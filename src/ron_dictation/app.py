@@ -82,7 +82,8 @@ was_cancelled = False
 frames = []
 stream = None
 press_t0 = None
-last_utterance_ended_with_end_punct = False
+# Deprecated: we now inject space immediately after finishing an utterance when needed
+prepend_space_next_time = False
 
 def _beep(enabled: bool, freq=1000, duration=0.15):
     if not enabled:
@@ -160,7 +161,7 @@ def _type_text(text: str):
             runtime = env.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
             env.setdefault("YDOTOOL_SOCKET", os.path.join(runtime, ".ydotool_socket"))
             proc = subprocess.Popen(
-                ["ydotool", "type", "-d", "10", "-H", "10", "-f", "-"],
+                ["ydotool", "type", "-d", "5", "-H", "5", "-f", "-"],
                 stdin=subprocess.PIPE,
                 env=env
             )
@@ -179,12 +180,50 @@ def _type_text(text: str):
             pass
     print("⚠️  Could not type text (no ydotool/wtype).")
 
+def _paste_text(text: str):
+    """Wayland paste injection: put text on clipboard, then Ctrl+V."""
+    try:
+        if shutil.which("wl-copy") and shutil.which("ydotool"):
+            # Copy text
+            import subprocess as _sp
+            _sp.run(["wl-copy"], input=text.encode("utf-8"), check=False)
+            # Give the compositor a moment to publish clipboard contents
+            time.sleep(0.06)
+            # Send Ctrl+V: KEY_LEFTCTRL (29), KEY_V (47)
+            env = os.environ.copy()
+            runtime = env.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+            env.setdefault("YDOTOOL_SOCKET", os.path.join(runtime, ".ydotool_socket"))
+            _sp.run(["ydotool", "key", "29:1", "47:1", "47:0", "29:0"], check=False, env=env)
+            # Some apps prefer Shift+Insert; try it as well just in case
+            _sp.run(["ydotool", "key", "42:1", "110:1", "110:0", "42:0"], check=False, env=env)
+            time.sleep(0.02)
+            return True
+    except Exception:
+        pass
+    return False
+
+def _press_space():
+    # Inject a literal Space keypress via ydotool when possible; fallback to typing a space
+    if shutil.which("ydotool"):
+        try:
+            env = os.environ.copy()
+            runtime = env.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+            env.setdefault("YDOTOOL_SOCKET", os.path.join(runtime, ".ydotool_socket"))
+            subprocess.run(["ydotool", "key", "57:1", "57:0"], check=False, env=env)
+            return
+        except Exception:
+            pass
+    if shutil.which("wtype"):
+        subprocess.run(["wtype", "--", " "], check=False); return
+
 def stop_recording(
     beeps_on: bool,
     smart_quotes: bool,
     notify_on: bool,
     language: str | None = None,
     auto_space: bool = True,
+    auto_period: bool = False,
+    paste_injection: bool = False,
 ):
     global is_recording
     held_ms = int((time.time() - (press_t0 or time.time())) * 1000)
@@ -216,19 +255,42 @@ def stop_recording(
         print(f"📝 Raw: {raw!r}")
         text = normalize_text(raw if smart_quotes else raw.replace("“","\"").replace("”","\""))
 
-        # Auto-space between utterances when previous ended with sentence punctuation
-        global last_utterance_ended_with_end_punct
-        if auto_space and text and last_utterance_ended_with_end_punct and text[0] not in ("\n", "\t", " "):
+        # Optionally add a final period if the utterance lacks terminal punctuation
+        stripped_for_period = text.rstrip()
+        if auto_period and stripped_for_period and stripped_for_period[-1] not in ".?!…":
+            # Add ". " so the next sentence naturally starts after a space
+            text = stripped_for_period + ". "
+        elif auto_space and stripped_for_period and stripped_for_period[-1] in ".?!…" and not text.endswith((" ", "\n", "\t")):
+            # If sentence already ends with punctuation and auto_space is on, append a space
+            text = text + " "
+
+        # If the previous utterance requested a leading space for this one, prefix it now so the
+        # space is typed together with the text (more reliable than separate key injection).
+        global prepend_space_next_time
+        if auto_space and prepend_space_next_time and text and text[0] not in ("\n", "\t", " "):
             text = " " + text
+        prepend_space_next_time = False
         print(f"📜 Text: {text!r}")
 
         _beep(beeps_on, *READY_BEEP)
         if notify_on: _notify("Ron Dictation", f"Transcribed: {text[:80]}{'…' if len(text)>80 else ''}")
         if text:
-            _type_text(text)
-            # Update end-of-utterance punctuation state for next time
+            # Small settling delay so focused app is ready to receive text
+            time.sleep(0.12)
+            # Choose injection mode: paste entire utterance vs keystroke typing
+            use_paste = paste_injection or os.environ.get("DICTATE_INJECTION_MODE","type").lower()=="paste"
+            if use_paste and _paste_text(text):
+                print(f"✂️  Inject (paste) len={len(text)}")
+                pass
+            else:
+                print(f"⌨️  Inject (type) len={len(text)}")
+                _type_text(text)
+            # We appended trailing spacing already when needed; do not request a leading space next time.
+            prepend_space_next_time = False
+            # Update spacing flag for next utterance
             import re as _re
-            last_utterance_ended_with_end_punct = bool(_re.search(r"[.?!…][”\)\]\}]*\s*$", text))
+            # If the last visible character is not whitespace/newline/tab, we should lead with space next time
+            last_utterance_should_lead_with_space = bool(_re.search(r"[^\s]$", text))
         else: print("ℹ️  (No speech recognized)")
     except Exception as e:
         print(f"Transcription error: {e}")
@@ -257,13 +319,13 @@ def _loop_evdev(cfg: Settings, input_device_idx):
                                 if event.value == 1 and not is_recording:
                                     start_recording(cfg.beeps, cfg.notify, input_device_idx)
                                 elif event.value == 0 and is_recording:
-                                    stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language, cfg.auto_space)
+                                    stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language, cfg.auto_space, cfg.auto_period, cfg.paste_injection)
                         else:  # toggle mode: press to start, press again to stop
                             if event.code == toggle_key and event.value == 1:
                                 if not is_recording:
                                     start_recording(cfg.beeps, cfg.notify, input_device_idx)
                                 else:
-                                     stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language, cfg.auto_space)
+                                     stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language, cfg.auto_space, cfg.auto_period, cfg.paste_injection)
                         # ESC cancels in any mode
                         if event.code == ecodes.KEY_ESC and is_recording and event.value == 1:
                             cancel_recording(cfg.beeps, cfg.notify, "Cancelled by ESC")
@@ -318,6 +380,7 @@ def main():
 
     global model
     model = build_model(cfg)
+    print(f"Config: model={cfg.model} device={cfg.device} lang={cfg.language or 'auto'} auto_space={cfg.auto_space} auto_period={cfg.auto_period}")
     _loop_evdev(cfg, input_device_idx)
 
 if __name__ == "__main__":

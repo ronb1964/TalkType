@@ -99,9 +99,9 @@ def normalize_text(text: str) -> str:
     lines = []
     for raw_line in text.split("\n"):
         # strip leading runs of stray punctuation at start of each line
-        # but DO NOT strip tabs used for indentation (preserve leading tabs)
+        # DO NOT strip spaces or tabs (preserve indentation/intentional leading space)
         # (keep ellipsis and quotes/paren if present)
-        line = re.sub(r"^[ \.,;:!?]+(?!…)", "", raw_line)
+        line = re.sub(r"^[\.,;:!?]+(?!…)", "", raw_line)
 
         leading_tabs = len(line) - len(line.lstrip("\t"))
         core = line.lstrip("\t")
