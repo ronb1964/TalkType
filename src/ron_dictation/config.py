@@ -15,6 +15,8 @@ class Settings:
     toggle_hotkey: str = "F9"   # used only when mode="toggle"
     mic: str = ""               # substring to match input device (empty = default)
     notify: bool = True         # desktop notifications
+    language: str = ""          # optional language code (e.g., "en"); empty = auto-detect
+    auto_space: bool = True     # prepend a space before new utterance when not starting a new line/tab
 
 def load_config() -> Settings:
     s = Settings()
@@ -31,6 +33,8 @@ def load_config() -> Settings:
             s.toggle_hotkey = str(data.get("toggle_hotkey", s.toggle_hotkey))
             s.mic = str(data.get("mic", s.mic))
             s.notify = bool(data.get("notify", s.notify))
+            s.language = str(data.get("language", s.language))
+            s.auto_space = bool(data.get("auto_space", s.auto_space))
         except Exception:
             pass
 
@@ -41,6 +45,8 @@ def load_config() -> Settings:
     s.mode = os.getenv("DICTATE_MODE", s.mode)
     s.toggle_hotkey = os.getenv("DICTATE_TOGGLE_HOTKEY", s.toggle_hotkey)
     s.mic = os.getenv("DICTATE_MIC", s.mic)
+    s.language = os.getenv("DICTATE_LANGUAGE", s.language)
+    a = os.getenv("DICTATE_AUTO_SPACE");   s.auto_space = s.auto_space if a is None else a.lower() not in {"0","false","off","no"}
 
     b = os.getenv("DICTATE_BEEPS");            s.beeps = s.beeps if b is None else b.lower() not in {"0","false","off","no"}
     q = os.getenv("DICTATE_SMART_QUOTES");     s.smart_quotes = s.smart_quotes if q is None else q.lower() not in {"0","false","off","no"}

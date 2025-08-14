@@ -82,6 +82,7 @@ was_cancelled = False
 frames = []
 stream = None
 press_t0 = None
+last_utterance_ended_with_end_punct = False
 
 def _beep(enabled: bool, freq=1000, duration=0.15):
     if not enabled:
@@ -178,7 +179,13 @@ def _type_text(text: str):
             pass
     print("⚠️  Could not type text (no ydotool/wtype).")
 
-def stop_recording(beeps_on: bool, smart_quotes: bool, notify_on: bool):
+def stop_recording(
+    beeps_on: bool,
+    smart_quotes: bool,
+    notify_on: bool,
+    language: str | None = None,
+    auto_space: bool = True,
+):
     global is_recording
     held_ms = int((time.time() - (press_t0 or time.time())) * 1000)
     if held_ms < MIN_HOLD_MS:
@@ -188,28 +195,43 @@ def stop_recording(beeps_on: bool, smart_quotes: bool, notify_on: bool):
     if was_cancelled: return
 
     print("🛑 Recording stopped. Transcribing…")
-    audio_path = tempfile.mktemp(prefix="stt_", suffix=".wav")
+    # Convert captured bytes -> float32 mono PCM in [-1, 1]
     try:
-        with wave.open(audio_path, 'wb') as wf:
-            wf.setnchannels(CHANNELS); wf.setsampwidth(2); wf.setframerate(SAMPLE_RATE)
-            wf.writeframes(b''.join(frames))
+        pcm_int16 = np.frombuffer(b''.join(frames), dtype=np.int16)
+        if pcm_int16.size == 0:
+            print("ℹ️  (No audio captured)")
+            return
+        audio_f32 = (pcm_int16.astype(np.float32) / 32768.0)
 
         segments, _ = model.transcribe(
-            audio_path,
-            vad_filter=True, beam_size=1,
-            condition_on_previous_text=False, temperature=0.0
+            audio_f32,
+            vad_filter=True,
+            beam_size=1,
+            condition_on_previous_text=False,
+            temperature=0.0,
+            without_timestamps=True,
+            language=(language or None),
         )
         raw = " ".join(seg.text for seg in segments).strip()
+        print(f"📝 Raw: {raw!r}")
         text = normalize_text(raw if smart_quotes else raw.replace("“","\"").replace("”","\""))
+
+        # Auto-space between utterances when previous ended with sentence punctuation
+        global last_utterance_ended_with_end_punct
+        if auto_space and text and last_utterance_ended_with_end_punct and text[0] not in ("\n", "\t", " "):
+            text = " " + text
         print(f"📜 Text: {text!r}")
 
         _beep(beeps_on, *READY_BEEP)
         if notify_on: _notify("Ron Dictation", f"Transcribed: {text[:80]}{'…' if len(text)>80 else ''}")
-        if text: _type_text(text)
+        if text:
+            _type_text(text)
+            # Update end-of-utterance punctuation state for next time
+            import re as _re
+            last_utterance_ended_with_end_punct = bool(_re.search(r"[.?!…][”\)\]\}]*\s*$", text))
         else: print("ℹ️  (No speech recognized)")
-    finally:
-        try: os.remove(audio_path)
-        except Exception: pass
+    except Exception as e:
+        print(f"Transcription error: {e}")
 
 def _loop_evdev(cfg: Settings, input_device_idx):
     session = os.environ.get("XDG_SESSION_TYPE", "").lower()
@@ -235,13 +257,13 @@ def _loop_evdev(cfg: Settings, input_device_idx):
                                 if event.value == 1 and not is_recording:
                                     start_recording(cfg.beeps, cfg.notify, input_device_idx)
                                 elif event.value == 0 and is_recording:
-                                    stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify)
+                                    stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language, cfg.auto_space)
                         else:  # toggle mode: press to start, press again to stop
                             if event.code == toggle_key and event.value == 1:
                                 if not is_recording:
                                     start_recording(cfg.beeps, cfg.notify, input_device_idx)
                                 else:
-                                    stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify)
+                                     stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language, cfg.auto_space)
                         # ESC cancels in any mode
                         if event.code == ecodes.KEY_ESC and is_recording and event.value == 1:
                             cancel_recording(cfg.beeps, cfg.notify, "Cancelled by ESC")
@@ -252,10 +274,11 @@ def _loop_evdev(cfg: Settings, input_device_idx):
         time.sleep(0.005)
 
 def build_model(settings: Settings):
+    compute_type = "float16" if settings.device.lower() == "cuda" else "int8"
     return WhisperModel(
         settings.model,
         device=settings.device,
-        compute_type="int8",
+        compute_type=compute_type,
         cpu_threads=os.cpu_count() or 4
     )
 
@@ -270,6 +293,7 @@ def parse_args():
     ap.add_argument("--beeps", choices=["on","off"], help="Enable beeps", default=None)
     ap.add_argument("--smart-quotes", choices=["on","off"], help="Use “smart quotes”", default=None)
     ap.add_argument("--notify", choices=["on","off"], help="Desktop notifications", default=None)
+    ap.add_argument("--language", help="Force language code (e.g., en). Empty = auto-detect", default=None)
     return ap.parse_args()
 
 def main():
@@ -287,6 +311,7 @@ def main():
     if args.beeps: cfg.beeps = (args.beeps == "on")
     if args.smart_quotes: cfg.smart_quotes = (args.smart_quotes == "on")
     if args.notify: cfg.notify = (args.notify == "on")
+    if args.language is not None: cfg.language = args.language
 
     # Input device selection
     input_device_idx = _pick_input_device(cfg.mic)

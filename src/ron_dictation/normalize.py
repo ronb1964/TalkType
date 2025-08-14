@@ -5,6 +5,11 @@ def normalize_text(text: str) -> str:
     if not text:
         return text
 
+    # --- 0) Escape sequences for literal words (do NOT convert to punctuation) ---
+    # Allow phrases like "literal period" or "the word period" to keep the word "period"
+    # instead of converting it to a period symbol.
+    text = re.sub(r"\b(?:literal|the\s+word)\s+period\b", "__LIT_PERIOD__", text, flags=re.IGNORECASE)
+
     # --- 1) Multi-word replacements first (order matters) ---
     replacements = [
         (r"\bnew\s*line\b|\bnewline\b", "\n"),
@@ -27,10 +32,11 @@ def normalize_text(text: str) -> str:
 
     # --- 2) Single-word replacements ---
     singles = [
-        (r"\bcomma\b", ","),
-        (r"\bsemicolon\b", ";"),
-        (r"\bcolon\b", ":"),
-        (r"\bperiod\b", "."),
+        # Allow optional immediate punctuation after the spoken token (e.g., "comma,", "period.")
+        (r"\bcomma\b,?", ","),
+        (r"\bsemicolon\b;?", ";"),
+        (r"\bcolon\b:?", ":"),
+        (r"\bperiod\b\.?", "."),
         (r"\bapostrophe\b", "’"),
         (r"\bquote\b", '"'),
         (r"\bhyphen\b|\bdash\b", "-"),
@@ -93,8 +99,9 @@ def normalize_text(text: str) -> str:
     lines = []
     for raw_line in text.split("\n"):
         # strip leading runs of stray punctuation at start of each line
+        # but DO NOT strip tabs used for indentation (preserve leading tabs)
         # (keep ellipsis and quotes/paren if present)
-        line = re.sub(r"^[\s\.,;:!?]+(?!…)", "", raw_line)
+        line = re.sub(r"^[ \.,;:!?]+(?!…)", "", raw_line)
 
         leading_tabs = len(line) - len(line.lstrip("\t"))
         core = line.lstrip("\t")
@@ -122,5 +129,8 @@ def normalize_text(text: str) -> str:
     # --- 11) Place sentence punctuation inside closing smart quote ---
     # Turn ”! -> !”, ”? -> ?”, ”. -> .”, ”, -> ,”, ”; -> ;”, ”: -> :
     text = re.sub(r"”( ?)([!?,;:.])", r"\2”", text)
+
+    # --- 12) Restore literal tokens ---
+    text = text.replace("__LIT_PERIOD__", "period")
 
     return text
