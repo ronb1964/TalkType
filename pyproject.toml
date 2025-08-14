@@ -1,0 +1,40 @@
+[tool.poetry]
+name = "ron-dictation"
+version = "0.1.0"
+description = "Press-and-hold dictation for Wayland (F8), Faster-Whisper + ydotool, with smart punctuation."
+authors = ["Ron"]
+license = "MIT"
+readme = "README.md"
+packages = [{ include = "ron_dictation", from = "src" }]
+
+[tool.poetry.dependencies]
+python = ">=3.10,<3.13"
+faster-whisper = "*"
+sounddevice = "*"
+evdev = "*"
+numpy = "*"
+pyperclip = "*"
+pygobject = "^3.52.3"
+
+[tool.poetry.scripts]
+dictate-tray = "ron_dictation.tray:main"
+dictate = "ron_dictation.app:main"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.4.1"
+black = "^25.1.0"
+ruff = "^0.12.9"
+
+[tool.black]
+line-length = 100
+
+[tool.ruff]
+line-length = 100
+select = ["E","F","I"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
