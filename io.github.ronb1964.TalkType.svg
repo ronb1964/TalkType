@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="micGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4f9cf9;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2563eb;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background circle -->
+  <circle cx="64" cy="64" r="60" fill="#f8fafc" stroke="#e2e8f0" stroke-width="2"/>
+  
+  <!-- Microphone body -->
+  <rect x="52" y="32" width="24" height="40" rx="12" ry="12" fill="url(#micGradient)"/>
+  
+  <!-- Microphone stand -->
+  <rect x="62" y="72" width="4" height="20" fill="#64748b"/>
+  
+  <!-- Microphone base -->
+  <rect x="48" y="88" width="32" height="6" rx="3" ry="3" fill="#64748b"/>
+  
+  <!-- Sound waves -->
+  <path d="M 85 45 Q 95 52 85 59" stroke="#10b981" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M 90 40 Q 105 52 90 64" stroke="#10b981" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <path d="M 95 35 Q 115 52 95 69" stroke="#10b981" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+  
+  <!-- Microphone grille lines -->
+  <line x1="56" y1="40" x2="72" y2="40" stroke="#ffffff" stroke-width="1" opacity="0.6"/>
+  <line x1="56" y1="45" x2="72" y2="45" stroke="#ffffff" stroke-width="1" opacity="0.6"/>
+  <line x1="56" y1="50" x2="72" y2="50" stroke="#ffffff" stroke-width="1" opacity="0.6"/>
+  <line x1="56" y1="55" x2="72" y2="55" stroke="#ffffff" stroke-width="1" opacity="0.6"/>
+  <line x1="56" y1="60" x2="72" y2="60" stroke="#ffffff" stroke-width="1" opacity="0.6"/>
+</svg>

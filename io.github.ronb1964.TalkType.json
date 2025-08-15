@@ -1,0 +1,157 @@
+{
+  "app-id": "io.github.ronb1964.TalkType",
+  "runtime": "org.freedesktop.Platform",
+  "runtime-version": "23.08",
+  "sdk": "org.freedesktop.Sdk",
+  "command": "dictate",
+  "finish-args": [
+    "--share=ipc",
+    "--socket=x11",
+    "--socket=wayland", 
+    "--device=dri",
+    "--socket=pulseaudio",
+    "--filesystem=home:ro",
+    "--filesystem=xdg-config:create",
+    "--system-talk-name=org.freedesktop.systemd1",
+    "--device=all",
+    "--socket=session-bus",
+    "--socket=system-bus",
+    "--talk-name=org.freedesktop.Notifications"
+  ],
+  "modules": [
+    {
+      "name": "python3-numpy",
+      "buildsystem": "simple",
+      "build-commands": [
+        "pip3 install --verbose --exists-action=i --no-index --find-links=\"file://${PWD}\" --prefix=${FLATPAK_DEST} numpy"
+      ],
+      "sources": [
+        {
+          "type": "file",
+          "url": "https://files.pythonhosted.org/packages/65/6e/09db70a523a96d25e115e71cc56a6f9031e7b9cd9376aa0f379a5d4223619/numpy-1.24.4-cp310-cp310-linux_x86_64.whl",
+          "sha256": "c0bfb52d2169d58c1cdb8cc1f16989101639b34c7d3ce60ed70b19c63eba0b64"
+        }
+      ]
+    },
+    {
+      "name": "python3-sounddevice",
+      "buildsystem": "simple", 
+      "build-commands": [
+        "pip3 install --verbose --exists-action=i --no-index --find-links=\"file://${PWD}\" --prefix=${FLATPAK_DEST} sounddevice"
+      ],
+      "sources": [
+        {
+          "type": "file",
+          "url": "https://files.pythonhosted.org/packages/5a/29/5a8c5ef0d12fe7e5be4be31c7be7cb8e5cde27a3c07e0cd65ef95b25ef0da/sounddevice-0.4.6-py3-none-any.whl",
+          "sha256": "5de768ba6fe56ad2b5e55ddf8a617d22d6a9d83e05c8f61b16bb27c2d7b80d6a"
+        }
+      ]
+    },
+    {
+      "name": "python3-evdev",
+      "buildsystem": "simple",
+      "build-commands": [
+        "pip3 install --verbose --exists-action=i --no-index --find-links=\"file://${PWD}\" --prefix=${FLATPAK_DEST} evdev"
+      ],
+      "sources": [
+        {
+          "type": "file",
+          "url": "https://files.pythonhosted.org/packages/6e/67/81e5fe6bd6ac27bd55a916d3f6c4a7e252c4e8ce3b0cc1f06b1d3e7e3dd3e/evdev-1.6.1.tar.gz",
+          "sha256": "299db8628cc73b237fc1cc57d3c2948faa0756e2a58b6194b5bf81dc2081c69d"
+        }
+      ]
+    },
+    {
+      "name": "python3-pyperclip",
+      "buildsystem": "simple",
+      "build-commands": [
+        "pip3 install --verbose --exists-action=i --no-index --find-links=\"file://${PWD}\" --prefix=${FLATPAK_DEST} pyperclip"
+      ],
+      "sources": [
+        {
+          "type": "file",
+          "url": "https://files.pythonhosted.org/packages/a7/2c/4c64579f847bd5d539803c8b909e54ba087a79d01bb3aba433a95879a6c5/pyperclip-1.8.2.tar.gz",
+          "sha256": "105254a8b04934f0bc84e9c24eb360a591aaf6535c9def5f29d92af107a9bf57"
+        }
+      ]
+    },
+    {
+      "name": "python3-toml",
+      "buildsystem": "simple",
+      "build-commands": [
+        "pip3 install --verbose --exists-action=i --no-index --find-links=\"file://${PWD}\" --prefix=${FLATPAK_DEST} toml"
+      ],
+      "sources": [
+        {
+          "type": "file",
+          "url": "https://files.pythonhosted.org/packages/44/6f/7120676b6d73228f96e17f475ec3a44a6c810ce2a9ee4b6cb25ac7ad7eb94/toml-0.10.2-py2.py3-none-any.whl",
+          "sha256": "806143ae5bfb6a3c6e736a764057db0e6a0e05e338b5630894a5f779cabb4f9b"
+        }
+      ]
+    },
+    {
+      "name": "faster-whisper-dependencies",
+      "buildsystem": "simple",
+      "build-commands": [
+        "pip3 install --verbose --exists-action=i --no-index --find-links=\"file://${PWD}\" --prefix=${FLATPAK_DEST} ctranslate2 tokenizers huggingface-hub"
+      ],
+      "sources": [
+        {
+          "type": "file",
+          "url": "https://files.pythonhosted.org/packages/35/67/8aaffe3d2073c00d6502e33b2fe92e2204b0a46d2d75d6e9c7d9e2a0de6b/ctranslate2-3.24.0-cp310-cp310-linux_x86_64.whl",
+          "sha256": "example-hash-replace-with-actual"
+        }
+      ]
+    },
+    {
+      "name": "faster-whisper",
+      "buildsystem": "simple",
+      "build-commands": [
+        "pip3 install --verbose --exists-action=i --no-index --find-links=\"file://${PWD}\" --prefix=${FLATPAK_DEST} faster-whisper"
+      ],
+      "sources": [
+        {
+          "type": "file",
+          "url": "https://files.pythonhosted.org/packages/c9/26/d6579a6c1b9c76c64e96b6d8be6d32a8c2e2e1b5cdd36c9f82e7b5d3e4b6/faster_whisper-0.10.0-py3-none-any.whl",
+          "sha256": "example-hash-replace-with-actual"
+        }
+      ]
+    },
+    {
+      "name": "ydotool",
+      "buildsystem": "cmake-ninja",
+      "config-opts": [
+        "-DCMAKE_BUILD_TYPE=Release"
+      ],
+      "sources": [
+        {
+          "type": "git",
+          "url": "https://github.com/ReimuNotMoe/ydotool.git",
+          "tag": "v1.0.4"
+        }
+      ],
+      "post-install": [
+        "install -Dm755 ydotool /app/bin/ydotool",
+        "install -Dm755 ydotoold /app/bin/ydotoold"
+      ]
+    },
+    {
+      "name": "talktype",
+      "buildsystem": "simple",
+      "build-commands": [
+        "pip3 install --verbose --exists-action=i --prefix=${FLATPAK_DEST} ."
+      ],
+      "sources": [
+        {
+          "type": "git",
+          "url": "https://github.com/ronb1964/TalkType.git",
+          "branch": "main"
+        }
+      ],
+      "post-install": [
+        "install -Dm644 io.github.ronb1964.TalkType.desktop /app/share/applications/io.github.ronb1964.TalkType.desktop",
+        "install -Dm644 io.github.ronb1964.TalkType.svg /app/share/icons/hicolor/scalable/apps/io.github.ronb1964.TalkType.svg"
+      ]
+    }
+  ]
+}
