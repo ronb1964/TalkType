@@ -1,7 +1,0 @@
-faster-whisper
-sounddevice
-evdev
-numpy
-pyperclip
-pygobject>=3.52.3
-toml

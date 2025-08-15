@@ -9,6 +9,3 @@ venv/
 
 # OS files
 .DS_Store
-*.flatpak
-.flatpak-builder/
-build-dir/
