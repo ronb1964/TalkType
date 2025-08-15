@@ -1,0 +1,70 @@
+#!/bin/bash
+
+# AppRun script for TalkType AppImage
+# This script sets up the environment and launches TalkType
+
+HERE="$(dirname "$(readlink -f "${0}")")"
+
+# Set up Python environment
+export PYTHONHOME="$HERE/usr"
+export PYTHONPATH="$HERE/usr/lib64/python3.13/site-packages:$HERE/usr/lib/python3.13/site-packages:$HERE/usr/lib/python3/dist-packages"
+export PATH="$HERE/usr/bin:$PATH"
+export LD_LIBRARY_PATH="$HERE/usr/lib64:$HERE/usr/lib:$HERE/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH"
+
+# Ensure Python can find its standard library
+export PYTHONPATH="$HERE/usr/lib64/python3.13:$HERE/usr/lib64/python3.13/lib-dynload:$PYTHONPATH"
+
+# Set up audio environment
+export PULSE_RUNTIME_PATH="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/pulse"
+
+# Set up GTK and GI environment
+export GI_TYPELIB_PATH="$HERE/usr/lib/x86_64-linux-gnu/girepository-1.0:$HERE/usr/lib/girepository-1.0"
+export XDG_DATA_DIRS="$HERE/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+
+# Detect what to run based on arguments or filename
+EXEC_NAME=$(basename "$0")
+
+if [[ "$EXEC_NAME" == *"tray"* ]] || [[ "$1" == "tray" ]]; then
+    # Run tray application
+    exec "$HERE/usr/bin/python3" -c "
+import sys
+sys.path.insert(0, '$HERE/usr/src')
+from src.ron_dictation.tray import main
+main()
+" "${@:2}"
+elif [[ "$1" == "prefs" ]] || [[ "$1" == "preferences" ]]; then
+    # Run preferences
+    exec "$HERE/usr/bin/python3" -c "
+import sys
+sys.path.insert(0, '$HERE/usr/src')
+from src.ron_dictation.prefs import main
+main()
+" "${@:2}"
+elif [[ "$1" == "dictate" ]] || [[ "$1" == "service" ]]; then
+    # Run main dictation service
+    exec "$HERE/usr/bin/python3" -c "
+import sys
+sys.path.insert(0, '$HERE/usr/src')
+from src.ron_dictation.app import main
+main()
+" "${@:2}"
+elif [[ "$1" == "--help" ]] || [[ "$1" == "-h" ]]; then
+    echo "TalkType - AI-powered dictation for Wayland"
+    echo ""
+    echo "Usage:"
+    echo "  $0 [tray]         Start system tray (default)"
+    echo "  $0 prefs          Open preferences window"
+    echo "  $0 dictate        Run dictation service directly"
+    echo "  $0 --help         Show this help"
+    echo ""
+    echo "Default action: Start system tray"
+    exit 0
+else
+    # Default: run tray application
+    exec "$HERE/usr/bin/python3" -c "
+import sys
+sys.path.insert(0, '$HERE/usr/src')
+from src.ron_dictation.tray import main
+main()
+" "$@"
+fi

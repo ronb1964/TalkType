@@ -12,3 +12,9 @@ venv/
 *.flatpak
 .flatpak-builder/
 build-dir/
+
+# AppImage files
+*.AppImage
+AppDir/
+appimage-builder
+appimagetool
