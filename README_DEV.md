@@ -1,4 +1,4 @@
-# Ron Dictation – Developer Notes
+# TalkType – Developer Notes
 
 > **Purpose:** Voice dictation tool for Linux (Wayland) using Faster-Whisper, `ydotool`, and hotkey press-and-hold to inject text into the active window.
 > Includes punctuation and formatting normalization, optional tray icon, and systemd integration.
@@ -20,7 +20,7 @@
 ---
 
 ## Project Overview
-- **Name:** ron-dictation
+- **Name:** TalkType
 - **Goal:**  
   - Press and hold **F8** → Start listening.  
   - Release **F8** → Stop listening, normalize text, insert into active window.

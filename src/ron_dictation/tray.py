@@ -54,11 +54,12 @@ def _acquire_tray_singleton():
 class DictationTray:
     def __init__(self):
         self.indicator = AppIndicator3.Indicator.new(
-            "ron-dictation",
+            "talktype",
             "microphone-sensitivity-muted",  # start with muted icon
             AppIndicator3.IndicatorCategory.APPLICATION_STATUS
         )
         self.indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
+        self.indicator.set_title("TalkType")  # Set the app name
         self.update_icon_status()
         self.indicator.set_menu(self.build_menu())
         
@@ -77,9 +78,11 @@ class DictationTray:
     def update_icon_status(self):
         """Update icon based on service status."""
         if self.is_service_running():
-            self.indicator.set_icon_full("microphone-sensitivity-medium", "Ron Dictation: Active")
+            # Try different icon names for active state
+            self.indicator.set_icon_full("microphone-sensitivity-high", "TalkType: Active")
         else:
-            self.indicator.set_icon_full("microphone-sensitivity-muted", "Ron Dictation: Stopped")
+            # Use muted icon for stopped state
+            self.indicator.set_icon_full("microphone-sensitivity-muted", "TalkType: Stopped")
         return True  # Continue the timer
     
     def start_service(self, _):
@@ -101,11 +104,12 @@ class DictationTray:
     def open_preferences(self, _):
         """Launch preferences window."""
         try:
-            # Use the same Python/Poetry environment as the tray
-            import sys
+            # Use direct Python path for more reliable execution
             import os
-            venv_python = sys.executable
-            subprocess.Popen([venv_python, "-c", "from ron_dictation.prefs import main; main()"])
+            project_dir = "/home/ron/projects/ron-dictation/TalkType"
+            python_path = "/home/ron/.cache/pypoetry/virtualenvs/ron-dictation-zz-XcKas-py3.12/bin/python"
+            subprocess.Popen([python_path, "-m", "src.ron_dictation.prefs"], 
+                           cwd=project_dir)
         except Exception as e:
             print(f"Failed to open preferences: {e}")
     
@@ -115,9 +119,9 @@ class DictationTray:
     def build_menu(self):
         menu = Gtk.Menu()
         
-        # Status item (non-clickable)
-        status_item = Gtk.MenuItem(label="Checking status...")
-        status_item.set_sensitive(False)
+        # App title header (non-clickable)
+        title_item = Gtk.MenuItem(label="🎙️ TalkType")
+        title_item.set_sensitive(False)
         
         start_item = Gtk.MenuItem(label="Start Service")
         stop_item = Gtk.MenuItem(label="Stop Service")
@@ -131,7 +135,7 @@ class DictationTray:
         prefs_item.connect("activate", self.open_preferences)
         quit_item.connect("activate", self.quit_app)
         
-        for item in (status_item, Gtk.SeparatorMenuItem(), start_item, stop_item, 
+        for item in (title_item, Gtk.SeparatorMenuItem(), start_item, stop_item, 
                      restart_item, Gtk.SeparatorMenuItem(), prefs_item, quit_item):
             menu.append(item)
         menu.show_all()
