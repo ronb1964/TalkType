@@ -15,10 +15,12 @@ evdev = "*"
 numpy = "*"
 pyperclip = "*"
 pygobject = "^3.52.3"
+toml = "*"
 
 [tool.poetry.scripts]
 dictate-tray = "ron_dictation.tray:main"
 dictate = "ron_dictation.app:main"
+dictate-prefs = "ron_dictation.prefs:main"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.4.1"

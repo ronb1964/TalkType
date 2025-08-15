@@ -255,21 +255,11 @@ def stop_recording(
         print(f"📝 Raw: {raw!r}")
         text = normalize_text(raw if smart_quotes else raw.replace("“","\"").replace("”","\""))
 
-        # Optionally add a final period if the utterance lacks terminal punctuation
-        stripped_for_period = text.rstrip()
-        if auto_period and stripped_for_period and stripped_for_period[-1] not in ".?!…":
-            # Add ". " so the next sentence naturally starts after a space
-            text = stripped_for_period + ". "
-        elif auto_space and stripped_for_period and stripped_for_period[-1] in ".?!…" and not text.endswith((" ", "\n", "\t")):
-            # If sentence already ends with punctuation and auto_space is on, append a space
+        # Simple spacing: always add period+space or just space when auto features are on
+        if auto_period and text and not text.rstrip().endswith((".","?","!","…")):
+            text = text.rstrip() + "."
+        if auto_space and text and not text.endswith((" ", "\n", "\t")):
             text = text + " "
-
-        # If the previous utterance requested a leading space for this one, prefix it now so the
-        # space is typed together with the text (more reliable than separate key injection).
-        global prepend_space_next_time
-        if auto_space and prepend_space_next_time and text and text[0] not in ("\n", "\t", " "):
-            text = " " + text
-        prepend_space_next_time = False
         print(f"📜 Text: {text!r}")
 
         _beep(beeps_on, *READY_BEEP)
