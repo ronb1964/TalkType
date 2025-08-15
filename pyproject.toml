@@ -8,7 +8,7 @@ readme = "README.md"
 packages = [{ include = "ron_dictation", from = "src" }]
 
 [tool.poetry.dependencies]
-python = ">=3.10,<3.13"
+python = ">=3.10,<3.14"
 faster-whisper = "*"
 sounddevice = "*"
 evdev = "*"

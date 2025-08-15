@@ -1,0 +1,63 @@
+version: 1
+
+script:
+  # Remove any existing AppDir
+  - rm -rf AppDir || true
+  
+  # Create the basic AppDir structure
+  - mkdir -p AppDir/usr/src
+  - mkdir -p AppDir/usr/share/applications
+  - mkdir -p AppDir/usr/share/icons/hicolor/scalable/apps
+  - mkdir -p AppDir/usr/bin
+  
+  # Copy application files
+  - cp -r src/ AppDir/usr/src/
+  - cp pyproject.toml AppDir/usr/src/
+  - cp requirements.txt AppDir/usr/src/
+  - cp README.md AppDir/usr/src/
+  - cp LICENSE AppDir/usr/src/
+  - cp AppRun AppDir/
+  
+  # Copy desktop file and icon
+  - cp TalkType.desktop AppDir/TalkType.desktop
+  - cp io.github.ronb1964.TalkType.svg AppDir/io.github.ronb1964.TalkType.svg
+  
+  # Install Python and dependencies to AppDir
+  - python3 -m pip install --ignore-installed --prefix=AppDir/usr pyperclip toml evdev sounddevice numpy pygobject faster-whisper
+  
+  # Install TalkType
+  - cd AppDir/usr/src && python3 -m pip install --ignore-installed --prefix=../../usr .
+  
+  # Copy Python interpreter
+  - cp /usr/bin/python3 AppDir/usr/bin/python3
+
+AppDir:
+  path: ./AppDir
+  
+  app_info:
+    id: io.github.ronb1964.TalkType
+    name: TalkType
+    icon: io.github.ronb1964.TalkType
+    version: "0.1.0"
+    exec: AppRun
+    exec_args: "$@"
+  
+  runtime:
+    env:
+      PYTHONHOME: "$APPDIR/usr"
+      PYTHONPATH: "$APPDIR/usr/lib/python3.13/site-packages:$APPDIR/usr/lib/python3/dist-packages"
+      PATH: "$APPDIR/usr/bin:$PATH"
+      LD_LIBRARY_PATH: "$APPDIR/usr/lib:$APPDIR/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH"
+      # Enable audio
+      PULSE_RUNTIME_PATH: "/run/user/1000/pulse"
+  
+  files:
+    include: []
+    exclude:
+      - usr/share/man
+      - usr/share/doc
+
+AppImage:
+  update-information: 'gh-releases-zsync|ronb1964|TalkType|latest|TalkType-*x86_64.AppImage.zsync'
+  sign-key: None
+  arch: x86_64
