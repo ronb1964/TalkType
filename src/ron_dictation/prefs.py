@@ -93,9 +93,11 @@ class PreferencesWindow:
         # Connect window close event to cleanup
         self.window.connect("delete-event", self.on_window_close)
         
-        # Show window
+        # Show window - force it to appear
         self.window.show_all()
         self.window.present()  # Bring window to front
+        self.window.set_keep_above(True)  # Force window on top temporarily
+        GLib.timeout_add_seconds(1, self._remove_keep_above)  # Remove keep_above after 1 second
         
     def load_config(self):
         """Load config from TOML file."""
@@ -124,6 +126,11 @@ class PreferencesWindow:
                 print(f"Error loading config: {e}")
         
         return defaults
+    
+    def _remove_keep_above(self):
+        """Remove keep_above setting after window appears."""
+        self.window.set_keep_above(False)
+        return False  # Don't repeat
     
     def _check_cuda_availability(self):
         """Check if CUDA is available for faster-whisper."""
