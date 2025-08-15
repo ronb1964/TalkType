@@ -19,3 +19,21 @@ def test_ellipsis_and_caps():
 def test_newlines_tabs():
     s = "first line newline tab indented second line period"
     assert normalize_text(s) == "First line\n\tIndented second line."
+
+def test_return_commands():
+    """Test various voice commands for line breaks"""
+    # Test "return"
+    s = "first line return second line"
+    assert normalize_text(s) == "First line\nSecond line"
+    
+    # Test "line break"
+    s = "first line line break second line"
+    assert normalize_text(s) == "First line\nSecond line"
+    
+    # Test "new paragraph" for double line break
+    s = "first paragraph new paragraph second paragraph"
+    assert normalize_text(s) == "First paragraph\n\nSecond paragraph"
+    
+    # Test "paragraph break"
+    s = "first paragraph paragraph break second paragraph"
+    assert normalize_text(s) == "First paragraph\n\nSecond paragraph"
