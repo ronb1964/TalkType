@@ -152,7 +152,7 @@ def cancel_recording(beeps_on: bool, notify_on: bool, reason="Cancelled"):
     _stop_stream_safely()
     _beep(beeps_on, *CANCEL_BEEP)
     print(f"⏸️  {reason}")
-    if notify_on: _notify("Ron Dictation", reason)
+    if notify_on: _notify("TalkType", reason)
 
 def _type_text(text: str):
     if shutil.which("ydotool"):
@@ -263,7 +263,7 @@ def stop_recording(
         print(f"📜 Text: {text!r}")
 
         _beep(beeps_on, *READY_BEEP)
-        if notify_on: _notify("Ron Dictation", f"Transcribed: {text[:80]}{'…' if len(text)>80 else ''}")
+        if notify_on: _notify("TalkType", f"Transcribed: {text[:80]}{'…' if len(text)>80 else ''}")
         if text:
             # Small settling delay so focused app is ready to receive text
             time.sleep(0.12)
@@ -283,7 +283,9 @@ def stop_recording(
             last_utterance_should_lead_with_space = bool(_re.search(r"[^\s]$", text))
         else: print("ℹ️  (No speech recognized)")
     except Exception as e:
-        print(f"Transcription error: {e}")
+        print(f"❌ Transcription error: {e}")
+        _beep(beeps_on, *READY_BEEP)  # Still play the ready beep so user knows it's done
+        if notify_on: _notify("TalkType", f"Transcription failed: {str(e)[:60]}{'…' if len(str(e))>60 else ''}")
 
 def _loop_evdev(cfg: Settings, input_device_idx):
     session = os.environ.get("XDG_SESSION_TYPE", "").lower()
@@ -327,12 +329,34 @@ def _loop_evdev(cfg: Settings, input_device_idx):
 
 def build_model(settings: Settings):
     compute_type = "float16" if settings.device.lower() == "cuda" else "int8"
-    return WhisperModel(
-        settings.model,
-        device=settings.device,
-        compute_type=compute_type,
-        cpu_threads=os.cpu_count() or 4
-    )
+    try:
+        model = WhisperModel(
+            settings.model,
+            device=settings.device,
+            compute_type=compute_type,
+            cpu_threads=os.cpu_count() or 4
+        )
+        print(f"✅ Model loaded successfully on {settings.device.upper()}")
+        return model
+    except Exception as e:
+        if settings.device.lower() == "cuda":
+            print(f"❌ CUDA failed: {e}")
+            print("🔄 Falling back to CPU...")
+            try:
+                model = WhisperModel(
+                    settings.model,
+                    device="cpu",
+                    compute_type="int8",
+                    cpu_threads=os.cpu_count() or 4
+                )
+                print("✅ Model loaded successfully on CPU (fallback)")
+                return model
+            except Exception as cpu_e:
+                print(f"❌ CPU fallback also failed: {cpu_e}")
+                raise cpu_e
+        else:
+            print(f"❌ Model loading failed: {e}")
+            raise e
 
 def parse_args():
     ap = argparse.ArgumentParser(prog="dictate", description="Press-and-hold / toggle dictation for Wayland")

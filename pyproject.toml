@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "ron-dictation"
+name = "talktype"
 version = "0.1.0"
 description = "Press-and-hold dictation for Wayland (F8), Faster-Whisper + ydotool, with smart punctuation."
 authors = ["Ron"]
