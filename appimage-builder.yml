@@ -1,0 +1,116 @@
+version: 1
+
+script:
+  # Remove any old build
+  - rm -rf AppDir/usr || true
+  - mkdir -p AppDir/usr
+
+AppDir:
+  path: ./AppDir
+
+  app_info:
+    id: io.github.ronb1964.TalkType
+    name: TalkType
+    icon: io.github.ronb1964.TalkType
+    version: "0.1.0"
+    exec: usr/bin/python3
+    exec_args: "-c \"import sys; sys.path.insert(0, '/opt/talktype/usr/src'); from src.ron_dictation.tray import main; main()\" $@"
+
+  # Use manual package deployment instead of apt since we're on Fedora
+  files:
+    include:
+      - /usr/bin/python3*
+      - /usr/lib64/python3*/**
+      - /usr/lib/python3*/**
+      - /usr/share/gir-1.0/**
+      - /usr/lib64/girepository-1.0/**
+      - /usr/lib/girepository-1.0/**
+      
+    exclude:
+      - usr/share/doc
+      - usr/share/man
+      - usr/share/locale
+      - usr/include
+
+  after_bundle:
+    # Install Python dependencies using pip
+    - |
+      # Set up Python environment
+      cd AppDir/usr
+      
+      # Install pip packages to local directory
+      python3 -m pip install --target=lib/python3.10/site-packages \
+        faster-whisper sounddevice evdev numpy pyperclip pygobject toml
+      
+      # Copy our source code
+      mkdir -p src
+      cp -r ../../../src/* src/
+      
+      # Make sure Python can find our modules
+      export PYTHONPATH="$PWD/lib/python3.10/site-packages:$PWD/src:$PYTHONPATH"
+      
+      # Create launcher scripts
+      cat > bin/dictate-tray << 'EOF'
+      #!/bin/bash
+      HERE="$(dirname "$(readlink -f "${0}")")/.."
+      export PYTHONPATH="$HERE/lib/python3.10/site-packages:$HERE/src:$PYTHONPATH"
+      exec "$HERE/bin/python3" -c "
+      import sys
+      sys.path.insert(0, '$HERE/src')
+      from src.ron_dictation.tray import main
+      main()
+      " "$@"
+      EOF
+      
+      cat > bin/dictate-prefs << 'EOF'
+      #!/bin/bash
+      HERE="$(dirname "$(readlink -f "${0}")")/.."
+      export PYTHONPATH="$HERE/lib/python3.10/site-packages:$HERE/src:$PYTHONPATH"
+      exec "$HERE/bin/python3" -c "
+      import sys
+      sys.path.insert(0, '$HERE/src')
+      from src.ron_dictation.prefs import main
+      main()
+      " "$@"
+      EOF
+      
+      cat > bin/dictate << 'EOF'
+      #!/bin/bash
+      HERE="$(dirname "$(readlink -f "${0}")")/.."
+      export PYTHONPATH="$HERE/lib/python3.10/site-packages:$HERE/src:$PYTHONPATH"
+      exec "$HERE/bin/python3" -c "
+      import sys
+      sys.path.insert(0, '$HERE/src')
+      from src.ron_dictation.app import main
+      main()
+      " "$@"
+      EOF
+      
+      chmod +x bin/dictate*
+
+  test:
+    debian:
+      image: appimagecrafters/tests-env:debian-stable
+      command: ./AppRun --help
+      use_host_x: true
+    centos:
+      image: appimagecrafters/tests-env:centos-7
+      command: ./AppRun --help
+      use_host_x: true
+    arch:
+      image: appimagecrafters/tests-env:archlinux-latest
+      command: ./AppRun --help
+      use_host_x: true
+    fedora:
+      image: appimagecrafters/tests-env:fedora-30
+      command: ./AppRun --help
+      use_host_x: true
+    ubuntu:
+      image: appimagecrafters/tests-env:ubuntu-xenial
+      command: ./AppRun --help
+      use_host_x: true
+
+AppImage:
+  update-information: gh-releases-zsync|ronb1964|TalkType|latest|TalkType-*.AppImage.zsync
+  sign-key: None
+  arch: x86_64
