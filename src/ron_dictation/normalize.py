@@ -12,8 +12,9 @@ def normalize_text(text: str) -> str:
 
     # --- 1) Multi-word replacements first (order matters) ---
     replacements = [
-        (r"\bnew\s*line\b|\bnewline\b|\breturn\b|\bline\s+break\b", "\n"),
-        (r"\bnew\s+paragraph\b|\bparagraph\s+break\b", "\n\n"),
+        (r"[,.\s]*\bnew\s*line\b[,.\s]*|\bnewline\b|\breturn\b|\bline\s+break\b", "§SHIFT_ENTER§"),
+        (r"[,.\s]*\bnew\s+paragraph\b[,.\s]*|\bparagraph\s+break\b", "\n\n"),
+        (r"[,.\s]*\bsoft\s+break\b[,.\s]*|\bsoft\s+line\b[,.\s]*", "   "),
         (r"\btab\b", "\t"),
         (r"\bexclamation\s+point\b|\bexclamation\s+mark\b", "!"),
         (r"\bquestion\s+mark\b", "?"),

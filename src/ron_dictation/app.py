@@ -154,7 +154,37 @@ def cancel_recording(beeps_on: bool, notify_on: bool, reason="Cancelled"):
     print(f"⏸️  {reason}")
     if notify_on: _notify("TalkType", reason)
 
+def _send_shift_enter():
+    """Send Shift+Enter keystrokes to create line break without submitting."""
+    if shutil.which("ydotool"):
+        try:
+            env = os.environ.copy()
+            runtime = env.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+            env.setdefault("YDOTOOL_SOCKET", os.path.join(runtime, ".ydotool_socket"))
+            # KEY_LEFTSHIFT (42), KEY_ENTER (28)
+            subprocess.run(["ydotool", "key", "42:1", "28:1", "28:0", "42:0"], check=False, env=env)
+            return True
+        except Exception as e:
+            print(f"ydotool shift+enter failed: {e}")
+    return False
+
 def _type_text(text: str):
+    # Handle special markers first
+    if "§SHIFT_ENTER§" in text:
+        parts = text.split("§SHIFT_ENTER§")
+        for i, part in enumerate(parts):
+            if part:  # Type the text part
+                _type_text_raw(part)
+            if i < len(parts) - 1:  # Not the last part, send Shift+Enter
+                time.sleep(0.05)  # Small delay between text and key
+                _send_shift_enter()
+                time.sleep(0.05)  # Small delay after key
+        return
+    
+    # Normal text typing
+    _type_text_raw(text)
+
+def _type_text_raw(text: str):
     if shutil.which("ydotool"):
         try:
             env = os.environ.copy()
