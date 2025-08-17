@@ -40,7 +40,7 @@ except ImportError:
 def _runtime_dir():
     return os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
 
-_PREFS_PIDFILE = os.path.join(_runtime_dir(), "ron-dictation-prefs.pid")
+_PREFS_PIDFILE = os.path.join(_runtime_dir(), "talktype-prefs.pid")
 
 def _pid_running(pid: int) -> bool:
     if pid <= 0: return False
@@ -49,7 +49,7 @@ def _pid_running(pid: int) -> bool:
     try:
         with open(os.path.join(proc, "cmdline"), "rb") as f:
             cmd = f.read().decode(errors="ignore")
-        return ("dictate-prefs" in cmd) or ("ron_dictation.prefs" in cmd)
+        return ("dictate-prefs" in cmd) or ("talktype.prefs" in cmd)
     except Exception:
         return True
 
@@ -270,6 +270,16 @@ class PreferencesWindow:
         grid.attach(device_combo, 1, row, 1, 1)
         row += 1
         
+        # Language Mode
+        grid.attach(Gtk.Label(label="Language Mode:", xalign=0), 0, row, 1, 1)
+        language_mode_combo = Gtk.ComboBoxText()
+        language_mode_combo.append("auto", "Auto-detect")
+        language_mode_combo.append("manual", "Manual")
+        language_mode_combo.set_active_id(self.config.get("language_mode", "auto"))
+        language_mode_combo.connect("changed", lambda x: self.update_config("language_mode", x.get_active_id()))
+        grid.attach(language_mode_combo, 1, row, 1, 1)
+        row += 1
+        
         # Language
         grid.attach(Gtk.Label(label="Language:", xalign=0), 0, row, 1, 1)
         lang_entry = Gtk.Entry()
@@ -348,6 +358,14 @@ class PreferencesWindow:
         grid.attach(toggle_combo, 1, row, 1, 1)
         row += 1
         
+        # Launch at Login
+        launch_check = Gtk.CheckButton(label="Launch at login")
+        launch_check.set_active(self.config.get("launch_at_login", False))
+        launch_check.connect("toggled", lambda x: self.update_config("launch_at_login", x.get_active()))
+        launch_check.set_tooltip_text("Automatically start TalkType when you log in to your desktop.")
+        grid.attach(launch_check, 0, row, 2, 1)
+        row += 1
+        
         return grid
     
     def create_audio_tab(self):
@@ -419,6 +437,32 @@ class PreferencesWindow:
         notify_check.connect("toggled", lambda x: self.update_config("notify", x.get_active()))
         notify_check.set_tooltip_text("Show desktop notifications with transcribed text preview.\nUseful to confirm what was transcribed without switching windows.")
         grid.attach(notify_check, 0, row, 2, 1)
+        row += 1
+        
+        # Microphone Testing Section
+        separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        grid.attach(separator, 0, row, 2, 1)
+        row += 1
+        
+        # Microphone Test Label
+        test_label = Gtk.Label(label="Microphone Test")
+        test_label.set_markup("<b>Microphone Test</b>")
+        test_label.set_xalign(0)
+        grid.attach(test_label, 0, row, 2, 1)
+        row += 1
+        
+        # Test Recording Button
+        self.record_button = Gtk.Button(label="Start Recording")
+        self.record_button.connect("clicked", self.on_record_clicked)
+        self.record_button.set_tooltip_text("Test your microphone by recording a short sample")
+        grid.attach(self.record_button, 0, row, 1, 1)
+        
+        # Level indicator
+        self.level_bar = Gtk.LevelBar()
+        self.level_bar.set_min_value(0.0)
+        self.level_bar.set_max_value(1.0)
+        self.level_bar.set_tooltip_text("Microphone input level")
+        grid.attach(self.level_bar, 1, row, 1, 1)
         row += 1
         
         return grid
@@ -505,7 +549,20 @@ class PreferencesWindow:
         """Restart the dictation service."""
         try:
             import subprocess
-            result = subprocess.run(["systemctl", "--user", "restart", "ron-dictation.service"], 
+            # Don't use systemctl - restart the process directly
+            subprocess.run(["pkill", "-f", "talktype.app"], capture_output=True)
+            # Wait a moment for processes to terminate
+            import time
+            time.sleep(1)
+            # Start the service again using the same Python interpreter as the preferences
+            project_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+            python_path = sys.executable
+            subprocess.Popen([python_path, "-m", "src.talktype.app"], 
+                           cwd=project_dir, 
+                           stdout=subprocess.DEVNULL, 
+                           stderr=subprocess.DEVNULL,
+                           env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
+            result = subprocess.run(["true"], 
                                   capture_output=True, text=True)
             return result.returncode == 0
         except Exception:
@@ -596,6 +653,69 @@ class PreferencesWindow:
             Gtk.main_quit()
         else:
             self.on_apply(button)  # Show error dialog
+
+    def on_record_clicked(self, button):
+        """Handle microphone test recording."""
+        if not hasattr(self, "recording") or not self.recording:
+            self.start_recording()
+        else:
+            self.stop_recording()
+    
+    def start_recording(self):
+        """Start microphone test recording."""
+        try:
+            import sounddevice as sd
+            import numpy as np
+            
+            self.recording = True
+            self.record_button.set_label("Stop Recording")
+            
+            # Start level monitoring
+            self._start_level_monitoring()
+            
+            # Record for 3 seconds
+            GLib.timeout_add(3000, self.stop_recording)
+            
+        except Exception as e:
+            print(f"Recording error: {e}")
+            self.recording = False
+            self.record_button.set_label("Start Recording")
+    
+    def stop_recording(self):
+        """Stop microphone test recording."""
+        self.recording = False
+        self.record_button.set_label("Start Recording")
+        self._stop_level_monitoring()
+        return False  # Remove timeout
+    
+    def _start_level_monitoring(self):
+        """Start monitoring microphone levels."""
+        try:
+            import sounddevice as sd
+            import numpy as np
+            
+            def audio_callback(indata, frames, time, status):
+                if hasattr(self, "level_bar"):
+                    level = np.sqrt(np.mean(indata**2))
+                    GLib.idle_add(lambda: self.level_bar.set_value(min(level * 10, 1.0)))
+            
+            self.stream = sd.InputStream(callback=audio_callback)
+            self.stream.start()
+            
+        except Exception as e:
+            print(f"Level monitoring error: {e}")
+    
+    def _stop_level_monitoring(self):
+        """Stop monitoring microphone levels."""
+        if hasattr(self, "stream"):
+            try:
+                self.stream.stop()
+                self.stream.close()
+                delattr(self, "stream")
+            except:
+                pass
+        if hasattr(self, "level_bar"):
+            self.level_bar.set_value(0.0)
 
 def main():
     _acquire_prefs_singleton()

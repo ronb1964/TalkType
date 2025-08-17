@@ -5,7 +5,7 @@ description = "Press-and-hold dictation for Wayland (F8), Faster-Whisper + ydoto
 authors = ["Ron"]
 license = "MIT"
 readme = "README.md"
-packages = [{ include = "ron_dictation", from = "src" }]
+packages = [{ include = "talktype", from = "src" }]
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.14"
@@ -18,9 +18,9 @@ pygobject = "^3.52.3"
 toml = "*"
 
 [tool.poetry.scripts]
-dictate-tray = "ron_dictation.tray:main"
-dictate = "ron_dictation.app:main"
-dictate-prefs = "ron_dictation.prefs:main"
+dictate-tray = "talktype.tray:main"
+dictate = "talktype.app:main"
+dictate-prefs = "talktype.prefs:main"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.4.1"

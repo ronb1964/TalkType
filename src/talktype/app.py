@@ -31,7 +31,7 @@ def _notify(title: str, body: str):
 def _runtime_dir():
     return os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
 
-_PIDFILE = os.path.join(_runtime_dir(), "ron-dictation.pid")
+_PIDFILE = os.path.join(_runtime_dir(), "talktype.pid")
 
 def _pid_running(pid: int) -> bool:
     if pid <= 0: return False
@@ -40,7 +40,7 @@ def _pid_running(pid: int) -> bool:
     try:
         with open(os.path.join(proc, "cmdline"), "rb") as f:
             cmd = f.read().decode(errors="ignore")
-        return ("ron_dictation.app" in cmd) or ("dictate" in cmd)
+        return ("talktype.app" in cmd) or ("dictate" in cmd)
     except Exception:
         return True  # if in doubt, assume running
 
@@ -53,7 +53,7 @@ def _acquire_single_instance():
             except Exception:
                 old = 0
             if _pid_running(old):
-                print("Another ron-dictation instance is already running. Exiting.")
+                print("Another talktype instance is already running. Exiting.")
                 sys.exit(0)
         with open(_PIDFILE, "w") as f:
             f.write(str(os.getpid()))
