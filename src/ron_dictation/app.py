@@ -1,7 +1,8 @@
 import os, sys, time, shutil, subprocess, tempfile, wave, atexit, argparse
 import numpy as np
 import sounddevice as sd
-from faster_whisper import WhisperModel
+# Lazy load heavy dependencies
+# from faster_whisper import WhisperModel  # Loaded only when needed
 from evdev import InputDevice, ecodes, list_devices
 
 from .normalize import normalize_text
@@ -358,6 +359,15 @@ def _loop_evdev(cfg: Settings, input_device_idx):
         time.sleep(0.005)
 
 def build_model(settings: Settings):
+    # Lazy load WhisperModel only when needed
+    try:
+        from faster_whisper import WhisperModel
+    except ImportError:
+        print("❌ faster-whisper not installed!")
+        print("Install with: pip install faster-whisper")
+        print("Or: poetry install")
+        sys.exit(1)
+    
     compute_type = "float16" if settings.device.lower() == "cuda" else "int8"
     try:
         model = WhisperModel(

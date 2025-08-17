@@ -212,6 +212,9 @@ class PreferencesWindow:
         
         vbox.pack_start(button_box, False, False, 0)
         self.window.add(vbox)
+        
+        # Initialize hotkey UI state (after a short delay to ensure UI is ready)
+        GLib.timeout_add(100, self._update_hotkey_ui_state)
     
     def create_general_tab(self):
         grid = Gtk.Grid()
@@ -488,6 +491,38 @@ class PreferencesWindow:
             widget.grab_focus()
         # Let GTK handle the normal click event
         return False
+    
+    def _on_mode_changed(self, widget):
+        """Handle mode change to show/hide appropriate hotkey fields."""
+        mode = widget.get_active_id()
+        if mode == "hold":
+            # Show hold hotkey, hide toggle hotkey
+            self.hotkey_label.set_visible(True)
+            self.hotkey_combo.set_visible(True)
+            self.toggle_label.set_visible(False)
+            self.toggle_combo.set_visible(False)
+        else:  # toggle mode
+            # Show toggle hotkey, hide hold hotkey
+            self.hotkey_label.set_visible(False)
+            self.hotkey_combo.set_visible(False)
+            self.toggle_label.set_visible(True)
+            self.toggle_combo.set_visible(True)
+    
+    def _update_hotkey_ui_state(self):
+        """Update hotkey UI state based on current config."""
+        mode = self.config.get("mode", "hold")
+        if mode == "hold":
+            # Show hold hotkey, hide toggle hotkey
+            self.hotkey_label.set_visible(True)
+            self.hotkey_combo.set_visible(True)
+            self.toggle_label.set_visible(False)
+            self.toggle_combo.set_visible(False)
+        else:  # toggle mode
+            # Show toggle hotkey, hide hold hotkey
+            self.hotkey_label.set_visible(False)
+            self.hotkey_combo.set_visible(False)
+            self.toggle_label.set_visible(True)
+            self.toggle_combo.set_visible(True)
     
     def on_window_close(self, widget, event):
         """Handle window close event to clean up PID file."""
