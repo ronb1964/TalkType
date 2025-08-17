@@ -99,6 +99,9 @@ class PreferencesWindow:
         self.window.set_keep_above(True)  # Force window on top temporarily
         GLib.timeout_add_seconds(1, self._remove_keep_above)  # Remove keep_above after 1 second
         
+        # Initialize hotkey UI state after window is shown
+        GLib.timeout_add(200, self._update_hotkey_ui_state)
+        
     def load_config(self):
         """Load config from TOML file."""
         defaults = {
@@ -212,9 +215,6 @@ class PreferencesWindow:
         
         vbox.pack_start(button_box, False, False, 0)
         self.window.add(vbox)
-        
-        # Initialize hotkey UI state (after a short delay to ensure UI is ready)
-        GLib.timeout_add(100, self._update_hotkey_ui_state)
     
     def create_general_tab(self):
         grid = Gtk.Grid()
@@ -284,72 +284,81 @@ class PreferencesWindow:
         
         # Mode selection
         grid.attach(Gtk.Label(label="Mode:", xalign=0), 0, row, 1, 1)
-        mode_combo = Gtk.ComboBoxText()
+        self.mode_combo = Gtk.ComboBoxText()
         
         # Fix dropdown responsiveness - enable proper focus handling
-        mode_combo.set_can_focus(True)
+        self.mode_combo.set_can_focus(True)
         # Add button press event to ensure dropdown opens reliably
-        mode_combo.connect("button-press-event", self._on_combo_button_press)
+        self.mode_combo.connect("button-press-event", self._on_combo_button_press)
         
-        mode_combo.append("hold", "Hold to Talk")
-        mode_combo.append("toggle", "Press to Toggle")
-        mode_combo.set_active_id(self.config["mode"])
-        mode_combo.connect("changed", lambda x: self.update_config("mode", x.get_active_id()))
-        mode_combo.set_tooltip_text("How to activate dictation:\n• Hold to Talk: hold hotkey down while speaking\n• Press to Toggle: press once to start, press again to stop")
-        grid.attach(mode_combo, 1, row, 1, 1)
+        self.mode_combo.append("hold", "Hold to Talk")
+        self.mode_combo.append("toggle", "Press to Toggle")
+        self.mode_combo.set_active_id(self.config["mode"])
+        self.mode_combo.connect("changed", lambda x: self.update_config("mode", x.get_active_id()))
+        self.mode_combo.connect("changed", self._on_mode_changed)
+        self.mode_combo.set_tooltip_text("How to activate dictation:\n• Hold to Talk: hold hotkey down while speaking\n• Press to Toggle: press once to start, press again to stop")
+        grid.attach(self.mode_combo, 1, row, 1, 1)
         row += 1
         
-        # Hotkey
-        grid.attach(Gtk.Label(label="Hold Hotkey:", xalign=0), 0, row, 1, 1)
-        hotkey_combo = Gtk.ComboBoxText()
+        # Dynamic Hotkey (shows based on mode)
+        self.hotkey_label = Gtk.Label(label="Hold Hotkey:", xalign=0)
+        grid.attach(self.hotkey_label, 0, row, 1, 1)
+        
+        self.hotkey_combo = Gtk.ComboBoxText()
         
         # Fix dropdown responsiveness - enable proper focus handling
-        hotkey_combo.set_can_focus(True)
+        self.hotkey_combo.set_can_focus(True)
         # Add button press event to ensure dropdown opens reliably
-        hotkey_combo.connect("button-press-event", self._on_combo_button_press)
+        self.hotkey_combo.connect("button-press-event", self._on_combo_button_press)
         
         # Add F-key options (most practical for dictation)
         hotkeys = ["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12"]
         
         for key in hotkeys:
-            hotkey_combo.append(key, key)
+            self.hotkey_combo.append(key, key)
         
         # Set current selection or default to F8
         current_hotkey = self.config.get("hotkey", "F8")
         if current_hotkey in hotkeys:
-            hotkey_combo.set_active_id(current_hotkey)
+            self.hotkey_combo.set_active_id(current_hotkey)
         else:
-            hotkey_combo.set_active_id("F8")  # Default fallback
+            self.hotkey_combo.set_active_id("F8")  # Default fallback
             
-        hotkey_combo.connect("changed", lambda x: self.update_config("hotkey", x.get_active_id()))
-        hotkey_combo.set_tooltip_text("Choose the key to hold down for dictation.\nRecommended: F8 (default), F6, F7, F9, F10\nAvoid: F1 (help), F5 (refresh), F11 (fullscreen), F12 (dev tools)")
-        grid.attach(hotkey_combo, 1, row, 1, 1)
+        self.hotkey_combo.connect("changed", lambda x: self.update_config("hotkey", x.get_active_id()))
+        self.hotkey_combo.set_tooltip_text("Choose the key to hold down for dictation.\nRecommended: F8 (default), F6, F7, F9, F10\nAvoid: F1 (help), F5 (refresh), F11 (fullscreen), F12 (dev tools)")
+        grid.attach(self.hotkey_combo, 1, row, 1, 1)
         row += 1
         
-        # Toggle hotkey
-        grid.attach(Gtk.Label(label="Toggle Hotkey:", xalign=0), 0, row, 1, 1)
-        toggle_combo = Gtk.ComboBoxText()
+        # Toggle hotkey (initially hidden for hold mode)
+        self.toggle_label = Gtk.Label(label="Toggle Hotkey:", xalign=0)
+        self.toggle_combo = Gtk.ComboBoxText()
         
         # Fix dropdown responsiveness - enable proper focus handling
-        toggle_combo.set_can_focus(True)
+        self.toggle_combo.set_can_focus(True)
         # Add button press event to ensure dropdown opens reliably
-        toggle_combo.connect("button-press-event", self._on_combo_button_press)
+        self.toggle_combo.connect("button-press-event", self._on_combo_button_press)
         
         # Add same options for toggle key
         for key in hotkeys:
-            toggle_combo.append(key, key)
+            self.toggle_combo.append(key, key)
             
         # Set current selection or default to F9
         current_toggle = self.config.get("toggle_hotkey", "F9")
         if current_toggle in hotkeys:
-            toggle_combo.set_active_id(current_toggle)
+            self.toggle_combo.set_active_id(current_toggle)
         else:
-            toggle_combo.set_active_id("F9")  # Default fallback
+            self.toggle_combo.set_active_id("F9")  # Default fallback
             
-        toggle_combo.connect("changed", lambda x: self.update_config("toggle_hotkey", x.get_active_id()))
-        toggle_combo.set_tooltip_text("Choose the key for toggle mode (press once to start, press again to stop).\nRecommended: F9 (default), F10, F6, F7\nOnly used when Mode is set to 'Press to Toggle'.")
-        grid.attach(toggle_combo, 1, row, 1, 1)
-        row += 1
+        self.toggle_combo.connect("changed", lambda x: self.update_config("toggle_hotkey", x.get_active_id()))
+        self.toggle_combo.set_tooltip_text("Choose the key for toggle mode (press once to start, press again to stop).\nRecommended: F9 (default), F10, F6, F7\nOnly used when Mode is set to 'Press to Toggle'.")
+        
+        # Initially hide toggle hotkey if in hold mode
+        if self.config["mode"] == "hold":
+            self.toggle_label.set_visible(False)
+            self.toggle_combo.set_visible(False)
+        else:
+            self.hotkey_label.set_visible(False)
+            self.hotkey_combo.set_visible(False)
         
         return grid
     
