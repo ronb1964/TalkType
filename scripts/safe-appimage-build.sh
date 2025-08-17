@@ -32,7 +32,7 @@ print_success() {
 }
 
 # Check if we're in the right directory
-if [[ ! -f "pyproject.toml" ]] || [[ ! -d "src/ron_dictation" ]]; then
+if [[ ! -f "pyproject.toml" ]] || [[ ! -d "src/talktype" ]]; then
     print_error "Must be run from TalkType project root directory"
     exit 1
 fi
@@ -62,16 +62,16 @@ fi
 print_status "Stopping TalkType services to prevent conflicts..."
 
 # Stop systemd service if running
-if systemctl --user is-active --quiet ron-dictation.service 2>/dev/null; then
-    print_status "Stopping ron-dictation.service..."
-    systemctl --user stop ron-dictation.service
+if systemctl --user is-active --quiet talktype.service 2>/dev/null; then
+    print_status "Stopping talktype.service..."
+    systemctl --user stop talktype.service
     RESTART_SERVICE=1
 fi
 
 # Kill any running TalkType processes
 print_status "Stopping TalkType processes..."
 pkill -f "dictate-tray" 2>/dev/null || true
-pkill -f "ron_dictation" 2>/dev/null || true
+pkill -f "talktype" 2>/dev/null || true
 pkill -f "TalkType" 2>/dev/null || true
 
 # Wait a moment for processes to die
@@ -131,8 +131,8 @@ print_status "Restoring TalkType services..."
 
 # Restart service if it was running
 if [[ "${RESTART_SERVICE:-0}" == "1" ]]; then
-    print_status "Restarting ron-dictation.service..."
-    systemctl --user start ron-dictation.service
+    print_status "Restarting talktype.service..."
+    systemctl --user start talktype.service
 fi
 
 print_success "Safe AppImage build complete!"

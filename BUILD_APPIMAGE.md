@@ -11,9 +11,9 @@ The AppImage build process copies your entire Python environment and can interfe
 ### 1. Preparation (Before Building)
 ```bash
 # 1. Stop TalkType completely
-systemctl --user stop ron-dictation.service
+systemctl --user stop talktype.service
 pkill -f "dictate-tray"
-pkill -f "ron_dictation"
+pkill -f "talktype"
 
 # 2. Switch to build branch
 git checkout appimage-builds
@@ -50,7 +50,7 @@ rm -rf AppDir/usr/  # Remove copied Python environment
 git clean -fd      # Remove any other build artifacts
 
 # 3. Restart your development environment
-systemctl --user start ron-dictation.service
+systemctl --user start talktype.service
 # Or manually start tray: dictate-tray &
 ```
 
@@ -89,5 +89,5 @@ docker run --rm -v $(pwd):/workspace appimage-builder
 2. Switch to main branch: `git checkout main`
 3. Clean workspace: `git clean -fd`
 4. Restart Poetry environment: `poetry install`
-5. Restart services: `systemctl --user restart ron-dictation.service`
+5. Restart services: `systemctl --user restart talktype.service`
 

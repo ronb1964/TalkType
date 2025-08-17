@@ -21,9 +21,9 @@ fi
 
 # Stop services
 print_status "Stopping TalkType services..."
-systemctl --user stop ron-dictation.service 2>/dev/null || true
+systemctl --user stop talktype.service 2>/dev/null || true
 pkill -f "dictate-tray" 2>/dev/null || true
-pkill -f "ron_dictation" 2>/dev/null || true
+pkill -f "talktype" 2>/dev/null || true
 pkill -f "TalkType" 2>/dev/null || true
 sleep 1
 
@@ -50,21 +50,21 @@ cat > AppDir/usr/bin/dictate-tray << 'EOF'
 #!/bin/bash
 HERE="$(dirname "$(readlink -f "${0}")")/.."
 export PYTHONPATH="$HERE/src:$PYTHONPATH"
-exec "$HERE/bin/python" -m ron_dictation.tray "$@"
+exec "$HERE/bin/python" -m talktype.tray "$@"
 EOF
 
 cat > AppDir/usr/bin/dictate-prefs << 'EOF'
 #!/bin/bash
 HERE="$(dirname "$(readlink -f "${0}")")/.."
 export PYTHONPATH="$HERE/src:$PYTHONPATH"
-exec "$HERE/bin/python" -m ron_dictation.prefs "$@"
+exec "$HERE/bin/python" -m talktype.prefs "$@"
 EOF
 
 cat > AppDir/usr/bin/dictate << 'EOF'
 #!/bin/bash
 HERE="$(dirname "$(readlink -f "${0}")")/.."
 export PYTHONPATH="$HERE/src:$PYTHONPATH"
-exec "$HERE/bin/python" -m ron_dictation.app "$@"
+exec "$HERE/bin/python" -m talktype.app "$@"
 EOF
 
 chmod +x AppDir/usr/bin/dictate*
@@ -115,7 +115,7 @@ chmod +x AppDir/AppRun
 
 # Test the environment
 print_status "Testing Poetry environment..."
-if AppDir/usr/bin/python -c "import ron_dictation.tray; print('✓ Imports work')" 2>/dev/null; then
+if AppDir/usr/bin/python -c "import talktype.tray; print('✓ Imports work')" 2>/dev/null; then
     print_success "Poetry environment is working"
 else
     echo "❌ Poetry environment test failed"
@@ -147,7 +147,7 @@ fi
 
 # Restart services
 print_status "Restarting services..."
-systemctl --user start ron-dictation.service 2>/dev/null || true
+systemctl --user start talktype.service 2>/dev/null || true
 
 print_success "Clean AppImage build complete!"
 echo "📁 Generated: TalkType-x86_64.AppImage"

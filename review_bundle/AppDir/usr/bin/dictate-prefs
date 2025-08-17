@@ -1,0 +1,4 @@
+#!/bin/bash
+HERE="$(dirname "$(readlink -f "${0}")")/.."
+export PYTHONPATH="$HERE/src:$PYTHONPATH"
+exec "$HERE/bin/python" -m ron_dictation.prefs "$@"

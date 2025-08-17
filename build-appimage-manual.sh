@@ -19,16 +19,16 @@ print_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 # Check if we're in the right directory
-if [[ ! -f "pyproject.toml" ]] || [[ ! -d "src/ron_dictation" ]]; then
+if [[ ! -f "pyproject.toml" ]] || [[ ! -d "src/talktype" ]]; then
     print_error "Must be run from TalkType project root directory"
     exit 1
 fi
 
 # Stop services first
 print_status "Stopping TalkType services..."
-systemctl --user stop ron-dictation.service 2>/dev/null || true
+systemctl --user stop talktype.service 2>/dev/null || true
 pkill -f "dictate-tray" 2>/dev/null || true
-pkill -f "ron_dictation" 2>/dev/null || true
+pkill -f "talktype" 2>/dev/null || true
 sleep 2
 
 # Clean and create AppDir
@@ -86,7 +86,7 @@ export LD_LIBRARY_PATH="\$HERE/lib64:\$HERE/lib:\$LD_LIBRARY_PATH"
 exec "\$HERE/bin/python3" -c "
 import sys
 sys.path.insert(0, '\$HERE/src')
-from src.ron_dictation.tray import main
+from src.talktype.tray import main
 main()
 " "\$@"
 EOF
@@ -99,7 +99,7 @@ export LD_LIBRARY_PATH="\$HERE/lib64:\$HERE/lib:\$LD_LIBRARY_PATH"
 exec "\$HERE/bin/python3" -c "
 import sys
 sys.path.insert(0, '\$HERE/src')
-from src.ron_dictation.prefs import main
+from src.talktype.prefs import main
 main()
 " "\$@"
 EOF
@@ -112,7 +112,7 @@ export LD_LIBRARY_PATH="\$HERE/lib64:\$HERE/lib:\$LD_LIBRARY_PATH"
 exec "\$HERE/bin/python3" -c "
 import sys
 sys.path.insert(0, '\$HERE/src')
-from src.ron_dictation.app import main
+from src.talktype.app import main
 main()
 " "\$@"
 EOF
@@ -162,7 +162,7 @@ else
 fi
 
 print_status "Cleaning up and restoring services..."
-systemctl --user start ron-dictation.service 2>/dev/null || true
+systemctl --user start talktype.service 2>/dev/null || true
 
 print_success "Manual AppImage build complete!"
 echo "📁 Generated: TalkType-x86_64.AppImage"

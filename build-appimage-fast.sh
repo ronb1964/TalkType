@@ -21,9 +21,9 @@ fi
 
 # Stop services
 print_status "Stopping TalkType services..."
-systemctl --user stop ron-dictation.service 2>/dev/null || true
+systemctl --user stop talktype.service 2>/dev/null || true
 pkill -f "dictate-tray" 2>/dev/null || true
-pkill -f "ron_dictation" 2>/dev/null || true
+pkill -f "talktype" 2>/dev/null || true
 pkill -f "TalkType" 2>/dev/null || true
 sleep 1
 
@@ -63,7 +63,7 @@ fi
 
 # Restart services
 print_status "Restarting services..."
-systemctl --user start ron-dictation.service 2>/dev/null || true
+systemctl --user start talktype.service 2>/dev/null || true
 
 print_success "Fast AppImage build complete!"
 echo "📁 Generated: TalkType-x86_64.AppImage"
