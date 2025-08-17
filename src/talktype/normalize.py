@@ -1,6 +1,6 @@
 import re
 
-def normalize_text(text: str) -> str:
+def normalize_text(text: str, use_smart_quotes: bool = True, preserve_soft_break_marker: bool = False) -> str:
     """Spoken punctuation -> symbols; tidy punctuation; auto-capitalize; keep newlines/tabs."""
     if not text:
         return text
@@ -12,9 +12,9 @@ def normalize_text(text: str) -> str:
 
     # --- 1) Multi-word replacements first (order matters) ---
     replacements = [
-        (r"[,.\s]*\bnew\s*line\b[,.\s]*|\bnewline\b|\breturn\b|\bline\s+break\b", "§SHIFT_ENTER§"),
-        (r"[,.\s]*\bnew\s+paragraph\b[,.\s]*|\bparagraph\s+break\b", "\n\n"),
-        (r"[,.\s]*\bsoft\s+break\b[,.\s]*|\bsoft\s+line\b[,.\s]*", "   "),
+        (r"[,\.\s]*\bnew\s*line\b[,\.\s]*|\bnewline\b|\breturn\b|\bline\s+break\b", "§SHIFT_ENTER§"),
+        (r"[,\.\s]*\bnew\s+paragraph\b[,\.\s]*|\bparagraph\s+break\b", "\n\n"),
+        (r"[,\.\s]*\bsoft\s+break\b[,\.\s]*|\bsoft\s+line\b[,\.\s]*", "   "),
         (r"\btab\b", "\t"),
         (r"\bexclamation\s+point\b|\bexclamation\s+mark\b", "!"),
         (r"\bquestion\s+mark\b", "?"),
@@ -46,6 +46,9 @@ def normalize_text(text: str) -> str:
     ]
     for pat, repl in singles:
         text = re.sub(pat, repl, text, flags=re.IGNORECASE)
+
+    # Trim spaces around soft-break markers without touching tabs/newlines
+    text = re.sub(r"[ ]*§SHIFT_ENTER§[ ]*", "§SHIFT_ENTER§", text)
 
     # --- 3) Quotes/brackets spacing (no space inside, tidy outside) ---
     text = re.sub(r"(\(|\[|\{)\s+", r"\1", text)   # "( something" -> "(something"
@@ -92,6 +95,10 @@ def normalize_text(text: str) -> str:
     text = re.sub(r"\s*—\s*", " — ", text)
     text = re.sub(r"\s*-\s*", "-", text)
 
+    # Convert soft-break marker to newline early so following tidy/cap steps handle it
+    if not preserve_soft_break_marker:
+        text = text.replace("§SHIFT_ENTER§", "\n")
+
     # --- 9) Tidy spaces around newlines; keep tabs/newlines; avoid stripping leading tabs ---
     text = re.sub(r"[ \t]+\n", "\n", text)   # drop spaces/tabs before newline
     text = re.sub(r"\n[ ]+", "\n", text)     # drop spaces after newline, KEEP tabs
@@ -130,9 +137,17 @@ def normalize_text(text: str) -> str:
 
     # --- 11) Place sentence punctuation inside closing smart quote ---
     # Turn ”! -> !”, ”? -> ?”, ”. -> .”, ”, -> ,”, ”; -> ;”, ”: -> :
-    text = re.sub(r"”( ?)([!?,;:.])", r"\2”", text)
+    if use_smart_quotes:
+        text = re.sub(r"”( ?)([!?,;:.])", r"\2”", text)
 
     # --- 12) Restore literal tokens ---
     text = text.replace("__LIT_PERIOD__", "period")
+
+    # If smart quotes are disabled, convert smart punctuation to ASCII at the end
+    if not use_smart_quotes:
+        text = (text
+                .replace("“", '"')
+                .replace("”", '"')
+                .replace("’", "'"))
 
     return text

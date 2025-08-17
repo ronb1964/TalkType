@@ -1,6 +1,17 @@
 from __future__ import annotations
-import os, tomllib
+import os
 from dataclasses import dataclass
+
+try:
+    import tomllib
+    def _load_toml(path: str) -> dict:
+        with open(path, "rb") as f:
+            return tomllib.load(f)
+except ModuleNotFoundError:
+    import toml
+    def _load_toml(path: str) -> dict:
+        with open(path, "r", encoding="utf-8") as f:
+            return toml.load(f)
 
 CONFIG_PATH = os.path.expanduser("~/.config/talktype/config.toml")
 
@@ -25,8 +36,7 @@ def load_config() -> Settings:
     s = Settings()
     if os.path.exists(CONFIG_PATH):
         try:
-            with open(CONFIG_PATH, "rb") as f:
-                data = tomllib.load(f)
+            data = _load_toml(CONFIG_PATH)
             s.model = str(data.get("model", s.model))
             s.device = str(data.get("device", s.device))
             s.hotkey = str(data.get("hotkey", s.hotkey))

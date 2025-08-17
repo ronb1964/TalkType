@@ -284,7 +284,7 @@ def stop_recording(
         )
         raw = " ".join(seg.text for seg in segments).strip()
         print(f"📝 Raw: {raw!r}")
-        text = normalize_text(raw if smart_quotes else raw.replace("“","\"").replace("”","\""))
+        text = normalize_text(raw, use_smart_quotes=smart_quotes, preserve_soft_break_marker=True)
 
         # Simple spacing: always add period+space or just space when auto features are on
         if auto_period and text and not text.rstrip().endswith((".","?","!","…")):

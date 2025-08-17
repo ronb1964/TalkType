@@ -89,9 +89,8 @@ class DictationTray:
     def start_service(self, _):
         """Start the dictation service."""
         try:
-            # Start the app in background
-                        subprocess.Popen(["python3", "-m", "src.talktype.app"],
-                            cwd=os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+            project_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+            subprocess.Popen([sys.executable, "-m", "talktype.app"], cwd=project_dir)
             GLib.timeout_add_seconds(2, self.update_icon_status_once)
         except Exception as e:
             print(f"Failed to start service: {e}")
@@ -121,12 +120,8 @@ class DictationTray:
     def open_preferences(self, _):
         """Launch preferences window."""
         try:
-            # Use direct Python path for more reliable execution
-            import os
-                    project_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__))
-        python_path = "python3"  # Use system Python instead of hardcoded path
-            subprocess.Popen([python_path, "-m", "src.talktype.prefs"], 
-                           cwd=project_dir)
+            project_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+            subprocess.Popen([sys.executable, "-m", "talktype.prefs"], cwd=project_dir)
         except Exception as e:
             print(f"Failed to open preferences: {e}")
     
