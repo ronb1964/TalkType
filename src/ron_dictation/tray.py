@@ -69,9 +69,10 @@ class DictationTray:
     def is_service_running(self):
         """Check if the dictation service is active."""
         try:
-            result = subprocess.run(["systemctl", "--user", "is-active", SERVICE], 
+            # Check for running Python processes with ron_dictation.app
+            result = subprocess.run(["pgrep", "-f", "ron_dictation.app"], 
                                   capture_output=True, text=True)
-            return result.returncode == 0 and result.stdout.strip() == "active"
+            return result.returncode == 0
         except Exception:
             return False
     
@@ -86,16 +87,32 @@ class DictationTray:
         return True  # Continue the timer
     
     def start_service(self, _):
-        subprocess.call(["systemctl", "--user", "start", SERVICE])
-        GLib.timeout_add_seconds(1, self.update_icon_status_once)
+        """Start the dictation service."""
+        try:
+            # Start the app in background
+            subprocess.Popen(["python3", "-m", "src.ron_dictation.app"], 
+                           cwd="/home/ron/projects/ron-dictation/TalkType")
+            GLib.timeout_add_seconds(2, self.update_icon_status_once)
+        except Exception as e:
+            print(f"Failed to start service: {e}")
     
     def stop_service(self, _):
-        subprocess.call(["systemctl", "--user", "stop", SERVICE])
-        GLib.timeout_add_seconds(1, self.update_icon_status_once)
+        """Stop the dictation service."""
+        try:
+            # Kill running app processes
+            subprocess.run(["pkill", "-f", "ron_dictation.app"])
+            GLib.timeout_add_seconds(1, self.update_icon_status_once)
+        except Exception as e:
+            print(f"Failed to stop service: {e}")
     
     def restart_service(self, _):
-        subprocess.call(["systemctl", "--user", "restart", SERVICE])
-        GLib.timeout_add_seconds(2, self.update_icon_status_once)
+        """Restart the dictation service."""
+        try:
+            # Stop first, then start
+            subprocess.run(["pkill", "-f", "ron_dictation.app"])
+            GLib.timeout_add_seconds(1, lambda: self.start_service(None))
+        except Exception as e:
+            print(f"Failed to restart service: {e}")
     
     def update_icon_status_once(self):
         self.update_icon_status()
@@ -123,9 +140,9 @@ class DictationTray:
         title_item = Gtk.MenuItem(label="🎙️ TalkType")
         title_item.set_sensitive(False)
         
-        start_item = Gtk.MenuItem(label="Start Service")
-        stop_item = Gtk.MenuItem(label="Stop Service")
-        restart_item = Gtk.MenuItem(label="Restart Service")
+        start_item = Gtk.MenuItem(label="Start Dictation")
+        stop_item = Gtk.MenuItem(label="Stop Dictation")
+        restart_item = Gtk.MenuItem(label="Restart Dictation")
         prefs_item = Gtk.MenuItem(label="Preferences...")
         quit_item = Gtk.MenuItem(label="Quit Tray")
         
