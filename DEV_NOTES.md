@@ -70,7 +70,7 @@ Service to run the listener at login
 .desktop launchers for Start/Stop/Tray/Preferences
 
 Repo layout
-src/ron_dictation/
+src/talktype/
   app.py           # main listener loop: hotkeys, audio record, STT, typing
   normalize.py     # text post-processing rules (tests cover behavior)
   config.py        # load config from TOML + env overrides
@@ -84,11 +84,11 @@ README.md
 
 Console scripts (via Poetry):
 
-dictate → ron_dictation.app:main
+dictate → talktype.app:main
 
-dictate-tray → ron_dictation.tray:main
+dictate-tray → talktype.tray:main
 
-dictate-prefs → ron_dictation.prefs:main
+dictate-prefs → talktype.prefs:main
 
 Dependencies
 
