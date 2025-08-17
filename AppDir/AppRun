@@ -1,23 +1,14 @@
 #!/bin/bash
 HERE="$(dirname "$(readlink -f "${0}")")"
 
-# Set up environment - match system environment
+# Set up environment
 export PATH="$HERE/usr/bin:$PATH"
 export LD_LIBRARY_PATH="$HERE/usr/lib:$LD_LIBRARY_PATH"
 export PYTHONPATH="$HERE/usr/src:$PYTHONPATH"
 
-# GTK and GI environment - use system libraries for display
-unset GI_TYPELIB_PATH
-export GI_TYPELIB_PATH="/usr/lib64/girepository-1.0:/usr/lib/girepository-1.0:$HERE/usr/lib/girepository-1.0"
-export XDG_DATA_DIRS="$HERE/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
-
-# Audio environment  
+# Set up audio and GTK
 export PULSE_RUNTIME_PATH="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/pulse"
-
-# Ensure proper display and windowing
-export DISPLAY="${DISPLAY:-:0}"
-export WAYLAND_DISPLAY="${WAYLAND_DISPLAY}"
-export XDG_SESSION_TYPE="${XDG_SESSION_TYPE}"
+export XDG_DATA_DIRS="$HERE/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
 
 # Parse arguments
 case "${1:-tray}" in

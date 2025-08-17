@@ -2,7 +2,7 @@ from __future__ import annotations
 import os, tomllib
 from dataclasses import dataclass
 
-CONFIG_PATH = os.path.expanduser("~/.config/ron-dictation/config.toml")
+CONFIG_PATH = os.path.expanduser("~/.config/talktype/config.toml")
 
 @dataclass
 class Settings:

@@ -1,4 +1,4 @@
-from ron_dictation.normalize import normalize_text
+from src.talktype.normalize import normalize_text
 
 def test_basic_punct():
     s = "thank you comma this is great exclamation point"

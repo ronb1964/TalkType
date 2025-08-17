@@ -8,12 +8,12 @@ import os
 import sys
 import atexit
 
-SERVICE = "ron-dictation.service"
+SERVICE = "talktype.service"  # Not used anymore - we check processes directly
 
 def _runtime_dir():
     return os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
 
-_TRAY_PIDFILE = os.path.join(_runtime_dir(), "ron-dictation-tray.pid")
+_TRAY_PIDFILE = os.path.join(_runtime_dir(), "talktype-tray.pid")
 
 def _pid_running(pid: int) -> bool:
     if pid <= 0: return False
@@ -22,7 +22,7 @@ def _pid_running(pid: int) -> bool:
     try:
         with open(os.path.join(proc, "cmdline"), "rb") as f:
             cmd = f.read().decode(errors="ignore")
-        return ("dictate-tray" in cmd) or ("ron_dictation.tray" in cmd)
+        return ("talktype.tray" in cmd) or ("dictate-tray" in cmd)
     except Exception:
         return True  # if in doubt, assume running
 
@@ -69,9 +69,10 @@ class DictationTray:
     def is_service_running(self):
         """Check if the dictation service is active."""
         try:
-            result = subprocess.run(["systemctl", "--user", "is-active", SERVICE], 
+            # Check for running talktype.app process
+            result = subprocess.run(["pgrep", "-f", "talktype.app"], 
                                   capture_output=True, text=True)
-            return result.returncode == 0 and result.stdout.strip() == "active"
+            return result.returncode == 0 and result.stdout.strip()
         except Exception:
             return False
     
@@ -106,9 +107,9 @@ class DictationTray:
         try:
             # Use direct Python path for more reliable execution
             import os
-            project_dir = "/home/ron/projects/ron-dictation/TalkType"
-            python_path = "/home/ron/.cache/pypoetry/virtualenvs/ron-dictation-zz-XcKas-py3.12/bin/python"
-            subprocess.Popen([python_path, "-m", "src.ron_dictation.prefs"], 
+            project_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+            python_path = sys.executable
+            subprocess.Popen([python_path, "-m", "src.talktype.prefs"], 
                            cwd=project_dir)
         except Exception as e:
             print(f"Failed to open preferences: {e}")

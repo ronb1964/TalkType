@@ -32,13 +32,16 @@ print_status "Cleaning old AppDir..."
 rm -rf AppDir/usr/ 2>/dev/null || true
 mkdir -p AppDir/usr/{bin,lib,share/applications,share/icons/hicolor/scalable/apps}
 
-# Get Poetry venv path
-POETRY_VENV="/home/ron/.cache/pypoetry/virtualenvs/ron-dictation-zz-XcKas-py3.12"
-print_status "Using Poetry venv: $POETRY_VENV"
+# Use project venv
+PROJECT_VENV=".venv"
+print_status "Using project venv: $PROJECT_VENV"
 
-# Copy Poetry's Python environment
-print_status "Copying Poetry virtual environment..."
-cp -r "$POETRY_VENV"/* AppDir/usr/
+# Copy project virtual environment
+print_status "Copying project virtual environment..."
+mkdir -p AppDir/usr/lib/python3.13/site-packages
+cp -r "$PROJECT_VENV"/lib/python3.13/site-packages/* AppDir/usr/lib/python3.13/site-packages/
+cp "$PROJECT_VENV"/bin/python* AppDir/usr/bin/
+cp "$PROJECT_VENV"/bin/pip* AppDir/usr/bin/ 2>/dev/null || true
 
 # Copy our source code  
 print_status "Copying TalkType source code..."
@@ -49,22 +52,22 @@ print_status "Creating launcher scripts..."
 cat > AppDir/usr/bin/dictate-tray << 'EOF'
 #!/bin/bash
 HERE="$(dirname "$(readlink -f "${0}")")/.."
-export PYTHONPATH="$HERE/src:$PYTHONPATH"
-exec "$HERE/bin/python" -m ron_dictation.tray "$@"
+export PYTHONPATH="$HERE:$PYTHONPATH"
+exec "$HERE/bin/python" -m src.talktype.tray "$@"
 EOF
 
 cat > AppDir/usr/bin/dictate-prefs << 'EOF'
 #!/bin/bash
 HERE="$(dirname "$(readlink -f "${0}")")/.."
-export PYTHONPATH="$HERE/src:$PYTHONPATH"
-exec "$HERE/bin/python" -m ron_dictation.prefs "$@"
+export PYTHONPATH="$HERE:$PYTHONPATH"
+exec "$HERE/bin/python" -m src.talktype.prefs "$@"
 EOF
 
 cat > AppDir/usr/bin/dictate << 'EOF'
 #!/bin/bash
 HERE="$(dirname "$(readlink -f "${0}")")/.."
-export PYTHONPATH="$HERE/src:$PYTHONPATH"
-exec "$HERE/bin/python" -m ron_dictation.app "$@"
+export PYTHONPATH="$HERE:$PYTHONPATH"
+exec "$HERE/bin/python" -m src.talktype.app "$@"
 EOF
 
 chmod +x AppDir/usr/bin/dictate*
@@ -114,11 +117,11 @@ EOF
 chmod +x AppDir/AppRun
 
 # Test the environment
-print_status "Testing Poetry environment..."
-if AppDir/usr/bin/python -c "import ron_dictation.tray; print('✓ Imports work')" 2>/dev/null; then
-    print_success "Poetry environment is working"
+print_status "Testing project environment..."
+if AppDir/usr/bin/dictate-tray --help >/dev/null 2>&1; then
+    print_success "Project environment is working"
 else
-    echo "❌ Poetry environment test failed"
+    echo "❌ Project environment test failed"
     exit 1
 fi
 
