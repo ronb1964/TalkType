@@ -33,7 +33,7 @@ rm -rf AppDir/usr/ 2>/dev/null || true
 mkdir -p AppDir/usr/{bin,lib,share/applications,share/icons/hicolor/scalable/apps}
 
 # Get Poetry venv path
-POETRY_VENV="/home/ron/.cache/pypoetry/virtualenvs/ron-dictation-zz-XcKas-py3.12"
+POETRY_VENV="/home/ron/.cache/pypoetry/virtualenvs/talktype-zz-XcKas-py3.12"
 print_status "Using Poetry venv: $POETRY_VENV"
 
 # Copy Poetry's Python environment

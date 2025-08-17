@@ -28,7 +28,7 @@ poetry run dictate-tray
 poetry run dictate-prefs
 
 # Make changes to core app
-edit src/ron_dictation/*.py
+edit src/talktype/*.py
 
 # Test changes
 poetry run pytest
@@ -60,7 +60,7 @@ edit AppDir/AppRun
 ### **📁 File Ownership by Branch**
 
 #### **`main` branch owns:**
-- `src/ron_dictation/*.py` (core application)
+- `src/talktype/*.py` (core application)
 - `pyproject.toml` (dependencies)
 - `tests/` (unit tests)
 - `README.md` (user documentation)
@@ -76,28 +76,28 @@ edit AppDir/AppRun
 #### **Switch to Daily Use (Installed App):**
 ```bash
 git checkout main
-systemctl --user start ron-dictation.service
+systemctl --user start talktype.service
 ```
 
 #### **Switch to AppImage Development:**
 ```bash
 git checkout appimage-builds
-systemctl --user stop ron-dictation.service
+systemctl --user stop talktype.service
 ./build-appimage-clean.sh
 ```
 
 #### **Emergency Reset if Confused:**
 ```bash
 # Stop everything
-pkill -f "dictate\|TalkType\|ron_dictation"
-systemctl --user stop ron-dictation.service
+pkill -f "dictate\|TalkType\|talktype"
+systemctl --user stop talktype.service
 
 # Go back to stable main
 git checkout main
 git reset --hard origin/main
 
 # Restart installed version
-systemctl --user start ron-dictation.service
+systemctl --user start talktype.service
 ```
 
 ### **🎯 Benefits**

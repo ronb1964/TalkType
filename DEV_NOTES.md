@@ -1,5 +1,5 @@
 DEV_NOTES.md
-Project: TalkType (a.k.a. ron-dictation)
+Project: TalkType
 
 Press-and-hold (or toggle) dictation for Wayland. Uses Faster-Whisper for STT and ydotool to type into the focused window. Includes smart punctuation, quotes, ellipsis, capitalization, config file, CLI flags, optional tray, and a GTK Preferences UI.
 
@@ -53,7 +53,7 @@ Auto-space: when a new utterance types into existing text, we prepend a single s
 
 Config
 
-TOML: ~/.config/ron-dictation/config.toml
+TOML: ~/.config/talktype/config.toml
 
 Env overrides and CLI flags
 
@@ -140,7 +140,7 @@ systemctl --user enable --now ydotoold.service
 
 Config file
 
-~/.config/ron-dictation/config.toml:
+~/.config/talktype/config.toml:
 
 model = "small"         # tiny/base/small/medium/large-v3
 device = "cpu"          # "cpu" or "cuda"
@@ -169,7 +169,7 @@ poetry run dictate \
 
 Systemd service (user) for the app
 mkdir -p ~/.config/systemd/user
-cat > ~/.config/systemd/user/ron-dictation.service <<'EOF'
+cat > ~/.config/systemd/user/talktype.service <<'EOF'
 [Unit]
 Description=Ron Dictation Listener (F8) - Faster-Whisper + ydotool
 After=ydotoold.service graphical-session.target
@@ -177,7 +177,7 @@ Wants=ydotoold.service
 
 [Service]
 Type=simple
-ExecStart=/bin/bash -lc 'cd ~/projects/ron-dictation && poetry run dictate'
+ExecStart=/bin/bash -lc 'cd ~/projects/talktype && poetry run dictate'
 Restart=on-failure
 RestartSec=2
 StandardOutput=journal
@@ -188,30 +188,30 @@ WantedBy=default.target
 EOF
 
 systemctl --user daemon-reload
-systemctl --user enable --now ron-dictation.service
-journalctl --user -fu ron-dictation.service
+systemctl --user enable --now talktype.service
+journalctl --user -fu talktype.service
 
 
 Desktop launchers (already included in setup):
 
-~/.local/share/applications/ron-dictation-start.desktop
+~/.local/share/applications/talktype-start.desktop
 
-~/.local/share/applications/ron-dictation-stop.desktop
+~/.local/share/applications/talktype-stop.desktop
 
-~/.local/share/applications/ron-dictation-tray.desktop
+~/.local/share/applications/talktype-tray.desktop
 
-~/.local/share/applications/ron-dictation-prefs.desktop
+~/.local/share/applications/talktype-prefs.desktop
 
 Autostart tray on login:
 
-~/.config/autostart/ron-dictation-tray.desktop
-Exec=sh -lc 'cd ~/projects/ron-dictation && poetry run dictate-tray'
+~/.config/autostart/talktype-tray.desktop
+Exec=sh -lc 'cd ~/projects/talktype && poetry run dictate-tray'
 
 Development (Cursor / Poetry)
 
 Activate Poetry env (path will differ on your machine):
 
-source /home/ron/.cache/pypoetry/virtualenvs/ron-dictation-*/bin/activate
+source /home/ron/.cache/pypoetry/virtualenvs/talktype-*/bin/activate
 
 
 Or in Cursor:
@@ -253,8 +253,8 @@ Fix:
 systemctl --user stop voice-dictation.service
 systemctl --user disable voice-dictation.service
 systemctl --user mask voice-dictation.service
-pkill -f 'speech_to_text.py|poetry run dictate|ron_dictation.app' || true
-systemctl --user restart ron-dictation.service
+pkill -f 'speech_to_text.py|poetry run dictate|talktype.app' || true
+systemctl --user restart talktype.service
 
 
 Nothing typed / “Could not type text”
@@ -310,7 +310,7 @@ poetry run dictate-tray &
 poetry run dictate-prefs
 
 # logs (service)
-journalctl --user -fu ron-dictation.service
+journalctl --user -fu talktype.service
 
 
 Maintainer notes: When adding features, please update this file so Cursor’s AI and future contributors have context without digging through chat history.

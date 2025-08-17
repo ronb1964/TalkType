@@ -29,7 +29,7 @@ Perfect for coding, writing, chatting, and accessibility. Uses Faster-Whisper fo
 git clone https://github.com/ronb1964/TalkType.git
 cd TalkType
 poetry install
-poetry run python -m ron_dictation.tray
+poetry run python -m src.talktype.tray
 ```
 
 ## 🎤 Basic Usage
@@ -90,7 +90,7 @@ poetry install
 poetry run pytest -q
 
 # Start development version
-poetry run python -m ron_dictation.tray
+poetry run python -m src.talktype.tray
 ```
 
 ## 📦 Building AppImage

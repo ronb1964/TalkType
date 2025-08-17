@@ -35,10 +35,10 @@
 ### Main Components
 | File | Purpose |
 |------|---------|
-| `src/ron_dictation/app.py` | Main listener loop, integrates Faster-Whisper + hotkey capture + ydotool typing. |
-| `src/ron_dictation/normalize.py` | Text cleanup rules (punctuation, spacing, capitalization, tabs). |
-| `src/ron_dictation/config.py` | User-configurable settings (hotkeys, beeps, model path). |
-| `src/ron_dictation/tray.py` | Optional tray icon for status & quick settings. |
+| `src/talktype/app.py` | Main listener loop, integrates Faster-Whisper + hotkey capture + ydotool typing. |
+| `src/talktype/normalize.py` | Text cleanup rules (punctuation, spacing, capitalization, tabs). |
+| `src/talktype/config.py` | User-configurable settings (hotkeys, beeps, model path). |
+| `src/talktype/tray.py` | Optional tray icon for status & service control. |
 
 ### Dependencies
 - `faster-whisper` (speech-to-text)
@@ -100,7 +100,7 @@ Description=Ron Dictation Listener (F8) - Faster-Whisper + ydotool
 After=ydotool.service
 
 [Service]
-ExecStart=/home/ron/.cache/pypoetry/virtualenvs/ron-dictation-PjtP02uz-py3.12/bin/python -m ron_dictation.app
+ExecStart=/home/ron/.cache/pypoetry/virtualenvs/talktype-PjtP02uz-py3.12/bin/python -m src.talktype.app
 Restart=always
 RestartSec=1
 
@@ -112,8 +112,8 @@ bash
 Copy
 Edit
 systemctl --user daemon-reload
-systemctl --user enable --now ron-dictation.service
-systemctl --user status ron-dictation.service
+systemctl --user enable --now talktype.service
+systemctl --user status talktype.service
 Old service cleanup:
 
 bash

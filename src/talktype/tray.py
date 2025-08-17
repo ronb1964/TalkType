@@ -90,8 +90,8 @@ class DictationTray:
         """Start the dictation service."""
         try:
             # Start the app in background
-            subprocess.Popen(["python3", "-m", "src.talktype.app"], 
-                           cwd="/home/ron/projects/ron-dictation/TalkType")
+                        subprocess.Popen(["python3", "-m", "src.talktype.app"],
+                            cwd=os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
             GLib.timeout_add_seconds(2, self.update_icon_status_once)
         except Exception as e:
             print(f"Failed to start service: {e}")
@@ -123,8 +123,8 @@ class DictationTray:
         try:
             # Use direct Python path for more reliable execution
             import os
-            project_dir = "/home/ron/projects/ron-dictation/TalkType"
-            python_path = "/home/ron/.cache/pypoetry/virtualenvs/ron-dictation-zz-XcKas-py3.12/bin/python"
+                    project_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__))
+        python_path = "python3"  # Use system Python instead of hardcoded path
             subprocess.Popen([python_path, "-m", "src.talktype.prefs"], 
                            cwd=project_dir)
         except Exception as e:
