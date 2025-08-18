@@ -10,6 +10,13 @@ export PYTHONPATH="$HERE/usr/src:$PYTHONPATH"
 export PULSE_RUNTIME_PATH="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/pulse"
 export XDG_DATA_DIRS="$HERE/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
 
+# Check if ydotoold is running, if not start it (needed for text injection)
+if ! pgrep -x "ydotoold" > /dev/null; then
+    echo "Starting ydotoold daemon for text injection..."
+    ydotoold &
+    sleep 2
+fi
+
 # Parse arguments
 case "${1:-tray}" in
     "tray"|"")
