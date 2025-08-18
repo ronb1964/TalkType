@@ -60,11 +60,16 @@ class DictationTray:
         )
         self.indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
         self.indicator.set_title("TalkType")  # Set the app name
+        
+        # Store menu items for dynamic updates
+        self.start_item = None
+        self.stop_item = None
+        
         self.update_icon_status()
         self.indicator.set_menu(self.build_menu())
         
-        # Check service status every 3 seconds
-        GLib.timeout_add_seconds(3, self.update_icon_status)
+        # Check service status every 3 seconds and update menu
+        GLib.timeout_add_seconds(3, self.update_status_and_menu)
         
     def is_service_running(self):
         """Check if the dictation service is active."""
@@ -87,20 +92,63 @@ class DictationTray:
         return True  # Continue the timer
     
     def start_service(self, _):
-        subprocess.call(["systemctl", "--user", "start", SERVICE])
-        GLib.timeout_add_seconds(1, self.update_icon_status_once)
+        """Start the dictation service directly."""
+        try:
+            project_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+            subprocess.Popen([sys.executable, "-m", "src.talktype.app"], 
+                           cwd=project_dir, 
+                           stdout=subprocess.DEVNULL, 
+                           stderr=subprocess.DEVNULL)
+            print("Started dictation service")
+        except Exception as e:
+            print(f"Failed to start service: {e}")
+        GLib.timeout_add_seconds(1, self.update_status_and_menu_once)
     
     def stop_service(self, _):
-        subprocess.call(["systemctl", "--user", "stop", SERVICE])
-        GLib.timeout_add_seconds(1, self.update_icon_status_once)
+        """Stop the dictation service directly."""
+        try:
+            subprocess.run(["pkill", "-f", "talktype.app"], capture_output=True)
+            print("Stopped dictation service")
+        except Exception as e:
+            print(f"Failed to stop service: {e}")
+        GLib.timeout_add_seconds(1, self.update_status_and_menu_once)
     
     def restart_service(self, _):
-        subprocess.call(["systemctl", "--user", "restart", SERVICE])
-        GLib.timeout_add_seconds(2, self.update_icon_status_once)
+        """Restart the dictation service directly."""
+        try:
+            # Stop first
+            subprocess.run(["pkill", "-f", "talktype.app"], capture_output=True)
+            # Wait a moment for processes to terminate
+            time.sleep(1)
+            # Start again
+            project_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+            subprocess.Popen([sys.executable, "-m", "src.talktype.app"], 
+                           cwd=project_dir, 
+                           stdout=subprocess.DEVNULL, 
+                           stderr=subprocess.DEVNULL)
+            print("Restarted dictation service")
+        except Exception as e:
+            print(f"Failed to restart service: {e}")
+        GLib.timeout_add_seconds(2, self.update_status_and_menu_once)
     
-    def update_icon_status_once(self):
+    def update_status_and_menu(self):
+        """Update icon and menu item visibility based on service status."""
         self.update_icon_status()
+        self.update_menu_items()
+        return True  # Continue the timer
+    
+    def update_status_and_menu_once(self):
+        """Update icon and menu items once."""
+        self.update_icon_status()
+        self.update_menu_items()
         return False  # Don't repeat
+    
+    def update_menu_items(self):
+        """Show/hide Start/Stop menu items based on service status."""
+        if self.start_item and self.stop_item:
+            is_running = self.is_service_running()
+            self.start_item.set_visible(not is_running)
+            self.stop_item.set_visible(is_running)
     
     def open_preferences(self, _):
         """Launch preferences window."""
@@ -124,22 +172,27 @@ class DictationTray:
         title_item = Gtk.MenuItem(label="🎙️ TalkType")
         title_item.set_sensitive(False)
         
-        start_item = Gtk.MenuItem(label="Start Service")
-        stop_item = Gtk.MenuItem(label="Stop Service")
+        # Store references to start/stop items for dynamic visibility
+        self.start_item = Gtk.MenuItem(label="Start Service")
+        self.stop_item = Gtk.MenuItem(label="Stop Service")
         restart_item = Gtk.MenuItem(label="Restart Service")
         prefs_item = Gtk.MenuItem(label="Preferences...")
         quit_item = Gtk.MenuItem(label="Quit Tray")
         
-        start_item.connect("activate", self.start_service)
-        stop_item.connect("activate", self.stop_service)
+        self.start_item.connect("activate", self.start_service)
+        self.stop_item.connect("activate", self.stop_service)
         restart_item.connect("activate", self.restart_service)
         prefs_item.connect("activate", self.open_preferences)
         quit_item.connect("activate", self.quit_app)
         
-        for item in (title_item, Gtk.SeparatorMenuItem(), start_item, stop_item, 
+        for item in (title_item, Gtk.SeparatorMenuItem(), self.start_item, self.stop_item, 
                      restart_item, Gtk.SeparatorMenuItem(), prefs_item, quit_item):
             menu.append(item)
         menu.show_all()
+        
+        # Set initial menu state based on service status
+        self.update_menu_items()
+        
         return menu
 
 def main():

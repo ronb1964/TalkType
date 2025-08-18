@@ -168,6 +168,20 @@ def _send_shift_enter():
             print(f"ydotool shift+enter failed: {e}")
     return False
 
+def _send_enter():
+    """Send Enter keystroke to create a new line."""
+    if shutil.which("ydotool"):
+        try:
+            env = os.environ.copy()
+            runtime = env.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+            env.setdefault("YDOTOOL_SOCKET", os.path.join(runtime, ".ydotool_socket"))
+            # KEY_ENTER (28)
+            subprocess.run(["ydotool", "key", "28:1", "28:0"], check=False, env=env)
+            return True
+        except Exception as e:
+            print(f"ydotool enter failed: {e}")
+    return False
+
 def _type_text(text: str):
     # Handle special markers first
     if "§SHIFT_ENTER§" in text:
@@ -178,6 +192,18 @@ def _type_text(text: str):
             if i < len(parts) - 1:  # Not the last part, send Shift+Enter
                 time.sleep(0.05)  # Small delay between text and key
                 _send_shift_enter()
+                time.sleep(0.05)  # Small delay after key
+        return
+    
+    # Handle regular newlines by converting them to Enter key presses
+    if "\n" in text:
+        parts = text.split("\n")
+        for i, part in enumerate(parts):
+            if part:  # Type the text part
+                _type_text_raw(part)
+            if i < len(parts) - 1:  # Not the last part, send Enter
+                time.sleep(0.05)  # Small delay between text and key
+                _send_enter()
                 time.sleep(0.05)  # Small delay after key
         return
     
@@ -283,12 +309,13 @@ def stop_recording(
         )
         raw = " ".join(seg.text for seg in segments).strip()
         print(f"📝 Raw: {raw!r}")
-        text = normalize_text(raw if smart_quotes else raw.replace("“","\"").replace("”","\""))
+        text = normalize_text(raw if smart_quotes else raw.replace(""","\"").replace(""","\""))
 
         # Simple spacing: always add period+space or just space when auto features are on
-        if auto_period and text and not text.rstrip().endswith((".","?","!","…")):
+        # Don't add auto-period or auto-space if text ends with special markers (like §SHIFT_ENTER§)
+        if auto_period and text and not text.rstrip().endswith((".","?","!","…")) and not text.endswith("§"):
             text = text.rstrip() + "."
-        if auto_space and text and not text.endswith((" ", "\n", "\t")):
+        if auto_space and text and not text.endswith((" ", "\n", "\t", "§")):
             text = text + " "
         print(f"📜 Text: {text!r}")
 
