@@ -163,6 +163,14 @@ class DictationTray:
             print(f"Failed to open preferences: {e}")
     
     def quit_app(self, _):
+        """Quit the tray and stop the dictation service."""
+        try:
+            # Stop the dictation service first
+            subprocess.run(["pkill", "-f", "talktype.app"], capture_output=True)
+            print("Stopped dictation service")
+        except Exception as e:
+            print(f"Error stopping dictation service: {e}")
+        # Then quit the tray
         Gtk.main_quit()
     
     def build_menu(self):
