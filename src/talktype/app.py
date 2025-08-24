@@ -398,6 +398,10 @@ def build_model(settings: Settings):
     except Exception as e:
         if settings.device.lower() == "cuda":
             print(f"❌ CUDA failed: {e}")
+            print(f"❌ CUDA error details: {type(e).__name__}: {str(e)}")
+            import traceback
+            print("❌ CUDA traceback:")
+            traceback.print_exc()
             print("🔄 Falling back to CPU...")
             try:
                 model = WhisperModel(
