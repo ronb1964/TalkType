@@ -95,10 +95,15 @@ class DictationTray:
         """Start the dictation service directly."""
         try:
             project_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+            # Add cuDNN library path for CUDA support
+            env = os.environ.copy()
+            cudnn_lib_path = os.path.join(os.path.dirname(sys.executable), 
+                                         "../lib/python3.13/site-packages/nvidia/cudnn/lib")
+            if os.path.exists(cudnn_lib_path):
+                current_ld_path = env.get("LD_LIBRARY_PATH", "")
+                env["LD_LIBRARY_PATH"] = f"{cudnn_lib_path}:{current_ld_path}" if current_ld_path else cudnn_lib_path
             subprocess.Popen([sys.executable, "-m", "src.talktype.app"], 
-                           cwd=project_dir, 
-                           stdout=subprocess.DEVNULL, 
-                           stderr=subprocess.DEVNULL)
+                           cwd=project_dir, env=env)
             print("Started dictation service")
         except Exception as e:
             print(f"Failed to start service: {e}")
@@ -122,10 +127,15 @@ class DictationTray:
             time.sleep(1)
             # Start again
             project_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+            # Add cuDNN library path for CUDA support
+            env = os.environ.copy()
+            cudnn_lib_path = os.path.join(os.path.dirname(sys.executable), 
+                                         "../lib/python3.13/site-packages/nvidia/cudnn/lib")
+            if os.path.exists(cudnn_lib_path):
+                current_ld_path = env.get("LD_LIBRARY_PATH", "")
+                env["LD_LIBRARY_PATH"] = f"{cudnn_lib_path}:{current_ld_path}" if current_ld_path else cudnn_lib_path
             subprocess.Popen([sys.executable, "-m", "src.talktype.app"], 
-                           cwd=project_dir, 
-                           stdout=subprocess.DEVNULL, 
-                           stderr=subprocess.DEVNULL)
+                           cwd=project_dir, env=env)
             print("Restarted dictation service")
         except Exception as e:
             print(f"Failed to restart service: {e}")
