@@ -80,6 +80,11 @@ def _acquire_prefs_singleton():
 
 class PreferencesWindow:
     def __init__(self):
+        # Set GTK theme to prefer dark mode
+        settings = Gtk.Settings.get_default()
+        if settings:
+            settings.set_property("gtk-application-prefer-dark-theme", True)
+        
         self.window = Gtk.Window(title="TalkType Preferences")
         self.window.set_default_size(500, 400)
         self.window.set_position(Gtk.WindowPosition.CENTER)
@@ -143,11 +148,17 @@ class PreferencesWindow:
         """Check if CUDA is available for faster-whisper."""
         try:
             from faster_whisper import WhisperModel
+            print("🔍 Checking CUDA availability in preferences...")
             # Try to create a tiny model with CUDA - this will fail if CUDA isn't available
             model = WhisperModel("tiny", device="cuda")
             del model  # Clean up
+            print("✅ CUDA availability check passed!")
             return True
-        except Exception:
+        except Exception as e:
+            print(f"❌ CUDA availability check failed: {e}")
+            import traceback
+            print("❌ CUDA availability traceback:")
+            traceback.print_exc()
             return False
     
     def save_config(self):
@@ -635,6 +646,54 @@ class PreferencesWindow:
     def update_config(self, key, value):
         """Update config value."""
         self.config[key] = value
+        
+        # Handle autostart desktop file creation/removal
+        if key == "launch_at_login":
+            self._handle_autostart(value)
+    
+    def _handle_autostart(self, enable):
+        """Create or remove autostart desktop file."""
+        autostart_dir = os.path.expanduser("~/.config/autostart")
+        desktop_file = os.path.join(autostart_dir, "talktype.desktop")
+        
+        if enable:
+            # Create autostart directory if it doesn't exist
+            os.makedirs(autostart_dir, exist_ok=True)
+            
+            # Get the path to the Poetry environment
+            python_path = sys.executable
+            project_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+            
+            # Create desktop file content
+            desktop_content = f"""[Desktop Entry]
+Type=Application
+Name=TalkType
+GenericName=Voice Dictation
+Comment=AI-powered dictation for Wayland using Faster-Whisper
+Exec={python_path} -c "import sys; sys.path.insert(0, '{project_dir}'); from src.talktype.tray import main; main()"
+Icon={project_dir}/AppDir/io.github.ronb1964.TalkType.svg
+Terminal=false
+Categories=Utility;
+Keywords=dictation;voice;speech;whisper;ai;transcription;
+StartupNotify=true
+StartupWMClass=TalkType
+X-GNOME-Autostart-enabled=true
+"""
+            
+            try:
+                with open(desktop_file, "w") as f:
+                    f.write(desktop_content)
+                print(f"✅ Created autostart file: {desktop_file}")
+            except Exception as e:
+                print(f"❌ Failed to create autostart file: {e}")
+        else:
+            # Remove autostart file
+            try:
+                if os.path.exists(desktop_file):
+                    os.remove(desktop_file)
+                    print(f"✅ Removed autostart file: {desktop_file}")
+            except Exception as e:
+                print(f"❌ Failed to remove autostart file: {e}")
     
     def _on_combo_button_press(self, widget, event):
         """Handle button press events on combo boxes to ensure they open reliably."""
