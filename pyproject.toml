@@ -16,6 +16,9 @@ numpy = "*"
 pyperclip = "*"
 pygobject = "^3.52.3"
 toml = "*"
+torch = {version = "^2.6.0+cu124", source = "pytorch"}
+torchvision = {version = "^0.21.0+cu124", source = "pytorch"}
+torchaudio = {version = "^2.6.0+cu124", source = "pytorch"}
 
 [tool.poetry.scripts]
 dictate-tray = "talktype.tray:main"
@@ -26,6 +29,12 @@ dictate-prefs = "talktype.prefs:main"
 pytest = "^8.4.1"
 black = "^25.1.0"
 ruff = "^0.12.9"
+
+
+[[tool.poetry.source]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cu124"
+priority = "explicit"
 
 [tool.black]
 line-length = 100
