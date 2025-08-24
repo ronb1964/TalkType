@@ -349,6 +349,14 @@ def _loop_evdev(cfg: Settings, input_device_idx):
     print(f"Session: {session} | Wayland={session=='wayland'}")
     mode = cfg.mode.lower().strip()
     print(f"Mode: {mode} | Hold key: {cfg.hotkey}" + (f" | Toggle key: {cfg.toggle_hotkey}" if mode=='toggle' else ""))
+
+    # Auto-timeout setup
+    timeout_enabled = getattr(cfg, 'auto_timeout_enabled', False)
+    timeout_minutes = getattr(cfg, 'auto_timeout_minutes', 5)
+    timeout_seconds = timeout_minutes * 60
+    last_activity_time = time.time()
+    print(f"Auto-timeout: {timeout_enabled} | Timeout: {timeout_minutes} minutes")
+
     devices = [InputDevice(p) for p in list_devices()]
     for dev in devices:
         try: dev.set_nonblocking(True)
@@ -359,10 +367,24 @@ def _loop_evdev(cfg: Settings, input_device_idx):
 
     global is_recording
     while True:
+        current_time = time.time()
+
+        # Check for auto-timeout
+        if timeout_enabled and not is_recording:
+            if current_time - last_activity_time > timeout_seconds:
+                print(f"⏰ Auto-timeout: No activity for {timeout_minutes} minutes, shutting down...")
+                if cfg.notify:
+                    _notify("TalkType Auto-Timeout", f"Service stopped after {timeout_minutes} minutes of inactivity")
+                sys.exit(0)
+
         for dev in devices:
             try:
                 for event in dev.read():
                     if event.type == ecodes.EV_KEY:
+                        # Reset activity timer on any key activity
+                        if timeout_enabled:
+                            last_activity_time = current_time
+
                         if mode == "hold":
                             if event.code == hold_key:
                                 if event.value == 1 and not is_recording:

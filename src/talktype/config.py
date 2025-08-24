@@ -10,7 +10,7 @@ class Settings:
     device: str = "cpu"         # "cpu" or "cuda"
     hotkey: str = "F8"          # hold-to-talk hotkey
     beeps: bool = True          # beeps on/off
-    smart_quotes: bool = True   # “smart quotes”
+    smart_quotes: bool = True   # "smart quotes"
     mode: str = "hold"          # "hold" or "toggle"
     toggle_hotkey: str = "F9"   # used only when mode="toggle"
     mic: str = ""               # substring to match input device (empty = default)
@@ -20,6 +20,8 @@ class Settings:
     auto_period: bool = False   # append a period when an utterance ends without terminal punctuation
     paste_injection: bool = False  # when adding a leading space is unreliable, paste " ␣text" via clipboard
     injection_mode: str = "type"  # "type" (ydotool/wtype) or "paste" (wl-copy + Ctrl+V)
+    auto_timeout_enabled: bool = False  # enable automatic timeout after inactivity
+    auto_timeout_minutes: int = 5      # minutes of inactivity before auto-stop
 
 def load_config() -> Settings:
     s = Settings()
@@ -41,6 +43,8 @@ def load_config() -> Settings:
             s.auto_period = bool(data.get("auto_period", s.auto_period))
             s.paste_injection = bool(data.get("paste_injection", s.paste_injection))
             s.injection_mode = str(data.get("injection_mode", s.injection_mode))
+            s.auto_timeout_enabled = bool(data.get("auto_timeout_enabled", s.auto_timeout_enabled))
+            s.auto_timeout_minutes = int(data.get("auto_timeout_minutes", s.auto_timeout_minutes))
         except Exception:
             pass
 
@@ -60,5 +64,7 @@ def load_config() -> Settings:
     b = os.getenv("DICTATE_BEEPS");            s.beeps = s.beeps if b is None else b.lower() not in {"0","false","off","no"}
     q = os.getenv("DICTATE_SMART_QUOTES");     s.smart_quotes = s.smart_quotes if q is None else q.lower() not in {"0","false","off","no"}
     n = os.getenv("DICTATE_NOTIFY");           s.notify = s.notify if n is None else n.lower() not in {"0","false","off","no"}
+    timeout_enabled = os.getenv("DICTATE_AUTO_TIMEOUT_ENABLED"); s.auto_timeout_enabled = s.auto_timeout_enabled if timeout_enabled is None else timeout_enabled.lower() not in {"0","false","off","no"}
+    timeout_minutes = os.getenv("DICTATE_AUTO_TIMEOUT_MINUTES"); s.auto_timeout_minutes = s.auto_timeout_minutes if timeout_minutes is None else int(timeout_minutes)
 
     return s
