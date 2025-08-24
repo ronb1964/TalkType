@@ -627,12 +627,12 @@ class PreferencesWindow:
         # Injection mode
         grid.attach(Gtk.Label(label="Text Injection:", xalign=0), 0, row, 1, 1)
         inject_combo = Gtk.ComboBoxText()
-        
+
         # Fix dropdown responsiveness - enable proper focus handling
         inject_combo.set_can_focus(True)
         # Add button press event to ensure dropdown opens reliably
         inject_combo.connect("button-press-event", self._on_combo_button_press)
-        
+
         inject_combo.append("type", "Keystroke Typing")
         inject_combo.append("paste", "Clipboard Paste")
         inject_combo.set_active_id(self.config["injection_mode"])
@@ -640,7 +640,39 @@ class PreferencesWindow:
         inject_combo.set_tooltip_text("How to insert transcribed text:\n• Keystroke Typing: simulates typing (more reliable)\n• Clipboard Paste: uses copy/paste (faster for long text)")
         grid.attach(inject_combo, 1, row, 1, 1)
         row += 1
-        
+
+        # Add horizontal separator
+        separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        separator.set_margin_top(20)
+        separator.set_margin_bottom(10)
+        grid.attach(separator, 0, row, 2, 1)
+        row += 1
+
+        # Auto timeout checkbox
+        self.auto_timeout_check = Gtk.CheckButton(label="Enable auto-timeout after inactivity")
+        self.auto_timeout_check.set_active(self.config.get("auto_timeout_enabled", False))
+        self.auto_timeout_check.connect("toggled", lambda x: self.update_config("auto_timeout_enabled", x.get_active()))
+        self.auto_timeout_check.connect("toggled", self._on_auto_timeout_toggled)
+        self.auto_timeout_check.set_tooltip_text("Automatically stop the dictation service after a period of inactivity.\nThis helps save battery life on laptops and reduces CPU usage.")
+        grid.attach(self.auto_timeout_check, 0, row, 2, 1)
+        row += 1
+
+        # Timeout duration (only visible when timeout is enabled)
+        self.timeout_label = Gtk.Label(label="Timeout after (minutes):", xalign=0)
+        grid.attach(self.timeout_label, 0, row, 1, 1)
+
+        self.timeout_spin = Gtk.SpinButton()
+        self.timeout_spin.set_range(1, 60)  # 1 to 60 minutes
+        self.timeout_spin.set_increments(1, 5)
+        self.timeout_spin.set_value(self.config.get("auto_timeout_minutes", 5))
+        self.timeout_spin.connect("value-changed", lambda x: self.update_config("auto_timeout_minutes", int(x.get_value())))
+        self.timeout_spin.set_tooltip_text("Number of minutes of inactivity before automatically stopping dictation.\n• 1-5 minutes: Very aggressive (good for short sessions)\n• 5-15 minutes: Balanced (recommended for laptop use)\n• 15-30 minutes: Conservative (good for desktop use)")
+        grid.attach(self.timeout_spin, 1, row, 1, 1)
+        row += 1
+
+        # Set initial visibility of timeout controls
+        self._update_timeout_ui_state()
+
         return grid
     
     def update_config(self, key, value):
@@ -954,6 +986,17 @@ X-GNOME-Autostart-enabled=true
             # Show language selection when manual is selected
             self.lang_label.set_visible(True)
             self.lang_combo.set_visible(True)
+
+    def _on_auto_timeout_toggled(self, checkbox):
+        """Handle auto-timeout checkbox toggle."""
+        self._update_timeout_ui_state()
+
+    def _update_timeout_ui_state(self):
+        """Update timeout UI visibility based on checkbox state."""
+        if hasattr(self, 'timeout_label'):
+            is_enabled = self.config.get("auto_timeout_enabled", False)
+            self.timeout_label.set_visible(is_enabled)
+            self.timeout_spin.set_visible(is_enabled)
         return False  # Don't repeat
     
     def _start_level_monitoring(self):
