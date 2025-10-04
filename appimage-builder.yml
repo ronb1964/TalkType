@@ -14,7 +14,7 @@ AppDir:
     icon: io.github.ronb1964.TalkType
     version: "0.1.0"
     exec: usr/bin/python3
-    exec_args: "-c \"import sys; sys.path.insert(0, '/opt/talktype/usr/src'); from src.ron_dictation.tray import main; main()\" $@"
+    exec_args: "-c \"import sys; sys.path.insert(0, '/opt/talktype/src'); from talktype.tray import main; main()\" $@"
 
   # Use manual package deployment instead of apt since we're on Fedora
   files:
@@ -31,6 +31,10 @@ AppDir:
       - usr/share/man
       - usr/share/locale
       - usr/include
+      # Exclude NVIDIA and CUDA libraries to keep the package small
+      - usr/lib/x86_64-linux-gnu/libcuda*
+      - usr/lib/x86_64-linux-gnu/libnvidia*
+      - usr/local/cuda*
 
   after_bundle:
     # Install Python dependencies using pip
@@ -38,8 +42,11 @@ AppDir:
       # Set up Python environment
       cd AppDir/usr
       
-      # Install pip packages to local directory
+      # Install pip packages to local directory. We explicitly install the CPU-only version of torch
+      # to keep the AppImage size small.
       python3 -m pip install --target=lib/python3.10/site-packages \
+        --index-url https://download.pytorch.org/whl/cpu \
+        torch torchaudio torchvision \
         faster-whisper sounddevice evdev numpy pyperclip pygobject toml
       
       # Copy our source code
@@ -57,7 +64,7 @@ AppDir:
       exec "$HERE/bin/python3" -c "
       import sys
       sys.path.insert(0, '$HERE/src')
-      from src.ron_dictation.tray import main
+      from talktype.tray import main
       main()
       " "$@"
       EOF
@@ -69,7 +76,7 @@ AppDir:
       exec "$HERE/bin/python3" -c "
       import sys
       sys.path.insert(0, '$HERE/src')
-      from src.ron_dictation.prefs import main
+      from talktype.prefs import main
       main()
       " "$@"
       EOF
@@ -81,7 +88,7 @@ AppDir:
       exec "$HERE/bin/python3" -c "
       import sys
       sys.path.insert(0, '$HERE/src')
-      from src.ron_dictation.app import main
+      from talktype.app import main
       main()
       " "$@"
       EOF
