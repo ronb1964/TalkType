@@ -12,7 +12,7 @@ def normalize_text(text: str) -> str:
 
     # --- 1) Multi-word replacements first (order matters) ---
     replacements = [
-        (r"[,.\s]*\bnew\s*line\b|\bnewline\b|\breturn\b|\bline\s+break\b", "§SHIFT_ENTER§"),
+        (r"\s*\bnew\s*line\b[,.\s]*|\bnewline\b|\breturn\b|\bline\s+break\b", "§SHIFT_ENTER§"),
         (r"[,.\s]*\bnew\s+paragraph\b|\bparagraph\s+break\b", "§SHIFT_ENTER§§SHIFT_ENTER§"),
         (r"[,.\s]*\bsoft\s+break\b[,.\s]*|\bsoft\s+line\b[,.\s]*", "   "),
         (r"\btab\b", "\t"),
@@ -103,7 +103,7 @@ def normalize_text(text: str) -> str:
         # strip leading runs of stray punctuation at start of each line
         # DO NOT strip spaces or tabs (preserve indentation/intentional leading space)
         # (keep ellipsis and quotes/paren if present)
-        line = re.sub(r"^[\.,;:!?]+(?!…)", "", raw_line)
+        line = re.sub(r"^[\s]*[\.,;:!?]+(?!…)", "", raw_line)
 
         leading_tabs = len(line) - len(line.lstrip("\t"))
         core = line.lstrip("\t")
@@ -120,13 +120,24 @@ def normalize_text(text: str) -> str:
                 return s[:i] + ch.upper() + s[i+1:]
         return s
 
+    # Temporarily convert §SHIFT_ENTER§ to newlines for capitalization processing
+    temp_text = text.replace("§SHIFT_ENTER§", "\n")
+    
     lines = []
-    for line in text.split("\n"):
+    for line in temp_text.split("\n"):
         line = cap_first(line)
+        # Convert trailing comma to period at end of line (before line break)
+        line = re.sub(r",$", ".", line)
+        # Add period at end of line if no punctuation exists (before line break)
+        if line and not re.search(r"[.?!…]$", line.rstrip()):
+            line = line.rstrip() + "."
         # Capitalize after (.?!… + space) if next is a-z
         line = re.sub(r"([.?!…]\s+)([a-z])", lambda m: m.group(1) + m.group(2).upper(), line)
         lines.append(line)
-    text = "\n".join(lines)
+    temp_text = "\n".join(lines)
+    
+    # Convert newlines back to §SHIFT_ENTER§ markers
+    text = temp_text.replace("\n", "§SHIFT_ENTER§")
 
     # --- 11) Place sentence punctuation inside closing smart quote ---
     # Turn ”! -> !”, ”? -> ?”, ”. -> .”, ”, -> ,”, ”; -> ;”, ”: -> :
