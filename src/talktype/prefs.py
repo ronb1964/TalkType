@@ -100,6 +100,7 @@ class PreferencesWindow:
         
         # Show window - force it to appear
         self.window.show_all()
+        self.ok_btn.grab_default()  # Now safe to grab default after window is shown
         self.window.present()  # Bring window to front
         self.window.set_keep_above(True)  # Force window on top temporarily
         GLib.timeout_add_seconds(1, self._remove_keep_above)  # Remove keep_above after 1 second
@@ -146,20 +147,46 @@ class PreferencesWindow:
     
     def _check_cuda_availability(self):
         """Check if CUDA is available for faster-whisper."""
+        # Use cuda_helper for reliable detection
         try:
-            from faster_whisper import WhisperModel
-            print("🔍 Checking CUDA availability in preferences...")
-            # Try to create a tiny model with CUDA - this will fail if CUDA isn't available
-            model = WhisperModel("tiny", device="cuda")
-            del model  # Clean up
-            print("✅ CUDA availability check passed!")
-            return True
-        except Exception as e:
-            print(f"❌ CUDA availability check failed: {e}")
-            import traceback
-            print("❌ CUDA availability traceback:")
-            traceback.print_exc()
-            return False
+            from . import cuda_helper
+            return cuda_helper.has_cuda_libraries()
+        except ImportError:
+            # Fallback to old method if cuda_helper not available
+            try:
+                from faster_whisper import WhisperModel
+                print("🔍 Checking CUDA availability in preferences...")
+                model = WhisperModel("tiny", device="cuda")
+                del model
+                print("✅ CUDA availability check passed!")
+                return True
+            except Exception as e:
+                print(f"❌ CUDA availability check failed: {e}")
+                return False
+    
+    def _refresh_device_options(self):
+        """Refresh the device dropdown options based on current CUDA availability."""
+        if not hasattr(self, 'device_combo'):
+            return
+            
+        # Clear existing options except CPU
+        self.device_combo.remove_all()
+        self.device_combo.append("cpu", "CPU")
+        
+        # Check CUDA availability and add option if available
+        cuda_available = self._check_cuda_availability()
+        if cuda_available:
+            self.device_combo.append("cuda", "CUDA (GPU)")
+            tooltip_text = "Processing device for AI transcription:\n• CPU: works on all computers, slower\n• CUDA (GPU): much faster, requires NVIDIA graphics card"
+        else:
+            tooltip_text = "Processing device for AI transcription:\n• CPU: works on all computers\n• CUDA: not available (no NVIDIA GPU or missing CUDA libraries)"
+            # If config has CUDA but it's not available, reset to CPU
+            if self.config["device"] == "cuda":
+                self.config["device"] = "cpu"
+        
+        # Set active selection and tooltip
+        self.device_combo.set_active_id(self.config["device"])
+        self.device_combo.set_tooltip_text(tooltip_text)
     
     def save_config(self):
         """Save config to TOML file."""
@@ -219,14 +246,13 @@ class PreferencesWindow:
         apply_btn = Gtk.Button(label="Apply")
         apply_btn.connect("clicked", self.on_apply)
         
-        ok_btn = Gtk.Button(label="OK")
-        ok_btn.connect("clicked", self.on_ok)
-        ok_btn.set_can_default(True)
-        ok_btn.grab_default()
+        self.ok_btn = Gtk.Button(label="OK")
+        self.ok_btn.connect("clicked", self.on_ok)
+        self.ok_btn.set_can_default(True)
         
         button_box.pack_start(cancel_btn, False, False, 0)
         button_box.pack_start(apply_btn, False, False, 0)
-        button_box.pack_start(ok_btn, False, False, 0)
+        button_box.pack_start(self.ok_btn, False, False, 0)
         
         vbox.pack_start(button_box, False, False, 0)
         self.window.add(vbox)
@@ -271,20 +297,13 @@ class PreferencesWindow:
         
         device_combo.append("cpu", "CPU")
         
-        # Only add CUDA option if it's actually available
-        cuda_available = self._check_cuda_availability()
-        if cuda_available:
-            device_combo.append("cuda", "CUDA (GPU)")
-            tooltip_text = "Processing device for AI transcription:\n• CPU: works on all computers, slower\n• CUDA (GPU): much faster, requires NVIDIA graphics card"
-        else:
-            tooltip_text = "Processing device for AI transcription:\n• CPU: works on all computers\n• CUDA: not available (no NVIDIA GPU or missing CUDA libraries)"
-            # If config has CUDA but it's not available, reset to CPU
-            if self.config["device"] == "cuda":
-                self.config["device"] = "cpu"
+        # Store device combo for later refresh
+        self.device_combo = device_combo
         
-        device_combo.set_active_id(self.config["device"])
+        # Populate device options
+        self._refresh_device_options()
+        
         device_combo.connect("changed", lambda x: self.update_config("device", x.get_active_id()))
-        device_combo.set_tooltip_text(tooltip_text)
         grid.attach(device_combo, 1, row, 1, 1)
         row += 1
         
@@ -673,6 +692,57 @@ class PreferencesWindow:
         # Set initial visibility of timeout controls
         self._update_timeout_ui_state()
 
+        # Add horizontal separator before GPU section
+        separator2 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        separator2.set_margin_top(20)
+        separator2.set_margin_bottom(10)
+        grid.attach(separator2, 0, row, 2, 1)
+        row += 1
+
+        # GPU Detection Section Header
+        gpu_header = Gtk.Label()
+        gpu_header.set_markup('<b>🎮 GPU Detection</b>')
+        gpu_header.set_xalign(0)
+        gpu_header.set_margin_bottom(5)
+        grid.attach(gpu_header, 0, row, 2, 1)
+        row += 1
+
+        # GPU Status Label
+        self.gpu_status_label = Gtk.Label(label="Checking...", xalign=0)
+        self.gpu_status_label.set_margin_start(10)
+        grid.attach(self.gpu_status_label, 0, row, 2, 1)
+        row += 1
+
+        # CUDA Status Label
+        self.cuda_status_label = Gtk.Label(label="", xalign=0)
+        self.cuda_status_label.set_margin_start(10)
+        self.cuda_status_label.set_margin_bottom(10)
+        grid.attach(self.cuda_status_label, 0, row, 2, 1)
+        row += 1
+
+        # Button box for GPU actions
+        gpu_button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        gpu_button_box.set_margin_start(10)
+
+        # Check GPU button
+        self.check_gpu_button = Gtk.Button(label="🔍 Check for NVIDIA GPU")
+        self.check_gpu_button.connect("clicked", self._on_check_gpu_clicked)
+        self.check_gpu_button.set_tooltip_text("Check if an NVIDIA graphics card is present on your system")
+        gpu_button_box.pack_start(self.check_gpu_button, False, False, 0)
+
+        # Download CUDA button
+        self.download_cuda_button = Gtk.Button(label="📦 Download CUDA Libraries")
+        self.download_cuda_button.connect("clicked", self._on_download_cuda_clicked)
+        self.download_cuda_button.set_tooltip_text("Download CUDA libraries for GPU acceleration (~800MB)")
+        self.download_cuda_button.set_sensitive(False)
+        gpu_button_box.pack_start(self.download_cuda_button, False, False, 0)
+
+        grid.attach(gpu_button_box, 0, row, 2, 1)
+        row += 1
+
+        # Initial GPU check
+        GLib.timeout_add(500, self._initial_gpu_check)
+
         return grid
     
     def update_config(self, key, value):
@@ -998,6 +1068,187 @@ X-GNOME-Autostart-enabled=true
             self.timeout_label.set_visible(is_enabled)
             self.timeout_spin.set_visible(is_enabled)
         return False  # Don't repeat
+
+    def _initial_gpu_check(self):
+        """Perform initial GPU check when preferences window opens."""
+        self._check_gpu_status()
+        return False  # Don't repeat
+
+    def _check_gpu_status(self):
+        """Check GPU and CUDA status and update UI."""
+        try:
+            # Import cuda_helper
+            try:
+                from . import cuda_helper
+            except ImportError:
+                # If cuda_helper doesn't exist, create stub
+                self.gpu_status_label.set_text("GPU detection not available in this build")
+                self.cuda_status_label.set_text("")
+                self.check_gpu_button.set_sensitive(False)
+                self.download_cuda_button.set_sensitive(False)
+                return
+            
+            # Check for NVIDIA GPU
+            has_gpu = cuda_helper.detect_nvidia_gpu()
+            has_cuda = cuda_helper.has_cuda_libraries()
+            
+            if has_gpu:
+                gpu_name = cuda_helper.detect_nvidia_gpu()
+                if isinstance(gpu_name, str) and len(gpu_name) > 5:
+                    self.gpu_status_label.set_markup(f'<span color="#4CAF50">✓ NVIDIA GPU detected: {gpu_name}</span>')
+                else:
+                    self.gpu_status_label.set_markup('<span color="#4CAF50">✓ NVIDIA GPU detected</span>')
+                
+                if has_cuda:
+                    self.cuda_status_label.set_markup('<span color="#4CAF50">✓ CUDA libraries installed</span>')
+                    self.download_cuda_button.set_label("✓ CUDA Installed")
+                    self.download_cuda_button.set_sensitive(False)
+                else:
+                    self.cuda_status_label.set_markup('<span color="#FF9800">⚠ CUDA libraries not installed (using CPU mode)</span>')
+                    self.download_cuda_button.set_sensitive(True)
+            else:
+                self.gpu_status_label.set_markup('<span color="#9E9E9E">⊘ No NVIDIA GPU detected</span>')
+                self.cuda_status_label.set_text("CPU mode only")
+                self.download_cuda_button.set_sensitive(False)
+                
+        except Exception as e:
+            self.gpu_status_label.set_text(f"Error checking GPU: {e}")
+            self.cuda_status_label.set_text("")
+            print(f"GPU check error: {e}")
+
+    def _on_check_gpu_clicked(self, button):
+        """Handle Check GPU button click."""
+        button.set_label("🔄 Checking...")
+        button.set_sensitive(False)
+        
+        def check_and_update():
+            self._check_gpu_status()
+            button.set_label("🔍 Check for NVIDIA GPU")
+            button.set_sensitive(True)
+            return False
+        
+        GLib.timeout_add(100, check_and_update)
+
+    def _on_download_cuda_clicked(self, button):
+        """Handle Download CUDA button click."""
+        try:
+            from . import cuda_helper
+        except ImportError:
+            return
+        
+        # Show confirmation dialog
+        dialog = Gtk.MessageDialog(
+            transient_for=self.window,
+            flags=0,
+            message_type=Gtk.MessageType.QUESTION,
+            buttons=Gtk.ButtonsType.YES_NO,
+            text="Download CUDA Libraries?"
+        )
+        dialog.format_secondary_text(
+            "This will download approximately 1.2GB of CUDA libraries "
+            "to enable GPU acceleration.\n\n"
+            "Libraries will be stored in ~/.local/share/TalkType/cuda\n\n"
+            "This may take several minutes depending on your connection.\n\n"
+            "Continue?"
+        )
+        
+        response = dialog.run()
+        dialog.destroy()
+        
+        if response == Gtk.ResponseType.YES:
+            # Create progress dialog with progress bar
+            progress_dialog = Gtk.Dialog(
+                title="Downloading CUDA Libraries",
+                transient_for=self.window,
+                flags=0
+            )
+            progress_dialog.set_default_size(400, 150)
+            
+            content = progress_dialog.get_content_area()
+            content.set_margin_top(20)
+            content.set_margin_bottom(20)
+            content.set_margin_start(20)
+            content.set_margin_end(20)
+            
+            # Status label
+            status_label = Gtk.Label(label="Preparing download...")
+            status_label.set_margin_bottom(10)
+            content.pack_start(status_label, False, False, 0)
+            
+            # Progress bar
+            progress_bar = Gtk.ProgressBar()
+            progress_bar.set_show_text(True)
+            progress_bar.set_margin_bottom(10)
+            content.pack_start(progress_bar, False, False, 0)
+            
+            progress_dialog.show_all()
+            
+            button.set_sensitive(False)
+            
+            import threading
+            
+            def progress_callback(message, percent):
+                """Update progress dialog from download thread."""
+                def update_ui():
+                    status_label.set_text(message)
+                    progress_bar.set_fraction(percent / 100.0)
+                    progress_bar.set_text(f"{percent}%")
+                    return False
+                GLib.idle_add(update_ui)
+            
+            def download_thread():
+                """Run download in background thread."""
+                success = cuda_helper.download_cuda_libraries(progress_callback)
+                
+                def finish_download():
+                    progress_dialog.destroy()
+                    
+                    if success:
+                        # Refresh GPU status
+                        self._check_gpu_status()
+                        
+                        # Refresh device dropdown to show CUDA option
+                        self._refresh_device_options()
+                        
+                        # Show success dialog
+                        success_dialog = Gtk.MessageDialog(
+                            transient_for=self.window,
+                            flags=0,
+                            message_type=Gtk.MessageType.INFO,
+                            buttons=Gtk.ButtonsType.OK,
+                            text="CUDA Libraries Installed!"
+                        )
+                        success_dialog.format_secondary_text(
+                            "GPU acceleration is now available.\n\n"
+                            "You can select 'CUDA (GPU)' in the General tab\n"
+                            "to enable faster transcription."
+                        )
+                        success_dialog.run()
+                        success_dialog.destroy()
+                    else:
+                        button.set_sensitive(True)
+                        # Show error dialog
+                        error_dialog = Gtk.MessageDialog(
+                            transient_for=self.window,
+                            flags=0,
+                            message_type=Gtk.MessageType.ERROR,
+                            buttons=Gtk.ButtonsType.OK,
+                            text="Download Failed"
+                        )
+                        error_dialog.format_secondary_text(
+                            "Failed to download CUDA libraries.\n\n"
+                            "Please check your internet connection and try again."
+                        )
+                        error_dialog.run()
+                        error_dialog.destroy()
+                    
+                    return False
+                
+                GLib.idle_add(finish_download)
+            
+            # Start download in background thread
+            thread = threading.Thread(target=download_thread, daemon=True)
+            thread.start()
     
     def _start_level_monitoring(self):
         """Initialize level monitoring after window is shown."""
