@@ -95,6 +95,11 @@ def show_hotkey_test_dialog(mode, hold_key, toggle_key):
         button_box = dialog.get_action_area()
         button_box.set_layout(Gtk.ButtonBoxStyle.EDGE)
 
+        change_keys_btn = Gtk.Button(label="Change Keys...")
+        change_keys_btn.connect("clicked", lambda w: dialog.response(Gtk.ResponseType.APPLY))
+        change_keys_btn.set_tooltip_text("Open Preferences to change hotkeys")
+        dialog.add_action_widget(change_keys_btn, Gtk.ResponseType.APPLY)
+
         skip_btn = Gtk.Button(label="Skip")
         skip_btn.connect("clicked", lambda w: dialog.response(Gtk.ResponseType.CANCEL))
         skip_btn.set_tooltip_text("Skip verification (not recommended)")
@@ -137,16 +142,20 @@ def show_hotkey_test_dialog(mode, hold_key, toggle_key):
         response = dialog.run()
         dialog.destroy()
 
-        # Return True if both keys tested or user clicked Continue
-        # Return False if user skipped
+        # Handle different responses
         if response == Gtk.ResponseType.OK:
-            return tested["hold"] and tested["toggle"]
+            # User clicked Continue - keys verified
+            return ("verified", tested["hold"] and tested["toggle"])
+        elif response == Gtk.ResponseType.APPLY:
+            # User wants to change keys
+            return ("change_keys", False)
         else:
-            return False  # User skipped
+            # User skipped
+            return ("skipped", False)
 
     except Exception as e:
         logger.error(f"Failed to show hotkey test dialog: {e}")
-        return True  # Fallback: allow continuation if dialog fails
+        return ("error", True)  # Fallback: allow continuation if dialog fails
 
 # --- Single instance lock (user runtime dir) ---
 def _runtime_dir():
@@ -526,31 +535,35 @@ def _loop_evdev(cfg: Settings, input_device_idx):
     print(f"🎹 Showing hotkey verification dialog...")
     logger.info(f"Showing hotkey verification dialog for user")
 
-    # Run dialog in a separate thread to avoid blocking the event loop
-    import threading
-    dialog_result = {"verified": False}
+    # Run dialog directly (GTK must run in main thread)
+    action, verified = show_hotkey_test_dialog(mode, cfg.hotkey, cfg.toggle_hotkey)
 
-    def run_dialog():
-        result = show_hotkey_test_dialog(mode, cfg.hotkey, cfg.toggle_hotkey)
-        dialog_result["verified"] = result
-        if result:
-            state.hold_key_tested = True
-            if mode == "toggle":
-                state.toggle_key_tested = True
-            print(f"✓ Hotkeys verified successfully")
-            logger.info(f"Hotkeys verified by user")
-
-    # Run dialog in background thread
-    dialog_thread = threading.Thread(target=run_dialog)
-    dialog_thread.daemon = True
-    dialog_thread.start()
-
-    # Wait for dialog to complete
-    dialog_thread.join()
-
-    if not dialog_result["verified"]:
-        print("⚠️ Hotkey verification incomplete - user may have closed dialog")
-        logger.warning("Hotkey verification incomplete")
+    if action == "verified" and verified:
+        state.hold_key_tested = True
+        if mode == "toggle":
+            state.toggle_key_tested = True
+        print(f"✓ Hotkeys verified successfully")
+        logger.info(f"Hotkeys verified by user")
+    elif action == "change_keys":
+        print("🔧 User wants to change hotkeys - opening Preferences...")
+        logger.info("Opening Preferences for hotkey change")
+        # Launch preferences
+        try:
+            src_dir = os.path.dirname(__file__)
+            usr_dir = os.path.dirname(os.path.dirname(src_dir))
+            prefs_script = os.path.join(usr_dir, "bin", "dictate-prefs")
+            if os.path.exists(prefs_script):
+                subprocess.Popen([prefs_script])
+            else:
+                subprocess.Popen([sys.executable, "-m", "talktype.prefs"])
+        except Exception as e:
+            logger.error(f"Failed to open Preferences: {e}")
+        # Exit service so user can change keys and restart
+        print("Service will exit. Please change your hotkeys and restart.")
+        sys.exit(0)
+    else:
+        print("⚠️ Hotkey verification skipped by user")
+        logger.warning("Hotkey verification skipped")
 
     while True:
         current_time = time.time()
