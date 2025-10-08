@@ -552,6 +552,27 @@ def _loop_evdev(cfg: Settings, input_device_idx):
             state.toggle_key_tested = True
         print(f"✓ Hotkeys verified successfully")
         logger.info(f"Hotkeys verified by user")
+
+        # Show final "Ready!" message
+        try:
+            gi.require_version('Gtk', '3.0')
+            from gi.repository import Gtk
+
+            ready_dialog = Gtk.MessageDialog(
+                message_type=Gtk.MessageType.INFO,
+                buttons=Gtk.ButtonsType.OK,
+                text="✓ Hotkeys Verified!"
+            )
+            ready_dialog.format_secondary_text(
+                "Your hotkeys are working correctly!\n\n"
+                "The dictation service is now ready.\n"
+                "Press F8 or F9 to start dictating."
+            )
+            ready_dialog.set_position(Gtk.WindowPosition.CENTER)
+            ready_dialog.run()
+            ready_dialog.destroy()
+        except Exception as e:
+            logger.error(f"Failed to show ready dialog: {e}")
     elif action == "change_keys":
         print("🔧 User wants to change hotkeys - opening Preferences...")
         logger.info("Opening Preferences for hotkey change")

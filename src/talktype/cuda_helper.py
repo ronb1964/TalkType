@@ -431,28 +431,25 @@ def show_initial_help_dialog():
 
         # Main instructions
         instructions = Gtk.Label()
-        instructions.set_markup('''<span size="large"><b>✨ TalkType is Ready!</b></span>
+        instructions.set_markup('''<span size="large"><b>🎙️ Welcome to TalkType!</b></span>
 
-<b>🚀 Getting Started:</b>
+<b>🚀 Next Steps:</b>
 
-The dictation service will start automatically in a moment.
-Simply press your hotkey to begin dictating!
+<b>1. Verify Your Hotkeys</b>
+   After clicking "Got It!", you'll test your hotkeys (F8 and F9)
+   to ensure they work and don't conflict with other apps.
 
-<b>1. Begin Dictating:</b> Press <b>F8</b> (push-to-talk) or <b>F9</b> (toggle mode)
-    • Red microphone icon appears during recording
-<b>2. Configure Settings:</b> Right-click tray → "Preferences" to customize
+<b>2. Start Dictating!</b>
+   Once verified, the service starts automatically.
+   Press <b>F8</b> (push-to-talk) or <b>F9</b> (toggle mode) to dictate.
 
 <b>✨ Key Features:</b>
 • Auto-punctuation, smart quotes, 50+ languages
 • GPU acceleration available (3-5x faster with NVIDIA GPU)
 • Auto-timeout after 5 minutes to save system resources
 
-<b>💡 Power Management:</b>
-The service automatically pauses after 5 minutes of inactivity.
-Adjust this in Preferences → Advanced → Auto-timeout.
-
 <b>🎮 GPU Acceleration:</b>
-Enable later for 3-5x faster transcription:
+Enable later for faster transcription:
 Right-click tray → "Preferences" → "Advanced" tab
 
 <b>📚 Need Help?</b>
@@ -613,14 +610,17 @@ def offer_cuda_download(show_gui=True):
                                     
                                     # Instructions
                                     instructions = Gtk.Label()
-                                    instructions.set_markup('''<b>✨ TalkType is Ready!</b>
+                                    instructions.set_markup('''<b>✨ CUDA Libraries Installed!</b>
 
-The dictation service will start automatically in a moment with GPU acceleration enabled!
+<b>🚀 Next Steps:</b>
 
-<b>🚀 Getting Started:</b>
-• Press <b>F8</b> (push-to-talk) or <b>F9</b> (toggle mode) to begin dictating
-• Red microphone icon shows when recording
-• CUDA (GPU) mode has been automatically enabled!
+<b>1. Verify Your Hotkeys</b>
+   After clicking "Got It!", you'll test your hotkeys (F8 and F9)
+   to ensure they work and don't conflict with other apps.
+
+<b>2. Start Dictating!</b>
+   Once verified, the service starts automatically with GPU acceleration!
+   Press <b>F8</b> (push-to-talk) or <b>F9</b> (toggle mode) to dictate.
 
 <b>💡 GPU Benefits:</b>
 • 3-5x faster transcription than CPU mode
@@ -628,8 +628,8 @@ The dictation service will start automatically in a moment with GPU acceleration
 • Lower CPU usage during dictation
 
 <b>💡 Power Management:</b>
-The service automatically pauses after 5 minutes of inactivity to save
-system resources. Adjust this in Preferences → Advanced.
+The service automatically pauses after 5 minutes of inactivity.
+Adjust this in Preferences → Advanced.
 
 <b>📚 Need Help?</b>
 Right-click the tray icon → "Help..." for full documentation''')
