@@ -138,27 +138,28 @@ def show_hotkey_test_dialog(mode, hold_key, toggle_key):
 
         dialog.connect("key-press-event", on_key_press)
 
+        # Dialog response handling
+        result = {"action": None, "verified": False}
+
+        def on_response(dialog, response_id):
+            if response_id == Gtk.ResponseType.OK:
+                result["action"] = "verified"
+                result["verified"] = tested["hold"] and tested["toggle"]
+            elif response_id == Gtk.ResponseType.APPLY:
+                result["action"] = "change_keys"
+            else:
+                result["action"] = "skipped"
+            dialog.destroy()
+            Gtk.main_quit()
+
+        dialog.connect("response", on_response)
         dialog.show_all()
-        response = dialog.run()
 
-        # Ensure dialog is fully destroyed and events processed
-        dialog.hide()
-        while Gtk.events_pending():
-            Gtk.main_iteration()
-        dialog.destroy()
-        while Gtk.events_pending():
-            Gtk.main_iteration()
+        # Run a GTK main loop for this dialog
+        Gtk.main()
 
-        # Handle different responses
-        if response == Gtk.ResponseType.OK:
-            # User clicked Continue - keys verified
-            return ("verified", tested["hold"] and tested["toggle"])
-        elif response == Gtk.ResponseType.APPLY:
-            # User wants to change keys
-            return ("change_keys", False)
-        else:
-            # User skipped
-            return ("skipped", False)
+        # Return results
+        return (result["action"], result["verified"])
 
     except Exception as e:
         logger.error(f"Failed to show hotkey test dialog: {e}")
