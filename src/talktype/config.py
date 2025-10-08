@@ -130,3 +130,25 @@ def load_config() -> Settings:
     validate_config(s)
 
     return s
+
+def save_config(s: Settings) -> None:
+    """Save Settings to TOML file."""
+    os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
+    with open(CONFIG_PATH, "w") as f:
+        f.write("# TalkType config\n")
+        f.write(f'model = "{s.model}"\n')
+        f.write(f'device = "{s.device}"\n')
+        f.write(f'hotkey = "{s.hotkey}"\n')
+        f.write(f'beeps = {str(s.beeps).lower()}\n')
+        f.write(f'smart_quotes = {str(s.smart_quotes).lower()}\n')
+        f.write(f'mode = "{s.mode}"\n')
+        f.write(f'toggle_hotkey = "{s.toggle_hotkey}"\n')
+        f.write(f'mic = "{s.mic}"\n')
+        f.write(f'notify = {str(s.notify).lower()}\n')
+        f.write(f'language = "{s.language}"\n')
+        f.write(f'auto_space = {str(s.auto_space).lower()}\n')
+        f.write(f'auto_period = {str(s.auto_period).lower()}\n')
+        f.write(f'paste_injection = {str(s.paste_injection).lower()}\n')
+        f.write(f'injection_mode = "{s.injection_mode}"\n')
+        f.write(f'auto_timeout_enabled = {str(s.auto_timeout_enabled).lower()}\n')
+        f.write(f'auto_timeout_minutes = {s.auto_timeout_minutes}\n')

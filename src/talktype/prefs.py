@@ -281,8 +281,21 @@ class PreferencesWindow:
         for model in models:
             model_combo.append(model, model)  # append(id, text) - use model name as both ID and text
         model_combo.set_active_id(self.config["model"])
-        model_combo.connect("changed", lambda x: self.update_config("model", x.get_active_id()))
-        model_combo.set_tooltip_text("Whisper AI model size. Larger models are more accurate but slower:\n• tiny: fastest, least accurate\n• small: good balance (recommended)\n• large-v3: most accurate, slowest")
+        self.model_combo = model_combo  # Store reference for later use
+        model_combo.connect("changed", self._on_model_changed)
+        model_combo.set_tooltip_text(
+            "Whisper AI model size - choose based on your needs:\n\n"
+            "• tiny (39 MB): Fastest, basic accuracy - quick notes\n"
+            "• base (74 MB): Fast, good accuracy - casual use\n"
+            "• small (244 MB): Balanced - recommended for most users\n"
+            "• medium (769 MB): Slower, very accurate - professional use\n"
+            "• large-v3 (~3 GB): Best accuracy - technical/professional work\n"
+            "  ⚠️ Takes 30-60 seconds to load initially\n\n"
+            "Larger models provide:\n"
+            "• Better word recognition (technical terms, proper nouns)\n"
+            "• Improved punctuation and context awareness\n"
+            "• Better handling of accents and background noise"
+        )
         grid.attach(model_combo, 1, row, 1, 1)
         row += 1
         
@@ -733,7 +746,7 @@ class PreferencesWindow:
         # Download CUDA button
         self.download_cuda_button = Gtk.Button(label="📦 Download CUDA Libraries")
         self.download_cuda_button.connect("clicked", self._on_download_cuda_clicked)
-        self.download_cuda_button.set_tooltip_text("Download CUDA libraries for GPU acceleration (~800MB)")
+        self.download_cuda_button.set_tooltip_text("Download CUDA libraries for GPU acceleration (~1.7GB download, 1.2GB installed)")
         self.download_cuda_button.set_sensitive(False)
         gpu_button_box.pack_start(self.download_cuda_button, False, False, 0)
 
@@ -748,11 +761,51 @@ class PreferencesWindow:
     def update_config(self, key, value):
         """Update config value."""
         self.config[key] = value
-        
+
         # Handle autostart desktop file creation/removal
         if key == "launch_at_login":
             self._handle_autostart(value)
-    
+
+    def _on_model_changed(self, combo):
+        """Handle model selection change with warning for large models."""
+        # Prevent recursive calls when reverting model selection
+        if hasattr(self, '_updating_model') and self._updating_model:
+            return
+
+        new_model = combo.get_active_id()
+
+        # Show warning dialog for large-v3 model
+        if new_model == "large-v3" and self.config.get("model") != "large-v3":
+            dialog = Gtk.MessageDialog(
+                transient_for=self.window,
+                flags=0,
+                message_type=Gtk.MessageType.WARNING,
+                buttons=Gtk.ButtonsType.OK_CANCEL,
+                text="Large Model Selected"
+            )
+            dialog.format_secondary_text(
+                "The large-v3 model is approximately 3 GB in size.\n\n"
+                "⏱️  First-time load: 30-60 seconds\n"
+                "⏱️  Subsequent loads: 10-20 seconds\n\n"
+                "The application will not respond to your dictation hotkey "
+                "until the model has fully loaded.\n\n"
+                "Do you want to proceed with this model?"
+            )
+
+            response = dialog.run()
+            dialog.destroy()
+
+            if response == Gtk.ResponseType.CANCEL:
+                # Revert to previous model selection (block recursive call)
+                self._updating_model = True
+                previous_model = self.config.get("model", "medium")
+                combo.set_active_id(previous_model)
+                self._updating_model = False
+                return
+
+        # Update config with new model
+        self.update_config("model", new_model)
+
     def _handle_autostart(self, enable):
         """Create or remove autostart desktop file."""
         autostart_dir = os.path.expanduser("~/.config/autostart")
@@ -1151,8 +1204,8 @@ X-GNOME-Autostart-enabled=true
             text="Download CUDA Libraries?"
         )
         dialog.format_secondary_text(
-            "This will download approximately 1.2GB of CUDA libraries "
-            "to enable GPU acceleration.\n\n"
+            "This will download approximately 1.7GB of CUDA libraries "
+            "(1.2GB installed) to enable GPU acceleration.\n\n"
             "Libraries will be stored in ~/.local/share/TalkType/cuda\n\n"
             "This may take several minutes depending on your connection.\n\n"
             "Continue?"
