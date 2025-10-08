@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "talktype"
-version = "0.2.3"
+version = "0.2.4"
 description = "Press-and-hold dictation for Wayland (F8), Faster-Whisper + ydotool, with smart punctuation."
 authors = ["Ron"]
 license = "MIT"
