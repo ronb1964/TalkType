@@ -268,7 +268,7 @@ print_status "Copying desktop files and icons..."
 cat > AppDir/talktype.desktop << 'EOF'
 [Desktop Entry]
 Name=TalkType
-Comment=AI-powered speech recognition and dictation
+Comment=AI-powered voice dictation with GPU acceleration and smart text processing
 Exec=AppRun tray
 Icon=talktype
 Type=Application
