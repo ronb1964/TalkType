@@ -42,7 +42,7 @@ def show_hotkey_test_dialog(mode, hold_key, toggle_key):
         from gi.repository import Gtk, GLib
 
         dialog = Gtk.Dialog(title="Verify Your Hotkeys")
-        dialog.set_default_size(500, 280)
+        dialog.set_default_size(520, 320)
         dialog.set_resizable(False)
         dialog.set_modal(True)
         dialog.set_position(Gtk.WindowPosition.CENTER)
@@ -60,21 +60,14 @@ def show_hotkey_test_dialog(mode, hold_key, toggle_key):
         header.set_markup('<span size="large"><b>🎹 Verify Your Hotkeys</b></span>')
         content.pack_start(header, False, False, 0)
 
-        # Instructions
+        # Instructions - always test both keys
         instructions = Gtk.Label()
-        if mode == "toggle":
-            instructions.set_markup(
-                '<b>Before you can start dictating, please test your hotkeys:</b>\n\n'
-                f'Press <b>{hold_key}</b> (push-to-talk mode)\n'
-                f'Press <b>{toggle_key}</b> (toggle mode)\n\n'
-                'This ensures your hotkeys work and don\'t conflict with other apps.'
-            )
-        else:
-            instructions.set_markup(
-                '<b>Before you can start dictating, please test your hotkey:</b>\n\n'
-                f'Press <b>{hold_key}</b> (push-to-talk)\n\n'
-                'This ensures your hotkey works and doesn\'t conflict with other apps.'
-            )
+        instructions.set_markup(
+            '<b>Before you can start dictating, please test both hotkeys:</b>\n\n'
+            f'1. Press <b>{hold_key}</b> (push-to-talk mode)\n'
+            f'2. Press <b>{toggle_key}</b> (toggle mode)\n\n'
+            'This ensures your hotkeys work and don\'t conflict with other apps.'
+        )
         instructions.set_line_wrap(True)
         instructions.set_xalign(0)
         content.pack_start(instructions, False, False, 0)
@@ -89,15 +82,29 @@ def show_hotkey_test_dialog(mode, hold_key, toggle_key):
         status_box.pack_start(hold_status, False, False, 0)
 
         toggle_status = Gtk.Label()
-        if mode == "toggle":
-            toggle_status.set_markup(f'<b>{toggle_key}</b>: <span color="#999999">⏳ Waiting...</span>')
-            toggle_status.set_xalign(0)
-            status_box.pack_start(toggle_status, False, False, 0)
+        toggle_status.set_markup(f'<b>{toggle_key}</b>: <span color="#999999">⏳ Waiting...</span>')
+        toggle_status.set_xalign(0)
+        status_box.pack_start(toggle_status, False, False, 0)
 
         content.pack_start(status_box, False, False, 0)
 
         # Track tested keys
-        tested = {"hold": False, "toggle": False if mode == "toggle" else True}
+        tested = {"hold": False, "toggle": False}
+
+        # Buttons
+        button_box = dialog.get_action_area()
+        button_box.set_layout(Gtk.ButtonBoxStyle.EDGE)
+
+        skip_btn = Gtk.Button(label="Skip")
+        skip_btn.connect("clicked", lambda w: dialog.response(Gtk.ResponseType.CANCEL))
+        skip_btn.set_tooltip_text("Skip verification (not recommended)")
+        dialog.add_action_widget(skip_btn, Gtk.ResponseType.CANCEL)
+
+        continue_btn = Gtk.Button(label="Continue")
+        continue_btn.set_sensitive(False)  # Disabled until both keys tested
+        continue_btn.get_style_context().add_class("suggested-action")
+        continue_btn.connect("clicked", lambda w: dialog.response(Gtk.ResponseType.OK))
+        dialog.add_action_widget(continue_btn, Gtk.ResponseType.OK)
 
         # Key press handler
         def on_key_press(widget, event):
@@ -108,27 +115,34 @@ def show_hotkey_test_dialog(mode, hold_key, toggle_key):
                 tested["hold"] = True
                 hold_status.set_markup(f'<b>{hold_key}</b>: <span color="#4CAF50">✓ Working!</span>')
 
-                # If all keys tested, enable continue button
+                # Enable continue button when both keys tested
                 if tested["hold"] and tested["toggle"]:
-                    GLib.timeout_add(500, lambda: dialog.response(Gtk.ResponseType.OK))
+                    continue_btn.set_sensitive(True)
+                    continue_btn.set_label("✓ Continue")
 
-            elif mode == "toggle" and keyname == toggle_key and not tested["toggle"]:
+            elif keyname == toggle_key and not tested["toggle"]:
                 tested["toggle"] = True
                 toggle_status.set_markup(f'<b>{toggle_key}</b>: <span color="#4CAF50">✓ Working!</span>')
 
-                # If all keys tested, enable continue button
+                # Enable continue button when both keys tested
                 if tested["hold"] and tested["toggle"]:
-                    GLib.timeout_add(500, lambda: dialog.response(Gtk.ResponseType.OK))
+                    continue_btn.set_sensitive(True)
+                    continue_btn.set_label("✓ Continue")
 
             return True
 
         dialog.connect("key-press-event", on_key_press)
 
         dialog.show_all()
-        dialog.run()
+        response = dialog.run()
         dialog.destroy()
 
-        return tested["hold"] and tested["toggle"]
+        # Return True if both keys tested or user clicked Continue
+        # Return False if user skipped
+        if response == Gtk.ResponseType.OK:
+            return tested["hold"] and tested["toggle"]
+        else:
+            return False  # User skipped
 
     except Exception as e:
         logger.error(f"Failed to show hotkey test dialog: {e}")
