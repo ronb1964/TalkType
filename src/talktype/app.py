@@ -106,6 +106,10 @@ class RecordingState:
     frames: list = None
     stream: object = None
     press_t0: float = None
+    # Hotkey testing state
+    hold_key_tested: bool = False
+    toggle_key_tested: bool = False
+    hotkey_test_start_time: float = None
 
     def __post_init__(self):
         if self.frames is None:
@@ -400,6 +404,24 @@ def _loop_evdev(cfg: Settings, input_device_idx):
     hold_key = _keycode_from_name(cfg.hotkey)
     toggle_key = _keycode_from_name(cfg.toggle_hotkey) if mode == "toggle" else None
 
+    # Initialize hotkey testing
+    state.hotkey_test_start_time = time.time()
+    state.hold_key_tested = False
+    state.toggle_key_tested = False
+
+    # Show initial hotkey test notification
+    if cfg.notify:
+        if mode == "toggle":
+            _notify("TalkType Started",
+                   f"Test your hotkeys:\n• Press {cfg.toggle_hotkey} (toggle mode)\n• Or press {cfg.hotkey} (push-to-talk)")
+        else:
+            _notify("TalkType Started",
+                   f"Test your hotkey: Press {cfg.hotkey} (push-to-talk)")
+
+    print(f"🎹 Waiting for hotkey test - Press {cfg.hotkey}" +
+          (f" or {cfg.toggle_hotkey}" if mode == "toggle" else ""))
+    logger.info(f"Hotkey test mode active - waiting for user to test keys")
+
     while True:
         current_time = time.time()
 
@@ -415,6 +437,31 @@ def _loop_evdev(cfg: Settings, input_device_idx):
             try:
                 for event in dev.read():
                     if event.type == ecodes.EV_KEY:
+                        # Track hotkey testing
+                        if event.value == 1:  # Key press (not release)
+                            if event.code == hold_key and not state.hold_key_tested:
+                                state.hold_key_tested = True
+                                print(f"✓ Hold key ({cfg.hotkey}) tested successfully")
+                                logger.info(f"Hold key tested: {cfg.hotkey}")
+                                if cfg.notify:
+                                    if mode == "toggle" and not state.toggle_key_tested:
+                                        _notify("TalkType Hotkey Test",
+                                               f"✓ {cfg.hotkey} working! Now test {cfg.toggle_hotkey}")
+                                    else:
+                                        _notify("TalkType Ready",
+                                               f"✓ Hotkey working! Ready to dictate.")
+                            elif event.code == toggle_key and not state.toggle_key_tested:
+                                state.toggle_key_tested = True
+                                print(f"✓ Toggle key ({cfg.toggle_hotkey}) tested successfully")
+                                logger.info(f"Toggle key tested: {cfg.toggle_hotkey}")
+                                if cfg.notify:
+                                    if not state.hold_key_tested:
+                                        _notify("TalkType Hotkey Test",
+                                               f"✓ {cfg.toggle_hotkey} working! Now test {cfg.hotkey}")
+                                    else:
+                                        _notify("TalkType Ready",
+                                               f"✓ Both hotkeys working! Ready to dictate.")
+
                         if mode == "hold":
                             if event.code == hold_key:
                                 # Reset timeout timer only when TalkType hotkey is used
