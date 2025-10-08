@@ -10,12 +10,23 @@ import subprocess
 import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, GLib
+from .logger import setup_logger
+
+logger = setup_logger(__name__)
+
+# Timeout constants (in seconds)
+NVIDIA_SMI_TIMEOUT = 5
+SUBPROCESS_TIMEOUT = 2
+
+# UI delay constants (in milliseconds)
+SUCCESS_DIALOG_DELAY_MS = 1000
+ERROR_DIALOG_DELAY_MS = 2000
 
 def detect_nvidia_gpu():
     """Check if NVIDIA GPU is present using nvidia-smi."""
     try:
         result = subprocess.run(['nvidia-smi', '--query-gpu=name', '--format=csv,noheader'],
-                              capture_output=True, text=True, timeout=5)
+                              capture_output=True, text=True, timeout=NVIDIA_SMI_TIMEOUT)
         return result.returncode == 0 and result.stdout.strip()
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return False
@@ -41,11 +52,11 @@ def has_cuda_libraries():
         for lib in required_libs:
             try:
                 result = subprocess.run(['find', lib_path, '-name', f'{lib}*'],
-                                      capture_output=True, text=True, timeout=2)
+                                      capture_output=True, text=True, timeout=SUBPROCESS_TIMEOUT)
                 if not result.stdout.strip():
                     found_all = False
                     break
-            except:
+            except (subprocess.TimeoutExpired, Exception):
                 found_all = False
                 break
         
@@ -54,15 +65,15 @@ def has_cuda_libraries():
     
     # Check system-wide CUDA installation via ldconfig (most reliable)
     try:
-        result = subprocess.run(['ldconfig', '-p'], capture_output=True, text=True, timeout=2)
+        result = subprocess.run(['ldconfig', '-p'], capture_output=True, text=True, timeout=SUBPROCESS_TIMEOUT)
         has_cudart = 'libcudart.so' in result.stdout
         has_cublas = 'libcublas.so' in result.stdout
         has_cudnn = 'libcudnn.so' in result.stdout
-        
+
         # If we have basic CUDA runtime and cuBLAS, consider it available
         if has_cudart and has_cublas:
             return True
-    except:
+    except (subprocess.TimeoutExpired, Exception):
         pass
     
     # Check common CUDA toolkit installation paths
@@ -79,10 +90,10 @@ def has_cuda_libraries():
                 files = os.listdir(cuda_dir)
                 has_cudart = any('libcudart.so' in f for f in files)
                 has_cublas = any('libcublas.so' in f for f in files)
-                
+
                 if has_cudart and has_cublas:
                     return True
-            except:
+            except (PermissionError, OSError):
                 pass
     
     # Check standard library paths (for distro-packaged CUDA)
@@ -99,7 +110,7 @@ def has_cuda_libraries():
                 has_cudart = any('libcudart.so' in f for f in files)
                 if has_cudart:
                     return True
-            except:
+            except (PermissionError, OSError):
                 pass
     
     return False
@@ -154,7 +165,7 @@ def download_cuda_libraries(progress_callback=None):
                     percent = int((pkg_idx / len(cuda_packages)) * 70)
                     progress_callback(f"Downloading {pkg_name}...", percent)
                 
-                print(f"📥 Downloading {pkg_name}...")
+                logger.info(f"📥 Downloading {pkg_name}...")
                 
                 try:
                     # Get the latest version from PyPI API and download directly
@@ -176,7 +187,7 @@ def download_cuda_libraries(progress_callback=None):
                             break
                     
                     if not wheel_url:
-                        print(f"❌ No suitable wheel found for {pkg_name}")
+                        logger.error(f"No suitable wheel found for {pkg_name}")
                         return False
                     
                     # Download the wheel with progress updates
@@ -193,10 +204,10 @@ def download_cuda_libraries(progress_callback=None):
                             progress_callback(f"Downloading {pkg_name}... {int(download_percent)}%", current_percent)
                     
                     urllib.request.urlretrieve(wheel_url, wheel_path, reporthook=download_progress_hook)
-                    print(f"✅ Downloaded {wheel_filename}")
+                    logger.info(f"✅ Downloaded {wheel_filename}")
                         
                 except Exception as e:
-                    print(f"❌ Failed to download {pkg_name}: {e}")
+                    logger.error(f"Failed to download {pkg_name}: {e}")
                     return False
             
             if progress_callback:
@@ -207,7 +218,7 @@ def download_cuda_libraries(progress_callback=None):
             
             for i, wheel_file in enumerate(wheel_files):
                 wheel_path = os.path.join(temp_dir, wheel_file)
-                print(f"📦 Extracting {wheel_file}...")
+                logger.info(f"📦 Extracting {wheel_file}...")
                 
                 with zipfile.ZipFile(wheel_path, 'r') as zip_ref:
                     # Get list of .so files to extract for progress tracking
@@ -232,7 +243,7 @@ def download_cuda_libraries(progress_callback=None):
                         if target.endswith('.so') or '.so.' in target:
                             try:
                                 os.chmod(target, 0o755)
-                            except:
+                            except (PermissionError, OSError):
                                 pass
                         
                         # Update progress more frequently during extraction
@@ -249,8 +260,8 @@ def download_cuda_libraries(progress_callback=None):
         if progress_callback:
             progress_callback("CUDA libraries installed successfully!", 100)
         
-        print(f"✅ CUDA libraries installed to {cuda_path}")
-        print(f"📂 Libraries extracted to {lib_path}")
+        logger.info(f"✅ CUDA libraries installed to {cuda_path}")
+        logger.info(f"📂 Libraries extracted to {lib_path}")
         
         # List what was installed
         so_files = []
@@ -259,13 +270,11 @@ def download_cuda_libraries(progress_callback=None):
                 if '.so' in f:
                     so_files.append(f)
         
-        print(f"✅ Installed {len(so_files)} library files")
+        logger.info(f"✅ Installed {len(so_files)} library files")
         return True
         
     except Exception as e:
-        print(f"❌ Error downloading CUDA libraries: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"Error downloading CUDA libraries: {e}", exc_info=True)
         return False
 
 def show_cuda_progress_dialog():
@@ -311,7 +320,7 @@ def show_cuda_progress_dialog():
         return dialog, status_label, progress_bar
         
     except Exception as e:
-        print(f"Error creating progress dialog: {e}")
+        logger.error(f"Error creating progress dialog: {e}")
         return None, None, None
 
 def show_cuda_welcome_dialog():
@@ -397,16 +406,11 @@ def show_cuda_welcome_dialog():
         dialog.show_all()
         response = dialog.run()
         dialog.destroy()
-        
-        print(f"DEBUG: Dialog response = {response}")
-        print(f"DEBUG: Gtk.ResponseType.OK = {Gtk.ResponseType.OK}")
+
         result = response == Gtk.ResponseType.OK
-        print(f"DEBUG: Returning {result}")
         return result
     except Exception as e:
-        print(f"Error in CUDA dialog: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"Error in CUDA dialog: {e}", exc_info=True)
         return False
 
 def show_initial_help_dialog():
@@ -498,19 +502,17 @@ Right-click the tray icon → "Help..." for comprehensive feature guide''')
                     subprocess.run(["pkill", "-f", "talktype.app"], capture_output=True)
                     # Start the service using the dictate script
                     subprocess.Popen([dictate_script], env=os.environ.copy())
-                    print(f"Started dictation service via {dictate_script}")
+                    logger.info(f"Started dictation service via {dictate_script}")
                 else:
                     # Fallback: use sys.executable (bundled Python)
                     subprocess.run(["pkill", "-f", "talktype.app"], capture_output=True)
                     subprocess.Popen([sys.executable, "-m", "talktype.app"], env=os.environ.copy())
-                    print("Started dictation service via Python module")
+                    logger.info("Started dictation service via Python module")
             except Exception as e:
-                print(f"Failed to start service from help dialog: {e}")
+                logger.error(f"Failed to start service from help dialog: {e}")
         
     except Exception as e:
-        print(f"Error showing initial help dialog: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"Error showing initial help dialog: {e}", exc_info=True)
 
 def offer_cuda_download_cli():
     """CLI fallback for CUDA download offer."""
@@ -556,15 +558,15 @@ def offer_cuda_download(show_gui=True):
         return False
     
     # Offer CUDA download
-    print("🎮 NVIDIA GPU detected!")
-    
+    logger.info("🎮 NVIDIA GPU detected!")
+
     if show_gui:
         try:
-            print("Showing CUDA welcome dialog...")
+            logger.debug("Showing CUDA welcome dialog...")
             wants_cuda = show_cuda_welcome_dialog()
-            print(f"Dialog returned: {wants_cuda}")
+            logger.debug(f"Dialog returned: {wants_cuda}")
             if wants_cuda:
-                print("User chose to download CUDA...")
+                logger.info("User chose to download CUDA...")
                 
                 # Show progress dialog
                 progress_dialog, status_label, progress_bar = show_cuda_progress_dialog()
@@ -582,16 +584,24 @@ def offer_cuda_download(show_gui=True):
                 # Download with progress updates
                 import threading
                 from gi.repository import GLib
-                
+
                 def progress_callback(message, percent):
+                    """
+                    Thread-safe progress callback for background download.
+                    Uses GLib.idle_add() to schedule UI updates on main GTK thread.
+                    """
                     def update_ui():
                         status_label.set_text(message)
                         progress_bar.set_fraction(percent / 100.0)
                         progress_bar.set_text(f"{percent}%")
-                        return False
+                        return False  # Don't repeat
                     GLib.idle_add(update_ui)
                 
                 def background_download_with_progress():
+                    """
+                    Background thread function for CUDA library download.
+                    All UI updates use GLib.idle_add() for thread safety.
+                    """
                     try:
                         success = download_cuda_libraries(progress_callback)
                         def finish_ui():
@@ -599,8 +609,20 @@ def offer_cuda_download(show_gui=True):
                                 status_label.set_text("✅ Download completed successfully!")
                                 progress_bar.set_fraction(1.0)
                                 progress_bar.set_text("100%")
-                                
-                                # Close progress dialog after 1 second and show success dialog
+
+                                # Auto-enable GPU mode in config after successful download
+                                try:
+                                    from . import config
+                                    s = config.load_config()
+                                    if s.device != "cuda":
+                                        s.device = "cuda"
+                                        config.save_config(s)
+                                        logger.info("✅ Automatically enabled CUDA in config")
+                                except Exception as e:
+                                    logger.warning(f"Could not auto-enable CUDA in config: {e}")
+
+                                # Close progress dialog after delay and show success dialog
+                                # Runs on main GTK thread via GLib.timeout_add()
                                 def show_success_dialog():
                                     progress_dialog.destroy()
                                     
@@ -628,7 +650,7 @@ def offer_cuda_download(show_gui=True):
 
 1. <b>Start the Service:</b> Right-click the tray icon → "Start Service"
 2. <b>Begin Dictating:</b> Press F8 (push-to-talk) or F9 (toggle mode) - red mic icon shows when recording
-3. <b>GPU Mode:</b> CUDA (GPU) is now available in Preferences → General
+3. <b>GPU Mode:</b> CUDA (GPU) has been automatically enabled!
 
 <b>💡 Tips:</b>
 • GPU acceleration is 3-5x faster than CPU mode
@@ -674,32 +696,34 @@ def offer_cuda_download(show_gui=True):
                                                 subprocess.run(["pkill", "-f", "talktype.app"], capture_output=True)
                                                 # Start the service using the dictate script
                                                 subprocess.Popen([dictate_script], env=os.environ.copy())
-                                                print(f"Started dictation service via {dictate_script}")
+                                                logger.info(f"Started dictation service via {dictate_script}")
                                             else:
                                                 # Fallback: use sys.executable (bundled Python)
                                                 subprocess.run(["pkill", "-f", "talktype.app"], capture_output=True)
                                                 subprocess.Popen([sys.executable, "-m", "talktype.app"], env=os.environ.copy())
-                                                print("Started dictation service via Python module")
+                                                logger.info("Started dictation service via Python module")
                                         except Exception as e:
-                                            print(f"Failed to start service from success dialog: {e}")
+                                            logger.error(f"Failed to start service from success dialog: {e}")
                                             pass  # Service start will be handled by tray
                                     
                                     return False
-                                GLib.timeout_add(1000, show_success_dialog)
+                                GLib.timeout_add(SUCCESS_DIALOG_DELAY_MS, show_success_dialog)
                             else:
                                 status_label.set_text("❌ Download failed")
                                 # Close dialog after 2 seconds
                                 def close_dialog():
                                     progress_dialog.response(Gtk.ResponseType.OK)
                                     return False
-                                GLib.timeout_add(2000, close_dialog)
+                                GLib.timeout_add(ERROR_DIALOG_DELAY_MS, close_dialog)
                             return False
+                        # Schedule UI update on main GTK thread
                         GLib.idle_add(finish_ui)
                         mark_first_run_complete()
                     except Exception as e:
                         def error_ui():
                             status_label.set_text(f"❌ Error: {e}")
                             return False
+                        # Schedule error UI update on main GTK thread
                         GLib.idle_add(error_ui)
                 
                 download_thread = threading.Thread(target=background_download_with_progress)
@@ -711,15 +735,13 @@ def offer_cuda_download(show_gui=True):
                 progress_dialog.destroy()
                 return True
             else:
-                print("User skipped CUDA download")
+                logger.info("User skipped CUDA download")
                 # Show initial help dialog for first-time users who skip CUDA
                 show_initial_help_dialog()
                 mark_first_run_complete()
                 return False
         except Exception as e:
-            print(f"Failed to show GUI dialog: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"Failed to show GUI dialog: {e}", exc_info=True)
             # Fall back to CLI
     
     wants_cuda = offer_cuda_download_cli()

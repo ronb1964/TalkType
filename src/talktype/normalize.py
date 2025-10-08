@@ -122,7 +122,7 @@ def normalize_text(text: str) -> str:
 
     # Temporarily convert §SHIFT_ENTER§ to newlines for capitalization processing
     temp_text = text.replace("§SHIFT_ENTER§", "\n")
-    
+
     lines = []
     for line in temp_text.split("\n"):
         line = cap_first(line)

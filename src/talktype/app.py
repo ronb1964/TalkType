@@ -1,4 +1,9 @@
-import os, sys, time, shutil, subprocess, tempfile, wave, atexit, argparse
+# Import torch_init FIRST to configure CUDA library paths before any torch imports
+from .torch_init import init_cuda_for_pytorch
+init_cuda_for_pytorch()
+
+import os, sys, time, shutil, subprocess, tempfile, wave, atexit, argparse, fcntl
+from dataclasses import dataclass
 import numpy as np
 import sounddevice as sd
 from faster_whisper import WhisperModel
@@ -6,6 +11,9 @@ from evdev import InputDevice, ecodes, list_devices
 
 from .normalize import normalize_text
 from .config import load_config, Settings
+from .logger import setup_logger
+
+logger = setup_logger(__name__)
 
 # Optional desktop notifications via libnotify (gi)
 _notify_ready = False
@@ -13,7 +21,7 @@ try:
     import gi
     gi.require_version("Notify", "0.7")
     from gi.repository import Notify
-    Notify.init("Ron Dictation")
+    Notify.init("TalkType")
     _notify_ready = True
 except Exception:
     _notify_ready = False
@@ -45,29 +53,42 @@ def _pid_running(pid: int) -> bool:
         return True  # if in doubt, assume running
 
 def _acquire_single_instance():
+    """
+    Acquire singleton lock using fcntl to prevent race conditions.
+    Uses file locking which is atomic and prevents multiple instances.
+    The lock is held for the lifetime of the process and auto-released on exit.
+    """
+    lockfile_path = os.path.join(_runtime_dir(), "talktype.lock")
     try:
-        if os.path.exists(_PIDFILE):
-            try:
-                with open(_PIDFILE, "r") as f:
-                    old = int(f.read().strip() or "0")
-            except Exception:
-                old = 0
-            if _pid_running(old):
-                print("Another talktype instance is already running. Exiting.")
-                sys.exit(0)
-        with open(_PIDFILE, "w") as f:
-            f.write(str(os.getpid()))
+        # Open lock file (create if doesn't exist)
+        lockfile = open(lockfile_path, "w")
+
+        # Try to acquire exclusive lock (non-blocking)
+        # LOCK_EX = exclusive lock, LOCK_NB = non-blocking
+        fcntl.flock(lockfile.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+        # If we got here, we acquired the lock successfully
+        # Write our PID for informational purposes
+        lockfile.write(str(os.getpid()))
+        lockfile.flush()
+
+        # Keep the file open for the process lifetime
+        # The lock will automatically be released when the process exits
+        # Store in global to prevent garbage collection
+        global _lockfile_handle
+        _lockfile_handle = lockfile
+
+        logger.debug(f"Acquired singleton lock: {lockfile_path}")
+
+    except IOError:
+        # Lock is already held by another process
+        print("Another talktype instance is already running. Exiting.", file=sys.stderr)
+        sys.exit(0)
     except Exception as e:
-        print(f"Warning: could not write pidfile: {e}")
-    def _cleanup():
-        try:
-            with open(_PIDFILE, "r") as f:
-                cur = int(f.read().strip() or "0")
-            if cur == os.getpid():
-                os.remove(_PIDFILE)
-        except Exception:
-            pass
-    atexit.register(_cleanup)
+        print(f"Warning: could not acquire singleton lock: {e}", file=sys.stderr)
+
+# Global to keep lock file open
+_lockfile_handle = None
 
 # --- Runtime state ---
 SAMPLE_RATE = 16000
@@ -77,13 +98,21 @@ START_BEEP = (1200, 0.12)
 CANCEL_BEEP = (500, 0.12)
 READY_BEEP  = (1000, 0.09)
 
-is_recording = False
-was_cancelled = False
-frames = []
-stream = None
-press_t0 = None
-# Deprecated: we now inject space immediately after finishing an utterance when needed
-prepend_space_next_time = False
+@dataclass
+class RecordingState:
+    """Encapsulates mutable state for recording sessions."""
+    is_recording: bool = False
+    was_cancelled: bool = False
+    frames: list = None
+    stream: object = None
+    press_t0: float = None
+
+    def __post_init__(self):
+        if self.frames is None:
+            self.frames = []
+
+# Global recording state
+state = RecordingState()
 
 def _beep(enabled: bool, freq=1000, duration=0.15):
     if not enabled:
@@ -97,8 +126,8 @@ def _beep(enabled: bool, freq=1000, duration=0.15):
         pass
 
 def _sd_callback(indata, frames_count, time_info, status):
-    if is_recording:
-        frames.append(indata.tobytes())
+    if state.is_recording:
+        state.frames.append(indata.tobytes())
 
 def _keycode_from_name(name: str) -> int:
     n = (name or "F8").strip().upper()
@@ -123,35 +152,34 @@ def _pick_input_device(mic_substring: str | None):
     return None
 
 def start_recording(beeps_on: bool, notify_on: bool, input_device_idx):
-    global is_recording, was_cancelled, frames, stream, press_t0
-    frames = []
-    was_cancelled = False
-    is_recording = True
-    press_t0 = time.time()
+    state.frames = []
+    state.was_cancelled = False
+    state.is_recording = True
+    state.press_t0 = time.time()
     sd.default.channels = CHANNELS
     sd.default.samplerate = SAMPLE_RATE
-    stream = sd.InputStream(callback=_sd_callback, dtype='int16', device=input_device_idx)
-    stream.start()
+    state.stream = sd.InputStream(callback=_sd_callback, dtype='int16', device=input_device_idx)
+    state.stream.start()
     print("🎙️  Recording…")
+    logger.debug("Recording started")
     _beep(beeps_on, *START_BEEP)
-    if notify_on: _notify("Ron Dictation", "Recording… (speak now)")
+    if notify_on: _notify("TalkType", "Recording… (speak now)")
 
 def _stop_stream_safely():
-    global stream
-    if stream:
+    if state.stream:
         try:
-            stream.stop(); stream.close()
+            state.stream.stop(); state.stream.close()
         except Exception:
             pass
-        stream = None
+        state.stream = None
 
 def cancel_recording(beeps_on: bool, notify_on: bool, reason="Cancelled"):
-    global is_recording, was_cancelled
-    is_recording = False
-    was_cancelled = True
+    state.is_recording = False
+    state.was_cancelled = True
     _stop_stream_safely()
     _beep(beeps_on, *CANCEL_BEEP)
     print(f"⏸️  {reason}")
+    logger.debug(f"Recording cancelled: {reason}")
     if notify_on: _notify("TalkType", reason)
 
 def _send_shift_enter():
@@ -165,7 +193,7 @@ def _send_shift_enter():
             subprocess.run(["ydotool", "key", "42:1", "28:1", "28:0", "42:0"], check=False, env=env)
             return True
         except Exception as e:
-            print(f"ydotool shift+enter failed: {e}")
+            logger.debug(f"ydotool shift+enter failed: {e}")
     return False
 
 def _send_enter():
@@ -179,7 +207,7 @@ def _send_enter():
             subprocess.run(["ydotool", "key", "28:1", "28:0"], check=False, env=env)
             return True
         except Exception as e:
-            print(f"ydotool enter failed: {e}")
+            logger.debug(f"ydotool enter failed: {e}")
     return False
 
 def _type_text(text: str):
@@ -224,16 +252,19 @@ def _type_text_raw(text: str):
             proc.communicate(input=text.encode("utf-8"), timeout=20)
             return
         except Exception as e:
-            print(f"ydotool failed: {e}")
+            logger.debug(f"ydotool failed: {e}")
     if shutil.which("wtype"):
         subprocess.run(["wtype", "--", text], check=False); return
     if shutil.which("wl-copy"):
         try:
             import pyperclip
-            pyperclip.copy(text); print("📋 Copied to clipboard. Ctrl+V to paste.")
+            pyperclip.copy(text)
+            print("📋 Copied to clipboard. Ctrl+V to paste.")
+            logger.info("Text copied to clipboard (fallback mode)")
             return
         except Exception:
             pass
+    logger.error("Could not type text: no ydotool/wtype/wl-copy available")
     print("⚠️  Could not type text (no ydotool/wtype).")
 
 def _paste_text(text: str):
@@ -281,20 +312,21 @@ def stop_recording(
     auto_period: bool = False,
     paste_injection: bool = False,
 ):
-    global is_recording
-    held_ms = int((time.time() - (press_t0 or time.time())) * 1000)
+    held_ms = int((time.time() - (state.press_t0 or time.time())) * 1000)
     if held_ms < MIN_HOLD_MS:
         cancel_recording(beeps_on, notify_on, f"Cancelled (held {held_ms} ms)"); return
-    is_recording = False
+    state.is_recording = False
     _stop_stream_safely()
-    if was_cancelled: return
+    if state.was_cancelled: return
 
     print("🛑 Recording stopped. Transcribing…")
+    logger.debug("Recording stopped, starting transcription")
     # Convert captured bytes -> float32 mono PCM in [-1, 1]
     try:
-        pcm_int16 = np.frombuffer(b''.join(frames), dtype=np.int16)
+        pcm_int16 = np.frombuffer(b''.join(state.frames), dtype=np.int16)
         if pcm_int16.size == 0:
             print("ℹ️  (No audio captured)")
+            logger.debug("No audio captured during recording")
             return
         audio_f32 = (pcm_int16.astype(np.float32) / 32768.0)
 
@@ -309,6 +341,7 @@ def stop_recording(
         )
         raw = " ".join(seg.text for seg in segments).strip()
         print(f"📝 Raw: {raw!r}")
+        logger.debug(f"Raw transcription: {raw!r}")
         text = normalize_text(raw if smart_quotes else raw.replace(""","\"").replace(""","\""))
 
         # Simple spacing: always add period+space or just space when auto features are on
@@ -318,6 +351,7 @@ def stop_recording(
         if auto_space and text and not text.endswith((" ", "\n", "\t", "§")):
             text = text + " "
         print(f"📜 Text: {text!r}")
+        logger.debug(f"Normalized text: {text!r}")
 
         _beep(beeps_on, *READY_BEEP)
         if notify_on: _notify("TalkType", f"Transcribed: {text[:80]}{'…' if len(text)>80 else ''}")
@@ -328,18 +362,16 @@ def stop_recording(
             use_paste = paste_injection or os.environ.get("DICTATE_INJECTION_MODE","type").lower()=="paste"
             if use_paste and _paste_text(text):
                 print(f"✂️  Inject (paste) len={len(text)}")
-                pass
+                logger.debug(f"Text injected via paste: {len(text)} chars")
             else:
                 print(f"⌨️  Inject (type) len={len(text)}")
+                logger.debug(f"Text injected via typing: {len(text)} chars")
                 _type_text(text)
-            # We appended trailing spacing already when needed; do not request a leading space next time.
-            prepend_space_next_time = False
-            # Update spacing flag for next utterance
-            import re as _re
-            # If the last visible character is not whitespace/newline/tab, we should lead with space next time
-            last_utterance_should_lead_with_space = bool(_re.search(r"[^\s]$", text))
-        else: print("ℹ️  (No speech recognized)")
+        else:
+            print("ℹ️  (No speech recognized)")
+            logger.debug("No speech recognized in audio")
     except Exception as e:
+        logger.error(f"Transcription error: {e}", exc_info=True)
         print(f"❌ Transcription error: {e}")
         _beep(beeps_on, *READY_BEEP)  # Still play the ready beep so user knows it's done
         if notify_on: _notify("TalkType", f"Transcription failed: {str(e)[:60]}{'…' if len(str(e))>60 else ''}")
@@ -347,8 +379,10 @@ def stop_recording(
 def _loop_evdev(cfg: Settings, input_device_idx):
     session = os.environ.get("XDG_SESSION_TYPE", "").lower()
     print(f"Session: {session} | Wayland={session=='wayland'}")
+    logger.info(f"Session type: {session}, Wayland: {session=='wayland'}")
     mode = cfg.mode.lower().strip()
     print(f"Mode: {mode} | Hold key: {cfg.hotkey}" + (f" | Toggle key: {cfg.toggle_hotkey}" if mode=='toggle' else ""))
+    logger.info(f"Input mode: {mode}, Hold key: {cfg.hotkey}, Toggle key: {cfg.toggle_hotkey if mode=='toggle' else 'N/A'}")
 
     # Auto-timeout setup
     timeout_enabled = getattr(cfg, 'auto_timeout_enabled', False)
@@ -356,6 +390,7 @@ def _loop_evdev(cfg: Settings, input_device_idx):
     timeout_seconds = timeout_minutes * 60
     last_activity_time = time.time()
     print(f"Auto-timeout: {timeout_enabled} | Timeout: {timeout_minutes} minutes")
+    logger.info(f"Auto-timeout: enabled={timeout_enabled}, minutes={timeout_minutes}")
 
     devices = [InputDevice(p) for p in list_devices()]
     for dev in devices:
@@ -365,12 +400,11 @@ def _loop_evdev(cfg: Settings, input_device_idx):
     hold_key = _keycode_from_name(cfg.hotkey)
     toggle_key = _keycode_from_name(cfg.toggle_hotkey) if mode == "toggle" else None
 
-    global is_recording
     while True:
         current_time = time.time()
 
         # Check for auto-timeout
-        if timeout_enabled and not is_recording:
+        if timeout_enabled and not state.is_recording:
             if current_time - last_activity_time > timeout_seconds:
                 print(f"⏰ Auto-timeout: No activity for {timeout_minutes} minutes, shutting down...")
                 if cfg.notify:
@@ -381,24 +415,29 @@ def _loop_evdev(cfg: Settings, input_device_idx):
             try:
                 for event in dev.read():
                     if event.type == ecodes.EV_KEY:
-                        # Reset activity timer on any key activity
-                        if timeout_enabled:
-                            last_activity_time = current_time
-
                         if mode == "hold":
                             if event.code == hold_key:
-                                if event.value == 1 and not is_recording:
+                                # Reset timeout timer only when TalkType hotkey is used
+                                if timeout_enabled:
+                                    last_activity_time = current_time
+                                if event.value == 1 and not state.is_recording:
                                     start_recording(cfg.beeps, cfg.notify, input_device_idx)
-                                elif event.value == 0 and is_recording:
+                                elif event.value == 0 and state.is_recording:
                                     stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language, cfg.auto_space, cfg.auto_period, cfg.paste_injection)
                         else:  # toggle mode: press to start, press again to stop
                             if event.code == toggle_key and event.value == 1:
-                                if not is_recording:
+                                # Reset timeout timer only when TalkType hotkey is used
+                                if timeout_enabled:
+                                    last_activity_time = current_time
+                                if not state.is_recording:
                                     start_recording(cfg.beeps, cfg.notify, input_device_idx)
                                 else:
                                      stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language, cfg.auto_space, cfg.auto_period, cfg.paste_injection)
                         # ESC cancels in any mode
-                        if event.code == ecodes.KEY_ESC and is_recording and event.value == 1:
+                        if event.code == ecodes.KEY_ESC and state.is_recording and event.value == 1:
+                            # Reset timeout timer when ESC is used to cancel
+                            if timeout_enabled:
+                                last_activity_time = current_time
                             cancel_recording(cfg.beeps, cfg.notify, "Cancelled by ESC")
             except BlockingIOError:
                 pass
@@ -416,14 +455,14 @@ def build_model(settings: Settings):
             cpu_threads=os.cpu_count() or 4
         )
         print(f"✅ Model loaded successfully on {settings.device.upper()}")
+        logger.info(f"Model loaded: {settings.model} on {settings.device}")
         return model
     except Exception as e:
         if settings.device.lower() == "cuda":
             print(f"❌ CUDA failed: {e}")
-            print(f"❌ CUDA error details: {type(e).__name__}: {str(e)}")
+            logger.error(f"CUDA error: {type(e).__name__}: {str(e)}")
             import traceback
-            print("❌ CUDA traceback:")
-            traceback.print_exc()
+            logger.debug("CUDA traceback:", exc_info=True)
             print("🔄 Falling back to CPU...")
             try:
                 model = WhisperModel(
@@ -433,12 +472,15 @@ def build_model(settings: Settings):
                     cpu_threads=os.cpu_count() or 4
                 )
                 print("✅ Model loaded successfully on CPU (fallback)")
+                logger.info("Model loaded on CPU (fallback from CUDA)")
                 return model
             except Exception as cpu_e:
                 print(f"❌ CPU fallback also failed: {cpu_e}")
+                logger.error(f"CPU fallback failed: {cpu_e}")
                 raise cpu_e
         else:
             print(f"❌ Model loading failed: {e}")
+            logger.error(f"Model loading failed: {e}")
             raise e
 
 def parse_args():
@@ -478,6 +520,7 @@ def main():
     global model
     model = build_model(cfg)
     print(f"Config: model={cfg.model} device={cfg.device} lang={cfg.language or 'auto'} auto_space={cfg.auto_space} auto_period={cfg.auto_period}")
+    logger.info(f"Configuration: model={cfg.model}, device={cfg.device}, language={cfg.language or 'auto'}, auto_space={cfg.auto_space}, auto_period={cfg.auto_period}")
     _loop_evdev(cfg, input_device_idx)
 
 if __name__ == "__main__":
