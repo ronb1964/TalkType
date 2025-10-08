@@ -478,9 +478,18 @@ class PreferencesWindow:
         grid.attach(self.toggle_label, 0, row, 1, 1)
         grid.attach(self.toggle_combo, 1, row, 1, 1)
         row += 1
-        
+
+        # Test Hotkeys button
+        test_hotkeys_btn = Gtk.Button(label="🎹 Test Hotkeys")
+        test_hotkeys_btn.connect("clicked", self._on_test_hotkeys)
+        test_hotkeys_btn.set_tooltip_text("Test your configured hotkeys to make sure they work")
+        test_hotkeys_btn.set_halign(Gtk.Align.START)
+        test_hotkeys_btn.set_margin_top(10)
+        grid.attach(test_hotkeys_btn, 0, row, 2, 1)
+        row += 1
+
         # Initial visibility will be set by _update_hotkey_ui_state
-        
+
         # Add horizontal separator
         separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
         separator.set_margin_top(20)
@@ -1459,6 +1468,88 @@ X-GNOME-Autostart-enabled=true
 
             self.window.destroy()
             Gtk.main_quit()
+
+    def _on_test_hotkeys(self, button):
+        """Show hotkey test dialog."""
+        from evdev import ecodes
+
+        dialog = Gtk.Dialog(title="Test Hotkeys", transient_for=self.window)
+        dialog.set_default_size(450, 250)
+        dialog.set_modal(True)
+        dialog.set_position(Gtk.WindowPosition.CENTER)
+
+        content = dialog.get_content_area()
+        content.set_margin_top(20)
+        content.set_margin_bottom(20)
+        content.set_margin_start(25)
+        content.set_margin_end(25)
+        content.set_spacing(15)
+
+        # Instructions
+        instructions = Gtk.Label()
+        instructions.set_markup('<span size="large"><b>Test Your Hotkeys</b></span>\n\nPress each hotkey to verify it works:')
+        instructions.set_xalign(0)
+        content.pack_start(instructions, False, False, 0)
+
+        # Get current mode and hotkeys
+        mode = self.config.get("mode", "hold")
+        hold_key = self.config.get("hotkey", "F8")
+        toggle_key = self.config.get("toggle_hotkey", "F9")
+
+        # Test status labels
+        status_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        status_box.set_margin_top(10)
+
+        hold_label = Gtk.Label()
+        hold_label.set_markup(f'<b>{hold_key}</b> (Push-to-talk): <span color="#999999">Not tested</span>')
+        hold_label.set_xalign(0)
+        status_box.pack_start(hold_label, False, False, 0)
+
+        toggle_label = Gtk.Label()
+        if mode == "toggle":
+            toggle_label.set_markup(f'<b>{toggle_key}</b> (Toggle mode): <span color="#999999">Not tested</span>')
+        else:
+            toggle_label.set_markup(f'<b>{toggle_key}</b> (Toggle mode): <span color="#999999">Not used in Hold mode</span>')
+        toggle_label.set_xalign(0)
+        status_box.pack_start(toggle_label, False, False, 0)
+
+        content.pack_start(status_box, False, False, 0)
+
+        # Track tested keys
+        tested_keys = {"hold": False, "toggle": False}
+
+        # Key press event handler
+        def on_key_press(widget, event):
+            keyname = Gtk.accelerator_name(event.keyval, 0)
+
+            if keyname == hold_key:
+                tested_keys["hold"] = True
+                hold_label.set_markup(f'<b>{hold_key}</b> (Push-to-talk): <span color="#4CAF50">✓ Working!</span>')
+            elif keyname == toggle_key and mode == "toggle":
+                tested_keys["toggle"] = True
+                toggle_label.set_markup(f'<b>{toggle_key}</b> (Toggle mode): <span color="#4CAF50">✓ Working!</span>')
+
+            return True  # Stop event propagation
+
+        # Connect key press handler to dialog
+        dialog.connect("key-press-event", on_key_press)
+
+        # Info label
+        info_label = Gtk.Label()
+        info_label.set_markup('<i>Note: If a key doesn\'t work, it may be used by another application.</i>')
+        info_label.set_line_wrap(True)
+        info_label.set_xalign(0)
+        info_label.set_margin_top(10)
+        content.pack_start(info_label, False, False, 0)
+
+        # Close button
+        close_button = Gtk.Button(label="Close")
+        close_button.connect("clicked", lambda w: dialog.destroy())
+        dialog.add_action_widget(close_button, Gtk.ResponseType.CLOSE)
+
+        dialog.show_all()
+        dialog.run()
+        dialog.destroy()
 
     def on_help(self, button):
         """Show help dialog with TalkType features and instructions."""
