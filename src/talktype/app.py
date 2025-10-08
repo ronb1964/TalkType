@@ -140,7 +140,14 @@ def show_hotkey_test_dialog(mode, hold_key, toggle_key):
 
         dialog.show_all()
         response = dialog.run()
+
+        # Ensure dialog is fully destroyed and events processed
+        dialog.hide()
+        while Gtk.events_pending():
+            Gtk.main_iteration()
         dialog.destroy()
+        while Gtk.events_pending():
+            Gtk.main_iteration()
 
         # Handle different responses
         if response == Gtk.ResponseType.OK:
