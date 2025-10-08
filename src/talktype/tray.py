@@ -7,6 +7,10 @@ import time
 import os
 import sys
 import atexit
+import fcntl
+from .logger import setup_logger
+
+logger = setup_logger(__name__)
 
 SERVICE = "talktype.service"  # Not used anymore - we check processes directly
 
@@ -27,29 +31,42 @@ def _pid_running(pid: int) -> bool:
         return True  # if in doubt, assume running
 
 def _acquire_tray_singleton():
+    """
+    Acquire singleton lock using fcntl to prevent race conditions.
+    Uses file locking which is atomic and prevents multiple instances.
+    The lock is held for the lifetime of the process and auto-released on exit.
+    """
+    lockfile_path = os.path.join(_runtime_dir(), "talktype-tray.lock")
     try:
-        if os.path.exists(_TRAY_PIDFILE):
-            try:
-                with open(_TRAY_PIDFILE, "r") as f:
-                    old = int(f.read().strip() or "0")
-            except Exception:
-                old = 0
-            if _pid_running(old):
-                print("Another tray instance is already running. Exiting.")
-                sys.exit(0)
-        with open(_TRAY_PIDFILE, "w") as f:
-            f.write(str(os.getpid()))
+        # Open lock file (create if doesn't exist)
+        lockfile = open(lockfile_path, "w")
+
+        # Try to acquire exclusive lock (non-blocking)
+        # LOCK_EX = exclusive lock, LOCK_NB = non-blocking
+        fcntl.flock(lockfile.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+        # If we got here, we acquired the lock successfully
+        # Write our PID for informational purposes
+        lockfile.write(str(os.getpid()))
+        lockfile.flush()
+
+        # Keep the file open for the process lifetime
+        # The lock will automatically be released when the process exits
+        # Store in global to prevent garbage collection
+        global _tray_lockfile_handle
+        _tray_lockfile_handle = lockfile
+
+        logger.debug(f"Acquired tray singleton lock: {lockfile_path}")
+
+    except IOError:
+        # Lock is already held by another process
+        print("Another tray instance is already running. Exiting.", file=sys.stderr)
+        sys.exit(0)
     except Exception as e:
-        print(f"Warning: could not write tray pidfile: {e}")
-    def _cleanup():
-        try:
-            with open(_TRAY_PIDFILE, "r") as f:
-                cur = int(f.read().strip() or "0")
-            if cur == os.getpid():
-                os.remove(_TRAY_PIDFILE)
-        except Exception:
-            pass
-    atexit.register(_cleanup)
+        print(f"Warning: could not acquire tray singleton lock: {e}", file=sys.stderr)
+
+# Global to keep lock file open
+_tray_lockfile_handle = None
 
 class DictationTray:
     def __init__(self):
@@ -100,29 +117,29 @@ class DictationTray:
             src_dir = os.path.dirname(__file__)  # usr/src/talktype
             usr_dir = os.path.dirname(os.path.dirname(src_dir))  # usr
             dictate_script = os.path.join(usr_dir, "bin", "dictate")
-            
+
             if os.path.exists(dictate_script):
                 # Use the dictate script which has proper paths set up
                 subprocess.Popen([dictate_script], env=os.environ.copy())
-                print(f"Started dictation service via {dictate_script}")
+                logger.info(f"Started dictation service via {dictate_script}")
             else:
                 # Fallback: use sys.executable (bundled Python)
-                subprocess.Popen([sys.executable, "-m", "talktype.app"], 
+                subprocess.Popen([sys.executable, "-m", "talktype.app"],
                                env=os.environ.copy())
-                print("Started dictation service via Python module")
+                logger.info("Started dictation service via Python module")
         except Exception as e:
             print(f"Failed to start service: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"Failed to start service: {e}", exc_info=True)
         GLib.timeout_add_seconds(1, self.update_status_and_menu_once)
     
     def stop_service(self, _):
         """Stop the dictation service directly."""
         try:
             subprocess.run(["pkill", "-f", "talktype.app"], capture_output=True)
-            print("Stopped dictation service")
+            logger.info("Stopped dictation service")
         except Exception as e:
             print(f"Failed to stop service: {e}")
+            logger.error(f"Failed to stop service: {e}")
         GLib.timeout_add_seconds(1, self.update_status_and_menu_once)
     
     def restart_service(self, _):
@@ -132,25 +149,24 @@ class DictationTray:
             subprocess.run(["pkill", "-f", "talktype.app"], capture_output=True)
             # Wait a moment for processes to terminate
             time.sleep(1)
-            
+
             # Find the dictate script relative to this module
             src_dir = os.path.dirname(__file__)  # usr/src/talktype
             usr_dir = os.path.dirname(os.path.dirname(src_dir))  # usr
             dictate_script = os.path.join(usr_dir, "bin", "dictate")
-            
+
             if os.path.exists(dictate_script):
                 # Use the dictate script which has proper paths set up
                 subprocess.Popen([dictate_script], env=os.environ.copy())
-                print(f"Restarted dictation service via {dictate_script}")
+                logger.info(f"Restarted dictation service via {dictate_script}")
             else:
                 # Fallback: use sys.executable (bundled Python)
-                subprocess.Popen([sys.executable, "-m", "talktype.app"], 
+                subprocess.Popen([sys.executable, "-m", "talktype.app"],
                                env=os.environ.copy())
-                print("Restarted dictation service via Python module")
+                logger.info("Restarted dictation service via Python module")
         except Exception as e:
             print(f"Failed to restart service: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"Failed to restart service: {e}", exc_info=True)
         GLib.timeout_add_seconds(2, self.update_status_and_menu_once)
     
     def update_status_and_menu(self):
@@ -188,14 +204,15 @@ class DictationTray:
         """Download CUDA libraries for GPU acceleration."""
         try:
             from . import cuda_helper
-            print("Starting CUDA download...")
+            logger.info("Starting CUDA download...")
             success = cuda_helper.download_cuda_libraries()
             if success:
-                print("✅ CUDA libraries downloaded successfully!")
+                logger.info("CUDA libraries downloaded successfully")
             else:
-                print("❌ CUDA download failed")
+                logger.error("CUDA download failed")
         except Exception as e:
             print(f"Error downloading CUDA: {e}")
+            logger.error(f"Error downloading CUDA: {e}")
     
     def show_help(self, _):
         """Show help dialog with TalkType features and instructions."""
@@ -338,9 +355,8 @@ TalkType includes an intelligent timeout feature to save system resources and ba
             gpu_detected = cuda_helper.detect_nvidia_gpu()
             cuda_installed = cuda_helper.has_cuda_libraries()
             show_cuda_download = gpu_detected and not cuda_installed
-            print(f"DEBUG: GPU detected: {gpu_detected}, CUDA installed: {cuda_installed}, Show download: {show_cuda_download}")
-        except Exception as e:
-            print(f"DEBUG: Error checking CUDA status: {e}")
+        except Exception:
+            pass
         
         menu_items = [title_item, Gtk.SeparatorMenuItem(), self.start_item, self.stop_item, 
                      restart_item, Gtk.SeparatorMenuItem(), prefs_item]
@@ -350,9 +366,6 @@ TalkType includes an intelligent timeout feature to save system resources and ba
             cuda_item = Gtk.MenuItem(label="Download CUDA Libraries...")
             cuda_item.connect("activate", self.download_cuda)
             menu_items.append(cuda_item)
-            print("DEBUG: Added CUDA download menu item")
-        else:
-            print("DEBUG: CUDA download menu item not added")
         
         menu_items.extend([help_item, quit_item])
         
@@ -377,26 +390,17 @@ def main():
     # Check for first run and offer CUDA setup if applicable
     try:
         import talktype.cuda_helper as cuda_helper
-        print(f"DEBUG: cuda_helper imported successfully")
         # Only show welcome dialog on first tray launch (not for prefs)
         if cuda_helper.is_first_run():
-            print(f"DEBUG: First run detected, scheduling welcome dialog")
             # Schedule the welcome dialog after tray is initialized
             def show_welcome():
-                print(f"DEBUG: Showing welcome dialog now")
                 cuda_helper.offer_cuda_download(show_gui=True)
-                print(f"DEBUG: Welcome dialog completed")
                 # Refresh menu after CUDA installation (in case CUDA was installed)
                 tray.refresh_menu()
-                print(f"DEBUG: Menu refreshed")
                 return False  # Don't repeat
             GLib.timeout_add(2000, show_welcome)  # Show after 2 seconds (increased delay)
-        else:
-            print(f"DEBUG: Not first run, skipping welcome dialog")
-    except ImportError as e:
-        print(f"DEBUG: Import error: {e}")
-    except Exception as e:
-        print(f"DEBUG: Error in welcome dialog setup: {e}")
+    except Exception:
+        pass
     
     Gtk.main()
 

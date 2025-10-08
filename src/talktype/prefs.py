@@ -977,9 +977,12 @@ X-GNOME-Autostart-enabled=true
                                         return int(part[:-1])
                                     except ValueError:
                                         continue
+        except FileNotFoundError:
+            # pactl not installed - silently use fallback (common on non-PulseAudio systems)
+            pass
         except Exception as e:
             print(f"Failed to get system mic volume: {e}")
-        
+
         # Fallback to 50% if we can't get the actual volume
         return 50
     
@@ -992,6 +995,9 @@ X-GNOME-Autostart-enabled=true
                 ["pactl", "set-source-volume", "@DEFAULT_SOURCE@", f"{volume_percent}%"],
                 capture_output=True, timeout=2
             )
+        except FileNotFoundError:
+            # pactl not installed - silently skip (common on non-PulseAudio systems)
+            pass
         except Exception as e:
             print(f"Failed to set system mic volume: {e}")
     
@@ -1202,14 +1208,22 @@ X-GNOME-Autostart-enabled=true
                 
                 def finish_download():
                     progress_dialog.destroy()
-                    
+
                     if success:
+                        # Auto-enable GPU mode in config after successful download
+                        if self.s.device != "cuda":
+                            self.s.device = "cuda"
+                            self.save_settings()
+                            # Update device combo to reflect change
+                            if hasattr(self, 'device_combo'):
+                                self.device_combo.set_active_id("cuda")
+
                         # Refresh GPU status
                         self._check_gpu_status()
-                        
+
                         # Refresh device dropdown to show CUDA option
                         self._refresh_device_options()
-                        
+
                         # Show success dialog
                         success_dialog = Gtk.MessageDialog(
                             transient_for=self.window,
@@ -1219,9 +1233,8 @@ X-GNOME-Autostart-enabled=true
                             text="CUDA Libraries Installed!"
                         )
                         success_dialog.format_secondary_text(
-                            "GPU acceleration is now available.\n\n"
-                            "You can select 'CUDA (GPU)' in the General tab\n"
-                            "to enable faster transcription."
+                            "GPU acceleration is now enabled and ready to use.\n\n"
+                            "The app will now use GPU for faster transcription."
                         )
                         success_dialog.run()
                         success_dialog.destroy()

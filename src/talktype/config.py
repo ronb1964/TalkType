@@ -1,6 +1,7 @@
 from __future__ import annotations
 import os, tomllib
 from dataclasses import dataclass
+import sys
 
 CONFIG_PATH = os.path.expanduser("~/.config/talktype/config.toml")
 
@@ -22,6 +23,64 @@ class Settings:
     injection_mode: str = "type"  # "type" (ydotool/wtype) or "paste" (wl-copy + Ctrl+V)
     auto_timeout_enabled: bool = False  # enable automatic timeout after inactivity
     auto_timeout_minutes: int = 5      # minutes of inactivity before auto-stop
+
+def validate_config(s: Settings) -> None:
+    """
+    Validate configuration settings and exit with clear error message if invalid.
+
+    Checks:
+    - model: valid Whisper model name
+    - device: "cpu" or "cuda"
+    - mode: "hold" or "toggle"
+    - auto_timeout_minutes: positive integer
+    - injection_mode: "type" or "paste"
+    - hotkey/toggle_hotkey: reasonable key names (basic validation)
+    """
+    errors = []
+
+    # Valid Whisper model names
+    valid_models = {
+        "tiny", "tiny.en",
+        "base", "base.en",
+        "small", "small.en",
+        "medium", "medium.en",
+        "large", "large-v1", "large-v2", "large-v3"
+    }
+    if s.model not in valid_models:
+        errors.append(f"Invalid model '{s.model}'. Valid options: {', '.join(sorted(valid_models))}")
+
+    # Valid device
+    if s.device.lower() not in {"cpu", "cuda"}:
+        errors.append(f"Invalid device '{s.device}'. Must be 'cpu' or 'cuda'")
+
+    # Valid mode
+    if s.mode.lower() not in {"hold", "toggle"}:
+        errors.append(f"Invalid mode '{s.mode}'. Must be 'hold' or 'toggle'")
+
+    # Valid injection mode
+    if s.injection_mode.lower() not in {"type", "paste"}:
+        errors.append(f"Invalid injection_mode '{s.injection_mode}'. Must be 'type' or 'paste'")
+
+    # Auto-timeout minutes must be positive
+    if s.auto_timeout_minutes <= 0:
+        errors.append(f"Invalid auto_timeout_minutes '{s.auto_timeout_minutes}'. Must be positive")
+
+    # Basic hotkey validation - just check it's not empty and looks reasonable
+    if not s.hotkey or len(s.hotkey.strip()) == 0:
+        errors.append("Invalid hotkey: cannot be empty")
+
+    if s.mode.lower() == "toggle":
+        if not s.toggle_hotkey or len(s.toggle_hotkey.strip()) == 0:
+            errors.append("Invalid toggle_hotkey: cannot be empty when mode is 'toggle'")
+
+    # If there are errors, print them and exit
+    if errors:
+        print("❌ Configuration validation failed:", file=sys.stderr)
+        for error in errors:
+            print(f"  • {error}", file=sys.stderr)
+        print(f"\nPlease fix your configuration in: {CONFIG_PATH}", file=sys.stderr)
+        print("Or use environment variables (DICTATE_MODEL, DICTATE_DEVICE, etc.)", file=sys.stderr)
+        sys.exit(1)
 
 def load_config() -> Settings:
     s = Settings()
@@ -66,5 +125,8 @@ def load_config() -> Settings:
     n = os.getenv("DICTATE_NOTIFY");           s.notify = s.notify if n is None else n.lower() not in {"0","false","off","no"}
     timeout_enabled = os.getenv("DICTATE_AUTO_TIMEOUT_ENABLED"); s.auto_timeout_enabled = s.auto_timeout_enabled if timeout_enabled is None else timeout_enabled.lower() not in {"0","false","off","no"}
     timeout_minutes = os.getenv("DICTATE_AUTO_TIMEOUT_MINUTES"); s.auto_timeout_minutes = s.auto_timeout_minutes if timeout_minutes is None else int(timeout_minutes)
+
+    # Validate configuration before returning
+    validate_config(s)
 
     return s
