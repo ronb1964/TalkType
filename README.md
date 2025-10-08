@@ -83,7 +83,7 @@ poetry run dictate-tray &
 
 ## ⚙️ Configuration
 
-Settings are stored in `~/.config/TalkType/config.toml`:
+Settings are stored in `~/.config/talktype/config.toml`:
 
 ```toml
 model = "small"           # Whisper model size
@@ -115,7 +115,7 @@ poetry run pytest -q
 ## 📋 Requirements
 
 - **OS**: Linux with Wayland
-- **Python**: 3.11+
+- **Python**: 3.10+
 - **Audio**: Working microphone
 - **Dependencies**: ydotool, portaudio, ffmpeg
 

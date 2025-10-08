@@ -12,7 +12,7 @@ The project is architecturally divided into three main Python components:
 
 2.  **System Tray Application (`src/talktype/tray.py`):** A GTK-based system tray icon that provides a user interface for starting, stopping, and restarting the dictation service. It also provides access to the preferences window.
 
-3.  **Preferences GUI (`src/talktype/prefs.py`):** A GTK-based graphical interface for configuring the application. Settings are stored in `~/.config/TalkType/config.toml`.
+3.  **Preferences GUI (`src/talktype/prefs.py`):** A GTK-based graphical interface for configuring the application. Settings are stored in `~/.config/talktype/config.toml`.
 
 ## Building and Running
 

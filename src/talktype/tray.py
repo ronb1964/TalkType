@@ -77,27 +77,44 @@ class DictationTray:
         )
         self.indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
         self.indicator.set_title("TalkType")  # Set the app name
-        
+
         # Store menu items for dynamic updates
         self.start_item = None
         self.stop_item = None
-        
+
         self.update_icon_status()
         self.indicator.set_menu(self.build_menu())
-        
+
         # Check service status every 3 seconds and update menu
         GLib.timeout_add_seconds(3, self.update_status_and_menu)
+
+        # Auto-start the dictation service after a brief delay
+        # This ensures the tray is fully initialized before starting the service
+        GLib.timeout_add(1000, self._auto_start_service)
         
     def is_service_running(self):
         """Check if the dictation service is active."""
         try:
             # Check for running talktype.app process
-            result = subprocess.run(["pgrep", "-f", "talktype.app"], 
+            result = subprocess.run(["pgrep", "-f", "talktype.app"],
                                   capture_output=True, text=True)
             return result.returncode == 0 and result.stdout.strip()
         except Exception:
             return False
-    
+
+    def _auto_start_service(self):
+        """Auto-start the dictation service if not already running."""
+        try:
+            # Only start if not already running
+            if not self.is_service_running():
+                logger.info("Auto-starting dictation service...")
+                self.start_service(None)
+            else:
+                logger.info("Dictation service already running, skipping auto-start")
+        except Exception as e:
+            logger.error(f"Failed to auto-start service: {e}", exc_info=True)
+        return False  # Don't repeat this timer
+
     def update_icon_status(self):
         """Update icon based on service status."""
         if self.is_service_running():
@@ -254,16 +271,16 @@ class DictationTray:
         # Tab 1: Getting Started
         create_tab("🚀 Getting Started", '''<span size="large"><b>Quick Start Guide</b></span>
 
-<b>1. Start the Service</b>
-Right-click the tray icon → "Start Service"
-The tray icon will show the service status
+<b>✨ TalkType is ready to use!</b>
+The dictation service starts automatically when you launch TalkType.
 
-<b>2. Choose Your Mode</b>
-• <b>F8 (Push-to-talk):</b> Hold to record, release to stop
-• <b>F9 (Toggle mode):</b> Press once to start, press again to stop
+<b>1. Begin Dictating</b>
+Press <b>F8</b> (push-to-talk) or <b>F9</b> (toggle mode) to start
+• <b>F8:</b> Hold to record, release to stop
+• <b>F9:</b> Press once to start, press again to stop
 • <b>Recording Indicator:</b> A red microphone icon appears during active dictation
 
-<b>3. Configure Settings</b>
+<b>2. Configure Settings</b>
 Right-click → "Preferences" to customize:
 • Hotkeys (F8/F9 or custom keys)
 • AI model (tiny to large-v3)
@@ -271,9 +288,13 @@ Right-click → "Preferences" to customize:
 • GPU acceleration (if you have NVIDIA GPU)
 • Text input method (keyboard or clipboard)
 
-<b>4. Start Dictating!</b>
+<b>3. Dictate!</b>
 Press your hotkey and speak clearly at a normal pace.
 Text will be inserted where your cursor is located.
+
+<b>💡 Auto-Timeout Feature:</b>
+The service automatically pauses after 5 minutes of inactivity to save
+system resources. Adjust this in Preferences → Advanced.
 
 <b>Need more help?</b> Check the other tabs for detailed information.''')
 

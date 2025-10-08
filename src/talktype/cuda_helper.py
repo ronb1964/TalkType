@@ -416,101 +416,68 @@ def show_cuda_welcome_dialog():
 def show_initial_help_dialog():
     """Show initial help dialog for first-time users who skip CUDA download."""
     try:
-        dialog = Gtk.Dialog(title="🎙️ Welcome to TalkType!")
-        dialog.set_default_size(480, 280)
-        dialog.set_size_request(480, 280)  # Force the size
-        dialog.set_resizable(False)  # Prevent resizing
+        dialog = Gtk.Dialog(title="Welcome to TalkType")
+        dialog.set_default_size(520, 320)
+        dialog.set_resizable(False)
         dialog.set_modal(True)
         dialog.set_position(Gtk.WindowPosition.CENTER)
-        
+
         content = dialog.get_content_area()
-        content.set_margin_top(5)
-        content.set_margin_bottom(5)
-        content.set_margin_start(8)
-        content.set_margin_end(8)
-        content.set_spacing(5)  # Reduce spacing between elements
-        
-        # Header
-        header = Gtk.Label()
-        header.set_markup('<span size="large"><b>🎙️ Welcome to TalkType!</b></span>')
-        header.set_margin_bottom(3)
-        content.pack_start(header, False, False, 0)
-        
-        # Instructions
+        content.set_margin_top(20)
+        content.set_margin_bottom(20)
+        content.set_margin_start(25)
+        content.set_margin_end(25)
+        content.set_spacing(15)
+
+        # Main instructions
         instructions = Gtk.Label()
-        instructions.set_markup('''<b>Getting Started:</b>
+        instructions.set_markup('''<span size="large"><b>✨ TalkType is Ready!</b></span>
 
-1. <b>Start the Service:</b> Right-click the tray icon → "Start Service"
-2. <b>Begin Dictating:</b> Press F8 (push-to-talk) or F9 (toggle mode)
-   • Red microphone icon appears during recording
-3. <b>Configure Settings:</b> Right-click → "Preferences" to customize
+<b>🚀 Getting Started:</b>
 
-<b>💡 Key Features:</b>
-• <b>Dual Hotkey Modes:</b> F8 (hold to talk) or F9 (toggle on/off)
-• <b>Smart Text Processing:</b> Auto-punctuation, smart quotes, spacing
-• <b>Language Support:</b> Auto-detect or manually select language
-• <b>Power Management:</b> Auto-timeout to save battery when idle
+The dictation service will start automatically in a moment.
+Simply press your hotkey to begin dictating!
+
+<b>1. Begin Dictating:</b> Press <b>F8</b> (push-to-talk) or <b>F9</b> (toggle mode)
+    • Red microphone icon appears during recording
+<b>2. Configure Settings:</b> Right-click tray → "Preferences" to customize
+
+<b>✨ Key Features:</b>
+• Auto-punctuation, smart quotes, 50+ languages
+• GPU acceleration available (3-5x faster with NVIDIA GPU)
+• Auto-timeout after 5 minutes to save system resources
+
+<b>💡 Power Management:</b>
+The service automatically pauses after 5 minutes of inactivity.
+Adjust this in Preferences → Advanced → Auto-timeout.
 
 <b>🎮 GPU Acceleration:</b>
-You can enable GPU acceleration later for 3-5x faster transcription:
-• Right-click tray → "Preferences" → "Advanced" tab
-• Or use the "Download CUDA Libraries" menu option
+Enable later for 3-5x faster transcription:
+Right-click tray → "Preferences" → "Advanced" tab
 
 <b>📚 Need Help?</b>
-Right-click the tray icon → "Help..." for comprehensive feature guide''')
+Right-click the tray icon → "Help..." for full documentation''')
         instructions.set_line_wrap(True)
         instructions.set_xalign(0)
+        instructions.set_yalign(0)
         content.pack_start(instructions, True, True, 0)
-        
-        # Add some space before buttons
-        spacer = Gtk.Label()
-        spacer.set_margin_top(10)
-        content.pack_start(spacer, False, False, 0)
-        
+
         # Buttons
         button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         button_box.set_halign(Gtk.Align.CENTER)
-        
-        start_service_btn = Gtk.Button(label="🚀 Start Service Now")
-        start_service_btn.get_style_context().add_class("suggested-action")
-        start_service_btn.connect("clicked", lambda w: dialog.response(1))
-        button_box.pack_start(start_service_btn, False, False, 0)
-        
+        button_box.set_margin_top(10)
+
         ok_btn = Gtk.Button(label="Got It!")
+        ok_btn.get_style_context().add_class("suggested-action")
         ok_btn.connect("clicked", lambda w: dialog.response(Gtk.ResponseType.OK))
         button_box.pack_start(ok_btn, False, False, 0)
-        
+
         content.pack_start(button_box, False, False, 0)
-        
+
         dialog.show_all()
-        response = dialog.run()
+        dialog.run()
         dialog.destroy()
-        
-        # If user clicked "Start Service Now", try to start it
-        if response == 1:
-            try:
-                import subprocess
-                import os
-                
-                # Find the dictate script relative to this module
-                current_dir = os.path.dirname(__file__)  # usr/src/talktype
-                usr_dir = os.path.dirname(os.path.dirname(current_dir))  # usr
-                dictate_script = os.path.join(usr_dir, "bin", "dictate")
-                
-                if os.path.exists(dictate_script):
-                    # Stop any existing service first
-                    subprocess.run(["pkill", "-f", "talktype.app"], capture_output=True)
-                    # Start the service using the dictate script
-                    subprocess.Popen([dictate_script], env=os.environ.copy())
-                    logger.info(f"Started dictation service via {dictate_script}")
-                else:
-                    # Fallback: use sys.executable (bundled Python)
-                    subprocess.run(["pkill", "-f", "talktype.app"], capture_output=True)
-                    subprocess.Popen([sys.executable, "-m", "talktype.app"], env=os.environ.copy())
-                    logger.info("Started dictation service via Python module")
-            except Exception as e:
-                logger.error(f"Failed to start service from help dialog: {e}")
-        
+
     except Exception as e:
         logger.error(f"Error showing initial help dialog: {e}", exc_info=True)
 
@@ -646,65 +613,44 @@ def offer_cuda_download(show_gui=True):
                                     
                                     # Instructions
                                     instructions = Gtk.Label()
-                                    instructions.set_markup('''<b>Next Steps:</b>
+                                    instructions.set_markup('''<b>✨ TalkType is Ready!</b>
 
-1. <b>Start the Service:</b> Right-click the tray icon → "Start Service"
-2. <b>Begin Dictating:</b> Press F8 (push-to-talk) or F9 (toggle mode) - red mic icon shows when recording
-3. <b>GPU Mode:</b> CUDA (GPU) has been automatically enabled!
+The dictation service will start automatically in a moment with GPU acceleration enabled!
 
-<b>💡 Tips:</b>
-• GPU acceleration is 3-5x faster than CPU mode
-• The service must be started manually to begin dictation
-• Right-click the tray icon → "Help..." for comprehensive feature guide''')
+<b>🚀 Getting Started:</b>
+• Press <b>F8</b> (push-to-talk) or <b>F9</b> (toggle mode) to begin dictating
+• Red microphone icon shows when recording
+• CUDA (GPU) mode has been automatically enabled!
+
+<b>💡 GPU Benefits:</b>
+• 3-5x faster transcription than CPU mode
+• Smoother performance with larger AI models
+• Lower CPU usage during dictation
+
+<b>💡 Power Management:</b>
+The service automatically pauses after 5 minutes of inactivity to save
+system resources. Adjust this in Preferences → Advanced.
+
+<b>📚 Need Help?</b>
+Right-click the tray icon → "Help..." for full documentation''')
                                     instructions.set_line_wrap(True)
                                     instructions.set_xalign(0)
                                     content.pack_start(instructions, True, True, 0)
-                                    
+
                                     # Add some space before buttons
                                     spacer = Gtk.Label()
                                     spacer.set_margin_top(10)
                                     content.pack_start(spacer, False, False, 0)
-                                    
+
                                     # Buttons
-                                    start_service_btn = Gtk.Button(label="🚀 Start Service Now")
-                                    start_service_btn.connect("clicked", lambda w: success_dialog.response(1))
-                                    success_dialog.add_action_widget(start_service_btn, 1)
-                                    
-                                    ok_btn = Gtk.Button(label="OK")
+                                    ok_btn = Gtk.Button(label="Got It!")
+                                    ok_btn.get_style_context().add_class("suggested-action")
                                     ok_btn.connect("clicked", lambda w: success_dialog.response(Gtk.ResponseType.OK))
                                     success_dialog.add_action_widget(ok_btn, Gtk.ResponseType.OK)
-                                    
+
                                     success_dialog.show_all()
-                                    response = success_dialog.run()
+                                    success_dialog.run()
                                     success_dialog.destroy()
-                                    
-                                    # If user clicked "Start Service Now", try to start it
-                                    if response == 1:
-                                        try:
-                                            import subprocess
-                                            import os
-                                            
-                                            # Find the dictate script relative to this module
-                                            # We're in usr/src/talktype/cuda_helper.py
-                                            # dictate is in usr/bin/dictate
-                                            current_dir = os.path.dirname(__file__)  # usr/src/talktype
-                                            usr_dir = os.path.dirname(os.path.dirname(current_dir))  # usr
-                                            dictate_script = os.path.join(usr_dir, "bin", "dictate")
-                                            
-                                            if os.path.exists(dictate_script):
-                                                # Stop any existing service first
-                                                subprocess.run(["pkill", "-f", "talktype.app"], capture_output=True)
-                                                # Start the service using the dictate script
-                                                subprocess.Popen([dictate_script], env=os.environ.copy())
-                                                logger.info(f"Started dictation service via {dictate_script}")
-                                            else:
-                                                # Fallback: use sys.executable (bundled Python)
-                                                subprocess.run(["pkill", "-f", "talktype.app"], capture_output=True)
-                                                subprocess.Popen([sys.executable, "-m", "talktype.app"], env=os.environ.copy())
-                                                logger.info("Started dictation service via Python module")
-                                        except Exception as e:
-                                            logger.error(f"Failed to start service from success dialog: {e}")
-                                            pass  # Service start will be handled by tray
                                     
                                     return False
                                 GLib.timeout_add(SUCCESS_DIALOG_DELAY_MS, show_success_dialog)

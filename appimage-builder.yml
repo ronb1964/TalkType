@@ -95,6 +95,13 @@ AppDir:
       
       chmod +x bin/dictate*
 
+      # Copy icon to AppDir root (required by AppImage spec)
+      cd ..
+      cp io.github.ronb1964.TalkType.svg .
+
+      # Create .DirIcon symlink for AppImage
+      ln -sf io.github.ronb1964.TalkType.svg .DirIcon
+
   test:
     debian:
       image: appimagecrafters/tests-env:debian-stable

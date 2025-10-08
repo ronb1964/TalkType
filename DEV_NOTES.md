@@ -57,7 +57,7 @@ Auto-space: when a new utterance types into existing text, we prepend a single s
 
 Config
 
-TOML: ~/.config/TalkType/config.toml
+TOML: ~/.config/talktype/config.toml
 
 Env overrides and CLI flags
 
@@ -146,7 +146,7 @@ systemctl --user enable --now ydotoold.service
 
 Config file
 
-~/.config/TalkType/config.toml:
+~/.config/talktype/config.toml:
 
 model = "small"         # tiny/base/small/medium/large-v3
 device = "cpu"          # "cpu" or "cuda"
