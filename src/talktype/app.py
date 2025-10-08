@@ -35,6 +35,105 @@ def _notify(title: str, body: str):
     except Exception:
         pass
 
+def show_hotkey_test_dialog(mode, hold_key, toggle_key):
+    """Show modal dialog requiring user to test hotkeys before continuing."""
+    try:
+        gi.require_version('Gtk', '3.0')
+        from gi.repository import Gtk, GLib
+
+        dialog = Gtk.Dialog(title="Verify Your Hotkeys")
+        dialog.set_default_size(500, 280)
+        dialog.set_resizable(False)
+        dialog.set_modal(True)
+        dialog.set_position(Gtk.WindowPosition.CENTER)
+        dialog.set_keep_above(True)
+
+        content = dialog.get_content_area()
+        content.set_margin_top(20)
+        content.set_margin_bottom(20)
+        content.set_margin_start(25)
+        content.set_margin_end(25)
+        content.set_spacing(15)
+
+        # Header
+        header = Gtk.Label()
+        header.set_markup('<span size="large"><b>🎹 Verify Your Hotkeys</b></span>')
+        content.pack_start(header, False, False, 0)
+
+        # Instructions
+        instructions = Gtk.Label()
+        if mode == "toggle":
+            instructions.set_markup(
+                '<b>Before you can start dictating, please test your hotkeys:</b>\n\n'
+                f'Press <b>{hold_key}</b> (push-to-talk mode)\n'
+                f'Press <b>{toggle_key}</b> (toggle mode)\n\n'
+                'This ensures your hotkeys work and don\'t conflict with other apps.'
+            )
+        else:
+            instructions.set_markup(
+                '<b>Before you can start dictating, please test your hotkey:</b>\n\n'
+                f'Press <b>{hold_key}</b> (push-to-talk)\n\n'
+                'This ensures your hotkey works and doesn\'t conflict with other apps.'
+            )
+        instructions.set_line_wrap(True)
+        instructions.set_xalign(0)
+        content.pack_start(instructions, False, False, 0)
+
+        # Status labels
+        status_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        status_box.set_margin_top(10)
+
+        hold_status = Gtk.Label()
+        hold_status.set_markup(f'<b>{hold_key}</b>: <span color="#999999">⏳ Waiting...</span>')
+        hold_status.set_xalign(0)
+        status_box.pack_start(hold_status, False, False, 0)
+
+        toggle_status = Gtk.Label()
+        if mode == "toggle":
+            toggle_status.set_markup(f'<b>{toggle_key}</b>: <span color="#999999">⏳ Waiting...</span>')
+            toggle_status.set_xalign(0)
+            status_box.pack_start(toggle_status, False, False, 0)
+
+        content.pack_start(status_box, False, False, 0)
+
+        # Track tested keys
+        tested = {"hold": False, "toggle": False if mode == "toggle" else True}
+
+        # Key press handler
+        def on_key_press(widget, event):
+            from gi.repository import Gdk
+            keyname = Gdk.keyval_name(event.keyval)
+
+            if keyname == hold_key and not tested["hold"]:
+                tested["hold"] = True
+                hold_status.set_markup(f'<b>{hold_key}</b>: <span color="#4CAF50">✓ Working!</span>')
+
+                # If all keys tested, enable continue button
+                if tested["hold"] and tested["toggle"]:
+                    GLib.timeout_add(500, lambda: dialog.response(Gtk.ResponseType.OK))
+
+            elif mode == "toggle" and keyname == toggle_key and not tested["toggle"]:
+                tested["toggle"] = True
+                toggle_status.set_markup(f'<b>{toggle_key}</b>: <span color="#4CAF50">✓ Working!</span>')
+
+                # If all keys tested, enable continue button
+                if tested["hold"] and tested["toggle"]:
+                    GLib.timeout_add(500, lambda: dialog.response(Gtk.ResponseType.OK))
+
+            return True
+
+        dialog.connect("key-press-event", on_key_press)
+
+        dialog.show_all()
+        dialog.run()
+        dialog.destroy()
+
+        return tested["hold"] and tested["toggle"]
+
+    except Exception as e:
+        logger.error(f"Failed to show hotkey test dialog: {e}")
+        return True  # Fallback: allow continuation if dialog fails
+
 # --- Single instance lock (user runtime dir) ---
 def _runtime_dir():
     return os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
@@ -409,18 +508,35 @@ def _loop_evdev(cfg: Settings, input_device_idx):
     state.hold_key_tested = False
     state.toggle_key_tested = False
 
-    # Show initial hotkey test notification
-    if cfg.notify:
-        if mode == "toggle":
-            _notify("TalkType Started",
-                   f"Test your hotkeys:\n• Press {cfg.toggle_hotkey} (toggle mode)\n• Or press {cfg.hotkey} (push-to-talk)")
-        else:
-            _notify("TalkType Started",
-                   f"Test your hotkey: Press {cfg.hotkey} (push-to-talk)")
+    # Show hotkey verification dialog
+    print(f"🎹 Showing hotkey verification dialog...")
+    logger.info(f"Showing hotkey verification dialog for user")
 
-    print(f"🎹 Waiting for hotkey test - Press {cfg.hotkey}" +
-          (f" or {cfg.toggle_hotkey}" if mode == "toggle" else ""))
-    logger.info(f"Hotkey test mode active - waiting for user to test keys")
+    # Run dialog in a separate thread to avoid blocking the event loop
+    import threading
+    dialog_result = {"verified": False}
+
+    def run_dialog():
+        result = show_hotkey_test_dialog(mode, cfg.hotkey, cfg.toggle_hotkey)
+        dialog_result["verified"] = result
+        if result:
+            state.hold_key_tested = True
+            if mode == "toggle":
+                state.toggle_key_tested = True
+            print(f"✓ Hotkeys verified successfully")
+            logger.info(f"Hotkeys verified by user")
+
+    # Run dialog in background thread
+    dialog_thread = threading.Thread(target=run_dialog)
+    dialog_thread.daemon = True
+    dialog_thread.start()
+
+    # Wait for dialog to complete
+    dialog_thread.join()
+
+    if not dialog_result["verified"]:
+        print("⚠️ Hotkey verification incomplete - user may have closed dialog")
+        logger.warning("Hotkey verification incomplete")
 
     while True:
         current_time = time.time()
@@ -437,53 +553,11 @@ def _loop_evdev(cfg: Settings, input_device_idx):
             try:
                 for event in dev.read():
                     if event.type == ecodes.EV_KEY:
-                        # Track hotkey testing
-                        if event.value == 1:  # Key press (not release)
-                            if event.code == hold_key and not state.hold_key_tested:
-                                state.hold_key_tested = True
-                                print(f"✓ Hold key ({cfg.hotkey}) tested successfully")
-                                logger.info(f"Hold key tested: {cfg.hotkey}")
-                                if cfg.notify:
-                                    if mode == "toggle" and not state.toggle_key_tested:
-                                        _notify("TalkType Hotkey Test",
-                                               f"✓ {cfg.hotkey} working! Now test {cfg.toggle_hotkey}")
-                                    else:
-                                        _notify("TalkType Ready",
-                                               f"✓ Hotkey working! Ready to dictate.")
-                            elif event.code == toggle_key and not state.toggle_key_tested:
-                                state.toggle_key_tested = True
-                                print(f"✓ Toggle key ({cfg.toggle_hotkey}) tested successfully")
-                                logger.info(f"Toggle key tested: {cfg.toggle_hotkey}")
-                                if cfg.notify:
-                                    if not state.hold_key_tested:
-                                        _notify("TalkType Hotkey Test",
-                                               f"✓ {cfg.toggle_hotkey} working! Now test {cfg.hotkey}")
-                                    else:
-                                        _notify("TalkType Ready",
-                                               f"✓ Both hotkeys working! Ready to dictate.")
-
-                        # Check if hotkey testing is complete before allowing dictation
-                        hotkeys_verified = False
-                        if mode == "hold":
-                            # In hold mode, only need to test the hold key
-                            hotkeys_verified = state.hold_key_tested
-                        else:
-                            # In toggle mode, need to test both keys
-                            hotkeys_verified = state.hold_key_tested and state.toggle_key_tested
-
                         if mode == "hold":
                             if event.code == hold_key:
                                 # Reset timeout timer only when TalkType hotkey is used
                                 if timeout_enabled:
                                     last_activity_time = current_time
-
-                                # Block dictation until hotkey is verified
-                                if not hotkeys_verified:
-                                    if cfg.notify and event.value == 1:
-                                        _notify("TalkType Hotkey Test",
-                                               f"Please test your hotkey first!\nPress {cfg.hotkey} again to confirm it works.")
-                                    continue
-
                                 if event.value == 1 and not state.is_recording:
                                     start_recording(cfg.beeps, cfg.notify, input_device_idx)
                                 elif event.value == 0 and state.is_recording:
@@ -493,18 +567,6 @@ def _loop_evdev(cfg: Settings, input_device_idx):
                                 # Reset timeout timer only when TalkType hotkey is used
                                 if timeout_enabled:
                                     last_activity_time = current_time
-
-                                # Block dictation until both hotkeys are verified
-                                if not hotkeys_verified:
-                                    if cfg.notify:
-                                        if not state.hold_key_tested:
-                                            _notify("TalkType Hotkey Test",
-                                                   f"Please test {cfg.hotkey} first, then {cfg.toggle_hotkey}")
-                                        elif not state.toggle_key_tested:
-                                            _notify("TalkType Hotkey Test",
-                                                   f"Good! Now test {cfg.toggle_hotkey}")
-                                    continue
-
                                 if not state.is_recording:
                                     start_recording(cfg.beeps, cfg.notify, input_device_idx)
                                 else:
