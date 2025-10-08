@@ -462,11 +462,28 @@ def _loop_evdev(cfg: Settings, input_device_idx):
                                         _notify("TalkType Ready",
                                                f"✓ Both hotkeys working! Ready to dictate.")
 
+                        # Check if hotkey testing is complete before allowing dictation
+                        hotkeys_verified = False
+                        if mode == "hold":
+                            # In hold mode, only need to test the hold key
+                            hotkeys_verified = state.hold_key_tested
+                        else:
+                            # In toggle mode, need to test both keys
+                            hotkeys_verified = state.hold_key_tested and state.toggle_key_tested
+
                         if mode == "hold":
                             if event.code == hold_key:
                                 # Reset timeout timer only when TalkType hotkey is used
                                 if timeout_enabled:
                                     last_activity_time = current_time
+
+                                # Block dictation until hotkey is verified
+                                if not hotkeys_verified:
+                                    if cfg.notify and event.value == 1:
+                                        _notify("TalkType Hotkey Test",
+                                               f"Please test your hotkey first!\nPress {cfg.hotkey} again to confirm it works.")
+                                    continue
+
                                 if event.value == 1 and not state.is_recording:
                                     start_recording(cfg.beeps, cfg.notify, input_device_idx)
                                 elif event.value == 0 and state.is_recording:
@@ -476,6 +493,18 @@ def _loop_evdev(cfg: Settings, input_device_idx):
                                 # Reset timeout timer only when TalkType hotkey is used
                                 if timeout_enabled:
                                     last_activity_time = current_time
+
+                                # Block dictation until both hotkeys are verified
+                                if not hotkeys_verified:
+                                    if cfg.notify:
+                                        if not state.hold_key_tested:
+                                            _notify("TalkType Hotkey Test",
+                                                   f"Please test {cfg.hotkey} first, then {cfg.toggle_hotkey}")
+                                        elif not state.toggle_key_tested:
+                                            _notify("TalkType Hotkey Test",
+                                                   f"Good! Now test {cfg.toggle_hotkey}")
+                                    continue
+
                                 if not state.is_recording:
                                     start_recording(cfg.beeps, cfg.notify, input_device_idx)
                                 else:
