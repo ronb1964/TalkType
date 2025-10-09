@@ -88,9 +88,8 @@ class DictationTray:
         # Check service status every 3 seconds and update menu
         GLib.timeout_add_seconds(3, self.update_status_and_menu)
 
-        # Auto-start the dictation service after a brief delay
-        # This ensures the tray is fully initialized before starting the service
-        GLib.timeout_add(1000, self._auto_start_service)
+        # Auto-start will be triggered after welcome dialog on first run
+        # or immediately if not first run (handled in main())
         
     def is_service_running(self):
         """Check if the dictation service is active."""
@@ -606,10 +605,16 @@ def main():
                 cuda_helper.offer_cuda_download(show_gui=True)
                 # Refresh menu after CUDA installation (in case CUDA was installed)
                 tray.refresh_menu()
+                # NOW start the service (after welcome dialog)
+                GLib.timeout_add(500, tray._auto_start_service)
                 return False  # Don't repeat
-            GLib.timeout_add(2000, show_welcome)  # Show after 2 seconds (increased delay)
+            GLib.timeout_add(1500, show_welcome)  # Show after 1.5 seconds
+        else:
+            # Not first run, auto-start immediately
+            GLib.timeout_add(1000, tray._auto_start_service)
     except Exception:
-        pass
+        # If any error, still try to auto-start
+        GLib.timeout_add(1000, tray._auto_start_service)
     
     Gtk.main()
 

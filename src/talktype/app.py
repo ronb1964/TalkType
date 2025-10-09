@@ -165,6 +165,137 @@ def show_hotkey_test_dialog(mode, hold_key, toggle_key):
         logger.error(f"Failed to show hotkey test dialog: {e}")
         return ("error", True)  # Fallback: allow continuation if dialog fails
 
+def show_simple_hotkey_change_dialog(current_mode, current_hold_key, current_toggle_key):
+    """Show a simple modal dialog to change hotkeys during first run."""
+    try:
+        gi.require_version('Gtk', '3.0')
+        from gi.repository import Gtk
+
+        dialog = Gtk.Dialog(title="Change Your Hotkeys")
+        dialog.set_default_size(500, 350)
+        dialog.set_resizable(False)
+        dialog.set_modal(True)
+        dialog.set_position(Gtk.WindowPosition.CENTER)
+
+        content = dialog.get_content_area()
+        content.set_margin_top(20)
+        content.set_margin_bottom(20)
+        content.set_margin_start(25)
+        content.set_margin_end(25)
+        content.set_spacing(15)
+
+        # Header
+        header = Gtk.Label()
+        header.set_markup('<span size="large"><b>🎹 Choose Your Hotkeys</b></span>')
+        content.pack_start(header, False, False, 0)
+
+        # Instructions
+        instructions = Gtk.Label()
+        instructions.set_markup(
+            'Select the hotkeys you want to use for dictation.\n'
+            'Choose keys that won\'t conflict with other apps.'
+        )
+        instructions.set_line_wrap(True)
+        content.pack_start(instructions, False, False, 0)
+
+        # Mode selection
+        mode_frame = Gtk.Frame(label="Activation Mode")
+        mode_frame.set_margin_top(10)
+        mode_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        mode_box.set_margin_top(10)
+        mode_box.set_margin_bottom(10)
+        mode_box.set_margin_start(15)
+        mode_box.set_margin_end(15)
+
+        hold_radio = Gtk.RadioButton(label="Push-to-Talk (Hold key to record)")
+        toggle_radio = Gtk.RadioButton(label="Toggle (Press once to start, again to stop)", group=hold_radio)
+
+        if current_mode == "toggle":
+            toggle_radio.set_active(True)
+        else:
+            hold_radio.set_active(True)
+
+        mode_box.pack_start(hold_radio, False, False, 0)
+        mode_box.pack_start(toggle_radio, False, False, 0)
+        mode_frame.add(mode_box)
+        content.pack_start(mode_frame, False, False, 0)
+
+        # Hotkey selection
+        hotkey_frame = Gtk.Frame(label="Hotkeys")
+        hotkey_frame.set_margin_top(10)
+        hotkey_grid = Gtk.Grid()
+        hotkey_grid.set_row_spacing(10)
+        hotkey_grid.set_column_spacing(10)
+        hotkey_grid.set_margin_top(10)
+        hotkey_grid.set_margin_bottom(10)
+        hotkey_grid.set_margin_start(15)
+        hotkey_grid.set_margin_end(15)
+
+        # Hold key
+        hold_label = Gtk.Label(label="Push-to-Talk Key:")
+        hold_label.set_xalign(0)
+        hold_combo = Gtk.ComboBoxText()
+        for key in ["F8", "F9", "F10", "F11", "F12", "F1", "F2", "F3", "F4", "F5", "F6", "F7"]:
+            hold_combo.append_text(key)
+        hold_combo.set_active_id(current_hold_key)
+        if hold_combo.get_active() == -1:
+            hold_combo.set_active(0)
+
+        hotkey_grid.attach(hold_label, 0, 0, 1, 1)
+        hotkey_grid.attach(hold_combo, 1, 0, 1, 1)
+
+        # Toggle key
+        toggle_label = Gtk.Label(label="Toggle Key:")
+        toggle_label.set_xalign(0)
+        toggle_combo = Gtk.ComboBoxText()
+        for key in ["F8", "F9", "F10", "F11", "F12", "F1", "F2", "F3", "F4", "F5", "F6", "F7"]:
+            toggle_combo.append_text(key)
+        toggle_combo.set_active_id(current_toggle_key)
+        if toggle_combo.get_active() == -1:
+            toggle_combo.set_active(1)
+
+        hotkey_grid.attach(toggle_label, 0, 1, 1, 1)
+        hotkey_grid.attach(toggle_combo, 1, 1, 1, 1)
+
+        hotkey_frame.add(hotkey_grid)
+        content.pack_start(hotkey_frame, False, False, 0)
+
+        # Buttons
+        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        button_box.set_halign(Gtk.Align.CENTER)
+        button_box.set_margin_top(15)
+
+        cancel_btn = Gtk.Button(label="Cancel")
+        cancel_btn.connect("clicked", lambda w: dialog.response(Gtk.ResponseType.CANCEL))
+        button_box.pack_start(cancel_btn, False, False, 0)
+
+        save_btn = Gtk.Button(label="Save & Continue")
+        save_btn.get_style_context().add_class("suggested-action")
+        save_btn.connect("clicked", lambda w: dialog.response(Gtk.ResponseType.OK))
+        button_box.pack_start(save_btn, False, False, 0)
+
+        content.pack_start(button_box, False, False, 0)
+
+        # Show dialog
+        dialog.show_all()
+        response = dialog.run()
+
+        # Get values
+        new_mode = "toggle" if toggle_radio.get_active() else "hold"
+        new_hold_key = hold_combo.get_active_text()
+        new_toggle_key = toggle_combo.get_active_text()
+
+        dialog.destroy()
+
+        if response == Gtk.ResponseType.OK:
+            return (True, new_mode, new_hold_key, new_toggle_key)
+        else:
+            return (False, None, None, None)
+
+    except Exception as e:
+        logger.error(f"Failed to show hotkey change dialog: {e}")
+        return (False, None, None, None)
+
 # --- Single instance lock (user runtime dir) ---
 def _runtime_dir():
     return os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
@@ -534,65 +665,290 @@ def _loop_evdev(cfg: Settings, input_device_idx):
     hold_key = _keycode_from_name(cfg.hotkey)
     toggle_key = _keycode_from_name(cfg.toggle_hotkey) if mode == "toggle" else None
 
-    # Initialize hotkey testing
-    state.hotkey_test_start_time = time.time()
-    state.hold_key_tested = False
-    state.toggle_key_tested = False
+    # Check if this is the first run
+    try:
+        from talktype.cuda_helper import is_first_run, mark_first_run_complete
+        first_run = is_first_run()
+    except Exception:
+        first_run = False
 
-    # Show hotkey verification dialog
-    print(f"🎹 Showing hotkey verification dialog...")
-    logger.info(f"Showing hotkey verification dialog for user")
+    # Check if we should show welcome dialog (after user changed keys)
+    show_welcome_after_change = False
+    welcome_flag_file = os.path.expanduser("~/.local/share/TalkType/.show_welcome_on_restart")
+    if os.path.exists(welcome_flag_file):
+        show_welcome_after_change = True
+        try:
+            os.remove(welcome_flag_file)
+            logger.info("Removed welcome flag, will show welcome dialog")
+        except Exception as e:
+            logger.error(f"Failed to remove welcome flag: {e}")
 
-    # Run dialog directly (GTK must run in main thread)
-    action, verified = show_hotkey_test_dialog(mode, cfg.hotkey, cfg.toggle_hotkey)
+    # Only show hotkey verification on first run
+    if first_run:
+        # Loop until user verifies or skips
+        while True:
+            # Initialize hotkey testing
+            state.hotkey_test_start_time = time.time()
+            state.hold_key_tested = False
+            state.toggle_key_tested = False
 
-    if action == "verified" and verified:
-        state.hold_key_tested = True
-        if mode == "toggle":
-            state.toggle_key_tested = True
-        print(f"✓ Hotkeys verified successfully")
-        logger.info(f"Hotkeys verified by user")
+            # Show hotkey verification dialog
+            print(f"🎹 Showing hotkey verification dialog...")
+            logger.info(f"Showing hotkey verification dialog for user")
 
-        # Show final "Ready!" message
+            # Run dialog directly (GTK must run in main thread)
+            action, verified = show_hotkey_test_dialog(mode, cfg.hotkey, cfg.toggle_hotkey)
+
+            if action == "change_keys":
+                # User wants to change hotkeys
+                print("🔧 User wants to change hotkeys...")
+                logger.info("Showing simple hotkey change dialog")
+
+                # Show simple hotkey change dialog
+                saved, new_mode, new_hold_key, new_toggle_key = show_simple_hotkey_change_dialog(
+                    mode, cfg.hotkey, cfg.toggle_hotkey
+                )
+
+                if saved:
+                    # Save new hotkeys to config
+                    print(f"💾 Saving new hotkeys: mode={new_mode}, hold={new_hold_key}, toggle={new_toggle_key}")
+                    logger.info(f"User changed hotkeys: mode={new_mode}, hold={new_hold_key}, toggle={new_toggle_key}")
+
+                    # Update config
+                    cfg.mode = new_mode
+                    cfg.hotkey = new_hold_key
+                    cfg.toggle_hotkey = new_toggle_key
+
+                    # Save to file
+                    from talktype.config import save_config
+                    save_config(cfg)
+                    logger.info("Config saved with new hotkeys")
+
+                    # Update mode and keycodes for this session
+                    mode = new_mode
+                    hold_key = _keycode_from_name(new_hold_key)
+                    toggle_key = _keycode_from_name(new_toggle_key) if mode == "toggle" else None
+
+                    # Loop back to verification with new keys
+                    print(f"🔄 Now test your new hotkeys: {new_hold_key} and {new_toggle_key}")
+                    logger.info("Looping back to verification with new hotkeys")
+                    continue  # Go back to start of while loop
+                else:
+                    print("⚠️ User cancelled hotkey change, returning to verification")
+                    logger.info("User cancelled hotkey change, returning to verification")
+                    continue  # Go back to verification with original keys
+
+            elif action == "verified" and verified:
+                state.hold_key_tested = True
+                if mode == "toggle":
+                    state.toggle_key_tested = True
+                print(f"✓ Hotkeys verified successfully")
+                logger.info(f"Hotkeys verified by user")
+
+                # Mark first run as complete
+                try:
+                    mark_first_run_complete()
+                    logger.info("First run marked as complete")
+                except Exception as e:
+                    logger.error(f"Failed to mark first run complete: {e}")
+
+                break  # Exit the while loop
+
+            else:
+                # User skipped verification
+                print("⚠️ Hotkey verification skipped by user")
+                logger.warning("Hotkey verification skipped")
+                break  # Exit the while loop
+
+        # After verification loop, show final ready dialog if verified
+        if action == "verified" and verified:
+
+            # Show final "Ready!" message with nice welcome-style dialog
+            try:
+                gi.require_version('Gtk', '3.0')
+                from gi.repository import Gtk
+
+                ready_dialog = Gtk.Dialog(title="Ready to Dictate!")
+                ready_dialog.set_default_size(500, 300)
+                ready_dialog.set_resizable(False)
+                ready_dialog.set_modal(True)
+                ready_dialog.set_position(Gtk.WindowPosition.CENTER)
+
+                content = ready_dialog.get_content_area()
+                content.set_margin_top(20)
+                content.set_margin_bottom(20)
+                content.set_margin_start(25)
+                content.set_margin_end(25)
+                content.set_spacing(15)
+
+                # Main message
+                message = Gtk.Label()
+                message.set_markup('''<span size="large"><b>✅ You're All Set!</b></span>
+
+<b>🎉 Hotkeys Verified Successfully!</b>
+
+Your hotkeys are working perfectly and ready to use.
+
+<b>🎤 Start Dictating Now:</b>
+• Press <b>F8</b> for push-to-talk mode (hold to record)
+• Press <b>F9</b> for toggle mode (press once to start, again to stop)
+
+<b>⏱️ Auto-Timeout:</b>
+The service will automatically stop after 5 minutes of inactivity
+to conserve system resources. Just press your hotkey to wake it up!
+
+<b>📚 Need Help?</b>
+Right-click the tray icon → "Help..." for full documentation
+
+<b>Happy dictating! 🚀</b>''')
+                message.set_line_wrap(True)
+                message.set_xalign(0)
+                message.set_yalign(0)
+                content.pack_start(message, True, True, 0)
+
+                # Button
+                button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+                button_box.set_halign(Gtk.Align.CENTER)
+                button_box.set_margin_top(10)
+
+                ok_btn = Gtk.Button(label="Let's Go!")
+                ok_btn.get_style_context().add_class("suggested-action")
+                ok_btn.connect("clicked", lambda w: ready_dialog.response(Gtk.ResponseType.OK))
+                button_box.pack_start(ok_btn, False, False, 0)
+
+                content.pack_start(button_box, False, False, 0)
+
+                # Proper GTK dialog handling
+                def on_response(dialog, response_id):
+                    dialog.destroy()
+                    Gtk.main_quit()
+
+                ready_dialog.connect("response", on_response)
+                ready_dialog.show_all()
+
+                # Run GTK main loop for this dialog
+                Gtk.main()
+
+            except Exception as e:
+                logger.error(f"Failed to show ready dialog: {e}")
+        elif action == "change_keys":
+            print("🔧 User wants to change hotkeys...")
+            logger.info("Showing simple hotkey change dialog")
+
+            # Show simple hotkey change dialog
+            saved, new_mode, new_hold_key, new_toggle_key = show_simple_hotkey_change_dialog(
+                mode, cfg.hotkey, cfg.toggle_hotkey
+            )
+
+            if saved:
+                # Save new hotkeys to config
+                print(f"💾 Saving new hotkeys: mode={new_mode}, hold={new_hold_key}, toggle={new_toggle_key}")
+                logger.info(f"User changed hotkeys: mode={new_mode}, hold={new_hold_key}, toggle={new_toggle_key}")
+
+                # Update config
+                cfg.mode = new_mode
+                cfg.hotkey = new_hold_key
+                cfg.toggle_hotkey = new_toggle_key
+
+                # Save to file
+                from talktype.config import save_config
+                save_config(cfg)
+                logger.info("Config saved with new hotkeys")
+
+                # Update mode and keycodes for this session
+                mode = new_mode
+                hold_key = _keycode_from_name(new_hold_key)
+                toggle_key = _keycode_from_name(new_toggle_key) if mode == "toggle" else None
+
+                # Mark first run as complete
+                try:
+                    mark_first_run_complete()
+                    logger.info("First run marked as complete (user changed hotkeys)")
+                except Exception as e:
+                    logger.error(f"Failed to mark first run complete: {e}")
+
+                # Show success message
+                print(f"✅ Hotkeys saved! You can now start dictating with your new keys.")
+                logger.info("User finished changing hotkeys, ready to start")
+            else:
+                print("⚠️ User cancelled hotkey change, skipping verification")
+                logger.info("User cancelled hotkey change, continuing with original hotkeys")
+        else:
+            print("⚠️ Hotkey verification skipped by user")
+            logger.warning("Hotkey verification skipped")
+    elif show_welcome_after_change:
+        # Show welcome dialog after user changed keys (no verification needed)
+        print("👋 Showing welcome dialog after hotkey change...")
+        logger.info("Showing welcome dialog after user changed hotkeys")
         try:
             gi.require_version('Gtk', '3.0')
             from gi.repository import Gtk
 
-            ready_dialog = Gtk.MessageDialog(
-                message_type=Gtk.MessageType.INFO,
-                buttons=Gtk.ButtonsType.OK,
-                text="✓ Hotkeys Verified!"
-            )
-            ready_dialog.format_secondary_text(
-                "Your hotkeys are working correctly!\n\n"
-                "The dictation service is now ready.\n"
-                "Press F8 or F9 to start dictating."
-            )
+            ready_dialog = Gtk.Dialog(title="Hotkeys Updated!")
+            ready_dialog.set_default_size(500, 300)
+            ready_dialog.set_resizable(False)
+            ready_dialog.set_modal(True)
             ready_dialog.set_position(Gtk.WindowPosition.CENTER)
+
+            content = ready_dialog.get_content_area()
+            content.set_margin_top(20)
+            content.set_margin_bottom(20)
+            content.set_margin_start(25)
+            content.set_margin_end(25)
+            content.set_spacing(15)
+
+            # Build dynamic hotkey message based on mode
+            if mode == "toggle":
+                hotkey_msg = f'''<b>🎤 Your New Hotkeys:</b>
+• Press <b>{cfg.hotkey}</b> to hold and record (hold mode)
+• Press <b>{cfg.toggle_hotkey}</b> to start/stop recording (toggle mode)'''
+            else:
+                hotkey_msg = f'''<b>🎤 Your New Hotkey:</b>
+• Press and hold <b>{cfg.hotkey}</b> to record (push-to-talk mode)'''
+
+            # Main message
+            message = Gtk.Label()
+            message.set_markup(f'''<span size="large"><b>✅ You're All Set!</b></span>
+
+<b>🎉 Hotkeys Updated Successfully!</b>
+
+Your new hotkeys are ready to use.
+
+{hotkey_msg}
+
+<b>⏱️ Auto-Timeout:</b>
+The service will automatically stop after 5 minutes of inactivity
+to conserve system resources. Just press your hotkey to wake it up!
+
+<b>📚 Need Help?</b>
+Right-click the tray icon → "Help..." for full documentation
+
+<b>Happy dictating! 🚀</b>''')
+            message.set_line_wrap(True)
+            message.set_xalign(0)
+            message.set_yalign(0)
+            content.pack_start(message, True, True, 0)
+
+            # Button
+            button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+            button_box.set_halign(Gtk.Align.CENTER)
+            button_box.set_margin_top(10)
+
+            ok_btn = Gtk.Button(label="Let's Go!")
+            ok_btn.get_style_context().add_class("suggested-action")
+            ok_btn.connect("clicked", lambda w: ready_dialog.response(Gtk.ResponseType.OK))
+            button_box.pack_start(ok_btn, False, False, 0)
+
+            content.pack_start(button_box, False, False, 0)
+
+            # Show dialog and wait for response
+            ready_dialog.show_all()
             ready_dialog.run()
             ready_dialog.destroy()
+            logger.info("Welcome dialog closed, continuing to main loop")
+
         except Exception as e:
-            logger.error(f"Failed to show ready dialog: {e}")
-    elif action == "change_keys":
-        print("🔧 User wants to change hotkeys - opening Preferences...")
-        logger.info("Opening Preferences for hotkey change")
-        # Launch preferences
-        try:
-            src_dir = os.path.dirname(__file__)
-            usr_dir = os.path.dirname(os.path.dirname(src_dir))
-            prefs_script = os.path.join(usr_dir, "bin", "dictate-prefs")
-            if os.path.exists(prefs_script):
-                subprocess.Popen([prefs_script])
-            else:
-                subprocess.Popen([sys.executable, "-m", "talktype.prefs"])
-        except Exception as e:
-            logger.error(f"Failed to open Preferences: {e}")
-        # Exit service so user can change keys and restart
-        print("Service will exit. Please change your hotkeys and restart.")
-        sys.exit(0)
-    else:
-        print("⚠️ Hotkey verification skipped by user")
-        logger.warning("Hotkey verification skipped")
+            logger.error(f"Failed to show welcome dialog after hotkey change: {e}")
 
     while True:
         current_time = time.time()

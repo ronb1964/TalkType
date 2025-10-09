@@ -513,12 +513,12 @@ def offer_cuda_download(show_gui=True):
     
     # Check if GPU is present
     if not detect_nvidia_gpu():
-        mark_first_run_complete()
+        # Don't mark first run complete - hotkey verification still needed
         return False
-    
+
     # Check if CUDA is already installed
     if has_cuda_libraries():
-        mark_first_run_complete()
+        # Don't mark first run complete - hotkey verification still needed
         return False
     
     # Offer CUDA download
@@ -539,7 +539,7 @@ def offer_cuda_download(show_gui=True):
                     import threading
                     def background_download():
                         success = download_cuda_libraries()
-                        mark_first_run_complete()
+                        # Don't mark first run complete - hotkey verification still needed
                     download_thread = threading.Thread(target=background_download)
                     download_thread.daemon = True
                     download_thread.start()
@@ -664,7 +664,7 @@ Right-click the tray icon → "Help..." for full documentation''')
                             return False
                         # Schedule UI update on main GTK thread
                         GLib.idle_add(finish_ui)
-                        mark_first_run_complete()
+                        # Don't mark first run complete - hotkey verification still needed
                     except Exception as e:
                         def error_ui():
                             status_label.set_text(f"❌ Error: {e}")
@@ -684,20 +684,20 @@ Right-click the tray icon → "Help..." for full documentation''')
                 logger.info("User skipped CUDA download")
                 # Show initial help dialog for first-time users who skip CUDA
                 show_initial_help_dialog()
-                mark_first_run_complete()
+                # Don't mark first run complete yet - wait for hotkey verification in app.py
                 return False
         except Exception as e:
             logger.error(f"Failed to show GUI dialog: {e}", exc_info=True)
             # Fall back to CLI
     
     wants_cuda = offer_cuda_download_cli()
-    
+
     if wants_cuda:
         success = download_cuda_libraries()
-        mark_first_run_complete()
+        # Don't mark first run complete - hotkey verification still needed
         return success
     else:
-        mark_first_run_complete()
+        # Don't mark first run complete - hotkey verification still needed
         return False
 
 if __name__ == "__main__":
