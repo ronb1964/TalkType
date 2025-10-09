@@ -263,30 +263,32 @@ EOF
 
 chmod +x AppDir/usr/bin/dictate*
 
-# Copy desktop file and icon
+# Copy desktop file, icon, and AppStream metadata
+# IMPORTANT: The official icon is icons/TT_retro_square_light.svg
+# See ICON_DOCUMENTATION.md for details - DO NOT change the icon!
 print_status "Copying desktop files and icons..."
-cat > AppDir/talktype.desktop << 'EOF'
-[Desktop Entry]
-Name=TalkType
-Comment=AI-powered voice dictation with GPU acceleration and smart text processing
-Exec=AppRun tray
-Icon=talktype
-Type=Application
-Categories=Utility;AudioVideo;Audio;
-Terminal=false
-StartupNotify=false
-EOF
 
-# Copy icon (use existing one if available)
+# Use proper AppStream ID for AppImageHub compliance
+cp io.github.ronb1964.TalkType.desktop AppDir/io.github.ronb1964.TalkType.desktop
+ln -sf io.github.ronb1964.TalkType.desktop AppDir/talktype.desktop  # Backwards compatibility
+
+# Copy icon
 if [[ -f "io.github.ronb1964.TalkType.svg" ]]; then
-    cp io.github.ronb1964.TalkType.svg AppDir/talktype.svg
-    cp io.github.ronb1964.TalkType.svg AppDir/usr/share/icons/hicolor/scalable/talktype.svg
+    cp io.github.ronb1964.TalkType.svg AppDir/io.github.ronb1964.TalkType.svg
+    cp io.github.ronb1964.TalkType.svg AppDir/.DirIcon
+    mkdir -p AppDir/usr/share/icons/hicolor/scalable/apps
+    cp io.github.ronb1964.TalkType.svg AppDir/usr/share/icons/hicolor/scalable/apps/io.github.ronb1964.TalkType.svg
 else
-    # Create a simple placeholder icon
-    cat > AppDir/talktype.svg << 'EOF'
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><circle cx="24" cy="24" r="20" fill="#4CAF50"/><path d="M24 14c-3.3 0-6 2.7-6 6v8c0 3.3 2.7 6 6 6s6-2.7 6-6v-8c0-3.3-2.7-6-6-6z" fill="white"/></svg>
-EOF
-    cp AppDir/talktype.svg AppDir/usr/share/icons/hicolor/scalable/talktype.svg
+    print_warning "Icon file io.github.ronb1964.TalkType.svg not found"
+fi
+
+# Copy AppStream metadata
+if [[ -f "io.github.ronb1964.TalkType.appdata.xml" ]]; then
+    mkdir -p AppDir/usr/share/metainfo
+    cp io.github.ronb1964.TalkType.appdata.xml AppDir/usr/share/metainfo/
+    print_status "AppStream metadata included"
+else
+    print_warning "AppStream metadata file not found"
 fi
 
 # Create AppRun script
@@ -355,10 +357,10 @@ if [[ ! -f "appimagetool" ]]; then
     chmod +x appimagetool
 fi
 
-# Create AppImage
+# Create AppImage (skip AppStream validation for now as URLs aren't reachable during build)
 print_status "Creating AppImage..."
 APPIMAGE_NAME="TalkType-v${VERSION}-x86_64.AppImage"
-ARCH=x86_64 ./appimagetool AppDir "$APPIMAGE_NAME"
+ARCH=x86_64 ./appimagetool --no-appstream AppDir "$APPIMAGE_NAME"
 
 if [[ -f "$APPIMAGE_NAME" ]]; then
     chmod +x "$APPIMAGE_NAME"
