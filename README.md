@@ -2,6 +2,17 @@
 
 Press-and-hold (or toggle) voice dictation for Linux Wayland, using Faster-Whisper for speech recognition and ydotool for text injection.
 
+## 📸 Screenshots
+
+<p align="center">
+  <img src="screenshots/TalkType_welcome.png" alt="Welcome Screen" width="45%">
+  <img src="screenshots/TalkType_preferences.png" alt="Preferences Window" width="45%">
+</p>
+
+<p align="center">
+  <em>Welcome screen with first-run guidance • Preferences with GPU acceleration settings</em>
+</p>
+
 ## ✨ Features
 
 - **🎙️ Voice Dictation**: Press and hold F8 to dictate, release to transcribe and type
