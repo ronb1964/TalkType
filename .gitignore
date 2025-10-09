@@ -123,3 +123,10 @@ appimagetool
 
 # AppDir build directory (keep structure but ignore large binaries)
 AppDir/usr/
+
+# CUDA wheel files (too large for GitHub)
+cuda_wheels/
+
+# Icon files (use only what's in src)
+icons/
+*.svg
