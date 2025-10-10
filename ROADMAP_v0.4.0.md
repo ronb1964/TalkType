@@ -63,17 +63,32 @@ System Tray →
 
 ---
 
-### 3. Undo Last Dictation
+### 3. Voice-Activated Undo Commands
 **Current:** No way to undo transcribed text
-**Proposed:** Hotkey to delete last transcription
+**Proposed:** Voice commands to delete portions of recent dictation
+
+**Voice Commands:**
+- **"undo last word"** - Delete the last word typed
+- **"undo last sentence"** - Delete the last sentence (up to previous period/question mark/exclamation)
+- **"undo last paragraph"** - Delete everything since last paragraph break
 
 **Implementation:**
-- Track last inserted text (length + content)
-- Add hotkey (default: Ctrl+Shift+Z or F7)
-- Send backspace keypresses to delete text
-- Clear undo buffer after manual typing
+- Track last inserted text with word/sentence/paragraph boundaries
+- Detect specific multi-word undo phrases (won't trigger on just "undo" alone)
+- Calculate backspaces needed based on boundary markers
+- Send backspace keypresses to delete specified portion
+- Similar to existing voice commands (new line, comma, etc.)
 
-**Benefit:** Quick correction without manual deletion
+**Why voice-activated instead of hotkey:**
+- Keeps hands-free workflow intact
+- Natural for a dictation app
+- No need to remember keyboard shortcuts
+
+**Safety:**
+- Phrases like "I need to undo that" won't trigger (only exact multi-word commands)
+- Avoids false positives like "scratch that itch"
+
+**Benefit:** Quick, hands-free correction without breaking dictation flow
 
 ---
 
@@ -100,23 +115,6 @@ content_area = dialog.get_content_area()
 **Benefit:** Future GTK compatibility
 
 ---
-
-### 5. Auto-Capitalize After New Line
-**Current:** Text after "new line" starts lowercase
-**Proposed:** Auto-capitalize first letter after new line/paragraph
-
-**Implementation:**
-- Check if previous command was new line/paragraph
-- Capitalize first letter of next transcription
-- Add config option to enable/disable
-
-**Example:**
-```
-Before: "Hello. new line. this is a test"
-After:  "Hello.\nThis is a test"
-```
-
-**Benefit:** More natural text formatting
 
 ---
 
@@ -325,11 +323,10 @@ These features would bloat the AppImage:
 ### Phase 1: v0.4.0 (Quick Wins)
 **Target: 1-2 weeks**
 
-1. ✅ Fix GTK deprecation warning
-2. ✅ Quick Model Switcher (tray menu)
-3. ✅ Auto-capitalize after new line
-4. ✅ Undo last dictation
-5. ✅ Custom voice commands (basic)
+1. Fix GTK deprecation warning
+2. Quick Model Switcher (tray menu)
+3. Voice-activated undo commands (undo last word/sentence/paragraph)
+4. Custom voice commands (basic user-defined phrases)
 
 ### Phase 2: v0.5.0 (Enhanced UX)
 **Target: 2-3 weeks**
