@@ -1,0 +1,52 @@
+#!/bin/bash
+HERE="$(dirname "$(readlink -f "${0}")")"
+
+# Set up environment
+export PATH="$HERE/usr/bin:$PATH"
+export PYTHONPATH="$HERE/usr/lib/python3.13/site-packages:$HERE/usr/src:$PYTHONPATH"
+
+# Add CUDA library paths if they exist (downloaded by user)
+CUDA_BASE="${HOME}/.local/share/TalkType/cuda"
+if [ -d "${CUDA_BASE}" ]; then
+    export LD_LIBRARY_PATH="${CUDA_BASE}/lib:${CUDA_BASE}/lib64:$HERE/usr/lib:$LD_LIBRARY_PATH"
+else
+    export LD_LIBRARY_PATH="$HERE/usr/lib:$LD_LIBRARY_PATH"
+fi
+
+# Set up audio and GTK
+export PULSE_RUNTIME_PATH="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/pulse"
+export XDG_DATA_DIRS="$HERE/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+
+# Check if ydotoold is running, if not start it (needed for text injection)
+if ! pgrep -x "ydotoold" > /dev/null; then
+    echo "Starting ydotoold daemon for text injection..."
+    ydotoold &
+    sleep 2
+fi
+
+# Parse arguments
+case "${1:-tray}" in
+    "tray"|"")
+        exec "$HERE/usr/bin/dictate-tray" "${@:2}"
+        ;;
+    "prefs"|"preferences")
+        exec "$HERE/usr/bin/dictate-prefs" "${@:2}"
+        ;;
+    "dictate"|"service")
+        exec "$HERE/usr/bin/dictate" "${@:2}"
+        ;;
+    "--help"|"-h")
+        echo "TalkType - AI-powered dictation for Wayland"
+        echo ""
+        echo "Usage:"
+        echo "  $0 [tray]         Start system tray (default)"
+        echo "  $0 prefs          Open preferences window"
+        echo "  $0 dictate        Run dictation service directly"
+        echo "  $0 --help         Show this help"
+        echo ""
+        echo "Default action: Start system tray"
+        ;;
+    *)
+        exec "$HERE/usr/bin/dictate-tray" "$@"
+        ;;
+esac

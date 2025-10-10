@@ -203,6 +203,16 @@ print_status "Stripped ~65 MB of unnecessary files"
 print_status "Copying TalkType source code..."
 cp -r src AppDir/usr/
 
+# Bundle ydotool for text injection (AppImage should be self-contained)
+print_status "Bundling ydotool binaries for text injection..."
+if command -v ydotoold >/dev/null 2>&1; then
+    cp /usr/bin/ydotoold AppDir/usr/bin/
+    cp /usr/bin/ydotool AppDir/usr/bin/
+    print_status "ydotool bundled successfully"
+else
+    print_warning "ydotool not found on system - users will need to install it separately"
+fi
+
 # Copy entry point scripts
 print_status "Creating entry point scripts..."
 cat > AppDir/usr/bin/dictate << EOF
@@ -357,10 +367,12 @@ if [[ ! -f "appimagetool" ]]; then
     chmod +x appimagetool
 fi
 
-# Create AppImage (skip AppStream validation for now as URLs aren't reachable during build)
+# Create AppImage with update information for AppImageHub
 print_status "Creating AppImage..."
 APPIMAGE_NAME="TalkType-v${VERSION}-x86_64.AppImage"
-ARCH=x86_64 ./appimagetool --no-appstream AppDir "$APPIMAGE_NAME"
+# Add update information for AppImageHub: gh-releases-zsync|user|repo|latest|AppImage-*.AppImage.zsync
+UPDATE_INFO="gh-releases-zsync|ronb1964|TalkType|latest|TalkType-*-x86_64.AppImage.zsync"
+ARCH=x86_64 ./appimagetool --no-appstream --updateinformation "$UPDATE_INFO" AppDir "$APPIMAGE_NAME"
 
 if [[ -f "$APPIMAGE_NAME" ]]; then
     chmod +x "$APPIMAGE_NAME"
