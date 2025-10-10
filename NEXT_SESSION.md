@@ -1,22 +1,51 @@
 # Next Session - TalkType Development
 
-## 🎯 Current Status (as of 2025-10-09)
+## ⚠️ MANDATORY: Read This FIRST!
 
-### ✅ Completed Today
-- Fixed icon issues (retro square light design locked in)
-- Created comprehensive AppImageHub submission
-- Added screenshots to README and AppStream metadata
-- Submitted to AppImageHub (PR #3511 - awaiting manual review)
-- Tested v0.3.6 AppImage - **everything works perfectly!**
-- Created roadmap for v0.4.0+ with 15+ feature ideas
+### Testing Procedure (ALWAYS USE THIS!)
+
+**Before testing ANY AppImage build, run:**
+```bash
+./fresh-test-env.sh
+```
+
+This script ensures a completely fresh first-run environment:
+- Stops all TalkType processes
+- Removes config file
+- Removes first-run flag
+- Removes CUDA libraries
+- Removes all model caches (small, medium, large)
+- Copies latest AppImage to ~/AppImages/
+- Shows verification checkmarks
+
+**CRITICAL:** Never remove first-run flag while app is running - it will be recreated on shutdown!
+
+See `TESTING_PROCEDURES.md` for full testing checklist and procedures.
+
+---
+
+## 🎯 Current Status (as of 2025-10-10)
+
+### 🚧 Working On v0.3.7
+- **Status:** Fixing bugs found in testing
+- **Current Issues:**
+  - CUDA download green checkmark doesn't appear immediately (only after OK clicked)
+  - Need to test auto-switch to GPU after CUDA download
+
+### ✅ Recently Fixed
+- `self.s.device` → `self.config.get("device")` bug in prefs.py
+- `self.save_settings()` → `self.save_config()` bug in prefs.py
+- Bundled ydotool for AppImageHub compatibility
+- Fixed nvidia package exclusion (was including 2.7GB of nvidia packages)
+- Set proper defaults: auto_period=True, auto_timeout=5min, language_mode=auto
+- Improved auto-period UI with better label and tooltip
 
 ### 📦 AppImage Status
-- **Size:** 870MB (uploaded to GitHub)
-- **Version:** v0.3.6
-- **Release:** https://github.com/ronb1964/TalkType/releases/tag/v0.3.6
+- **Size:** 890MB
+- **Version:** v0.3.7 (in testing, not yet released)
+- **Last Release:** v0.3.7 (draft - needs more testing)
 - **AppImageHub PR:** https://github.com/AppImage/appimage.github.io/pull/3511
-  - Status: Automated test failed (environment issue, not AppImage issue)
-  - Action: Waiting for manual review by maintainers
+  - Status: Waiting for v0.3.7 testing to complete before re-running checks
 
 ### 🔄 Backups Created
 - CUDA libraries: `~/.local/share/TalkType/cuda.backup.*`

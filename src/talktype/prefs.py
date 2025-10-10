@@ -203,6 +203,8 @@ class PreferencesWindow:
                         f.write(f'{key} = {str(value).lower()}\n')
                     else:
                         f.write(f'{key} = {value}\n')
+                f.flush()  # Ensure file is written to disk
+                os.fsync(f.fileno())  # Force write to disk
             return True
         except Exception as e:
             print(f"Error saving config: {e}")
@@ -809,6 +811,7 @@ class PreferencesWindow:
                 "⏱️  Subsequent loads: 10-20 seconds\n\n"
                 "The application will not respond to your dictation hotkey "
                 "until the model has fully loaded.\n\n"
+                "💡 Click OK here to confirm, then click Apply or OK in Preferences to start the download.\n\n"
                 "Do you want to proceed with this model?"
             )
 
@@ -1284,18 +1287,19 @@ X-GNOME-Autostart-enabled=true
 
                     if success:
                         # Auto-enable GPU mode in config after successful download
-                        if self.s.device != "cuda":
-                            self.s.device = "cuda"
-                            self.save_settings()
-                            # Update device combo to reflect change
-                            if hasattr(self, 'device_combo'):
-                                self.device_combo.set_active_id("cuda")
+                        if self.config.get("device") != "cuda":
+                            self.config["device"] = "cuda"
+                            self.save_config()
 
                         # Refresh GPU status
                         self._check_gpu_status()
 
-                        # Refresh device dropdown to show CUDA option
+                        # Refresh device dropdown to show CUDA option (must be before set_active_id!)
                         self._refresh_device_options()
+
+                        # Update device combo to reflect change (after refresh adds the option)
+                        if hasattr(self, 'device_combo'):
+                            self.device_combo.set_active_id("cuda")
 
                         # Show success dialog
                         success_dialog = Gtk.MessageDialog(
@@ -1306,8 +1310,9 @@ X-GNOME-Autostart-enabled=true
                             text="CUDA Libraries Installed!"
                         )
                         success_dialog.format_secondary_text(
-                            "GPU acceleration is now enabled and ready to use.\n\n"
-                            "The app will now use GPU for faster transcription."
+                            "GPU acceleration is ready to use!\n\n"
+                            "Click OK or Apply in the Preferences window to activate GPU mode.\n"
+                            "The app will then restart with GPU-accelerated transcription."
                         )
                         success_dialog.run()
                         success_dialog.destroy()
