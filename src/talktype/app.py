@@ -574,7 +574,7 @@ def stop_recording(
     notify_on: bool,
     language: str | None = None,
     auto_space: bool = True,
-    auto_period: bool = False,
+    auto_period: bool = True,
     paste_injection: bool = False,
 ):
     held_ms = int((time.time() - (state.press_t0 or time.time())) * 1000)
@@ -615,7 +615,6 @@ def stop_recording(
             text = text.rstrip() + "."
         if auto_space and text and not text.endswith((" ", "\n", "\t", "§")):
             text = text + " "
-        print(f"📜 Text: {text!r}")
         logger.debug(f"Normalized text: {text!r}")
 
         _beep(beeps_on, *READY_BEEP)

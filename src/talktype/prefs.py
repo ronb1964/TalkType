@@ -114,7 +114,7 @@ class PreferencesWindow:
         """Load config from TOML file."""
         defaults = {
             "model": "small",
-            "device": "cuda", 
+            "device": "cuda",
             "hotkey": "F8",
             "beeps": True,
             "smart_quotes": True,
@@ -122,13 +122,15 @@ class PreferencesWindow:
             "toggle_hotkey": "F9",
             "mic": "",
             "notify": False,
-            "language": "en",
-            "language_mode": "manual",
+            "language": "",
+            "language_mode": "auto",
             "auto_space": True,
             "auto_period": True,
             "paste_injection": False,
             "injection_mode": "type",
-            "launch_at_login": False
+            "launch_at_login": False,
+            "auto_timeout_enabled": True,
+            "auto_timeout_minutes": 5
         }
         
         if os.path.exists(CONFIG_PATH):
@@ -667,10 +669,10 @@ class PreferencesWindow:
         row += 1
         
         # Auto period
-        period_check = Gtk.CheckButton(label="Auto-add period at end of sentences")
-        period_check.set_active(self.config["auto_period"])
+        period_check = Gtk.CheckButton(label="Ensure period at end of sentences")
+        period_check.set_active(bool(self.config.get("auto_period", True)))  # Ensure boolean, default True
         period_check.connect("toggled", lambda x: self.update_config("auto_period", x.get_active()))
-        period_check.set_tooltip_text("Automatically add a period at the end if your sentence doesn't end with punctuation.\nUseful for quick note-taking.")
+        period_check.set_tooltip_text("Ensure every sentence ends with punctuation.\n\nWhisper AI usually adds periods automatically, but sometimes misses them.\nThis option adds a period when Whisper forgets, ensuring consistent punctuation.\n\nUnchecked: You get whatever Whisper outputs (sometimes has periods, sometimes doesn't)\nChecked: Every sentence is guaranteed to end with punctuation")
         grid.attach(period_check, 0, row, 2, 1)
         row += 1
         

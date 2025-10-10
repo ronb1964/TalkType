@@ -18,7 +18,7 @@ class Settings:
     notify: bool = True         # desktop notifications
     language: str = ""          # optional language code (e.g., "en"); empty = auto-detect
     auto_space: bool = True     # prepend a space before new utterance when not starting a new line/tab
-    auto_period: bool = False   # append a period when an utterance ends without terminal punctuation
+    auto_period: bool = True   # append a period when an utterance ends without terminal punctuation
     paste_injection: bool = False  # when adding a leading space is unreliable, paste " ␣text" via clipboard
     injection_mode: str = "type"  # "type" (ydotool/wtype) or "paste" (wl-copy + Ctrl+V)
     auto_timeout_enabled: bool = True   # enable automatic timeout after inactivity (default: on)

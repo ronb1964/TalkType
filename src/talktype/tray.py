@@ -554,28 +554,10 @@ Result: Use the period command
         prefs_item.connect("activate", self.open_preferences)
         help_item.connect("activate", self.show_help)
         quit_item.connect("activate", self.quit_app)
-        
-        # Check if we should show CUDA download option (fresh check each time)
-        show_cuda_download = False
-        try:
-            import talktype.cuda_helper as cuda_helper
-            # Only show CUDA download if GPU detected but CUDA not installed
-            gpu_detected = cuda_helper.detect_nvidia_gpu()
-            cuda_installed = cuda_helper.has_cuda_libraries()
-            show_cuda_download = gpu_detected and not cuda_installed
-        except Exception:
-            pass
-        
-        menu_items = [title_item, Gtk.SeparatorMenuItem(), self.start_item, self.stop_item, 
-                     restart_item, Gtk.SeparatorMenuItem(), prefs_item]
-        
-        # Add CUDA download option if needed
-        if show_cuda_download:
-            cuda_item = Gtk.MenuItem(label="Download CUDA Libraries...")
-            cuda_item.connect("activate", self.download_cuda)
-            menu_items.append(cuda_item)
-        
-        menu_items.extend([help_item, quit_item])
+
+        # CUDA download option removed from tray menu - users can access it via Preferences
+        menu_items = [title_item, Gtk.SeparatorMenuItem(), self.start_item, self.stop_item,
+                     restart_item, Gtk.SeparatorMenuItem(), prefs_item, help_item, quit_item]
         
         for item in menu_items:
             menu.append(item)
