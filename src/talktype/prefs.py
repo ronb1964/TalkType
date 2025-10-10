@@ -1821,10 +1821,12 @@ if you need better accuracy for professional or technical dictation.''')
 
 <b>🎮 GPU Acceleration</b>
 If you have an NVIDIA graphics card, enable GPU acceleration for 3-5x faster transcription:
-• CUDA libraries (~1.7GB download, 1.2GB installed) are downloaded automatically on first run
-• Enable in: Preferences → General → Processing Device → "CUDA (GPU)"
-• GPU mode significantly reduces transcription time
+• On first run with NVIDIA GPU, you'll be offered to download CUDA libraries (~800MB)
+• After download completes, click OK or Apply in Preferences to activate GPU mode
+• Device automatically switches to "CUDA (GPU)" - no manual selection needed
+• GPU mode significantly reduces transcription time (3-5x faster)
 • Allows use of larger models without slowdown
+• Can also download CUDA later: Preferences → Advanced → "Download CUDA Libraries"
 
 <b>🔋 Power Management</b>
 TalkType includes intelligent timeout to save system resources:
