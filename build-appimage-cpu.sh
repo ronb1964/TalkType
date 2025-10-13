@@ -5,11 +5,12 @@ set -e
 # This creates a smaller AppImage without CUDA libraries
 # GPU detection and CUDA download offer is handled at runtime
 
-echo "🚀 Building TalkType CPU-Only AppImage"
+echo "🚀 Building TalkType AppImage"
 echo "======================================="
 
 # Colors for output
 GREEN='\033[0;32m'
+RED='\033[0;31m'
 BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
@@ -17,6 +18,7 @@ NC='\033[0m' # No Color
 print_status() { echo -e "${BLUE}[INFO]${NC} $1"; }
 print_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 print_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
+print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 # Check if we're in the right directory
 if [[ ! -f "pyproject.toml" ]]; then
@@ -59,6 +61,23 @@ chmod +x AppDir/usr/bin/python3
 # Get Python version
 PYTHON_VERSION=$(.venv/bin/python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
 print_status "Detected Python ${PYTHON_VERSION}"
+
+# Bundle Python shared library (CRITICAL for AppImage to work)
+print_status "Bundling Python shared library..."
+mkdir -p AppDir/usr/lib
+if [ -f "/lib64/libpython${PYTHON_VERSION}.so.1.0" ]; then
+    cp "/lib64/libpython${PYTHON_VERSION}.so.1.0" AppDir/usr/lib/
+    print_status "Copied libpython${PYTHON_VERSION}.so.1.0 from /lib64"
+elif [ -f "/usr/lib64/libpython${PYTHON_VERSION}.so.1.0" ]; then
+    cp "/usr/lib64/libpython${PYTHON_VERSION}.so.1.0" AppDir/usr/lib/
+    print_status "Copied libpython${PYTHON_VERSION}.so.1.0 from /usr/lib64"
+elif [ -f "/usr/lib/x86_64-linux-gnu/libpython${PYTHON_VERSION}.so.1.0" ]; then
+    cp "/usr/lib/x86_64-linux-gnu/libpython${PYTHON_VERSION}.so.1.0" AppDir/usr/lib/
+    print_status "Copied libpython${PYTHON_VERSION}.so.1.0 from /usr/lib/x86_64-linux-gnu"
+else
+    print_error "Could not find libpython${PYTHON_VERSION}.so.1.0!"
+    exit 1
+fi
 
 # Create lib directory structure
 mkdir -p "AppDir/usr/lib/python${PYTHON_VERSION}/site-packages"
@@ -203,14 +222,39 @@ print_status "Stripped ~65 MB of unnecessary files"
 print_status "Copying TalkType source code..."
 cp -r src AppDir/usr/
 
-# Bundle ydotool for text injection (AppImage should be self-contained)
-print_status "Bundling ydotool binaries for text injection..."
-if command -v ydotoold >/dev/null 2>&1; then
-    cp /usr/bin/ydotoold AppDir/usr/bin/
-    cp /usr/bin/ydotool AppDir/usr/bin/
-    print_status "ydotool bundled successfully"
+# Bundle ydotool for text injection (AppImage MUST be self-contained)
+print_status "Building ydotool from source with static linking for maximum compatibility..."
+YDOTOOL_BUILD_DIR=$(mktemp -d)
+PROJECT_DIR=$(pwd)
+
+if git clone --depth 1 https://github.com/ReimuNotMoe/ydotool.git "$YDOTOOL_BUILD_DIR" 2>/dev/null; then
+    cd "$YDOTOOL_BUILD_DIR"
+
+    # Build with static linking to avoid glibc issues (skip docs build)
+    if mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBUILD_DOCS=OFF .. && make; then
+        # Copy binaries and verify they work
+        if [ -f "ydotool" ] && [ -f "ydotoold" ]; then
+            cp ydotool "$PROJECT_DIR/AppDir/usr/bin/"
+            cp ydotoold "$PROJECT_DIR/AppDir/usr/bin/"
+            cd "$PROJECT_DIR"
+            rm -rf "$YDOTOOL_BUILD_DIR"
+            print_status "ydotool built and bundled successfully"
+        else
+            cd "$PROJECT_DIR"
+            rm -rf "$YDOTOOL_BUILD_DIR"
+            print_error "Failed to build ydotool binaries"
+            exit 1
+        fi
+    else
+        cd "$PROJECT_DIR"
+        rm -rf "$YDOTOOL_BUILD_DIR"
+        print_error "Failed to compile ydotool"
+        exit 1
+    fi
 else
-    print_warning "ydotool not found on system - users will need to install it separately"
+    rm -rf "$YDOTOOL_BUILD_DIR"
+    print_error "Failed to download ydotool source"
+    exit 1
 fi
 
 # Copy entry point scripts
@@ -280,16 +324,25 @@ print_status "Copying desktop files and icons..."
 
 # Use proper AppStream ID for AppImageHub compliance
 cp io.github.ronb1964.TalkType.desktop AppDir/io.github.ronb1964.TalkType.desktop
-ln -sf io.github.ronb1964.TalkType.desktop AppDir/talktype.desktop  # Backwards compatibility
 
-# Copy icon
+# Copy icon - AppImageHub requires PNG format in AppDir root
+if [[ -f "io.github.ronb1964.TalkType.png" ]]; then
+    # Copy PNG icon to AppDir root (required by AppImageHub)
+    cp io.github.ronb1964.TalkType.png AppDir/io.github.ronb1964.TalkType.png
+    cp io.github.ronb1964.TalkType.png AppDir/.DirIcon
+
+    # Copy PNG to icon hierarchy
+    mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+    cp io.github.ronb1964.TalkType.png AppDir/usr/share/icons/hicolor/256x256/apps/io.github.ronb1964.TalkType.png
+    print_status "PNG icon copied"
+else
+    print_warning "Icon file io.github.ronb1964.TalkType.png not found"
+fi
+
+# Also copy SVG for scalability
 if [[ -f "io.github.ronb1964.TalkType.svg" ]]; then
-    cp io.github.ronb1964.TalkType.svg AppDir/io.github.ronb1964.TalkType.svg
-    cp io.github.ronb1964.TalkType.svg AppDir/.DirIcon
     mkdir -p AppDir/usr/share/icons/hicolor/scalable/apps
     cp io.github.ronb1964.TalkType.svg AppDir/usr/share/icons/hicolor/scalable/apps/io.github.ronb1964.TalkType.svg
-else
-    print_warning "Icon file io.github.ronb1964.TalkType.svg not found"
 fi
 
 # Copy AppStream metadata
@@ -324,10 +377,16 @@ export PULSE_RUNTIME_PATH="\${XDG_RUNTIME_DIR:-/run/user/\$(id -u)}/pulse"
 export XDG_DATA_DIRS="\$HERE/usr/share:\${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
 
 # Check if ydotoold is running, if not start it (needed for text injection)
-if ! pgrep -x "ydotoold" > /dev/null; then
+if ! pgrep -x "ydotoold" > /dev/null 2>&1; then
     echo "Starting ydotoold daemon for text injection..."
-    ydotoold &
-    sleep 2
+    if ydotoold 2>/dev/null &
+    then
+        sleep 2
+        echo "ydotoold started successfully"
+    else
+        echo "Warning: Failed to start ydotoold - text injection may not work"
+        echo "You may need to start ydotoold manually or install it system-wide"
+    fi
 fi
 
 # Parse arguments
