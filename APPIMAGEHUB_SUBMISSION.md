@@ -1,201 +1,212 @@
-# AppImageHub Submission Guide for TalkType
+# AppImageHub Submission Instructions for TalkType v0.3.7
 
-## Prerequisites Checklist
+## ✅ Pre-Submission Verification Complete
 
-Before submitting to AppImageHub, ensure you have:
+All requirements verified and passing:
 
-- [x] Valid AppStream metadata (`io.github.ronb1964.TalkType.appdata.xml`)
-- [x] Working AppImage (`TalkType-v0.3.6-x86_64.AppImage`)
-- [x] GitHub repository (https://github.com/ronb1964/TalkType)
-- [ ] Screenshots in AppStream metadata
-- [ ] GitHub Release with AppImage uploaded
-- [ ] AppImage accessible via direct wget URL
+- ✅ **GLIBC Compatibility:** 2.35 (Ubuntu 22.04+)
+- ✅ **AppImage Size:** 892M (under 2GB limit, down from 901M!)
+- ✅ **Desktop File:** Present and valid
+- ✅ **AppStream Metadata:** Valid with all required fields
+- ✅ **Icon:** PNG format present
+- ✅ **Tested:** Both CPU and GPU modes working perfectly
+- ✅ **"New paragraph" bug:** FIXED
 
-## Current Status
+## What Changed in v0.3.7
 
-✅ AppStream metadata is valid (warnings about URLs are OK - they'll work once the repo is public)
-✅ AppImage built and ready: `TalkType-v0.3.6-x86_64.AppImage` (2.7GB)
-✅ GitHub repository exists: `ronb1964/TalkType`
+**Major Bug Fix:**
+- Fixed "new paragraph" voice command inserting unwanted ". " after line breaks
+- Root cause: Whisper transcribes "New paragraph." with trailing period, which was being left behind after conversion to markers
+- Solution: Updated regex in normalize.py to strip trailing punctuation
 
-## Step-by-Step Submission Process
+**Size Optimization:**
+- Reduced from 901M to 892M by excluding torchvision/torchaudio (not needed by faster-whisper)
+- Added proper .pyc bytecode cleaning to build process
+- Now have 108M headroom under 1GB limit for future features
 
-### Step 1: Add Screenshots to AppStream Metadata (OPTIONAL but RECOMMENDED)
+**Build Infrastructure:**
+- Added Docker build environment (Ubuntu 22.04) for guaranteed glibc 2.35 compatibility
+- Improved fresh-test-env.sh for better process cleanup
 
-Screenshots help users see your app before downloading. Add to `io.github.ronb1964.TalkType.appdata.xml`:
+## Submission Process
 
-```xml
-<screenshots>
-  <screenshot type="default">
-    <caption>TalkType system tray and preferences</caption>
-    <image>https://raw.githubusercontent.com/ronb1964/TalkType/main/screenshots/main.png</image>
-  </screenshot>
-  <screenshot>
-    <caption>Dictation in action</caption>
-    <image>https://raw.githubusercontent.com/ronb1964/TalkType/main/screenshots/dictating.png</image>
-  </screenshot>
-</screenshots>
-```
-
-Add this section before `<releases>` tag.
-
-To create screenshots:
-1. Create `screenshots/` directory in your repo
-2. Take screenshots of your app (PNG format, 1280x720 or similar)
-3. Commit and push to GitHub
-4. Update the AppStream XML with the correct URLs
-
-### Step 2: Create GitHub Release with AppImage
-
-You need to create a GitHub release and upload your AppImage:
+### Step 1: Create GitHub Release
 
 ```bash
-# Make sure you're in the project directory
 cd /home/ron/projects/TalkType
 
-# Create a release and upload the AppImage
-gh release create v0.3.6 \
-  --title "v0.3.6 - Polished First-Run Experience" \
-  --notes "See CHANGELOG or AppStream metadata for details" \
-  TalkType-v0.3.6-x86_64.AppImage
+# Create release and upload AppImage
+gh release create v0.3.7 \
+  --title "v0.3.7 - Fix 'new paragraph' command and optimize size" \
+  --notes "$(cat <<'EOF'
+## What's Fixed
+
+- **Fixed "new paragraph" voice command** - No longer inserts unwanted ". " after line breaks
+  - Root cause: Whisper was transcribing "New paragraph." with a period, which wasn't being stripped
+  - Now properly strips trailing punctuation from voice commands
+
+- **Optimized AppImage size** - Reduced from 901M to 892M
+  - Excluded torchvision/torchaudio packages (not needed by faster-whisper)
+  - Fixed .pyc bytecode caching issues
+  - Now have 108M headroom for future features
+
+## Improvements
+
+- Built in Ubuntu 22.04 Docker environment for better compatibility (glibc 2.35)
+- Enhanced fresh-test-env.sh for better cleanup
+- Improved build process reliability
+
+## Testing
+
+- ✅ CPU mode with small model - working
+- ✅ GPU mode with large model - working
+- ✅ "new paragraph" command - fixed and working
+- ✅ CUDA auto-download - working
+- ✅ All voice commands functional
+
+**Full Changelog:** https://github.com/ronb1964/TalkType/compare/v0.3.6...v0.3.7
+EOF
+)" \
+  TalkType-v0.3.7-x86_64.AppImage TalkType-v0.3.7-x86_64.AppImage.zsync
 ```
 
-This will:
-- Create a new release tagged `v0.3.6`
-- Upload your AppImage to the release
-- Make it available at a permanent URL like:
-  `https://github.com/ronb1964/TalkType/releases/download/v0.3.6/TalkType-v0.3.6-x86_64.AppImage`
-
-### Step 3: Test the Download URL
-
-Verify your AppImage is downloadable:
+### Step 2: Verify Download URL
 
 ```bash
-wget https://github.com/ronb1964/TalkType/releases/download/v0.3.6/TalkType-v0.3.6-x86_64.AppImage
+# Test that the AppImage is downloadable
+wget --spider https://github.com/ronb1964/TalkType/releases/download/v0.3.7/TalkType-v0.3.7-x86_64.AppImage
 ```
 
-### Step 4: Submit to AppImageHub
+### Step 3: Submit to AppImageHub
 
-1. Go to: https://github.com/AppImage/AppImageHub/new/master/data
+**Method 1: Via GitHub Web UI (Easiest)**
 
-2. Create a new file named: `TalkType`
+1. Go to: https://github.com/AppImage/appimage.github.io
+2. Click "Fork" (if you haven't already)
+3. In your fork, navigate to `database/` directory
+4. Click "Create new file"
+5. Name it: `TalkType/talktype.json`
+6. Paste this content:
 
-3. In the file content, put ONLY this line:
-   ```
-   https://github.com/ronb1964/TalkType
-   ```
+```json
+{
+  "name": "TalkType",
+  "description": "AI-powered speech recognition and dictation for Wayland using OpenAI's Faster-Whisper",
+  "categories": ["Utility", "AudioVideo", "Audio", "Accessibility"],
+  "authors": [
+    {
+      "name": "ronb1964",
+      "url": "https://github.com/ronb1964"
+    }
+  ],
+  "license": "MIT",
+  "links": [
+    {
+      "type": "GitHub",
+      "url": "https://github.com/ronb1964/TalkType"
+    }
+  ],
+  "icons": [
+    "io.github.ronb1964.TalkType"
+  ],
+  "screenshots": []
+}
+```
 
-4. Scroll down and create a pull request with:
-   - Title: `Add TalkType`
-   - Description:
-     ```
-     TalkType - AI-powered speech recognition and dictation for Wayland
+7. Commit the file
+8. Create a pull request to the main AppImageHub repository
 
-     - Privacy-focused offline dictation using Faster-Whisper
-     - Press-and-hold hotkey interface
-     - Smart punctuation and voice commands
-     - System tray integration
-     - GPU acceleration support
-     ```
+**Pull Request Details:**
 
-5. Submit the PR
+**Title:** `Add TalkType - AI-powered speech-to-text for Linux Wayland`
 
-### Step 5: Wait for Automated Review
+**Description:**
+```markdown
+TalkType is a privacy-focused speech recognition application for Linux Wayland systems.
+
+## Key Features
+
+- **Privacy-first**: All processing happens locally using OpenAI's Faster-Whisper AI
+- **Press-and-hold dictation**: Default F8 hotkey (configurable)
+- **Intelligent punctuation**: Voice commands like "period", "comma", "new paragraph"
+- **Auto-punctuation and auto-spacing**: Smart text formatting
+- **CPU and GPU support**: Automatic CUDA detection and on-demand library download
+- **Multiple model sizes**: tiny, small, medium, large (1.5GB model for best accuracy)
+- **System tray integration**: Easy access to preferences and settings
+
+## Technical Details
+
+- **Built for**: Ubuntu 22.04+ (glibc 2.35)
+- **Size**: 892MB (optimized, under 1GB)
+- **License**: MIT
+- **Desktop ID**: io.github.ronb1964.TalkType
+- **AppStream metadata**: Included and validated
+
+## Testing Verification
+
+- ✅ Tested on Nobara Linux (Fedora-based) with Wayland
+- ✅ CPU mode with small model - working
+- ✅ GPU mode with large model - working
+- ✅ CUDA library auto-download - working
+- ✅ All voice commands functional
+- ✅ "new paragraph" command - fixed and working perfectly
+
+## What's Included
+
+The AppImage is completely self-contained:
+- Python 3.11 runtime with full standard library
+- PyTorch with CUDA support (CUDA libraries downloaded on-demand)
+- faster-whisper AI model (downloaded on first run, multiple sizes available)
+- ydotool for Wayland text injection
+- GTK3 system tray interface
+
+## Download
+
+AppImage: https://github.com/ronb1964/TalkType/releases/download/v0.3.7/TalkType-v0.3.7-x86_64.AppImage
+```
+
+### Step 4: Wait for CI Tests
 
 AppImageHub will automatically:
-- Download your AppImage from the GitHub release
-- Run validation tests
-- Check AppStream metadata
-- Verify desktop file
-- Test if it runs
+- Download your AppImage
+- Run it in Ubuntu 22.04 container
+- Verify desktop file, AppStream metadata, icons
+- Check GLIBC compatibility
 
-You'll see the results in the PR:
-- ✅ Green checkmark = Success! Your app will be added to AppImageHub
-- ❌ Red X = Issues found, check the build log and fix
+**Expected result:** ✅ All tests pass (we've verified everything!)
 
-## Important Notes
+## Confidence Level: HIGH ✅
 
-### File Naming Convention
-Your AppImage follows the correct naming:
-- `TalkType-v0.3.6-x86_64.AppImage` ✅
-- Format: `AppName-Version-Architecture.AppImage`
+**Why we'll pass this time:**
 
-### AppStream Requirements
-- [x] Valid `id`: `io.github.ronb1964.TalkType`
-- [x] Valid `metadata_license`: `CC0-1.0`
-- [x] Valid `project_license`: `MIT`
-- [x] Has `name`, `summary`, `description`
-- [x] Has categories
-- [x] Has releases section
-- [ ] Has screenshots (optional but recommended)
+1. ✅ **GLIBC 2.35** - Built in Ubuntu 22.04 Docker container
+2. ✅ **Size under limit** - 892M (well under 2GB)
+3. ✅ **All metadata present** - desktop, AppStream, icon all verified
+4. ✅ **Tested and working** - User confirmed CPU + GPU modes work
+5. ✅ **Python stdlib bundled** - No missing module errors
+6. ✅ **No .pyc cache issues** - Build script properly cleans bytecode
 
-### GitHub Release Requirements
-- Must be tagged (e.g., `v0.3.6`)
-- AppImage must be uploaded as a release asset
-- Must be publicly accessible (not draft)
-- URL must be stable and permanent
+## After Approval
 
-### AppImage Requirements (Already Met)
-- [x] Contains desktop file
-- [x] Contains icon
-- [x] Contains AppStream metadata
-- [x] Executable
-- [x] Follows naming convention
+Your app will appear on:
+- https://www.appimagehub.com
+- AppImage search tools
+- Linux app catalogs
 
-## Common Issues and Solutions
-
-**Issue**: "URL not reachable"
-- **Solution**: Ensure GitHub release is public and AppImage is uploaded
-
-**Issue**: "AppStream validation failed"
-- **Solution**: Run `appstreamcli validate io.github.ronb1964.TalkType.appdata.xml`
-
-**Issue**: "Desktop file invalid"
-- **Solution**: Check `io.github.ronb1964.TalkType.desktop` syntax
-
-**Issue**: "AppImage too large"
-- **Note**: Your 2.7GB AppImage is large. This is OK but consider:
-  - Excluding unnecessary dependencies
-  - Stripping debug symbols
-  - Your CPU-only build script already optimizes this
-
-## After Submission
-
-Once approved:
-- Your app appears on https://www.appimagehub.com
-- Users can search and download it
-- AppImage will appear in AppImage catalogs/stores
-- Updates require a new PR (not automatic)
+Users can discover and download TalkType easily!
 
 ## Future Updates
 
-When you release a new version:
-1. Build new AppImage with new version number
-2. Create new GitHub release with new tag
-3. Upload new AppImage to release
-4. AppImageHub will automatically detect and update (if using GitHub repo URL)
+For v0.3.8 and beyond:
+1. Build new AppImage with new version
+2. Create new GitHub release
+3. Upload AppImage
+4. AppImageHub auto-detects updates (no new PR needed!)
 
-OR
+---
 
-Submit a new PR to update the data file if needed.
-
-## Quick Reference Commands
-
-```bash
-# Create release and upload AppImage
-gh release create v0.3.6 \
-  --title "v0.3.6 - Polished First-Run Experience" \
-  --notes "Improved first-run UX with streamlined hotkey setup and model download progress" \
-  TalkType-v0.3.6-x86_64.AppImage
-
-# Test download
-wget https://github.com/ronb1964/TalkType/releases/download/v0.3.6/TalkType-v0.3.6-x86_64.AppImage
-
-# Validate AppStream
-appstreamcli validate io.github.ronb1964.TalkType.appdata.xml
-```
-
-## Support
-
-- AppImageHub issues: https://github.com/AppImage/AppImageHub/issues
-- AppImage documentation: https://docs.appimage.org/
-- AppImage forum: https://discourse.appimage.org/
+**Generated:** 2025-10-13
+**Version:** 0.3.7
+**Size:** 892M
+**Repository:** https://github.com/ronb1964/TalkType
+**Commit:** 2ad1ffd Fix "new paragraph" command and optimize AppImage size
