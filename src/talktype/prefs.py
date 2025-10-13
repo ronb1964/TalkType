@@ -1373,7 +1373,11 @@ X-GNOME-Autostart-enabled=true
         return False
     
     def check_and_download_model(self, model_name):
-        """Check if model exists, download with progress if needed."""
+        """Check if model exists, download with progress if needed.
+
+        Returns:
+            tuple: (success: bool, was_downloaded: bool)
+        """
         import os
 
         # Check if model is already cached
@@ -1383,7 +1387,7 @@ X-GNOME-Autostart-enabled=true
 
         if os.path.exists(model_path):
             print(f"Model {model_name} already cached")
-            return True
+            return (True, False)  # Success, but not downloaded
 
         # Model needs downloading - show progress dialog
         print(f"Model {model_name} not found, downloading...")
@@ -1420,9 +1424,18 @@ X-GNOME-Autostart-enabled=true
 
         def download_model():
             try:
+                import warnings
+
+                # Suppress PyTorch CUDA warnings BEFORE importing anything that imports torch
+                # (warnings happen at torch import time, not at WhisperModel usage time)
+                warnings.filterwarnings('ignore', message='Could not load CUDA library.*')
+                warnings.filterwarnings('ignore', category=UserWarning, module='torch')
+
                 from faster_whisper import WhisperModel
-                # This will download the model
+
+                # This will download the model (using CPU mode for download)
                 WhisperModel(model_name, device="cpu", compute_type="int8")
+
                 download_complete["success"] = True
             except Exception as e:
                 print(f"Model download failed: {e}")
@@ -1448,7 +1461,23 @@ X-GNOME-Autostart-enabled=true
         # Wait for download
         dialog.run()
 
-        return download_complete["success"]
+        # Show success message if download completed successfully
+        if download_complete["success"]:
+            print(f"✅ Model {model_name} downloaded successfully")
+
+            # Show success dialog
+            success_dialog = Gtk.MessageDialog(
+                transient_for=self.window,
+                flags=0,
+                message_type=Gtk.MessageType.INFO,
+                buttons=Gtk.ButtonsType.OK,
+                text="Model Downloaded Successfully!"
+            )
+            success_dialog.format_secondary_text(f"The {model_name} model has been downloaded and is ready to use.")
+            success_dialog.run()
+            success_dialog.destroy()
+
+        return (download_complete["success"], download_complete["success"])  # (success, was_downloaded)
 
     def restart_service(self):
         """Restart the dictation service."""
@@ -1459,12 +1488,10 @@ X-GNOME-Autostart-enabled=true
             # Wait a moment for processes to terminate
             import time
             time.sleep(1)
-            # Start the service again
+            # Start the service again (keep stdout/stderr visible for debugging)
             project_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
             subprocess.Popen([sys.executable, "-m", "src.talktype.app"],
-                           cwd=project_dir,
-                           stdout=subprocess.DEVNULL,
-                           stderr=subprocess.DEVNULL)
+                           cwd=project_dir)
             return True
         except Exception as e:
             print(f"Failed to restart service: {e}")
@@ -1476,19 +1503,21 @@ X-GNOME-Autostart-enabled=true
             # Check if model needs downloading
             if hasattr(self, 'model_combo'):
                 model_name = self.model_combo.get_active_text()
-                if model_name and not self.check_and_download_model(model_name):
-                    # Model download failed
-                    dialog = Gtk.MessageDialog(
-                        transient_for=self.window,
-                        flags=0,
-                        message_type=Gtk.MessageType.ERROR,
-                        buttons=Gtk.ButtonsType.OK,
-                        text="Model download failed!"
-                    )
-                    dialog.format_secondary_text("Failed to download the Whisper model. Please check your internet connection.")
-                    dialog.run()
-                    dialog.destroy()
-                    return
+                if model_name:
+                    success, was_downloaded = self.check_and_download_model(model_name)
+                    if not success:
+                        # Model download failed
+                        dialog = Gtk.MessageDialog(
+                            transient_for=self.window,
+                            flags=0,
+                            message_type=Gtk.MessageType.ERROR,
+                            buttons=Gtk.ButtonsType.OK,
+                            text="Model download failed!"
+                        )
+                        dialog.format_secondary_text("Failed to download the Whisper model. Please check your internet connection.")
+                        dialog.run()
+                        dialog.destroy()
+                        return
 
             # Restart the service
             if self.restart_service():
@@ -1543,25 +1572,35 @@ X-GNOME-Autostart-enabled=true
     def on_ok(self, button):
         """Save, restart service, and close."""
         if self.save_config():
+            model_was_downloaded = False
+
             # Check if model needs downloading
             if hasattr(self, 'model_combo'):
                 model_name = self.model_combo.get_active_text()
-                if model_name and not self.check_and_download_model(model_name):
-                    # Model download failed
-                    dialog = Gtk.MessageDialog(
-                        transient_for=self.window,
-                        flags=0,
-                        message_type=Gtk.MessageType.ERROR,
-                        buttons=Gtk.ButtonsType.OK,
-                        text="Model download failed!"
-                    )
-                    dialog.format_secondary_text("Failed to download the Whisper model. Please check your internet connection.")
-                    dialog.run()
-                    dialog.destroy()
-                    return
+                if model_name:
+                    success, was_downloaded = self.check_and_download_model(model_name)
+                    model_was_downloaded = was_downloaded
+                    if not success:
+                        # Model download failed
+                        dialog = Gtk.MessageDialog(
+                            transient_for=self.window,
+                            flags=0,
+                            message_type=Gtk.MessageType.ERROR,
+                            buttons=Gtk.ButtonsType.OK,
+                            text="Model download failed!"
+                        )
+                        dialog.format_secondary_text("Failed to download the Whisper model. Please check your internet connection.")
+                        dialog.run()
+                        dialog.destroy()
+                        return
 
             # Restart the service
             service_restarted = self.restart_service()
+
+            # If model was just downloaded, keep preferences open so user can adjust other settings
+            if model_was_downloaded:
+                # Don't close the window - let user make more changes if needed
+                return
 
             # Clean up PID file before closing
             try:
