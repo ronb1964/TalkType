@@ -13,7 +13,7 @@ def normalize_text(text: str) -> str:
     # --- 1) Multi-word replacements first (order matters) ---
     replacements = [
         (r"\s*\bnew\s*line\b[,.\s]*|\bnewline\b|\breturn\b|\bline\s+break\b", "§SHIFT_ENTER§"),
-        (r"[,.\s]*\bnew\s+paragraph\b|\bparagraph\s+break\b", "§SHIFT_ENTER§§SHIFT_ENTER§"),
+        (r"[,.\s]*\bnew\s+paragraph\b[,.\s]*|\bparagraph\s+break\b[,.\s]*", "§SHIFT_ENTER§§SHIFT_ENTER§"),
         (r"[,.\s]*\bsoft\s+break\b[,.\s]*|\bsoft\s+line\b[,.\s]*", "   "),
         (r"\btab\b", "\t"),
         (r"\bexclamation\s+point\b|\bexclamation\s+mark\b", "!"),
@@ -129,7 +129,8 @@ def normalize_text(text: str) -> str:
         # Convert trailing comma to period at end of line (before line break)
         line = re.sub(r",$", ".", line)
         # Add period at end of line if no punctuation exists (before line break)
-        if line and not re.search(r"[.?!…]$", line.rstrip()):
+        # BUT: Don't add period to empty lines (from "new line" / "new paragraph" commands)
+        if line and line.strip() and not re.search(r"[.?!…]$", line.rstrip()):
             line = line.rstrip() + "."
         # Capitalize after (.?!… + space) if next is a-z
         line = re.sub(r"([.?!…]\s+)([a-z])", lambda m: m.group(1) + m.group(2).upper(), line)

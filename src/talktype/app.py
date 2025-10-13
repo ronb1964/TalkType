@@ -610,10 +610,15 @@ def stop_recording(
         text = normalize_text(raw if smart_quotes else raw.replace(""","\"").replace(""","\""))
 
         # Simple spacing: always add period+space or just space when auto features are on
-        # Don't add auto-period or auto-space if text ends with special markers (like §SHIFT_ENTER§)
-        if auto_period and text and not text.rstrip().endswith((".","?","!","…")) and not text.endswith("§"):
+        # Don't add auto-period or auto-space if text contains paragraph/line break markers
+        # Also skip if text is ONLY markers (no actual content)
+        has_break_markers = "§SHIFT_ENTER§" in text
+        text_without_markers = text.replace("§SHIFT_ENTER§", "").strip()
+        is_only_markers = has_break_markers and not text_without_markers
+
+        if auto_period and text and not is_only_markers and not text.rstrip().endswith((".","?","!","…")):
             text = text.rstrip() + "."
-        if auto_space and text and not text.endswith((" ", "\n", "\t", "§")):
+        if auto_space and text and not is_only_markers and not text.endswith((" ", "\n", "\t")):
             text = text + " "
         logger.debug(f"Normalized text: {text!r}")
 

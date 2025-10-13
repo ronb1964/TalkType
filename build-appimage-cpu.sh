@@ -79,6 +79,22 @@ else
     exit 1
 fi
 
+# Copy Python standard library (encodings, os, etc.)
+print_status "Copying Python standard library..."
+mkdir -p "AppDir/usr/lib/python${PYTHON_VERSION}"
+if [ -d "/usr/lib/python${PYTHON_VERSION}" ]; then
+    rsync -a --exclude='site-packages' --exclude='__pycache__' --exclude='*.pyc' \
+        "/usr/lib/python${PYTHON_VERSION}/" "AppDir/usr/lib/python${PYTHON_VERSION}/"
+    print_status "Copied Python stdlib from /usr/lib/python${PYTHON_VERSION}"
+elif [ -d "/usr/lib64/python${PYTHON_VERSION}" ]; then
+    rsync -a --exclude='site-packages' --exclude='__pycache__' --exclude='*.pyc' \
+        "/usr/lib64/python${PYTHON_VERSION}/" "AppDir/usr/lib/python${PYTHON_VERSION}/"
+    print_status "Copied Python stdlib from /usr/lib64/python${PYTHON_VERSION}"
+else
+    print_error "Could not find Python standard library!"
+    exit 1
+fi
+
 # Create lib directory structure
 mkdir -p "AppDir/usr/lib/python${PYTHON_VERSION}/site-packages"
 
@@ -89,6 +105,11 @@ rsync -a --exclude='__pycache__' \
     --exclude='*.pyo' \
     --exclude='torch' \
     --exclude='torch-*' \
+    --exclude='torchvision' \
+    --exclude='torchvision-*' \
+    --exclude='torchvision.libs' \
+    --exclude='torchaudio' \
+    --exclude='torchaudio-*' \
     --exclude='nvidia/' \
     --exclude='nvidia_*' \
     --exclude='cuda*' \
@@ -116,6 +137,11 @@ if [ -d ".venv/lib64/python${PYTHON_VERSION}/site-packages" ]; then
         --exclude='*.pyo' \
         --exclude='torch' \
         --exclude='torch-*' \
+        --exclude='torchvision' \
+        --exclude='torchvision-*' \
+        --exclude='torchvision.libs' \
+        --exclude='torchaudio' \
+        --exclude='torchaudio-*' \
         --exclude='nvidia/' \
         --exclude='nvidia_*' \
         --exclude='triton' \
@@ -132,6 +158,7 @@ if [ -d ".venv/lib64/python${PYTHON_VERSION}/site-packages" ]; then
 fi
 
 # Copy CUDA-enabled PyTorch from venv (full GPU support)
+# NOTE: torchvision and torchaudio are NOT copied - they're not needed by faster-whisper
 print_status "Copying CUDA-enabled PyTorch from venv..."
 # PyTorch is installed in lib64, so copy from there
 if [ -d ".venv/lib64/python${PYTHON_VERSION}/site-packages/torch" ]; then
@@ -139,17 +166,7 @@ if [ -d ".venv/lib64/python${PYTHON_VERSION}/site-packages/torch" ]; then
           "AppDir/usr/lib/python${PYTHON_VERSION}/site-packages/"
     cp -r ".venv/lib64/python${PYTHON_VERSION}/site-packages/torch-"*.dist-info \
           "AppDir/usr/lib/python${PYTHON_VERSION}/site-packages/" 2>/dev/null || true
-    cp -r ".venv/lib64/python${PYTHON_VERSION}/site-packages/torchvision" \
-          "AppDir/usr/lib/python${PYTHON_VERSION}/site-packages/" 2>/dev/null || true
-    cp -r ".venv/lib64/python${PYTHON_VERSION}/site-packages/torchvision-"*.dist-info \
-          "AppDir/usr/lib/python${PYTHON_VERSION}/site-packages/" 2>/dev/null || true
-    cp -r ".venv/lib64/python${PYTHON_VERSION}/site-packages/torchaudio" \
-          "AppDir/usr/lib/python${PYTHON_VERSION}/site-packages/" 2>/dev/null || true
-    cp -r ".venv/lib64/python${PYTHON_VERSION}/site-packages/torchaudio-"*.dist-info \
-          "AppDir/usr/lib/python${PYTHON_VERSION}/site-packages/" 2>/dev/null || true
-    cp -r ".venv/lib64/python${PYTHON_VERSION}/site-packages/torchvision.libs" \
-          "AppDir/usr/lib/python${PYTHON_VERSION}/site-packages/" 2>/dev/null || true
-    print_status "PyTorch CUDA version copied from lib64"
+    print_status "PyTorch CUDA version copied from lib64 (torchvision/torchaudio excluded)"
 else
     print_warning "PyTorch not found in lib64, trying lib..."
     cp -r ".venv/lib/python${PYTHON_VERSION}/site-packages/torch" \
@@ -195,32 +212,35 @@ print_status "PyTorch now supports both CPU-only systems and GPU systems with do
 print_status "Stripping unnecessary PyTorch files..."
 TORCH_DIR="AppDir/usr/lib/python${PYTHON_VERSION}/site-packages/torch"
 
-# Remove development headers (50 MB)
-rm -rf "${TORCH_DIR}/include"
-
-# Remove testing files (4.8 MB)
-rm -rf "${TORCH_DIR}/testing"
-
-# Remove binary tools (11 MB) - only needed for development
-rm -rf "${TORCH_DIR}/bin"
-
-# Remove distributed training if present (4.6 MB) - not needed for single-user dictation
-# Keep it commented out for now in case users want multi-GPU in future
-# rm -rf "${TORCH_DIR}/distributed"
+# Remove development and training components (not needed for inference)
+rm -rf "${TORCH_DIR}/include"        # Development headers (50 MB)
+rm -rf "${TORCH_DIR}/testing"        # Testing files (4.8 MB)
+rm -rf "${TORCH_DIR}/bin"            # Binary tools (11 MB)
+rm -rf "${TORCH_DIR}/distributed"    # Multi-GPU training (4.1 MB)
+rm -rf "${TORCH_DIR}/onnx"           # ONNX export (1.9 MB)
+rm -rf "${TORCH_DIR}/fx"             # FX graph mode (1.7 MB)
+rm -rf "${TORCH_DIR}/ao"             # Quantization tools (2.5 MB)
+rm -rf "${TORCH_DIR}/_inductor"      # Compilation backend (5.1 MB)
+rm -rf "${TORCH_DIR}/_dynamo"        # Dynamic compilation (2.4 MB)
 
 # Remove type stub files (save a few MB)
 find "${TORCH_DIR}" -name "*.pyi" -delete 2>/dev/null || true
 
-# Remove Python cache files
+# Remove Python cache files from all packages
 find "AppDir/usr/lib/python${PYTHON_VERSION}/site-packages" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 find "AppDir/usr/lib/python${PYTHON_VERSION}/site-packages" -name "*.pyc" -delete 2>/dev/null || true
 find "AppDir/usr/lib/python${PYTHON_VERSION}/site-packages" -name "*.pyo" -delete 2>/dev/null || true
 
-print_status "Stripped ~65 MB of unnecessary files"
+print_status "Stripped ~85 MB of unnecessary files"
 
-# Copy TalkType source code
+# Clean cached bytecode from source to ensure latest code is used
+print_status "Cleaning cached Python bytecode..."
+find src -type d -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true
+find src -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete 2>/dev/null || true
+
+# Copy TalkType source code (exclude cached bytecode)
 print_status "Copying TalkType source code..."
-cp -r src AppDir/usr/
+rsync -a --exclude='__pycache__' --exclude='*.pyc' --exclude='*.pyo' src/ AppDir/usr/src/
 
 # Bundle ydotool for text injection (AppImage MUST be self-contained)
 print_status "Building ydotool from source with static linking for maximum compatibility..."

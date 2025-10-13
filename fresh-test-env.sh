@@ -7,10 +7,18 @@ set -e
 echo "🧹 Setting up fresh TalkType test environment..."
 echo ""
 
-# 1. Stop any running TalkType processes
+# 1. Stop any running TalkType processes (including tray icon)
 echo "1️⃣  Stopping TalkType processes..."
-pkill -f dictate-tray 2>/dev/null || true
-pkill -f dictate 2>/dev/null || true
+pkill -f "dictate-tray" 2>/dev/null || true
+pkill -f "dictate" 2>/dev/null || true
+pkill -f "TalkType.*AppImage" 2>/dev/null || true
+pkill -f "talktype.tray" 2>/dev/null || true
+pkill -f "talktype.app" 2>/dev/null || true
+systemctl --user stop ron-dictation.service 2>/dev/null || true
+sleep 2
+
+# Unmount any mounted AppImages
+fusermount -u /tmp/.mount_TalkTy* 2>/dev/null || true
 sleep 1
 
 # 2. Remove config file
