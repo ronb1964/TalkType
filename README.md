@@ -123,6 +123,8 @@ poetry run dictate-prefs
 poetry run pytest -q
 ```
 
+**⚠️ IMPORTANT: Before testing AppImage builds, ALWAYS follow [TESTING_PROCEDURES.md](TESTING_PROCEDURES.md)**
+
 ## 📋 Requirements
 
 - **OS**: Linux with Wayland

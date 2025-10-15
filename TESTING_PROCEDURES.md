@@ -1,5 +1,50 @@
 # TalkType Testing Procedures
 
+## Prerequisites for Testing
+
+**Before testing the AppImage, ensure ydotool is installed and running:**
+
+```bash
+# Check if ydotoold is running
+systemctl --user status ydotoold
+```
+
+If not installed or not running:
+
+```bash
+# Install ydotool (choose your distro)
+# Fedora/Nobara:
+sudo dnf install ydotool
+
+# Ubuntu/Debian:
+sudo apt install ydotool
+
+# Set up systemd service for ydotool daemon
+mkdir -p ~/.config/systemd/user
+cat > ~/.config/systemd/user/ydotoold.service <<'EOF'
+[Unit]
+Description=ydotool daemon (Wayland keystroke injector)
+After=graphical-session.target
+
+[Service]
+Environment=XDG_RUNTIME_DIR=%t
+ExecStart=/usr/bin/ydotoold --socket-path=%t/.ydotool_socket
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
+EOF
+
+# Enable and start the service
+systemctl --user daemon-reload
+systemctl --user enable --now ydotoold.service
+
+# Verify it's running
+systemctl --user status ydotoold
+```
+
+**Note:** The AppImage requires ydotool to be installed system-wide for text injection to work.
+
 ## Fresh Test Environment Setup
 
 **ALWAYS use this procedure before testing a new AppImage build:**

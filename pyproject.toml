@@ -8,13 +8,13 @@ readme = "README.md"
 packages = [{ include = "talktype", from = "src" }]
 
 [tool.poetry.dependencies]
-python = ">=3.10,<3.14"
+python = "^3.10"  # AppImage uses Python 3.10 (Ubuntu 22.04 default)
 faster-whisper = "*"
 sounddevice = "*"
 evdev = "*"
 numpy = "*"
 pyperclip = "*"
-pygobject = "^3.52.3"
+pygobject = "~3.42.2"  # Pin to 3.42.x (compatible with libgirepository 1.0 on Ubuntu 22.04)
 toml = "*"
 torch = {version = "^2.6.0+cu124", source = "pytorch"}
 torchvision = {version = "^0.21.0+cu124", source = "pytorch"}

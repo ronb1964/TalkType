@@ -1,0 +1,21 @@
+#!/bin/bash
+HERE="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+export PYTHONPATH="${HERE}/../lib/python3.11/site-packages:${HERE}/../src:${PYTHONPATH}"
+
+# Add CUDA library paths if they exist (downloaded by user)
+CUDA_BASE="${HOME}/.local/share/TalkType/cuda"
+if [ -d "${CUDA_BASE}" ]; then
+    export LD_LIBRARY_PATH="${CUDA_BASE}/lib:${CUDA_BASE}/lib64:${HERE}/../lib:${LD_LIBRARY_PATH}"
+
+    # Preload critical CUDA libraries to help PyTorch find them
+    if [ -f "${CUDA_BASE}/lib64/libcudart.so.12" ]; then
+        export LD_PRELOAD="${CUDA_BASE}/lib64/libcudart.so.12:${LD_PRELOAD}"
+    fi
+    if [ -f "${CUDA_BASE}/lib64/libcublas.so.12" ]; then
+        export LD_PRELOAD="${CUDA_BASE}/lib64/libcublas.so.12:${LD_PRELOAD}"
+    fi
+else
+    export LD_LIBRARY_PATH="${HERE}/../lib:${LD_LIBRARY_PATH}"
+fi
+
+exec "${HERE}/python3" -m talktype.app "$@"

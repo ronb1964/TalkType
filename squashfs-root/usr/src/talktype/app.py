@@ -12,8 +12,6 @@ from evdev import InputDevice, ecodes, list_devices
 from .normalize import normalize_text
 from .config import load_config, Settings
 from .logger import setup_logger
-from .recording_indicator import RecordingIndicator
-import threading
 
 logger = setup_logger(__name__)
 
@@ -381,9 +379,6 @@ class RecordingState:
 # Global recording state
 state = RecordingState()
 
-# Global recording indicator (initialized in main)
-recording_indicator = None
-
 def _beep(enabled: bool, freq=1000, duration=0.15):
     if not enabled:
         return
@@ -398,17 +393,6 @@ def _beep(enabled: bool, freq=1000, duration=0.15):
 def _sd_callback(indata, frames_count, time_info, status):
     if state.is_recording:
         state.frames.append(indata.tobytes())
-
-        # Update recording indicator with audio level
-        if recording_indicator:
-            # Calculate RMS (root mean square) for audio level
-            audio_data = np.frombuffer(indata, dtype=np.int16)
-            # Use float64 to avoid overflow in squaring
-            audio_float = audio_data.astype(np.float64)
-            rms = np.sqrt(np.mean(audio_float**2))
-            # Normalize to 0-1 range (adjust multiplier for sensitivity)
-            normalized = min(1.0, rms / 3000.0)
-            recording_indicator.set_audio_level(normalized)
 
 def _keycode_from_name(name: str) -> int:
     n = (name or "F8").strip().upper()
@@ -446,15 +430,6 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx):
     _beep(beeps_on, *START_BEEP)
     if notify_on: _notify("TalkType", "Recording… (speak now)")
 
-    # Show recording indicator
-    if recording_indicator:
-        try:
-            recording_indicator.show_at_position()
-            recording_indicator.start_recording()
-        except Exception as e:
-            print(f"⚠️  Failed to show recording indicator: {e}")
-            logger.error(f"Failed to show recording indicator: {e}", exc_info=True)
-
 def _stop_stream_safely():
     if state.stream:
         try:
@@ -471,10 +446,6 @@ def cancel_recording(beeps_on: bool, notify_on: bool, reason="Cancelled"):
     print(f"⏸️  {reason}")
     logger.debug(f"Recording cancelled: {reason}")
     if notify_on: _notify("TalkType", reason)
-
-    # Hide recording indicator
-    if recording_indicator:
-        recording_indicator.hide_indicator()
 
 def _send_shift_enter():
     """Send Shift+Enter keystrokes to create line break without submitting."""
@@ -613,11 +584,6 @@ def stop_recording(
     _stop_stream_safely()
     if state.was_cancelled: return
 
-    # Hide recording indicator immediately when recording stops
-    # This prevents it from interfering with text injection
-    if recording_indicator:
-        recording_indicator.hide_indicator()
-
     print("🛑 Recording stopped. Transcribing…")
     logger.debug("Recording stopped, starting transcription")
     # Convert captured bytes -> float32 mono PCM in [-1, 1]
@@ -678,9 +644,6 @@ def stop_recording(
         print(f"❌ Transcription error: {e}")
         _beep(beeps_on, *READY_BEEP)  # Still play the ready beep so user knows it's done
         if notify_on: _notify("TalkType", f"Transcription failed: {str(e)[:60]}{'…' if len(str(e))>60 else ''}")
-    finally:
-        # Ensure recording indicator is hidden (already hidden at start of stop_recording)
-        pass
 
 def _loop_evdev(cfg: Settings, input_device_idx):
     session = os.environ.get("XDG_SESSION_TYPE", "").lower()
@@ -1107,38 +1070,6 @@ def main():
 
     # Input device selection
     input_device_idx = _pick_input_device(cfg.mic)
-
-    # Initialize recording indicator if enabled
-    global recording_indicator
-    if cfg.recording_indicator:
-        try:
-            # Import GTK in the main thread
-            import gi
-            gi.require_version('Gtk', '3.0')
-            from gi.repository import Gtk, GLib
-
-            recording_indicator = RecordingIndicator(
-                position=cfg.indicator_position,
-                offset_x=cfg.indicator_offset_x,
-                offset_y=cfg.indicator_offset_y,
-                size=cfg.indicator_size
-            )
-            print(f"✓ Recording indicator initialized (position: {cfg.indicator_position}, size: {cfg.indicator_size})")
-            logger.info(f"Recording indicator initialized at position: {cfg.indicator_position}, size: {cfg.indicator_size}")
-
-            # Start GTK main loop in a background thread so it can process our window
-            def run_gtk_loop():
-                print("🔄 Starting GTK main loop for recording indicator...")
-                Gtk.main()
-
-            gtk_thread = threading.Thread(target=run_gtk_loop, daemon=True)
-            gtk_thread.start()
-            print("✓ GTK main loop started in background thread")
-
-        except Exception as e:
-            print(f"⚠️  Failed to initialize recording indicator: {e}")
-            logger.error(f"Recording indicator initialization failed: {e}", exc_info=True)
-            recording_indicator = None
 
     global model
     model = build_model(cfg)

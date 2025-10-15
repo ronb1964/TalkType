@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.ronb1964.TalkType</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>TalkType</name>
+  <summary>AI-powered speech recognition and dictation for Wayland</summary>
+
+  <description>
+    <p>
+      TalkType is a powerful, privacy-focused speech-to-text application for Linux Wayland systems.
+      Using OpenAI's Faster-Whisper AI model, TalkType provides accurate voice dictation with intelligent
+      punctuation and formatting.
+    </p>
+    <p>
+      Press and hold a configurable hotkey (default F8) to start dictating, release to stop.
+      Your spoken words are instantly transcribed and inserted at your cursor position in any application.
+    </p>
+    <p>
+      Features:
+    </p>
+    <ul>
+      <li>High-accuracy AI transcription using Faster-Whisper models</li>
+      <li>Smart punctuation and capitalization</li>
+      <li>Voice commands for punctuation (period, comma, question mark, etc.)</li>
+      <li>GPU acceleration support (optional CUDA download)</li>
+      <li>Multiple Whisper model sizes (tiny, base, small, medium, large)</li>
+      <li>Configurable hotkeys (hold or toggle mode)</li>
+      <li>System tray integration</li>
+      <li>Works with all Wayland applications</li>
+      <li>Completely offline - no internet required after model download</li>
+      <li>Privacy-focused - all processing happens locally on your machine</li>
+    </ul>
+  </description>
+
+  <launchable type="desktop-id">io.github.ronb1964.TalkType.desktop</launchable>
+
+  <url type="homepage">https://github.com/ronb1964/TalkType</url>
+  <url type="bugtracker">https://github.com/ronb1964/TalkType/issues</url>
+  <url type="help">https://github.com/ronb1964/TalkType#readme</url>
+
+  <developer id="io.github.ronb1964">
+    <name>Ron</name>
+  </developer>
+
+
+  <categories>
+    <category>Utility</category>
+    <category>AudioVideo</category>
+    <category>Audio</category>
+    <category>Accessibility</category>
+  </categories>
+
+  <keywords>
+    <keyword>dictation</keyword>
+    <keyword>speech</keyword>
+    <keyword>voice</keyword>
+    <keyword>transcription</keyword>
+    <keyword>whisper</keyword>
+    <keyword>ai</keyword>
+    <keyword>accessibility</keyword>
+  </keywords>
+
+  <screenshots>
+    <screenshot type="default">
+      <caption>Welcome screen with first-run setup guidance</caption>
+      <image>https://raw.githubusercontent.com/ronb1964/TalkType/main/screenshots/TalkType_welcome.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Preferences window with GPU acceleration and model selection</caption>
+      <image>https://raw.githubusercontent.com/ronb1964/TalkType/main/screenshots/TalkType_preferences.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Hotkey configuration confirmation dialog</caption>
+      <image>https://raw.githubusercontent.com/ronb1964/TalkType/main/screenshots/TalkType_Nvidia.png</image>
+    </screenshot>
+  </screenshots>
+
+  <releases>
+    <release version="0.3.6" date="2025-10-08">
+      <description>
+        <p>Polished first-run experience with improved UX</p>
+        <ul>
+          <li>Simple modal dialog for hotkey changes (not full Preferences window)</li>
+          <li>Loop-back verification: after changing keys, immediately verify new keys</li>
+          <li>Progress dialog when downloading Whisper models</li>
+          <li>Fixed dialog timing: welcome screen now appears before hotkey verification</li>
+          <li>First run only marked complete after successful hotkey verification</li>
+        </ul>
+      </description>
+    </release>
+    <release version="0.2.1" date="2025-01-15">
+      <description>
+        <p>Bug fixes and improvements</p>
+        <ul>
+          <li>Fixed 'new line' voice command</li>
+          <li>Optimized AppImage size</li>
+        </ul>
+      </description>
+    </release>
+  </releases>
+
+  <provides>
+    <binary>dictate</binary>
+    <binary>dictate-tray</binary>
+    <binary>dictate-prefs</binary>
+  </provides>
+
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+
+  <recommends>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </recommends>
+
+  <content_rating type="oars-1.1" />
+</component>

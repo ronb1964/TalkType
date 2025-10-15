@@ -23,11 +23,6 @@ class Settings:
     injection_mode: str = "type"  # "type" (ydotool/wtype) or "paste" (wl-copy + Ctrl+V)
     auto_timeout_enabled: bool = True   # enable automatic timeout after inactivity (default: on)
     auto_timeout_minutes: int = 5       # minutes of inactivity before auto-stop
-    recording_indicator: bool = True    # show visual recording indicator near cursor
-    indicator_position: str = "center"  # screen position: center, top-left, top-center, top-right, bottom-left, bottom-center, bottom-right, left-center, right-center
-    indicator_offset_x: int = 0         # custom X offset from position anchor (pixels, can be negative)
-    indicator_offset_y: int = 0         # custom Y offset from position anchor (pixels, can be negative)
-    indicator_size: str = "medium"      # indicator size: small, medium, large
 
 def validate_config(s: Settings) -> None:
     """
@@ -78,20 +73,6 @@ def validate_config(s: Settings) -> None:
         if not s.toggle_hotkey or len(s.toggle_hotkey.strip()) == 0:
             errors.append("Invalid toggle_hotkey: cannot be empty when mode is 'toggle'")
 
-    # Valid indicator positions
-    valid_positions = {
-        "center", "top-left", "top-center", "top-right",
-        "bottom-left", "bottom-center", "bottom-right",
-        "left-center", "right-center"
-    }
-    if s.indicator_position.lower() not in valid_positions:
-        errors.append(f"Invalid indicator_position '{s.indicator_position}'. Valid options: {', '.join(sorted(valid_positions))}")
-
-    # Valid indicator sizes
-    valid_sizes = {"small", "medium", "large"}
-    if s.indicator_size.lower() not in valid_sizes:
-        errors.append(f"Invalid indicator_size '{s.indicator_size}'. Valid options: {', '.join(sorted(valid_sizes))}")
-
     # If there are errors, print them and exit
     if errors:
         print("❌ Configuration validation failed:", file=sys.stderr)
@@ -123,11 +104,6 @@ def load_config() -> Settings:
             s.injection_mode = str(data.get("injection_mode", s.injection_mode))
             s.auto_timeout_enabled = bool(data.get("auto_timeout_enabled", s.auto_timeout_enabled))
             s.auto_timeout_minutes = int(data.get("auto_timeout_minutes", s.auto_timeout_minutes))
-            s.recording_indicator = bool(data.get("recording_indicator", s.recording_indicator))
-            s.indicator_position = str(data.get("indicator_position", s.indicator_position))
-            s.indicator_offset_x = int(data.get("indicator_offset_x", s.indicator_offset_x))
-            s.indicator_offset_y = int(data.get("indicator_offset_y", s.indicator_offset_y))
-            s.indicator_size = str(data.get("indicator_size", s.indicator_size))
         except Exception:
             pass
 
@@ -176,8 +152,3 @@ def save_config(s: Settings) -> None:
         f.write(f'injection_mode = "{s.injection_mode}"\n')
         f.write(f'auto_timeout_enabled = {str(s.auto_timeout_enabled).lower()}\n')
         f.write(f'auto_timeout_minutes = {s.auto_timeout_minutes}\n')
-        f.write(f'recording_indicator = {str(s.recording_indicator).lower()}\n')
-        f.write(f'indicator_position = "{s.indicator_position}"\n')
-        f.write(f'indicator_offset_x = {s.indicator_offset_x}\n')
-        f.write(f'indicator_offset_y = {s.indicator_offset_y}\n')
-        f.write(f'indicator_size = "{s.indicator_size}"\n')

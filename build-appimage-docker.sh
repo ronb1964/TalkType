@@ -37,9 +37,9 @@ fi
 # Run the build inside Docker container
 echo "🔨 Building AppImage inside Ubuntu 22.04 container..."
 docker run --rm \
-    -v "$PROJECT_DIR:/build" \
-    -w /build \
-    -u "$(id -u):$(id -g)" \
+    -v "$PROJECT_DIR:/tmp/build" \
+    -w /tmp/build \
+    -u $(id -u):$(id -g) \
     -e HOME=/tmp \
     -e APPIMAGE_EXTRACT_AND_RUN=1 \
     "$IMAGE_NAME" \
@@ -49,12 +49,19 @@ docker run --rm \
         echo '🐍 Python version:'
         python3 --version
         echo ''
-        echo '📚 Installing Poetry...'
-        python3 -m pip install --user poetry
-        export PATH=\"/tmp/.local/bin:\$PATH\"
+        echo '📚 Installing Poetry and creating venv...'
+        python3 -m pip install --user poetry 2>&1 | grep -v WARNING || true
+        export PATH=\"\$HOME/.local/bin:\$PATH\"
+        python3 -m venv --copies .venv
+        .venv/bin/pip install --upgrade pip 2>&1 | tail -3
+        .venv/bin/pip install poetry
+        .venv/bin/poetry install --only main
+        echo ''
+        echo '🔍 Verifying Python binary glibc compatibility...'
+        readelf -V /usr/bin/python3 2>/dev/null | grep 'GLIBC_' | sort -u | tail -3
         echo ''
         echo '🏗️  Running build script...'
-        bash build-appimage-cpu.sh
+        bash build-appimage.sh
     "
 
 echo ""

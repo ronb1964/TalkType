@@ -203,7 +203,55 @@ Language ▼
 
 ---
 
-### 10. Empty Transcription Visual Indicator
+### 10. Recording Status Overlay/Pop-up
+**Current:** No visual feedback while recording (only audio beep and tray icon)
+**Proposed:** On-screen indicator showing active recording
+
+**Visual Options:**
+- **Small floating window** - Semi-transparent, shows "🎙️ Recording..." with animated waveform or pulse
+- **Toast notification style** - Appears in corner, auto-positions away from cursor
+- **Minimal overlay** - Just a red dot or mic icon that follows cursor
+- **Status bar widget** - Small bar at top/bottom of screen
+
+**Features:**
+- Animated to show it's active (pulsing, waveform, spinning)
+- Shows elapsed recording time
+- Click to cancel recording
+- Configurable position (top-left/right, bottom-left/right, follow cursor)
+- Configurable opacity/size
+- Option to disable if user prefers audio-only feedback
+
+**Implementation:**
+- Use GTK window with `set_keep_above(True)` for always-on-top
+- Semi-transparent background (`set_opacity()`)
+- Position near cursor or in corner based on config
+- Simple animation (GLib.timeout_add for updates)
+- Minimal CPU usage
+- Show on recording start, hide on recording stop
+
+**UI Mock:**
+```
+┌─────────────────┐
+│ 🎙️ Recording... │
+│    0:03         │
+└─────────────────┘
+```
+
+**Config Options:**
+```toml
+[recording_indicator]
+enabled = true
+style = "floating"  # floating, toast, minimal, bar
+position = "top-right"  # or follow_cursor
+opacity = 0.9
+show_timer = true
+```
+
+**Benefit:** Clear visual feedback that recording is active, especially helpful when audio beeps are disabled
+
+---
+
+### 11. Empty Transcription Visual Indicator
 **Current:** Console shows `(No speech recognized)`
 **Proposed:** Brief visual feedback
 
