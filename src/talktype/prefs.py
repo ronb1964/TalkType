@@ -84,7 +84,10 @@ class PreferencesWindow:
         settings = Gtk.Settings.get_default()
         if settings:
             settings.set_property("gtk-application-prefer-dark-theme", True)
-        
+
+        # Load custom CSS styling
+        self._load_css()
+
         self.window = Gtk.Window(title="TalkType Preferences")
         self.window.set_default_size(500, 400)
         self.window.set_position(Gtk.WindowPosition.CENTER)
@@ -109,7 +112,28 @@ class PreferencesWindow:
         GLib.timeout_add(200, self._update_hotkey_ui_state)
         GLib.timeout_add(200, self._update_language_ui_state)
         # Don't auto-start level monitoring - only when user clicks record button
-        
+
+    def _load_css(self):
+        """Load custom CSS stylesheet for preferences window."""
+        try:
+            css_provider = Gtk.CssProvider()
+            css_file = os.path.join(os.path.dirname(__file__), 'prefs_style.css')
+
+            if os.path.exists(css_file):
+                css_provider.load_from_path(css_file)
+                screen = Gtk.Window().get_screen()
+                style_context = Gtk.StyleContext()
+                style_context.add_provider_for_screen(
+                    screen,
+                    css_provider,
+                    Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+                )
+                print("✅ Loaded custom CSS styling")
+            else:
+                print(f"⚠️  CSS file not found: {css_file}")
+        except Exception as e:
+            print(f"❌ Failed to load CSS: {e}")
+
     def load_config(self):
         """Load config from TOML file."""
         defaults = {
@@ -278,9 +302,17 @@ class PreferencesWindow:
         grid.set_margin_end(20)
         grid.set_margin_top(20)
         grid.set_margin_bottom(20)
-        
+
         row = 0
-        
+
+        # ===== AI MODEL SECTION =====
+        model_header = Gtk.Label()
+        model_header.set_markup('<b>AI Model Configuration</b>')
+        model_header.set_xalign(0)
+        model_header.set_margin_bottom(10)
+        grid.attach(model_header, 0, row, 2, 1)
+        row += 1
+
         # Model selection
         grid.attach(Gtk.Label(label="Model:", xalign=0), 0, row, 1, 1)
         model_combo = Gtk.ComboBoxText()
@@ -405,9 +437,23 @@ class PreferencesWindow:
         self.lang_combo.set_tooltip_text("Select the language for speech recognition.\nOnly used when Language Mode is set to 'Manual'.")
         grid.attach(self.lang_combo, 1, row, 1, 1)
         row += 1
-        
+
         # Initial visibility will be set by _update_language_ui_state
-        
+
+        # ===== HOTKEY CONFIGURATION SECTION =====
+        separator1 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        separator1.set_margin_top(20)
+        separator1.set_margin_bottom(15)
+        grid.attach(separator1, 0, row, 2, 1)
+        row += 1
+
+        hotkey_header = Gtk.Label()
+        hotkey_header.set_markup('<b>Hotkey Configuration</b>')
+        hotkey_header.set_xalign(0)
+        hotkey_header.set_margin_bottom(10)
+        grid.attach(hotkey_header, 0, row, 2, 1)
+        row += 1
+
         # Mode selection
         grid.attach(Gtk.Label(label="Mode:", xalign=0), 0, row, 1, 1)
         self.mode_combo = Gtk.ComboBoxText()
@@ -494,13 +540,20 @@ class PreferencesWindow:
 
         # Initial visibility will be set by _update_hotkey_ui_state
 
-        # Add horizontal separator
-        separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
-        separator.set_margin_top(20)
-        separator.set_margin_bottom(10)
-        grid.attach(separator, 0, row, 2, 1)
+        # ===== STARTUP OPTIONS SECTION =====
+        separator2 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        separator2.set_margin_top(20)
+        separator2.set_margin_bottom(15)
+        grid.attach(separator2, 0, row, 2, 1)
         row += 1
-        
+
+        startup_header = Gtk.Label()
+        startup_header.set_markup('<b>Startup Options</b>')
+        startup_header.set_xalign(0)
+        startup_header.set_margin_bottom(10)
+        grid.attach(startup_header, 0, row, 2, 1)
+        row += 1
+
         # Launch at login checkbox
         self.launch_at_login_check = Gtk.CheckButton(label="Launch TalkType at login")
         self.launch_at_login_check.set_active(self.config.get("launch_at_login", False))
@@ -519,9 +572,17 @@ class PreferencesWindow:
         grid.set_margin_end(20)
         grid.set_margin_top(20)
         grid.set_margin_bottom(20)
-        
+
         row = 0
-        
+
+        # ===== MICROPHONE SETUP SECTION =====
+        mic_header = Gtk.Label()
+        mic_header.set_markup('<b>Microphone Setup</b>')
+        mic_header.set_xalign(0)
+        mic_header.set_margin_bottom(10)
+        grid.attach(mic_header, 0, row, 2, 1)
+        row += 1
+
         # Microphone
         grid.attach(Gtk.Label(label="Microphone:", xalign=0), 0, row, 1, 1)
         mic_combo = Gtk.ComboBoxText()
@@ -624,7 +685,21 @@ class PreferencesWindow:
         self.recording = False
         self.recorded_audio = None
         self.level_monitor_timer = None
-        
+
+        # ===== AUDIO FEEDBACK SECTION =====
+        separator1 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        separator1.set_margin_top(20)
+        separator1.set_margin_bottom(15)
+        grid.attach(separator1, 0, row, 2, 1)
+        row += 1
+
+        feedback_header = Gtk.Label()
+        feedback_header.set_markup('<b>Audio & Visual Feedback</b>')
+        feedback_header.set_xalign(0)
+        feedback_header.set_margin_bottom(10)
+        grid.attach(feedback_header, 0, row, 2, 1)
+        row += 1
+
         # Beeps
         beeps_check = Gtk.CheckButton(label="Play beeps for start/stop/ready")
         beeps_check.set_active(self.config["beeps"])
@@ -673,6 +748,16 @@ class PreferencesWindow:
         import os
         is_wayland = os.environ.get('WAYLAND_DISPLAY') or os.environ.get('XDG_SESSION_TYPE') == 'wayland'
 
+        # Check if GNOME extension is available (enables positioning on Wayland)
+        has_extension = False
+        if is_wayland:
+            try:
+                from . import extension_helper
+                ext_status = extension_helper.get_extension_status()
+                has_extension = ext_status.get('installed', False) and ext_status.get('enabled', False)
+            except:
+                pass
+
         positions = [
             ("center", "Center"),
             ("top-left", "Top Left"),
@@ -693,18 +778,22 @@ class PreferencesWindow:
         position_combo.set_active_id(current_position)
         position_combo.connect("changed", lambda x: self.update_config("indicator_position", x.get_active_id()))
 
-        if is_wayland:
-            position_combo.set_tooltip_text("Note: On Wayland, window positioning may be restricted by your compositor.\nGNOME Wayland currently forces windows to center screen.\nThese settings work on X11 sessions.")
-            position_combo.set_sensitive(False)  # Disable on Wayland since it won't work
+        # Enable positioning if: X11 session OR (Wayland + GNOME extension installed)
+        if is_wayland and not has_extension:
+            position_combo.set_tooltip_text("Note: On Wayland, window positioning requires the GNOME extension.\nInstall the extension from the Advanced tab to enable positioning.")
+            position_combo.set_sensitive(False)  # Disable on Wayland without extension
         else:
-            position_combo.set_tooltip_text("Choose where the recording indicator appears on screen.")
+            if has_extension:
+                position_combo.set_tooltip_text("Choose where the recording indicator appears on screen.\n(Enabled via GNOME extension)")
+            else:
+                position_combo.set_tooltip_text("Choose where the recording indicator appears on screen.")
 
         grid.attach(position_combo, 1, row, 1, 1)
         row += 1
 
-        # Add warning label for Wayland users
-        if is_wayland:
-            warning_label = Gtk.Label(label="  ⚠️ Wayland restricts window positioning - indicator will appear at screen center", xalign=0)
+        # Add warning label for Wayland users without extension
+        if is_wayland and not has_extension:
+            warning_label = Gtk.Label(label="  ⚠️ Install GNOME extension (Advanced tab) to enable positioning on Wayland", xalign=0)
             warning_label.set_line_wrap(True)
             warning_label.set_max_width_chars(60)
             warning_style = warning_label.get_style_context()
@@ -721,7 +810,7 @@ class PreferencesWindow:
         offset_x_spin.set_value(self.config.get("indicator_offset_x", 0))
         offset_x_spin.connect("value-changed", lambda x: self.update_config("indicator_offset_x", int(x.get_value())))
         offset_x_spin.set_tooltip_text("Fine-tune horizontal position.\nPositive = right, Negative = left")
-        if is_wayland:
+        if is_wayland and not has_extension:
             offset_x_spin.set_sensitive(False)
         grid.attach(offset_x_spin, 1, row, 1, 1)
         row += 1
@@ -735,7 +824,7 @@ class PreferencesWindow:
         offset_y_spin.set_value(self.config.get("indicator_offset_y", 0))
         offset_y_spin.connect("value-changed", lambda x: self.update_config("indicator_offset_y", int(x.get_value())))
         offset_y_spin.set_tooltip_text("Fine-tune vertical position.\nPositive = down, Negative = up")
-        if is_wayland:
+        if is_wayland and not has_extension:
             offset_y_spin.set_sensitive(False)
         grid.attach(offset_y_spin, 1, row, 1, 1)
         row += 1
@@ -750,9 +839,17 @@ class PreferencesWindow:
         grid.set_margin_end(20)
         grid.set_margin_top(20)
         grid.set_margin_bottom(20)
-        
+
         row = 0
-        
+
+        # ===== TEXT FORMATTING SECTION =====
+        formatting_header = Gtk.Label()
+        formatting_header.set_markup('<b>Text Formatting</b>')
+        formatting_header.set_xalign(0)
+        formatting_header.set_margin_bottom(10)
+        grid.attach(formatting_header, 0, row, 2, 1)
+        row += 1
+
         # Smart quotes
         quotes_check = Gtk.CheckButton(label="Use smart quotes (" ")")
         quotes_check.set_active(self.config["smart_quotes"])
@@ -794,11 +891,18 @@ class PreferencesWindow:
         grid.attach(inject_combo, 1, row, 1, 1)
         row += 1
 
-        # Add horizontal separator
+        # ===== POWER MANAGEMENT SECTION =====
         separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
         separator.set_margin_top(20)
-        separator.set_margin_bottom(10)
+        separator.set_margin_bottom(15)
         grid.attach(separator, 0, row, 2, 1)
+        row += 1
+
+        power_header = Gtk.Label()
+        power_header.set_markup('<b>Power Management</b>')
+        power_header.set_xalign(0)
+        power_header.set_margin_bottom(10)
+        grid.attach(power_header, 0, row, 2, 1)
         row += 1
 
         # Auto timeout checkbox
@@ -876,6 +980,58 @@ class PreferencesWindow:
 
         # Initial GPU check
         GLib.timeout_add(500, self._initial_gpu_check)
+
+        # Add horizontal separator before Extensions section
+        separator3 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        separator3.set_margin_top(20)
+        separator3.set_margin_bottom(10)
+        grid.attach(separator3, 0, row, 2, 1)
+        row += 1
+
+        # Extensions Section Header
+        extension_header = Gtk.Label()
+        extension_header.set_markup('<b>🎨 GNOME Extension</b>')
+        extension_header.set_xalign(0)
+        extension_header.set_margin_bottom(5)
+        grid.attach(extension_header, 0, row, 2, 1)
+        row += 1
+
+        # Extension Status Label
+        self.extension_status_label = Gtk.Label(label="Checking...", xalign=0)
+        self.extension_status_label.set_margin_start(10)
+        self.extension_status_label.set_margin_bottom(10)
+        grid.attach(self.extension_status_label, 0, row, 2, 1)
+        row += 1
+
+        # Button box for Extension actions
+        ext_button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        ext_button_box.set_margin_start(10)
+
+        # Install Extension button
+        self.install_extension_button = Gtk.Button(label="📦 Install Extension")
+        self.install_extension_button.connect("clicked", self._on_install_extension_clicked)
+        self.install_extension_button.set_tooltip_text("Download and install GNOME Shell extension for panel indicator (~3KB)")
+        self.install_extension_button.set_sensitive(False)
+        ext_button_box.pack_start(self.install_extension_button, False, False, 0)
+
+        # Uninstall Extension button
+        self.uninstall_extension_button = Gtk.Button(label="🗑️ Uninstall Extension")
+        self.uninstall_extension_button.connect("clicked", self._on_uninstall_extension_clicked)
+        self.uninstall_extension_button.set_tooltip_text("Remove GNOME Shell extension")
+        self.uninstall_extension_button.set_sensitive(False)
+        ext_button_box.pack_start(self.uninstall_extension_button, False, False, 0)
+
+        # Restart GNOME Shell info button
+        self.restart_info_button = Gtk.Button(label="ℹ️ Restart Info")
+        self.restart_info_button.connect("clicked", self._on_restart_info_clicked)
+        self.restart_info_button.set_tooltip_text("How to restart GNOME Shell to activate extension")
+        ext_button_box.pack_start(self.restart_info_button, False, False, 0)
+
+        grid.attach(ext_button_box, 0, row, 2, 1)
+        row += 1
+
+        # Initial extension check
+        GLib.timeout_add(500, self._initial_extension_check)
 
         return grid
     
@@ -1439,7 +1595,260 @@ X-GNOME-Autostart-enabled=true
             # Start download in background thread
             thread = threading.Thread(target=download_thread, daemon=True)
             thread.start()
-    
+
+    def _initial_extension_check(self):
+        """Perform initial extension check when preferences window opens."""
+        self._check_extension_status()
+        return False  # Don't repeat
+
+    def _check_extension_status(self):
+        """Check extension status and update UI."""
+        try:
+            # Import extension_helper
+            try:
+                from . import extension_helper
+            except ImportError:
+                self.extension_status_label.set_text("Extension support not available")
+                self.install_extension_button.set_sensitive(False)
+                self.uninstall_extension_button.set_sensitive(False)
+                return
+
+            # Get extension status
+            status = extension_helper.get_extension_status()
+
+            if not status['available']:
+                self.extension_status_label.set_markup('<span color="#9E9E9E">⊘ Not available (requires GNOME desktop)</span>')
+                self.install_extension_button.set_sensitive(False)
+                self.uninstall_extension_button.set_sensitive(False)
+            elif status['installed']:
+                if status['enabled']:
+                    self.extension_status_label.set_markup('<span color="#4CAF50">✓ Extension installed and enabled</span>')
+                else:
+                    self.extension_status_label.set_markup('<span color="#FF9800">⚠ Extension installed but not enabled</span>')
+                self.install_extension_button.set_label("✓ Installed")
+                self.install_extension_button.set_sensitive(False)
+                self.uninstall_extension_button.set_sensitive(True)
+            else:
+                self.extension_status_label.set_markup('<span color="#FF9800">⊘ Extension not installed</span>')
+                self.install_extension_button.set_sensitive(True)
+                self.uninstall_extension_button.set_sensitive(False)
+
+        except Exception as e:
+            self.extension_status_label.set_text(f"Error checking extension: {e}")
+            print(f"Extension check error: {e}")
+
+    def _on_install_extension_clicked(self, button):
+        """Handle Install Extension button click."""
+        try:
+            from . import extension_helper
+        except ImportError:
+            return
+
+        # Show confirmation dialog
+        dialog = Gtk.MessageDialog(
+            transient_for=self.window,
+            flags=0,
+            message_type=Gtk.MessageType.QUESTION,
+            buttons=Gtk.ButtonsType.YES_NO,
+            text="Install GNOME Extension?"
+        )
+        dialog.format_secondary_markup(
+            "<b>TalkType GNOME Shell Extension</b>\n\n"
+            "✨ <b>Features:</b>\n"
+            "  • Panel indicator with recording status\n"
+            "  • Quick model switcher\n"
+            "  • Visual recording feedback\n"
+            "  • Better GNOME integration\n\n"
+            "📦 <b>Size:</b> ~3KB\n\n"
+            "⚠️  <b>Note:</b> You'll need to restart GNOME Shell after installation:\n"
+            "    Press Alt+F2, type 'r', press Enter\n\n"
+            "Install now?"
+        )
+
+        response = dialog.run()
+        dialog.destroy()
+
+        if response == Gtk.ResponseType.YES:
+            # Create progress dialog
+            progress_dialog = Gtk.Dialog(
+                title="Installing Extension",
+                transient_for=self.window,
+                flags=0
+            )
+            progress_dialog.set_default_size(400, 150)
+
+            content = progress_dialog.get_content_area()
+            content.set_margin_top(20)
+            content.set_margin_bottom(20)
+            content.set_margin_start(20)
+            content.set_margin_end(20)
+
+            # Status label
+            status_label = Gtk.Label(label="Preparing installation...")
+            status_label.set_margin_bottom(10)
+            content.pack_start(status_label, False, False, 0)
+
+            # Progress bar
+            progress_bar = Gtk.ProgressBar()
+            progress_bar.set_show_text(True)
+            progress_bar.set_margin_bottom(10)
+            content.pack_start(progress_bar, False, False, 0)
+
+            progress_dialog.show_all()
+
+            button.set_sensitive(False)
+
+            import threading
+
+            def progress_callback(message, percent):
+                """Update progress dialog from download thread."""
+                def update_ui():
+                    status_label.set_text(message)
+                    progress_bar.set_fraction(percent / 100.0)
+                    progress_bar.set_text(f"{percent}%")
+                    return False
+                GLib.idle_add(update_ui)
+
+            def install_thread():
+                """Run installation in background thread."""
+                success = extension_helper.download_and_install_extension(progress_callback)
+
+                def finish_install():
+                    progress_dialog.destroy()
+
+                    if success:
+                        # Refresh extension status
+                        self._check_extension_status()
+
+                        # Show success dialog with restart instructions
+                        success_dialog = Gtk.MessageDialog(
+                            transient_for=self.window,
+                            flags=0,
+                            message_type=Gtk.MessageType.INFO,
+                            buttons=Gtk.ButtonsType.OK,
+                            text="Extension Installed Successfully!"
+                        )
+                        success_dialog.format_secondary_markup(
+                            "<b>Next Steps:</b>\n\n"
+                            "1. Restart GNOME Shell to activate the extension:\n"
+                            "   • Press <b>Alt+F2</b>\n"
+                            "   • Type <b>r</b> and press <b>Enter</b>\n"
+                            "   • OR log out and log back in\n\n"
+                            "2. The TalkType icon will appear in your top panel\n\n"
+                            "3. Click the icon to:\n"
+                            "   • Start/stop dictation service\n"
+                            "   • Switch Whisper models\n"
+                            "   • Access preferences"
+                        )
+                        success_dialog.run()
+                        success_dialog.destroy()
+                    else:
+                        button.set_sensitive(True)
+                        # Show error dialog
+                        error_dialog = Gtk.MessageDialog(
+                            transient_for=self.window,
+                            flags=0,
+                            message_type=Gtk.MessageType.ERROR,
+                            buttons=Gtk.ButtonsType.OK,
+                            text="Installation Failed"
+                        )
+                        error_dialog.format_secondary_text(
+                            "Failed to install GNOME extension.\n\n"
+                            "Please check your internet connection and try again."
+                        )
+                        error_dialog.run()
+                        error_dialog.destroy()
+
+                    return False
+
+                GLib.idle_add(finish_install)
+
+            # Start installation in background thread
+            thread = threading.Thread(target=install_thread, daemon=True)
+            thread.start()
+
+    def _on_uninstall_extension_clicked(self, button):
+        """Handle Uninstall Extension button click."""
+        try:
+            from . import extension_helper
+        except ImportError:
+            return
+
+        # Show confirmation dialog
+        dialog = Gtk.MessageDialog(
+            transient_for=self.window,
+            flags=0,
+            message_type=Gtk.MessageType.WARNING,
+            buttons=Gtk.ButtonsType.YES_NO,
+            text="Uninstall GNOME Extension?"
+        )
+        dialog.format_secondary_text(
+            "This will remove the TalkType GNOME Shell extension.\n\n"
+            "The main TalkType application will continue to work normally.\n\n"
+            "Uninstall?"
+        )
+
+        response = dialog.run()
+        dialog.destroy()
+
+        if response == Gtk.ResponseType.YES:
+            success = extension_helper.uninstall_extension()
+
+            if success:
+                # Refresh extension status
+                self._check_extension_status()
+
+                # Show success message
+                info = Gtk.MessageDialog(
+                    transient_for=self.window,
+                    flags=0,
+                    message_type=Gtk.MessageType.INFO,
+                    buttons=Gtk.ButtonsType.OK,
+                    text="Extension Uninstalled"
+                )
+                info.format_secondary_text(
+                    "The GNOME extension has been removed.\n\n"
+                    "Restart GNOME Shell to complete:\n"
+                    "  Press Alt+F2, type 'r', press Enter"
+                )
+                info.run()
+                info.destroy()
+            else:
+                # Show error
+                error = Gtk.MessageDialog(
+                    transient_for=self.window,
+                    flags=0,
+                    message_type=Gtk.MessageType.ERROR,
+                    buttons=Gtk.ButtonsType.OK,
+                    text="Uninstall Failed"
+                )
+                error.format_secondary_text("Failed to uninstall the extension.")
+                error.run()
+                error.destroy()
+
+    def _on_restart_info_clicked(self, button):
+        """Show information about restarting GNOME Shell."""
+        dialog = Gtk.MessageDialog(
+            transient_for=self.window,
+            flags=0,
+            message_type=Gtk.MessageType.INFO,
+            buttons=Gtk.ButtonsType.OK,
+            text="How to Restart GNOME Shell"
+        )
+        dialog.format_secondary_markup(
+            "<b>To activate or update the extension:</b>\n\n"
+            "<b>Method 1: Quick Restart (Recommended)</b>\n"
+            "1. Press <b>Alt+F2</b>\n"
+            "2. Type <b>r</b> and press <b>Enter</b>\n"
+            "3. GNOME Shell will restart immediately\n\n"
+            "<b>Method 2: Log Out</b>\n"
+            "1. Log out of your session\n"
+            "2. Log back in\n\n"
+            "⚠️  <b>Note:</b> Wayland sessions require Method 2"
+        )
+        dialog.run()
+        dialog.destroy()
+
     def _start_level_monitoring(self):
         """Initialize level monitoring after window is shown."""
         self.start_level_monitoring()

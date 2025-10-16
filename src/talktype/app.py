@@ -93,10 +93,7 @@ def show_hotkey_test_dialog(mode, hold_key, toggle_key):
         # Track tested keys
         tested = {"hold": False, "toggle": False}
 
-        # Buttons
-        button_box = dialog.get_action_area()
-        button_box.set_layout(Gtk.ButtonBoxStyle.EDGE)
-
+        # Buttons (action area is managed automatically by dialog)
         change_keys_btn = Gtk.Button(label="Change Keys...")
         change_keys_btn.connect("clicked", lambda w: dialog.response(Gtk.ResponseType.APPLY))
         change_keys_btn.set_tooltip_text("Open Preferences to change hotkeys")
@@ -381,8 +378,9 @@ class RecordingState:
 # Global recording state
 state = RecordingState()
 
-# Global recording indicator (initialized in main)
+# Global recording indicator and D-Bus service (initialized in main)
 recording_indicator = None
+dbus_service = None
 
 def _beep(enabled: bool, freq=1000, duration=0.15):
     if not enabled:
@@ -1108,27 +1106,164 @@ def main():
     # Input device selection
     input_device_idx = _pick_input_device(cfg.mic)
 
-    # Initialize recording indicator if enabled
-    global recording_indicator
-    if cfg.recording_indicator:
+    # Initialize GTK components (D-Bus service and recording indicator)
+    # Both need the GTK main loop, so we initialize them together
+    global dbus_service, recording_indicator
+    dbus_service = None
+    recording_indicator = None
+    gtk_needed = False
+
+    # Check if we need GTK at all
+    if cfg.recording_indicator or True:  # Always try D-Bus for GNOME extension
+        gtk_needed = True
+
+    if gtk_needed:
         try:
             # Import GTK in the main thread
             import gi
             gi.require_version('Gtk', '3.0')
             from gi.repository import Gtk, GLib
 
-            recording_indicator = RecordingIndicator(
-                position=cfg.indicator_position,
-                offset_x=cfg.indicator_offset_x,
-                offset_y=cfg.indicator_offset_y,
-                size=cfg.indicator_size
-            )
-            print(f"✓ Recording indicator initialized (position: {cfg.indicator_position}, size: {cfg.indicator_size})")
-            logger.info(f"Recording indicator initialized at position: {cfg.indicator_position}, size: {cfg.indicator_size}")
+            # Initialize D-Bus service for GNOME extension integration
+            try:
+                from .dbus_service import TalkTypeDBusService
 
-            # Start GTK main loop in a background thread so it can process our window
+                # Create a simple app instance with necessary attributes for D-Bus
+                class AppInstance:
+                    def __init__(self, cfg):
+                        self.config = cfg
+                        self.is_recording = False
+                        self.service_running = True
+                        self.dbus_service = None
+
+                    def show_preferences(self):
+                        """Open preferences window"""
+                        import subprocess
+                        subprocess.Popen([sys.executable, "-m", "talktype.prefs"])
+
+                    def start_recording(self):
+                        """Start recording - not implemented in D-Bus only mode"""
+                        pass
+
+                    def stop_recording(self):
+                        """Stop recording - not implemented in D-Bus only mode"""
+                        pass
+
+                    def toggle_recording(self):
+                        """Toggle recording - not implemented in D-Bus only mode"""
+                        pass
+
+                    def start_service(self):
+                        """Start the dictation service"""
+                        import subprocess
+                        try:
+                            # Find the dictate script
+                            src_dir = os.path.dirname(__file__)  # usr/src/talktype
+                            usr_dir = os.path.dirname(os.path.dirname(src_dir))  # usr
+                            dictate_script = os.path.join(usr_dir, "bin", "dictate")
+
+                            if os.path.exists(dictate_script):
+                                subprocess.Popen([dictate_script], env=os.environ.copy())
+                                logger.info(f"Started dictation service via {dictate_script}")
+                            else:
+                                subprocess.Popen([sys.executable, "-m", "talktype.app"],
+                                               env=os.environ.copy())
+                                logger.info("Started dictation service via Python module")
+
+                            self.service_running = True
+                            if self.dbus_service:
+                                self.dbus_service.emit_service_state(True)
+                        except Exception as e:
+                            logger.error(f"Failed to start service: {e}", exc_info=True)
+
+                    def stop_service(self):
+                        """Stop the dictation service"""
+                        import subprocess
+                        try:
+                            subprocess.run(["pkill", "-f", "talktype.app"], capture_output=True)
+                            logger.info("Stopped dictation service")
+                            self.service_running = False
+                            if self.dbus_service:
+                                self.dbus_service.emit_service_state(False)
+                        except Exception as e:
+                            logger.error(f"Failed to stop service: {e}", exc_info=True)
+
+                    def set_model(self, model_name: str):
+                        """Change the Whisper model (requires service restart)"""
+                        try:
+                            # Update config file
+                            from .config import load_config
+                            config_path = os.path.expanduser("~/.config/talktype/settings.json")
+
+                            # Read current config
+                            import json
+                            if os.path.exists(config_path):
+                                with open(config_path, 'r') as f:
+                                    config_data = json.load(f)
+                            else:
+                                config_data = {}
+
+                            # Update model
+                            config_data['model'] = model_name
+                            self.config.model = model_name
+
+                            # Write back
+                            os.makedirs(os.path.dirname(config_path), exist_ok=True)
+                            with open(config_path, 'w') as f:
+                                json.dump(config_data, f, indent=2)
+
+                            logger.info(f"Model changed to {model_name} (restart required)")
+
+                            # Emit signal so extension updates
+                            if self.dbus_service:
+                                self.dbus_service.emit_model_changed(model_name)
+
+                            # Note: Actual model change requires service restart
+                            # For now, we just update config and notify
+                        except Exception as e:
+                            logger.error(f"Failed to set model: {e}", exc_info=True)
+
+                    def quit(self):
+                        """Quit the application"""
+                        import subprocess
+                        try:
+                            subprocess.run(["pkill", "-f", "talktype"], capture_output=True)
+                        except Exception:
+                            pass
+                        sys.exit(0)
+
+                app_instance = AppInstance(cfg)
+                dbus_service = TalkTypeDBusService(app_instance)
+                app_instance.dbus_service = dbus_service
+
+                # Emit initial state so extension syncs properly
+                dbus_service.emit_service_state(True)
+                dbus_service.emit_model_changed(cfg.model)
+
+                print("✓ D-Bus service initialized for GNOME extension")
+                logger.info("D-Bus service started successfully")
+            except Exception as e:
+                print(f"⚠️  Failed to initialize D-Bus service: {e}")
+                logger.error(f"D-Bus service initialization failed: {e}", exc_info=True)
+
+            # Initialize recording indicator if enabled
+            if cfg.recording_indicator:
+                try:
+                    recording_indicator = RecordingIndicator(
+                        position=cfg.indicator_position,
+                        offset_x=cfg.indicator_offset_x,
+                        offset_y=cfg.indicator_offset_y,
+                        size=cfg.indicator_size
+                    )
+                    print(f"✓ Recording indicator initialized (position: {cfg.indicator_position}, size: {cfg.indicator_size})")
+                    logger.info(f"Recording indicator initialized at position: {cfg.indicator_position}, size: {cfg.indicator_size}")
+                except Exception as e:
+                    print(f"⚠️  Failed to initialize recording indicator: {e}")
+                    logger.error(f"Recording indicator initialization failed: {e}", exc_info=True)
+
+            # Start single GTK main loop in a background thread for both D-Bus and recording indicator
             def run_gtk_loop():
-                print("🔄 Starting GTK main loop for recording indicator...")
+                print("🔄 Starting GTK main loop...")
                 Gtk.main()
 
             gtk_thread = threading.Thread(target=run_gtk_loop, daemon=True)
@@ -1136,9 +1271,8 @@ def main():
             print("✓ GTK main loop started in background thread")
 
         except Exception as e:
-            print(f"⚠️  Failed to initialize recording indicator: {e}")
-            logger.error(f"Recording indicator initialization failed: {e}", exc_info=True)
-            recording_indicator = None
+            print(f"⚠️  Failed to initialize GTK components: {e}")
+            logger.error(f"GTK initialization failed: {e}", exc_info=True)
 
     global model
     model = build_model(cfg)

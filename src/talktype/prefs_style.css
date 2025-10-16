@@ -1,0 +1,425 @@
+/* TalkType Preferences Stylesheet
+ * Professional dark theme with subtle accents
+ * Color scheme: Muted slate blue with minimal effects
+ */
+
+/* Window background - clean dark */
+window {
+    background: #1e1e1e;
+}
+
+/* Notebook tabs */
+notebook > header {
+    background: #252525;
+    border-bottom: 1px solid #3a3a3a;
+    padding: 8px;
+}
+
+notebook > header > tabs > tab {
+    background: transparent;
+    color: #ababab;
+    border: none;
+    padding: 12px 24px;
+    margin: 0 4px;
+    border-radius: 6px 6px 0 0;
+    transition: all 150ms ease;
+    font-weight: 500;
+}
+
+notebook > header > tabs > tab:hover {
+    background: rgba(80, 140, 200, 0.15);
+    color: #d4d4d4;
+}
+
+notebook > header > tabs > tab:checked {
+    background: #2d2d2d;
+    color: #7eb7dd;
+    border-bottom: 2px solid #5a8fb8;
+    font-weight: 600;
+}
+
+/* Notebook content area */
+notebook > stack {
+    background: #1e1e1e;
+    padding: 20px;
+}
+
+/* Section frames */
+frame {
+    border: 1px solid #3a3a3a;
+    border-radius: 8px;
+    background: #252525;
+    padding: 16px;
+    margin: 8px 0;
+}
+
+frame > border {
+    border: none;
+}
+
+/* Frame labels (section headers) */
+frame > label {
+    color: #7eb7dd;
+    font-weight: 600;
+    font-size: 110%;
+    padding: 0 8px;
+}
+
+/* Regular labels */
+label {
+    color: #d4d4d4;
+}
+
+label:disabled {
+    color: #6a6a6a;
+}
+
+/* Buttons - clean professional style */
+button {
+    background: #3a3a3a;
+    color: #d4d4d4;
+    border: 1px solid #505050;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-weight: 500;
+    transition: all 150ms ease;
+}
+
+button:hover {
+    background: #454545;
+    border-color: #5a8fb8;
+}
+
+button:active {
+    background: #303030;
+}
+
+button:disabled {
+    background: #2a2a2a;
+    color: #5a5a5a;
+    border-color: #353535;
+}
+
+/* Suggested action buttons (Continue, OK, etc.) */
+button.suggested-action {
+    background: #5a8fb8;
+    color: white;
+    border-color: #6a9fc8;
+}
+
+button.suggested-action:hover {
+    background: #6a9fc8;
+    border-color: #7aafd8;
+}
+
+/* Destructive action buttons (Delete, Remove, etc.) */
+button.destructive-action {
+    background: #c24b4b;
+    border-color: #d25b5b;
+    color: white;
+}
+
+button.destructive-action:hover {
+    background: #d25b5b;
+    border-color: #e26b6b;
+}
+
+/* Flat buttons (secondary actions) */
+button.flat {
+    background: transparent;
+    border: 1px solid #505050;
+    color: #7eb7dd;
+}
+
+button.flat:hover {
+    background: rgba(90, 143, 184, 0.15);
+    border-color: #5a8fb8;
+}
+
+/* Entry fields */
+entry {
+    background: #2a2a2a;
+    color: #d4d4d4;
+    border: 1px solid #454545;
+    border-radius: 4px;
+    padding: 8px 12px;
+    transition: all 150ms ease;
+}
+
+entry:focus {
+    background: #303030;
+    border-color: #5a8fb8;
+}
+
+entry:disabled {
+    background: #252525;
+    color: #5a5a5a;
+    border-color: #353535;
+}
+
+/* ComboBox / Dropdown */
+combobox button {
+    background: #2a2a2a;
+    border: 1px solid #454545;
+}
+
+combobox button:hover {
+    background: #303030;
+    border-color: #5a8fb8;
+}
+
+/* Switches */
+switch {
+    background: #3a3a3a;
+    border: 1px solid #505050;
+    border-radius: 14px;
+    min-width: 48px;
+    min-height: 28px;
+}
+
+switch:checked {
+    background: #5a8fb8;
+    border-color: #6a9fc8;
+}
+
+switch slider {
+    background: white;
+    border-radius: 50%;
+    margin: 2px;
+    min-width: 22px;
+    min-height: 22px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+/* Checkboxes */
+checkbutton check {
+    background: #2a2a2a;
+    border: 2px solid #505050;
+    border-radius: 4px;
+    min-width: 20px;
+    min-height: 20px;
+}
+
+checkbutton check:checked {
+    background: #5a8fb8;
+    border-color: #6a9fc8;
+    -gtk-icon-source: -gtk-icontheme("object-select-symbolic");
+}
+
+checkbutton check:hover {
+    border-color: #5a8fb8;
+}
+
+/* Radio buttons */
+radiobutton radio {
+    background: #2a2a2a;
+    border: 2px solid #505050;
+    border-radius: 50%;
+    min-width: 20px;
+    min-height: 20px;
+}
+
+radiobutton radio:checked {
+    background: #5a8fb8;
+    border-color: #6a9fc8;
+    -gtk-icon-source: -gtk-icontheme("object-select-symbolic");
+}
+
+radiobutton radio:hover {
+    border-color: #5a8fb8;
+}
+
+/* Scale / Slider */
+scale trough {
+    background: #3a3a3a;
+    border: 1px solid #454545;
+    border-radius: 4px;
+    min-height: 8px;
+}
+
+scale highlight {
+    background: #5a8fb8;
+    border-radius: 4px;
+}
+
+scale slider {
+    background: white;
+    border: 2px solid #5a8fb8;
+    border-radius: 50%;
+    min-width: 18px;
+    min-height: 18px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+scale slider:hover {
+    border-color: #6a9fc8;
+}
+
+/* Spinbutton */
+spinbutton {
+    background: #2a2a2a;
+    border: 1px solid #454545;
+    border-radius: 4px;
+    color: #d4d4d4;
+}
+
+spinbutton:focus {
+    border-color: #5a8fb8;
+}
+
+spinbutton button {
+    background: transparent;
+    border: none;
+    color: #7eb7dd;
+}
+
+spinbutton button:hover {
+    background: rgba(90, 143, 184, 0.2);
+}
+
+/* Progress bar */
+progressbar trough {
+    background: #3a3a3a;
+    border: 1px solid #454545;
+    border-radius: 4px;
+    min-height: 8px;
+}
+
+progressbar progress {
+    background: #5a8fb8;
+    border-radius: 4px;
+}
+
+/* Scrollbars */
+scrollbar {
+    background: transparent;
+}
+
+scrollbar slider {
+    background: rgba(90, 143, 184, 0.3);
+    border-radius: 8px;
+    min-width: 12px;
+    min-height: 40px;
+}
+
+scrollbar slider:hover {
+    background: rgba(90, 143, 184, 0.5);
+}
+
+/* Separator */
+separator {
+    background: #3a3a3a;
+    min-width: 1px;
+    min-height: 1px;
+}
+
+/* Tooltips */
+tooltip {
+    background: #2a2a2a;
+    color: #d4d4d4;
+    border: 1px solid #505050;
+    border-radius: 4px;
+    padding: 6px 10px;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5);
+}
+
+tooltip * {
+    background: transparent;
+    color: inherit;
+}
+
+/* Info bars */
+infobar {
+    border-radius: 6px;
+    padding: 12px;
+    margin: 8px;
+}
+
+infobar.info {
+    background: rgba(90, 143, 184, 0.15);
+    border: 1px solid rgba(90, 143, 184, 0.3);
+}
+
+infobar.warning {
+    background: rgba(230, 170, 60, 0.15);
+    border: 1px solid rgba(230, 170, 60, 0.3);
+}
+
+infobar.error {
+    background: rgba(194, 75, 75, 0.15);
+    border: 1px solid rgba(194, 75, 75, 0.3);
+}
+
+/* List boxes */
+list {
+    background: #2a2a2a;
+    border: 1px solid #454545;
+    border-radius: 6px;
+}
+
+list row {
+    padding: 8px;
+    border-radius: 4px;
+    color: #d4d4d4;
+}
+
+list row:hover {
+    background: rgba(90, 143, 184, 0.15);
+}
+
+list row:selected {
+    background: #5a8fb8;
+    color: white;
+}
+
+/* Message dialogs */
+messagedialog {
+    background: #1e1e1e;
+}
+
+messagedialog .dialog-action-area button {
+    margin: 4px;
+}
+
+/* Accent text (headers, important info) */
+.accent {
+    color: #7eb7dd;
+    font-weight: 600;
+}
+
+/* Success messages */
+.success {
+    color: #6db896;
+}
+
+/* Warning text */
+.warning {
+    color: #e6aa3c;
+}
+
+/* Error text */
+.error {
+    color: #d25b5b;
+}
+
+/* Dim text */
+.dim-label {
+    opacity: 0.7;
+}
+
+/* Section headers within tabs */
+label {
+    color: #d4d4d4;
+}
+
+/* Style bold section headers */
+grid > label {
+    color: #d4d4d4;
+}
+
+/* Section headers should stand out more */
+notebook > stack > grid > label:first-child,
+grid > label[xalign="0"] {
+    color: #7eb7dd;
+    font-weight: 600;
+}
