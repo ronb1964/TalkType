@@ -185,6 +185,11 @@ class TalkTypeIndicator extends PanelMenu.Button {
         this._modelDisplayItem.label.style = 'font-weight: bold;';
         this.menu.addMenuItem(this._modelDisplayItem);
 
+        // Device mode display (read-only)
+        this._deviceDisplayItem = new PopupMenu.PopupMenuItem('Device: Loading...', {reactive: false});
+        this._deviceDisplayItem.label.style = 'font-weight: bold;';
+        this.menu.addMenuItem(this._deviceDisplayItem);
+
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
         // Preferences
@@ -226,6 +231,7 @@ class TalkTypeIndicator extends PanelMenu.Button {
             this._isRecording = status.recording ? status.recording.deep_unpack() : false;
             this._isServiceRunning = status.service_running ? status.service_running.deep_unpack() : false;
             this._currentModel = status.model ? status.model.deep_unpack() : 'unknown';
+            this._currentDevice = status.device ? status.device.deep_unpack() : 'unknown';
 
             this._updateIcon();
             this._updateMenu();
@@ -269,6 +275,7 @@ class TalkTypeIndicator extends PanelMenu.Button {
         // Update active model display
         if (!this._dbusAvailable) {
             this._modelDisplayItem.label.text = 'TalkType Not Running';
+            this._deviceDisplayItem.label.text = 'Device: Unknown';
         } else {
             const modelNames = {
                 'tiny': 'Tiny (fastest)',
@@ -280,6 +287,14 @@ class TalkTypeIndicator extends PanelMenu.Button {
             };
             const displayName = modelNames[this._currentModel] || this._currentModel;
             this._modelDisplayItem.label.text = `Active Model: ${displayName}`;
+
+            // Update device display
+            const deviceNames = {
+                'cpu': 'CPU',
+                'cuda': 'GPU (CUDA)'
+            };
+            const deviceDisplay = deviceNames[this._currentDevice] || this._currentDevice.toUpperCase();
+            this._deviceDisplayItem.label.text = `Device: ${deviceDisplay}`;
         }
     }
 

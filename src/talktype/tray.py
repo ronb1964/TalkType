@@ -329,9 +329,18 @@ class DictationTray:
                 }
                 display_name = model_names.get(cfg.model, cfg.model)
                 self.model_display_item.set_label(f"Active Model: {display_name}")
+
+                # Update device display
+                device_names = {
+                    'cpu': 'CPU',
+                    'cuda': 'GPU (CUDA)'
+                }
+                device_display = device_names.get(cfg.device, cfg.device.upper())
+                self.device_display_item.set_label(f"Device: {device_display}")
             except Exception as e:
-                logger.error(f"Failed to update model display: {e}")
+                logger.error(f"Failed to update model/device display: {e}")
                 self.model_display_item.set_label("Active Model: Unknown")
+                self.device_display_item.set_label("Device: Unknown")
     
     def open_preferences(self, _):
         """Launch preferences window."""
@@ -690,6 +699,10 @@ Result: Use the period command
         self.model_display_item = Gtk.MenuItem(label="Active Model: Loading...")
         self.model_display_item.set_sensitive(False)
 
+        # Device mode display (non-clickable)
+        self.device_display_item = Gtk.MenuItem(label="Device: Loading...")
+        self.device_display_item.set_sensitive(False)
+
         # Menu items
         prefs_item = Gtk.MenuItem(label="Preferences...")
         help_item = Gtk.MenuItem(label="Help...")
@@ -704,6 +717,7 @@ Result: Use the period command
             self.service_toggle,
             Gtk.SeparatorMenuItem(),
             self.model_display_item,
+            self.device_display_item,
             Gtk.SeparatorMenuItem(),
             prefs_item,
             help_item,
