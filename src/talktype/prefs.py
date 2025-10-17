@@ -1010,7 +1010,10 @@ class PreferencesWindow:
         # Install Extension button
         self.install_extension_button = Gtk.Button(label="📦 Install Extension")
         self.install_extension_button.connect("clicked", self._on_install_extension_clicked)
-        self.install_extension_button.set_tooltip_text("Download and install GNOME Shell extension for panel indicator (~3KB)")
+        self.install_extension_button.set_tooltip_text(
+            "Download and install GNOME Shell extension (~3KB)\n"
+            "Adds panel indicator, service controls, and enables recording indicator positioning on Wayland"
+        )
         self.install_extension_button.set_sensitive(False)
         ext_button_box.pack_start(self.install_extension_button, False, False, 0)
 
@@ -2260,19 +2263,27 @@ X-GNOME-Autostart-enabled=true
 <b>✨ TalkType is ready to use!</b>
 The dictation service starts automatically when you launch TalkType.
 
+<b>🎉 First-Run Setup</b>
+On first launch, TalkType shows a welcome dialog that:
+• Tests your hotkeys (F8 and F9) to ensure they work
+• Offers to install GNOME extension (if on GNOME desktop)
+• Offers to download CUDA libraries (if NVIDIA GPU detected)
+• Adapts automatically to your system capabilities
+
 <b>1. Begin Dictating</b>
 Press <b>F8</b> (push-to-talk) or <b>F9</b> (toggle mode) to start
 • <b>F8:</b> Hold to record, release to stop
 • <b>F9:</b> Press once to start, press again to stop
-• <b>Recording Indicator:</b> A red microphone icon appears during active dictation
+• <b>Recording Indicator:</b> An animated microphone appears during active dictation
 
 <b>2. Configure Settings</b>
-Right-click → "Preferences" to customize:
-• Hotkeys (F8/F9 or custom keys)
+Right-click the tray icon → "Preferences" to customize:
+• Hotkeys (F8/F9 or custom keys - test them in the dialog)
 • AI model (tiny to large-v3)
 • Language (auto-detect or select manually)
 • GPU acceleration (if you have NVIDIA GPU)
 • Text input method (keyboard or clipboard)
+• Recording indicator size and position
 
 <b>3. Dictate!</b>
 Press your hotkey and speak clearly at a normal pace.
@@ -2280,7 +2291,7 @@ Text will be inserted where your cursor is located.
 
 <b>💡 Auto-Timeout Feature:</b>
 The service automatically pauses after 5 minutes of inactivity to save
-system resources. Adjust this in Preferences → Advanced.
+battery and system resources. Adjust this in Preferences → Advanced.
 
 <b>Need more help?</b> Check the other tabs for detailed information.''')
 
@@ -2366,10 +2377,21 @@ if you need better accuracy for professional or technical dictation.''')
         # Tab 4: Advanced
         create_tab("⚙️ Advanced", '''<span size="large"><b>Advanced Features</b></span>
 
+<b>🎨 GNOME Extension (GNOME Desktop Only)</b>
+If you're on GNOME, install the native extension for enhanced integration:
+• <b>Panel Indicator:</b> Shows recording status and current model in the top bar
+• <b>Quick Controls:</b> Start/stop service and access preferences from panel menu
+• <b>Better Integration:</b> Native GNOME look and feel
+• <b>Wayland Positioning:</b> Enables custom recording indicator positioning on Wayland
+  (The recording indicator works on all systems, but positioning requires the extension on Wayland)
+• <b>Installation:</b> Offered during first run, or install later from Preferences → Advanced
+• <b>Size:</b> Only ~3KB, very lightweight
+
 <b>🎮 GPU Acceleration</b>
 If you have an NVIDIA graphics card, enable GPU acceleration for 3-5x faster transcription:
 • On first run with NVIDIA GPU, you'll be offered to download CUDA libraries (~800MB)
-• After download completes, click OK or Apply in Preferences to activate GPU mode
+• Download shows real-time progress with visual progress bar
+• After download, GPU mode is automatically enabled
 • Device automatically switches to "CUDA (GPU)" - no manual selection needed
 • GPU mode significantly reduces transcription time (3-5x faster)
 • Allows use of larger models without slowdown

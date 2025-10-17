@@ -291,6 +291,11 @@ class WelcomeDialog:
         ext_label.set_markup('📦 <b>Install GNOME Extension</b> <span size="small">(~3KB)</span>')
         ext_label.set_halign(Gtk.Align.START)
         self.extension_check.add(ext_label)
+        self.extension_check.set_tooltip_text(
+            "Install native GNOME Shell extension for enhanced integration.\n"
+            "Adds panel indicator, service controls, and enables custom recording indicator positioning on Wayland.\n"
+            "Lightweight (~3KB) and requires logging out/in after installation."
+        )
         ext_box.pack_start(self.extension_check, False, False, 0)
 
         # GNOME detected badge
@@ -351,6 +356,12 @@ class WelcomeDialog:
         cuda_label.set_markup('📦 <b>Download CUDA Libraries</b> <span size="small">(~800MB)</span>')
         cuda_label.set_halign(Gtk.Align.START)
         self.cuda_check.add(cuda_label)
+        self.cuda_check.set_tooltip_text(
+            "Download NVIDIA CUDA libraries for GPU-accelerated transcription.\n"
+            "Provides 3-5x faster performance with your NVIDIA graphics card.\n"
+            "Download is ~800MB and may take a few minutes depending on connection speed.\n"
+            "GPU mode will be automatically enabled after successful download."
+        )
         cuda_box.pack_start(self.cuda_check, False, False, 0)
 
         # NVIDIA detected badge
@@ -473,17 +484,17 @@ def show_welcome_dialog(parent=None):
 def show_hotkey_test_dialog():
     """
     Show hotkey testing dialog for first-run experience.
-    Simplified version that just shows the test interface.
+    Allows users to test and customize both hotkeys in one place.
 
     Returns:
         bool: True if user completed the test
     """
-    from talktype.config import Config
+    from talktype.config import load_config, save_config
 
-    config = Config()
+    config = load_config()
 
     dialog = Gtk.Dialog(title="Test Your Hotkeys")
-    dialog.set_default_size(450, 280)
+    dialog.set_default_size(550, 420)
     dialog.set_modal(True)
     dialog.set_position(Gtk.WindowPosition.CENTER)
 
@@ -496,64 +507,160 @@ def show_hotkey_test_dialog():
 
     # Instructions
     instructions = Gtk.Label()
-    instructions.set_markup('<span size="large"><b>Test Your Hotkeys</b></span>\n\nPress each hotkey to verify it works:')
+    instructions.set_markup('<span size="large"><b>Configure Your Hotkeys</b></span>\n\nTest both hotkeys to ensure they work on your system:')
     instructions.set_xalign(0)
     content.pack_start(instructions, False, False, 0)
 
-    # Get current hotkeys
-    hold_key = config.get("hotkey", "F8")
-    toggle_key = config.get("toggle_hotkey", "F9")
-    mode = config.get("mode", "hold")
-
-    # Test status labels
-    status_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-    status_box.set_margin_top(10)
-
-    hold_label = Gtk.Label()
-    hold_label.set_markup(f'<b>{hold_key}</b> (Push-to-talk): <span color="#999999">Not tested</span>')
-    hold_label.set_xalign(0)
-    status_box.pack_start(hold_label, False, False, 0)
-
-    toggle_label = Gtk.Label()
-    if mode == "toggle":
-        toggle_label.set_markup(f'<b>{toggle_key}</b> (Toggle mode): <span color="#999999">Not tested</span>')
-    else:
-        toggle_label.set_markup(f'<b>{toggle_key}</b> (Toggle mode): <span color="#999999">Not used in Hold mode</span>')
-    toggle_label.set_xalign(0)
-    status_box.pack_start(toggle_label, False, False, 0)
-
-    content.pack_start(status_box, False, False, 0)
-
-    # Track tested keys
+    # State variables
+    current_hold_key = [config.hotkey]
+    current_toggle_key = [config.toggle_hotkey]
     tested_keys = {"hold": False, "toggle": False}
+    capturing_key = [None]  # "hold", "toggle", or None
+
+    # Hotkey configuration box with buttons
+    hotkey_config_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+    hotkey_config_box.set_margin_top(10)
+
+    # Push-to-talk row
+    hold_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+    hold_label = Gtk.Label()
+    hold_label.set_markup(f'<b>Push-to-talk:</b> {current_hold_key[0]}')
+    hold_label.set_xalign(0)
+    hold_label.set_size_request(200, -1)
+    hold_row.pack_start(hold_label, False, False, 0)
+
+    hold_change_btn = Gtk.Button(label="Change Key")
+    hold_change_btn.set_size_request(120, -1)
+    hold_row.pack_start(hold_change_btn, False, False, 0)
+
+    hold_status = Gtk.Label()
+    hold_status.set_markup('<span color="#999999">Not tested</span>')
+    hold_status.set_xalign(0)
+    hold_row.pack_start(hold_status, True, True, 0)
+
+    hotkey_config_box.pack_start(hold_row, False, False, 0)
+
+    # Toggle mode row
+    toggle_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+    toggle_label = Gtk.Label()
+    toggle_label.set_markup(f'<b>Toggle mode:</b> {current_toggle_key[0]}')
+    toggle_label.set_xalign(0)
+    toggle_label.set_size_request(200, -1)
+    toggle_row.pack_start(toggle_label, False, False, 0)
+
+    toggle_change_btn = Gtk.Button(label="Change Key")
+    toggle_change_btn.set_size_request(120, -1)
+    toggle_row.pack_start(toggle_change_btn, False, False, 0)
+
+    toggle_status = Gtk.Label()
+    toggle_status.set_markup('<span color="#999999">Not tested</span>')
+    toggle_status.set_xalign(0)
+    toggle_row.pack_start(toggle_status, True, True, 0)
+
+    hotkey_config_box.pack_start(toggle_row, False, False, 0)
+
+    content.pack_start(hotkey_config_box, False, False, 0)
+
+    # Capture instruction (hidden initially)
+    capture_instruction = Gtk.Label()
+    capture_instruction.set_markup('<span background="#FFA500" color="white"> Press any key to set hotkey... (ESC to cancel) </span>')
+    capture_instruction.set_margin_top(10)
+    capture_instruction.set_no_show_all(True)
+    content.pack_start(capture_instruction, False, False, 0)
 
     # Key press event handler
     def on_key_press(widget, event):
         keyname = Gtk.accelerator_name(event.keyval, 0)
 
-        if keyname == hold_key:
+        # If we're capturing a new key
+        if capturing_key[0]:
+            if keyname == "Escape":
+                # Cancel capture
+                capturing_key[0] = None
+                capture_instruction.hide()
+                hold_change_btn.set_sensitive(True)
+                toggle_change_btn.set_sensitive(True)
+                return True
+
+            # Update the appropriate key
+            if capturing_key[0] == "hold":
+                current_hold_key[0] = keyname
+                hold_label.set_markup(f'<b>Push-to-talk:</b> {keyname}')
+                tested_keys["hold"] = True
+                hold_status.set_markup('<span color="#4CAF50">✓ Working!</span>')
+            elif capturing_key[0] == "toggle":
+                current_toggle_key[0] = keyname
+                toggle_label.set_markup(f'<b>Toggle mode:</b> {keyname}')
+                tested_keys["toggle"] = True
+                toggle_status.set_markup('<span color="#4CAF50">✓ Working!</span>')
+
+            capturing_key[0] = None
+            capture_instruction.hide()
+            hold_change_btn.set_sensitive(True)
+            toggle_change_btn.set_sensitive(True)
+            return True
+
+        # Normal testing mode
+        if keyname == current_hold_key[0]:
             tested_keys["hold"] = True
-            hold_label.set_markup(f'<b>{hold_key}</b> (Push-to-talk): <span color="#4CAF50">✓ Working!</span>')
-        elif keyname == toggle_key and mode == "toggle":
+            hold_status.set_markup('<span color="#4CAF50">✓ Working!</span>')
+        elif keyname == current_toggle_key[0]:
             tested_keys["toggle"] = True
-            toggle_label.set_markup(f'<b>{toggle_key}</b> (Toggle mode): <span color="#4CAF50">✓ Working!</span>')
+            toggle_status.set_markup('<span color="#4CAF50">✓ Working!</span>')
 
-        return True  # Stop event propagation
+        return True
 
-    # Connect key press handler to dialog
+    # Change button handlers
+    def on_change_hold(button):
+        capturing_key[0] = "hold"
+        capture_instruction.show()
+        hold_change_btn.set_sensitive(False)
+        toggle_change_btn.set_sensitive(False)
+
+    def on_change_toggle(button):
+        capturing_key[0] = "toggle"
+        capture_instruction.show()
+        hold_change_btn.set_sensitive(False)
+        toggle_change_btn.set_sensitive(False)
+
+    hold_change_btn.connect("clicked", on_change_hold)
+    toggle_change_btn.connect("clicked", on_change_toggle)
+
+    # Connect key press handler
     dialog.connect("key-press-event", on_key_press)
 
     # Info label
     info_label = Gtk.Label()
-    info_label.set_markup('<i>Note: If a key doesn\'t work, it may be used by another application.\nYou can change hotkeys anytime in Preferences → Hotkeys.</i>')
+    info_label.set_markup(
+        '<span size="small"><i>💡 Both hotkeys will be saved to your configuration.\n'
+        'You can change between Push-to-talk and Toggle mode anytime in Preferences.</i></span>'
+    )
     info_label.set_line_wrap(True)
     info_label.set_xalign(0)
-    info_label.set_margin_top(10)
+    info_label.set_margin_top(15)
     content.pack_start(info_label, False, False, 0)
+
+    # Note about conflicts
+    conflict_label = Gtk.Label()
+    conflict_label.set_markup(
+        '<span size="small"><i>⚠️ If a key doesn\'t respond, it may be used by another application.</i></span>'
+    )
+    conflict_label.set_line_wrap(True)
+    conflict_label.set_xalign(0)
+    conflict_label.set_opacity(0.8)
+    content.pack_start(conflict_label, False, False, 0)
 
     # Continue button
     continue_button = Gtk.Button(label="Continue")
-    continue_button.connect("clicked", lambda w: dialog.response(Gtk.ResponseType.OK))
+
+    def on_continue(button):
+        # Save the keys to config
+        config.hotkey = current_hold_key[0]
+        config.toggle_hotkey = current_toggle_key[0]
+        save_config(config)
+        dialog.response(Gtk.ResponseType.OK)
+
+    continue_button.connect("clicked", on_continue)
     continue_button.get_style_context().add_class("suggested-action")
     dialog.add_action_widget(continue_button, Gtk.ResponseType.OK)
 
@@ -584,28 +691,87 @@ def show_welcome_and_install():
         logger.info("User requested CUDA libraries download")
         try:
             from talktype import cuda_helper
+            from gi.repository import GLib
+            import threading
 
-            # Show progress dialog
-            progress_dialog = Gtk.MessageDialog(
-                message_type=Gtk.MessageType.INFO,
-                buttons=Gtk.ButtonsType.NONE,
-                text="Downloading CUDA Libraries..."
-            )
-            progress_dialog.format_secondary_text(
-                "Please wait while we download CUDA libraries (~800MB).\n"
-                "This may take several minutes depending on your connection..."
-            )
+            # Create progress dialog with progress bar
+            progress_dialog = Gtk.Dialog(title="Downloading CUDA Libraries")
+            progress_dialog.set_default_size(500, 150)
+            progress_dialog.set_modal(True)
+            progress_dialog.set_position(Gtk.WindowPosition.CENTER)
+
+            content = progress_dialog.get_content_area()
+            content.set_margin_top(20)
+            content.set_margin_bottom(20)
+            content.set_margin_start(30)
+            content.set_margin_end(30)
+            content.set_spacing(15)
+
+            # Title
+            title_label = Gtk.Label()
+            title_label.set_markup('<span size="large"><b>Downloading CUDA Libraries</b></span>')
+            content.pack_start(title_label, False, False, 0)
+
+            # Status label
+            status_label = Gtk.Label()
+            status_label.set_markup('<span>Initializing download... (~800MB)</span>')
+            status_label.set_line_wrap(True)
+            content.pack_start(status_label, False, False, 0)
+
+            # Progress bar
+            progress_bar = Gtk.ProgressBar()
+            progress_bar.set_show_text(True)
+            content.pack_start(progress_bar, False, False, 0)
+
+            # Info label
+            info_label = Gtk.Label()
+            info_label.set_markup('<span size="small"><i>This may take several minutes depending on your connection...</i></span>')
+            info_label.set_opacity(0.7)
+            content.pack_start(info_label, False, False, 0)
+
             progress_dialog.show_all()
 
-            # Process pending events to show the dialog
-            while Gtk.events_pending():
-                Gtk.main_iteration()
+            # Download result
+            download_success = [False]
 
-            # Attempt download
-            success = cuda_helper.download_cuda_libraries()
-            progress_dialog.destroy()
+            def update_progress(message, percent):
+                """Update progress bar and status from callback"""
+                def update_ui():
+                    progress_bar.set_fraction(percent / 100.0)
+                    progress_bar.set_text(f"{percent}%")
+                    status_label.set_markup(f'<span>{message}</span>')
+                    return False
+                GLib.idle_add(update_ui)
+
+            def do_download():
+                """Run download in background thread"""
+                download_success[0] = cuda_helper.download_cuda_libraries(progress_callback=update_progress)
+                GLib.idle_add(progress_dialog.destroy)
+
+            # Start download in background thread
+            download_thread = threading.Thread(target=do_download)
+            download_thread.start()
+
+            # Run dialog event loop
+            progress_dialog.run()
+
+            # Wait for thread to complete
+            download_thread.join()
+
+            success = download_success[0]
 
             if success:
+                # Automatically enable GPU mode in config
+                try:
+                    from talktype.config import load_config, save_config
+                    config = load_config()
+                    if config.device != "cuda":
+                        config.device = "cuda"
+                        save_config(config)
+                        logger.info("✅ Automatically enabled GPU mode in config")
+                except Exception as e:
+                    logger.warning(f"Could not auto-enable GPU mode in config: {e}")
+
                 # Show success message
                 msg = Gtk.MessageDialog(
                     message_type=Gtk.MessageType.INFO,
@@ -614,7 +780,7 @@ def show_welcome_and_install():
                 )
                 msg.format_secondary_text(
                     "GPU acceleration is now available.\n\n"
-                    "TalkType will use your NVIDIA GPU for faster transcription."
+                    "TalkType has been automatically configured to use your NVIDIA GPU for faster transcription."
                 )
                 msg.run()
                 msg.destroy()
