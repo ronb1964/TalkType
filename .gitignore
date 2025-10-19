@@ -120,12 +120,19 @@ dmypy.json
 *.AppImage
 appimage-builder
 appimagetool
-
-# AppDir build directory (keep structure but ignore large binaries)
-AppDir/usr/
+AppDir/
+squashfs-root/
+appimagetool-extracted/
+*.log
 
 # CUDA wheel files (too large for GitHub)
 cuda_wheels/
+
+# Archive folder (never commit)
+archive/
+
+# Old AppImage versions (keep only latest zsync)
+TalkType-v0.3.[0-7]-*.AppImage*
 
 # Icon files (use only what's in src)
 icons/

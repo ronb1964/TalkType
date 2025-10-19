@@ -1,9 +1,0 @@
-[Desktop Entry]
-Name=TalkType
-Comment=AI-powered speech recognition and dictation
-Exec=AppRun tray
-Icon=io.github.ronb1964.TalkType
-Type=Application
-Categories=Utility;AudioVideo;Audio;Accessibility;
-Terminal=false
-StartupNotify=false
