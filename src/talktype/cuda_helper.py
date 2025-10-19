@@ -117,28 +117,32 @@ def has_cuda_libraries():
 
 def get_appdir_cuda_path():
     """Get the path where CUDA libraries should be stored."""
-    return os.path.expanduser("~/.local/share/TalkType/cuda")
+    from .config import get_data_dir
+    return os.path.join(get_data_dir(), "cuda")
 
 def is_first_run():
     """Check if this is the first time the app is run."""
-    flag_file = os.path.expanduser("~/.local/share/TalkType/.first_run_done")
+    from .config import get_data_dir
+    flag_file = os.path.join(get_data_dir(), ".first_run_done")
     return not os.path.exists(flag_file)
 
 def mark_first_run_complete():
     """Mark that the first run has been completed."""
-    flag_file = os.path.expanduser("~/.local/share/TalkType/.first_run_done")
+    from .config import get_data_dir
+    flag_file = os.path.join(get_data_dir(), ".first_run_done")
     os.makedirs(os.path.dirname(flag_file), exist_ok=True)
     with open(flag_file, 'w') as f:
         f.write('done')
 
-def download_cuda_libraries(progress_callback=None):
+def download_cuda_libraries(progress_callback=None, cancel_event=None):
     """
     Download CUDA libraries for GPU acceleration.
     Downloads wheels directly from PyPI and extracts them.
-    
+
     Args:
         progress_callback: Optional function(message, percent) for progress updates
-    
+        cancel_event: Optional threading.Event() to signal cancellation
+
     Returns:
         bool: True if successful, False otherwise
     """
@@ -161,10 +165,15 @@ def download_cuda_libraries(progress_callback=None):
         with tempfile.TemporaryDirectory() as temp_dir:
             # Use pip to download packages
             for pkg_idx, pkg_name in enumerate(cuda_packages):
+                # Check for cancellation
+                if cancel_event and cancel_event.is_set():
+                    logger.info("Download cancelled by user")
+                    return False
+
                 if progress_callback:
                     percent = int((pkg_idx / len(cuda_packages)) * 70)
                     progress_callback(f"Downloading {pkg_name}...", percent)
-                
+
                 logger.info(f"📥 Downloading {pkg_name}...")
                 
                 try:
@@ -209,17 +218,27 @@ def download_cuda_libraries(progress_callback=None):
                 except Exception as e:
                     logger.error(f"Failed to download {pkg_name}: {e}")
                     return False
-            
+
+            # Check for cancellation before extraction
+            if cancel_event and cancel_event.is_set():
+                logger.info("Download cancelled by user before extraction")
+                return False
+
             if progress_callback:
                 progress_callback("Extracting CUDA libraries...", 70)
-            
+
             # Extract .so files from wheels
             wheel_files = [f for f in os.listdir(temp_dir) if f.endswith('.whl')]
             
             for i, wheel_file in enumerate(wheel_files):
+                # Check for cancellation during extraction
+                if cancel_event and cancel_event.is_set():
+                    logger.info("Download cancelled by user during extraction")
+                    return False
+
                 wheel_path = os.path.join(temp_dir, wheel_file)
                 logger.info(f"📦 Extracting {wheel_file}...")
-                
+
                 with zipfile.ZipFile(wheel_path, 'r') as zip_ref:
                     # Get list of .so files to extract for progress tracking
                     so_files = [member for member in zip_ref.namelist() 
@@ -276,6 +295,164 @@ def download_cuda_libraries(progress_callback=None):
     except Exception as e:
         logger.error(f"Error downloading CUDA libraries: {e}", exc_info=True)
         return False
+
+def show_cuda_download_dialog(parent=None, on_success_callback=None):
+    """
+    Show modern CUDA download dialog with progress bar.
+    This is the unified dialog used by both welcome screen and preferences.
+
+    Args:
+        parent: Optional parent window for the dialog
+        on_success_callback: Optional callback function to run after successful download
+                           (e.g., to refresh UI elements in preferences)
+
+    Returns:
+        bool: True if download was successful, False otherwise, None if cancelled
+    """
+    import threading
+    from gi.repository import GLib
+
+    # Create progress dialog
+    progress_dialog = Gtk.Dialog(title="Downloading CUDA Libraries")
+    progress_dialog.set_default_size(500, 150)
+    progress_dialog.set_modal(True)
+    progress_dialog.set_position(Gtk.WindowPosition.CENTER)
+
+    if parent:
+        progress_dialog.set_transient_for(parent)
+
+    content = progress_dialog.get_content_area()
+    content.set_margin_top(20)
+    content.set_margin_bottom(20)
+    content.set_margin_start(30)
+    content.set_margin_end(30)
+    content.set_spacing(15)
+
+    # Title
+    title_label = Gtk.Label()
+    title_label.set_markup('<span size="large"><b>Downloading CUDA Libraries</b></span>')
+    content.pack_start(title_label, False, False, 0)
+
+    # Status label
+    status_label = Gtk.Label()
+    status_label.set_markup('<span>Initializing download... (~800MB)</span>')
+    status_label.set_line_wrap(True)
+    content.pack_start(status_label, False, False, 0)
+
+    # Progress bar
+    progress_bar = Gtk.ProgressBar()
+    progress_bar.set_show_text(True)
+    content.pack_start(progress_bar, False, False, 0)
+
+    # Info label
+    info_label = Gtk.Label()
+    info_label.set_markup('<span size="small"><i>This may take several minutes depending on your connection...</i></span>')
+    info_label.set_opacity(0.7)
+    content.pack_start(info_label, False, False, 0)
+
+    # Add Cancel button
+    cancel_button = Gtk.Button(label="Cancel")
+    progress_dialog.add_action_widget(cancel_button, Gtk.ResponseType.CANCEL)
+
+    progress_dialog.show_all()
+
+    # Cancellation flag and download result
+    cancel_event = threading.Event()
+    download_success = [False]
+    download_cancelled = [False]
+
+    def update_progress(message, percent):
+        """Update progress bar and status from callback"""
+        def update_ui():
+            progress_bar.set_fraction(percent / 100.0)
+            progress_bar.set_text(f"{percent}%")
+            status_label.set_markup(f'<span>{message}</span>')
+            return False
+        GLib.idle_add(update_ui)
+
+    def do_download():
+        """Run download in background thread"""
+        download_success[0] = download_cuda_libraries(
+            progress_callback=update_progress,
+            cancel_event=cancel_event
+        )
+        def close_dialog():
+            progress_dialog.response(Gtk.ResponseType.OK)
+            return False
+        GLib.idle_add(close_dialog)
+
+    # Start download in background thread
+    download_thread = threading.Thread(target=do_download)
+    download_thread.daemon = True
+    download_thread.start()
+
+    # Run dialog event loop
+    response = progress_dialog.run()
+    progress_dialog.destroy()
+
+    # Check if user cancelled
+    if response == Gtk.ResponseType.CANCEL or response == Gtk.ResponseType.DELETE_EVENT:
+        logger.info("User cancelled CUDA download")
+        cancel_event.set()  # Signal the download thread to stop
+        download_cancelled[0] = True
+        # Don't wait for thread - let it clean up in background
+        return None
+
+    # Wait for thread to complete (only if not cancelled)
+    download_thread.join()
+
+    success = download_success[0]
+
+    if success:
+        # Automatically enable GPU mode in config
+        try:
+            from talktype.config import load_config, save_config
+            config = load_config()
+            if config.device != "cuda":
+                config.device = "cuda"
+                save_config(config)
+                logger.info("✅ Automatically enabled GPU mode in config")
+        except Exception as e:
+            logger.warning(f"Could not auto-enable GPU mode in config: {e}")
+
+        # Run success callback if provided
+        if on_success_callback:
+            try:
+                on_success_callback()
+            except Exception as e:
+                logger.warning(f"Error in success callback: {e}")
+
+        # Show success message
+        msg = Gtk.MessageDialog(
+            parent=parent,
+            message_type=Gtk.MessageType.INFO,
+            buttons=Gtk.ButtonsType.OK,
+            text="CUDA Libraries Downloaded!"
+        )
+        msg.format_secondary_text(
+            "GPU acceleration is now available.\n\n"
+            "TalkType has been automatically configured to use your NVIDIA GPU for faster transcription."
+        )
+        msg.run()
+        msg.destroy()
+        logger.info("CUDA libraries downloaded successfully")
+    else:
+        # Show error message
+        msg = Gtk.MessageDialog(
+            parent=parent,
+            message_type=Gtk.MessageType.ERROR,
+            buttons=Gtk.ButtonsType.OK,
+            text="Download Failed"
+        )
+        msg.format_secondary_text(
+            "Could not download CUDA libraries.\n\n"
+            "You can try again later from Preferences → Advanced."
+        )
+        msg.run()
+        msg.destroy()
+        logger.error("CUDA libraries download failed")
+
+    return success
 
 def show_cuda_progress_dialog():
     """Show GTK progress dialog for CUDA download."""
@@ -383,7 +560,9 @@ def show_cuda_welcome_dialog():
         
         # Setup info
         setup_label = Gtk.Label()
-        setup_label.set_markup('<b>📦 One-time setup:</b> ~800MB download\nLibraries will be stored in ~/.local/share/TalkType/')
+        from .config import get_data_dir
+        data_dir = get_data_dir()
+        setup_label.set_markup(f'<b>📦 One-time setup:</b> ~800MB download\nLibraries will be stored in {data_dir}/')
         setup_label.set_line_wrap(True)
         setup_label.set_margin_bottom(15)
         content.pack_start(setup_label, False, False, 0)
@@ -491,7 +670,8 @@ def offer_cuda_download_cli():
     print("  ⏱️ Real-time processing for live dictation")
     print("  💻 Lower CPU usage during transcription")
     print("\n📦 One-time setup: ~800MB download")
-    print("Libraries will be stored in ~/.local/share/TalkType/")
+    from .config import get_data_dir
+    print(f"Libraries will be stored in {get_data_dir()}/")
     print("="*60)
     
     try:
