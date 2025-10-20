@@ -1,11 +1,37 @@
 import gi
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk, GLib
+gi.require_version("Gdk", "3.0")
+from gi.repository import Gtk, Gdk, GLib
 import os
 import subprocess
 import sys
 import atexit
 from .config import CONFIG_PATH
+
+
+def apply_dark_dialog_style(dialog):
+    """Apply consistent dark styling to dialogs to match other windows."""
+    # Set dark theme preference
+    settings = Gtk.Settings.get_default()
+    if settings:
+        settings.set_property("gtk-application-prefer-dark-theme", True)
+
+    # Apply custom CSS for darker background (matching welcome screen)
+    css_provider = Gtk.CssProvider()
+    css_provider.load_from_data(b"""
+        dialog {
+            background-color: #2b2b2b;
+        }
+        dialog box {
+            background-color: #2b2b2b;
+        }
+        dialog label {
+            color: #ffffff;
+        }
+    """)
+
+    style_context = dialog.get_style_context()
+    style_context.add_provider(css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 
 # Use tomllib (Python 3.11+) or fallback to toml
 try:
@@ -85,16 +111,25 @@ class PreferencesWindow:
         if settings:
             settings.set_property("gtk-application-prefer-dark-theme", True)
 
-        # Load custom CSS styling
-        self._load_css()
-
+        # Create window FIRST
         self.window = Gtk.Window(title="TalkType Preferences")
+        self.window.set_name("preferences_window")  # Give window a name for CSS targeting
         self.window.set_default_size(500, 400)
         self.window.set_position(Gtk.WindowPosition.CENTER)
-        
+
+        # Load custom CSS styling (after window is created)
+        self._load_css()
+
+        # Set window type hint to NORMAL to ensure proper window stacking
+        # This prevents the "Tried to map a popup with a non-top most parent" error
+        self.window.set_type_hint(Gdk.WindowTypeHint.NORMAL)
+
         # Load current config
         self.config = self.load_config()
-        
+
+        # Initialize model tracking to prevent repeated warnings
+        self._last_selected_model = self.config.get("model")
+
         # Create UI
         self.create_ui()
         
@@ -105,30 +140,29 @@ class PreferencesWindow:
         self.window.show_all()
         self.ok_btn.grab_default()  # Now safe to grab default after window is shown
         self.window.present()  # Bring window to front
-        self.window.set_keep_above(True)  # Force window on top temporarily
-        GLib.timeout_add_seconds(1, self._remove_keep_above)  # Remove keep_above after 1 second
-        
+        # Note: Don't use set_keep_above - it interferes with combo box popups
+
         # Initialize UI state after window is shown
         GLib.timeout_add(200, self._update_hotkey_ui_state)
         GLib.timeout_add(200, self._update_language_ui_state)
         # Don't auto-start level monitoring - only when user clicks record button
 
     def _load_css(self):
-        """Load custom CSS stylesheet for preferences window."""
+        """Load custom CSS stylesheet for preferences window ONLY (not globally)."""
         try:
             css_provider = Gtk.CssProvider()
             css_file = os.path.join(os.path.dirname(__file__), 'prefs_style.css')
 
             if os.path.exists(css_file):
                 css_provider.load_from_path(css_file)
-                screen = Gtk.Window().get_screen()
-                style_context = Gtk.StyleContext()
-                style_context.add_provider_for_screen(
-                    screen,
+                # Apply CSS ONLY to preferences window, not the entire screen
+                # This prevents style conflicts with dialogs (help, etc.)
+                style_context = self.window.get_style_context()
+                style_context.add_provider(
                     css_provider,
                     Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
                 )
-                print("✅ Loaded custom CSS styling")
+                print("✅ Loaded custom CSS styling (prefs window only)")
             else:
                 print(f"⚠️  CSS file not found: {css_file}")
         except Exception as e:
@@ -165,12 +199,7 @@ class PreferencesWindow:
                 print(f"Error loading config: {e}")
         
         return defaults
-    
-    def _remove_keep_above(self):
-        """Remove keep_above setting after window appears."""
-        self.window.set_keep_above(False)
-        return False  # Don't repeat
-    
+
     def _check_cuda_availability(self):
         """Check if CUDA is available for faster-whisper."""
         # Use cuda_helper for reliable detection
@@ -314,21 +343,8 @@ class PreferencesWindow:
         row += 1
 
         # Model selection
-        grid.attach(Gtk.Label(label="Model:", xalign=0), 0, row, 1, 1)
-        model_combo = Gtk.ComboBoxText()
-        
-        # Fix dropdown responsiveness - enable proper focus handling
-        model_combo.set_can_focus(True)
-        # Add button press event to ensure dropdown opens reliably
-        model_combo.connect("button-press-event", self._on_combo_button_press)
-        
-        models = ["tiny", "base", "small", "medium", "large-v3"]
-        for model in models:
-            model_combo.append(model, model)  # append(id, text) - use model name as both ID and text
-        model_combo.set_active_id(self.config["model"])
-        self.model_combo = model_combo  # Store reference for later use
-        model_combo.connect("changed", self._on_model_changed)
-        model_combo.set_tooltip_text(
+        model_label = Gtk.Label(label="Model 💡:", xalign=0)
+        model_label.set_tooltip_text(
             "Whisper AI model size - choose based on your needs:\n\n"
             "• tiny (39 MB): Fastest, basic accuracy - quick notes\n"
             "• base (74 MB): Fast, good accuracy - casual use\n"
@@ -341,18 +357,40 @@ class PreferencesWindow:
             "• Improved punctuation and context awareness\n"
             "• Better handling of accents and background noise"
         )
+        grid.attach(model_label, 0, row, 1, 1)
+        model_combo = Gtk.ComboBoxText()
+        model_combo.set_can_focus(True)
+        model_combo.connect("button-press-event", self._on_combo_button_press)
+
+        models = ["tiny", "base", "small", "medium", "large-v3"]
+        for model in models:
+            model_combo.append(model, model)  # append(id, text) - use model name as both ID and text
+        model_combo.set_active_id(self.config["model"])
+        self.model_combo = model_combo  # Store reference for later use
+        model_combo.connect("changed", self._on_model_changed)
+        # TESTING: Tooltip disabled to check if it interferes with dropdown popup
+        # model_combo.set_tooltip_text(
+        #     "Whisper AI model size - choose based on your needs:\n\n"
+        #     "• tiny (39 MB): Fastest, basic accuracy - quick notes\n"
+        #     "• base (74 MB): Fast, good accuracy - casual use\n"
+        #     "• small (244 MB): Balanced - recommended for most users\n"
+        #     "• medium (769 MB): Slower, very accurate - professional use\n"
+        #     "• large-v3 (~3 GB): Best accuracy - technical/professional work\n"
+        #     "  ⚠️ Takes 30-60 seconds to load initially\n\n"
+        #     "Larger models provide:\n"
+        #     "• Better word recognition (technical terms, proper nouns)\n"
+        #     "• Improved punctuation and context awareness\n"
+        #     "• Better handling of accents and background noise"
+        # )
         grid.attach(model_combo, 1, row, 1, 1)
         row += 1
         
         # Device selection
         grid.attach(Gtk.Label(label="Device:", xalign=0), 0, row, 1, 1)
         device_combo = Gtk.ComboBoxText()
-        
-        # Fix dropdown responsiveness - enable proper focus handling
         device_combo.set_can_focus(True)
-        # Add button press event to ensure dropdown opens reliably
         device_combo.connect("button-press-event", self._on_combo_button_press)
-        
+
         device_combo.append("cpu", "CPU")
         
         # Store device combo for later refresh
@@ -366,7 +404,9 @@ class PreferencesWindow:
         row += 1
         
         # Language Mode (first)
-        grid.attach(Gtk.Label(label="Language Mode:", xalign=0), 0, row, 1, 1)
+        lang_mode_label = Gtk.Label(label="Language Mode 💡:", xalign=0)
+        lang_mode_label.set_tooltip_text("Auto-detect: automatically detect language from speech\nManual Selection (Faster): select a specific language for faster processing")
+        grid.attach(lang_mode_label, 0, row, 1, 1)
         self.lang_mode_combo = Gtk.ComboBoxText()
         self.lang_mode_combo.set_can_focus(True)
         self.lang_mode_combo.connect("button-press-event", self._on_combo_button_press)
@@ -375,17 +415,17 @@ class PreferencesWindow:
         self.lang_mode_combo.set_active_id(self.config.get("language_mode", "auto"))
         self.lang_mode_combo.connect("changed", lambda x: self.update_config("language_mode", x.get_active_id()))
         self.lang_mode_combo.connect("changed", self._on_language_mode_changed)
-        self.lang_mode_combo.set_tooltip_text("Auto-detect: automatically detect language from speech\nManual Selection (Faster): select a specific language for faster processing")
         grid.attach(self.lang_mode_combo, 1, row, 1, 1)
         row += 1
         
         # Language Selection (second)
-        self.lang_label = Gtk.Label(label="Language:", xalign=0)
+        self.lang_label = Gtk.Label(label="Language 💡:", xalign=0)
+        self.lang_label.set_tooltip_text("Select the language for speech recognition.\nOnly used when Language Mode is set to 'Manual'.")
         grid.attach(self.lang_label, 0, row, 1, 1)
         self.lang_combo = Gtk.ComboBoxText()
         self.lang_combo.set_can_focus(True)
         self.lang_combo.connect("button-press-event", self._on_combo_button_press)
-        
+
         # Add language options with flags
         languages = [
             ("", "🌐 Auto-detect"),
@@ -432,9 +472,9 @@ class PreferencesWindow:
         self.lang_combo.set_active_id(current_lang)
         if self.lang_combo.get_active_id() is None:
             self.lang_combo.set_active_id("")  # Default to auto-detect
-            
+
         self.lang_combo.connect("changed", lambda x: self.update_config("language", x.get_active_id()))
-        self.lang_combo.set_tooltip_text("Select the language for speech recognition.\nOnly used when Language Mode is set to 'Manual'.")
+        # Tooltip moved to label to avoid interference with dropdown popup
         grid.attach(self.lang_combo, 1, row, 1, 1)
         row += 1
 
@@ -455,34 +495,30 @@ class PreferencesWindow:
         row += 1
 
         # Mode selection
-        grid.attach(Gtk.Label(label="Mode:", xalign=0), 0, row, 1, 1)
+        mode_label = Gtk.Label(label="Mode 💡:", xalign=0)
+        mode_label.set_tooltip_text("How to activate dictation:\n• Hold to Talk: hold hotkey down while speaking\n• Press to Toggle: press once to start, press again to stop")
+        grid.attach(mode_label, 0, row, 1, 1)
         self.mode_combo = Gtk.ComboBoxText()
-        
-        # Fix dropdown responsiveness - enable proper focus handling
         self.mode_combo.set_can_focus(True)
-        # Add button press event to ensure dropdown opens reliably
         self.mode_combo.connect("button-press-event", self._on_combo_button_press)
-        
+
         self.mode_combo.append("hold", "Hold to Talk")
         self.mode_combo.append("toggle", "Press to Toggle")
         self.mode_combo.set_active_id(self.config["mode"])
         self.mode_combo.connect("changed", lambda x: self.update_config("mode", x.get_active_id()))
         self.mode_combo.connect("changed", self._on_mode_changed)
-        self.mode_combo.set_tooltip_text("How to activate dictation:\n• Hold to Talk: hold hotkey down while speaking\n• Press to Toggle: press once to start, press again to stop")
         grid.attach(self.mode_combo, 1, row, 1, 1)
         row += 1
         
         # Dynamic Hotkey (shows based on mode)
-        self.hotkey_label = Gtk.Label(label="Hold Hotkey:", xalign=0)
+        self.hotkey_label = Gtk.Label(label="Hold Hotkey 💡:", xalign=0)
+        self.hotkey_label.set_tooltip_text("Choose the key to hold down for dictation.\nRecommended: F8 (default), F6, F7, F9, F10\nAvoid: F1 (help), F5 (refresh), F11 (fullscreen), F12 (dev tools)")
         grid.attach(self.hotkey_label, 0, row, 1, 1)
-        
+
         self.hotkey_combo = Gtk.ComboBoxText()
-        
-        # Fix dropdown responsiveness - enable proper focus handling
         self.hotkey_combo.set_can_focus(True)
-        # Add button press event to ensure dropdown opens reliably
         self.hotkey_combo.connect("button-press-event", self._on_combo_button_press)
-        
+
         # Add F-key options (most practical for dictation)
         hotkeys = ["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12"]
         
@@ -495,21 +531,19 @@ class PreferencesWindow:
             self.hotkey_combo.set_active_id(current_hotkey)
         else:
             self.hotkey_combo.set_active_id("F8")  # Default fallback
-            
+
         self.hotkey_combo.connect("changed", lambda x: self.update_config("hotkey", x.get_active_id()))
-        self.hotkey_combo.set_tooltip_text("Choose the key to hold down for dictation.\nRecommended: F8 (default), F6, F7, F9, F10\nAvoid: F1 (help), F5 (refresh), F11 (fullscreen), F12 (dev tools)")
+        # Tooltip moved to label to avoid interference with dropdown popup
         grid.attach(self.hotkey_combo, 1, row, 1, 1)
         row += 1
         
         # Toggle hotkey (initially hidden for hold mode)
-        self.toggle_label = Gtk.Label(label="Toggle Hotkey:", xalign=0)
+        self.toggle_label = Gtk.Label(label="Toggle Hotkey 💡:", xalign=0)
+        self.toggle_label.set_tooltip_text("Choose the key for toggle mode (press once to start, press again to stop).\nRecommended: F9 (default), F10, F6, F7\nOnly used when Mode is set to 'Press to Toggle'.")
         self.toggle_combo = Gtk.ComboBoxText()
-        
-        # Fix dropdown responsiveness - enable proper focus handling
         self.toggle_combo.set_can_focus(True)
-        # Add button press event to ensure dropdown opens reliably
         self.toggle_combo.connect("button-press-event", self._on_combo_button_press)
-        
+
         # Add same options for toggle key
         for key in hotkeys:
             self.toggle_combo.append(key, key)
@@ -520,10 +554,10 @@ class PreferencesWindow:
             self.toggle_combo.set_active_id(current_toggle)
         else:
             self.toggle_combo.set_active_id("F9")  # Default fallback
-            
+
         self.toggle_combo.connect("changed", lambda x: self.update_config("toggle_hotkey", x.get_active_id()))
-        self.toggle_combo.set_tooltip_text("Choose the key for toggle mode (press once to start, press again to stop).\nRecommended: F9 (default), F10, F6, F7\nOnly used when Mode is set to 'Press to Toggle'.")
-        
+        # Tooltip moved to label to avoid interference with dropdown popup
+
         # Attach toggle elements to grid
         grid.attach(self.toggle_label, 0, row, 1, 1)
         grid.attach(self.toggle_combo, 1, row, 1, 1)
@@ -586,12 +620,9 @@ class PreferencesWindow:
         # Microphone
         grid.attach(Gtk.Label(label="Microphone:", xalign=0), 0, row, 1, 1)
         mic_combo = Gtk.ComboBoxText()
-        
-        # Fix dropdown responsiveness - enable proper focus handling
         mic_combo.set_can_focus(True)
-        # Add button press event to ensure dropdown opens reliably
         mic_combo.connect("button-press-event", self._on_combo_button_press)
-        
+
         # Get available input devices
         try:
             import sounddevice as sd
@@ -640,7 +671,7 @@ class PreferencesWindow:
         self.volume_scale.set_range(0, 100)
         self.volume_scale.set_value(self.get_system_mic_volume())  # Get current system volume
         self.volume_scale.set_hexpand(True)
-        self.volume_scale.set_tooltip_text("Adjust system microphone input volume")
+        self.volume_scale.set_tooltip_text("Adjust system microphone input volume (PipeWire/PulseAudio)")
         self.volume_scale.connect("value-changed", self.on_volume_changed)
         volume_box.pack_start(volume_label, False, False, 0)
         volume_box.pack_start(self.volume_scale, True, True, 0)
@@ -694,7 +725,7 @@ class PreferencesWindow:
         row += 1
 
         feedback_header = Gtk.Label()
-        feedback_header.set_markup('<b>Audio & Visual Feedback</b>')
+        feedback_header.set_markup('<b>Audio &amp; Visual Feedback</b>')
         feedback_header.set_xalign(0)
         feedback_header.set_margin_bottom(10)
         grid.attach(feedback_header, 0, row, 2, 1)
@@ -725,10 +756,12 @@ class PreferencesWindow:
         row += 1
 
         # Indicator size
-        size_label = Gtk.Label(label="  Indicator size:", xalign=0)
+        size_label = Gtk.Label(label="  Indicator size 💡:", xalign=0)
+        size_label.set_tooltip_text("Choose the size of the recording indicator.\nMedium is the default size.")
         grid.attach(size_label, 0, row, 1, 1)
 
         size_combo = Gtk.ComboBoxText()
+        size_combo.connect("button-press-event", self._on_combo_button_press)
         size_combo.append("small", "Small (60%)")
         size_combo.append("medium", "Medium (100%)")
         size_combo.append("large", "Large (140%)")
@@ -736,7 +769,7 @@ class PreferencesWindow:
         current_size = self.config.get("indicator_size", "medium")
         size_combo.set_active_id(current_size)
         size_combo.connect("changed", lambda x: self.update_config("indicator_size", x.get_active_id()))
-        size_combo.set_tooltip_text("Choose the size of the recording indicator.\nMedium is the default size.")
+        # Tooltip moved to label to avoid interference with dropdown popup
         grid.attach(size_combo, 1, row, 1, 1)
         row += 1
 
@@ -771,6 +804,7 @@ class PreferencesWindow:
         ]
 
         position_combo = Gtk.ComboBoxText()
+        position_combo.connect("button-press-event", self._on_combo_button_press)
         for pos_id, pos_label_text in positions:
             position_combo.append(pos_id, pos_label_text)
 
@@ -875,19 +909,18 @@ class PreferencesWindow:
         row += 1
         
         # Injection mode
-        grid.attach(Gtk.Label(label="Text Injection:", xalign=0), 0, row, 1, 1)
+        inject_label = Gtk.Label(label="Text Injection 💡:", xalign=0)
+        inject_label.set_tooltip_text("How to insert transcribed text:\n• Keystroke Typing: simulates typing character-by-character (most reliable)\n• Clipboard Paste: uses clipboard + Ctrl+V / Shift+Ctrl+V (much faster for long text)\n\nClipboard Paste works in most applications:\n✓ Text editors, word processors, terminals\n✓ Web browsers, email clients\n✓ Most standard text input fields\n\nUse Keystroke Typing if paste doesn't work in specialized applications.")
+        grid.attach(inject_label, 0, row, 1, 1)
         inject_combo = Gtk.ComboBoxText()
-
-        # Fix dropdown responsiveness - enable proper focus handling
         inject_combo.set_can_focus(True)
-        # Add button press event to ensure dropdown opens reliably
         inject_combo.connect("button-press-event", self._on_combo_button_press)
 
         inject_combo.append("type", "Keystroke Typing")
         inject_combo.append("paste", "Clipboard Paste")
         inject_combo.set_active_id(self.config["injection_mode"])
         inject_combo.connect("changed", lambda x: self.update_config("injection_mode", x.get_active_id()))
-        inject_combo.set_tooltip_text("How to insert transcribed text:\n• Keystroke Typing: simulates typing (more reliable)\n• Clipboard Paste: uses copy/paste (faster for long text)")
+        # Tooltip moved to label to avoid interference with dropdown popup
         grid.attach(inject_combo, 1, row, 1, 1)
         row += 1
 
@@ -1038,8 +1071,40 @@ class PreferencesWindow:
 
         return grid
     
+    def _on_combo_button_press(self, widget, event):
+        """Handle button press events on combo boxes to ensure they open reliably."""
+        # Ensure the widget has focus before processing the click
+        if not widget.has_focus():
+            widget.grab_focus()
+        # Let GTK handle the normal click event
+        return False
+
     def update_config(self, key, value):
         """Update config value."""
+        # Special handling for device changes - verify CUDA is available
+        if key == "device" and value == "cuda":
+            from talktype import cuda_helper
+            if not cuda_helper.has_cuda_libraries():
+                # CUDA libraries not available - show error and revert to CPU
+                dialog = Gtk.MessageDialog(
+                    transient_for=self.window,
+                    flags=0,
+                    message_type=Gtk.MessageType.ERROR,
+                    buttons=Gtk.ButtonsType.OK,
+                    text="CUDA Libraries Not Available"
+                )
+                dialog.format_secondary_text(
+                    "GPU acceleration requires CUDA libraries to be downloaded first.\n\n"
+                    "Please download CUDA libraries from the Advanced tab before switching to GPU mode."
+                )
+                dialog.run()
+                dialog.destroy()
+
+                # Revert combo box to CPU
+                if hasattr(self, 'device_combo'):
+                    self.device_combo.set_active_id("cpu")
+                return  # Don't update config
+
         self.config[key] = value
 
         # Handle autostart desktop file creation/removal
@@ -1054,8 +1119,13 @@ class PreferencesWindow:
 
         new_model = combo.get_active_id()
 
-        # Show warning dialog for large-v3 model
-        if new_model == "large-v3" and self.config.get("model") != "large-v3":
+        # Track last selected model to avoid showing dialog when clicking same model
+        if not hasattr(self, '_last_selected_model'):
+            self._last_selected_model = self.config.get("model")
+
+        # Show warning dialog for large-v3 model ONLY if it's not already downloaded
+        from .model_helper import is_model_cached
+        if new_model == "large-v3" and not is_model_cached("large-v3"):
             dialog = Gtk.MessageDialog(
                 transient_for=self.window,
                 flags=0,
@@ -1063,6 +1133,12 @@ class PreferencesWindow:
                 buttons=Gtk.ButtonsType.OK_CANCEL,
                 text="Large Model Selected"
             )
+
+            # Apply dark theme
+            settings = Gtk.Settings.get_default()
+            if settings:
+                settings.set_property("gtk-application-prefer-dark-theme", True)
+
             dialog.format_secondary_text(
                 "The large-v3 model is approximately 3 GB in size.\n\n"
                 "⏱️  First-time load: 30-60 seconds\n"
@@ -1079,35 +1155,36 @@ class PreferencesWindow:
             if response == Gtk.ResponseType.CANCEL:
                 # Revert to previous model selection (block recursive call)
                 self._updating_model = True
-                previous_model = self.config.get("model", "medium")
-                combo.set_active_id(previous_model)
+                combo.set_active_id(self._last_selected_model)
                 self._updating_model = False
                 return
 
-        # Update config with new model
+        # Update config with new model and track it
+        self._last_selected_model = new_model
         self.update_config("model", new_model)
 
     def _handle_autostart(self, enable):
         """Create or remove autostart desktop file."""
         autostart_dir = os.path.expanduser("~/.config/autostart")
         desktop_file = os.path.join(autostart_dir, "talktype.desktop")
-        
+
         if enable:
             # Create autostart directory if it doesn't exist
             os.makedirs(autostart_dir, exist_ok=True)
-            
-            # Get the path to the Poetry environment
-            python_path = sys.executable
-            project_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-            
+
+            # Determine the best way to launch TalkType
+            # Priority: 1. Use dictate-tray if available, 2. Use current Python
+            exec_cmd = self._get_launch_command()
+            icon_path = self._get_icon_path()
+
             # Create desktop file content
             desktop_content = f"""[Desktop Entry]
 Type=Application
 Name=TalkType
 GenericName=Voice Dictation
 Comment=AI-powered dictation for Wayland using Faster-Whisper
-Exec={python_path} -c "import sys; sys.path.insert(0, '{project_dir}'); from src.talktype.tray import main; main()"
-Icon={project_dir}/AppDir/io.github.ronb1964.TalkType.svg
+Exec={exec_cmd}
+Icon={icon_path}
 Terminal=false
 Categories=Utility;
 Keywords=dictation;voice;speech;whisper;ai;transcription;
@@ -1115,11 +1192,12 @@ StartupNotify=true
 StartupWMClass=TalkType
 X-GNOME-Autostart-enabled=true
 """
-            
+
             try:
                 with open(desktop_file, "w") as f:
                     f.write(desktop_content)
                 print(f"✅ Created autostart file: {desktop_file}")
+                print(f"   Launch command: {exec_cmd}")
             except Exception as e:
                 print(f"❌ Failed to create autostart file: {e}")
         else:
@@ -1130,15 +1208,87 @@ X-GNOME-Autostart-enabled=true
                     print(f"✅ Removed autostart file: {desktop_file}")
             except Exception as e:
                 print(f"❌ Failed to remove autostart file: {e}")
-    
-    def _on_combo_button_press(self, widget, event):
-        """Handle button press events on combo boxes to ensure they open reliably."""
-        # Ensure the widget has focus before processing the click
-        if not widget.has_focus():
-            widget.grab_focus()
-        # Let GTK handle the normal click event
-        return False
-    
+
+    def _get_launch_command(self):
+        """
+        Get the appropriate launch command for TalkType.
+
+        Returns the most portable way to launch the tray icon:
+        1. If running from AppImage, use the AppImage path
+        2. If dictate-tray is in PATH, use it (works for installed versions)
+        3. Otherwise, use the current Python interpreter with the module path
+        """
+        # Check if we're running from an AppImage
+        appimage_path = os.environ.get('APPIMAGE')
+        if appimage_path and os.path.isfile(appimage_path) and os.access(appimage_path, os.X_OK):
+            # Return the AppImage path - it defaults to starting the tray
+            return appimage_path
+
+        # Check if sys.executable is inside an AppImage mount point
+        # (handles cases where APPIMAGE env var might not be set but we're still in an AppImage)
+        if '/tmp/.mount_' in sys.executable or 'squashfs-root' in sys.executable:
+            # Try to find the AppImage in common locations
+            possible_appimages = [
+                os.path.expanduser('~/AppImages/TalkType-*.AppImage'),
+                os.path.expanduser('~/Downloads/TalkType-*.AppImage'),
+            ]
+            import glob
+            for pattern in possible_appimages:
+                matches = glob.glob(pattern)
+                if matches:
+                    # Use the most recent one
+                    latest = max(matches, key=os.path.getmtime)
+                    if os.access(latest, os.X_OK):
+                        return latest
+
+        # Check if dictate-tray command is available in PATH
+        try:
+            result = subprocess.run(
+                ['which', 'dictate-tray'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0:
+                dictate_tray_path = result.stdout.strip()
+                # Verify it's executable
+                if os.path.isfile(dictate_tray_path) and os.access(dictate_tray_path, os.X_OK):
+                    return dictate_tray_path
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
+
+        # Fallback: use current Python interpreter
+        python_path = sys.executable
+        # Use -m to run as module, which is more reliable
+        return f'{python_path} -m talktype.tray'
+
+    def _get_icon_path(self):
+        """
+        Get the path to the TalkType icon.
+
+        Returns:
+            str: Path to icon file, or fallback to system icon name
+        """
+        # Try common locations
+        possible_paths = [
+            # Official icon in development location (Dropbox)
+            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'icons', 'OFFICIAL_ICON_DO_NOT_CHANGE.svg'),
+            # AppImage location
+            os.path.join(os.path.dirname(sys.executable), '..', 'io.github.ronb1964.TalkType.svg'),
+            # Old development location (AppDir)
+            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'AppDir', 'io.github.ronb1964.TalkType.svg'),
+            # Installed location
+            '/usr/share/icons/hicolor/scalable/apps/io.github.ronb1964.TalkType.svg',
+            '/usr/local/share/icons/hicolor/scalable/apps/io.github.ronb1964.TalkType.svg',
+        ]
+
+        for path in possible_paths:
+            if os.path.isfile(path):
+                return os.path.abspath(path)
+
+        # Fallback to system icon name
+        return 'audio-input-microphone'
+
     def get_selected_device_idx(self):
         """Get the device index for the currently selected microphone."""
         current_mic = self.config.get("mic", "")
@@ -1204,20 +1354,20 @@ X-GNOME-Autostart-enabled=true
         try:
             import sounddevice as sd
             import numpy as np
-            
+
             device_idx = self.get_selected_device_idx()
-            
+
             # Start recording
             self.recording = True
             self.recorded_frames = []
-            
+
             def audio_callback(indata, frames, time, status):
                 if self.recording:
                     self.recorded_frames.append(indata.copy())
                     # Update level bar
                     rms = np.sqrt(np.mean(indata**2))
                     GLib.idle_add(self.update_level_bar, min(rms * 10, 1.0))
-            
+
             self.record_stream = sd.InputStream(
                 callback=audio_callback,
                 channels=1,
@@ -1226,12 +1376,12 @@ X-GNOME-Autostart-enabled=true
                 dtype='float32'
             )
             self.record_stream.start()
-            
+
             # Update button states
             self.start_record_btn.set_sensitive(False)
             self.stop_record_btn.set_sensitive(True)
             self.replay_btn.set_sensitive(False)
-            
+
         except Exception as e:
             self.show_error_dialog("Recording failed!", str(e))
     
@@ -1265,13 +1415,16 @@ X-GNOME-Autostart-enabled=true
         try:
             if self.recorded_audio is not None:
                 import sounddevice as sd
-                # Amplify the audio for better playback volume (3x boost)
                 import numpy as np
+
+                # Amplify the audio for better playback volume (3x boost)
                 amplified_audio = self.recorded_audio * 3.0
+
                 # Ensure we don't clip (values stay between -1 and 1)
                 amplified_audio = np.clip(amplified_audio, -1.0, 1.0)
+
                 sd.play(amplified_audio, samplerate=16000)
-            
+
         except Exception as e:
             self.show_error_dialog("Playback failed!", str(e))
     
@@ -1289,10 +1442,38 @@ X-GNOME-Autostart-enabled=true
         dialog.destroy()
     
     def get_system_mic_volume(self):
-        """Get the current system microphone volume."""
+        """
+        Get the current system microphone volume.
+        Supports both PipeWire (wpctl) and PulseAudio (pactl).
+        """
+        import subprocess
+
+        # Try PipeWire first (modern systems like Fedora, Nobara, newer Ubuntu)
         try:
-            import subprocess
-            # Try to get microphone volume using pactl (PulseAudio)
+            result = subprocess.run(
+                ["wpctl", "get-volume", "@DEFAULT_AUDIO_SOURCE@"],
+                capture_output=True, text=True, timeout=2
+            )
+            if result.returncode == 0:
+                # Parse volume from output like "Volume: 0.90" or "Volume: 0.90 [MUTED]"
+                output = result.stdout.strip()
+                if 'Volume:' in output:
+                    # Extract the decimal value (0.0 to 1.0)
+                    parts = output.split()
+                    if len(parts) >= 2:
+                        try:
+                            volume_decimal = float(parts[1])
+                            return int(volume_decimal * 100)  # Convert to percentage
+                        except ValueError:
+                            pass
+        except FileNotFoundError:
+            # wpctl not installed - try PulseAudio
+            pass
+        except Exception as e:
+            print(f"wpctl failed: {e}")
+
+        # Try PulseAudio (older/traditional systems)
+        try:
             result = subprocess.run(
                 ["pactl", "get-source-volume", "@DEFAULT_SOURCE@"],
                 capture_output=True, text=True, timeout=2
@@ -1312,28 +1493,49 @@ X-GNOME-Autostart-enabled=true
                                     except ValueError:
                                         continue
         except FileNotFoundError:
-            # pactl not installed - silently use fallback (common on non-PulseAudio systems)
+            # pactl not installed either
             pass
         except Exception as e:
-            print(f"Failed to get system mic volume: {e}")
+            print(f"pactl failed: {e}")
 
-        # Fallback to 50% if we can't get the actual volume
+        # Fallback to 50% if neither wpctl nor pactl work
         return 50
     
     def set_system_mic_volume(self, volume_percent):
-        """Set the system microphone volume."""
+        """
+        Set the system microphone volume.
+        Supports both PipeWire (wpctl) and PulseAudio (pactl).
+        """
+        import subprocess
+
+        # Try PipeWire first (modern systems)
         try:
-            import subprocess
-            # Set microphone volume using pactl (PulseAudio)
+            # wpctl expects decimal format (0.0 to 1.0)
+            volume_decimal = volume_percent / 100.0
+            result = subprocess.run(
+                ["wpctl", "set-volume", "@DEFAULT_AUDIO_SOURCE@", f"{volume_decimal}"],
+                capture_output=True, timeout=2
+            )
+            if result.returncode == 0:
+                return  # Success!
+        except FileNotFoundError:
+            # wpctl not installed - try PulseAudio
+            pass
+        except Exception as e:
+            print(f"wpctl failed: {e}")
+
+        # Try PulseAudio (older systems)
+        try:
             subprocess.run(
                 ["pactl", "set-source-volume", "@DEFAULT_SOURCE@", f"{volume_percent}%"],
                 capture_output=True, timeout=2
             )
+            return  # Success!
         except FileNotFoundError:
-            # pactl not installed - silently skip (common on non-PulseAudio systems)
-            pass
+            # Neither wpctl nor pactl available
+            print("Volume control not available (neither wpctl nor pactl found)")
         except Exception as e:
-            print(f"Failed to set system mic volume: {e}")
+            print(f"pactl failed: {e}")
     
     def on_volume_changed(self, scale):
         """Handle volume slider changes."""
@@ -1430,7 +1632,8 @@ X-GNOME-Autostart-enabled=true
             
             # Check for NVIDIA GPU
             has_gpu = cuda_helper.detect_nvidia_gpu()
-            has_cuda = cuda_helper.has_cuda_libraries()
+            # Use has_talktype_cuda_libraries() for UI display (not system CUDA)
+            has_cuda = cuda_helper.has_talktype_cuda_libraries()
             
             if has_gpu:
                 gpu_name = cuda_helper.detect_nvidia_gpu()
@@ -1475,129 +1678,60 @@ X-GNOME-Autostart-enabled=true
             from . import cuda_helper
         except ImportError:
             return
-        
-        # Show confirmation dialog
-        dialog = Gtk.MessageDialog(
-            transient_for=self.window,
-            flags=0,
+
+        # Show confirmation dialog first
+        confirm_dialog = Gtk.MessageDialog(
+            parent=self.window,
             message_type=Gtk.MessageType.QUESTION,
             buttons=Gtk.ButtonsType.YES_NO,
             text="Download CUDA Libraries?"
         )
-        dialog.format_secondary_text(
-            "This will download approximately 1.7GB of CUDA libraries "
-            "(1.2GB installed) to enable GPU acceleration.\n\n"
-            "Libraries will be stored in ~/.local/share/TalkType/cuda\n\n"
-            "This may take several minutes depending on your connection.\n\n"
-            "Continue?"
+
+        # Apply dark theme to dialog
+        settings = Gtk.Settings.get_default()
+        if settings:
+            settings.set_property("gtk-application-prefer-dark-theme", True)
+
+        from talktype.config import get_data_dir
+        cuda_path = os.path.join(get_data_dir(), "cuda")
+        confirm_dialog.format_secondary_text(
+            "This will download approximately 800MB of CUDA libraries for GPU acceleration.\n\n"
+            f"The files will be stored in {cuda_path} and may take several minutes to download.\n\n"
+            "Continue with download?"
         )
-        
-        response = dialog.run()
-        dialog.destroy()
-        
-        if response == Gtk.ResponseType.YES:
-            # Create progress dialog with progress bar
-            progress_dialog = Gtk.Dialog(
-                title="Downloading CUDA Libraries",
-                transient_for=self.window,
-                flags=0
-            )
-            progress_dialog.set_default_size(400, 150)
-            
-            content = progress_dialog.get_content_area()
-            content.set_margin_top(20)
-            content.set_margin_bottom(20)
-            content.set_margin_start(20)
-            content.set_margin_end(20)
-            
-            # Status label
-            status_label = Gtk.Label(label="Preparing download...")
-            status_label.set_margin_bottom(10)
-            content.pack_start(status_label, False, False, 0)
-            
-            # Progress bar
-            progress_bar = Gtk.ProgressBar()
-            progress_bar.set_show_text(True)
-            progress_bar.set_margin_bottom(10)
-            content.pack_start(progress_bar, False, False, 0)
-            
-            progress_dialog.show_all()
-            
-            button.set_sensitive(False)
-            
-            import threading
-            
-            def progress_callback(message, percent):
-                """Update progress dialog from download thread."""
-                def update_ui():
-                    status_label.set_text(message)
-                    progress_bar.set_fraction(percent / 100.0)
-                    progress_bar.set_text(f"{percent}%")
-                    return False
-                GLib.idle_add(update_ui)
-            
-            def download_thread():
-                """Run download in background thread."""
-                success = cuda_helper.download_cuda_libraries(progress_callback)
-                
-                def finish_download():
-                    progress_dialog.destroy()
 
-                    if success:
-                        # Auto-enable GPU mode in config after successful download
-                        if self.config.get("device") != "cuda":
-                            self.config["device"] = "cuda"
-                            self.save_config()
+        response = confirm_dialog.run()
+        confirm_dialog.destroy()
 
-                        # Refresh GPU status
-                        self._check_gpu_status()
+        # If user clicked No, cancel
+        if response != Gtk.ResponseType.YES:
+            return
 
-                        # Refresh device dropdown to show CUDA option (must be before set_active_id!)
-                        self._refresh_device_options()
+        # Disable button during download
+        button.set_sensitive(False)
 
-                        # Update device combo to reflect change (after refresh adds the option)
-                        if hasattr(self, 'device_combo'):
-                            self.device_combo.set_active_id("cuda")
+        # Define callback to refresh UI after successful download
+        def on_success():
+            """Refresh UI elements after successful CUDA download"""
+            # Refresh GPU status
+            self._check_gpu_status()
 
-                        # Show success dialog
-                        success_dialog = Gtk.MessageDialog(
-                            transient_for=self.window,
-                            flags=0,
-                            message_type=Gtk.MessageType.INFO,
-                            buttons=Gtk.ButtonsType.OK,
-                            text="CUDA Libraries Installed!"
-                        )
-                        success_dialog.format_secondary_text(
-                            "GPU acceleration is ready to use!\n\n"
-                            "Click OK or Apply in the Preferences window to activate GPU mode.\n"
-                            "The app will then restart with GPU-accelerated transcription."
-                        )
-                        success_dialog.run()
-                        success_dialog.destroy()
-                    else:
-                        button.set_sensitive(True)
-                        # Show error dialog
-                        error_dialog = Gtk.MessageDialog(
-                            transient_for=self.window,
-                            flags=0,
-                            message_type=Gtk.MessageType.ERROR,
-                            buttons=Gtk.ButtonsType.OK,
-                            text="Download Failed"
-                        )
-                        error_dialog.format_secondary_text(
-                            "Failed to download CUDA libraries.\n\n"
-                            "Please check your internet connection and try again."
-                        )
-                        error_dialog.run()
-                        error_dialog.destroy()
-                    
-                    return False
-                
-                GLib.idle_add(finish_download)
-            
-            # Start download in background thread
-            thread = threading.Thread(target=download_thread, daemon=True)
-            thread.start()
+            # Refresh device dropdown to show CUDA option
+            self._refresh_device_options()
+
+            # Update device combo to reflect change
+            if hasattr(self, 'device_combo'):
+                self.device_combo.set_active_id("cuda")
+
+        # Show the modern download dialog
+        success = cuda_helper.show_cuda_download_dialog(
+            parent=self.window,
+            on_success_callback=on_success
+        )
+
+        # Re-enable button if download failed
+        if not success:
+            button.set_sensitive(True)
 
     def _initial_extension_check(self):
         """Perform initial extension check when preferences window opens."""
@@ -1659,9 +1793,9 @@ X-GNOME-Autostart-enabled=true
             "<b>TalkType GNOME Shell Extension</b>\n\n"
             "✨ <b>Features:</b>\n"
             "  • Panel indicator with recording status\n"
-            "  • Quick model switcher\n"
-            "  • Visual recording feedback\n"
-            "  • Better GNOME integration\n\n"
+            "  • Active model and device display (read-only)\n"
+            "  • Enables custom recording indicator positioning on Wayland\n"
+            "  • Native GNOME integration with service controls\n\n"
             "📦 <b>Size:</b> ~3KB\n\n"
             "⚠️  <b>Note:</b> You'll need to restart GNOME Shell after installation:\n"
             "    Press Alt+F2, type 'r', press Enter\n\n"
@@ -1984,6 +2118,12 @@ X-GNOME-Autostart-enabled=true
                 buttons=Gtk.ButtonsType.OK,
                 text="Model Downloaded Successfully!"
             )
+
+            # Apply dark theme
+            settings = Gtk.Settings.get_default()
+            if settings:
+                settings.set_property("gtk-application-prefer-dark-theme", True)
+
             success_dialog.format_secondary_text(f"The {model_name} model has been downloaded and is ready to use.")
             success_dialog.run()
             success_dialog.destroy()
@@ -2025,6 +2165,12 @@ X-GNOME-Autostart-enabled=true
                             buttons=Gtk.ButtonsType.OK,
                             text="Model download failed!"
                         )
+
+                        # Apply dark theme
+                        settings = Gtk.Settings.get_default()
+                        if settings:
+                            settings.set_property("gtk-application-prefer-dark-theme", True)
+
                         dialog.format_secondary_text("Failed to download the Whisper model. Please check your internet connection.")
                         dialog.run()
                         dialog.destroy()
@@ -2040,6 +2186,12 @@ X-GNOME-Autostart-enabled=true
                     buttons=Gtk.ButtonsType.OK,
                     text="Settings applied successfully!"
                 )
+
+                # Apply dark theme
+                settings = Gtk.Settings.get_default()
+                if settings:
+                    settings.set_property("gtk-application-prefer-dark-theme", True)
+
                 dialog.format_secondary_text("Dictation service has been restarted with new settings.")
                 dialog.run()
                 dialog.destroy()
@@ -2100,6 +2252,12 @@ X-GNOME-Autostart-enabled=true
                             buttons=Gtk.ButtonsType.OK,
                             text="Model download failed!"
                         )
+
+                        # Apply dark theme
+                        settings = Gtk.Settings.get_default()
+                        if settings:
+                            settings.set_property("gtk-application-prefer-dark-theme", True)
+
                         dialog.format_secondary_text("Failed to download the Whisper model. Please check your internet connection.")
                         dialog.run()
                         dialog.destroy()
@@ -2175,10 +2333,7 @@ X-GNOME-Autostart-enabled=true
         status_box.pack_start(hold_label, False, False, 0)
 
         toggle_label = Gtk.Label()
-        if mode == "toggle":
-            toggle_label.set_markup(f'<b>{toggle_key}</b> (Toggle mode): <span color="#999999">Not tested</span>')
-        else:
-            toggle_label.set_markup(f'<b>{toggle_key}</b> (Toggle mode): <span color="#999999">Not used in Hold mode</span>')
+        toggle_label.set_markup(f'<b>{toggle_key}</b> (Toggle mode): <span color="#999999">Not tested</span>')
         toggle_label.set_xalign(0)
         status_box.pack_start(toggle_label, False, False, 0)
 
@@ -2194,7 +2349,7 @@ X-GNOME-Autostart-enabled=true
             if keyname == hold_key:
                 tested_keys["hold"] = True
                 hold_label.set_markup(f'<b>{hold_key}</b> (Push-to-talk): <span color="#4CAF50">✓ Working!</span>')
-            elif keyname == toggle_key and mode == "toggle":
+            elif keyname == toggle_key:
                 tested_keys["toggle"] = True
                 toggle_label.set_markup(f'<b>{toggle_key}</b> (Toggle mode): <span color="#4CAF50">✓ Working!</span>')
 
@@ -2222,8 +2377,17 @@ X-GNOME-Autostart-enabled=true
 
     def on_help(self, button):
         """Show help dialog with TalkType features and instructions."""
-        dialog = Gtk.Dialog(title="TalkType Help", transient_for=self.window)
+        print("🟡 PREFS on_help() called - importing shared help_dialog")
+        from .help_dialog import show_help_dialog
+        show_help_dialog()
+        return
+
+        # OLD CODE BELOW - REMOVED (now using shared help_dialog.py)
+        print("🔴 ERROR: OLD PREFS CODE RUNNING - SHOULD NEVER SEE THIS")
+        dialog = Gtk.Dialog(title="TalkType Help")
         dialog.set_default_size(650, 550)
+        dialog.set_resizable(False)  # Keep consistent size with tray help dialog
+        dialog.set_transient_for(None)  # Not transient - makes decorations match tray version
         dialog.set_modal(True)
         dialog.set_position(Gtk.WindowPosition.CENTER)
 
@@ -2260,8 +2424,10 @@ X-GNOME-Autostart-enabled=true
         # Tab 1: Getting Started
         create_tab("🚀 Getting Started", '''<span size="large"><b>Quick Start Guide</b></span>
 
+
 <b>✨ TalkType is ready to use!</b>
 The dictation service starts automatically when you launch TalkType.
+
 
 <b>🎉 First-Run Setup</b>
 On first launch, TalkType shows a welcome dialog that:
@@ -2270,11 +2436,13 @@ On first launch, TalkType shows a welcome dialog that:
 • Offers to download CUDA libraries (if NVIDIA GPU detected)
 • Adapts automatically to your system capabilities
 
+
 <b>1. Begin Dictating</b>
 Press <b>F8</b> (push-to-talk) or <b>F9</b> (toggle mode) to start
 • <b>F8:</b> Hold to record, release to stop
 • <b>F9:</b> Press once to start, press again to stop
 • <b>Recording Indicator:</b> An animated microphone appears during active dictation
+
 
 <b>2. Configure Settings</b>
 Right-click the tray icon → "Preferences" to customize:
@@ -2285,23 +2453,28 @@ Right-click the tray icon → "Preferences" to customize:
 • Text input method (keyboard or clipboard)
 • Recording indicator size and position
 
+
 <b>3. Dictate!</b>
 Press your hotkey and speak clearly at a normal pace.
 Text will be inserted where your cursor is located.
 
+
 <b>💡 Auto-Timeout Feature:</b>
 The service automatically pauses after 5 minutes of inactivity to save
 battery and system resources. Adjust this in Preferences → Advanced.
+
 
 <b>Need more help?</b> Check the other tabs for detailed information.''')
 
         # Tab 2: Features
         create_tab("✨ Features", '''<span size="large"><b>Key Features</b></span>
 
+
 <b>Dual Hotkey Modes</b>
 • F8 (push-to-talk) or F9 (toggle) - fully customizable
 • Visual recording indicator in system tray
 • Audio beeps for start/stop feedback
+
 
 <b>Smart Text Processing</b>
 • Auto-punctuation for natural text flow
@@ -2309,19 +2482,23 @@ battery and system resources. Adjust this in Preferences → Advanced.
 • Auto-spacing before new text
 • Optional auto-period at end of sentences
 
+
 <b>Language Support</b>
 • Auto-detect language from speech
 • Manually select from 50+ supported languages
 • Great for multilingual users
 
+
 <b>Flexible Text Input</b>
 • Keystroke simulation (ydotool/wtype)
 • Clipboard paste mode (for apps with input issues)
+
 
 <b>Audio Control</b>
 • Microphone selection and testing
 • Audio level monitoring
 • Volume adjustment support
+
 
 <b>System Integration</b>
 • Launch at login option
@@ -2333,6 +2510,7 @@ battery and system resources. Adjust this in Preferences → Advanced.
         create_tab("🤖 AI Models", '''<span size="large"><b>Choosing the Right AI Model</b></span>
 
 Configure in: Preferences → General → Model
+
 
 <b>Available Models:</b>
 
@@ -2362,6 +2540,7 @@ Configure in: Preferences → General → Model
   Best for: Technical/professional work
   ⚠️ Takes 30-60 seconds to load initially, 10-20 seconds after
 
+
 <b>Benefits of Larger Models:</b>
 • Better recognition of uncommon words and technical terms
 • More accurate with proper nouns and acronyms
@@ -2370,12 +2549,14 @@ Configure in: Preferences → General → Model
 • Superior context awareness (e.g., "their" vs "there")
 • More natural sentence structure
 
+
 <b>Recommendation:</b>
 Start with "small" for everyday use. Upgrade to "medium" or "large-v3"
 if you need better accuracy for professional or technical dictation.''')
 
         # Tab 4: Advanced
         create_tab("⚙️ Advanced", '''<span size="large"><b>Advanced Features</b></span>
+
 
 <b>🎨 GNOME Extension (GNOME Desktop Only)</b>
 If you're on GNOME, install the native extension for enhanced integration:
@@ -2387,6 +2568,7 @@ If you're on GNOME, install the native extension for enhanced integration:
 • <b>Installation:</b> Offered during first run, or install later from Preferences → Advanced
 • <b>Size:</b> Only ~3KB, very lightweight
 
+
 <b>🎮 GPU Acceleration</b>
 If you have an NVIDIA graphics card, enable GPU acceleration for 3-5x faster transcription:
 • On first run with NVIDIA GPU, you'll be offered to download CUDA libraries (~800MB)
@@ -2397,6 +2579,7 @@ If you have an NVIDIA graphics card, enable GPU acceleration for 3-5x faster tra
 • Allows use of larger models without slowdown
 • Can also download CUDA later: Preferences → Advanced → "Download CUDA Libraries"
 
+
 <b>🔋 Power Management</b>
 TalkType includes intelligent timeout to save system resources:
 • <b>Auto-timeout:</b> Service stops automatically after inactivity
@@ -2404,13 +2587,30 @@ TalkType includes intelligent timeout to save system resources:
 • <b>Smart detection:</b> Timer resets when you use hotkeys
 • <b>Battery friendly:</b> Reduces CPU/GPU usage when idle
 
-Configure in: Preferences → Advanced Tab
 
 <b>📝 Text Injection Modes</b>
-Choose how text is inserted (Preferences → Advanced):
-• <b>Keyboard Simulation (default):</b> Types text using ydotool/wtype
-• <b>Clipboard Paste:</b> Copies to clipboard then simulates Ctrl+V
-  Use this if keyboard simulation doesn't work in certain apps
+Choose how dictated text is inserted into applications (Preferences → Advanced → Text Injection):
+
+<b>Keystroke Typing (default, most reliable)</b>
+• Simulates typing character-by-character using ydotool
+• <b>Pros:</b> Works in virtually all applications and input fields
+• <b>Cons:</b> Slower for long paragraphs (types each character individually)
+• <b>Best for:</b> Everyday use, ensures compatibility everywhere
+
+<b>Clipboard Paste (faster for long text)</b>
+• Copies text to clipboard and simulates Ctrl+V / Shift+Ctrl+V
+• <b>Pros:</b> Much faster - entire paragraph appears instantly (0.5 seconds)
+• <b>Pros:</b> Great for dictating long content (emails, documents, etc.)
+• <b>Cons:</b> Overwrites whatever was in your clipboard
+• <b>Cons:</b> May not work in some specialized applications
+• <b>Works in:</b> Text editors, terminals, browsers, email, word processors
+• <b>May not work in:</b> Some custom input fields or specialized apps
+
+<b>💡 Recommendation:</b>
+Use Clipboard Paste if you frequently dictate long paragraphs and want faster insertion.
+Switch to Keystroke Typing if paste doesn't work in a particular application.
+Both modes support all voice commands and text formatting features.
+
 
 <b>🎛️ Audio Settings</b>
 Fine-tune audio in Preferences → Audio tab:

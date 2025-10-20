@@ -200,8 +200,8 @@ class SplashScreen:
 
     def _animate_glow(self):
         """Animate the glow effect by expanding once to maximum, then staying there."""
-        if not self.image_widget:
-            return True
+        if not self.image_widget or getattr(self, '_stop_glow', False):
+            return False  # Stop animation if widget gone or stop flag set
 
         style_context = self.image_widget.get_style_context()
 
@@ -217,7 +217,7 @@ class SplashScreen:
         else:
             # Stay at maximum glow
             style_context.add_class(f'glow-{self.glow_level}')
-            return False  # Stop animation
+            return False  # Stop animation (GLib will auto-remove timer)
 
     def show_and_fade(self, callback):
         """
@@ -254,9 +254,8 @@ class SplashScreen:
         if opacity > 0.0:
             GLib.timeout_add(25, lambda: self._fade_out(opacity, callback))
         else:
-            # Stop glow animation
-            if hasattr(self, 'glow_timer'):
-                GLib.source_remove(self.glow_timer)
+            # Stop glow animation by setting flag (timer will auto-remove)
+            self._stop_glow = True
 
             # Close splash and show welcome dialog
             self.window.destroy()
@@ -793,15 +792,58 @@ def show_welcome_dialog(parent=None):
     return result_container[0]
 
 
-def show_tips_and_features_dialog():
+def show_tips_and_features_dialog(extension_installed=False):
     """
     Show tips and features dialog after hotkey testing.
     Encourages users to explore TalkType's capabilities.
+    Now includes model selection for first-run download.
+
+    Args:
+        extension_installed: Whether GNOME extension was installed (requires logout reminder)
     """
     dialog = Gtk.Dialog(title="TalkType - Setup Complete!")
-    dialog.set_default_size(600, 500)
+    dialog.set_default_size(600, 650 if extension_installed else 600)
     dialog.set_border_width(0)
     dialog.set_resizable(False)
+
+    # Add CSS for pulsing logout reminder
+    if extension_installed:
+        css_provider = Gtk.CssProvider()
+        css_provider.load_from_data(b"""
+            /* Logout reminder - simple style like checkboxes */
+            .logout-reminder {
+                padding: 15px;
+                border-radius: 8px;
+                border: none;
+                transition: all 300ms ease-in-out;
+            }
+            /* Pulse effect - yellow glow like checkbox style */
+            .logout-reminder.pulse-0 {
+                background-color: rgba(255, 235, 59, 0.06);
+                box-shadow: 0 0 8px rgba(255, 235, 59, 0.25);
+            }
+            .logout-reminder.pulse-1 {
+                background-color: rgba(255, 235, 59, 0.075);
+                box-shadow: 0 0 9px rgba(255, 235, 59, 0.3);
+            }
+            .logout-reminder.pulse-2 {
+                background-color: rgba(255, 235, 59, 0.09);
+                box-shadow: 0 0 11px rgba(255, 235, 59, 0.375);
+            }
+            .logout-reminder.pulse-3 {
+                background-color: rgba(255, 235, 59, 0.105);
+                box-shadow: 0 0 12px rgba(255, 235, 59, 0.425);
+            }
+            .logout-reminder.pulse-4 {
+                background-color: rgba(255, 235, 59, 0.12);
+                box-shadow: 0 0 14px rgba(255, 235, 59, 0.5);
+            }
+        """)
+        Gtk.StyleContext.add_provider_for_screen(
+            dialog.get_screen() if dialog.get_screen() else Gdk.Screen.get_default(),
+            css_provider,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )
 
     # Get content area
     content = dialog.get_content_area()
@@ -871,6 +913,85 @@ def show_tips_and_features_dialog():
 
     vbox.pack_start(tips_box, False, False, 0)
 
+    # GNOME Extension logout reminder (if extension was installed)
+    logout_reminder_box = None
+    if extension_installed:
+        sep_ext = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        sep_ext.set_margin_top(15)
+        sep_ext.set_margin_bottom(10)
+        vbox.pack_start(sep_ext, False, False, 0)
+
+        # Use Frame instead of EventBox to avoid border artifacts
+        logout_reminder_box = Gtk.Frame()
+        logout_reminder_box.set_shadow_type(Gtk.ShadowType.NONE)  # No default frame shadow
+        logout_reminder_box.get_style_context().add_class('logout-reminder')
+
+        logout_reminder = Gtk.Label()
+        logout_reminder.set_markup(
+            '<span size="medium"><b>⚠️ Important: GNOME Extension Installed</b></span>\n\n'
+            '<span size="small">Please <b>log out and back in</b> for the GNOME extension to become active.\n'
+            'The extension adds panel integration and enhanced Wayland support.</span>'
+        )
+        logout_reminder.set_line_wrap(True)
+        logout_reminder.set_justify(Gtk.Justification.CENTER)
+        logout_reminder.set_max_width_chars(55)
+        logout_reminder.set_margin_start(10)
+        logout_reminder.set_margin_end(10)
+        logout_reminder.set_margin_top(10)
+        logout_reminder.set_margin_bottom(10)
+
+        logout_reminder_box.add(logout_reminder)
+        vbox.pack_start(logout_reminder_box, False, False, 0)
+
+    # Model selection section
+    sep_model = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+    sep_model.set_margin_top(15)
+    sep_model.set_margin_bottom(10)
+    vbox.pack_start(sep_model, False, False, 0)
+
+    model_section = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+    model_section.set_margin_start(20)
+    model_section.set_margin_end(20)
+
+    # Model selection header
+    model_header = Gtk.Label()
+    model_header.set_markup('<span size="medium"><b>💡 Choose Your Starting Model</b></span>')
+    model_header.set_halign(Gtk.Align.START)
+    model_section.pack_start(model_header, False, False, 0)
+
+    # Model dropdown with description
+    model_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+
+    model_label = Gtk.Label()
+    model_label.set_markup('<b>Model:</b>')
+    model_box.pack_start(model_label, False, False, 0)
+
+    model_combo = Gtk.ComboBoxText()
+    model_combo.append("small", "Small (recommended) - 244MB")
+    model_combo.append("tiny", "Tiny (fastest) - 39MB")
+    model_combo.append("medium", "Medium (better accuracy) - 769MB")
+    model_combo.append("large-v3", "Large (best quality) - 3GB")
+    model_combo.set_active_id("small")
+    model_combo.set_tooltip_text("Choose which AI model to download. You can change this later in Preferences.")
+    model_box.pack_start(model_combo, True, True, 0)
+
+    model_section.pack_start(model_box, False, False, 0)
+
+    # Model description
+    model_desc = Gtk.Label()
+    model_desc.set_markup(
+        '<span size="small">The Small model provides good accuracy for most use cases\n'
+        'with fast downloads and quick transcription.\n\n'
+        'You can change models anytime in Preferences.</span>'
+    )
+    model_desc.set_line_wrap(True)
+    model_desc.set_justify(Gtk.Justification.LEFT)
+    model_desc.set_halign(Gtk.Align.START)
+    model_desc.set_opacity(0.9)
+    model_section.pack_start(model_desc, False, False, 0)
+
+    vbox.pack_start(model_section, False, False, 0)
+
     # Bottom section - encourage exploration
     sep2 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
     sep2.set_margin_top(15)
@@ -894,17 +1015,63 @@ def show_tips_and_features_dialog():
     button_box.set_margin_start(20)
     button_box.set_margin_end(20)
 
-    get_started_button = Gtk.Button(label="Get Started!")
-    get_started_button.connect("clicked", lambda b: dialog.response(Gtk.ResponseType.OK))
+    get_started_button = Gtk.Button(label="Download and Get Started!")
     get_started_button.get_style_context().add_class("suggested-action")
-    get_started_button.set_size_request(120, -1)  # Minimum width
+    get_started_button.set_size_request(200, -1)  # Wider for new text
+
+    # Store selected model
+    selected_model = [model_combo.get_active_id()]  # Use list to make mutable
+
+    def on_get_started_clicked(button):
+        """Handle Get Started button - close dialog and return selected model"""
+        selected_model[0] = model_combo.get_active_id()
+        dialog.response(Gtk.ResponseType.OK)
+
+    get_started_button.connect("clicked", on_get_started_clicked)
 
     button_box.pack_end(get_started_button, False, False, 0)
     dialog.get_action_area().pack_start(button_box, True, True, 0)
 
+    # Start pulsing animation for logout reminder if extension was installed
+    pulse_timer_id = None
+    if logout_reminder_box:
+        import math
+        pulse_phase = [0]  # Use list to make it mutable in nested function
+
+        def pulse_logout_reminder():
+            """Animate logout reminder with smooth continuous pulsating glow."""
+            phase = pulse_phase[0]
+            pulse_phase[0] = phase + 0.15
+
+            # Calculate pulse intensity (oscillates smoothly between 0 and 4)
+            intensity = 2 + 2 * math.sin(phase)
+            pulse_level = int(round(intensity))
+
+            style_context = logout_reminder_box.get_style_context()
+
+            # Remove all pulse classes
+            for i in range(5):
+                style_context.remove_class(f'pulse-{i}')
+
+            # Add the current pulse level class
+            style_context.add_class(f'pulse-{pulse_level}')
+
+            return True  # Continue animation
+
+        # Start pulsing timer (60 FPS = ~16ms per frame)
+        pulse_timer_id = GLib.timeout_add(50, pulse_logout_reminder)
+
     dialog.show_all()
     dialog.run()
+
+    # Stop pulsing animation before destroying dialog
+    if pulse_timer_id:
+        GLib.source_remove(pulse_timer_id)
+
     dialog.destroy()
+
+    # Return the selected model for downloading
+    return selected_model[0]
 
 
 def show_hotkey_test_dialog():
@@ -1112,101 +1279,143 @@ def show_welcome_and_install():
         logger.info("User cancelled welcome dialog")
         return result
 
-    # Handle CUDA libraries download FIRST (takes longer)
-    if result.get('download_cuda'):
-        logger.info("User requested CUDA libraries download")
+    # Determine what needs to be downloaded
+    download_cuda = result.get('download_cuda', False)
+    install_extension = result.get('install_extension', False)
+    extension_installed = False  # Track if extension was successfully installed
 
-        # Show confirmation dialog first
-        confirm_dialog = Gtk.MessageDialog(
-            message_type=Gtk.MessageType.QUESTION,
-            buttons=Gtk.ButtonsType.YES_NO,
-            text="Download CUDA Libraries?"
-        )
-        from talktype.config import get_data_dir
-        cuda_path = os.path.join(get_data_dir(), "cuda")
-        confirm_dialog.format_secondary_text(
-            "This will download approximately 800MB of CUDA libraries for GPU acceleration.\n\n"
-            f"The files will be stored in {cuda_path} and may take several minutes to download.\n\n"
-            "Continue with download?"
-        )
-        confirm_dialog.set_position(Gtk.WindowPosition.CENTER)
-        response = confirm_dialog.run()
-        confirm_dialog.destroy()
-
-        if response != Gtk.ResponseType.YES:
-            logger.info("CUDA download cancelled by user")
-        else:
-            try:
-                from talktype import cuda_helper
-
-                # Use the unified modern download dialog
-                cuda_helper.show_cuda_download_dialog()
-
-            except Exception as e:
-                logger.error(f"Error during CUDA libraries download: {e}")
-
-    # Handle GNOME extension installation SECOND (quick, and user may want to logout)
-    if result.get('install_extension'):
-        logger.info("User requested GNOME extension installation")
+    # If user selected any downloads, show unified download dialog
+    if download_cuda or install_extension:
         try:
-            from talktype import extension_helper
+            from talktype.download_progress_dialog import show_unified_download_dialog
 
-            # Show progress dialog
-            progress_dialog = Gtk.MessageDialog(
-                message_type=Gtk.MessageType.INFO,
-                buttons=Gtk.ButtonsType.NONE,
-                text="Installing GNOME Extension..."
+            # Show unified download dialog with selected tasks
+            download_results = show_unified_download_dialog(
+                cuda=download_cuda,
+                extension=install_extension,
+                parent=None
             )
-            progress_dialog.format_secondary_text("Please wait while we install the TalkType extension...")
-            progress_dialog.show_all()
 
-            # Process pending events to show the dialog
-            while Gtk.events_pending():
-                Gtk.main_iteration()
+            logger.info(f"Download results: {download_results}")
 
-            # Attempt installation
-            success = extension_helper.download_and_install_extension()
-            progress_dialog.destroy()
+            # Handle post-download actions
+            if download_cuda and download_results.get('CUDA Libraries', {}).get('success'):
+                # CUDA was downloaded successfully - auto-enable GPU mode
+                try:
+                    from talktype.config import load_config, save_config
+                    config = load_config()
+                    if config.device != "cuda":
+                        config.device = "cuda"
+                        save_config(config)
+                        logger.info("✅ Automatically enabled GPU mode in config")
+                except Exception as e:
+                    logger.warning(f"Could not auto-enable GPU mode: {e}")
 
-            if success:
-                # Show success message with logout reminder
-                msg = Gtk.MessageDialog(
-                    message_type=Gtk.MessageType.INFO,
-                    buttons=Gtk.ButtonsType.OK,
-                    text="GNOME Extension Installed!"
-                )
-                msg.format_secondary_text(
-                    "The TalkType extension has been installed successfully.\n\n"
-                    "Please log out and back in for the extension to become active."
-                )
-                msg.run()
-                msg.destroy()
-                logger.info("GNOME extension installed successfully")
-            else:
-                # Show error message
-                msg = Gtk.MessageDialog(
-                    message_type=Gtk.MessageType.ERROR,
-                    buttons=Gtk.ButtonsType.OK,
-                    text="Installation Failed"
-                )
-                msg.format_secondary_text(
-                    "Could not install the GNOME extension.\n\n"
-                    "You can try again later from Preferences → Advanced."
-                )
-                msg.run()
-                msg.destroy()
-                logger.error("GNOME extension installation failed")
+            # Store extension install result for later use
+            extension_installed = install_extension and download_results.get('GNOME Extension', {}).get('success')
 
         except Exception as e:
-            logger.error(f"Error during GNOME extension installation: {e}")
+            logger.error(f"Error during installations: {e}", exc_info=True)
 
     # Show hotkey testing dialog
     logger.info("Showing hotkey test dialog")
     show_hotkey_test_dialog()
 
-    # Show tips and features dialog
-    logger.info("Showing tips and features dialog")
-    show_tips_and_features_dialog()
+    # Show tips and features dialog (with extension logout reminder if needed)
+    # This now includes model selection and returns the selected model
+    logger.info("Showing tips and features dialog with model selection")
+    selected_model = show_tips_and_features_dialog(extension_installed=extension_installed)
+
+    # Download the selected model (no confirmation needed - user already chose)
+    if selected_model:
+        logger.info(f"Downloading selected model: {selected_model}")
+        try:
+            from talktype.model_helper import download_model_with_progress, is_model_cached
+            from talktype.config import load_config, save_config
+
+            config = load_config()
+            device = config.device
+            compute_type = "float16" if device.lower() == "cuda" else "int8"
+
+            # Download model WITHOUT confirmation (user already selected it)
+            model = download_model_with_progress(
+                selected_model,
+                device=device,
+                compute_type=compute_type,
+                parent=None,
+                show_confirmation=False  # No confirmation - user already chose
+            )
+
+            if model:
+                logger.info(f"✅ {selected_model} model downloaded successfully")
+                # Update config with selected model
+                config.model = selected_model
+                save_config(config)
+                logger.info(f"✅ Config updated to use {selected_model} model")
+                del model  # Clean up - will be reloaded when service starts
+            else:
+                # Download failed or was cancelled - fall back to smaller model
+                logger.warning(f"Model download returned None for {selected_model} (likely cancelled or failed)")
+
+                # Try fallback models in order: small, tiny
+                fallback_models = ["small", "tiny"] if selected_model not in ["small", "tiny"] else ["tiny"]
+
+                for fallback in fallback_models:
+                    if is_model_cached(fallback):
+                        logger.info(f"✅ Using cached {fallback} model as fallback")
+                        config.model = fallback
+                        save_config(config)
+                        break
+
+                    logger.info(f"Attempting fallback to {fallback} model...")
+                    try:
+                        fallback_model = download_model_with_progress(
+                            fallback,
+                            device=device,
+                            compute_type=compute_type,
+                            parent=None,
+                            show_confirmation=False
+                        )
+
+                        if fallback_model:
+                            logger.info(f"✅ Fallback to {fallback} model successful")
+                            config.model = fallback
+                            save_config(config)
+                            del fallback_model
+                            break
+                        else:
+                            logger.warning(f"Fallback to {fallback} also failed")
+                    except Exception as e:
+                        logger.warning(f"Error downloading fallback {fallback}: {e}")
+
+        except Exception as e:
+            logger.warning(f"Error downloading {selected_model} model: {e}")
+            # Try to ensure SOME model is available (tiny as last resort)
+            try:
+                from talktype.model_helper import is_model_cached, download_model_with_progress
+                from talktype.config import load_config, save_config
+
+                config = load_config()
+
+                if not is_model_cached("tiny"):
+                    logger.info("Downloading tiny model as emergency fallback...")
+                    tiny_model = download_model_with_progress(
+                        "tiny",
+                        device="cpu",
+                        compute_type="int8",
+                        parent=None,
+                        show_confirmation=False
+                    )
+                    if tiny_model:
+                        config.model = "tiny"
+                        save_config(config)
+                        del tiny_model
+                else:
+                    config.model = "tiny"
+                    save_config(config)
+            except Exception:
+                pass  # Last resort failed, app will try to download on first run
+
     logger.info("First-run setup completed")
 
     return result

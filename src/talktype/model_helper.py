@@ -37,7 +37,7 @@ def is_model_cached(model_name):
         return False
 
 
-def download_model_with_progress(model_name, device="cpu", compute_type="int8", parent=None):
+def download_model_with_progress(model_name, device="cpu", compute_type="int8", parent=None, show_confirmation=True):
     """
     Download a Whisper model with progress dialog.
 
@@ -46,6 +46,7 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
         device: Device to use ("cpu" or "cuda")
         compute_type: Compute type ("int8", "float16", etc.)
         parent: Optional parent window for dialog
+        show_confirmation: Whether to show confirmation dialog before download (default True)
 
     Returns:
         WhisperModel instance or None if cancelled/failed
@@ -57,11 +58,52 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
         logger.info(f"Model {model_name} already cached, loading directly")
         return WhisperModel(model_name, device=device, compute_type=compute_type)
 
-    # Show progress dialog
+    # Show confirmation dialog before starting download
+    if show_confirmation:
+        model_sizes = {
+            "tiny": "39 MB",
+            "base": "74 MB",
+            "small": "244 MB",
+            "medium": "769 MB",
+            "large-v3": "~3 GB"
+        }
+        size_str = model_sizes.get(model_name, "unknown size")
+
+        confirm_dialog = Gtk.MessageDialog(
+            parent=parent,
+            message_type=Gtk.MessageType.QUESTION,
+            buttons=Gtk.ButtonsType.OK_CANCEL,
+            text=f"Download {model_name.title()} Model?"
+        )
+
+        # Apply dark theme to dialog
+        settings = Gtk.Settings.get_default()
+        if settings:
+            settings.set_property("gtk-application-prefer-dark-theme", True)
+
+        confirm_dialog.format_secondary_text(
+            f"TalkType needs to download the {model_name} AI model ({size_str}) for speech recognition.\n\n"
+            f"This is a one-time download that will be cached for future use.\n\n"
+            "Continue with download?"
+        )
+        confirm_dialog.set_position(Gtk.WindowPosition.CENTER)
+        response = confirm_dialog.run()
+        confirm_dialog.destroy()
+
+        if response != Gtk.ResponseType.OK:
+            logger.info(f"User declined model download: {model_name}")
+            return None
+
+    # Show progress dialog with dark theme
     progress_dialog = Gtk.Dialog(title=f"Downloading Model: {model_name}")
     progress_dialog.set_default_size(500, 150)
     progress_dialog.set_modal(True)
     progress_dialog.set_position(Gtk.WindowPosition.CENTER)
+
+    # Apply dark theme to dialog
+    settings = Gtk.Settings.get_default()
+    if settings:
+        settings.set_property("gtk-application-prefer-dark-theme", True)
 
     if parent:
         progress_dialog.set_transient_for(parent)
@@ -102,11 +144,19 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
     info_label.set_opacity(0.7)
     content.pack_start(info_label, False, False, 0)
 
-    # Add Cancel button
+    # Add Cancel button to action area
     cancel_button = Gtk.Button(label="Cancel")
+    cancel_button.set_can_default(True)
+    cancel_button.show()  # Explicitly show the button
     progress_dialog.add_action_widget(cancel_button, Gtk.ResponseType.CANCEL)
 
+    # Show all widgets
     progress_dialog.show_all()
+
+    # Make sure action area is visible
+    action_area = progress_dialog.get_action_area()
+    if action_area:
+        action_area.show_all()
 
     # Download state
     cancel_event = threading.Event()
@@ -172,6 +222,12 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
             buttons=Gtk.ButtonsType.OK,
             text="Model Download Failed"
         )
+
+        # Apply dark theme
+        settings = Gtk.Settings.get_default()
+        if settings:
+            settings.set_property("gtk-application-prefer-dark-theme", True)
+
         msg.format_secondary_text(
             f"Could not download {model_name} model.\n\n"
             f"Error: {str(download_error[0])}\n\n"
