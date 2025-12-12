@@ -606,10 +606,10 @@ def _paste_text(text: str, send_trailing_keys: bool = False):
             proc.stdin.close()
 
             # Give wl-copy and compositor time to publish clipboard contents
-            time.sleep(0.25)
+            time.sleep(0.10)
 
             # Wait for target window to be ready
-            time.sleep(0.3)
+            time.sleep(0.08)
 
             # Send appropriate paste command based on application type
             # KEY_LEFTSHIFT (42), KEY_LEFTCTRL (29), KEY_V (47)
@@ -642,7 +642,7 @@ def _paste_text(text: str, send_trailing_keys: bool = False):
                 time.sleep(0.05)
                 _sp.run(["ydotool", "key", "29:0"], check=False, env=env)  # Ctrl up
             
-            time.sleep(0.2)
+            time.sleep(0.05)
 
             # Kill wl-copy process after paste is complete
             try:
@@ -736,7 +736,7 @@ def stop_recording(
         if notify_on: _notify("TalkType", f"Transcribed: {text[:80]}{'…' if len(text)>80 else ''}")
         if text:
             # Small settling delay so focused app is ready to receive text
-            time.sleep(0.12)
+            time.sleep(0.05)
 
             # Check if AT-SPI can help us make a smarter decision
             # TEMPORARILY DISABLED for testing clipboard paste mode
@@ -798,13 +798,13 @@ def stop_recording(
                             logger.warning(f"Paste failed on part {i+1}, falling back to typing mode")
                             success = False
                             break
-                        time.sleep(0.15)  # Brief delay after each paste
+                        time.sleep(0.08)  # Brief delay after each paste
 
                     # Send Shift+Enter after each part except the last
                     if i < len(parts) - 1:
                         logger.info(f"Sending Shift+Enter after part {i+1}")
                         _send_shift_enter()
-                        time.sleep(0.1)
+                        time.sleep(0.05)
 
                 if success:
                     print(f"✂️  Inject (smart paste) {len(parts)} chunks, {len(text)} total chars")
