@@ -269,6 +269,53 @@ show_timer = true
 
 ## 💡 Nice to Have (Lower Priority)
 
+### Native Wayland Window Positioning (gtk-layer-shell)
+**Current:** Recording indicator positioning uses XWayland fallback (`GDK_BACKEND=x11`)
+**Problem:** Native Wayland doesn't allow apps to position their own windows
+**Proposed:** Use `gtk-layer-shell` library for proper Wayland positioning
+
+**Current Workaround:**
+- Force XWayland via `GDK_BACKEND=x11` in run scripts
+- Works but uses compatibility layer instead of native Wayland
+
+**Proper Implementation:**
+1. Add smart display detection:
+   ```
+   If Wayland AND gtk-layer-shell available:
+       → Use native Wayland with layer-shell positioning
+   Else if Wayland (no layer-shell):
+       → Fall back to XWayland OR accept center-only positioning
+   Else (X11):
+       → Use X11 normally (positioning works natively)
+   ```
+
+2. Update `recording_indicator.py` to use:
+   ```python
+   gi.require_version('GtkLayerShell', '0.1')
+   from gi.repository import GtkLayerShell
+   
+   GtkLayerShell.init_for_window(window)
+   GtkLayerShell.set_layer(window, GtkLayerShell.Layer.OVERLAY)
+   GtkLayerShell.set_anchor(window, GtkLayerShell.Edge.TOP, True)  # etc.
+   ```
+
+**Dependencies:**
+- `gtk-layer-shell` package (available in most distros: Fedora, Ubuntu, Arch)
+- Fedora/Nobara: `sudo dnf install gtk-layer-shell`
+- Ubuntu/Debian: `sudo apt install libgtk-layer-shell-dev gir1.2-gtklayershell-0.1`
+
+**Benefits:**
+- Native Wayland performance (no XWayland overhead)
+- Proper HiDPI scaling
+- Future-proof as X11 gets deprecated
+- Works on pure Wayland systems (no XWayland installed)
+
+**Fallback Strategy:**
+- If gtk-layer-shell not installed, gracefully fall back to XWayland or center-only
+- Show note in Preferences that positioning requires gtk-layer-shell on Wayland
+
+---
+
 ### 11. Audio Feedback Options
 **More beep sound choices:**
 - Different styles (chirp, click, tone, voice)
