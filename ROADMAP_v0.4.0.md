@@ -8,6 +8,50 @@ All features below are designed to add value **without increasing AppImage size*
 
 ## 🎯 High Priority (High Value, Easy to Implement)
 
+### Smart Injection Mode Detection (AT-SPI)
+**Current:** User manually chooses between clipboard paste or keyboard typing
+**Problem:** Clipboard paste doesn't work in URL bars, password fields, and other special inputs
+**Proposed:** Automatically detect the best injection method based on focused widget
+
+**Detection Logic:**
+```
+Use AT-SPI to detect focused widget type:
+
+If terminal emulator:
+    → Use Ctrl+Shift+V (already implemented)
+If URL/address bar:
+    → Use keyboard typing (Ctrl+V doesn't work)
+If password field:
+    → Use keyboard typing (more reliable)
+If standard text field:
+    → Use clipboard paste (fastest for long text)
+Fallback:
+    → Try AT-SPI direct text insertion if supported
+```
+
+**AT-SPI Widget Roles to Detect:**
+- `ATK_ROLE_TERMINAL` → Terminal
+- `ATK_ROLE_PASSWORD_TEXT` → Password field
+- `ATK_ROLE_ENTRY` with URI context → URL bar
+- `ATK_ROLE_TEXT` / `ATK_ROLE_ENTRY` → Normal text field
+
+**Implementation:**
+1. Extend existing `atspi_helper.py` to detect widget roles
+2. Add role-based injection method selection in `app.py`
+3. User preference becomes "Auto" (smart), "Paste", or "Type"
+4. Log which method was chosen and why (for debugging)
+
+**Benefits:**
+- User just dictates - app figures out the best method
+- Fast paste where it works, reliable typing where it doesn't
+- Handles edge cases automatically
+- Future-proof: add new rules as we discover quirks
+
+**Ultimate Goal:**
+Use AT-SPI **direct text insertion** where supported - bypasses both paste and typing entirely, works in any AT-SPI-enabled widget.
+
+---
+
 ### 1. Quick Model Switcher in Tray Menu
 **Current:** Must open Preferences to change model
 **Proposed:** Add model selection directly in tray menu
