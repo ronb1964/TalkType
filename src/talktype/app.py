@@ -618,31 +618,22 @@ def _paste_text(text: str, send_trailing_keys: bool = False):
             env.setdefault("YDOTOOL_SOCKET", os.path.join(runtime, ".ydotool_socket"))
 
             if is_terminal:
-                # Terminal: Use Shift+Ctrl+V
+                # Terminal: Use Shift+Ctrl+V (single ydotool call with all keys)
                 logger.debug("Using Shift+Ctrl+V for terminal")
-                _sp.run(["ydotool", "key", "42:1"], check=False, env=env)  # Shift down
-                time.sleep(0.05)
-                _sp.run(["ydotool", "key", "29:1"], check=False, env=env)  # Ctrl down
-                time.sleep(0.05)
-                _sp.run(["ydotool", "key", "47:1"], check=False, env=env)  # V down
-                time.sleep(0.05)
-                _sp.run(["ydotool", "key", "47:0"], check=False, env=env)  # V up
-                time.sleep(0.05)
-                _sp.run(["ydotool", "key", "29:0"], check=False, env=env)  # Ctrl up
-                time.sleep(0.05)
-                _sp.run(["ydotool", "key", "42:0"], check=False, env=env)  # Shift up
+                # KEY_LEFTSHIFT=42, KEY_LEFTCTRL=29, KEY_V=47
+                # Format: keycode:1 (down) or keycode:0 (up)
+                _sp.run(["ydotool", "key", "--delay", "20",
+                        "42:1", "29:1", "47:1", "47:0", "29:0", "42:0"], 
+                       check=False, env=env)
             else:
-                # Regular app: Use Ctrl+V
+                # Regular app: Use Ctrl+V (single ydotool call)
                 logger.debug("Using Ctrl+V for regular application")
-                _sp.run(["ydotool", "key", "29:1"], check=False, env=env)  # Ctrl down
-                time.sleep(0.05)
-                _sp.run(["ydotool", "key", "47:1"], check=False, env=env)  # V down
-                time.sleep(0.05)
-                _sp.run(["ydotool", "key", "47:0"], check=False, env=env)  # V up
-                time.sleep(0.05)
-                _sp.run(["ydotool", "key", "29:0"], check=False, env=env)  # Ctrl up
+                # KEY_LEFTCTRL=29, KEY_V=47
+                _sp.run(["ydotool", "key", "--delay", "20",
+                        "29:1", "47:1", "47:0", "29:0"], 
+                       check=False, env=env)
             
-            time.sleep(0.05)
+            time.sleep(0.03)
 
             # Kill wl-copy process after paste is complete
             try:
