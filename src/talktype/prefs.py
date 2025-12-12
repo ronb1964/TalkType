@@ -1014,6 +1014,49 @@ class PreferencesWindow:
         # Initial GPU check
         GLib.timeout_add(500, self._initial_gpu_check)
 
+        # Add horizontal separator before Typing Setup section
+        separator_typing = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        separator_typing.set_margin_top(20)
+        separator_typing.set_margin_bottom(10)
+        grid.attach(separator_typing, 0, row, 2, 1)
+        row += 1
+
+        # Typing Setup Section Header
+        typing_header = Gtk.Label()
+        typing_header.set_markup('<b>⌨️ Typing Setup</b>')
+        typing_header.set_xalign(0)
+        typing_header.set_margin_bottom(5)
+        grid.attach(typing_header, 0, row, 2, 1)
+        row += 1
+
+        # Typing Status Label
+        self.typing_status_label = Gtk.Label(label="Checking...", xalign=0)
+        self.typing_status_label.set_margin_start(10)
+        self.typing_status_label.set_margin_bottom(10)
+        grid.attach(self.typing_status_label, 0, row, 2, 1)
+        row += 1
+
+        # Button box for Typing actions
+        typing_button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        typing_button_box.set_margin_start(10)
+
+        # Fix Typing button
+        self.fix_typing_button = Gtk.Button(label="🔧 Fix Typing Permissions")
+        self.fix_typing_button.connect("clicked", self._on_fix_typing_clicked)
+        self.fix_typing_button.set_tooltip_text(
+            "Configure system permissions for keystroke injection.\n"
+            "Required for typing mode to work. Uses /dev/uinput.\n"
+            "Will prompt for admin password."
+        )
+        self.fix_typing_button.set_sensitive(False)
+        typing_button_box.pack_start(self.fix_typing_button, False, False, 0)
+
+        grid.attach(typing_button_box, 0, row, 2, 1)
+        row += 1
+
+        # Initial typing check
+        GLib.timeout_add(600, self._initial_typing_check)
+
         # Add horizontal separator before Extensions section
         separator3 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
         separator3.set_margin_top(20)
@@ -1745,6 +1788,129 @@ X-GNOME-Autostart-enabled=true
         # Re-enable button if download failed
         if not success:
             button.set_sensitive(True)
+
+    def _initial_typing_check(self):
+        """Perform initial typing permission check when preferences window opens."""
+        self._check_typing_status()
+        return False  # Don't repeat
+
+    def _check_typing_status(self):
+        """Check typing permission status and update UI."""
+        try:
+            from . import uinput_helper
+            
+            has_access, reason = uinput_helper.check_uinput_permission()
+            
+            if has_access:
+                self.typing_status_label.set_markup(
+                    '<span color="#4CAF50">✓ Typing permissions configured correctly</span>'
+                )
+                self.fix_typing_button.set_label("✓ Ready")
+                self.fix_typing_button.set_sensitive(False)
+            else:
+                # Check if udev rule exists (might need reboot)
+                if uinput_helper.check_udev_rule_exists():
+                    self.typing_status_label.set_markup(
+                        '<span color="#FF9800">⚠ Permissions configured - please log out and back in</span>'
+                    )
+                    self.fix_typing_button.set_label("✓ Configured")
+                    self.fix_typing_button.set_sensitive(False)
+                else:
+                    self.typing_status_label.set_markup(
+                        '<span color="#FF9800">⚠ Typing permissions not configured (using Clipboard mode as fallback)</span>'
+                    )
+                    self.fix_typing_button.set_sensitive(True)
+                    
+        except ImportError:
+            self.typing_status_label.set_markup(
+                '<span color="#9E9E9E">⊘ Typing check not available</span>'
+            )
+            self.fix_typing_button.set_sensitive(False)
+        except Exception as e:
+            self.typing_status_label.set_text(f"Error checking typing: {e}")
+            print(f"Typing check error: {e}")
+
+    def _on_fix_typing_clicked(self, button):
+        """Handle Fix Typing button click."""
+        try:
+            from . import uinput_helper
+            
+            # Show confirmation dialog
+            dialog = Gtk.MessageDialog(
+                transient_for=self.window,
+                flags=0,
+                message_type=Gtk.MessageType.QUESTION,
+                buttons=Gtk.ButtonsType.YES_NO,
+                text="Configure Typing Permissions?"
+            )
+            dialog.format_secondary_text(
+                "This will configure system permissions to allow TalkType to type "
+                "directly into applications.\n\n"
+                "What this does:\n"
+                "• Adds a udev rule for /dev/uinput access\n"
+                "• Adds your user to the 'input' group\n\n"
+                "You will be prompted for your admin password.\n\n"
+                "After setup, you'll need to log out and log back in for "
+                "the changes to take effect.\n\n"
+                "Continue?"
+            )
+            
+            response = dialog.run()
+            dialog.destroy()
+            
+            if response != Gtk.ResponseType.YES:
+                return
+            
+            # Disable button during fix
+            button.set_sensitive(False)
+            button.set_label("Setting up...")
+            
+            # Run the fix
+            success, message = uinput_helper.install_udev_rule_with_pkexec(self.window)
+            
+            if success:
+                # Show success dialog
+                msg = Gtk.MessageDialog(
+                    transient_for=self.window,
+                    modal=True,
+                    message_type=Gtk.MessageType.INFO,
+                    buttons=Gtk.ButtonsType.OK,
+                    text="Typing Permissions Configured!"
+                )
+                msg.format_secondary_text(
+                    "The system has been configured for keystroke injection.\n\n"
+                    "IMPORTANT: You need to log out and log back in for the "
+                    "changes to take effect.\n\n"
+                    "After logging back in, TalkType will be able to type "
+                    "directly into your applications."
+                )
+                msg.run()
+                msg.destroy()
+                
+                # Update status
+                self._check_typing_status()
+            else:
+                # Re-enable button
+                button.set_sensitive(True)
+                button.set_label("🔧 Fix Typing Permissions")
+                
+                if "cancelled" not in message.lower():
+                    # Show error dialog
+                    msg = Gtk.MessageDialog(
+                        transient_for=self.window,
+                        modal=True,
+                        message_type=Gtk.MessageType.ERROR,
+                        buttons=Gtk.ButtonsType.OK,
+                        text="Setup Failed"
+                    )
+                    msg.format_secondary_text(message)
+                    msg.run()
+                    msg.destroy()
+                    
+        except Exception as e:
+            print(f"Error fixing typing permissions: {e}")
+            button.set_sensitive(True)
+            button.set_label("🔧 Fix Typing Permissions")
 
     def _initial_extension_check(self):
         """Perform initial extension check when preferences window opens."""

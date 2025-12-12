@@ -74,6 +74,26 @@ def detect_nvidia_gpu():
         return False
 
 
+def detect_uinput_access():
+    """
+    Detect if current user has access to /dev/uinput for keystroke injection.
+    
+    Returns:
+        tuple: (has_access: bool, reason: str)
+    """
+    try:
+        from talktype.uinput_helper import check_uinput_permission
+        return check_uinput_permission()
+    except ImportError as e:
+        logger.warning(f"Could not import uinput_helper: {e}")
+        # Fallback: basic check
+        if not os.path.exists("/dev/uinput"):
+            return (False, "The /dev/uinput device does not exist.")
+        if os.access("/dev/uinput", os.R_OK | os.W_OK):
+            return (True, "You have access to /dev/uinput.")
+        return (False, "You don't have permission to access /dev/uinput.")
+
+
 class SplashScreen:
     """
     Simple splash screen showing TalkType icon.
@@ -273,7 +293,7 @@ class WelcomeDialog:
     4. Base + both options
     """
 
-    def __init__(self, parent=None, force_gnome=None, force_nvidia=None):
+    def __init__(self, parent=None, force_gnome=None, force_nvidia=None, force_uinput=None):
         """
         Initialize the welcome dialog.
 
@@ -281,33 +301,45 @@ class WelcomeDialog:
             parent: Parent window (optional)
             force_gnome: Override GNOME detection for testing (None/True/False)
             force_nvidia: Override NVIDIA detection for testing (None/True/False)
+            force_uinput: Override uinput detection for testing (None/True/False)
         """
         self.parent = parent
 
         # Detect system capabilities (or use forced values for testing)
         self.has_gnome = detect_gnome_desktop() if force_gnome is None else force_gnome
         self.has_nvidia = detect_nvidia_gpu() if force_nvidia is None else force_nvidia
-
-        # Determine scenario
-        if self.has_gnome and self.has_nvidia:
-            self.scenario = 4
-            self.height = 1245
-        elif self.has_gnome:
-            self.scenario = 2
-            self.height = 1020
-        elif self.has_nvidia:
-            self.scenario = 3
-            self.height = 1020
+        
+        # Detect uinput access (for keystroke injection)
+        if force_uinput is None:
+            has_uinput, self.uinput_reason = detect_uinput_access()
+            self.needs_uinput_fix = not has_uinput
         else:
-            self.scenario = 1
-            self.height = 700
+            self.needs_uinput_fix = not force_uinput
+            self.uinput_reason = "Forced for testing" if not force_uinput else ""
 
-        logger.info(f"Welcome dialog scenario {self.scenario}: GNOME={self.has_gnome}, NVIDIA={self.has_nvidia}")
+        # Calculate height based on what sections we'll show
+        # Base height for core content
+        base_height = 700
+        additional_height = 0
+        
+        # Add height for each optional section
+        if self.has_gnome:
+            additional_height += 160  # GNOME extension section
+        if self.has_nvidia:
+            additional_height += 180  # CUDA section
+        if self.needs_uinput_fix:
+            additional_height += 200  # Uinput fix section
+        
+        self.height = base_height + additional_height
+
+        logger.info(f"Welcome dialog: GNOME={self.has_gnome}, NVIDIA={self.has_nvidia}, "
+                   f"needs_uinput_fix={self.needs_uinput_fix}")
 
         # Build the dialog
         self.dialog = None
         self.extension_check = None
         self.cuda_check = None
+        self.uinput_fixed = False  # Track if user fixed uinput during this dialog
         self._build_dialog()
 
     def _build_dialog(self):
@@ -394,7 +426,7 @@ class WelcomeDialog:
         self._build_base_content(vbox)
 
         # Add optional features if applicable
-        if self.has_gnome or self.has_nvidia:
+        if self.has_gnome or self.has_nvidia or self.needs_uinput_fix:
             self._build_optional_features(vbox)
 
         self._build_footer(vbox)
@@ -488,34 +520,195 @@ class WelcomeDialog:
         vbox.pack_start(quickstart_box, False, False, 0)
 
     def _build_optional_features(self, vbox):
-        """Build the optional features section (GNOME extension and/or CUDA)."""
+        """Build the optional features section (GNOME extension, CUDA, and/or uinput fix)."""
         # Separator before optional features
         sep3 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
         sep3.set_margin_top(10)
         sep3.set_margin_bottom(10)
         vbox.pack_start(sep3, False, False, 0)
 
-        # Optional Features header
-        optional_label = Gtk.Label()
-        optional_label.set_markup('<span size="large"><b>⚙️ Optional Features</b></span>')
-        optional_label.set_halign(Gtk.Align.START)
-        vbox.pack_start(optional_label, False, False, 5)
+        # Uinput fix section (shown FIRST if needed - this is critical for typing to work)
+        if self.needs_uinput_fix:
+            self._build_uinput_fix_option(vbox)
+            
+            # Separator after uinput section
+            if self.has_gnome or self.has_nvidia:
+                sep_uinput = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+                sep_uinput.set_margin_top(15)
+                sep_uinput.set_margin_bottom(10)
+                vbox.pack_start(sep_uinput, False, False, 0)
 
-        # GNOME Extension (if detected)
-        if self.has_gnome:
-            self._build_gnome_extension_option(vbox)
+        # Optional Features header (only show if we have GNOME or NVIDIA options)
+        if self.has_gnome or self.has_nvidia:
+            optional_label = Gtk.Label()
+            optional_label.set_markup('<span size="large"><b>⚙️ Optional Features</b></span>')
+            optional_label.set_halign(Gtk.Align.START)
+            vbox.pack_start(optional_label, False, False, 5)
 
-        # CUDA Libraries (if detected)
-        if self.has_nvidia:
-            self._build_cuda_option(vbox)
+            # GNOME Extension (if detected)
+            if self.has_gnome:
+                self._build_gnome_extension_option(vbox)
 
-        # Preferences note
-        note = Gtk.Label()
-        note.set_markup('<span size="small">💡 <i>You can install or change these anytime in Preferences → Advanced</i></span>')
-        note.set_halign(Gtk.Align.START)
-        note.set_margin_top(10)
-        note.set_opacity(0.7)
-        vbox.pack_start(note, False, False, 0)
+            # CUDA Libraries (if detected)
+            if self.has_nvidia:
+                self._build_cuda_option(vbox)
+
+            # Preferences note
+            note = Gtk.Label()
+            note.set_markup('<span size="small">💡 <i>You can install or change these anytime in Preferences → Advanced</i></span>')
+            note.set_halign(Gtk.Align.START)
+            note.set_margin_top(10)
+            note.set_opacity(0.7)
+            vbox.pack_start(note, False, False, 0)
+
+    def _build_uinput_fix_option(self, vbox):
+        """Build the uinput permission fix section."""
+        uinput_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        uinput_box.set_margin_start(10)
+        uinput_box.set_margin_top(5)
+
+        # Header with warning icon
+        header_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        header_label = Gtk.Label()
+        header_label.set_markup('<span size="large"><b>⚠️ Typing Setup Required</b></span>')
+        header_label.set_halign(Gtk.Align.START)
+        header_box.pack_start(header_label, False, False, 0)
+        uinput_box.pack_start(header_box, False, False, 0)
+
+        # Explanation
+        explain_label = Gtk.Label()
+        explain_label.set_markup(
+            '<span>TalkType needs permission to type text into your applications.\n'
+            'This is a one-time setup that requires your admin password.</span>'
+        )
+        explain_label.set_halign(Gtk.Align.START)
+        explain_label.set_line_wrap(True)
+        explain_label.set_max_width_chars(60)
+        explain_label.set_margin_start(10)
+        explain_label.set_margin_top(5)
+        uinput_box.pack_start(explain_label, False, False, 0)
+
+        # What happens section
+        what_label = Gtk.Label()
+        what_label.set_markup('<b>What this does:</b>')
+        what_label.set_halign(Gtk.Align.START)
+        what_label.set_margin_start(10)
+        what_label.set_margin_top(8)
+        uinput_box.pack_start(what_label, False, False, 0)
+
+        # Details
+        details = [
+            "🔧 Adds a system rule to allow input device access",
+            "👤 Adds your user to the 'input' group",
+            "🔄 Requires logging out and back in to take effect"
+        ]
+
+        details_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        details_box.set_margin_start(25)
+
+        for detail in details:
+            label = Gtk.Label()
+            label.set_markup(detail)
+            label.set_halign(Gtk.Align.START)
+            label.set_opacity(0.9)
+            details_box.pack_start(label, False, False, 0)
+
+        uinput_box.pack_start(details_box, False, False, 0)
+
+        # Buttons
+        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        button_box.set_margin_start(10)
+        button_box.set_margin_top(12)
+
+        # Fix button (primary action)
+        self.fix_typing_button = Gtk.Button(label="🔧 Fix Typing (Recommended)")
+        self.fix_typing_button.get_style_context().add_class("suggested-action")
+        self.fix_typing_button.connect("clicked", self._on_fix_typing_clicked)
+        self.fix_typing_button.set_tooltip_text(
+            "Configure system permissions for keystroke injection.\n"
+            "This will prompt for your admin password."
+        )
+        button_box.pack_start(self.fix_typing_button, False, False, 0)
+
+        # Status label (shown after fix attempt)
+        self.uinput_status_label = Gtk.Label()
+        self.uinput_status_label.set_halign(Gtk.Align.START)
+        button_box.pack_start(self.uinput_status_label, False, False, 10)
+
+        uinput_box.pack_start(button_box, False, False, 0)
+
+        # Alternative note
+        alt_note = Gtk.Label()
+        alt_note.set_markup(
+            '<span size="small"><i>💡 Alternative: You can skip this and use "Clipboard Paste" mode instead.\n'
+            '   This can be configured in Preferences → Advanced → Text Injection</i></span>'
+        )
+        alt_note.set_halign(Gtk.Align.START)
+        alt_note.set_margin_start(10)
+        alt_note.set_margin_top(8)
+        alt_note.set_opacity(0.7)
+        alt_note.set_line_wrap(True)
+        alt_note.set_max_width_chars(65)
+        uinput_box.pack_start(alt_note, False, False, 0)
+
+        vbox.pack_start(uinput_box, False, False, 0)
+
+    def _on_fix_typing_clicked(self, button):
+        """Handle the Fix Typing button click."""
+        try:
+            from talktype.uinput_helper import install_udev_rule_with_pkexec
+            
+            # Disable button while processing
+            button.set_sensitive(False)
+            button.set_label("Setting up...")
+            
+            # Run the fix
+            success, message = install_udev_rule_with_pkexec(self.dialog)
+            
+            if success:
+                self.uinput_fixed = True
+                button.set_label("✅ Fixed!")
+                self.uinput_status_label.set_markup(
+                    '<span color="#4CAF50"><b>Success!</b> Log out and back in to complete setup.</span>'
+                )
+                
+                # Show success dialog
+                msg = Gtk.MessageDialog(
+                    transient_for=self.dialog,
+                    modal=True,
+                    message_type=Gtk.MessageType.INFO,
+                    buttons=Gtk.ButtonsType.OK,
+                    text="Typing Permissions Configured!"
+                )
+                msg.format_secondary_text(
+                    "The system has been configured for keystroke injection.\n\n"
+                    "IMPORTANT: You need to log out and log back in for the "
+                    "changes to take effect.\n\n"
+                    "After logging back in, TalkType will be able to type "
+                    "directly into your applications."
+                )
+                msg.run()
+                msg.destroy()
+            else:
+                button.set_sensitive(True)
+                button.set_label("🔧 Fix Typing (Recommended)")
+                
+                if "cancelled" in message.lower():
+                    self.uinput_status_label.set_markup(
+                        '<span color="#FF9800">Cancelled. You can try again or use Clipboard mode.</span>'
+                    )
+                else:
+                    self.uinput_status_label.set_markup(
+                        f'<span color="#f44336">Failed: {message}</span>'
+                    )
+                    
+        except Exception as e:
+            logger.error(f"Error fixing typing permissions: {e}")
+            button.set_sensitive(True)
+            button.set_label("🔧 Fix Typing (Recommended)")
+            self.uinput_status_label.set_markup(
+                f'<span color="#f44336">Error: {str(e)}</span>'
+            )
 
     def _build_gnome_extension_option(self, vbox):
         """Build GNOME extension checkbox and details."""
@@ -752,6 +945,10 @@ class WelcomeDialog:
 
         if self.cuda_check:
             result['download_cuda'] = self.cuda_check.get_active()
+
+        # Include uinput fix status
+        result['uinput_fixed'] = self.uinput_fixed
+        result['needs_uinput_fix'] = self.needs_uinput_fix and not self.uinput_fixed
 
         logger.info(f"Welcome dialog result: {result}")
 
