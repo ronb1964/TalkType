@@ -412,7 +412,59 @@ Ron
 
 ---
 
-### 14. Keyboard Shortcuts Reference
+### 14. Voice Commands Quick Access & Cheat Sheet
+**Current:** Voice commands reference buried in Help → Voice Commands tab
+**Proposed:** Direct access from tray menu with enhanced features
+
+**Features:**
+1. **Tray Menu Quick Access**
+   - Add "Voice Commands" directly to tray menu
+   - Opens a focused dialog showing all available commands
+   - No need to navigate through Help
+
+2. **Printable Cheat Sheet**
+   - "Print / Export" button in the dialog
+   - Generates a clean, printer-friendly PDF or HTML
+   - Users can print and keep near their desk
+   - Compact format: 1-page reference card
+
+3. **Test Commands Feature**
+   - "Test" button next to each command category
+   - Opens a test area where user can try commands
+   - Shows live preview: what you said → what gets inserted
+   - Helps users learn and verify commands work
+
+**UI Mock:**
+```
+┌─────────────────────────────────────────┐
+│ 🗣️ Voice Commands Reference            │
+├─────────────────────────────────────────┤
+│ Punctuation:                            │
+│   "comma" → ,    "period" → .           │
+│   "question mark" → ?                   │
+│                          [Test These]   │
+├─────────────────────────────────────────┤
+│ Formatting:                             │
+│   "new line" → ↵    "new paragraph" → ¶ │
+│   "tab" → ⇥                             │
+│                          [Test These]   │
+├─────────────────────────────────────────┤
+│ [🖨️ Print Cheat Sheet]  [Close]        │
+└─────────────────────────────────────────┘
+```
+
+**Implementation:**
+- Add "Voice Commands" menu item to tray.py
+- Create new `voice_commands_dialog.py` with:
+  - Tabular display of all commands
+  - Test area with live preview
+  - Print/export functionality (use GTK print API or generate HTML)
+
+**Benefit:** Users discover and learn commands easily, improving their dictation workflow
+
+---
+
+### 15. Keyboard Shortcuts Reference
 **Quick reference dialog:**
 
 Tray menu → "Keyboard Shortcuts" → Shows dialog with all hotkeys
@@ -424,13 +476,6 @@ F8          Start/Stop Recording (Hold Mode)
 F9          Toggle Recording (Toggle Mode)
 Ctrl+Shift+Z  Undo Last Dictation
 Esc         Cancel Recording
-
-Voice Commands
-──────────────
-"comma"     Insert comma
-"period"    Insert period
-"new line"  Line break
-...
 ```
 
 ---
