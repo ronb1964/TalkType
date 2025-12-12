@@ -30,6 +30,7 @@ class Settings:
     auto_period: bool = True   # append a period when an utterance ends without terminal punctuation
     paste_injection: bool = False  # when adding a leading space is unreliable, paste " ␣text" via clipboard
     injection_mode: str = "type"  # "type" (ydotool/wtype) or "paste" (wl-copy + Ctrl+V)
+    typing_delay: int = 12  # milliseconds between keystrokes when typing (5-50, higher = slower but more reliable)
     auto_timeout_enabled: bool = True   # enable automatic timeout after inactivity (default: on)
     auto_timeout_minutes: int = 5       # minutes of inactivity before auto-stop
     recording_indicator: bool = True    # show visual recording indicator near cursor

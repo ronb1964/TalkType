@@ -382,6 +382,9 @@ state = RecordingState()
 recording_indicator = None
 dbus_service = None
 
+# Global typing delay (set from config in main)
+_typing_delay = 12  # milliseconds, default value
+
 def _beep(enabled: bool, freq=1000, duration=0.15):
     if not enabled:
         return
@@ -531,13 +534,26 @@ def _type_text(text: str):
     _type_text_raw(text)
 
 def _type_text_raw(text: str):
+    """
+    Type text using ydotool or fallback methods.
+    
+    Uses global _typing_delay for keystroke timing.
+    Higher values are slower but more reliable.
+    Lower values may cause transposed letters.
+    """
+    global _typing_delay
+    
     if shutil.which("ydotool"):
         try:
             env = os.environ.copy()
             runtime = env.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
             env.setdefault("YDOTOOL_SOCKET", os.path.join(runtime, ".ydotool_socket"))
+            # -d = delay between keydown and keyup (ms)
+            # -H = hold time before next key (ms)
+            # Lower values are faster but may cause letters to arrive out of order
+            delay_str = str(max(5, min(50, _typing_delay)))  # Clamp to 5-50ms
             proc = subprocess.Popen(
-                ["ydotool", "type", "-d", "5", "-H", "5", "-f", "-"],
+                ["ydotool", "type", "-d", delay_str, "-H", delay_str, "-f", "-"],
                 stdin=subprocess.PIPE,
                 env=env
             )
@@ -1253,6 +1269,11 @@ def main():
     if args.smart_quotes: cfg.smart_quotes = (args.smart_quotes == "on")
     if args.notify: cfg.notify = (args.notify == "on")
     if args.language is not None: cfg.language = args.language
+
+    # Set global typing delay from config
+    global _typing_delay
+    _typing_delay = getattr(cfg, 'typing_delay', 12)
+    logger.debug(f"Typing delay set to {_typing_delay}ms")
 
     # Input device selection
     input_device_idx = _pick_input_device(cfg.mic)
