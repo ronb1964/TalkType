@@ -114,8 +114,9 @@ system resources. Adjust this in Preferences → Advanced.
 • Great for multilingual users
 
 <b>Flexible Text Input</b>
-• Keystroke simulation (ydotool/wtype)
-• Clipboard paste mode (for apps with input issues)
+• <b>Keyboard Typing:</b> Character-by-character typing (most reliable)
+• <b>Clipboard Paste:</b> Fast paste for long text (use tray menu to toggle)
+• <b>Note:</b> Terminal windows may require Keyboard Typing mode
 
 <b>Audio Control</b>
 • Microphone selection and testing

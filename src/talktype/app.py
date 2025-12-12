@@ -559,25 +559,87 @@ def _type_text_raw(text: str):
     logger.error("Could not type text: no ydotool/wtype/wl-copy available")
     print("⚠️  Could not type text (no ydotool/wtype).")
 
-def _paste_text(text: str):
-    """Wayland paste injection: put text on clipboard, then Ctrl+V."""
+def _paste_text(text: str, send_trailing_keys: bool = False):
+    """
+    Wayland paste injection: put text on clipboard, then Ctrl+V or Shift+Ctrl+V.
+    
+    Automatically detects terminal applications and uses Shift+Ctrl+V for them,
+    regular Ctrl+V for everything else.
+
+    Args:
+        text: Text to paste (should NOT contain §SHIFT_ENTER§ markers)
+        send_trailing_keys: If True, send additional key presses after paste
+    """
     try:
         if shutil.which("wl-copy") and shutil.which("ydotool"):
-            # Copy text
+            # Detect if we're in a terminal (terminals use Shift+Ctrl+V)
+            is_terminal = False
+            try:
+                from .atspi_helper import is_terminal_active
+                is_terminal = is_terminal_active()
+                logger.debug(f"Terminal detection: {is_terminal}")
+            except Exception as e:
+                logger.debug(f"Terminal detection failed, defaulting to Ctrl+V: {e}")
+            
+            # Copy text to clipboard
+            # wl-copy needs to stay running in background to serve clipboard requests
+            # So we start it as a background process (Popen) instead of waiting for it
             import subprocess as _sp
-            _sp.run(["wl-copy"], input=text.encode("utf-8"), check=False)
-            # Give the compositor a moment to publish clipboard contents
-            time.sleep(0.06)
-            # Send Ctrl+V: KEY_LEFTCTRL (29), KEY_V (47)
+            proc = _sp.Popen(["wl-copy"], stdin=_sp.PIPE, stdout=_sp.PIPE, stderr=_sp.PIPE)
+            proc.stdin.write(text.encode("utf-8"))
+            proc.stdin.close()
+
+            # Give wl-copy and compositor time to publish clipboard contents
+            time.sleep(0.25)
+
+            # Wait for target window to be ready
+            time.sleep(0.3)
+
+            # Send appropriate paste command based on application type
+            # KEY_LEFTSHIFT (42), KEY_LEFTCTRL (29), KEY_V (47)
             env = os.environ.copy()
             runtime = env.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
             env.setdefault("YDOTOOL_SOCKET", os.path.join(runtime, ".ydotool_socket"))
-            _sp.run(["ydotool", "key", "29:1", "47:1", "47:0", "29:0"], check=False, env=env)
-            # Some apps prefer Shift+Insert; try it as well just in case
-            _sp.run(["ydotool", "key", "42:1", "110:1", "110:0", "42:0"], check=False, env=env)
-            time.sleep(0.02)
+
+            if is_terminal:
+                # Terminal: Use Shift+Ctrl+V
+                logger.debug("Using Shift+Ctrl+V for terminal")
+                _sp.run(["ydotool", "key", "42:1"], check=False, env=env)  # Shift down
+                time.sleep(0.05)
+                _sp.run(["ydotool", "key", "29:1"], check=False, env=env)  # Ctrl down
+                time.sleep(0.05)
+                _sp.run(["ydotool", "key", "47:1"], check=False, env=env)  # V down
+                time.sleep(0.05)
+                _sp.run(["ydotool", "key", "47:0"], check=False, env=env)  # V up
+                time.sleep(0.05)
+                _sp.run(["ydotool", "key", "29:0"], check=False, env=env)  # Ctrl up
+                time.sleep(0.05)
+                _sp.run(["ydotool", "key", "42:0"], check=False, env=env)  # Shift up
+            else:
+                # Regular app: Use Ctrl+V
+                logger.debug("Using Ctrl+V for regular application")
+                _sp.run(["ydotool", "key", "29:1"], check=False, env=env)  # Ctrl down
+                time.sleep(0.05)
+                _sp.run(["ydotool", "key", "47:1"], check=False, env=env)  # V down
+                time.sleep(0.05)
+                _sp.run(["ydotool", "key", "47:0"], check=False, env=env)  # V up
+                time.sleep(0.05)
+                _sp.run(["ydotool", "key", "29:0"], check=False, env=env)  # Ctrl up
+            
+            time.sleep(0.2)
+
+            # Kill wl-copy process after paste is complete
+            try:
+                proc.terminate()
+                proc.wait(timeout=0.5)
+            except:
+                pass
+
             return True
-    except Exception:
+    except subprocess.TimeoutExpired as e:
+        logger.error(f"Paste injection timeout: {e}")
+    except Exception as e:
+        logger.error(f"Paste injection failed: {e}")
         pass
     return False
 
@@ -602,7 +664,7 @@ def stop_recording(
     language: str | None = None,
     auto_space: bool = True,
     auto_period: bool = True,
-    paste_injection: bool = False,
+    injection_mode: str = "type",
 ):
     held_ms = int((time.time() - (state.press_t0 or time.time())) * 1000)
     if held_ms < MIN_HOLD_MS:
@@ -638,7 +700,7 @@ def stop_recording(
         )
         raw = " ".join(seg.text for seg in segments).strip()
         print(f"📝 Raw: {raw!r}")
-        logger.debug(f"Raw transcription: {raw!r}")
+        logger.info(f"Raw transcription: {raw!r}")
         text = normalize_text(raw if smart_quotes else raw.replace(""","\"").replace(""","\""))
 
         # Simple spacing: always add period+space or just space when auto features are on
@@ -652,19 +714,96 @@ def stop_recording(
             text = text.rstrip() + "."
         if auto_space and text and not is_only_markers and not text.endswith((" ", "\n", "\t")):
             text = text + " "
-        logger.debug(f"Normalized text: {text!r}")
+        logger.info(f"Normalized text: {text!r}")
 
         _beep(beeps_on, *READY_BEEP)
         if notify_on: _notify("TalkType", f"Transcribed: {text[:80]}{'…' if len(text)>80 else ''}")
         if text:
             # Small settling delay so focused app is ready to receive text
             time.sleep(0.12)
-            # Choose injection mode: paste entire utterance vs keystroke typing
-            use_paste = paste_injection or os.environ.get("DICTATE_INJECTION_MODE","type").lower()=="paste"
-            if use_paste and _paste_text(text):
+
+            # Check if AT-SPI can help us make a smarter decision
+            # TEMPORARILY DISABLED for testing clipboard paste mode
+            use_atspi = False
+            atspi_reason = ""
+            # try:
+            #     from .atspi_helper import is_atspi_available, should_use_atspi, get_focused_context, insert_text_atspi
+            #     if is_atspi_available():
+            #         should_use, reason = should_use_atspi()
+            #         use_atspi = should_use
+            #         atspi_reason = reason
+            #         logger.info(f"AT-SPI decision: use={use_atspi}, reason={reason}")
+
+            #         # If AT-SPI says "VS Code - use typing", force typing mode
+            #         if "VS Code" in reason and not use_atspi:
+            #             logger.info("Forcing typing mode for VS Code to avoid paste duplication")
+            #             injection_mode = "type"  # Override to typing mode
+            # except Exception as e:
+            #     logger.debug(f"AT-SPI check failed: {e}")
+
+            # Choose injection mode: AT-SPI, paste, or typing
+            use_paste = (injection_mode == "paste") or os.environ.get("DICTATE_INJECTION_MODE","type").lower()=="paste"
+            print(f"🔍 DEBUG: injection_mode={injection_mode!r}, use_atspi={use_atspi}, use_paste={use_paste}, reason={atspi_reason!r}")
+            logger.info(f"Injection mode decision: mode={injection_mode!r}, atspi={use_atspi}, paste={use_paste}, text_len={len(text)}")
+
+            # Try AT-SPI insertion first if recommended
+            if use_atspi:
+                logger.info(f"Attempting AT-SPI insertion: {atspi_reason}")
+                print(f"🔮 Attempting AT-SPI insertion...")
+                try:
+                    if insert_text_atspi(text):
+                        print(f"✨ AT-SPI insertion successful! ({len(text)} chars)")
+                        logger.info("AT-SPI text insertion succeeded")
+                    else:
+                        # AT-SPI failed, fall back to typing
+                        print(f"⚠️  AT-SPI insertion failed, falling back to typing")
+                        logger.warning("AT-SPI insertion failed, using typing fallback")
+                        _type_text(text)
+                except Exception as e:
+                    logger.error(f"AT-SPI insertion error: {e}")
+                    print(f"⚠️  AT-SPI error, falling back to typing")
+                    _type_text(text)
+
+            # Smart hybrid mode: Split text on markers and paste each chunk separately
+            # This gives us fast paste for long text while properly handling formatting commands
+            elif use_paste and ("§SHIFT_ENTER§" in text or "\n" in text):
+                logger.info(f"Smart hybrid mode: splitting text on markers")
+
+                # Split on §SHIFT_ENTER§ markers
+                parts = text.split("§SHIFT_ENTER§")
+                logger.info(f"Split into {len(parts)} parts")
+
+                success = True
+                for i, part in enumerate(parts):
+                    if part:  # Only paste non-empty parts
+                        logger.info(f"Pasting part {i+1}/{len(parts)}: {len(part)} chars")
+                        if not _paste_text(part):
+                            # Paste failed, fall back to typing the whole thing
+                            logger.warning(f"Paste failed on part {i+1}, falling back to typing mode")
+                            success = False
+                            break
+                        time.sleep(0.15)  # Brief delay after each paste
+
+                    # Send Shift+Enter after each part except the last
+                    if i < len(parts) - 1:
+                        logger.info(f"Sending Shift+Enter after part {i+1}")
+                        _send_shift_enter()
+                        time.sleep(0.1)
+
+                if success:
+                    print(f"✂️  Inject (smart paste) {len(parts)} chunks, {len(text)} total chars")
+                    logger.info(f"Smart hybrid paste completed: {len(parts)} chunks")
+                else:
+                    # Fall back to typing mode
+                    print(f"⌨️  Inject (type) len={len(text)} [paste failed, typing fallback]")
+                    logger.info(f"Falling back to typing mode")
+                    _type_text(text)
+            elif use_paste and _paste_text(text):
+                # Simple paste, no special markers
                 print(f"✂️  Inject (paste) len={len(text)}")
                 logger.debug(f"Text injected via paste: {len(text)} chars")
             else:
+                # Use typing mode
                 print(f"⌨️  Inject (type) len={len(text)}")
                 logger.debug(f"Text injected via typing: {len(text)} chars")
                 _type_text(text)
@@ -713,7 +852,8 @@ def _loop_evdev(cfg: Settings, input_device_idx):
 
     # Check if we should show welcome dialog (after user changed keys)
     show_welcome_after_change = False
-    welcome_flag_file = os.path.expanduser("~/.local/share/TalkType/.show_welcome_on_restart")
+    from .config import get_data_dir
+    welcome_flag_file = os.path.join(get_data_dir(), ".show_welcome_on_restart")
     if os.path.exists(welcome_flag_file):
         show_welcome_after_change = True
         try:
@@ -1012,7 +1152,7 @@ Right-click the tray icon → "Help..." for full documentation
                                 if event.value == 1 and not state.is_recording:
                                     start_recording(cfg.beeps, cfg.notify, input_device_idx)
                                 elif event.value == 0 and state.is_recording:
-                                    stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language, cfg.auto_space, cfg.auto_period, cfg.paste_injection)
+                                    stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language, cfg.auto_space, cfg.auto_period, cfg.injection_mode)
                         else:  # toggle mode: press to start, press again to stop
                             if event.code == toggle_key and event.value == 1:
                                 # Reset timeout timer only when TalkType hotkey is used
@@ -1021,7 +1161,7 @@ Right-click the tray icon → "Help..." for full documentation
                                 if not state.is_recording:
                                     start_recording(cfg.beeps, cfg.notify, input_device_idx)
                                 else:
-                                     stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language, cfg.auto_space, cfg.auto_period, cfg.paste_injection)
+                                     stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language, cfg.auto_space, cfg.auto_period, cfg.injection_mode)
                         # ESC cancels in any mode
                         if event.code == ecodes.KEY_ESC and state.is_recording and event.value == 1:
                             # Reset timeout timer when ESC is used to cancel
@@ -1035,14 +1175,21 @@ Right-click the tray icon → "Help..." for full documentation
         time.sleep(0.005)
 
 def build_model(settings: Settings):
+    from .model_helper import download_model_with_progress
+
     compute_type = "float16" if settings.device.lower() == "cuda" else "int8"
     try:
-        model = WhisperModel(
+        # Use model helper with progress dialog
+        model = download_model_with_progress(
             settings.model,
             device=settings.device,
-            compute_type=compute_type,
-            cpu_threads=os.cpu_count() or 4
+            compute_type=compute_type
         )
+
+        if model is None:
+            # User cancelled download
+            raise Exception("Model download cancelled by user")
+
         print(f"✅ Model loaded successfully on {settings.device.upper()}")
         logger.info(f"Model loaded: {settings.model} on {settings.device}")
         return model
@@ -1054,12 +1201,16 @@ def build_model(settings: Settings):
             logger.debug("CUDA traceback:", exc_info=True)
             print("🔄 Falling back to CPU...")
             try:
-                model = WhisperModel(
+                # Try CPU fallback with progress dialog
+                model = download_model_with_progress(
                     settings.model,
                     device="cpu",
-                    compute_type="int8",
-                    cpu_threads=os.cpu_count() or 4
+                    compute_type="int8"
                 )
+
+                if model is None:
+                    raise Exception("Model download cancelled by user")
+
                 print("✅ Model loaded successfully on CPU (fallback)")
                 logger.info("Model loaded on CPU (fallback from CUDA)")
                 return model

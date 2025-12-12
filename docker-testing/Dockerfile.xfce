@@ -1,0 +1,38 @@
+# TalkType Testing Container - XFCE Environment
+FROM fedora:latest
+
+# Install XFCE components and dependencies
+RUN dnf install -y \
+    gtk3 \
+    gtk4 \
+    xfce4-session \
+    xfce4-settings \
+    xfwm4 \
+    xfce4-panel \
+    xfdesktop \
+    arc-theme \
+    python3 \
+    python3-pip \
+    python3-gobject \
+    python3-cairo \
+    dbus-x11 \
+    xorg-x11-server-Xvfb \
+    mesa-dri-drivers \
+    xfce4-screenshooter \
+    && dnf clean all
+
+# Set up virtual display
+ENV DISPLAY=:99
+ENV XDG_RUNTIME_DIR=/tmp/runtime-root
+
+# Create necessary directories
+RUN mkdir -p /tmp/runtime-root && chmod 0700 /tmp/runtime-root
+
+# Copy TalkType source (will be mounted at runtime)
+WORKDIR /app
+
+# Script to start Xvfb and run tests
+COPY test-runner.sh /usr/local/bin/test-runner.sh
+RUN chmod +x /usr/local/bin/test-runner.sh
+
+CMD ["/usr/local/bin/test-runner.sh"]

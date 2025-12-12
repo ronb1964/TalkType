@@ -1,16 +1,18 @@
 #!/bin/bash
-# TalkType Fresh Start Script - Run this before EVERY test
-# This ensures a true first-run experience
+# TalkType Fresh Start Script - Cleans ONLY AppImage environment
+# Dev environment (~/.config/talktype-dev/ and ~/.local/share/TalkType-dev/) is preserved!
 
 set -e
 
-echo "🧹 TalkType Fresh Start Cleanup"
-echo "================================"
+echo "🧹 TalkType AppImage Fresh Start Cleanup"
+echo "========================================"
+echo ""
+echo "NOTE: This ONLY cleans AppImage environment."
+echo "Your dev environment stays intact!"
 echo ""
 
-# 1. Kill all TalkType processes (CRITICAL: Must stop dev version before testing AppImage!)
+# 1. Kill all TalkType processes
 echo "1. Stopping all TalkType processes..."
-echo "   (This includes the dev version - dev and AppImage cannot run together)"
 pkill -f "TalkType.*AppImage" 2>/dev/null || true
 pkill -f "talktype.tray" 2>/dev/null || true
 pkill -f "talktype.app" 2>/dev/null || true
@@ -23,29 +25,40 @@ if pgrep -f "talktype" > /dev/null; then
 fi
 echo "   ✓ All processes stopped"
 
-# 2. Remove config directory
-echo "2. Removing config directory..."
+# 2. Remove AppImage config directory (NOT -dev!)
+echo "2. Removing AppImage config directory..."
 rm -rf ~/.config/talktype
-echo "   ✓ Config removed: ~/.config/talktype"
+echo "   ✓ AppImage config removed: ~/.config/talktype"
+echo "   ℹ️  Dev config preserved: ~/.config/talktype-dev/"
 
-# 3. Remove data directory (including CUDA libs and models)
-echo "3. Removing data directory..."
+# 3. Remove AppImage data directory (NOT -dev!)
+echo "3. Removing AppImage data directory..."
 rm -rf ~/.local/share/talktype
 rm -rf ~/.local/share/TalkType
-echo "   ✓ Data removed: ~/.local/share/talktype"
-echo "   ✓ CUDA libraries removed (will be re-downloaded on first GPU use)"
-echo "   ✓ All models removed (small, medium, large - will be re-downloaded)"
+echo "   ✓ AppImage data removed: ~/.local/share/TalkType"
+echo "   ℹ️  Dev data preserved: ~/.local/share/TalkType-dev/"
+echo "   ✓ AppImage CUDA libraries removed"
+echo "   ℹ️  Dev CUDA libraries preserved (if you had them)"
 
-# 4. Uninstall GNOME extension
-echo "4. Uninstalling GNOME extension..."
+# 4. Remove Hugging Face model cache
+echo "4. Removing Hugging Face model cache..."
+if [ -d ~/.cache/huggingface/hub ]; then
+    rm -rf ~/.cache/huggingface/hub/models--Systran--faster-whisper-* 2>/dev/null || true
+    echo "   ✓ All whisper models removed (small, medium, large - will be re-downloaded)"
+else
+    echo "   ✓ No model cache found"
+fi
+
+# 5. Uninstall GNOME extension
+echo "5. Uninstalling GNOME extension..."
 gnome-extensions uninstall talktype@ronb1964.github.io 2>/dev/null && echo "   ✓ Extension uninstalled" || echo "   ✓ Extension not installed"
 
-# 5. Remove autostart entry
-echo "5. Removing autostart entry..."
+# 6. Remove autostart entry
+echo "6. Removing autostart entry..."
 rm -f ~/.config/autostart/talktype.desktop
 echo "   ✓ Autostart removed"
 
-# 6. Verify cleanup
+# 7. Verify cleanup
 echo ""
 echo "🔍 Verification:"
 [ ! -d ~/.config/talktype ] && echo "   ✓ Config dir removed" || echo "   ❌ Config dir still exists!"

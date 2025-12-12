@@ -5,17 +5,33 @@
 
 ---
 
+## ⚠️ IMPORTANT: Read CLAUDE_RULES.md First!
+
+**Before working on this project, AI assistants MUST read [CLAUDE_RULES.md](./CLAUDE_RULES.md).**
+
+This file contains critical non-negotiable rules including:
+- NEVER break the dev environment (user relies on it daily!)
+- AppImage builds MUST be completely isolated from dev environment
+- Build in clean Ubuntu 22.04 containers ONLY
+- Bundle ALL dependencies - never copy from host system
+- Cross-platform compatibility requirements
+
+**Failure to follow these rules wastes time and breaks the user's workflow.**
+
+---
+
 ## 📌 Table of Contents
 1. [Project Overview](#project-overview)
-2. [Architecture](#architecture)
-3. [Hotkey Behavior](#hotkey-behavior)
-4. [Normalizer Rules](#normalizer-rules)
-5. [Systemd Services](#systemd-services)
-6. [Tray App](#tray-app)
-7. [Testing](#testing)
-8. [Git & Repo Setup](#git--repo-setup)
-9. [Known Issues](#known-issues)
-10. [Future Ideas](#future-ideas)
+2. [AppImage Cross-Compatibility Requirements](#appimage-cross-compatibility-requirements)
+3. [Architecture](#architecture)
+4. [Hotkey Behavior](#hotkey-behavior)
+5. [Normalizer Rules](#normalizer-rules)
+6. [Systemd Services](#systemd-services)
+7. [Tray App](#tray-app)
+8. [Testing](#testing)
+9. [Git & Repo Setup](#git--repo-setup)
+10. [Known Issues](#known-issues)
+11. [Future Ideas](#future-ideas)
 
 ---
 
@@ -27,6 +43,67 @@
   - Press **Esc** while holding → Cancel.
 - Built with **Poetry**, Python 3.12.
 - Works on **Wayland** via `ydotool`.
+
+---
+
+## AppImage Cross-Compatibility Requirements
+
+**⚠️ CRITICAL: This project is distributed as an AppImage and must work across many Linux distributions and desktop environments.**
+
+### Audio Backend Support
+Always support multiple audio backends with graceful fallbacks:
+
+1. **PipeWire** (modern Fedora, Nobara, newer Ubuntu)
+   - Command: `wpctl`
+   - Example: `wpctl get-volume @DEFAULT_AUDIO_SOURCE@`
+
+2. **PulseAudio** (older/traditional systems)
+   - Command: `pactl`
+   - Example: `pactl get-source-volume @DEFAULT_SOURCE@`
+
+3. **ALSA-only** (minimal systems)
+   - No standardized volume control - graceful degradation required
+
+### Implementation Pattern
+```python
+def set_system_volume(volume):
+    # Try PipeWire first (most modern systems)
+    try:
+        subprocess.run(['wpctl', 'set-volume', '@DEFAULT_AUDIO_SOURCE@', f'{volume}%'], ...)
+        return
+    except FileNotFoundError:
+        pass
+
+    # Fall back to PulseAudio
+    try:
+        subprocess.run(['pactl', 'set-source-volume', '@DEFAULT_SOURCE@', f'{volume}%'], ...)
+        return
+    except FileNotFoundError:
+        pass
+
+    # Neither available - inform user gracefully
+    logger.warning("Volume control not available (neither wpctl nor pactl found)")
+```
+
+### General Guidelines
+- **Never assume** a specific desktop environment (GNOME, KDE, XFCE, etc.)
+- **Never assume** specific system commands exist
+- **Always provide fallbacks** when system features aren't available
+- **Test on multiple distros** when possible (Fedora, Ubuntu, Arch, etc.)
+- **Graceful degradation** - features should fail gracefully, not crash
+
+### Desktop Environment Variations
+- Some systems use GNOME, others KDE, XFCE, etc.
+- Tray icon implementations vary (StatusNotifier vs legacy)
+- System dialogs and notifications differ
+- Audio routing and device naming varies
+
+### When Making Changes
+Before implementing features that interact with the system:
+1. Consider: "Will this work on Ubuntu AND Fedora AND Arch?"
+2. Check: "What if this system command doesn't exist?"
+3. Implement: Multiple detection methods with fallbacks
+4. Document: Which systems/scenarios are supported
 
 ---
 

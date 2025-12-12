@@ -7,6 +7,12 @@ Shows an animated orb with satellites near the cursor during dictation
 import gi
 gi.require_version('Gtk', '3.0')
 gi.require_version('Gdk', '3.0')
+try:
+    # Try to use Cairo from GObject Introspection (needed for AppImage)
+    gi.require_foreign('cairo')
+except (ValueError, ImportError):
+    pass  # Already available or not needed
+
 from gi.repository import Gtk, Gdk, GLib
 import cairo
 import math
@@ -37,7 +43,11 @@ class RecordingIndicator(Gtk.Window):
         self.set_type_hint(Gdk.WindowTypeHint.TOOLTIP)  # Changed from NOTIFICATION to TOOLTIP
         self.set_skip_taskbar_hint(True)
         self.set_skip_pager_hint(True)
-        self.set_default_size(200, 100)  # Increased size to prevent clipping
+        # Calculate window size to fit full animation with satellites
+        # Need to accommodate: orb + satellites at max extension + padding
+        # Large scale (1.4): satellites reach ~53px from center, need 120+ height
+        # Adding safety margin for all sizes
+        self.set_default_size(200, 180)
 
         # Try to allow positioning (may not work on all compositors)
         self.set_position(Gtk.WindowPosition.NONE)
@@ -76,9 +86,9 @@ class RecordingIndicator(Gtk.Window):
                 screen_width = screen.get_width()
                 screen_height = screen.get_height()
 
-                # Window dimensions (scaled)
+                # Window dimensions (scaled to match set_default_size)
                 window_width = int(200 * self.scale)
-                window_height = int(100 * self.scale)
+                window_height = int(180 * self.scale)
 
                 # Calculate base position based on configured anchor
                 if self.position == "center":

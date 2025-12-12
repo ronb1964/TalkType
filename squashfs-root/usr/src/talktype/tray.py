@@ -12,6 +12,14 @@ from .logger import setup_logger
 
 logger = setup_logger(__name__)
 
+# D-Bus service import (optional - only needed for GNOME extension)
+try:
+    from .dbus_service import TalkTypeDBusService
+    DBUS_AVAILABLE = True
+except ImportError:
+    DBUS_AVAILABLE = False
+    logger.warning("D-Bus service not available - GNOME extension integration disabled")
+
 SERVICE = "talktype.service"  # Not used anymore - we check processes directly
 
 def _runtime_dir():
@@ -75,22 +83,126 @@ class DictationTray:
             "microphone-sensitivity-muted",  # start with muted icon
             AppIndicator3.IndicatorCategory.APPLICATION_STATUS
         )
-        self.indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
+
+        # Check if we should show the GTK tray
+        # In production: hide GTK tray if GNOME extension is enabled
+        # In dev mode (DEV_MODE=1): always show GTK tray for testing
+        self._should_show_tray = self._check_tray_visibility()
+
+        if self._should_show_tray:
+            self.indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
+            logger.info("GTK tray enabled")
+        else:
+            self.indicator.set_status(AppIndicator3.IndicatorStatus.PASSIVE)
+            logger.info("GTK tray hidden (GNOME extension is active)")
+
         self.indicator.set_title("TalkType")  # Set the app name
 
         # Store menu items for dynamic updates
         self.start_item = None
         self.stop_item = None
 
+        # Track subprocess windows
+        self.preferences_process = None
+
+        # Initialize D-Bus service (optional - for GNOME extension integration)
+        self.dbus_service = None
+        self._init_dbus_service()
+
         self.update_icon_status()
         self.indicator.set_menu(self.build_menu())
 
-        # Check service status every 3 seconds and update menu
-        GLib.timeout_add_seconds(3, self.update_status_and_menu)
+        # Track service state for change detection
+        self._last_service_state = self.is_service_running()
+
+        # Check service status every 1 second and update menu (faster sync in dev mode)
+        GLib.timeout_add_seconds(1, self.update_status_and_menu)
 
         # Auto-start will be triggered after welcome dialog on first run
         # or immediately if not first run (handled in main())
-        
+
+    def _check_tray_visibility(self) -> bool:
+        """
+        Determine if GTK tray should be visible.
+
+        Returns:
+            bool: True if GTK tray should be shown, False if it should be hidden
+        """
+        # Check for dev mode first - always show in dev mode
+        if os.environ.get('DEV_MODE') == '1':
+            logger.info("DEV_MODE=1 detected - showing GTK tray for testing")
+            return True
+
+        # Check if GNOME extension is enabled
+        try:
+            from . import extension_helper
+            if extension_helper.is_extension_enabled():
+                logger.info("GNOME extension is enabled - hiding GTK tray")
+                return False
+        except Exception as e:
+            logger.debug(f"Could not check extension status: {e}")
+
+        # Default: show GTK tray (extension not enabled or not GNOME)
+        return True
+
+    def _init_dbus_service(self):
+        """Initialize D-Bus service for GNOME extension integration (optional)."""
+        if not DBUS_AVAILABLE:
+            return
+
+        try:
+            # Create a minimal app instance for D-Bus
+            class TrayAppInstance:
+                """Minimal app instance for D-Bus integration with tray."""
+                def __init__(self, tray):
+                    self.tray = tray
+                    self.is_recording = False
+
+                @property
+                def service_running(self):
+                    """Get current service running state."""
+                    return self.tray.is_service_running()
+
+                def start_service(self):
+                    """Start service via tray."""
+                    GLib.idle_add(self.tray.start_service, None)
+
+                def stop_service(self):
+                    """Stop service via tray."""
+                    GLib.idle_add(self.tray.stop_service, None)
+
+                def show_preferences(self):
+                    """Open preferences via tray."""
+                    GLib.idle_add(self.tray.open_preferences, None)
+
+                def show_help(self):
+                    """Show help via tray."""
+                    GLib.idle_add(self.tray.show_help, None)
+
+                def quit(self):
+                    """Quit via tray."""
+                    GLib.idle_add(self.tray.quit_app, None)
+
+                @property
+                def config(self):
+                    """Get current config."""
+                    try:
+                        from .config import load_config
+                        return load_config()
+                    except Exception:
+                        # Return minimal config
+                        class MinimalConfig:
+                            model = 'large-v3'
+                            device = 'cpu'
+                        return MinimalConfig()
+
+            app_instance = TrayAppInstance(self)
+            self.dbus_service = TalkTypeDBusService(app_instance)
+            logger.info("D-Bus service initialized for GNOME extension integration")
+        except Exception as e:
+            logger.warning(f"Failed to initialize D-Bus service: {e}")
+            self.dbus_service = None
+
     def is_service_running(self):
         """Check if the dictation service is active."""
         try:
@@ -123,6 +235,23 @@ class DictationTray:
             # Use muted icon for stopped state
             self.indicator.set_icon_full("microphone-sensitivity-muted", "TalkType: Stopped")
         return True  # Continue the timer
+
+    def _emit_service_state_after_check(self, expected_state):
+        """Emit D-Bus service state signal after verifying actual state."""
+        if not self.dbus_service:
+            return False
+
+        # Check actual service state
+        actual_state = self.is_service_running()
+
+        # Emit the actual state (not expected, in case it didn't start/stop)
+        try:
+            self.dbus_service.emit_service_state(actual_state)
+            logger.debug(f"Emitted D-Bus service state: {actual_state}")
+        except Exception as e:
+            logger.error(f"Failed to emit D-Bus service state: {e}")
+
+        return False  # Don't repeat
     
     def start_service(self, _):
         """Start the dictation service directly."""
@@ -139,10 +268,31 @@ class DictationTray:
                 subprocess.Popen([dictate_script], env=os.environ.copy())
                 logger.info(f"Started dictation service via {dictate_script}")
             else:
-                # Fallback: use sys.executable (bundled Python)
+                # Fallback: use sys.executable (bundled Python or dev environment)
+                # In dev mode, we need to set PYTHONPATH to find the talktype module
+                env = os.environ.copy()
+
+                # Check if we're in dev mode (src/talktype structure exists relative to __file__)
+                project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+                src_dir_check = os.path.join(project_root, "src")
+                if os.path.exists(src_dir_check):
+                    # Dev mode - set PYTHONPATH to include src/ AND system PyGObject
+                    # Use absolute paths!
+                    pythonpath_parts = [
+                        os.path.abspath(src_dir_check),
+                        "/usr/lib64/python3.13/site-packages",  # System PyGObject on Fedora/Nobara
+                        "/usr/lib/python3.13/site-packages"      # Alternative location
+                    ]
+                    env["PYTHONPATH"] = ":".join(pythonpath_parts)
+                    logger.info(f"Dev mode detected - setting PYTHONPATH={env['PYTHONPATH']}")
+
                 subprocess.Popen([sys.executable, "-m", "talktype.app"],
-                               env=os.environ.copy())
+                               env=env)
                 logger.info("Started dictation service via Python module")
+
+            # Emit D-Bus signal if available
+            if self.dbus_service:
+                GLib.timeout_add_seconds(1, lambda: self._emit_service_state_after_check(True))
         except Exception as e:
             print(f"Failed to start service: {e}")
             logger.error(f"Failed to start service: {e}", exc_info=True)
@@ -153,6 +303,10 @@ class DictationTray:
         try:
             subprocess.run(["pkill", "-f", "talktype.app"], capture_output=True)
             logger.info("Stopped dictation service")
+
+            # Emit D-Bus signal if available
+            if self.dbus_service:
+                GLib.timeout_add_seconds(1, lambda: self._emit_service_state_after_check(False))
         except Exception as e:
             print(f"Failed to stop service: {e}")
             logger.error(f"Failed to stop service: {e}")
@@ -186,34 +340,118 @@ class DictationTray:
         GLib.timeout_add_seconds(2, self.update_status_and_menu_once)
     
     def update_status_and_menu(self):
-        """Update icon and menu item visibility based on service status."""
+        """Update icon and menu display based on service status."""
+        # Store previous state to detect changes
+        old_state = getattr(self, '_last_service_state', None)
+        new_state = self.is_service_running()
+
+        # Update UI
         self.update_icon_status()
-        self.update_menu_items()
+        self.update_menu_display()
+
+        # If state changed, emit D-Bus signal
+        if old_state is not None and old_state != new_state:
+            logger.info(f"Service state changed: {old_state} -> {new_state}")
+            if self.dbus_service:
+                try:
+                    self.dbus_service.emit_service_state(new_state)
+                    logger.debug(f"Emitted D-Bus service state: {new_state}")
+                except Exception as e:
+                    logger.error(f"Failed to emit D-Bus service state: {e}")
+
+        self._last_service_state = new_state
         return True  # Continue the timer
     
     def update_status_and_menu_once(self):
         """Update icon and menu items once."""
+        # Store previous state to detect changes
+        old_state = getattr(self, '_last_service_state', None)
+        new_state = self.is_service_running()
+
+        # Update UI
         self.update_icon_status()
-        self.update_menu_items()
+        self.update_menu_display()
+
+        # If state changed, emit D-Bus signal
+        if old_state is not None and old_state != new_state:
+            logger.info(f"Service state changed (one-time update): {old_state} -> {new_state}")
+            if self.dbus_service:
+                try:
+                    self.dbus_service.emit_service_state(new_state)
+                    logger.debug(f"Emitted D-Bus service state: {new_state}")
+                except Exception as e:
+                    logger.error(f"Failed to emit D-Bus service state: {e}")
+
+        self._last_service_state = new_state
         return False  # Don't repeat
-    
-    def update_menu_items(self):
-        """Show/hide Start/Stop menu items based on service status."""
-        if self.start_item and self.stop_item:
+
+    def toggle_service(self, widget):
+        """Toggle dictation service on/off."""
+        # Prevent recursive calls when we programmatically set the toggle
+        if hasattr(self, '_updating_toggle') and self._updating_toggle:
+            return
+
+        if widget.get_active():
+            # Turn service ON
+            self.start_service(None)
+        else:
+            # Turn service OFF
+            self.stop_service(None)
+
+    def update_menu_display(self):
+        """Update menu display with current service status and model."""
+        if hasattr(self, 'service_toggle'):
+            # Update service toggle state
             is_running = self.is_service_running()
-            self.start_item.set_visible(not is_running)
-            self.stop_item.set_visible(is_running)
+            self._updating_toggle = True
+            self.service_toggle.set_active(is_running)
+            self._updating_toggle = False
+
+        # Update active model display
+        if hasattr(self, 'model_display_item'):
+            try:
+                from .config import load_config
+                cfg = load_config()
+                model_names = {
+                    'tiny': 'Tiny (fastest)',
+                    'base': 'Base',
+                    'small': 'Small',
+                    'medium': 'Medium',
+                    'large-v3': 'Large (best quality)',
+                    'large': 'Large (best quality)'
+                }
+                display_name = model_names.get(cfg.model, cfg.model)
+                self.model_display_item.set_label(f"Active Model: {display_name}")
+
+                # Update device display
+                device_names = {
+                    'cpu': 'CPU',
+                    'cuda': 'GPU (CUDA)'
+                }
+                device_display = device_names.get(cfg.device, cfg.device.upper())
+                self.device_display_item.set_label(f"Device: {device_display}")
+            except Exception as e:
+                logger.error(f"Failed to update model/device display: {e}")
+                self.model_display_item.set_label("Active Model: Unknown")
+                self.device_display_item.set_label("Device: Unknown")
     
     def open_preferences(self, _):
         """Launch preferences window."""
         try:
+            # Check if preferences is already open
+            if self.preferences_process and self.preferences_process.poll() is None:
+                logger.info("Preferences window already open")
+                return
+
             # Use direct Python path for more reliable execution
             import os
             project_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
             python_path = sys.executable
-            subprocess.Popen([python_path, "-m", "src.talktype.prefs"], 
+            self.preferences_process = subprocess.Popen([python_path, "-m", "src.talktype.prefs"],
                            cwd=project_dir)
+            logger.info(f"Opened preferences window (pid={self.preferences_process.pid})")
         except Exception as e:
+            logger.error(f"Failed to open preferences: {e}")
             print(f"Failed to open preferences: {e}")
     
     def download_cuda(self, _):
@@ -529,45 +767,84 @@ Result: Use the period command
         try:
             # Stop the dictation service first
             subprocess.run(["pkill", "-f", "talktype.app"], capture_output=True)
-            print("Stopped dictation service")
+            logger.info("Stopped dictation service")
         except Exception as e:
-            print(f"Error stopping dictation service: {e}")
-        # Then quit the tray
+            logger.error(f"Error stopping dictation service: {e}")
+
+        # Close preferences window if open
+        if self.preferences_process and self.preferences_process.poll() is None:
+            try:
+                self.preferences_process.terminate()
+                self.preferences_process.wait(timeout=2)
+                logger.info("Closed preferences window")
+            except Exception as e:
+                logger.error(f"Error closing preferences window: {e}")
+                try:
+                    self.preferences_process.kill()
+                except:
+                    pass
+
+        # Clean up D-Bus service if it exists
+        if self.dbus_service:
+            try:
+                # Remove from connection to unregister the service
+                self.dbus_service.remove_from_connection()
+                logger.info("D-Bus service unregistered")
+            except Exception as e:
+                logger.error(f"Error unregistering D-Bus service: {e}")
+            self.dbus_service = None
+
+        # Quit the GTK main loop
         Gtk.main_quit()
+
+        # Force exit to ensure process terminates
+        # Use a small delay to allow GTK cleanup
+        GLib.timeout_add(100, lambda: sys.exit(0))
     
     def build_menu(self):
         menu = Gtk.Menu()
         
-        # App title header (non-clickable)
-        title_item = Gtk.MenuItem(label="🎙️ TalkType")
-        title_item.set_sensitive(False)
-        
-        # Store references to start/stop items for dynamic visibility
-        self.start_item = Gtk.MenuItem(label="Start Service")
-        self.stop_item = Gtk.MenuItem(label="Stop Service")
-        restart_item = Gtk.MenuItem(label="Restart Service")
+        # Dictation Service toggle (using CheckMenuItem for ON/OFF display)
+        self.service_toggle = Gtk.CheckMenuItem(label="Dictation Service")
+        self.service_toggle.connect("toggled", self.toggle_service)
+
+        # Active model display (non-clickable)
+        self.model_display_item = Gtk.MenuItem(label="Active Model: Loading...")
+        self.model_display_item.set_sensitive(False)
+
+        # Device mode display (non-clickable)
+        self.device_display_item = Gtk.MenuItem(label="Device: Loading...")
+        self.device_display_item.set_sensitive(False)
+
+        # Menu items
         prefs_item = Gtk.MenuItem(label="Preferences...")
         help_item = Gtk.MenuItem(label="Help...")
-        quit_item = Gtk.MenuItem(label="Quit Tray")
-        
-        self.start_item.connect("activate", self.start_service)
-        self.stop_item.connect("activate", self.stop_service)
-        restart_item.connect("activate", self.restart_service)
+        quit_item = Gtk.MenuItem(label="Quit TalkType")
+
         prefs_item.connect("activate", self.open_preferences)
         help_item.connect("activate", self.show_help)
         quit_item.connect("activate", self.quit_app)
 
-        # CUDA download option removed from tray menu - users can access it via Preferences
-        menu_items = [title_item, Gtk.SeparatorMenuItem(), self.start_item, self.stop_item,
-                     restart_item, Gtk.SeparatorMenuItem(), prefs_item, help_item, quit_item]
-        
+        # Build menu in exact same order as extension
+        menu_items = [
+            self.service_toggle,
+            Gtk.SeparatorMenuItem(),
+            self.model_display_item,
+            self.device_display_item,
+            Gtk.SeparatorMenuItem(),
+            prefs_item,
+            help_item,
+            Gtk.SeparatorMenuItem(),
+            quit_item
+        ]
+
         for item in menu_items:
             menu.append(item)
         menu.show_all()
-        
-        # Set initial menu state based on service status
-        self.update_menu_items()
-        
+
+        # Set initial menu state
+        self.update_menu_display()
+
         return menu
     
     def refresh_menu(self):
@@ -604,25 +881,38 @@ def main():
 
     tray = DictationTray()
     
-    # Check for first run and offer CUDA setup if applicable
+    # Check for first run and show welcome dialog if applicable
     try:
         import talktype.cuda_helper as cuda_helper
+        from talktype.welcome_dialog import show_welcome_and_install
+
         # Only show welcome dialog on first tray launch (not for prefs)
         if cuda_helper.is_first_run():
             # Schedule the welcome dialog after tray is initialized
-            def show_welcome():
-                cuda_helper.offer_cuda_download(show_gui=True)
-                # Refresh menu after CUDA installation (in case CUDA was installed)
+            def show_first_run_setup():
+                # Show unified welcome dialog with all setup options
+                show_welcome_and_install()
+
+                # Mark first run as complete
+                try:
+                    cuda_helper.mark_first_run_complete()
+                except Exception as e:
+                    logger.error(f"Failed to mark first run complete: {e}")
+
+                # Refresh menu after installations
                 tray.refresh_menu()
+
                 # NOW start the service (after welcome dialog)
                 GLib.timeout_add(500, tray._auto_start_service)
                 return False  # Don't repeat
-            GLib.timeout_add(1500, show_welcome)  # Show after 1.5 seconds
+
+            GLib.timeout_add(1500, show_first_run_setup)  # Show after 1.5 seconds
         else:
             # Not first run, auto-start immediately
             GLib.timeout_add(1000, tray._auto_start_service)
-    except Exception:
+    except Exception as e:
         # If any error, still try to auto-start
+        logger.error(f"Error in first run setup: {e}")
         GLib.timeout_add(1000, tray._auto_start_service)
     
     Gtk.main()

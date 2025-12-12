@@ -1214,10 +1214,23 @@ X-GNOME-Autostart-enabled=true
         Get the appropriate launch command for TalkType.
 
         Returns the most portable way to launch the tray icon:
-        1. If running from AppImage, use the AppImage path
-        2. If dictate-tray is in PATH, use it (works for installed versions)
-        3. Otherwise, use the current Python interpreter with the module path
+        1. If running in DEV_MODE, use the run-dev.sh script
+        2. If running from AppImage, use the AppImage path
+        3. If dictate-tray is in PATH, use it (works for installed versions)
+        4. Otherwise, use the current Python interpreter with the module path
         """
+        # Check if we're in DEV_MODE - use run-dev.sh script
+        from . import config
+        if config.DEV_MODE:
+            # Find the run-dev.sh script relative to this file
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            run_dev_script = os.path.join(project_root, 'run-dev.sh')
+            if os.path.isfile(run_dev_script) and os.access(run_dev_script, os.X_OK):
+                return run_dev_script
+            else:
+                # Fallback for dev mode - use bash with env vars
+                return f'/bin/bash -c "cd {project_root} && DEV_MODE=1 PYTHONPATH=./src:/usr/lib64/python3.13/site-packages:/usr/lib/python3.13/site-packages {sys.executable} -m talktype.tray"'
+
         # Check if we're running from an AppImage
         appimage_path = os.environ.get('APPIMAGE')
         if appimage_path and os.path.isfile(appimage_path) and os.access(appimage_path, os.X_OK):

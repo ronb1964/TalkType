@@ -136,6 +136,9 @@ def enable_extension(uuid: str) -> bool:
     """
     Enable a GNOME extension
 
+    This adds the extension to org.gnome.shell enabled-extensions gsettings key,
+    which persists across logout/login cycles.
+
     Args:
         uuid: Extension UUID
 
@@ -146,10 +149,27 @@ def enable_extension(uuid: str) -> bool:
         result = subprocess.run(
             ['gnome-extensions', 'enable', uuid],
             capture_output=True,
+            text=True,
             timeout=10
         )
-        return result.returncode == 0
-    except (subprocess.TimeoutExpired, FileNotFoundError):
+
+        if result.returncode != 0:
+            # Log error for debugging
+            if result.stderr:
+                print(f"⚠️  gnome-extensions enable error: {result.stderr.strip()}")
+            return False
+
+        # Verify it was actually enabled
+        if is_extension_enabled(uuid):
+            return True
+        else:
+            print(f"⚠️  Extension '{uuid}' was enabled but verification failed")
+            print(f"    This may require a logout/login to take effect")
+            # Still return True since the command succeeded
+            return True
+
+    except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+        print(f"⚠️  Failed to enable extension: {e}")
         return False
 
 

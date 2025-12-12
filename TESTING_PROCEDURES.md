@@ -1,5 +1,27 @@
 # TalkType Testing Procedures
 
+## CRITICAL: User's Role vs Claude's Role
+
+**USER:** Only runs the AppImage from `~/AppImages/` directory and tests the UI
+**CLAUDE:** Must provide a fresh test environment BEFORE user tests
+
+## Claude's Responsibilities Before User Tests
+
+When the user wants to test an AppImage, Claude MUST:
+
+1. **Run `./fresh-start-for-testing.sh`** to provide a clean environment
+2. **Verify the cleanup succeeded** by checking the script output
+3. **Show the AppImage file size** (user wants to keep it under 1GB)
+4. **Provide exact commands** for the user to copy/paste:
+   ```
+   cd ~/AppImages
+   ./TalkType-v0.3.8-x86_64.AppImage
+   ```
+   (User is a novice - ALWAYS include the `cd` command!)
+5. **Wait** for the user to share terminal output
+
+**NEVER** ask the user to run fresh-start-for-testing.sh themselves!
+
 ## Prerequisites for Testing
 
 **Before testing the AppImage, ensure ydotool is installed and running:**
@@ -47,13 +69,9 @@ systemctl --user status ydotoold
 
 ## Fresh Test Environment Setup
 
-**ALWAYS use this procedure before testing a new AppImage build:**
+**Claude runs this automatically - user never runs this script!**
 
-```bash
-./fresh-test-env.sh
-```
-
-This script ensures a completely clean first-run environment by:
+The `fresh-start-for-testing.sh` script ensures a completely clean first-run environment by:
 1. Stopping all TalkType processes
 2. Removing config file (`~/.config/talktype/config.toml`)
 3. Removing first-run flag (`~/.local/share/TalkType/.first_run_done`)

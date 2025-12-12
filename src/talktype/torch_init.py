@@ -38,7 +38,7 @@ def init_cuda_for_pytorch():
     {sys.path}/nvidia/{lib_folder}/lib/{lib_name}
 
     However, our cuda_helper.py strips the 'nvidia/' prefix when extracting,
-    so libraries are at: ~/.local/share/TalkType/cuda/lib/{lib_folder}/lib/
+    so libraries are at: ~/.local/share/TalkType[-dev]/cuda/lib/{lib_folder}/lib/
     We need to create the 'nvidia' directory structure PyTorch expects.
 
     Returns:
@@ -48,7 +48,8 @@ def init_cuda_for_pytorch():
     if _initialized:
         return True  # Already initialized, skip duplicate work
 
-    cuda_base = Path.home() / ".local" / "share" / "TalkType" / "cuda"
+    from .cuda_helper import get_appdir_cuda_path
+    cuda_base = Path(get_appdir_cuda_path())
     lib_path = cuda_base / "lib"
 
     if not lib_path.exists():

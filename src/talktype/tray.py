@@ -83,12 +83,27 @@ class DictationTray:
             "microphone-sensitivity-muted",  # start with muted icon
             AppIndicator3.IndicatorCategory.APPLICATION_STATUS
         )
-        self.indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
+
+        # Check if we should show the GTK tray
+        # In production: hide GTK tray if GNOME extension is enabled
+        # In dev mode (DEV_MODE=1): always show GTK tray for testing
+        self._should_show_tray = self._check_tray_visibility()
+
+        if self._should_show_tray:
+            self.indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
+            logger.info("GTK tray enabled")
+        else:
+            self.indicator.set_status(AppIndicator3.IndicatorStatus.PASSIVE)
+            logger.info("GTK tray hidden (GNOME extension is active)")
+
         self.indicator.set_title("TalkType")  # Set the app name
 
         # Store menu items for dynamic updates
         self.start_item = None
         self.stop_item = None
+
+        # Track subprocess windows
+        self.preferences_process = None
 
         # Initialize D-Bus service (optional - for GNOME extension integration)
         self.dbus_service = None
@@ -97,12 +112,39 @@ class DictationTray:
         self.update_icon_status()
         self.indicator.set_menu(self.build_menu())
 
-        # Check service status every 3 seconds and update menu
-        GLib.timeout_add_seconds(3, self.update_status_and_menu)
+        # Track service state for change detection
+        self._last_service_state = self.is_service_running()
+
+        # Check service status every 1 second and update menu (faster sync in dev mode)
+        GLib.timeout_add_seconds(1, self.update_status_and_menu)
 
         # Auto-start will be triggered after welcome dialog on first run
         # or immediately if not first run (handled in main())
-        
+
+    def _check_tray_visibility(self) -> bool:
+        """
+        Determine if GTK tray should be visible.
+
+        Returns:
+            bool: True if GTK tray should be shown, False if it should be hidden
+        """
+        # Check for dev mode first - always show in dev mode
+        if os.environ.get('DEV_MODE') == '1':
+            logger.info("DEV_MODE=1 detected - showing GTK tray for testing")
+            return True
+
+        # Check if GNOME extension is enabled
+        try:
+            from . import extension_helper
+            if extension_helper.is_extension_enabled():
+                logger.info("GNOME extension is enabled - hiding GTK tray")
+                return False
+        except Exception as e:
+            logger.debug(f"Could not check extension status: {e}")
+
+        # Default: show GTK tray (extension not enabled or not GNOME)
+        return True
+
     def _init_dbus_service(self):
         """Initialize D-Bus service for GNOME extension integration (optional)."""
         if not DBUS_AVAILABLE:
@@ -226,9 +268,26 @@ class DictationTray:
                 subprocess.Popen([dictate_script], env=os.environ.copy())
                 logger.info(f"Started dictation service via {dictate_script}")
             else:
-                # Fallback: use sys.executable (bundled Python)
+                # Fallback: use sys.executable (bundled Python or dev environment)
+                # In dev mode, we need to set PYTHONPATH to find the talktype module
+                env = os.environ.copy()
+
+                # Check if we're in dev mode (src/talktype structure exists relative to __file__)
+                project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+                src_dir_check = os.path.join(project_root, "src")
+                if os.path.exists(src_dir_check):
+                    # Dev mode - set PYTHONPATH to include src/ AND system PyGObject
+                    # Use absolute paths!
+                    pythonpath_parts = [
+                        os.path.abspath(src_dir_check),
+                        "/usr/lib64/python3.14/site-packages",  # System PyGObject on Fedora/Nobara
+                        "/usr/lib/python3.14/site-packages"      # Alternative location
+                    ]
+                    env["PYTHONPATH"] = ":".join(pythonpath_parts)
+                    logger.info(f"Dev mode detected - setting PYTHONPATH={env['PYTHONPATH']}")
+
                 subprocess.Popen([sys.executable, "-m", "talktype.app"],
-                               env=os.environ.copy())
+                               env=env)
                 logger.info("Started dictation service via Python module")
 
             # Emit D-Bus signal if available
@@ -282,14 +341,48 @@ class DictationTray:
     
     def update_status_and_menu(self):
         """Update icon and menu display based on service status."""
+        # Store previous state to detect changes
+        old_state = getattr(self, '_last_service_state', None)
+        new_state = self.is_service_running()
+
+        # Update UI
         self.update_icon_status()
         self.update_menu_display()
+
+        # If state changed, emit D-Bus signal
+        if old_state is not None and old_state != new_state:
+            logger.info(f"Service state changed: {old_state} -> {new_state}")
+            if self.dbus_service:
+                try:
+                    self.dbus_service.emit_service_state(new_state)
+                    logger.debug(f"Emitted D-Bus service state: {new_state}")
+                except Exception as e:
+                    logger.error(f"Failed to emit D-Bus service state: {e}")
+
+        self._last_service_state = new_state
         return True  # Continue the timer
     
     def update_status_and_menu_once(self):
         """Update icon and menu items once."""
+        # Store previous state to detect changes
+        old_state = getattr(self, '_last_service_state', None)
+        new_state = self.is_service_running()
+
+        # Update UI
         self.update_icon_status()
         self.update_menu_display()
+
+        # If state changed, emit D-Bus signal
+        if old_state is not None and old_state != new_state:
+            logger.info(f"Service state changed (one-time update): {old_state} -> {new_state}")
+            if self.dbus_service:
+                try:
+                    self.dbus_service.emit_service_state(new_state)
+                    logger.debug(f"Emitted D-Bus service state: {new_state}")
+                except Exception as e:
+                    logger.error(f"Failed to emit D-Bus service state: {e}")
+
+        self._last_service_state = new_state
         return False  # Don't repeat
 
     def toggle_service(self, widget):
@@ -304,6 +397,36 @@ class DictationTray:
         else:
             # Turn service OFF
             self.stop_service(None)
+
+    def toggle_paste_mode(self, widget):
+        """Toggle between clipboard paste and keyboard typing mode."""
+        # Prevent recursive calls when we programmatically set the toggle
+        if hasattr(self, '_updating_paste_toggle') and self._updating_paste_toggle:
+            return
+
+        try:
+            from .config import load_config, save_config
+            cfg = load_config()
+            
+            if widget.get_active():
+                # Enable clipboard paste mode
+                cfg.injection_mode = "paste"
+                logger.info("Switched to Clipboard Paste mode")
+            else:
+                # Enable keyboard typing mode
+                cfg.injection_mode = "type"
+                logger.info("Switched to Keyboard Typing mode")
+            
+            # Save the config
+            save_config(cfg)
+            
+            # Notify user
+            from .app import _notify
+            mode_name = "Clipboard Paste" if cfg.injection_mode == "paste" else "Keyboard Typing"
+            _notify("TalkType", f"Input mode: {mode_name}")
+            
+        except Exception as e:
+            logger.error(f"Failed to toggle paste mode: {e}")
 
     def update_menu_display(self):
         """Update menu display with current service status and model."""
@@ -337,6 +460,14 @@ class DictationTray:
                 }
                 device_display = device_names.get(cfg.device, cfg.device.upper())
                 self.device_display_item.set_label(f"Device: {device_display}")
+                
+                # Update paste mode toggle state
+                if hasattr(self, 'paste_mode_toggle'):
+                    self._updating_paste_toggle = True
+                    # Check if injection_mode is "paste"
+                    is_paste_mode = cfg.injection_mode == "paste"
+                    self.paste_mode_toggle.set_active(is_paste_mode)
+                    self._updating_paste_toggle = False
             except Exception as e:
                 logger.error(f"Failed to update model/device display: {e}")
                 self.model_display_item.set_label("Active Model: Unknown")
@@ -345,17 +476,45 @@ class DictationTray:
     def open_preferences(self, _):
         """Launch preferences window."""
         try:
+            # Check if preferences is already open
+            if self.preferences_process and self.preferences_process.poll() is None:
+                logger.info("Preferences window already open")
+                return
+
             # Use direct Python path for more reliable execution
             import os
             project_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
             python_path = sys.executable
-            subprocess.Popen([python_path, "-m", "src.talktype.prefs"], 
+            self.preferences_process = subprocess.Popen([python_path, "-m", "src.talktype.prefs"],
                            cwd=project_dir)
+            logger.info(f"Opened preferences window (pid={self.preferences_process.pid})")
         except Exception as e:
+            logger.error(f"Failed to open preferences: {e}")
             print(f"Failed to open preferences: {e}")
     
     def download_cuda(self, _):
         """Download CUDA libraries for GPU acceleration."""
+        # Show confirmation dialog first
+        confirm_dialog = Gtk.MessageDialog(
+            message_type=Gtk.MessageType.QUESTION,
+            buttons=Gtk.ButtonsType.YES_NO,
+            text="Download CUDA Libraries?"
+        )
+        from talktype.config import get_data_dir
+        cuda_path = os.path.join(get_data_dir(), "cuda")
+        confirm_dialog.format_secondary_text(
+            "This will download approximately 800MB of CUDA libraries for GPU acceleration.\n\n"
+            f"The files will be stored in {cuda_path} and may take several minutes to download.\n\n"
+            "Continue with download?"
+        )
+        confirm_dialog.set_position(Gtk.WindowPosition.CENTER)
+        response = confirm_dialog.run()
+        confirm_dialog.destroy()
+
+        if response != Gtk.ResponseType.YES:
+            logger.info("CUDA download cancelled by user")
+            return
+
         try:
             from . import cuda_helper
             logger.info("Starting CUDA download...")
@@ -370,6 +529,13 @@ class DictationTray:
     
     def show_help(self, _):
         """Show help dialog with TalkType features and instructions."""
+        print("🟢 TRAY show_help() called - importing shared help_dialog")
+        from .help_dialog import show_help_dialog
+        show_help_dialog()
+        return
+
+        # OLD CODE BELOW - REMOVED (now using shared help_dialog.py)
+        print("🔴 ERROR: OLD TRAY CODE RUNNING - SHOULD NEVER SEE THIS")
         dialog = Gtk.Dialog(title="TalkType Help")
         dialog.set_default_size(650, 550)
         dialog.set_modal(True)
@@ -671,6 +837,19 @@ Result: Use the period command
         except Exception as e:
             logger.error(f"Error stopping dictation service: {e}")
 
+        # Close preferences window if open
+        if self.preferences_process and self.preferences_process.poll() is None:
+            try:
+                self.preferences_process.terminate()
+                self.preferences_process.wait(timeout=2)
+                logger.info("Closed preferences window")
+            except Exception as e:
+                logger.error(f"Error closing preferences window: {e}")
+                try:
+                    self.preferences_process.kill()
+                except:
+                    pass
+
         # Clean up D-Bus service if it exists
         if self.dbus_service:
             try:
@@ -703,6 +882,10 @@ Result: Use the period command
         self.device_display_item = Gtk.MenuItem(label="Device: Loading...")
         self.device_display_item.set_sensitive(False)
 
+        # Injection mode toggle (Clipboard Paste vs Keyboard Typing)
+        self.paste_mode_toggle = Gtk.CheckMenuItem(label="Use Clipboard Paste")
+        self.paste_mode_toggle.connect("toggled", self.toggle_paste_mode)
+
         # Menu items
         prefs_item = Gtk.MenuItem(label="Preferences...")
         help_item = Gtk.MenuItem(label="Help...")
@@ -718,6 +901,7 @@ Result: Use the period command
             Gtk.SeparatorMenuItem(),
             self.model_display_item,
             self.device_display_item,
+            self.paste_mode_toggle,
             Gtk.SeparatorMenuItem(),
             prefs_item,
             help_item,

@@ -120,6 +120,36 @@ def get_appdir_cuda_path():
     from .config import get_data_dir
     return os.path.join(get_data_dir(), "cuda")
 
+def has_talktype_cuda_libraries():
+    """
+    Check if TalkType's own downloaded CUDA libraries are installed.
+    This ONLY checks ~/.local/share/TalkType/cuda, not system CUDA.
+
+    Use this in UI to show download status (not for runtime detection).
+
+    Returns:
+        bool: True if TalkType CUDA libraries exist, False otherwise
+    """
+    cuda_path = get_appdir_cuda_path()
+    lib_path = os.path.join(cuda_path, "lib")
+
+    if not os.path.exists(lib_path):
+        return False
+
+    # Check for key CUDA libraries
+    required_libs = ['libcudart.so', 'libcublas.so']
+
+    for lib in required_libs:
+        try:
+            result = subprocess.run(['find', lib_path, '-name', f'{lib}*'],
+                                  capture_output=True, text=True, timeout=SUBPROCESS_TIMEOUT)
+            if not result.stdout.strip():
+                return False
+        except (subprocess.TimeoutExpired, Exception):
+            return False
+
+    return True
+
 def is_first_run():
     """Check if this is the first time the app is run."""
     from .config import get_data_dir
@@ -149,12 +179,22 @@ def download_cuda_libraries(progress_callback=None, cancel_event=None):
     import urllib.request
     import zipfile
     import shutil
-    
+
     cuda_path = get_appdir_cuda_path()
     lib_path = os.path.join(cuda_path, "lib")
-    
+
     # Create directories
     os.makedirs(lib_path, exist_ok=True)
+
+    # Helper function to clean up on failure/cancellation
+    def cleanup_cuda_dir():
+        """Remove the CUDA directory if download fails or is cancelled."""
+        try:
+            if os.path.exists(cuda_path):
+                shutil.rmtree(cuda_path)
+                logger.info(f"Cleaned up incomplete CUDA installation at {cuda_path}")
+        except Exception as e:
+            logger.warning(f"Could not clean up CUDA directory: {e}")
     
     # Use pip to download packages instead of direct URLs
     cuda_packages = ['nvidia-cuda-runtime-cu12', 'nvidia-cublas-cu12', 'nvidia-cudnn-cu12']
@@ -168,6 +208,7 @@ def download_cuda_libraries(progress_callback=None, cancel_event=None):
                 # Check for cancellation
                 if cancel_event and cancel_event.is_set():
                     logger.info("Download cancelled by user")
+                    cleanup_cuda_dir()
                     return False
 
                 if progress_callback:
@@ -197,6 +238,7 @@ def download_cuda_libraries(progress_callback=None, cancel_event=None):
                     
                     if not wheel_url:
                         logger.error(f"No suitable wheel found for {pkg_name}")
+                        cleanup_cuda_dir()
                         return False
                     
                     # Download the wheel with progress updates
@@ -204,6 +246,10 @@ def download_cuda_libraries(progress_callback=None, cancel_event=None):
                     wheel_path = os.path.join(temp_dir, wheel_filename)
                     
                     def download_progress_hook(block_num, block_size, total_size):
+                        # Check for cancellation during download
+                        if cancel_event and cancel_event.is_set():
+                            raise InterruptedError("Download cancelled by user")
+
                         if progress_callback and total_size > 0:
                             downloaded = block_num * block_size
                             download_percent = min(100, (downloaded / total_size) * 100)
@@ -211,17 +257,19 @@ def download_cuda_libraries(progress_callback=None, cancel_event=None):
                             base_percent = pkg_idx * 23
                             current_percent = base_percent + int((download_percent / 100) * 23)
                             progress_callback(f"Downloading {pkg_name}... {int(download_percent)}%", current_percent)
-                    
+
                     urllib.request.urlretrieve(wheel_url, wheel_path, reporthook=download_progress_hook)
                     logger.info(f"✅ Downloaded {wheel_filename}")
                         
                 except Exception as e:
                     logger.error(f"Failed to download {pkg_name}: {e}")
+                    cleanup_cuda_dir()
                     return False
 
             # Check for cancellation before extraction
             if cancel_event and cancel_event.is_set():
                 logger.info("Download cancelled by user before extraction")
+                cleanup_cuda_dir()
                 return False
 
             if progress_callback:
@@ -234,6 +282,7 @@ def download_cuda_libraries(progress_callback=None, cancel_event=None):
                 # Check for cancellation during extraction
                 if cancel_event and cancel_event.is_set():
                     logger.info("Download cancelled by user during extraction")
+                    cleanup_cuda_dir()
                     return False
 
                 wheel_path = os.path.join(temp_dir, wheel_file)
@@ -291,9 +340,10 @@ def download_cuda_libraries(progress_callback=None, cancel_event=None):
         
         logger.info(f"✅ Installed {len(so_files)} library files")
         return True
-        
+
     except Exception as e:
         logger.error(f"Error downloading CUDA libraries: {e}", exc_info=True)
+        cleanup_cuda_dir()
         return False
 
 def show_cuda_download_dialog(parent=None, on_success_callback=None):
@@ -429,6 +479,12 @@ def show_cuda_download_dialog(parent=None, on_success_callback=None):
             buttons=Gtk.ButtonsType.OK,
             text="CUDA Libraries Downloaded!"
         )
+
+        # Apply dark theme
+        settings = Gtk.Settings.get_default()
+        if settings:
+            settings.set_property("gtk-application-prefer-dark-theme", True)
+
         msg.format_secondary_text(
             "GPU acceleration is now available.\n\n"
             "TalkType has been automatically configured to use your NVIDIA GPU for faster transcription."
@@ -444,6 +500,12 @@ def show_cuda_download_dialog(parent=None, on_success_callback=None):
             buttons=Gtk.ButtonsType.OK,
             text="Download Failed"
         )
+
+        # Apply dark theme
+        settings = Gtk.Settings.get_default()
+        if settings:
+            settings.set_property("gtk-application-prefer-dark-theme", True)
+
         msg.format_secondary_text(
             "Could not download CUDA libraries.\n\n"
             "You can try again later from Preferences → Advanced."

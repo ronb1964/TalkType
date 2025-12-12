@@ -142,7 +142,7 @@ class TalkTypeDBusService(dbus.service.Object):
         """Show the help dialog"""
         print("D-Bus: ShowHelp called")
         if hasattr(self.app, 'show_help'):
-            GLib.idle_add(self.app.show_help)
+            GLib.idle_add(self.app.show_help, None)
 
     @dbus.service.method(DBUS_INTERFACE)
     def Quit(self):

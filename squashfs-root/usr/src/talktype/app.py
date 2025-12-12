@@ -12,6 +12,8 @@ from evdev import InputDevice, ecodes, list_devices
 from .normalize import normalize_text
 from .config import load_config, Settings
 from .logger import setup_logger
+from .recording_indicator import RecordingIndicator
+import threading
 
 logger = setup_logger(__name__)
 
@@ -91,10 +93,7 @@ def show_hotkey_test_dialog(mode, hold_key, toggle_key):
         # Track tested keys
         tested = {"hold": False, "toggle": False}
 
-        # Buttons
-        button_box = dialog.get_action_area()
-        button_box.set_layout(Gtk.ButtonBoxStyle.EDGE)
-
+        # Buttons (action area is managed automatically by dialog)
         change_keys_btn = Gtk.Button(label="Change Keys...")
         change_keys_btn.connect("clicked", lambda w: dialog.response(Gtk.ResponseType.APPLY))
         change_keys_btn.set_tooltip_text("Open Preferences to change hotkeys")
@@ -379,6 +378,10 @@ class RecordingState:
 # Global recording state
 state = RecordingState()
 
+# Global recording indicator and D-Bus service (initialized in main)
+recording_indicator = None
+dbus_service = None
+
 def _beep(enabled: bool, freq=1000, duration=0.15):
     if not enabled:
         return
@@ -393,6 +396,17 @@ def _beep(enabled: bool, freq=1000, duration=0.15):
 def _sd_callback(indata, frames_count, time_info, status):
     if state.is_recording:
         state.frames.append(indata.tobytes())
+
+        # Update recording indicator with audio level
+        if recording_indicator:
+            # Calculate RMS (root mean square) for audio level
+            audio_data = np.frombuffer(indata, dtype=np.int16)
+            # Use float64 to avoid overflow in squaring
+            audio_float = audio_data.astype(np.float64)
+            rms = np.sqrt(np.mean(audio_float**2))
+            # Normalize to 0-1 range (adjust multiplier for sensitivity)
+            normalized = min(1.0, rms / 3000.0)
+            recording_indicator.set_audio_level(normalized)
 
 def _keycode_from_name(name: str) -> int:
     n = (name or "F8").strip().upper()
@@ -430,6 +444,15 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx):
     _beep(beeps_on, *START_BEEP)
     if notify_on: _notify("TalkType", "Recording… (speak now)")
 
+    # Show recording indicator
+    if recording_indicator:
+        try:
+            recording_indicator.show_at_position()
+            recording_indicator.start_recording()
+        except Exception as e:
+            print(f"⚠️  Failed to show recording indicator: {e}")
+            logger.error(f"Failed to show recording indicator: {e}", exc_info=True)
+
 def _stop_stream_safely():
     if state.stream:
         try:
@@ -446,6 +469,10 @@ def cancel_recording(beeps_on: bool, notify_on: bool, reason="Cancelled"):
     print(f"⏸️  {reason}")
     logger.debug(f"Recording cancelled: {reason}")
     if notify_on: _notify("TalkType", reason)
+
+    # Hide recording indicator
+    if recording_indicator:
+        recording_indicator.hide_indicator()
 
 def _send_shift_enter():
     """Send Shift+Enter keystrokes to create line break without submitting."""
@@ -532,25 +559,71 @@ def _type_text_raw(text: str):
     logger.error("Could not type text: no ydotool/wtype/wl-copy available")
     print("⚠️  Could not type text (no ydotool/wtype).")
 
-def _paste_text(text: str):
-    """Wayland paste injection: put text on clipboard, then Ctrl+V."""
+def _paste_text(text: str, send_trailing_keys: bool = False):
+    """
+    Wayland paste injection: put text on clipboard, then Ctrl+V.
+
+    Args:
+        text: Text to paste (should NOT contain §SHIFT_ENTER§ markers)
+        send_trailing_keys: If True, send additional key presses after paste
+    """
     try:
         if shutil.which("wl-copy") and shutil.which("ydotool"):
-            # Copy text
+            # Copy text to clipboard
+            # wl-copy needs to stay running in background to serve clipboard requests
+            # So we start it as a background process (Popen) instead of waiting for it
             import subprocess as _sp
-            _sp.run(["wl-copy"], input=text.encode("utf-8"), check=False)
-            # Give the compositor a moment to publish clipboard contents
-            time.sleep(0.06)
+            proc = _sp.Popen(["wl-copy"], stdin=_sp.PIPE, stdout=_sp.PIPE, stderr=_sp.PIPE)
+            proc.stdin.write(text.encode("utf-8"))
+            proc.stdin.close()
+
+            # Give wl-copy and compositor time to publish clipboard contents
+            time.sleep(0.25)
+
+            # Wait for target window to be ready
+            time.sleep(0.3)
+
             # Send Ctrl+V: KEY_LEFTCTRL (29), KEY_V (47)
             env = os.environ.copy()
             runtime = env.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
             env.setdefault("YDOTOOL_SOCKET", os.path.join(runtime, ".ydotool_socket"))
-            _sp.run(["ydotool", "key", "29:1", "47:1", "47:0", "29:0"], check=False, env=env)
-            # Some apps prefer Shift+Insert; try it as well just in case
-            _sp.run(["ydotool", "key", "42:1", "110:1", "110:0", "42:0"], check=False, env=env)
-            time.sleep(0.02)
+
+            # Try Ctrl+V for most applications
+            _sp.run(["ydotool", "key", "29:1"], check=False, env=env)  # Ctrl down
+            time.sleep(0.05)
+            _sp.run(["ydotool", "key", "47:1"], check=False, env=env)  # V down
+            time.sleep(0.05)
+            _sp.run(["ydotool", "key", "47:0"], check=False, env=env)  # V up
+            time.sleep(0.05)
+            _sp.run(["ydotool", "key", "29:0"], check=False, env=env)  # Ctrl up
+            time.sleep(0.1)
+
+            # Also try Shift+Ctrl+V for terminals
+            _sp.run(["ydotool", "key", "42:1"], check=False, env=env)  # Shift down
+            time.sleep(0.05)
+            _sp.run(["ydotool", "key", "29:1"], check=False, env=env)  # Ctrl down
+            time.sleep(0.05)
+            _sp.run(["ydotool", "key", "47:1"], check=False, env=env)  # V down
+            time.sleep(0.05)
+            _sp.run(["ydotool", "key", "47:0"], check=False, env=env)  # V up
+            time.sleep(0.05)
+            _sp.run(["ydotool", "key", "29:0"], check=False, env=env)  # Ctrl up
+            time.sleep(0.05)
+            _sp.run(["ydotool", "key", "42:0"], check=False, env=env)  # Shift up
+            time.sleep(0.2)
+
+            # Kill wl-copy process after paste is complete
+            try:
+                proc.terminate()
+                proc.wait(timeout=0.5)
+            except:
+                pass
+
             return True
-    except Exception:
+    except subprocess.TimeoutExpired as e:
+        logger.error(f"Paste injection timeout: {e}")
+    except Exception as e:
+        logger.error(f"Paste injection failed: {e}")
         pass
     return False
 
@@ -575,7 +648,7 @@ def stop_recording(
     language: str | None = None,
     auto_space: bool = True,
     auto_period: bool = True,
-    paste_injection: bool = False,
+    injection_mode: str = "type",
 ):
     held_ms = int((time.time() - (state.press_t0 or time.time())) * 1000)
     if held_ms < MIN_HOLD_MS:
@@ -583,6 +656,11 @@ def stop_recording(
     state.is_recording = False
     _stop_stream_safely()
     if state.was_cancelled: return
+
+    # Hide recording indicator immediately when recording stops
+    # This prevents it from interfering with text injection
+    if recording_indicator:
+        recording_indicator.hide_indicator()
 
     print("🛑 Recording stopped. Transcribing…")
     logger.debug("Recording stopped, starting transcription")
@@ -606,7 +684,7 @@ def stop_recording(
         )
         raw = " ".join(seg.text for seg in segments).strip()
         print(f"📝 Raw: {raw!r}")
-        logger.debug(f"Raw transcription: {raw!r}")
+        logger.info(f"Raw transcription: {raw!r}")
         text = normalize_text(raw if smart_quotes else raw.replace(""","\"").replace(""","\""))
 
         # Simple spacing: always add period+space or just space when auto features are on
@@ -620,7 +698,7 @@ def stop_recording(
             text = text.rstrip() + "."
         if auto_space and text and not is_only_markers and not text.endswith((" ", "\n", "\t")):
             text = text + " "
-        logger.debug(f"Normalized text: {text!r}")
+        logger.info(f"Normalized text: {text!r}")
 
         _beep(beeps_on, *READY_BEEP)
         if notify_on: _notify("TalkType", f"Transcribed: {text[:80]}{'…' if len(text)>80 else ''}")
@@ -628,11 +706,50 @@ def stop_recording(
             # Small settling delay so focused app is ready to receive text
             time.sleep(0.12)
             # Choose injection mode: paste entire utterance vs keystroke typing
-            use_paste = paste_injection or os.environ.get("DICTATE_INJECTION_MODE","type").lower()=="paste"
-            if use_paste and _paste_text(text):
+            use_paste = (injection_mode == "paste") or os.environ.get("DICTATE_INJECTION_MODE","type").lower()=="paste"
+            print(f"🔍 DEBUG: injection_mode={injection_mode!r}, use_paste={use_paste}, wl-copy={shutil.which('wl-copy')}, ydotool={shutil.which('ydotool')}")
+            logger.info(f"Injection mode decision: injection_mode={injection_mode!r}, use_paste={use_paste}, text_len={len(text)}")
+
+            # Smart hybrid mode: Split text on markers and paste each chunk separately
+            # This gives us fast paste for long text while properly handling formatting commands
+            if use_paste and ("§SHIFT_ENTER§" in text or "\n" in text):
+                logger.info(f"Smart hybrid mode: splitting text on markers")
+
+                # Split on §SHIFT_ENTER§ markers
+                parts = text.split("§SHIFT_ENTER§")
+                logger.info(f"Split into {len(parts)} parts")
+
+                success = True
+                for i, part in enumerate(parts):
+                    if part:  # Only paste non-empty parts
+                        logger.info(f"Pasting part {i+1}/{len(parts)}: {len(part)} chars")
+                        if not _paste_text(part):
+                            # Paste failed, fall back to typing the whole thing
+                            logger.warning(f"Paste failed on part {i+1}, falling back to typing mode")
+                            success = False
+                            break
+                        time.sleep(0.15)  # Brief delay after each paste
+
+                    # Send Shift+Enter after each part except the last
+                    if i < len(parts) - 1:
+                        logger.info(f"Sending Shift+Enter after part {i+1}")
+                        _send_shift_enter()
+                        time.sleep(0.1)
+
+                if success:
+                    print(f"✂️  Inject (smart paste) {len(parts)} chunks, {len(text)} total chars")
+                    logger.info(f"Smart hybrid paste completed: {len(parts)} chunks")
+                else:
+                    # Fall back to typing mode
+                    print(f"⌨️  Inject (type) len={len(text)} [paste failed, typing fallback]")
+                    logger.info(f"Falling back to typing mode")
+                    _type_text(text)
+            elif use_paste and _paste_text(text):
+                # Simple paste, no special markers
                 print(f"✂️  Inject (paste) len={len(text)}")
                 logger.debug(f"Text injected via paste: {len(text)} chars")
             else:
+                # Use typing mode
                 print(f"⌨️  Inject (type) len={len(text)}")
                 logger.debug(f"Text injected via typing: {len(text)} chars")
                 _type_text(text)
@@ -644,6 +761,9 @@ def stop_recording(
         print(f"❌ Transcription error: {e}")
         _beep(beeps_on, *READY_BEEP)  # Still play the ready beep so user knows it's done
         if notify_on: _notify("TalkType", f"Transcription failed: {str(e)[:60]}{'…' if len(str(e))>60 else ''}")
+    finally:
+        # Ensure recording indicator is hidden (already hidden at start of stop_recording)
+        pass
 
 def _loop_evdev(cfg: Settings, input_device_idx):
     session = os.environ.get("XDG_SESSION_TYPE", "").lower()
@@ -977,7 +1097,7 @@ Right-click the tray icon → "Help..." for full documentation
                                 if event.value == 1 and not state.is_recording:
                                     start_recording(cfg.beeps, cfg.notify, input_device_idx)
                                 elif event.value == 0 and state.is_recording:
-                                    stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language, cfg.auto_space, cfg.auto_period, cfg.paste_injection)
+                                    stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language, cfg.auto_space, cfg.auto_period, cfg.injection_mode)
                         else:  # toggle mode: press to start, press again to stop
                             if event.code == toggle_key and event.value == 1:
                                 # Reset timeout timer only when TalkType hotkey is used
@@ -986,7 +1106,7 @@ Right-click the tray icon → "Help..." for full documentation
                                 if not state.is_recording:
                                     start_recording(cfg.beeps, cfg.notify, input_device_idx)
                                 else:
-                                     stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language, cfg.auto_space, cfg.auto_period, cfg.paste_injection)
+                                     stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language, cfg.auto_space, cfg.auto_period, cfg.injection_mode)
                         # ESC cancels in any mode
                         if event.code == ecodes.KEY_ESC and state.is_recording and event.value == 1:
                             # Reset timeout timer when ESC is used to cancel
@@ -1070,6 +1190,174 @@ def main():
 
     # Input device selection
     input_device_idx = _pick_input_device(cfg.mic)
+
+    # Initialize GTK components (D-Bus service and recording indicator)
+    # Both need the GTK main loop, so we initialize them together
+    global dbus_service, recording_indicator
+    dbus_service = None
+    recording_indicator = None
+    gtk_needed = False
+
+    # Check if we need GTK at all
+    if cfg.recording_indicator or True:  # Always try D-Bus for GNOME extension
+        gtk_needed = True
+
+    if gtk_needed:
+        try:
+            # Import GTK in the main thread
+            import gi
+            gi.require_version('Gtk', '3.0')
+            from gi.repository import Gtk, GLib
+
+            # Initialize D-Bus service for GNOME extension integration
+            try:
+                from .dbus_service import TalkTypeDBusService
+
+                # Create a simple app instance with necessary attributes for D-Bus
+                class AppInstance:
+                    def __init__(self, cfg):
+                        self.config = cfg
+                        self.is_recording = False
+                        self.service_running = True
+                        self.dbus_service = None
+
+                    def show_preferences(self):
+                        """Open preferences window"""
+                        import subprocess
+                        subprocess.Popen([sys.executable, "-m", "talktype.prefs"])
+
+                    def start_recording(self):
+                        """Start recording - not implemented in D-Bus only mode"""
+                        pass
+
+                    def stop_recording(self):
+                        """Stop recording - not implemented in D-Bus only mode"""
+                        pass
+
+                    def toggle_recording(self):
+                        """Toggle recording - not implemented in D-Bus only mode"""
+                        pass
+
+                    def start_service(self):
+                        """Start the dictation service"""
+                        import subprocess
+                        try:
+                            # Find the dictate script
+                            src_dir = os.path.dirname(__file__)  # usr/src/talktype
+                            usr_dir = os.path.dirname(os.path.dirname(src_dir))  # usr
+                            dictate_script = os.path.join(usr_dir, "bin", "dictate")
+
+                            if os.path.exists(dictate_script):
+                                subprocess.Popen([dictate_script], env=os.environ.copy())
+                                logger.info(f"Started dictation service via {dictate_script}")
+                            else:
+                                subprocess.Popen([sys.executable, "-m", "talktype.app"],
+                                               env=os.environ.copy())
+                                logger.info("Started dictation service via Python module")
+
+                            self.service_running = True
+                            if self.dbus_service:
+                                self.dbus_service.emit_service_state(True)
+                        except Exception as e:
+                            logger.error(f"Failed to start service: {e}", exc_info=True)
+
+                    def stop_service(self):
+                        """Stop the dictation service"""
+                        import subprocess
+                        try:
+                            subprocess.run(["pkill", "-f", "talktype.app"], capture_output=True)
+                            logger.info("Stopped dictation service")
+                            self.service_running = False
+                            if self.dbus_service:
+                                self.dbus_service.emit_service_state(False)
+                        except Exception as e:
+                            logger.error(f"Failed to stop service: {e}", exc_info=True)
+
+                    def set_model(self, model_name: str):
+                        """Change the Whisper model (requires service restart)"""
+                        try:
+                            # Update config file
+                            from .config import load_config
+                            config_path = os.path.expanduser("~/.config/talktype/settings.json")
+
+                            # Read current config
+                            import json
+                            if os.path.exists(config_path):
+                                with open(config_path, 'r') as f:
+                                    config_data = json.load(f)
+                            else:
+                                config_data = {}
+
+                            # Update model
+                            config_data['model'] = model_name
+                            self.config.model = model_name
+
+                            # Write back
+                            os.makedirs(os.path.dirname(config_path), exist_ok=True)
+                            with open(config_path, 'w') as f:
+                                json.dump(config_data, f, indent=2)
+
+                            logger.info(f"Model changed to {model_name} (restart required)")
+
+                            # Emit signal so extension updates
+                            if self.dbus_service:
+                                self.dbus_service.emit_model_changed(model_name)
+
+                            # Note: Actual model change requires service restart
+                            # For now, we just update config and notify
+                        except Exception as e:
+                            logger.error(f"Failed to set model: {e}", exc_info=True)
+
+                    def quit(self):
+                        """Quit the application"""
+                        import subprocess
+                        try:
+                            subprocess.run(["pkill", "-f", "talktype"], capture_output=True)
+                        except Exception:
+                            pass
+                        sys.exit(0)
+
+                app_instance = AppInstance(cfg)
+                dbus_service = TalkTypeDBusService(app_instance)
+                app_instance.dbus_service = dbus_service
+
+                # Emit initial state so extension syncs properly
+                dbus_service.emit_service_state(True)
+                dbus_service.emit_model_changed(cfg.model)
+
+                print("✓ D-Bus service initialized for GNOME extension")
+                logger.info("D-Bus service started successfully")
+            except Exception as e:
+                print(f"⚠️  Failed to initialize D-Bus service: {e}")
+                logger.error(f"D-Bus service initialization failed: {e}", exc_info=True)
+
+            # Initialize recording indicator if enabled
+            if cfg.recording_indicator:
+                try:
+                    recording_indicator = RecordingIndicator(
+                        position=cfg.indicator_position,
+                        offset_x=cfg.indicator_offset_x,
+                        offset_y=cfg.indicator_offset_y,
+                        size=cfg.indicator_size
+                    )
+                    print(f"✓ Recording indicator initialized (position: {cfg.indicator_position}, size: {cfg.indicator_size})")
+                    logger.info(f"Recording indicator initialized at position: {cfg.indicator_position}, size: {cfg.indicator_size}")
+                except Exception as e:
+                    print(f"⚠️  Failed to initialize recording indicator: {e}")
+                    logger.error(f"Recording indicator initialization failed: {e}", exc_info=True)
+
+            # Start single GTK main loop in a background thread for both D-Bus and recording indicator
+            def run_gtk_loop():
+                print("🔄 Starting GTK main loop...")
+                Gtk.main()
+
+            gtk_thread = threading.Thread(target=run_gtk_loop, daemon=True)
+            gtk_thread.start()
+            print("✓ GTK main loop started in background thread")
+
+        except Exception as e:
+            print(f"⚠️  Failed to initialize GTK components: {e}")
+            logger.error(f"GTK initialization failed: {e}", exc_info=True)
 
     global model
     model = build_model(cfg)

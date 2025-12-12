@@ -5,10 +5,26 @@ def normalize_text(text: str) -> str:
     if not text:
         return text
 
-    # --- 0) Escape sequences for literal words (do NOT convert to punctuation) ---
+    # --- 0) Handle quoted text first - preserve everything inside quotes as literal ---
+    # This allows users to say "open quote new paragraph close quote" and get literal text
+    # Extract quoted sections and protect them from processing
+    quoted_sections = []
+    def save_quoted(match):
+        quoted_sections.append(match.group(1))
+        return f"__QUOTED_{len(quoted_sections)-1}__"
+
+    # Match text between "open quote/quotes" and "close quote/quotes"
+    # Allow commas, periods, and other punctuation around the quoted text
+    text = re.sub(
+        r'\b(?:open\s+quotes?)[,.\s]+(.*?)[,.\s]+(?:close\s+quotes?)\b',
+        save_quoted,
+        text,
+        flags=re.IGNORECASE
+    )
+
+    # --- 0.1) Escape sequences for literal words (backward compatibility) ---
     # Allow phrases like "literal period" or "the word period" to keep the word "period"
-    # instead of converting it to a period symbol.
-    text = re.sub(r"\b(?:literal|the\s+word)\s+period\b", "__LIT_PERIOD__", text, flags=re.IGNORECASE)
+    text = re.sub(r"\b(?:literal|the\s+words?)\s+period\b", "__LIT_PERIOD__", text, flags=re.IGNORECASE)
 
     # --- 1) Multi-word replacements first (order matters) ---
     replacements = [
@@ -146,5 +162,10 @@ def normalize_text(text: str) -> str:
 
     # --- 12) Restore literal tokens ---
     text = text.replace("__LIT_PERIOD__", "period")
+
+    # --- 13) Restore quoted sections with actual quote marks ---
+    for i, quoted_text in enumerate(quoted_sections):
+        # Put the quoted text back, wrapped in smart quotes
+        text = text.replace(f"__QUOTED_{i}__", f'"{quoted_text}"')
 
     return text

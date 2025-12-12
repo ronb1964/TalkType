@@ -5,6 +5,7 @@ GNOME Extension installer for TalkType
 
 import os
 import shutil
+import subprocess
 import urllib.request
 from pathlib import Path
 from typing import Optional, Callable
@@ -52,12 +53,13 @@ def get_extension_status() -> dict:
     }
 
 
-def install_extension_from_local(source_dir: str) -> bool:
+def install_extension_from_local(source_dir: str, auto_enable: bool = True) -> bool:
     """
     Install extension from local directory
 
     Args:
         source_dir: Path to extension source directory
+        auto_enable: If True, automatically enable the extension after installation
 
     Returns:
         bool: True if successful
@@ -77,6 +79,14 @@ def install_extension_from_local(source_dir: str) -> bool:
         shutil.copytree(source_dir, target_dir)
 
         print(f"✅ Extension installed to {target_dir}")
+
+        # Auto-enable if requested
+        if auto_enable:
+            if enable_extension():
+                print("✅ Extension enabled - will be active after logout/login")
+            else:
+                print("⚠️  Failed to auto-enable extension - you can enable it manually")
+
         return True
 
     except Exception as e:
@@ -148,6 +158,16 @@ def download_and_install_extension(progress_callback: Optional[Callable] = None)
             if progress_callback:
                 progress_callback("Extension installed successfully!", 100)
 
+            # Enable the extension after installation
+            # This adds it to org.gnome.shell enabled-extensions so it persists across logout/login
+            if progress_callback:
+                progress_callback("Enabling extension...", 95)
+
+            if enable_extension():
+                print("✅ Extension enabled - will be active after logout/login")
+            else:
+                print("⚠️  Failed to auto-enable extension - you can enable it manually from Extensions app")
+
             return True
 
     except Exception as e:
@@ -179,6 +199,17 @@ def uninstall_extension() -> bool:
         target_dir = os.path.join(ext_dir, EXTENSION_UUID)
 
         if os.path.exists(target_dir):
+            # First, disable the extension (removes from gsettings)
+            try:
+                subprocess.run(
+                    ['gnome-extensions', 'disable', EXTENSION_UUID],
+                    capture_output=True,
+                    timeout=10
+                )
+            except Exception:
+                pass  # Ignore errors - extension might not be recognized
+
+            # Remove the extension files
             shutil.rmtree(target_dir)
             print(f"✅ Extension uninstalled")
             return True
@@ -199,21 +230,20 @@ def get_installation_instructions() -> str:
         str: Installation instructions
     """
     return """
-The GNOME Extension has been installed to:
+The GNOME Extension has been installed and enabled!
+
+Location:
     ~/.local/share/gnome-shell/extensions/talktype@ronb1964.github.io/
 
 To activate the extension:
-    1. Restart GNOME Shell:
-       - Press Alt+F2
-       - Type 'r' and press Enter
-       - OR log out and log back in
+    LOG OUT and LOG BACK IN to load the extension
 
-    2. The TalkType icon should appear in your top panel
-
-    3. Click the icon to:
-       - Start/stop dictation service
-       - Switch Whisper models
-       - Access preferences
+After logging back in:
+    • The TalkType icon will appear in your top panel
+    • Click it to start/stop dictation service
+    • View active model and device mode
+    • Access preferences
+    • The extension will STAY ENABLED across future logins
 
 Note: The extension communicates with the TalkType Python app via D-Bus.
 Make sure the TalkType service is running for full functionality.
@@ -280,9 +310,9 @@ def offer_extension_installation(show_gui: bool = True) -> bool:
                 "<b>TalkType has a native GNOME Shell extension!</b>\n\n"
                 "✨ <b>Features:</b>\n"
                 "  • Panel indicator with recording status\n"
-                "  • Quick model switcher\n"
-                "  • Visual recording feedback\n"
-                "  • Better GNOME integration\n\n"
+                "  • Active model and device display (read-only)\n"
+                "  • Enables custom recording indicator positioning on Wayland\n"
+                "  • Native GNOME integration with service controls\n\n"
                 "📦 <b>Size:</b> ~3KB\n\n"
                 "Would you like to install it now?"
             )
@@ -325,9 +355,18 @@ def offer_extension_installation(show_gui: bool = True) -> bool:
                 info = Gtk.MessageDialog(
                     message_type=Gtk.MessageType.INFO,
                     buttons=Gtk.ButtonsType.OK,
-                    text="Extension Installed Successfully!",
+                    text="Extension Installed and Enabled!",
                 )
-                info.format_secondary_text(get_installation_instructions())
+                info.format_secondary_markup(
+                    "The GNOME Extension has been <b>installed and enabled</b>.\n\n"
+                    "<b>To activate it:</b>\n"
+                    "  <b>Log out and log back in</b> to load the extension\n\n"
+                    "After logging back in:\n"
+                    "  • The TalkType icon will appear in your top panel\n"
+                    "  • Click it to control the service and see status\n"
+                    "  • The extension will <b>stay enabled</b> across logins\n\n"
+                    "<b>Note:</b> The extension communicates with TalkType via D-Bus."
+                )
                 info.run()
                 info.destroy()
                 return True

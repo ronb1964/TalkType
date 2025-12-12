@@ -1,9 +1,18 @@
 from __future__ import annotations
-import os, tomllib
+import os
+try:
+    import tomllib  # Python 3.11+
+except ImportError:
+    import toml as tomllib  # Python 3.10 fallback
 from dataclasses import dataclass
 import sys
 
-CONFIG_PATH = os.path.expanduser("~/.config/talktype/config.toml")
+# Detect dev mode - use separate paths for dev vs production
+DEV_MODE = os.environ.get("DEV_MODE") == "1"
+CONFIG_DIR = "talktype-dev" if DEV_MODE else "talktype"
+DATA_DIR = "TalkType-dev" if DEV_MODE else "TalkType"
+
+CONFIG_PATH = os.path.expanduser(f"~/.config/{CONFIG_DIR}/config.toml")
 
 @dataclass
 class Settings:
@@ -15,7 +24,7 @@ class Settings:
     mode: str = "hold"          # "hold" or "toggle"
     toggle_hotkey: str = "F9"   # used only when mode="toggle"
     mic: str = ""               # substring to match input device (empty = default)
-    notify: bool = True         # desktop notifications
+    notify: bool = False        # desktop notifications
     language: str = ""          # optional language code (e.g., "en"); empty = auto-detect
     auto_space: bool = True     # prepend a space before new utterance when not starting a new line/tab
     auto_period: bool = True   # append a period when an utterance ends without terminal punctuation
@@ -181,3 +190,12 @@ def save_config(s: Settings) -> None:
         f.write(f'indicator_offset_x = {s.indicator_offset_x}\n')
         f.write(f'indicator_offset_y = {s.indicator_offset_y}\n')
         f.write(f'indicator_size = "{s.indicator_size}"\n')
+
+def get_data_dir():
+    """
+    Get the data directory path based on dev mode.
+
+    Returns:
+        str: Path to ~/.local/share/TalkType (production) or ~/.local/share/TalkType-dev (dev mode)
+    """
+    return os.path.expanduser(f"~/.local/share/{DATA_DIR}")

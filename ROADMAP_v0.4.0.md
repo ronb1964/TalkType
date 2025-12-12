@@ -444,6 +444,96 @@ Before release:
 
 ---
 
+## 🔬 Research & Exploration
+
+### AT-SPI Integration (Assistive Technology Service Provider Interface)
+**Status:** Research/Prototype Phase
+**Added:** 2025-10-18
+**Priority:** High potential impact, needs investigation
+
+**What is AT-SPI?**
+AT-SPI is the Linux accessibility framework used by GNOME, KDE, and other desktop environments. It provides programmatic access to UI elements and text content in applications.
+
+**Potential Benefits for TalkType:**
+
+1. **Smart Text Operations**
+   - Detect and replace selected text
+   - Know exact cursor position in any application
+   - Get context around cursor (current paragraph, sentence)
+   - Know if text is selected (and what text)
+
+2. **Intelligent Text Insertion**
+   - Insert text directly into application's text buffer (more reliable than ydotool)
+   - Context-aware dictation (know if in password field, code editor, document, etc.)
+   - Better handling of special characters and keyboard layouts
+   - Potential integration with application undo buffers
+
+3. **Advanced Features**
+   - "What did I just say?" - Read back recent dictation
+   - Navigate by sentence/paragraph with voice commands
+   - Context-aware auto-capitalization (e.g., don't capitalize in code editors)
+   - Detect document structure (headings, lists, paragraphs)
+
+**Example Workflow:**
+```
+Current (ydotool):
+1. Press F8
+2. Speak: "Hello world period"
+3. TalkType types: "Hello world."
+
+With AT-SPI:
+1. Press F8
+2. TalkType queries: Where's cursor? Is text selected? What app?
+3. Speak: "Hello world period"
+4. If text selected → replace with "Hello world."
+5. If in middle of sentence → insert intelligently
+6. If in code editor → adjust capitalization/formatting
+```
+
+**Implementation Approach:**
+- **Hybrid approach:** Use AT-SPI where available, fall back to ydotool
+- Start with basic features:
+  - Get caret position
+  - Detect selected text
+  - Insert text via AT-SPI
+- Add advanced features later:
+  - Context reading
+  - Smart text replacement
+  - Application-specific behaviors
+
+**Dependencies:**
+- `python3-pyatspi` (available in most distros)
+- May need to bundle in AppImage
+
+**Challenges:**
+- Not all applications support AT-SPI properly
+- More complex than ydotool keyboard simulation
+- Need robust fallback for unsupported apps
+- Testing across different apps and environments
+
+**Next Steps:**
+1. Create prototype script to test AT-SPI capabilities
+2. Test with common applications (Firefox, gedit, VS Code, terminals, etc.)
+3. Measure reliability vs ydotool
+4. Decide on integration strategy (replace, supplement, or optional)
+5. Document which apps work well with AT-SPI vs need ydotool
+
+**User Request:**
+> "What can incorporating this do for us?"
+
+Answer: The biggest wins would be:
+- **Replace selected text** - Select text, dictate replacement (huge workflow improvement)
+- **Know context** - TalkType could show current app/context in tray
+- **More reliable** - Especially in GTK apps (gedit, GNOME apps, etc.)
+- **Smarter behavior** - Auto-adjust based on application type
+
+**Resources:**
+- [AT-SPI Documentation](https://www.freedesktop.org/wiki/Accessibility/AT-SPI2/)
+- Python pyatspi examples
+- Accessibility testing tools
+
+---
+
 ## Notes from Development Session (2025-10-09)
 
 **User Feedback:**

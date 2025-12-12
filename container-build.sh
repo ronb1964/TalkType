@@ -32,6 +32,7 @@ apt-get install -y -qq \
     scdoc \
     fuse \
     libfuse2 \
+    wl-clipboard \
     > /dev/null 2>&1
 
 echo "✅ Python version: $(python3 --version)"
@@ -233,6 +234,10 @@ make -j$(nproc) > /dev/null 2>&1
 cp ydotool ydotoold /build/AppDir/usr/bin/
 cd /build
 
+# Bundle wl-clipboard for clipboard paste support
+echo "📋 Bundling wl-clipboard..."
+cp /usr/bin/wl-copy /usr/bin/wl-paste /build/AppDir/usr/bin/
+
 # Bundle GTK3 and GObject Introspection
 echo "   Bundling GTK3 libraries..."
 cp /usr/lib/x86_64-linux-gnu/libgirepository-1.0.so.1 AppDir/usr/lib/
@@ -278,7 +283,7 @@ chmod +x AppDir/usr/bin/dictate-tray
 
 # Copy desktop files and icons
 echo "   Adding desktop integration..."
-cp talktype-icon-v3.svg AppDir/io.github.ronb1964.TalkType.png
+cp icons/OFFICIAL_ICON_DO_NOT_CHANGE.svg AppDir/io.github.ronb1964.TalkType.png
 cp io.github.ronb1964.TalkType.desktop AppDir/
 cp io.github.ronb1964.TalkType.appdata.xml AppDir/usr/share/metainfo/
 

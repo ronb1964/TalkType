@@ -1,3 +1,4 @@
+claude
 DEV_NOTES.md
 Project: TalkType (a.k.a. TalkType)
 

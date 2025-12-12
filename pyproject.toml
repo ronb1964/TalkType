@@ -8,7 +8,7 @@ readme = "README.md"
 packages = [{ include = "talktype", from = "src" }]
 
 [tool.poetry.dependencies]
-python = ">=3.10,<3.14"  # Dev: 3.13 (Nobara), AppImage: 3.10 (Ubuntu 22.04)
+python = ">=3.10,<3.15"  # Dev: 3.14 (Nobara 42), AppImage: 3.10 (Ubuntu 22.04)
 faster-whisper = "*"
 sounddevice = "*"
 evdev = "*"
@@ -17,9 +17,9 @@ pyperclip = "*"
 toml = "*"
 # pygobject - using system package (copied manually in build script)
 # pycairo - using system package (copied manually in build script)
-torch = {version = "^2.6.0+cu124", source = "pytorch"}
-torchvision = {version = "^0.21.0+cu124", source = "pytorch"}
-torchaudio = {version = "^2.6.0+cu124", source = "pytorch"}
+torch = "^2.9.0"
+torchvision = "*"
+torchaudio = "*"
 
 [tool.poetry.scripts]
 dictate-tray = "talktype.tray:main"
@@ -32,10 +32,11 @@ black = "^25.1.0"
 ruff = "^0.12.9"
 
 
-[[tool.poetry.source]]
-name = "pytorch"
-url = "https://download.pytorch.org/whl/cu124"
-priority = "explicit"
+# PyTorch CUDA source - only needed for AppImage builds with specific CUDA version
+# [[tool.poetry.source]]
+# name = "pytorch"
+# url = "https://download.pytorch.org/whl/cu124"
+# priority = "explicit"
 
 [tool.black]
 line-length = 100

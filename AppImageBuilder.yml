@@ -1,0 +1,98 @@
+version: 1
+
+script:
+  # Remove any previous build
+  - rm -rf AppDir || true
+
+  # Create directory structure
+  - mkdir -p AppDir/usr/src
+  - mkdir -p AppDir/usr/share/applications
+  - mkdir -p AppDir/usr/share/icons/hicolor/scalable
+  - mkdir -p AppDir/usr/share/metainfo
+
+  # Copy TalkType source code
+  - cp -r src/talktype AppDir/usr/src/
+
+  # Copy desktop integration files
+  - cp io.github.ronb1964.TalkType.desktop AppDir/usr/share/applications/
+  - cp talktype-icon-v3.svg AppDir/io.github.ronb1964.TalkType.png
+  - cp io.github.ronb1964.TalkType.appdata.xml AppDir/usr/share/metainfo/
+
+  # Install Python dependencies into AppDir using Poetry
+  # Poetry will read pyproject.toml and install to the AppDir
+  - cd /build && python3 -m pip install --root=/build/AppDir --ignore-installed torch torchvision torchaudio faster-whisper sounddevice pyperclip toml evdev
+
+  # Build ydotool from source
+  - |
+    if [ ! -d /tmp/ydotool ]; then
+      cd /tmp
+      git clone https://github.com/ReimuNotMoe/ydotool.git
+      cd ydotool
+      mkdir build && cd build
+      cmake -DCMAKE_BUILD_TYPE=Release ..
+      make -j$(nproc)
+      cd -
+    fi
+  - mkdir -p AppDir/usr/bin
+  - cp /tmp/ydotool/build/ydotool AppDir/usr/bin/
+  - cp /tmp/ydotool/build/ydotoold AppDir/usr/bin/
+
+AppDir:
+  path: ./AppDir
+
+  app_info:
+    id: io.github.ronb1964.TalkType
+    name: TalkType
+    icon: io.github.ronb1964.TalkType
+    version: 0.3.8
+    exec: usr/bin/python3
+    exec_args: "-m talktype.tray $@"
+
+  apt:
+    arch: amd64
+    sources:
+      - sourceline: 'deb [arch=amd64] http://archive.ubuntu.com/ubuntu/ jammy main restricted universe multiverse'
+        key_url: 'http://keyserver.ubuntu.com/pks/lookup?op=get&search=0x871920D1991BC93C'
+
+    include:
+      # Python runtime
+      - python3
+      - python3-pip
+      - python3-pkg-resources
+
+      # GTK3 and GObject Introspection
+      - python3-gi
+      - python3-cairo
+      - gir1.2-gtk-3.0
+      - gir1.2-appindicator3-0.1
+      - gir1.2-glib-2.0
+      - libgirepository-1.0-1
+
+      # Build tools for ydotool
+      - git
+      - cmake
+      - build-essential
+      - pkg-config
+      - libsystemd-dev
+
+      # Audio support
+      - libportaudio2
+
+    exclude:
+      # Exclude large unnecessary packages
+      - libgl1-mesa-dri
+      - perl-base
+      - dpkg
+
+  runtime:
+    env:
+      PATH: '${APPDIR}/usr/bin:${PATH}'
+      PYTHONHOME: '${APPDIR}/usr'
+      PYTHONPATH: '${APPDIR}/usr/src:${APPDIR}/usr/lib/python3.10/site-packages'
+      LD_LIBRARY_PATH: '${APPDIR}/usr/lib:${LD_LIBRARY_PATH}'
+      GI_TYPELIB_PATH: '${APPDIR}/usr/lib/girepository-1.0'
+
+AppImage:
+  update-information: 'gh-releases-zsync|ronb1964|TalkType|latest|TalkType-*x86_64.AppImage.zsync'
+  sign-key: None
+  arch: x86_64

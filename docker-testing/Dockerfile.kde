@@ -1,0 +1,36 @@
+# TalkType Testing Container - KDE Environment
+FROM fedora:latest
+
+# Install KDE components and dependencies
+RUN dnf install -y \
+    gtk3 \
+    gtk4 \
+    plasma-workspace \
+    breeze-gtk \
+    breeze-icon-theme \
+    python3 \
+    python3-pip \
+    python3-gobject \
+    python3-cairo \
+    dbus-x11 \
+    xorg-x11-server-Xvfb \
+    mesa-dri-drivers \
+    spectacle \
+    && dnf clean all
+
+# Set up virtual display
+ENV DISPLAY=:99
+ENV XDG_RUNTIME_DIR=/tmp/runtime-root
+ENV QT_QPA_PLATFORMTHEME=kde
+
+# Create necessary directories
+RUN mkdir -p /tmp/runtime-root && chmod 0700 /tmp/runtime-root
+
+# Copy TalkType source (will be mounted at runtime)
+WORKDIR /app
+
+# Script to start Xvfb and run tests
+COPY test-runner.sh /usr/local/bin/test-runner.sh
+RUN chmod +x /usr/local/bin/test-runner.sh
+
+CMD ["/usr/local/bin/test-runner.sh"]

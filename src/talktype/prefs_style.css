@@ -418,8 +418,7 @@ grid > label {
 }
 
 /* Section headers should stand out more */
-notebook > stack > grid > label:first-child,
-grid > label[xalign="0"] {
+notebook > stack > grid > label:first-child {
     color: #7eb7dd;
     font-weight: 600;
 }

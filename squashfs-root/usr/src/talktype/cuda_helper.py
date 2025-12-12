@@ -277,6 +277,142 @@ def download_cuda_libraries(progress_callback=None):
         logger.error(f"Error downloading CUDA libraries: {e}", exc_info=True)
         return False
 
+def show_cuda_download_dialog(parent=None, on_success_callback=None):
+    """
+    Show modern CUDA download dialog with progress bar.
+    This is the unified dialog used by both welcome screen and preferences.
+
+    Args:
+        parent: Optional parent window for the dialog
+        on_success_callback: Optional callback function to run after successful download
+                           (e.g., to refresh UI elements in preferences)
+
+    Returns:
+        bool: True if download was successful, False otherwise
+    """
+    import threading
+    from gi.repository import GLib
+
+    # Create progress dialog
+    progress_dialog = Gtk.Dialog(title="Downloading CUDA Libraries")
+    progress_dialog.set_default_size(500, 150)
+    progress_dialog.set_modal(True)
+    progress_dialog.set_position(Gtk.WindowPosition.CENTER)
+
+    if parent:
+        progress_dialog.set_transient_for(parent)
+
+    content = progress_dialog.get_content_area()
+    content.set_margin_top(20)
+    content.set_margin_bottom(20)
+    content.set_margin_start(30)
+    content.set_margin_end(30)
+    content.set_spacing(15)
+
+    # Title
+    title_label = Gtk.Label()
+    title_label.set_markup('<span size="large"><b>Downloading CUDA Libraries</b></span>')
+    content.pack_start(title_label, False, False, 0)
+
+    # Status label
+    status_label = Gtk.Label()
+    status_label.set_markup('<span>Initializing download... (~800MB)</span>')
+    status_label.set_line_wrap(True)
+    content.pack_start(status_label, False, False, 0)
+
+    # Progress bar
+    progress_bar = Gtk.ProgressBar()
+    progress_bar.set_show_text(True)
+    content.pack_start(progress_bar, False, False, 0)
+
+    # Info label
+    info_label = Gtk.Label()
+    info_label.set_markup('<span size="small"><i>This may take several minutes depending on your connection...</i></span>')
+    info_label.set_opacity(0.7)
+    content.pack_start(info_label, False, False, 0)
+
+    progress_dialog.show_all()
+
+    # Download result
+    download_success = [False]
+
+    def update_progress(message, percent):
+        """Update progress bar and status from callback"""
+        def update_ui():
+            progress_bar.set_fraction(percent / 100.0)
+            progress_bar.set_text(f"{percent}%")
+            status_label.set_markup(f'<span>{message}</span>')
+            return False
+        GLib.idle_add(update_ui)
+
+    def do_download():
+        """Run download in background thread"""
+        download_success[0] = download_cuda_libraries(progress_callback=update_progress)
+        GLib.idle_add(progress_dialog.destroy)
+
+    # Start download in background thread
+    download_thread = threading.Thread(target=do_download)
+    download_thread.start()
+
+    # Run dialog event loop
+    progress_dialog.run()
+
+    # Wait for thread to complete
+    download_thread.join()
+
+    success = download_success[0]
+
+    if success:
+        # Automatically enable GPU mode in config
+        try:
+            from talktype.config import load_config, save_config
+            config = load_config()
+            if config.device != "cuda":
+                config.device = "cuda"
+                save_config(config)
+                logger.info("✅ Automatically enabled GPU mode in config")
+        except Exception as e:
+            logger.warning(f"Could not auto-enable GPU mode in config: {e}")
+
+        # Run success callback if provided
+        if on_success_callback:
+            try:
+                on_success_callback()
+            except Exception as e:
+                logger.warning(f"Error in success callback: {e}")
+
+        # Show success message
+        msg = Gtk.MessageDialog(
+            parent=parent,
+            message_type=Gtk.MessageType.INFO,
+            buttons=Gtk.ButtonsType.OK,
+            text="CUDA Libraries Downloaded!"
+        )
+        msg.format_secondary_text(
+            "GPU acceleration is now available.\n\n"
+            "TalkType has been automatically configured to use your NVIDIA GPU for faster transcription."
+        )
+        msg.run()
+        msg.destroy()
+        logger.info("CUDA libraries downloaded successfully")
+    else:
+        # Show error message
+        msg = Gtk.MessageDialog(
+            parent=parent,
+            message_type=Gtk.MessageType.ERROR,
+            buttons=Gtk.ButtonsType.OK,
+            text="Download Failed"
+        )
+        msg.format_secondary_text(
+            "Could not download CUDA libraries.\n\n"
+            "You can try again later from Preferences → Advanced."
+        )
+        msg.run()
+        msg.destroy()
+        logger.error("CUDA libraries download failed")
+
+    return success
+
 def show_cuda_progress_dialog():
     """Show GTK progress dialog for CUDA download."""
     try:
