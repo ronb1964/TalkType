@@ -599,15 +599,15 @@ def _paste_text(text: str, send_trailing_keys: bool = False):
                 except Exception as e:
                     logger.debug(f"Terminal detection failed, defaulting to Ctrl+V: {e}")
             
-            # Copy text to clipboard using --paste-once mode
-            # This mode serves one paste request and exits cleanly
+            # Copy text to clipboard
+            # wl-copy needs to stay running to serve clipboard requests
             import subprocess as _sp
-            proc = _sp.Popen(["wl-copy", "--paste-once"], stdin=_sp.PIPE, stdout=_sp.PIPE, stderr=_sp.PIPE)
+            proc = _sp.Popen(["wl-copy"], stdin=_sp.PIPE, stdout=_sp.PIPE, stderr=_sp.PIPE)
             proc.stdin.write(text.encode("utf-8"))
             proc.stdin.close()
 
-            # Brief delay for clipboard to be ready
-            time.sleep(0.08)
+            # Wait for clipboard to be ready
+            time.sleep(0.12)
 
             # Send appropriate paste command based on application type
             # KEY_LEFTSHIFT (42), KEY_LEFTCTRL (29), KEY_V (47)
@@ -633,8 +633,13 @@ def _paste_text(text: str, send_trailing_keys: bool = False):
             
             time.sleep(0.03)
 
-            # wl-copy with --paste-once exits automatically after paste
-            # No need to manually terminate
+            # Give wl-copy time to serve the paste, then terminate
+            time.sleep(0.1)
+            try:
+                proc.terminate()
+                proc.wait(timeout=0.3)
+            except:
+                pass
 
             return True
     except subprocess.TimeoutExpired as e:
