@@ -589,26 +589,24 @@ def _paste_text(text: str, send_trailing_keys: bool = False):
     try:
         if shutil.which("wl-copy") and shutil.which("ydotool"):
             # Detect if we're in a terminal (terminals use Shift+Ctrl+V)
+            # Can be disabled with TALKTYPE_SKIP_TERMINAL_DETECT=1 for debugging
             is_terminal = False
-            try:
-                from .atspi_helper import is_terminal_active
-                is_terminal = is_terminal_active()
-                logger.debug(f"Terminal detection: {is_terminal}")
-            except Exception as e:
-                logger.debug(f"Terminal detection failed, defaulting to Ctrl+V: {e}")
+            if not os.environ.get("TALKTYPE_SKIP_TERMINAL_DETECT"):
+                try:
+                    from .atspi_helper import is_terminal_active
+                    is_terminal = is_terminal_active()
+                    logger.debug(f"Terminal detection: {is_terminal}")
+                except Exception as e:
+                    logger.debug(f"Terminal detection failed, defaulting to Ctrl+V: {e}")
             
-            # Copy text to clipboard
-            # wl-copy needs to stay running in background to serve clipboard requests
-            # So we start it as a background process (Popen) instead of waiting for it
+            # Copy text to clipboard using --paste-once mode
+            # This mode serves one paste request and exits cleanly
             import subprocess as _sp
-            proc = _sp.Popen(["wl-copy"], stdin=_sp.PIPE, stdout=_sp.PIPE, stderr=_sp.PIPE)
+            proc = _sp.Popen(["wl-copy", "--paste-once"], stdin=_sp.PIPE, stdout=_sp.PIPE, stderr=_sp.PIPE)
             proc.stdin.write(text.encode("utf-8"))
             proc.stdin.close()
 
-            # Give wl-copy and compositor time to publish clipboard contents
-            time.sleep(0.10)
-
-            # Wait for target window to be ready
+            # Brief delay for clipboard to be ready
             time.sleep(0.08)
 
             # Send appropriate paste command based on application type
@@ -622,25 +620,21 @@ def _paste_text(text: str, send_trailing_keys: bool = False):
                 logger.debug("Using Shift+Ctrl+V for terminal")
                 # KEY_LEFTSHIFT=42, KEY_LEFTCTRL=29, KEY_V=47
                 # Format: keycode:1 (down) or keycode:0 (up)
-                _sp.run(["ydotool", "key", "--delay", "20",
+                _sp.run(["ydotool", "key", 
                         "42:1", "29:1", "47:1", "47:0", "29:0", "42:0"], 
                        check=False, env=env)
             else:
                 # Regular app: Use Ctrl+V (single ydotool call)
                 logger.debug("Using Ctrl+V for regular application")
                 # KEY_LEFTCTRL=29, KEY_V=47
-                _sp.run(["ydotool", "key", "--delay", "20",
+                _sp.run(["ydotool", "key",
                         "29:1", "47:1", "47:0", "29:0"], 
                        check=False, env=env)
             
             time.sleep(0.03)
 
-            # Kill wl-copy process after paste is complete
-            try:
-                proc.terminate()
-                proc.wait(timeout=0.5)
-            except:
-                pass
+            # wl-copy with --paste-once exits automatically after paste
+            # No need to manually terminate
 
             return True
     except subprocess.TimeoutExpired as e:
