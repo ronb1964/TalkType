@@ -243,9 +243,21 @@ Use these spoken commands during dictation to insert punctuation and formatting.
 • Say <b>soft break</b> or <b>soft line</b> for three spaces
 
 <b>Literal Words:</b>
-To prevent conversion to punctuation, say:
-• <b>literal period</b> → outputs the word "period" (not .)
-• <b>the word period</b> → outputs the word "period" (not .)
+To output the word instead of executing the command, say <b>literal</b> or <b>the word</b> before it:
+
+• <b>literal period</b> or <b>the word period</b> → "period" (not .)
+• <b>literal comma</b> or <b>the word comma</b> → "comma" (not ,)
+• <b>literal tab</b> or <b>the word tab</b> → "tab" (not a tab character)
+• <b>literal new line</b> or <b>the word newline</b> → "newline" (not a line break)
+• <b>literal question mark</b> → "question mark" (not ?)
+• <b>literal exclamation point</b> → "exclamation point" (not !)
+• <b>literal semicolon</b> → "semicolon" (not ;)
+• <b>literal colon</b> → "colon" (not :)
+• <b>literal quote</b> → "quote" (not ")
+• <b>literal hyphen</b> or <b>literal dash</b> → "hyphen"/"dash" (not -)
+• <b>literal ellipsis</b> → "ellipsis" (not …)
+
+Works with most voice commands!
 
 <b>Usage Examples:</b>
 Say: <i>Hello world comma how are you question mark</i>
@@ -260,6 +272,29 @@ Result: The temperature is 98.6 degrees
 
 Say: <i>Use the literal period command</i>
 Result: Use the period command
+
+<b>Custom Voice Commands:</b>
+Define your own phrase → replacement shortcuts in Preferences → Commands tab.
+
+Examples:
+• "my email" → "user@example.com"
+• "my address" → "123 Main Street, City, ST 12345"
+• "signature" → "Best regards,\\nYour Name"
+
+Custom commands are matched case-insensitively and replaced before
+other processing, so you can include punctuation in replacements.
+
+<b>Undo Commands:</b>
+• Say <b>undo last word</b> to delete the last word you dictated
+• Say <b>undo last sentence</b> to delete back to the previous sentence
+• Say <b>undo last paragraph</b> to delete back to the last line break
+• Also works: <b>delete last word</b>, <b>remove last word</b>, etc.
+
+<b>Smart Undo Features:</b>
+• Undo only affects text that TalkType inserted (not manually typed text)
+• After undoing mid-sentence, continue dictating seamlessly
+  (next words will automatically be lowercase)
+• Chain multiple undos to progressively remove more text
 
 <b>Smart Features:</b>
 • Auto-capitalization after sentences

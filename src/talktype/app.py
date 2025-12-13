@@ -10,7 +10,7 @@ from faster_whisper import WhisperModel
 from evdev import InputDevice, ecodes, list_devices
 
 from .normalize import normalize_text
-from .config import load_config, Settings
+from .config import load_config, Settings, load_custom_commands
 from .logger import setup_logger
 from .recording_indicator import RecordingIndicator
 import threading
@@ -370,6 +370,10 @@ class RecordingState:
     hold_key_tested: bool = False
     toggle_key_tested: bool = False
     hotkey_test_start_time: float = None
+    # Undo history - tracks last inserted text for voice-activated undo
+    last_inserted_text: str = ""
+    # Mid-sentence continuation - if True, lowercase the first letter of next dictation
+    continue_mid_sentence: bool = False
 
     def __post_init__(self):
         if self.frames is None:
@@ -384,6 +388,44 @@ dbus_service = None
 
 # Global typing delay (set from config in main)
 _typing_delay = 12  # milliseconds, default value
+
+# Global custom commands (loaded from config in main)
+_custom_commands: dict[str, str] = {}
+
+def _apply_custom_commands(text: str) -> str:
+    """
+    Apply user-defined custom voice commands to the transcribed text.
+    
+    Replaces spoken phrases with their configured replacements.
+    Uses case-insensitive matching with word boundaries to avoid
+    accidental replacements within longer words.
+    
+    Args:
+        text: Raw transcribed text
+        
+    Returns:
+        Text with custom commands applied
+    """
+    import re
+    
+    if not _custom_commands or not text:
+        return text
+    
+    result = text
+    
+    # Sort by phrase length (longest first) to avoid partial matches
+    sorted_commands = sorted(_custom_commands.items(), key=lambda x: len(x[0]), reverse=True)
+    
+    for phrase, replacement in sorted_commands:
+        # Create a case-insensitive word boundary pattern
+        # \b ensures we match whole words/phrases, not substrings
+        pattern = r'\b' + re.escape(phrase) + r'\b'
+        result = re.sub(pattern, replacement, result, flags=re.IGNORECASE)
+    
+    if result != text:
+        logger.info(f"Custom commands applied: {text!r} -> {result!r}")
+    
+    return result
 
 def _beep(enabled: bool, freq=1000, duration=0.15):
     if not enabled:
@@ -588,53 +630,54 @@ def _paste_text(text: str, send_trailing_keys: bool = False):
     """
     try:
         if shutil.which("wl-copy") and shutil.which("ydotool"):
-            # Detect if we're in a terminal (terminals use Shift+Ctrl+V)
-            # Can be disabled with TALKTYPE_SKIP_TERMINAL_DETECT=1 for debugging
-            is_terminal = False
-            if not os.environ.get("TALKTYPE_SKIP_TERMINAL_DETECT"):
-                try:
-                    from .atspi_helper import is_terminal_active
-                    is_terminal = is_terminal_active()
-                    logger.debug(f"Terminal detection: {is_terminal}")
-                except Exception as e:
-                    logger.debug(f"Terminal detection failed, defaulting to Ctrl+V: {e}")
+            # Always use Ctrl+Shift+V for paste - works in both terminals and regular apps
+            # This avoids complex and unreliable terminal detection
+            # (Ctrl+Shift+V works universally on Wayland/GNOME)
             
             # Copy text to clipboard
             # wl-copy needs to stay running to serve clipboard requests
             import subprocess as _sp
+            paste_start = time.time()
+            print(f"⏱️  PASTE: Starting paste operation for {len(text)} chars")
+            logger.info(f"TIMING: Starting paste operation for {len(text)} chars")
             proc = _sp.Popen(["wl-copy"], stdin=_sp.PIPE, stdout=_sp.PIPE, stderr=_sp.PIPE)
             proc.stdin.write(text.encode("utf-8"))
             proc.stdin.close()
+            wl_copy_time = time.time() - paste_start
+            print(f"⏱️  PASTE: wl-copy started in {wl_copy_time:.3f}s")
+            logger.info(f"TIMING: wl-copy started in {wl_copy_time:.3f}s")
 
-            # Wait for clipboard to be ready
-            time.sleep(0.12)
+            # Wait for clipboard to be ready (needs time for wl-copy to set up)
+            print(f"⏱️  PASTE: Waiting 0.08s for clipboard...")
+            time.sleep(0.08)
+            after_wait_time = time.time() - paste_start
+            print(f"⏱️  PASTE: After clipboard wait: {after_wait_time:.3f}s")
+            logger.info(f"TIMING: After clipboard wait: {after_wait_time:.3f}s")
 
-            # Send appropriate paste command based on application type
+            # Send Ctrl+Shift+V to paste - works universally in terminals and regular apps
             # KEY_LEFTSHIFT (42), KEY_LEFTCTRL (29), KEY_V (47)
             env = os.environ.copy()
             runtime = env.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
             env.setdefault("YDOTOOL_SOCKET", os.path.join(runtime, ".ydotool_socket"))
 
-            if is_terminal:
-                # Terminal: Use Shift+Ctrl+V (single ydotool call with all keys)
-                logger.debug("Using Shift+Ctrl+V for terminal")
-                # KEY_LEFTSHIFT=42, KEY_LEFTCTRL=29, KEY_V=47
-                # Format: keycode:1 (down) or keycode:0 (up)
-                _sp.run(["ydotool", "key", 
-                        "42:1", "29:1", "47:1", "47:0", "29:0", "42:0"], 
-                       check=False, env=env)
-            else:
-                # Regular app: Use Ctrl+V (single ydotool call)
-                logger.debug("Using Ctrl+V for regular application")
-                # KEY_LEFTCTRL=29, KEY_V=47
-                _sp.run(["ydotool", "key",
-                        "29:1", "47:1", "47:0", "29:0"], 
-                       check=False, env=env)
+            ydotool_start = time.time()
+            # Always use Ctrl+Shift+V - works for both terminals and regular apps
+            logger.debug("Using Ctrl+Shift+V for paste (universal)")
+            # KEY_LEFTSHIFT=42, KEY_LEFTCTRL=29, KEY_V=47
+            # Format: keycode:1 (down) or keycode:0 (up)
+            _sp.run(["ydotool", "key",
+                    "42:1", "29:1", "47:1", "47:0", "29:0", "42:0"],
+                   check=False, env=env)
+            ydotool_time = time.time() - ydotool_start
+            print(f"⏱️  PASTE: ydotool command took {ydotool_time:.3f}s")
+            logger.info(f"TIMING: ydotool paste command took {ydotool_time:.3f}s")
             
-            time.sleep(0.03)
-
-            # Give wl-copy time to serve the paste, then terminate
-            time.sleep(0.1)
+            # Brief delay for paste to register, then terminate wl-copy
+            print(f"⏱️  PASTE: Waiting 0.05s for paste to register...")
+            time.sleep(0.05)
+            total_paste_time = time.time() - paste_start
+            print(f"⏱️  PASTE: Total paste operation: {total_paste_time:.3f}s")
+            logger.info(f"TIMING: Total paste operation time: {total_paste_time:.3f}s")
             try:
                 proc.terminate()
                 proc.wait(timeout=0.3)
@@ -663,6 +706,177 @@ def _press_space():
     if shutil.which("wtype"):
         subprocess.run(["wtype", "--", " "], check=False); return
 
+def _determine_injection_method(injection_mode: str) -> tuple[str, str, str]:
+    """
+    Determine the best injection method based on mode and context.
+
+    Args:
+        injection_mode: User's configured mode ("type", "paste", or "auto")
+
+    Returns:
+        Tuple of (actual_mode, use_atspi, reason)
+        - actual_mode: "type" or "paste" (what to actually use)
+        - use_atspi: bool (whether to try AT-SPI first)
+        - reason: str (explanation for logging)
+
+    Note: This function is optimized for speed. Since we use Ctrl+Shift+V for paste
+    (which works universally in terminals and regular apps), we default to paste
+    mode and skip slow AT-SPI detection.
+    """
+    # If not auto mode, use user's choice directly
+    if injection_mode.lower() != "auto":
+        if injection_mode.lower() == "paste":
+            return ("paste", False, "User selected paste mode")
+        else:
+            return ("type", False, "User selected type mode")
+
+    # Auto mode: fast detection without AT-SPI (which can hang for 15+ seconds)
+    # Since Ctrl+Shift+V works universally, paste is almost always the right choice
+
+    # Quick process-based detection for common apps
+    try:
+        import subprocess
+        # Single fast pgrep call to detect common terminal/editor processes
+        result = subprocess.run(
+            ["pgrep", "-a", "-u", str(os.getuid())],
+            capture_output=True,
+            text=True,
+            timeout=0.3
+        )
+        if result.returncode == 0:
+            procs = result.stdout.lower()
+            # Check for terminals (all use paste with Ctrl+Shift+V)
+            terminals = ["gnome-terminal", "konsole", "xterm", "kitty", "alacritty",
+                        "terminator", "tilix", "ptyxis", "foot", "wezterm"]
+            for term in terminals:
+                if term in procs:
+                    return ("paste", False, f"Auto: terminal ({term}), using paste")
+
+            # Check for code editors (all work well with paste)
+            editors = ["cursor", "/code", "sublime", "atom", "gedit", "kate", "neovim", "nvim"]
+            for editor in editors:
+                if editor in procs:
+                    return ("paste", False, f"Auto: code editor detected, using paste")
+    except subprocess.TimeoutExpired:
+        logger.debug("Process detection timed out")
+    except Exception as e:
+        logger.debug(f"Process detection failed: {e}")
+
+    # Default: use paste (Ctrl+Shift+V works universally)
+    return ("paste", False, "Auto: defaulting to paste")
+
+def _send_backspaces(count: int):
+    """Send multiple backspace keypresses to delete characters."""
+    if count <= 0:
+        return
+    if shutil.which("ydotool"):
+        try:
+            env = os.environ.copy()
+            runtime = env.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+            env.setdefault("YDOTOOL_SOCKET", os.path.join(runtime, ".ydotool_socket"))
+            # KEY_BACKSPACE = 14
+            # Build key sequence: press and release backspace 'count' times
+            key_sequence = []
+            for _ in range(count):
+                key_sequence.extend(["14:1", "14:0"])
+            subprocess.run(["ydotool", "key"] + key_sequence, check=False, env=env)
+            return True
+        except Exception as e:
+            logger.debug(f"ydotool backspace failed: {e}")
+    return False
+
+def _detect_undo_command(raw_text: str) -> str | None:
+    """
+    Check if the raw transcription is an undo command.
+    
+    Returns the undo type ('word', 'sentence', 'paragraph') or None if not an undo command.
+    Uses case-insensitive matching and handles common Whisper transcription variations.
+    """
+    # Normalize: lowercase, strip punctuation and extra whitespace
+    import re
+    normalized = re.sub(r'[^\w\s]', '', raw_text.lower()).strip()
+    normalized = ' '.join(normalized.split())  # Collapse whitespace
+    
+    # Match undo commands - be flexible with variations Whisper might produce
+    undo_patterns = {
+        'word': ['undo last word', 'undo the last word', 'delete last word', 'remove last word'],
+        'sentence': ['undo last sentence', 'undo the last sentence', 'delete last sentence', 'remove last sentence'],
+        'paragraph': ['undo last paragraph', 'undo the last paragraph', 'delete last paragraph', 'remove last paragraph'],
+    }
+    
+    for undo_type, patterns in undo_patterns.items():
+        for pattern in patterns:
+            if normalized == pattern:
+                return undo_type
+    
+    return None
+
+def _calculate_undo_length(text: str, undo_type: str) -> int:
+    """
+    Calculate how many characters to delete based on undo type.
+    
+    Args:
+        text: The last inserted text
+        undo_type: 'word', 'sentence', or 'paragraph'
+    
+    Returns:
+        Number of characters to delete (backspaces to send)
+    """
+    if not text:
+        return 0
+    
+    # Remove trailing space if present (we add auto-space after dictation)
+    text_to_analyze = text.rstrip()
+    trailing_space = len(text) - len(text_to_analyze)
+    
+    if undo_type == 'word':
+        # Find last word boundary (whitespace)
+        # Delete from end back to last whitespace
+        stripped = text_to_analyze.rstrip()
+        last_space = stripped.rfind(' ')
+        if last_space == -1:
+            # No space found - delete everything
+            return len(text)
+        else:
+            # Delete from after the last space to end (including trailing space)
+            return len(text) - last_space - 1
+    
+    elif undo_type == 'sentence':
+        # Find last sentence boundary (. ? ! …)
+        # Work backwards from the end, skip any trailing punctuation
+        import re
+        # Remove trailing punctuation to find the previous sentence end
+        text_stripped = text_to_analyze.rstrip('.?!… ')
+        # Find the last sentence-ending punctuation
+        match = re.search(r'[.?!…]\s*', text_stripped[::-1])
+        if match:
+            # Found a previous sentence end
+            pos = len(text_stripped) - match.start()
+            return len(text) - pos
+        else:
+            # No previous sentence found - delete everything
+            return len(text)
+    
+    elif undo_type == 'paragraph':
+        # Find last paragraph boundary (newlines or §SHIFT_ENTER§ markers)
+        # First check for §SHIFT_ENTER§ marker
+        marker = "§SHIFT_ENTER§"
+        marker_pos = text_to_analyze.rfind(marker)
+        newline_pos = text_to_analyze.rfind('\n')
+        
+        # Use whichever is later (closer to end)
+        if marker_pos > newline_pos:
+            # Delete from after the marker to end
+            return len(text) - marker_pos - len(marker)
+        elif newline_pos != -1:
+            # Delete from after the newline to end
+            return len(text) - newline_pos - 1
+        else:
+            # No paragraph break found - delete everything
+            return len(text)
+    
+    return 0
+
 def stop_recording(
     beeps_on: bool,
     smart_quotes: bool,
@@ -685,6 +899,10 @@ def stop_recording(
         recording_indicator.hide_indicator()
 
     print("🛑 Recording stopped. Transcribing…")
+    stop_recording_start = time.time()
+    print(f"⏱️  TIMING: Stop recording at {stop_recording_start:.3f}")
+    logger.info("=" * 60)
+    logger.info("TIMING: Recording stopped, starting transcription")
     logger.debug("Recording stopped, starting transcription")
     # Convert captured bytes -> float32 mono PCM in [-1, 1]
     try:
@@ -695,19 +913,86 @@ def stop_recording(
             return
         audio_f32 = (pcm_int16.astype(np.float32) / 32768.0)
 
+        # Time the transcription to identify delays
+        transcribe_start = time.time()
         segments, _ = model.transcribe(
-            audio_f32,
-            vad_filter=True,
-            beam_size=1,
-            condition_on_previous_text=False,
-            temperature=0.0,
-            without_timestamps=True,
-            language=(language or None),
-        )
+                audio_f32,
+                vad_filter=True,
+                beam_size=1,
+                condition_on_previous_text=False,
+                temperature=0.0,
+                without_timestamps=True,
+                language=(language or None),
+            )
+        transcribe_time = time.time() - transcribe_start
+        print(f"⏱️  TIMING: Transcription took {transcribe_time:.2f}s")
+        logger.info(f"TIMING: Transcription completed in {transcribe_time:.2f}s")
+        if transcribe_time > 2.0:  # Log if transcription takes more than 2 seconds
+            logger.warning(f"⚠️  Transcription took {transcribe_time:.2f}s (first run may be slower due to CUDA compilation)")
+        
         raw = " ".join(seg.text for seg in segments).strip()
         print(f"📝 Raw: {raw!r}")
         logger.info(f"Raw transcription: {raw!r}")
-        text = normalize_text(raw if smart_quotes else raw.replace(""","\"").replace(""","\""))
+        
+        post_transcribe_time = time.time() - stop_recording_start
+        print(f"⏱️  TIMING: Total time to transcription: {post_transcribe_time:.2f}s")
+        logger.info(f"TIMING: Time from stop_recording to transcription complete: {post_transcribe_time:.2f}s")
+        
+        # Check for undo commands before normalizing
+        undo_type = _detect_undo_command(raw)
+        if undo_type:
+            logger.info(f"Undo command detected: {undo_type}")
+            print(f"🔙 Undo command: {undo_type}")
+            
+            if not state.last_inserted_text:
+                print("ℹ️  Nothing to undo (no previous dictation)")
+                logger.info("Undo requested but no previous text to undo")
+                _beep(beeps_on, *CANCEL_BEEP)
+                if notify_on: _notify("TalkType", "Nothing to undo")
+                return
+            
+            # Calculate how many characters to delete
+            delete_count = _calculate_undo_length(state.last_inserted_text, undo_type)
+            logger.info(f"Undo: deleting {delete_count} characters (last text was {len(state.last_inserted_text)} chars)")
+            print(f"🔙 Undoing {delete_count} characters ({undo_type})")
+            
+            if delete_count > 0:
+                _send_backspaces(delete_count)
+                # Update the last_inserted_text to reflect what remains
+                if delete_count >= len(state.last_inserted_text):
+                    state.last_inserted_text = ""
+                    state.continue_mid_sentence = False  # Starting fresh
+                else:
+                    state.last_inserted_text = state.last_inserted_text[:-delete_count]
+                    # Check if we're mid-sentence (remaining text doesn't end with sentence punctuation)
+                    remaining = state.last_inserted_text.rstrip()
+                    if remaining and not remaining.endswith(('.', '?', '!', '…')):
+                        state.continue_mid_sentence = True
+                        logger.info("Mid-sentence continuation enabled for next dictation")
+                    else:
+                        state.continue_mid_sentence = False
+                
+                _beep(beeps_on, *READY_BEEP)
+                if notify_on: _notify("TalkType", f"Undid last {undo_type}")
+            else:
+                print("ℹ️  Nothing to undo for this scope")
+                _beep(beeps_on, *CANCEL_BEEP)
+            
+            return  # Don't inject the undo command as text
+        
+        # Apply custom voice commands (phrase → replacement)
+        processed_raw = _apply_custom_commands(raw)
+        
+        text = normalize_text(processed_raw if smart_quotes else processed_raw.replace(""","\"").replace(""","\""))
+
+        # Handle mid-sentence continuation after undo
+        # Lowercase the first letter if we're continuing a sentence
+        if state.continue_mid_sentence and text:
+            # Only lowercase if the first character is uppercase
+            if text[0].isupper():
+                text = text[0].lower() + text[1:]
+                logger.info(f"Lowercased first letter for mid-sentence continuation")
+            state.continue_mid_sentence = False  # Reset the flag
 
         # Simple spacing: always add period+space or just space when auto features are on
         # Don't add auto-period or auto-space if text contains paragraph/line break markers
@@ -722,41 +1007,46 @@ def stop_recording(
             text = text + " "
         logger.info(f"Normalized text: {text!r}")
 
+        # Beep immediately after transcription completes (user feedback)
+        pre_beep_time = time.time() - stop_recording_start
+        print(f"⏱️  TIMING: About to beep at {pre_beep_time:.2f}s")
+        logger.info(f"TIMING: Time before beep: {pre_beep_time:.2f}s")
         _beep(beeps_on, *READY_BEEP)
+        post_beep_time = time.time() - stop_recording_start
+        print(f"⏱️  TIMING: Beep completed at {post_beep_time:.2f}s")
+        logger.info(f"TIMING: Time after beep: {post_beep_time:.2f}s")
         if notify_on: _notify("TalkType", f"Transcribed: {text[:80]}{'…' if len(text)>80 else ''}")
         if text:
-            # Small settling delay so focused app is ready to receive text
-            time.sleep(0.05)
+            # No delay - start injection immediately after transcription
 
-            # Check if AT-SPI can help us make a smarter decision
-            # TEMPORARILY DISABLED for testing clipboard paste mode
-            use_atspi = False
-            atspi_reason = ""
-            # try:
-            #     from .atspi_helper import is_atspi_available, should_use_atspi, get_focused_context, insert_text_atspi
-            #     if is_atspi_available():
-            #         should_use, reason = should_use_atspi()
-            #         use_atspi = should_use
-            #         atspi_reason = reason
-            #         logger.info(f"AT-SPI decision: use={use_atspi}, reason={reason}")
-
-            #         # If AT-SPI says "VS Code - use typing", force typing mode
-            #         if "VS Code" in reason and not use_atspi:
-            #             logger.info("Forcing typing mode for VS Code to avoid paste duplication")
-            #             injection_mode = "type"  # Override to typing mode
-            # except Exception as e:
-            #     logger.debug(f"AT-SPI check failed: {e}")
-
-            # Choose injection mode: AT-SPI, paste, or typing
-            use_paste = (injection_mode == "paste") or os.environ.get("DICTATE_INJECTION_MODE","type").lower()=="paste"
-            print(f"🔍 DEBUG: injection_mode={injection_mode!r}, use_atspi={use_atspi}, use_paste={use_paste}, reason={atspi_reason!r}")
-            logger.info(f"Injection mode decision: mode={injection_mode!r}, atspi={use_atspi}, paste={use_paste}, text_len={len(text)}")
+            # Determine injection method (handles auto mode with smart detection)
+            # Time this to see if it's causing the delay
+            detection_start = time.time()
+            print(f"⏱️  TIMING: Starting injection method detection...")
+            logger.info("TIMING: Starting injection method detection...")
+            actual_mode, use_atspi, reason = _determine_injection_method(injection_mode)
+            detection_time = time.time() - detection_start
+            print(f"⏱️  TIMING: Injection method detection took {detection_time:.3f}s (mode: {actual_mode})")
+            logger.info(f"TIMING: Injection method detection took {detection_time:.3f}s")
+            if detection_time > 0.1:  # Log if it takes more than 100ms
+                logger.warning(f"⚠️  Injection method detection took {detection_time:.2f}s - this may cause delays!")
+            
+            # Time the actual injection
+            injection_start = time.time()
+            logger.info(f"TIMING: Starting text injection (mode: {actual_mode})...")
+            
+            use_paste = (actual_mode == "paste")
+            
+            logger.info(f"Injection mode: configured={injection_mode!r}, actual={actual_mode!r}, atspi={use_atspi}, reason={reason}")
+            if injection_mode == "auto":
+                print(f"🔍 Auto mode: {reason}")
 
             # Try AT-SPI insertion first if recommended
             if use_atspi:
-                logger.info(f"Attempting AT-SPI insertion: {atspi_reason}")
+                logger.info(f"Attempting AT-SPI insertion: {reason}")
                 print(f"🔮 Attempting AT-SPI insertion...")
                 try:
+                    from .atspi_helper import insert_text_atspi
                     if insert_text_atspi(text):
                         print(f"✨ AT-SPI insertion successful! ({len(text)} chars)")
                         logger.info("AT-SPI text insertion succeeded")
@@ -769,7 +1059,6 @@ def stop_recording(
                     logger.error(f"AT-SPI insertion error: {e}")
                     print(f"⚠️  AT-SPI error, falling back to typing")
                     _type_text(text)
-
             # Smart hybrid mode: Split text on markers and paste each chunk separately
             # This gives us fast paste for long text while properly handling formatting commands
             elif use_paste and ("§SHIFT_ENTER§" in text or "\n" in text):
@@ -806,21 +1095,39 @@ def stop_recording(
                     _type_text(text)
             elif use_paste and _paste_text(text):
                 # Simple paste, no special markers
+                injection_time = time.time() - injection_start
+                total_time = time.time() - stop_recording_start
+                print(f"⏱️  TIMING: Paste injection completed in {injection_time:.2f}s")
+                print(f"⏱️  TIMING: TOTAL TIME from stop to text appearing: {total_time:.2f}s")
+                logger.info(f"TIMING: Paste injection completed in {injection_time:.2f}s")
+                logger.info(f"TIMING: Total time from stop_recording to injection complete: {total_time:.2f}s")
+                if injection_time > 1.0:
+                    logger.warning(f"⚠️  Paste injection took {injection_time:.2f}s - this is unusually slow!")
                 print(f"✂️  Inject (paste) len={len(text)}")
-                logger.debug(f"Text injected via paste: {len(text)} chars")
+                logger.info(f"Text injected via paste: {len(text)} chars in {injection_time:.2f}s")
             else:
                 # Use typing mode
+                injection_time = time.time() - injection_start
+                total_time = time.time() - stop_recording_start
+                logger.info(f"TIMING: Typing injection completed in {injection_time:.2f}s")
+                logger.info(f"TIMING: Total time from stop_recording to injection complete: {total_time:.2f}s")
+                if injection_time > 1.0:
+                    logger.warning(f"⚠️  Typing injection took {injection_time:.2f}s - this is unusually slow!")
                 print(f"⌨️  Inject (type) len={len(text)}")
-                logger.debug(f"Text injected via typing: {len(text)} chars")
+                logger.info(f"Text injected via typing: {len(text)} chars in {injection_time:.2f}s")
                 _type_text(text)
+            
+            # Track the injected text for undo functionality
+            state.last_inserted_text = text
+            logger.debug(f"Stored last inserted text for undo: {len(text)} chars")
         else:
             print("ℹ️  (No speech recognized)")
             logger.debug("No speech recognized in audio")
     except Exception as e:
-        logger.error(f"Transcription error: {e}", exc_info=True)
-        print(f"❌ Transcription error: {e}")
-        _beep(beeps_on, *READY_BEEP)  # Still play the ready beep so user knows it's done
-        if notify_on: _notify("TalkType", f"Transcription failed: {str(e)[:60]}{'…' if len(str(e))>60 else ''}")
+            logger.error(f"Transcription error: {e}", exc_info=True)
+            print(f"❌ Transcription error: {e}")
+            _beep(beeps_on, *READY_BEEP)  # Still play the ready beep so user knows it's done
+            if notify_on: _notify("TalkType", f"Transcription failed: {str(e)[:60]}{'…' if len(str(e))>60 else ''}")
     finally:
         # Ensure recording indicator is hidden (already hidden at start of stop_recording)
         pass
@@ -1264,6 +1571,13 @@ def main():
     global _typing_delay
     _typing_delay = getattr(cfg, 'typing_delay', 12)
     logger.debug(f"Typing delay set to {_typing_delay}ms")
+
+    # Load custom voice commands
+    global _custom_commands
+    _custom_commands = load_custom_commands()
+    if _custom_commands:
+        logger.info(f"Loaded {len(_custom_commands)} custom voice command(s)")
+        print(f"✓ Loaded {len(_custom_commands)} custom voice command(s)")
 
     # Input device selection
     input_device_idx = _pick_input_device(cfg.mic)

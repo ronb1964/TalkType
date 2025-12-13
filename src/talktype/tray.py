@@ -398,35 +398,33 @@ class DictationTray:
             # Turn service OFF
             self.stop_service(None)
 
-    def toggle_paste_mode(self, widget):
-        """Toggle between clipboard paste and keyboard typing mode."""
-        # Prevent recursive calls when we programmatically set the toggle
-        if hasattr(self, '_updating_paste_toggle') and self._updating_paste_toggle:
+    def set_injection_mode(self, mode: str):
+        """Set the injection mode (auto, type, or paste)."""
+        # Prevent recursive calls when we programmatically set the radio buttons
+        if hasattr(self, '_updating_injection_mode') and self._updating_injection_mode:
             return
 
         try:
             from .config import load_config, save_config
             cfg = load_config()
-            
-            if widget.get_active():
-                # Enable clipboard paste mode
-                cfg.injection_mode = "paste"
-                logger.info("Switched to Clipboard Paste mode")
-            else:
-                # Enable keyboard typing mode
-                cfg.injection_mode = "type"
-                logger.info("Switched to Keyboard Typing mode")
+            cfg.injection_mode = mode
             
             # Save the config
             save_config(cfg)
             
             # Notify user
             from .app import _notify
-            mode_name = "Clipboard Paste" if cfg.injection_mode == "paste" else "Keyboard Typing"
+            mode_names = {
+                "auto": "Auto (Smart Detection)",
+                "type": "Keyboard Typing",
+                "paste": "Clipboard Paste"
+            }
+            mode_name = mode_names.get(mode, mode)
+            logger.info(f"Switched to {mode_name} mode")
             _notify("TalkType", f"Input mode: {mode_name}")
             
         except Exception as e:
-            logger.error(f"Failed to toggle paste mode: {e}")
+            logger.error(f"Failed to set injection mode: {e}")
 
     def update_menu_display(self):
         """Update menu display with current service status and model."""
@@ -461,13 +459,17 @@ class DictationTray:
                 device_display = device_names.get(cfg.device, cfg.device.upper())
                 self.device_display_item.set_label(f"Device: {device_display}")
                 
-                # Update paste mode toggle state
-                if hasattr(self, 'paste_mode_toggle'):
-                    self._updating_paste_toggle = True
-                    # Check if injection_mode is "paste"
-                    is_paste_mode = cfg.injection_mode == "paste"
-                    self.paste_mode_toggle.set_active(is_paste_mode)
-                    self._updating_paste_toggle = False
+                # Update injection mode radio buttons
+                if hasattr(self, 'injection_mode_auto'):
+                    self._updating_injection_mode = True
+                    mode = cfg.injection_mode.lower()
+                    if mode == "auto":
+                        self.injection_mode_auto.set_active(True)
+                    elif mode == "paste":
+                        self.injection_mode_paste.set_active(True)
+                    else:  # default to "type"
+                        self.injection_mode_type.set_active(True)
+                    self._updating_injection_mode = False
             except Exception as e:
                 logger.error(f"Failed to update model/device display: {e}")
                 self.model_display_item.set_label("Active Model: Unknown")
@@ -882,9 +884,25 @@ Result: Use the period command
         self.device_display_item = Gtk.MenuItem(label="Device: Loading...")
         self.device_display_item.set_sensitive(False)
 
-        # Injection mode toggle (Clipboard Paste vs Keyboard Typing)
-        self.paste_mode_toggle = Gtk.CheckMenuItem(label="Use Clipboard Paste")
-        self.paste_mode_toggle.connect("toggled", self.toggle_paste_mode)
+        # Injection mode submenu (Auto / Keyboard Typing / Clipboard Paste)
+        injection_mode_submenu = Gtk.Menu()
+        self.injection_mode_group = None
+        
+        self.injection_mode_auto = Gtk.RadioMenuItem(label="Auto (Smart Detection)")
+        self.injection_mode_auto.connect("activate", lambda w: self.set_injection_mode("auto"))
+        injection_mode_submenu.append(self.injection_mode_auto)
+        self.injection_mode_group = self.injection_mode_auto
+        
+        self.injection_mode_type = Gtk.RadioMenuItem(label="Keyboard Typing", group=self.injection_mode_group)
+        self.injection_mode_type.connect("activate", lambda w: self.set_injection_mode("type"))
+        injection_mode_submenu.append(self.injection_mode_type)
+        
+        self.injection_mode_paste = Gtk.RadioMenuItem(label="Clipboard Paste", group=self.injection_mode_group)
+        self.injection_mode_paste.connect("activate", lambda w: self.set_injection_mode("paste"))
+        injection_mode_submenu.append(self.injection_mode_paste)
+        
+        self.injection_mode_menu_item = Gtk.MenuItem(label="Text Injection Mode")
+        self.injection_mode_menu_item.set_submenu(injection_mode_submenu)
 
         # Menu items
         prefs_item = Gtk.MenuItem(label="Preferences...")
@@ -901,7 +919,7 @@ Result: Use the period command
             Gtk.SeparatorMenuItem(),
             self.model_display_item,
             self.device_display_item,
-            self.paste_mode_toggle,
+            self.injection_mode_menu_item,
             Gtk.SeparatorMenuItem(),
             prefs_item,
             help_item,

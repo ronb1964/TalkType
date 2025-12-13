@@ -153,11 +153,6 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
     # Show all widgets
     progress_dialog.show_all()
 
-    # Make sure action area is visible
-    action_area = progress_dialog.get_action_area()
-    if action_area:
-        action_area.show_all()
-
     # Download state
     cancel_event = threading.Event()
     download_result = [None]

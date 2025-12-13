@@ -5,7 +5,7 @@ def normalize_text(text: str) -> str:
     if not text:
         return text
 
-    # --- 0) Handle quoted text first - preserve everything inside quotes as literal ---
+    # --- 0) Handle quoted text - preserve everything inside quotes as literal ---
     # This allows users to say "open quote new paragraph close quote" and get literal text
     # Extract quoted sections and protect them from processing
     quoted_sections = []
@@ -22,9 +22,37 @@ def normalize_text(text: str) -> str:
         flags=re.IGNORECASE
     )
 
-    # --- 0.1) Escape sequences for literal words (backward compatibility) ---
-    # Allow phrases like "literal period" or "the word period" to keep the word "period"
-    text = re.sub(r"\b(?:literal|the\s+words?)\s+period\b", "__LIT_PERIOD__", text, flags=re.IGNORECASE)
+    # --- 0.1) Escape sequences for literal words ---
+    # Allow phrases like "literal period" or "the word period" to output the word instead of the command
+    # Store literal words with placeholders that will be restored later
+    literal_replacements = {
+        "period": "__LIT_PERIOD__",
+        "comma": "__LIT_COMMA__",
+        "tab": "__LIT_TAB__",
+        "newline": "__LIT_NEWLINE__",
+        "new line": "__LIT_NEWLINE__",
+        "return": "__LIT_NEWLINE__",
+        "line break": "__LIT_NEWLINE__",
+        "new paragraph": "__LIT_NEWPARA__",
+        "paragraph break": "__LIT_NEWPARA__",
+        "question mark": "__LIT_QMARK__",
+        "exclamation point": "__LIT_EPOINT__",
+        "exclamation mark": "__LIT_EPOINT__",
+        "semicolon": "__LIT_SEMICOLON__",
+        "colon": "__LIT_COLON__",
+        "apostrophe": "__LIT_APOSTROPHE__",
+        "quote": "__LIT_QUOTE__",
+        "hyphen": "__LIT_HYPHEN__",
+        "dash": "__LIT_DASH__",
+        "ellipsis": "__LIT_ELLIPSIS__",
+        "dot dot dot": "__LIT_ELLIPSIS__",
+    }
+    
+    # Apply literal escapes (must come before the actual command replacements)
+    for word, placeholder in literal_replacements.items():
+        # Match "literal <word>" or "the word <word>" or "the words <word>"
+        pattern = rf"\b(?:literal|the\s+words?)\s+{re.escape(word)}\b"
+        text = re.sub(pattern, placeholder, text, flags=re.IGNORECASE)
 
     # --- 1) Multi-word replacements first (order matters) ---
     replacements = [
@@ -161,11 +189,61 @@ def normalize_text(text: str) -> str:
     text = re.sub(r"”( ?)([!?,;:.])", r"\2”", text)
 
     # --- 12) Restore literal tokens ---
-    text = text.replace("__LIT_PERIOD__", "period")
+    literal_restore = {
+        "__LIT_PERIOD__": "period",
+        "__LIT_COMMA__": "comma",
+        "__LIT_TAB__": "tab",
+        "__LIT_NEWLINE__": "newline",
+        "__LIT_NEWPARA__": "new paragraph",
+        "__LIT_QMARK__": "question mark",
+        "__LIT_EPOINT__": "exclamation point",
+        "__LIT_SEMICOLON__": "semicolon",
+        "__LIT_COLON__": "colon",
+        "__LIT_APOSTROPHE__": "apostrophe",
+        "__LIT_QUOTE__": "quote",
+        "__LIT_HYPHEN__": "hyphen",
+        "__LIT_DASH__": "dash",
+        "__LIT_ELLIPSIS__": "ellipsis",
+    }
+    for placeholder, word in literal_restore.items():
+        text = text.replace(placeholder, word)
 
     # --- 13) Restore quoted sections with actual quote marks ---
     for i, quoted_text in enumerate(quoted_sections):
         # Put the quoted text back, wrapped in smart quotes
         text = text.replace(f"__QUOTED_{i}__", f'"{quoted_text}"')
+
+    # --- 14) Fix email/URL formatting (run LAST to fix any spacing issues) ---
+    # Whisper and earlier steps may add spaces in email addresses
+    # e.g., "gmail. com" or "@ gmail" - fix these patterns
+    
+    # First, convert "at" to "@" in email contexts (username at domain.com)
+    # Pattern: alphanumeric/dots/underscores, then " at ", then domain
+    # Handle both "gmail.com" and "gmail. com" (with space from "dot com" normalization)
+    # Match common TLDs: com, org, net, edu, gov, io, co, uk, ca, de, fr, etc.
+    text = re.sub(
+        r"([a-zA-Z0-9._-]+)\s+at\s+([a-zA-Z0-9.-]+)\s*\.\s*(com|org|net|edu|gov|io|co|uk|ca|de|fr|us|au|jp|cn|in|br|mx|ru|kr|es|it|nl|se|no|fi|pl|cz|hu|ro|gr|pt|ie|nz|za|ae|il|tr|th|vn|ph|id|my|sg|hk|tw)\b",
+        r"\1@\2.\3",
+        text,
+        flags=re.IGNORECASE
+    )
+    
+    # Then fix other email formatting issues
+    email_fixes = [
+        (r"@\s+", "@"),                           # "@ gmail" → "@gmail"
+        (r"\.\s*([Cc]om)\b", ".com"),             # ". Com" or ". com" → ".com"
+        (r"\.\s*([Oo]rg)\b", ".org"),             # ". Org" → ".org"
+        (r"\.\s*([Nn]et)\b", ".net"),             # ". Net" → ".net"
+        (r"\.\s*([Ee]du)\b", ".edu"),             # ". Edu" → ".edu"
+        (r"\.\s*([Gg]ov)\b", ".gov"),             # ". Gov" → ".gov"
+        (r"\.\s*([Ii]o)\b", ".io"),               # ". Io" → ".io"
+        (r"\.\s*([Cc]o)\b", ".co"),               # ". Co" → ".co"
+        (r"\.\s*([Uu]k)\b", ".uk"),               # ". Uk" → ".uk"
+        (r"\.\s*([Cc]a)\b", ".ca"),               # ". Ca" → ".ca"
+        (r"\.\s*([Dd]e)\b", ".de"),               # ". De" → ".de"
+        (r"\.\s*([Ff]r)\b", ".fr"),               # ". Fr" → ".fr"
+    ]
+    for pat, repl in email_fixes:
+        text = re.sub(pat, repl, text)
 
     return text

@@ -29,7 +29,7 @@ class Settings:
     auto_space: bool = True     # prepend a space before new utterance when not starting a new line/tab
     auto_period: bool = True   # append a period when an utterance ends without terminal punctuation
     paste_injection: bool = False  # when adding a leading space is unreliable, paste " ␣text" via clipboard
-    injection_mode: str = "type"  # "type" (ydotool/wtype) or "paste" (wl-copy + Ctrl+V)
+    injection_mode: str = "type"  # "type" (ydotool/wtype), "paste" (wl-copy + Ctrl+V), or "auto" (smart detection)
     typing_delay: int = 12  # milliseconds between keystrokes when typing (5-50, higher = slower but more reliable)
     auto_timeout_enabled: bool = True   # enable automatic timeout after inactivity (default: on)
     auto_timeout_minutes: int = 5       # minutes of inactivity before auto-stop
@@ -48,7 +48,7 @@ def validate_config(s: Settings) -> None:
     - device: "cpu" or "cuda"
     - mode: "hold" or "toggle"
     - auto_timeout_minutes: positive integer
-    - injection_mode: "type" or "paste"
+    - injection_mode: "type", "paste", or "auto"
     - hotkey/toggle_hotkey: reasonable key names (basic validation)
     """
     errors = []
@@ -73,8 +73,8 @@ def validate_config(s: Settings) -> None:
         errors.append(f"Invalid mode '{s.mode}'. Must be 'hold' or 'toggle'")
 
     # Valid injection mode
-    if s.injection_mode.lower() not in {"type", "paste"}:
-        errors.append(f"Invalid injection_mode '{s.injection_mode}'. Must be 'type' or 'paste'")
+    if s.injection_mode.lower() not in {"type", "paste", "auto"}:
+        errors.append(f"Invalid injection_mode '{s.injection_mode}'. Must be 'type', 'paste', or 'auto'")
 
     # Auto-timeout minutes must be positive
     if s.auto_timeout_minutes <= 0:
@@ -200,3 +200,43 @@ def get_data_dir():
         str: Path to ~/.local/share/TalkType (production) or ~/.local/share/TalkType-dev (dev mode)
     """
     return os.path.expanduser(f"~/.local/share/{DATA_DIR}")
+
+# Custom voice commands configuration
+CUSTOM_COMMANDS_PATH = os.path.expanduser(f"~/.config/{CONFIG_DIR}/custom_commands.toml")
+
+def load_custom_commands() -> dict[str, str]:
+    """
+    Load custom voice commands from TOML file.
+    
+    Returns:
+        dict: Mapping of spoken phrases to replacement text
+              e.g., {"my email": "user@example.com", "signature": "Best regards,\\nRon"}
+    """
+    commands = {}
+    if os.path.exists(CUSTOM_COMMANDS_PATH):
+        try:
+            with open(CUSTOM_COMMANDS_PATH, "rb") as f:
+                data = tomllib.load(f)
+            # Commands are stored under [commands] section
+            commands = dict(data.get("commands", {}))
+        except Exception as e:
+            print(f"Warning: Could not load custom commands: {e}")
+    return commands
+
+def save_custom_commands(commands: dict[str, str]) -> None:
+    """
+    Save custom voice commands to TOML file.
+    
+    Args:
+        commands: Dictionary mapping spoken phrases to replacement text
+    """
+    os.makedirs(os.path.dirname(CUSTOM_COMMANDS_PATH), exist_ok=True)
+    with open(CUSTOM_COMMANDS_PATH, "w") as f:
+        f.write("# TalkType Custom Voice Commands\n")
+        f.write("# Format: \"spoken phrase\" = \"replacement text\"\n")
+        f.write("# Use \\n for line breaks in replacements\n\n")
+        f.write("[commands]\n")
+        for phrase, replacement in commands.items():
+            # Escape quotes and handle multi-line strings
+            escaped_replacement = replacement.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+            f.write(f'"{phrase}" = "{escaped_replacement}"\n')

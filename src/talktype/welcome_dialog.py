@@ -1227,7 +1227,7 @@ def show_tips_and_features_dialog(extension_installed=False):
     get_started_button.connect("clicked", on_get_started_clicked)
 
     button_box.pack_end(get_started_button, False, False, 0)
-    dialog.get_action_area().pack_start(button_box, True, True, 0)
+    vbox.pack_start(button_box, False, False, 0)
 
     # Start pulsing animation for logout reminder if extension was installed
     pulse_timer_id = None

@@ -444,3 +444,6 @@ if __name__ == "__main__":
     
     status = get_typing_status()
     print(f"\nTyping status: {status}")
+
+
+

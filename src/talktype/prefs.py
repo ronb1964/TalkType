@@ -6,7 +6,7 @@ import os
 import subprocess
 import sys
 import atexit
-from .config import CONFIG_PATH
+from .config import CONFIG_PATH, load_custom_commands, save_custom_commands
 
 
 def apply_dark_dialog_style(dialog):
@@ -290,6 +290,10 @@ class PreferencesWindow:
         # Advanced tab
         advanced_tab = self.create_advanced_tab()
         notebook.append_page(advanced_tab, Gtk.Label(label="Advanced"))
+        
+        # Commands tab (custom voice commands)
+        commands_tab = self.create_commands_tab()
+        notebook.append_page(commands_tab, Gtk.Label(label="Commands"))
         
         vbox.pack_start(notebook, True, True, 0)
         
@@ -910,12 +914,13 @@ class PreferencesWindow:
         
         # Injection mode
         inject_label = Gtk.Label(label="Text Injection 💡:", xalign=0)
-        inject_label.set_tooltip_text("How to insert transcribed text:\n• Keystroke Typing: simulates typing character-by-character (most reliable)\n• Clipboard Paste: uses clipboard + Ctrl+V / Shift+Ctrl+V (much faster for long text)\n\nClipboard Paste works in most applications:\n✓ Text editors, word processors, terminals\n✓ Web browsers, email clients\n✓ Most standard text input fields\n\nUse Keystroke Typing if paste doesn't work in specialized applications.")
+        inject_label.set_tooltip_text("How to insert transcribed text:\n• Auto (Smart Detection): Automatically chooses the best method based on the focused app\n• Keystroke Typing: simulates typing character-by-character (most reliable)\n• Clipboard Paste: uses clipboard + Ctrl+V / Shift+Ctrl+V (much faster for long text)\n\nAuto mode intelligently selects:\n✓ Paste for terminals and normal text fields\n✓ Typing for password fields and address bars\n✓ AT-SPI when available and reliable\n\nClipboard Paste works in most applications:\n✓ Text editors, word processors, terminals\n✓ Web browsers, email clients\n✓ Most standard text input fields\n\nUse Keystroke Typing if paste doesn't work in specialized applications.")
         grid.attach(inject_label, 0, row, 1, 1)
         inject_combo = Gtk.ComboBoxText()
         inject_combo.set_can_focus(True)
         inject_combo.connect("button-press-event", self._on_combo_button_press)
 
+        inject_combo.append("auto", "Auto (Smart Detection)")
         inject_combo.append("type", "Keystroke Typing")
         inject_combo.append("paste", "Clipboard Paste")
         inject_combo.set_active_id(self.config["injection_mode"])
@@ -1113,6 +1118,189 @@ class PreferencesWindow:
         GLib.timeout_add(500, self._initial_extension_check)
 
         return grid
+    
+    def create_commands_tab(self):
+        """Create the Custom Voice Commands tab."""
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        vbox.set_margin_start(20)
+        vbox.set_margin_end(20)
+        vbox.set_margin_top(15)
+        vbox.set_margin_bottom(15)
+        
+        # Header
+        header = Gtk.Label()
+        header.set_markup('<span size="large"><b>Custom Voice Commands</b></span>')
+        header.set_xalign(0)
+        vbox.pack_start(header, False, False, 0)
+        
+        # Description
+        desc = Gtk.Label()
+        desc.set_markup(
+            '<span size="small">Define custom phrases that will be replaced during dictation.\n'
+            'For example: say "my email" → inserts "user@example.com"</span>'
+        )
+        desc.set_xalign(0)
+        desc.set_line_wrap(True)
+        vbox.pack_start(desc, False, False, 5)
+        
+        # Create list store for commands: phrase, replacement
+        self.commands_store = Gtk.ListStore(str, str)
+        
+        # Load existing commands
+        commands = load_custom_commands()
+        for phrase, replacement in commands.items():
+            self.commands_store.append([phrase, replacement])
+        
+        # Create tree view
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        scrolled.set_min_content_height(200)
+        
+        self.commands_tree = Gtk.TreeView(model=self.commands_store)
+        self.commands_tree.set_headers_visible(True)
+        
+        # Phrase column (editable)
+        phrase_renderer = Gtk.CellRendererText()
+        phrase_renderer.set_property("editable", True)
+        phrase_renderer.connect("edited", self._on_phrase_edited)
+        phrase_renderer.connect("editing-started", self._on_cell_editing_started, 0)
+        phrase_column = Gtk.TreeViewColumn("Spoken Phrase", phrase_renderer, text=0)
+        phrase_column.set_expand(True)
+        phrase_column.set_min_width(150)
+        self.commands_tree.append_column(phrase_column)
+
+        # Replacement column (editable)
+        replacement_renderer = Gtk.CellRendererText()
+        replacement_renderer.set_property("editable", True)
+        replacement_renderer.connect("edited", self._on_replacement_edited)
+        replacement_renderer.connect("editing-started", self._on_cell_editing_started, 1)
+        replacement_column = Gtk.TreeViewColumn("Replacement Text", replacement_renderer, text=1)
+        replacement_column.set_expand(True)
+        replacement_column.set_min_width(200)
+        self.commands_tree.append_column(replacement_column)
+        
+        scrolled.add(self.commands_tree)
+        vbox.pack_start(scrolled, True, True, 0)
+        
+        # Buttons for add/remove
+        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        
+        add_btn = Gtk.Button(label="➕ Add Command")
+        add_btn.connect("clicked", self._on_add_command)
+        add_btn.set_tooltip_text("Add a new custom voice command")
+        button_box.pack_start(add_btn, False, False, 0)
+        
+        remove_btn = Gtk.Button(label="➖ Remove Selected")
+        remove_btn.connect("clicked", self._on_remove_command)
+        remove_btn.set_tooltip_text("Remove the selected command")
+        button_box.pack_start(remove_btn, False, False, 0)
+        
+        vbox.pack_start(button_box, False, False, 5)
+        
+        # Tips section
+        tips = Gtk.Label()
+        tips.set_markup(
+            '<span size="small"><b>Tips:</b>\n'
+            '• Click on a cell to edit it directly\n'
+            '• Phrases are matched case-insensitively\n'
+            '• Use \\n in replacement for line breaks\n'
+            '• Changes are saved when you click Apply or OK\n'
+            '• Restart the dictation service for changes to take effect</span>'
+        )
+        tips.set_xalign(0)
+        tips.set_line_wrap(True)
+        vbox.pack_start(tips, False, False, 10)
+        
+        return vbox
+    
+    def _on_cell_editing_started(self, renderer, editable, path, column_idx):
+        """Handle when a cell starts being edited - setup focus-out commit and Tab navigation."""
+        # Store current editing state
+        self._current_edit_path = path
+        self._current_edit_column = column_idx
+        
+        # Connect to focus-out to commit the edit
+        def on_focus_out(widget, event):
+            # Commit the current text
+            text = widget.get_text()
+            if column_idx == 0:
+                self._on_phrase_edited(renderer, path, text)
+            else:
+                self._on_replacement_edited(renderer, path, text)
+            return False
+        
+        editable.connect("focus-out-event", on_focus_out)
+        
+        # Handle Tab key to move to next column/row
+        def on_key_press(widget, event):
+            from gi.repository import Gdk
+            if event.keyval == Gdk.KEY_Tab:
+                # Commit current edit first
+                text = widget.get_text()
+                if column_idx == 0:
+                    self._on_phrase_edited(renderer, path, text)
+                else:
+                    self._on_replacement_edited(renderer, path, text)
+                
+                # Stop the current edit
+                widget.editing_done()
+                widget.remove_widget()
+                
+                # Move to next column or next row
+                if column_idx == 0:
+                    # Move to replacement column (column 1)
+                    GLib.idle_add(lambda: self.commands_tree.set_cursor(
+                        Gtk.TreePath.new_from_string(path),
+                        self.commands_tree.get_column(1),
+                        True
+                    ))
+                else:
+                    # Move to next row's phrase column (column 0)
+                    current_path = Gtk.TreePath.new_from_string(path)
+                    next_idx = current_path.get_indices()[0] + 1
+                    if next_idx < len(self.commands_store):
+                        GLib.idle_add(lambda: self.commands_tree.set_cursor(
+                            Gtk.TreePath.new_from_indices([next_idx]),
+                            self.commands_tree.get_column(0),
+                            True
+                        ))
+                return True  # Consume the Tab event
+            return False
+        
+        editable.connect("key-press-event", on_key_press)
+    
+    def _on_phrase_edited(self, renderer, path, new_text):
+        """Handle editing of the phrase column."""
+        if new_text.strip():
+            self.commands_store[path][0] = new_text.strip().lower()
+    
+    def _on_replacement_edited(self, renderer, path, new_text):
+        """Handle editing of the replacement column."""
+        self.commands_store[path][1] = new_text
+    
+    def _on_add_command(self, button):
+        """Add a new empty command row."""
+        iter = self.commands_store.append(["new phrase", "replacement text"])
+        # Select the new row
+        path = self.commands_store.get_path(iter)
+        self.commands_tree.set_cursor(path, self.commands_tree.get_column(0), True)
+    
+    def _on_remove_command(self, button):
+        """Remove the selected command."""
+        selection = self.commands_tree.get_selection()
+        model, iter = selection.get_selected()
+        if iter:
+            model.remove(iter)
+    
+    def _save_custom_commands(self):
+        """Save custom commands from the list store."""
+        commands = {}
+        for row in self.commands_store:
+            phrase = row[0].strip().lower()
+            replacement = row[1]
+            if phrase:  # Only save non-empty phrases
+                commands[phrase] = replacement
+        save_custom_commands(commands)
     
     def _on_combo_button_press(self, widget, event):
         """Handle button press events on combo boxes to ensure they open reliably."""
@@ -2329,6 +2517,10 @@ X-GNOME-Autostart-enabled=true
     
     def on_apply(self, button):
         """Apply changes and restart service without closing."""
+        # Save custom commands first
+        if hasattr(self, 'commands_store'):
+            self._save_custom_commands()
+        
         if self.save_config():
             # Check if model needs downloading
             if hasattr(self, 'model_combo'):
@@ -2413,6 +2605,10 @@ X-GNOME-Autostart-enabled=true
     
     def on_ok(self, button):
         """Save, restart service, and close."""
+        # Save custom commands first
+        if hasattr(self, 'commands_store'):
+            self._save_custom_commands()
+        
         if self.save_config():
             model_was_downloaded = False
 
