@@ -2,8 +2,10 @@ from __future__ import annotations
 import os
 try:
     import tomllib  # Python 3.11+
+    _USE_TOMLLIB = True  # tomllib requires binary mode ("rb")
 except ImportError:
     import toml as tomllib  # Python 3.10 fallback
+    _USE_TOMLLIB = False  # toml library requires text mode ("r")
 from dataclasses import dataclass
 import sys
 
@@ -29,7 +31,7 @@ class Settings:
     auto_space: bool = True     # prepend a space before new utterance when not starting a new line/tab
     auto_period: bool = True   # append a period when an utterance ends without terminal punctuation
     paste_injection: bool = False  # when adding a leading space is unreliable, paste " ␣text" via clipboard
-    injection_mode: str = "type"  # "type" (ydotool/wtype), "paste" (wl-copy + Ctrl+V), or "auto" (smart detection)
+    injection_mode: str = "auto"  # "auto" (smart detection), "type" (ydotool/wtype), or "paste" (wl-copy + Ctrl+V)
     typing_delay: int = 12  # milliseconds between keystrokes when typing (5-50, higher = slower but more reliable)
     auto_timeout_enabled: bool = True   # enable automatic timeout after inactivity (default: on)
     auto_timeout_minutes: int = 5       # minutes of inactivity before auto-stop
@@ -113,12 +115,16 @@ def validate_config(s: Settings) -> None:
 
 def load_config() -> Settings:
     s = Settings()
+    config_loaded = False
     if os.path.exists(CONFIG_PATH):
         try:
-            with open(CONFIG_PATH, "rb") as f:
+            # tomllib (Python 3.11+) requires binary mode, toml library requires text mode
+            file_mode = "rb" if _USE_TOMLLIB else "r"
+            with open(CONFIG_PATH, file_mode) as f:
                 data = tomllib.load(f)
             s.model = str(data.get("model", s.model))
             s.device = str(data.get("device", s.device))
+            config_loaded = True
             s.hotkey = str(data.get("hotkey", s.hotkey))
             s.beeps = bool(data.get("beeps", s.beeps))
             s.smart_quotes = bool(data.get("smart_quotes", s.smart_quotes))
@@ -138,8 +144,11 @@ def load_config() -> Settings:
             s.indicator_offset_x = int(data.get("indicator_offset_x", s.indicator_offset_x))
             s.indicator_offset_y = int(data.get("indicator_offset_y", s.indicator_offset_y))
             s.indicator_size = str(data.get("indicator_size", s.indicator_size))
-        except Exception:
-            pass
+        except Exception as e:
+            # Only print error once by using a module-level flag
+            if not getattr(load_config, '_error_printed', False):
+                print(f"⚠️  Error loading config from {CONFIG_PATH}: {e}", file=sys.stderr)
+                load_config._error_printed = True
 
     # Environment overrides (optional)
     s.model = os.getenv("DICTATE_MODEL", s.model)
@@ -207,7 +216,7 @@ CUSTOM_COMMANDS_PATH = os.path.expanduser(f"~/.config/{CONFIG_DIR}/custom_comman
 def load_custom_commands() -> dict[str, str]:
     """
     Load custom voice commands from TOML file.
-    
+
     Returns:
         dict: Mapping of spoken phrases to replacement text
               e.g., {"my email": "user@example.com", "signature": "Best regards,\\nRon"}
@@ -215,7 +224,9 @@ def load_custom_commands() -> dict[str, str]:
     commands = {}
     if os.path.exists(CUSTOM_COMMANDS_PATH):
         try:
-            with open(CUSTOM_COMMANDS_PATH, "rb") as f:
+            # tomllib (Python 3.11+) requires binary mode, toml library requires text mode
+            file_mode = "rb" if _USE_TOMLLIB else "r"
+            with open(CUSTOM_COMMANDS_PATH, file_mode) as f:
                 data = tomllib.load(f)
             # Commands are stored under [commands] section
             commands = dict(data.get("commands", {}))

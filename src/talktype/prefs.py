@@ -185,7 +185,7 @@ class PreferencesWindow:
             "auto_space": True,
             "auto_period": True,
             "paste_injection": False,
-            "injection_mode": "type",
+            "injection_mode": "auto",
             "launch_at_login": False,
             "auto_timeout_enabled": True,
             "auto_timeout_minutes": 5
@@ -1963,9 +1963,13 @@ X-GNOME-Autostart-enabled=true
             # Refresh device dropdown to show CUDA option
             self._refresh_device_options()
 
-            # Update device combo to reflect change
+            # Update device combo to reflect change and auto-save config
             if hasattr(self, 'device_combo'):
                 self.device_combo.set_active_id("cuda")
+                # Auto-save to config so tray and service see the change
+                self.config["device"] = "cuda"
+                self.save_config()
+                print("✅ Automatically switched to GPU mode after CUDA download")
 
         # Show the modern download dialog
         success = cuda_helper.show_cuda_download_dialog(
@@ -2501,15 +2505,57 @@ X-GNOME-Autostart-enabled=true
         """Restart the dictation service."""
         try:
             import subprocess
+            import time
+
+            # Debug: print what config will be loaded
+            print(f"📄 Config file: {CONFIG_PATH}")
+            if os.path.exists(CONFIG_PATH):
+                with open(CONFIG_PATH, "r") as f:
+                    content = f.read()
+                    # Extract model and device for debug
+                    for line in content.split("\n"):
+                        if line.startswith("model =") or line.startswith("device ="):
+                            print(f"   {line}")
+            else:
+                print(f"   ⚠️  Config file does not exist!")
+
             # Kill existing talktype.app processes
             subprocess.run(["pkill", "-f", "talktype.app"], capture_output=True)
             # Wait a moment for processes to terminate
-            import time
             time.sleep(1)
-            # Start the service again (keep stdout/stderr visible for debugging)
-            project_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-            subprocess.Popen([sys.executable, "-m", "src.talktype.app"],
-                           cwd=project_dir)
+
+            # Find the dictate script relative to this module (AppImage path)
+            # __file__ is in usr/src/talktype/prefs.py
+            # dictate is in usr/bin/dictate
+            src_dir = os.path.dirname(__file__)  # usr/src/talktype
+            usr_dir = os.path.dirname(os.path.dirname(src_dir))  # usr
+            dictate_script = os.path.join(usr_dir, "bin", "dictate")
+
+            if os.path.exists(dictate_script):
+                # Use the dictate script which has proper paths set up (AppImage)
+                subprocess.Popen([dictate_script], env=os.environ.copy())
+                print(f"Restarted dictation service via {dictate_script}")
+            else:
+                # Fallback: use sys.executable (dev environment)
+                env = os.environ.copy()
+
+                # Check if we're in dev mode (src/talktype structure exists relative to __file__)
+                project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+                src_dir_check = os.path.join(project_root, "src")
+                if os.path.exists(src_dir_check):
+                    # Dev mode - set PYTHONPATH to include src/ AND system PyGObject
+                    pythonpath_parts = [
+                        os.path.abspath(src_dir_check),
+                        "/usr/lib64/python3.14/site-packages",
+                        "/usr/lib/python3.14/site-packages",
+                        "/usr/lib64/python3.13/site-packages",
+                        "/usr/lib/python3.13/site-packages"
+                    ]
+                    env["PYTHONPATH"] = ":".join(pythonpath_parts)
+                    print(f"Dev mode detected - setting PYTHONPATH for service restart")
+
+                subprocess.Popen([sys.executable, "-m", "talktype.app"], env=env)
+                print("Restarted dictation service via Python module")
             return True
         except Exception as e:
             print(f"Failed to restart service: {e}")

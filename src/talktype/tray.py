@@ -523,8 +523,14 @@ class DictationTray:
         # Update active model display
         if hasattr(self, 'model_display_item'):
             try:
-                from .config import load_config
+                from .config import load_config, CONFIG_PATH
                 cfg = load_config()
+                # Debug: print config values every 10 seconds (not every update)
+                if not hasattr(self, '_debug_counter'):
+                    self._debug_counter = 0
+                self._debug_counter += 1
+                if self._debug_counter % 10 == 1:  # Every ~10 seconds
+                    logger.debug(f"Config read from {CONFIG_PATH}: model={cfg.model}, device={cfg.device}")
                 model_names = {
                     'tiny': 'Tiny (fastest)',
                     'base': 'Base',
@@ -578,13 +584,41 @@ class DictationTray:
                 logger.info("Preferences window already open")
                 return
 
-            # Use direct Python path for more reliable execution
-            import os
-            project_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-            python_path = sys.executable
-            self.preferences_process = subprocess.Popen([python_path, "-m", "src.talktype.prefs"],
-                           cwd=project_dir)
-            logger.info(f"Opened preferences window (pid={self.preferences_process.pid})")
+            # Find the dictate-prefs script relative to this module (AppImage path)
+            # __file__ is in usr/src/talktype/tray.py
+            # dictate-prefs is in usr/bin/dictate-prefs
+            src_dir = os.path.dirname(__file__)  # usr/src/talktype
+            usr_dir = os.path.dirname(os.path.dirname(src_dir))  # usr
+            prefs_script = os.path.join(usr_dir, "bin", "dictate-prefs")
+
+            if os.path.exists(prefs_script):
+                # Use the dictate-prefs script which has proper paths set up (AppImage)
+                self.preferences_process = subprocess.Popen([prefs_script], env=os.environ.copy())
+                logger.info(f"Opened preferences window via {prefs_script}")
+            else:
+                # Fallback: use sys.executable (dev environment)
+                env = os.environ.copy()
+
+                # Check if we're in dev mode (src/talktype structure exists relative to __file__)
+                project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+                src_dir_check = os.path.join(project_root, "src")
+                if os.path.exists(src_dir_check):
+                    # Dev mode - set PYTHONPATH to include src/ AND system PyGObject
+                    pythonpath_parts = [
+                        os.path.abspath(src_dir_check),
+                        "/usr/lib64/python3.14/site-packages",
+                        "/usr/lib/python3.14/site-packages",
+                        "/usr/lib64/python3.13/site-packages",
+                        "/usr/lib/python3.13/site-packages"
+                    ]
+                    env["PYTHONPATH"] = ":".join(pythonpath_parts)
+                    logger.info(f"Dev mode detected - setting PYTHONPATH for prefs")
+
+                self.preferences_process = subprocess.Popen(
+                    [sys.executable, "-m", "talktype.prefs"],
+                    env=env
+                )
+                logger.info("Opened preferences window via Python module")
         except Exception as e:
             logger.error(f"Failed to open preferences: {e}")
             print(f"Failed to open preferences: {e}")
@@ -618,6 +652,18 @@ class DictationTray:
             success = cuda_helper.download_cuda_libraries()
             if success:
                 logger.info("CUDA libraries downloaded successfully")
+                # Auto-switch to CUDA in config after successful download
+                try:
+                    from .config import load_config, save_config
+                    cfg = load_config()
+                    if cfg.device != "cuda":
+                        cfg.device = "cuda"
+                        save_config(cfg)
+                        logger.info("✅ Automatically switched to GPU mode after CUDA download")
+                        # Refresh menu to show updated device
+                        self.update_menu_display()
+                except Exception as save_e:
+                    logger.warning(f"Could not auto-enable GPU mode: {save_e}")
             else:
                 logger.error("CUDA download failed")
         except Exception as e:
