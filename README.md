@@ -20,11 +20,30 @@ Press-and-hold (or toggle) voice dictation for Linux Wayland, using Faster-Whisp
 - **📱 System Tray**: Easy start/stop control with visual status indicator
 - **⚙️ GUI Preferences**: Configure hotkeys, audio settings, and behavior
 - **🔧 Voice Commands**: "comma", "period", "new line", "new paragraph", "open quote", etc.
+- **🚀 GPU Acceleration**: Optional CUDA support for faster transcription
 - **🌐 Wayland Native**: Works seamlessly on modern Linux desktops
 
-## 🚀 Quick Start
+## 📦 Installation
 
-### Prerequisites
+### Arch Linux (AUR)
+```bash
+yay -S talktype-appimage
+# or
+paru -S talktype-appimage
+```
+
+### AppImage (All Distros)
+Download the latest AppImage from [Releases](https://github.com/ronb1964/TalkType/releases):
+```bash
+chmod +x TalkType-v*.AppImage
+./TalkType-v*.AppImage
+```
+
+The AppImage includes everything needed - just run it!
+
+### From Source (Development)
+
+#### Prerequisites
 ```bash
 # Install system dependencies (Fedora/Nobara)
 sudo dnf install -y portaudio-devel ffmpeg ydotool wl-clipboard \
@@ -35,7 +54,7 @@ sudo dnf install -y gnome-shell-extension-appindicator
 gnome-extensions enable appindicatorsupport@rgcjonas.gmail.com
 ```
 
-### Setup ydotool daemon
+#### Setup ydotool daemon
 ```bash
 # Create systemd service for ydotool
 mkdir -p ~/.config/systemd/user
@@ -57,7 +76,7 @@ systemctl --user daemon-reload
 systemctl --user enable --now ydotoold.service
 ```
 
-### Install TalkType
+#### Install TalkType
 ```bash
 # Clone and setup
 git clone https://github.com/ronb1964/TalkType.git
