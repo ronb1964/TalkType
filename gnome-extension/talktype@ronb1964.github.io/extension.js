@@ -30,6 +30,9 @@ const TalkTypeIface = `
     <method name="GetDeviceType">
       <arg type="s" direction="out" name="device"/>
     </method>
+    <method name="GetInjectionMode">
+      <arg type="s" direction="out" name="mode"/>
+    </method>
     <method name="GetStatus">
       <arg type="a{sv}" direction="out" name="status"/>
     </method>
@@ -42,6 +45,12 @@ const TalkTypeIface = `
     <method name="StopService"/>
     <method name="SetModel">
       <arg type="s" direction="in" name="model"/>
+    </method>
+    <method name="SetInjectionMode">
+      <arg type="s" direction="in" name="mode"/>
+    </method>
+    <method name="ApplyPerformancePreset">
+      <arg type="s" direction="in" name="preset"/>
     </method>
     <method name="OpenPreferences"/>
     <method name="ShowHelp"/>
@@ -67,6 +76,34 @@ const TalkTypeIface = `
   </interface>
 </node>`;
 
+// Performance presets - must match tray.py definitions
+const PERFORMANCE_PRESETS = {
+    'fastest': {
+        label: 'Fastest',
+        description: 'tiny model, CPU',
+        model: 'tiny',
+        device: 'cpu'
+    },
+    'balanced': {
+        label: 'Balanced',
+        description: 'small model, GPU if available',
+        model: 'small',
+        device: 'cuda'
+    },
+    'accurate': {
+        label: 'Most Accurate',
+        description: 'large-v3 model, GPU',
+        model: 'large-v3',
+        device: 'cuda'
+    },
+    'battery': {
+        label: 'Battery Saver',
+        description: 'tiny model, CPU, short timeout',
+        model: 'tiny',
+        device: 'cpu'
+    }
+};
+
 const TalkTypeProxy = Gio.DBusProxy.makeProxyWrapper(TalkTypeIface);
 
 // Panel indicator for TalkType
@@ -86,6 +123,8 @@ class TalkTypeIndicator extends PanelMenu.Button {
         this._isRecording = false;
         this._isServiceRunning = false;
         this._currentModel = 'unknown';
+        this._currentDevice = 'unknown';
+        this._currentInjectionMode = 'auto';
         this._dbusAvailable = false;
 
         // Connect to D-Bus
@@ -192,6 +231,43 @@ class TalkTypeIndicator extends PanelMenu.Button {
 
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
+        // Performance submenu
+        this._performanceSubMenu = new PopupMenu.PopupSubMenuMenuItem('Performance');
+        this._presetItems = {};
+        for (let [key, preset] of Object.entries(PERFORMANCE_PRESETS)) {
+            let item = new PopupMenu.PopupMenuItem(`${preset.label} (${preset.description})`);
+            item._presetKey = key;
+            item.connect('activate', () => {
+                this._proxy.ApplyPerformancePresetRemote(key);
+                this._updatePresetSelection(key);
+            });
+            this._presetItems[key] = item;
+            this._performanceSubMenu.menu.addMenuItem(item);
+        }
+        this.menu.addMenuItem(this._performanceSubMenu);
+
+        // Text Injection Mode submenu
+        this._injectionSubMenu = new PopupMenu.PopupSubMenuMenuItem('Text Injection Mode');
+        this._injectionItems = {};
+        const injectionModes = {
+            'auto': {label: 'Auto', description: 'Detect best method'},
+            'paste': {label: 'Paste', description: 'Use clipboard (Ctrl+Shift+V)'},
+            'type': {label: 'Type', description: 'Simulate keystrokes'}
+        };
+        for (let [key, mode] of Object.entries(injectionModes)) {
+            let item = new PopupMenu.PopupMenuItem(`${mode.label} (${mode.description})`);
+            item._modeKey = key;
+            item.connect('activate', () => {
+                this._proxy.SetInjectionModeRemote(key);
+                this._updateInjectionSelection(key);
+            });
+            this._injectionItems[key] = item;
+            this._injectionSubMenu.menu.addMenuItem(item);
+        }
+        this.menu.addMenuItem(this._injectionSubMenu);
+
+        this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+
         // Preferences
         let prefsItem = new PopupMenu.PopupMenuItem('Preferences...');
         prefsItem.connect('activate', () => {
@@ -216,6 +292,21 @@ class TalkTypeIndicator extends PanelMenu.Button {
         this.menu.addMenuItem(quitItem);
     }
 
+    _updatePresetSelection(activePreset) {
+        // Update checkmarks on preset menu items
+        for (let [key, item] of Object.entries(this._presetItems)) {
+            // Use ornament to show selection (like radio buttons)
+            item.setOrnament(key === activePreset ? PopupMenu.Ornament.DOT : PopupMenu.Ornament.NONE);
+        }
+    }
+
+    _updateInjectionSelection(activeMode) {
+        // Update checkmarks on injection mode menu items
+        for (let [key, item] of Object.entries(this._injectionItems)) {
+            item.setOrnament(key === activeMode ? PopupMenu.Ornament.DOT : PopupMenu.Ornament.NONE);
+        }
+    }
+
     _updateStatus() {
         if (!this._proxy)
             return;
@@ -232,10 +323,21 @@ class TalkTypeIndicator extends PanelMenu.Button {
             this._isServiceRunning = status.service_running ? status.service_running.deep_unpack() : false;
             this._currentModel = status.model ? status.model.deep_unpack() : 'unknown';
             this._currentDevice = status.device ? status.device.deep_unpack() : 'unknown';
+            this._currentInjectionMode = status.injection_mode ? status.injection_mode.deep_unpack() : 'auto';
 
             this._updateIcon();
             this._updateMenu();
         });
+    }
+
+    _getCurrentPreset() {
+        // Detect current preset based on model and device
+        for (let [key, preset] of Object.entries(PERFORMANCE_PRESETS)) {
+            if (preset.model === this._currentModel && preset.device === this._currentDevice) {
+                return key;
+            }
+        }
+        return null;  // Custom settings, no preset matches
     }
 
     _updateIcon() {
@@ -271,6 +373,8 @@ class TalkTypeIndicator extends PanelMenu.Button {
 
         // Disable menu items if D-Bus is unavailable
         this._serviceItem.setSensitive(this._dbusAvailable);
+        this._performanceSubMenu.setSensitive(this._dbusAvailable);
+        this._injectionSubMenu.setSensitive(this._dbusAvailable);
 
         // Update active model display
         if (!this._dbusAvailable) {
@@ -295,6 +399,13 @@ class TalkTypeIndicator extends PanelMenu.Button {
             };
             const deviceDisplay = deviceNames[this._currentDevice] || this._currentDevice.toUpperCase();
             this._deviceDisplayItem.label.text = `Device: ${deviceDisplay}`;
+
+            // Update preset selection
+            const currentPreset = this._getCurrentPreset();
+            this._updatePresetSelection(currentPreset);
+
+            // Update injection mode selection
+            this._updateInjectionSelection(this._currentInjectionMode || 'auto');
         }
     }
 

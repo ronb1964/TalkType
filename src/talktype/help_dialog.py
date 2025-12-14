@@ -9,7 +9,6 @@ from gi.repository import Gtk
 
 def show_help_dialog():
     """Show help dialog with TalkType features and instructions."""
-    print("🔵 USING SHARED help_dialog.py - NEW CODE")  # Debug message
     from gi.repository import Gdk
 
     dialog = Gtk.Dialog(title="TalkType Help")
@@ -99,14 +98,22 @@ system resources. Adjust this in Preferences → Advanced.
 
 <b>Dual Hotkey Modes</b>
 • F8 (push-to-talk) or F9 (toggle) - fully customizable
-• Visual recording indicator in system tray
+• Visual recording indicator on screen during active recording
 • Audio beeps for start/stop feedback
+
+<b>Performance Mode Presets</b>
+Quick one-click optimization via tray menu:
+• <b>Fastest:</b> Tiny model, CPU - instant results
+• <b>Balanced:</b> Small model, GPU - good accuracy with speed
+• <b>Most Accurate:</b> Large-v3 model, GPU - best quality
+• <b>Battery Saver:</b> Tiny model, CPU, short timeout
 
 <b>Smart Text Processing</b>
 • Auto-punctuation for natural text flow
 • Smart quotes (" " instead of " ")
 • Auto-spacing before new text
 • Optional auto-period at end of sentences
+• Voice-activated undo (word, sentence, paragraph, or everything)
 
 <b>Language Support</b>
 • Auto-detect language from speech
@@ -114,9 +121,9 @@ system resources. Adjust this in Preferences → Advanced.
 • Great for multilingual users
 
 <b>Flexible Text Input</b>
-• <b>Keyboard Typing:</b> Character-by-character typing (most reliable)
-• <b>Clipboard Paste:</b> Fast paste for long text (use tray menu to toggle)
-• <b>Note:</b> Terminal windows may require Keyboard Typing mode
+• <b>Auto:</b> Automatically detects best method for each app
+• <b>Keyboard Typing:</b> Character-by-character typing
+• <b>Clipboard Paste:</b> Fast paste using Ctrl+Shift+V (works everywhere)
 
 <b>Audio Control</b>
 • Microphone selection and testing
@@ -125,7 +132,7 @@ system resources. Adjust this in Preferences → Advanced.
 
 <b>System Integration</b>
 • Launch at login option
-• System tray integration
+• System tray integration (GTK or GNOME extension)
 • Notification sounds (optional)
 • Desktop notifications (optional)''')
 
@@ -288,7 +295,8 @@ other processing, so you can include punctuation in replacements.
 • Say <b>undo last word</b> to delete the last word you dictated
 • Say <b>undo last sentence</b> to delete back to the previous sentence
 • Say <b>undo last paragraph</b> to delete back to the last line break
-• Also works: <b>delete last word</b>, <b>remove last word</b>, etc.
+• Say <b>undo everything</b> to delete ALL text from current dictation session
+• Also works: <b>delete last word</b>, <b>remove last word</b>, <b>clear all</b>, etc.
 
 <b>Smart Undo Features:</b>
 • Undo only affects text that TalkType inserted (not manually typed text)
@@ -305,6 +313,12 @@ other processing, so you can include punctuation in replacements.
     # Tab 6: Tips
     create_tab("💡 Tips", '''<span size="large"><b>Tips &amp; Troubleshooting</b></span>
 
+<b>Keyboard Shortcuts:</b>
+• <b>F8:</b> Push-to-talk (hold to record, release to stop)
+• <b>F9:</b> Toggle recording (press once to start, again to stop)
+• Hotkeys work globally in any application
+• Customize hotkeys in Preferences → General
+
 <b>Getting Best Results:</b>
 • Speak clearly at a normal pace
 • Use a quality microphone for better accuracy
@@ -317,8 +331,8 @@ other processing, so you can include punctuation in replacements.
 • Select the correct microphone if you have multiple inputs
 
 <b>Status Indicators:</b>
-• Tray icon tooltip shows running or stopped status
-• Red microphone icon appears during recording
+• Tray icon shows service status (bright = running, dimmed = stopped)
+• Red recording indicator appears on screen during dictation
 • Audio beeps indicate recording start/stop (can be disabled)
 
 <b>Common Issues:</b>
@@ -330,23 +344,24 @@ other processing, so you can include punctuation in replacements.
 
 <b>Text not inserting:</b>
 • Make sure cursor is in a text field
-• Try clipboard paste mode (Preferences → Advanced)
-• Check if the app has special input restrictions
+• Try switching injection mode in tray menu (Auto/Type/Paste)
+• Some apps work better with Clipboard Paste mode
 
 <b>Transcription too slow:</b>
 • Enable GPU acceleration if you have NVIDIA GPU
 • Try a smaller AI model (tiny/base/small)
-• Check if other programs are using GPU/CPU
+• Use Performance presets in tray menu for quick optimization
 
 <b>Service won't start:</b>
 • Check logs: ~/.config/talktype/talktype.log
 • Restart from tray menu: Stop Service then Start Service
 • Ensure all dependencies are installed
 
-<b>Convenience Features:</b>
+<b>Pro Tips:</b>
 • Enable Launch at Login to start automatically
 • Use toggle mode (F9) for hands-free extended dictation
-• Set auto-timeout to save battery when not in use''')
+• Set auto-timeout to save battery when not in use
+• Create custom voice commands for frequently-typed text''')
 
     # Close button
     close_button = Gtk.Button(label="Close")

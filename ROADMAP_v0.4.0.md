@@ -29,49 +29,21 @@ All features are designed to add value **without increasing AppImage size**.
 - Visual feedback during recording
 - Configurable position and size
 
+### Voice-Activated Undo Commands
+- "undo last word" / "undo last sentence" / "undo last paragraph"
+- Multiple phrase variants supported
+- Tracks last inserted text and sends backspaces via ydotool
+
+### Performance Mode Presets
+- Quick presets in tray menu: Fastest, Balanced, Most Accurate, Battery Saver
+- One-click optimization for different scenarios
+- Available in both GTK tray and GNOME extension
+
 ---
 
 ## Phase 1: v0.4.0 (Current)
 
-### Voice-Activated Undo Commands
-**Status:** Not started
-**Priority:** High
-
-Voice commands to delete portions of recent dictation:
-- **"undo last word"** - Delete the last word typed
-- **"undo last sentence"** - Delete back to last period/question/exclamation
-- **"undo last paragraph"** - Delete back to last paragraph break
-
-**Implementation:**
-- Track last inserted text with word/sentence/paragraph boundaries
-- Calculate backspaces needed
-- Send backspace keypresses via ydotool
-
----
-
-### Fix GTK Deprecation Warning
-**Status:** Not started
-**Priority:** Low (cosmetic)
-
-```
-DeprecationWarning: Gtk.Dialog.get_action_area is deprecated
-```
-
-Replace deprecated `get_action_area()` with modern GTK3 patterns.
-
----
-
-### Performance Mode Presets
-**Status:** Not started
-**Priority:** Medium
-
-Quick presets in tray menu:
-- **Fastest** - tiny model, CPU
-- **Balanced** - small model, GPU if available
-- **Most Accurate** - large-v3, GPU
-- **Battery Saver** - tiny, CPU, auto-timeout
-
-One-click optimization for different scenarios.
+All v0.4.0 features are complete! Ready for release.
 
 ---
 

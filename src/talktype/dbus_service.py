@@ -75,6 +75,7 @@ class TalkTypeDBusService(dbus.service.Object):
             'service_running': self.IsServiceRunning(),
             'model': self.GetCurrentModel(),
             'device': self.GetDeviceType(),
+            'injection_mode': self.GetInjectionMode(),
         }
 
         # Add statistics if available
@@ -130,6 +131,27 @@ class TalkTypeDBusService(dbus.service.Object):
         if hasattr(self.app, 'set_model'):
             GLib.idle_add(self.app.set_model, model_name)
 
+    @dbus.service.method(DBUS_INTERFACE, out_signature='s')
+    def GetInjectionMode(self):
+        """Get current text injection mode (auto/paste/type)"""
+        if hasattr(self.app, 'config'):
+            return str(getattr(self.app.config, 'injection_mode', 'auto'))
+        return 'auto'
+
+    @dbus.service.method(DBUS_INTERFACE, in_signature='s')
+    def SetInjectionMode(self, mode: str):
+        """Change the text injection mode"""
+        print(f"D-Bus: SetInjectionMode called with {mode}")
+        if hasattr(self.app, 'set_injection_mode'):
+            GLib.idle_add(self.app.set_injection_mode, mode)
+
+    @dbus.service.method(DBUS_INTERFACE, in_signature='s')
+    def ApplyPerformancePreset(self, preset: str):
+        """Apply a performance preset (fastest/balanced/accurate/battery)"""
+        print(f"D-Bus: ApplyPerformancePreset called with {preset}")
+        if hasattr(self.app, 'set_performance_preset'):
+            GLib.idle_add(self.app.set_performance_preset, preset)
+
     @dbus.service.method(DBUS_INTERFACE)
     def OpenPreferences(self):
         """Open the preferences window"""
@@ -142,7 +164,7 @@ class TalkTypeDBusService(dbus.service.Object):
         """Show the help dialog"""
         print("D-Bus: ShowHelp called")
         if hasattr(self.app, 'show_help'):
-            GLib.idle_add(self.app.show_help, None)
+            GLib.idle_add(self.app.show_help)
 
     @dbus.service.method(DBUS_INTERFACE)
     def Quit(self):

@@ -136,4 +136,4 @@ TalkType-v0.3.[0-7]-*.AppImage*
 
 # Icon files (use only what's in src)
 icons/
-*.svg
+*.svg.playwright-mcp/

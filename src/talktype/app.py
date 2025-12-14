@@ -802,6 +802,7 @@ def _detect_undo_command(raw_text: str) -> str | None:
         'word': ['undo last word', 'undo the last word', 'delete last word', 'remove last word'],
         'sentence': ['undo last sentence', 'undo the last sentence', 'delete last sentence', 'remove last sentence'],
         'paragraph': ['undo last paragraph', 'undo the last paragraph', 'delete last paragraph', 'remove last paragraph'],
+        'everything': ['undo everything', 'undo all', 'delete everything', 'delete all', 'clear everything', 'clear all'],
     }
     
     for undo_type, patterns in undo_patterns.items():
@@ -814,16 +815,20 @@ def _detect_undo_command(raw_text: str) -> str | None:
 def _calculate_undo_length(text: str, undo_type: str) -> int:
     """
     Calculate how many characters to delete based on undo type.
-    
+
     Args:
         text: The last inserted text
-        undo_type: 'word', 'sentence', or 'paragraph'
-    
+        undo_type: 'word', 'sentence', 'paragraph', or 'everything'
+
     Returns:
         Number of characters to delete (backspaces to send)
     """
     if not text:
         return 0
+
+    # For 'everything', delete all tracked text
+    if undo_type == 'everything':
+        return len(text)
     
     # Remove trailing space if present (we add auto-space after dictation)
     text_to_analyze = text.rstrip()
