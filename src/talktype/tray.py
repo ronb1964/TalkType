@@ -189,6 +189,10 @@ class DictationTray:
                     """Show about dialog via tray."""
                     GLib.idle_add(self.tray.show_about_dialog, None)
 
+                def show_preferences_updates(self):
+                    """Open preferences to Updates tab via tray."""
+                    GLib.idle_add(self.tray.open_preferences_updates, None)
+
                 def quit(self):
                     """Quit via tray."""
                     GLib.idle_add(self.tray.quit_app, None)
@@ -669,7 +673,53 @@ class DictationTray:
         except Exception as e:
             logger.error(f"Failed to open preferences: {e}")
             print(f"Failed to open preferences: {e}")
-    
+
+    def open_preferences_updates(self, _):
+        """Launch preferences window directly to Updates tab."""
+        try:
+            # Check if preferences is already open
+            if self.preferences_process and self.preferences_process.poll() is None:
+                logger.info("Preferences window already open")
+                return
+
+            # Find the dictate-prefs script relative to this module (AppImage path)
+            src_dir = os.path.dirname(__file__)
+            usr_dir = os.path.dirname(os.path.dirname(src_dir))
+            prefs_script = os.path.join(usr_dir, "bin", "dictate-prefs")
+
+            if os.path.exists(prefs_script):
+                # Use the dictate-prefs script with --tab argument
+                self.preferences_process = subprocess.Popen(
+                    [prefs_script, "--tab=updates"],
+                    env=os.environ.copy()
+                )
+                logger.info(f"Opened preferences Updates tab via {prefs_script}")
+            else:
+                # Fallback: use sys.executable (dev environment)
+                env = os.environ.copy()
+
+                # Check if we're in dev mode
+                project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+                src_dir_check = os.path.join(project_root, "src")
+                if os.path.exists(src_dir_check):
+                    pythonpath_parts = [
+                        os.path.abspath(src_dir_check),
+                        "/usr/lib64/python3.14/site-packages",
+                        "/usr/lib/python3.14/site-packages",
+                        "/usr/lib64/python3.13/site-packages",
+                        "/usr/lib/python3.13/site-packages"
+                    ]
+                    env["PYTHONPATH"] = ":".join(pythonpath_parts)
+
+                self.preferences_process = subprocess.Popen(
+                    [sys.executable, "-m", "talktype.prefs", "--tab=updates"],
+                    env=env
+                )
+                logger.info("Opened preferences Updates tab via Python module")
+        except Exception as e:
+            logger.error(f"Failed to open preferences updates tab: {e}")
+            print(f"Failed to open preferences updates tab: {e}")
+
     def download_cuda(self, _):
         """Download CUDA libraries for GPU acceleration."""
         # Show confirmation dialog first

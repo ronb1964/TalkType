@@ -160,6 +160,13 @@ class TalkTypeDBusService(dbus.service.Object):
             GLib.idle_add(self.app.show_preferences)
 
     @dbus.service.method(DBUS_INTERFACE)
+    def OpenPreferencesUpdates(self):
+        """Open the preferences window directly to the Updates tab"""
+        print("D-Bus: OpenPreferencesUpdates called")
+        if hasattr(self.app, 'show_preferences_updates'):
+            GLib.idle_add(self.app.show_preferences_updates)
+
+    @dbus.service.method(DBUS_INTERFACE)
     def ShowHelp(self):
         """Show the help dialog"""
         print("D-Bus: ShowHelp called")

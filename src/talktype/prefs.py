@@ -277,7 +277,8 @@ class PreferencesWindow:
         vbox.pack_start(title, False, False, 0)
         
         # Notebook for tabs
-        notebook = Gtk.Notebook()
+        self.notebook = Gtk.Notebook()
+        notebook = self.notebook  # Local alias for compatibility
         
         # General tab
         general_tab = self.create_general_tab()
@@ -3172,8 +3173,27 @@ X-GNOME-Autostart-enabled=true
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="TalkType Preferences")
+    parser.add_argument("--tab", choices=["general", "audio", "advanced", "commands", "updates"],
+                        help="Tab to open initially")
+    args = parser.parse_args()
+
     _acquire_prefs_singleton()
     app = PreferencesWindow()
+
+    # Switch to specified tab if requested
+    if args.tab:
+        tab_indices = {
+            "general": 0,
+            "audio": 1,
+            "advanced": 2,
+            "commands": 3,
+            "updates": 4
+        }
+        if args.tab in tab_indices:
+            app.notebook.set_current_page(tab_indices[args.tab])
+
     Gtk.main()
 
 if __name__ == "__main__":

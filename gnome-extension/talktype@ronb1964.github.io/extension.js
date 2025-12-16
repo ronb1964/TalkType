@@ -53,6 +53,7 @@ const TalkTypeIface = `
       <arg type="s" direction="in" name="preset"/>
     </method>
     <method name="OpenPreferences"/>
+    <method name="OpenPreferencesUpdates"/>
     <method name="ShowHelp"/>
     <method name="ShowAbout"/>
     <method name="CheckForUpdates"/>
@@ -354,26 +355,10 @@ class TalkTypeIndicator extends PanelMenu.Button {
         }
 
         if (updateAvailable || extUpdate) {
-            // Updates available
-            let message = '';
-
-            if (updateAvailable) {
-                message += `TalkType ${currentVersion} → ${latestVersion}`;
-            }
-
-            if (extUpdate && extCurrent >= 0) {
-                if (message) message += '\n';
-                message += `Extension: ${extCurrent} → ${extLatest}`;
-            }
-
-            // Show notification with action to open release page
-            if (releaseUrl) {
-                Main.notify('TalkType Update Available!', message);
-                // Note: GNOME Shell notifications don't support clickable actions easily
-                // User can open Preferences → Updates tab to get the full experience
-            } else {
-                Main.notify('TalkType Update Available!', message);
-            }
+            // Updates available - open Preferences to Updates tab for full experience
+            // This gives users download buttons and progress bars
+            Main.notify('TalkType', 'Update available! Opening Updates...');
+            this._proxy.OpenPreferencesUpdatesRemote();
         } else {
             // No updates
             let extInfo = extCurrent >= 0 ? ` | Extension: v${extCurrent}` : '';
