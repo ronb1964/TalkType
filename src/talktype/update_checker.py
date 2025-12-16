@@ -165,6 +165,54 @@ def fetch_extension_version_from_release(tag: str) -> Optional[int]:
         return None
 
 
+def fetch_release_by_tag(tag: str) -> Optional[dict]:
+    """
+    Fetch release info for a specific version tag.
+
+    Args:
+        tag: Version tag (e.g., "v0.5.1")
+
+    Returns:
+        dict: Release info with body (release notes) and html_url, or None if failed
+    """
+    # Ensure tag has 'v' prefix
+    if not tag.startswith("v"):
+        tag = f"v{tag}"
+
+    url = f"https://api.github.com/repos/ronb1964/TalkType/releases/tags/{tag}"
+
+    try:
+        request = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": "TalkType-UpdateChecker",
+                "Accept": "application/vnd.github.v3+json"
+            }
+        )
+
+        with urllib.request.urlopen(request, timeout=10) as response:
+            data = json.loads(response.read().decode("utf-8"))
+            return {
+                "tag_name": data.get("tag_name", ""),
+                "name": data.get("name", ""),
+                "body": data.get("body", ""),
+                "html_url": data.get("html_url", ""),
+                "published_at": data.get("published_at", ""),
+            }
+
+    except urllib.error.HTTPError as e:
+        logger.debug(f"Could not fetch release for {tag}: {e.code}")
+        return None
+    except Exception as e:
+        logger.debug(f"Error fetching release {tag}: {e}")
+        return None
+
+
+def get_releases_url() -> str:
+    """Get the URL to the GitHub releases page."""
+    return "https://github.com/ronb1964/TalkType/releases"
+
+
 def fetch_latest_release() -> Optional[dict]:
     """
     Fetch latest release info from GitHub API.

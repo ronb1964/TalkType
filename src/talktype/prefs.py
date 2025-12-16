@@ -1342,6 +1342,14 @@ class PreferencesWindow:
         info_label.set_line_wrap(True)
         vbox.pack_start(info_label, False, False, 10)
 
+        # Full changelog link
+        changelog_link = Gtk.LinkButton.new_with_label(
+            update_checker.get_releases_url(),
+            "View Full Changelog on GitHub"
+        )
+        changelog_link.set_halign(Gtk.Align.START)
+        vbox.pack_start(changelog_link, False, False, 5)
+
         return vbox
 
     def _on_check_updates_clicked(self, button):

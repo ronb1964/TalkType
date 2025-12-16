@@ -773,20 +773,27 @@ class DictationTray:
         show_help_dialog()
 
     def show_about_dialog(self, _):
-        """Show About dialog with app info and version."""
+        """Show About dialog with app info, version, and changelog."""
+        import threading
         from . import __version__
+        from . import update_checker
 
-        about = Gtk.AboutDialog()
-        about.set_program_name("TalkType")
-        about.set_version(__version__)
-        about.set_comments("AI-powered speech recognition and dictation for Linux")
-        about.set_website("https://github.com/ronb1964/TalkType")
-        about.set_website_label("GitHub Repository")
-        about.set_authors(["Ron B."])
-        about.set_license_type(Gtk.License.GPL_3_0)
-        about.set_copyright("© 2024-2025 Ron B.")
+        # Create custom dialog for more flexibility
+        dialog = Gtk.Dialog(
+            title="About TalkType",
+            flags=Gtk.DialogFlags.MODAL
+        )
+        dialog.set_default_size(500, 450)
+        dialog.set_position(Gtk.WindowPosition.CENTER)
 
-        # Try to load the app icon
+        content = dialog.get_content_area()
+        content.set_spacing(10)
+        content.set_margin_start(20)
+        content.set_margin_end(20)
+        content.set_margin_top(20)
+        content.set_margin_bottom(10)
+
+        # App icon
         try:
             icon_paths = [
                 "/usr/share/icons/hicolor/128x128/apps/talktype.png",
@@ -795,15 +802,92 @@ class DictationTray:
             for icon_path in icon_paths:
                 if os.path.exists(icon_path):
                     from gi.repository import GdkPixbuf
-                    pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(icon_path, 128, 128, True)
-                    about.set_logo(pixbuf)
+                    pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(icon_path, 64, 64, True)
+                    icon = Gtk.Image.new_from_pixbuf(pixbuf)
+                    content.pack_start(icon, False, False, 0)
                     break
         except Exception as e:
             logger.debug(f"Could not load icon for About dialog: {e}")
 
-        about.set_position(Gtk.WindowPosition.CENTER)
-        about.run()
-        about.destroy()
+        # App name and version
+        title_label = Gtk.Label()
+        title_label.set_markup(f'<span size="x-large"><b>TalkType</b></span>')
+        content.pack_start(title_label, False, False, 0)
+
+        version_label = Gtk.Label(label=f"Version {__version__}")
+        content.pack_start(version_label, False, False, 0)
+
+        desc_label = Gtk.Label(label="AI-powered speech recognition and dictation for Linux")
+        desc_label.set_line_wrap(True)
+        content.pack_start(desc_label, False, False, 5)
+
+        # Copyright and author
+        copyright_label = Gtk.Label()
+        copyright_label.set_markup('<span size="small">© 2024-2025 Ron B. • GPL-3.0 License</span>')
+        content.pack_start(copyright_label, False, False, 0)
+
+        # What's New section
+        whats_new_label = Gtk.Label()
+        whats_new_label.set_markup('<b>What\'s New in This Version</b>')
+        whats_new_label.set_xalign(0)
+        whats_new_label.set_margin_top(15)
+        content.pack_start(whats_new_label, False, False, 0)
+
+        # Scrolled text view for release notes
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_min_content_height(150)
+
+        self._about_notes_text = Gtk.TextView()
+        self._about_notes_text.set_editable(False)
+        self._about_notes_text.set_wrap_mode(Gtk.WrapMode.WORD)
+        self._about_notes_text.set_left_margin(10)
+        self._about_notes_text.set_right_margin(10)
+        self._about_notes_text.set_top_margin(10)
+        self._about_notes_text.get_buffer().set_text("Loading release notes...")
+        scroll.add(self._about_notes_text)
+        content.pack_start(scroll, True, True, 0)
+
+        # Links box
+        links_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=20)
+        links_box.set_halign(Gtk.Align.CENTER)
+        links_box.set_margin_top(10)
+
+        # GitHub link
+        github_btn = Gtk.LinkButton.new_with_label(
+            "https://github.com/ronb1964/TalkType",
+            "GitHub Repository"
+        )
+        links_box.pack_start(github_btn, False, False, 0)
+
+        # Full changelog link
+        changelog_btn = Gtk.LinkButton.new_with_label(
+            update_checker.get_releases_url(),
+            "View Full Changelog"
+        )
+        links_box.pack_start(changelog_btn, False, False, 0)
+
+        content.pack_start(links_box, False, False, 0)
+
+        # Close button
+        dialog.add_button("Close", Gtk.ResponseType.CLOSE)
+
+        dialog.show_all()
+
+        # Fetch release notes in background
+        def fetch_notes():
+            release = update_checker.fetch_release_by_tag(__version__)
+            if release and release.get("body"):
+                notes = release["body"]
+            else:
+                notes = "Release notes not available.\n\nVisit GitHub for the full changelog."
+            GLib.idle_add(lambda: self._about_notes_text.get_buffer().set_text(notes))
+
+        thread = threading.Thread(target=fetch_notes, daemon=True)
+        thread.start()
+
+        dialog.run()
+        dialog.destroy()
 
     def check_for_updates_clicked(self, _):
         """Check for updates and show results dialog."""
