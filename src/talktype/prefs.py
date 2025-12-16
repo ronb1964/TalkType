@@ -294,9 +294,22 @@ class PreferencesWindow:
         # Commands tab (custom voice commands)
         commands_tab = self.create_commands_tab()
         notebook.append_page(commands_tab, Gtk.Label(label="Commands"))
-        
+
+        # Updates tab
+        updates_tab = self.create_updates_tab()
+        notebook.append_page(updates_tab, Gtk.Label(label="Updates"))
+
         vbox.pack_start(notebook, True, True, 0)
-        
+
+        # Version footer
+        from . import __version__
+        version_label = Gtk.Label()
+        version_label.set_markup(f'<span size="small" color="#888888">TalkType v{__version__}</span>')
+        version_label.set_halign(Gtk.Align.END)
+        version_label.set_margin_top(5)
+        version_label.set_margin_end(5)
+        vbox.pack_start(version_label, False, False, 0)
+
         # Buttons
         button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
 
@@ -1212,7 +1225,267 @@ class PreferencesWindow:
         vbox.pack_start(tips, False, False, 10)
         
         return vbox
-    
+
+    def create_updates_tab(self):
+        """Create the Updates tab for checking for software updates."""
+        import threading
+        from . import update_checker
+
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        vbox.set_margin_start(20)
+        vbox.set_margin_end(20)
+        vbox.set_margin_top(15)
+        vbox.set_margin_bottom(15)
+
+        # Header
+        header = Gtk.Label()
+        header.set_markup('<span size="large"><b>Software Updates</b></span>')
+        header.set_xalign(0)
+        vbox.pack_start(header, False, False, 0)
+
+        # Current versions section
+        version_frame = Gtk.Frame(label="Current Versions")
+        version_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        version_box.set_margin_start(10)
+        version_box.set_margin_end(10)
+        version_box.set_margin_top(10)
+        version_box.set_margin_bottom(10)
+
+        # AppImage version
+        current_version = update_checker.get_current_version()
+        self.app_version_label = Gtk.Label()
+        self.app_version_label.set_markup(f"<b>TalkType:</b> {current_version}")
+        self.app_version_label.set_xalign(0)
+        version_box.pack_start(self.app_version_label, False, False, 0)
+
+        # Extension version
+        ext_version = update_checker.get_extension_version()
+        ext_text = f"Version {ext_version}" if ext_version else "Not installed"
+        self.ext_version_label = Gtk.Label()
+        self.ext_version_label.set_markup(f"<b>GNOME Extension:</b> {ext_text}")
+        self.ext_version_label.set_xalign(0)
+        version_box.pack_start(self.ext_version_label, False, False, 0)
+
+        version_frame.add(version_box)
+        vbox.pack_start(version_frame, False, False, 10)
+
+        # Check for updates button
+        check_btn = Gtk.Button(label="Check for Updates")
+        check_btn.set_halign(Gtk.Align.START)
+        check_btn.connect("clicked", self._on_check_updates_clicked)
+        vbox.pack_start(check_btn, False, False, 5)
+
+        # Status area (hidden initially)
+        self.update_status_frame = Gtk.Frame(label="Update Status")
+        self.update_status_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        self.update_status_box.set_margin_start(10)
+        self.update_status_box.set_margin_end(10)
+        self.update_status_box.set_margin_top(10)
+        self.update_status_box.set_margin_bottom(10)
+
+        self.update_status_label = Gtk.Label(label="Click 'Check for Updates' to check for new versions.")
+        self.update_status_label.set_xalign(0)
+        self.update_status_label.set_line_wrap(True)
+        self.update_status_box.pack_start(self.update_status_label, False, False, 0)
+
+        # Buttons for update actions (hidden initially)
+        self.update_actions_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        self.update_actions_box.set_margin_top(10)
+
+        self.download_btn = Gtk.Button(label="Download Update")
+        self.download_btn.connect("clicked", self._on_download_update_clicked)
+        self.download_btn.set_no_show_all(True)
+        self.update_actions_box.pack_start(self.download_btn, False, False, 0)
+
+        self.view_release_btn = Gtk.Button(label="View on GitHub")
+        self.view_release_btn.connect("clicked", self._on_view_release_clicked)
+        self.view_release_btn.set_no_show_all(True)
+        self.update_actions_box.pack_start(self.view_release_btn, False, False, 0)
+
+        self.update_status_box.pack_start(self.update_actions_box, False, False, 0)
+        self.update_status_frame.add(self.update_status_box)
+        vbox.pack_start(self.update_status_frame, False, False, 10)
+
+        # Store release info for download button
+        self._current_release = None
+
+        # Info text
+        info_label = Gtk.Label()
+        info_label.set_markup(
+            '<span size="small">Updates are downloaded to ~/.local/share/TalkType/updates/\n'
+            'After downloading, close TalkType and replace your AppImage.</span>'
+        )
+        info_label.set_xalign(0)
+        info_label.set_line_wrap(True)
+        vbox.pack_start(info_label, False, False, 10)
+
+        return vbox
+
+    def _on_check_updates_clicked(self, button):
+        """Handle check for updates button click."""
+        import threading
+        from . import update_checker
+
+        # Update status
+        self.update_status_label.set_text("Checking for updates...")
+        self.download_btn.hide()
+        self.view_release_btn.hide()
+        button.set_sensitive(False)
+
+        def do_check():
+            result = update_checker.check_for_updates()
+            GLib.idle_add(lambda: self._handle_update_result(result, button))
+
+        thread = threading.Thread(target=do_check, daemon=True)
+        thread.start()
+
+    def _handle_update_result(self, result, button):
+        """Handle update check result in main thread."""
+        button.set_sensitive(True)
+
+        if not result.get("success"):
+            self.update_status_label.set_markup(
+                f"<span color='red'>Check failed: {result.get('error', 'Unknown error')}</span>"
+            )
+            return
+
+        has_update = result.get("update_available", False)
+        has_ext_update = result.get("extension_update", False)
+        current = result.get("current_version", "unknown")
+        latest = result.get("latest_version", "unknown")
+        ext_current = result.get("extension_current")
+        ext_latest = result.get("extension_latest")
+        release = result.get("release", {})
+
+        self._current_release = release
+
+        # Build status message
+        if has_update:
+            status_lines = [
+                f"<span color='#4CAF50'><b>Update available!</b></span>",
+                f"TalkType: {current} → <b>{latest}</b>"
+            ]
+        else:
+            status_lines = [
+                f"<span color='#4CAF50'>You're up to date!</span>",
+                f"TalkType {current} is the latest version."
+            ]
+
+        # Add extension status
+        if ext_current is not None:
+            if has_ext_update:
+                status_lines.append(f"Extension: {ext_current} → <b>{ext_latest}</b> (update available)")
+                status_lines.append("<span size='small'>Note: Extension updates require logout/login</span>")
+            else:
+                status_lines.append(f"Extension: Version {ext_current} (up to date)")
+
+        self.update_status_label.set_markup("\n".join(status_lines))
+
+        if has_update:
+            if release.get("appimage_url"):
+                self.download_btn.show()
+            if release.get("html_url"):
+                self.view_release_btn.show()
+        else:
+            self.download_btn.hide()
+            self.view_release_btn.hide()
+
+    def _on_download_update_clicked(self, button):
+        """Handle download update button click."""
+        import threading
+        from . import update_checker
+
+        if not self._current_release:
+            return
+
+        url = self._current_release.get("appimage_url")
+        filename = self._current_release.get("appimage_name", "TalkType-update.AppImage")
+
+        if not url:
+            return
+
+        # Create progress dialog
+        progress_dialog = Gtk.Dialog(
+            title="Downloading Update",
+            transient_for=self.window,
+            flags=Gtk.DialogFlags.MODAL
+        )
+        progress_dialog.set_default_size(400, 100)
+
+        content = progress_dialog.get_content_area()
+        content.set_spacing(10)
+        content.set_margin_start(20)
+        content.set_margin_end(20)
+        content.set_margin_top(20)
+        content.set_margin_bottom(10)
+
+        status_label = Gtk.Label(label="Starting download...")
+        status_label.set_halign(Gtk.Align.START)
+        content.pack_start(status_label, False, False, 0)
+
+        progress_bar = Gtk.ProgressBar()
+        progress_bar.set_show_text(True)
+        content.pack_start(progress_bar, False, False, 10)
+
+        progress_dialog.show_all()
+
+        result_holder = [None]
+
+        def progress_callback(message, percent):
+            GLib.idle_add(lambda: status_label.set_text(message))
+            GLib.idle_add(lambda: progress_bar.set_fraction(percent / 100.0))
+            GLib.idle_add(lambda: progress_bar.set_text(f"{percent}%"))
+
+        def do_download():
+            result_holder[0] = update_checker.download_update(url, filename, progress_callback)
+            GLib.idle_add(download_complete)
+
+        def download_complete():
+            progress_dialog.destroy()
+
+            downloaded_path = result_holder[0]
+            if downloaded_path:
+                self.update_status_label.set_markup(
+                    f"<span color='#4CAF50'><b>Download complete!</b></span>\n"
+                    f"Saved to: {downloaded_path}\n\n"
+                    f"To install: Close TalkType, replace your AppImage, restart."
+                )
+
+                # Show open folder dialog
+                dialog = Gtk.MessageDialog(
+                    transient_for=self.window,
+                    message_type=Gtk.MessageType.INFO,
+                    buttons=Gtk.ButtonsType.OK,
+                    text="Download Complete!"
+                )
+                dialog.format_secondary_text(
+                    f"The update has been downloaded.\n\n"
+                    f"To install:\n"
+                    f"1. Close TalkType\n"
+                    f"2. Replace your AppImage with the downloaded file\n"
+                    f"3. Restart TalkType"
+                )
+                dialog.add_button("Open Folder", Gtk.ResponseType.ACCEPT)
+
+                response = dialog.run()
+                if response == Gtk.ResponseType.ACCEPT:
+                    update_checker.open_update_directory()
+                dialog.destroy()
+            else:
+                self.update_status_label.set_markup(
+                    f"<span color='red'>Download failed. Please try again or download manually.</span>"
+                )
+
+        thread = threading.Thread(target=do_download, daemon=True)
+        thread.start()
+
+    def _on_view_release_clicked(self, button):
+        """Open the release page on GitHub."""
+        from . import update_checker
+
+        if self._current_release and self._current_release.get("html_url"):
+            update_checker.open_release_page(self._current_release["html_url"])
+
     def _on_cell_editing_started(self, renderer, editable, path, column_idx):
         """Handle when a cell starts being edited - setup focus-out commit and Tab navigation."""
         # Store current editing state

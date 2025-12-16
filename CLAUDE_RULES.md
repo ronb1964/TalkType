@@ -72,3 +72,39 @@ gh release create vX.X.X TalkType-vX.X.X-x86_64.AppImage talktype-gnome-extensio
 ```
 
 **NEVER create a release without the extension zip.**
+
+---
+
+## GTK TRAY AND GNOME EXTENSION - KEEP IN SYNC
+
+**TalkType has TWO user interfaces that must stay synchronized:**
+
+1. **GTK Tray Icon** (`src/talktype/tray.py`) - For all Linux desktops
+2. **GNOME Shell Extension** (`gnome-extension/talktype@ronb1964.github.io/extension.js`) - For GNOME users
+
+**When adding/modifying menu items or features:**
+- Add to BOTH the GTK tray menu AND the GNOME extension menu
+- Keep menu order identical between both
+- If adding a D-Bus method, update:
+  1. `src/talktype/dbus_service.py` - Add the D-Bus method
+  2. `src/talktype/tray.py` - Add method to `TrayAppInstance` class
+  3. `gnome-extension/.../extension.js` - Add to D-Bus interface AND menu
+
+**Current menu order (must match in both):**
+```
+Start/Stop Dictation (toggle)
+─────────────────────
+Active Model: [model]
+Device: [device]
+Performance ▸
+Text Injection Mode ▸
+─────────────────────
+Preferences...
+Help...
+About TalkType...
+Check for Updates...
+─────────────────────
+Quit TalkType
+```
+
+**Goal:** Users should have the same experience whether using the GTK tray or GNOME extension.

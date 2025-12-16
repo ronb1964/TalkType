@@ -49,17 +49,14 @@ All v0.4.0 features are complete! Ready for release.
 
 ## Phase 2: v0.5.0 (Enhanced UX)
 
-### Update Checker System
-**Priority: Next**
-- Periodic auto-check for updates (daily/weekly configurable)
-- Manual "Check for Updates" button in Preferences
-- Check both AppImage AND GNOME extension versions
-- Notification when updates available
-- Settings:
-  - Toggle: Auto-check for updates (on/off)
-  - Toggle: Auto-apply updates vs notification only
-  - Check frequency (daily/weekly/manual only)
-- Uses GitHub API: `api.github.com/repos/ronb1964/TalkType/releases/latest`
+### Update Checker System ✓ (In Progress)
+**Status: Core MVP implemented**
+- ✅ Manual "Check for Updates" in tray menu and Preferences
+- ✅ Check AppImage version via GitHub API
+- ✅ Download updates with progress bar
+- ✅ Smart extension update detection (skip reinstall if unchanged)
+- 🔲 Periodic auto-check (daily/weekly) - deferred to v0.5.1
+- 🔲 Check for Updates in GNOME extension menu (via D-Bus)
 
 ### Session Statistics
 Track and display in tray menu:
@@ -97,6 +94,14 @@ Filter low-quality transcriptions from background noise.
 ---
 
 ## Future / Nice to Have
+
+### Publish Extension to extensions.gnome.org
+**Priority: High** - Enables independent extension updates
+- Submit TalkType extension to GNOME Extensions website
+- Users get automatic update notifications through GNOME
+- Extension updates decoupled from AppImage releases
+- No logout/login required when only AppImage updates (extension unchanged)
+- Review process: https://gjs.guide/extensions/review-guidelines/review-guidelines.html
 
 ### Native Wayland Positioning (gtk-layer-shell)
 Currently using XWayland fallback for window positioning.

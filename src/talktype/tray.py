@@ -14,6 +14,7 @@ import sys
 import atexit
 import fcntl
 from .logger import setup_logger
+from .desktop_detect import is_gnome
 
 logger = setup_logger(__name__)
 
@@ -183,6 +184,10 @@ class DictationTray:
                 def show_help(self):
                     """Show help via tray."""
                     GLib.idle_add(self.tray.show_help, None)
+
+                def show_about(self):
+                    """Show about dialog via tray."""
+                    GLib.idle_add(self.tray.show_about_dialog, None)
 
                 def quit(self):
                     """Quit via tray."""
@@ -717,6 +722,330 @@ class DictationTray:
         from .help_dialog import show_help_dialog
         show_help_dialog()
 
+    def show_about_dialog(self, _):
+        """Show About dialog with app info and version."""
+        from . import __version__
+
+        about = Gtk.AboutDialog()
+        about.set_program_name("TalkType")
+        about.set_version(__version__)
+        about.set_comments("AI-powered speech recognition and dictation for Linux")
+        about.set_website("https://github.com/ronb1964/TalkType")
+        about.set_website_label("GitHub Repository")
+        about.set_authors(["Ron B."])
+        about.set_license_type(Gtk.License.GPL_3_0)
+        about.set_copyright("© 2024-2025 Ron B.")
+
+        # Try to load the app icon
+        try:
+            icon_paths = [
+                "/usr/share/icons/hicolor/128x128/apps/talktype.png",
+                os.path.join(os.path.dirname(__file__), "icons", "talktype-128.png"),
+            ]
+            for icon_path in icon_paths:
+                if os.path.exists(icon_path):
+                    from gi.repository import GdkPixbuf
+                    pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(icon_path, 128, 128, True)
+                    about.set_logo(pixbuf)
+                    break
+        except Exception as e:
+            logger.debug(f"Could not load icon for About dialog: {e}")
+
+        about.set_position(Gtk.WindowPosition.CENTER)
+        about.run()
+        about.destroy()
+
+    def check_for_updates_clicked(self, _):
+        """Check for updates and show results dialog."""
+        import threading
+        from . import update_checker
+
+        # Create progress dialog
+        progress_dialog = Gtk.MessageDialog(
+            message_type=Gtk.MessageType.INFO,
+            buttons=Gtk.ButtonsType.NONE,
+            text="Checking for Updates..."
+        )
+        progress_dialog.format_secondary_text("Connecting to GitHub...")
+        progress_dialog.set_position(Gtk.WindowPosition.CENTER)
+        progress_dialog.show_all()
+
+        result_holder = [None]
+
+        def do_check():
+            """Background thread to check for updates."""
+            result_holder[0] = update_checker.check_for_updates()
+            GLib.idle_add(show_result)
+
+        def show_result():
+            """Show the result in the main thread."""
+            progress_dialog.destroy()
+
+            result = result_holder[0]
+            if not result or not result.get("success"):
+                # Error checking for updates
+                error_dialog = Gtk.MessageDialog(
+                    message_type=Gtk.MessageType.ERROR,
+                    buttons=Gtk.ButtonsType.OK,
+                    text="Update Check Failed"
+                )
+                error_msg = result.get("error", "Unknown error") if result else "Unknown error"
+                error_dialog.format_secondary_text(error_msg)
+                error_dialog.set_position(Gtk.WindowPosition.CENTER)
+                error_dialog.run()
+                error_dialog.destroy()
+                return
+
+            # Show result dialog
+            self._show_update_result_dialog(result)
+
+        # Start background check
+        thread = threading.Thread(target=do_check, daemon=True)
+        thread.start()
+
+    def _show_update_result_dialog(self, result):
+        """Show dialog with update check results."""
+        from . import update_checker
+
+        has_update = result.get("update_available", False)
+        has_ext_update = result.get("extension_update", False)
+        current = result.get("current_version", "unknown")
+        latest = result.get("latest_version", "unknown")
+        ext_current = result.get("extension_current")
+        ext_latest = result.get("extension_latest")
+        release = result.get("release", {})
+
+        if not has_update and not has_ext_update:
+            # No updates available
+            dialog = Gtk.MessageDialog(
+                message_type=Gtk.MessageType.INFO,
+                buttons=Gtk.ButtonsType.OK,
+                text="You're Up to Date!"
+            )
+
+            # Build message - only show extension info on GNOME
+            message = f"<b>TalkType {current}</b> is the latest version."
+
+            if is_gnome():
+                # Build extension status message for GNOME users
+                if ext_current is not None:
+                    if ext_latest is not None:
+                        ext_status = f"Version {ext_current} (latest: {ext_latest})"
+                    else:
+                        ext_status = f"Version {ext_current}"
+                else:
+                    ext_status = "Not installed"
+                message += f"\n\nGNOME Extension: {ext_status}"
+
+            dialog.format_secondary_markup(message)
+            dialog.set_position(Gtk.WindowPosition.CENTER)
+            dialog.run()
+            dialog.destroy()
+            return
+
+        # Updates available - show detailed dialog
+        dialog = Gtk.Dialog(
+            title="Update Available",
+            flags=Gtk.DialogFlags.MODAL
+        )
+        dialog.set_default_size(450, 350)
+        dialog.set_position(Gtk.WindowPosition.CENTER)
+
+        content = dialog.get_content_area()
+        content.set_spacing(10)
+        content.set_margin_start(15)
+        content.set_margin_end(15)
+        content.set_margin_top(15)
+        content.set_margin_bottom(10)
+
+        # Header
+        header = Gtk.Label()
+        header.set_markup("<big><b>Update Available!</b></big>")
+        header.set_halign(Gtk.Align.START)
+        content.pack_start(header, False, False, 0)
+
+        # Version info
+        if has_update:
+            version_label = Gtk.Label()
+            version_label.set_markup(
+                f"<b>TalkType:</b> {current} → <b>{latest}</b>"
+            )
+            version_label.set_halign(Gtk.Align.START)
+            content.pack_start(version_label, False, False, 5)
+
+        # Extension status (only show on GNOME)
+        if is_gnome() and ext_current is not None:
+            ext_label = Gtk.Label()
+            if has_ext_update:
+                ext_label.set_markup(
+                    f"<b>GNOME Extension:</b> {ext_current} → <b>{ext_latest}</b> (update available)"
+                )
+            else:
+                ext_label.set_markup(
+                    f"<b>GNOME Extension:</b> Version {ext_current} (up to date)"
+                )
+            ext_label.set_halign(Gtk.Align.START)
+            content.pack_start(ext_label, False, False, 5)
+
+        # Note about extension updates requiring logout (only on GNOME)
+        if is_gnome() and has_ext_update:
+            note_label = Gtk.Label()
+            note_label.set_markup(
+                "<span size='small' color='#888888'>Note: Extension updates require logout/login to take effect.</span>"
+            )
+            note_label.set_halign(Gtk.Align.START)
+            content.pack_start(note_label, False, False, 5)
+
+        # Release notes in scrolled window
+        if release.get("body"):
+            notes_label = Gtk.Label(label="Release Notes:")
+            notes_label.set_halign(Gtk.Align.START)
+            notes_label.set_margin_top(10)
+            content.pack_start(notes_label, False, False, 0)
+
+            scroll = Gtk.ScrolledWindow()
+            scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+            scroll.set_min_content_height(150)
+
+            notes_text = Gtk.TextView()
+            notes_text.set_editable(False)
+            notes_text.set_wrap_mode(Gtk.WrapMode.WORD)
+            notes_text.set_left_margin(10)
+            notes_text.set_right_margin(10)
+            notes_text.set_top_margin(10)
+            notes_text.get_buffer().set_text(release.get("body", ""))
+            scroll.add(notes_text)
+
+            content.pack_start(scroll, True, True, 0)
+
+        # Buttons
+        dialog.add_button("Close", Gtk.ResponseType.CLOSE)
+
+        if release.get("html_url"):
+            view_btn = dialog.add_button("View on GitHub", Gtk.ResponseType.ACCEPT)
+
+        if has_update and release.get("appimage_url"):
+            download_btn = dialog.add_button("Download Update", Gtk.ResponseType.YES)
+            download_btn.get_style_context().add_class("suggested-action")
+
+        dialog.show_all()
+        response = dialog.run()
+
+        if response == Gtk.ResponseType.ACCEPT:
+            # Open GitHub release page
+            update_checker.open_release_page(release.get("html_url", ""))
+        elif response == Gtk.ResponseType.YES:
+            # Download update
+            dialog.destroy()
+            self._download_update(release)
+            return
+
+        dialog.destroy()
+
+    def _download_update(self, release):
+        """Download the update with progress dialog."""
+        import threading
+        from . import update_checker
+
+        url = release.get("appimage_url")
+        filename = release.get("appimage_name", "TalkType-update.AppImage")
+
+        if not url:
+            error_dialog = Gtk.MessageDialog(
+                message_type=Gtk.MessageType.ERROR,
+                buttons=Gtk.ButtonsType.OK,
+                text="Download Error"
+            )
+            error_dialog.format_secondary_text("Could not find download URL.")
+            error_dialog.set_position(Gtk.WindowPosition.CENTER)
+            error_dialog.run()
+            error_dialog.destroy()
+            return
+
+        # Create progress dialog
+        progress_dialog = Gtk.Dialog(
+            title="Downloading Update",
+            flags=Gtk.DialogFlags.MODAL
+        )
+        progress_dialog.set_default_size(400, 120)
+        progress_dialog.set_position(Gtk.WindowPosition.CENTER)
+
+        content = progress_dialog.get_content_area()
+        content.set_spacing(10)
+        content.set_margin_start(20)
+        content.set_margin_end(20)
+        content.set_margin_top(20)
+        content.set_margin_bottom(10)
+
+        status_label = Gtk.Label(label="Starting download...")
+        status_label.set_halign(Gtk.Align.START)
+        content.pack_start(status_label, False, False, 0)
+
+        progress_bar = Gtk.ProgressBar()
+        progress_bar.set_show_text(True)
+        content.pack_start(progress_bar, False, False, 10)
+
+        progress_dialog.show_all()
+
+        result_holder = [None]
+
+        def progress_callback(message, percent):
+            """Update progress from background thread."""
+            GLib.idle_add(lambda: status_label.set_text(message))
+            GLib.idle_add(lambda: progress_bar.set_fraction(percent / 100.0))
+            GLib.idle_add(lambda: progress_bar.set_text(f"{percent}%"))
+
+        def do_download():
+            """Background thread to download update."""
+            result_holder[0] = update_checker.download_update(url, filename, progress_callback)
+            GLib.idle_add(download_complete)
+
+        def download_complete():
+            """Handle download completion."""
+            progress_dialog.destroy()
+
+            downloaded_path = result_holder[0]
+            if downloaded_path:
+                # Success - show completion dialog
+                success_dialog = Gtk.MessageDialog(
+                    message_type=Gtk.MessageType.INFO,
+                    buttons=Gtk.ButtonsType.OK,
+                    text="Download Complete!"
+                )
+                success_dialog.format_secondary_markup(
+                    f"The update has been downloaded to:\n"
+                    f"<b>{downloaded_path}</b>\n\n"
+                    f"<b>To install:</b>\n"
+                    f"1. Close TalkType\n"
+                    f"2. Replace your current AppImage with the downloaded file\n"
+                    f"3. Restart TalkType"
+                )
+                success_dialog.add_button("Open Downloads Folder", Gtk.ResponseType.ACCEPT)
+                success_dialog.set_position(Gtk.WindowPosition.CENTER)
+
+                response = success_dialog.run()
+                if response == Gtk.ResponseType.ACCEPT:
+                    update_checker.open_update_directory()
+                success_dialog.destroy()
+            else:
+                # Failed
+                error_dialog = Gtk.MessageDialog(
+                    message_type=Gtk.MessageType.ERROR,
+                    buttons=Gtk.ButtonsType.OK,
+                    text="Download Failed"
+                )
+                error_dialog.format_secondary_text(
+                    "The download could not be completed.\n"
+                    "Please try again or download manually from GitHub."
+                )
+                error_dialog.set_position(Gtk.WindowPosition.CENTER)
+                error_dialog.run()
+                error_dialog.destroy()
+
+        # Start download
+        thread = threading.Thread(target=do_download, daemon=True)
+        thread.start()
+
     def quit_app(self, _):
         """Quit the tray and stop the dictation service."""
         try:
@@ -858,10 +1187,14 @@ class DictationTray:
         # Menu items
         prefs_item = Gtk.MenuItem(label="Preferences...")
         help_item = Gtk.MenuItem(label="Help...")
+        about_item = Gtk.MenuItem(label="About TalkType...")
+        updates_item = Gtk.MenuItem(label="Check for Updates...")
         quit_item = Gtk.MenuItem(label="Quit TalkType")
 
         prefs_item.connect("activate", self.open_preferences)
         help_item.connect("activate", self.show_help)
+        about_item.connect("activate", self.show_about_dialog)
+        updates_item.connect("activate", self.check_for_updates_clicked)
         quit_item.connect("activate", self.quit_app)
 
         # Build menu in exact same order as extension
@@ -875,6 +1208,8 @@ class DictationTray:
             Gtk.SeparatorMenuItem(),
             prefs_item,
             help_item,
+            about_item,
+            updates_item,
             Gtk.SeparatorMenuItem(),
             quit_item
         ]

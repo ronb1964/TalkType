@@ -54,6 +54,8 @@ const TalkTypeIface = `
     </method>
     <method name="OpenPreferences"/>
     <method name="ShowHelp"/>
+    <method name="ShowAbout"/>
+    <method name="CheckForUpdates"/>
     <method name="Quit"/>
 
     <!-- Signals -->
@@ -72,6 +74,17 @@ const TalkTypeIface = `
     <signal name="ErrorOccurred">
       <arg type="s" name="error_type"/>
       <arg type="s" name="message"/>
+    </signal>
+    <signal name="UpdateCheckComplete">
+      <arg type="b" name="success"/>
+      <arg type="s" name="current_version"/>
+      <arg type="s" name="latest_version"/>
+      <arg type="b" name="update_available"/>
+      <arg type="i" name="extension_current"/>
+      <arg type="i" name="extension_latest"/>
+      <arg type="b" name="extension_update"/>
+      <arg type="s" name="release_url"/>
+      <arg type="s" name="error"/>
     </signal>
   </interface>
 </node>`;
@@ -167,6 +180,10 @@ class TalkTypeIndicator extends PanelMenu.Button {
             this._proxy.connectSignal('ModelChanged', (proxy, sender, [modelName]) => {
                 this._currentModel = modelName;
                 this._updateMenu();
+            });
+
+            this._proxy.connectSignal('UpdateCheckComplete', (proxy, sender, params) => {
+                this._handleUpdateCheckResult(params);
             });
 
             this._dbusAvailable = true;
@@ -282,6 +299,20 @@ class TalkTypeIndicator extends PanelMenu.Button {
         });
         this.menu.addMenuItem(helpItem);
 
+        // About
+        let aboutItem = new PopupMenu.PopupMenuItem('About TalkType...');
+        aboutItem.connect('activate', () => {
+            this._proxy.ShowAboutRemote();
+        });
+        this.menu.addMenuItem(aboutItem);
+
+        // Check for Updates
+        this._updatesItem = new PopupMenu.PopupMenuItem('Check for Updates...');
+        this._updatesItem.connect('activate', () => {
+            this._checkForUpdates();
+        });
+        this.menu.addMenuItem(this._updatesItem);
+
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
         // Quit TalkType
@@ -290,6 +321,64 @@ class TalkTypeIndicator extends PanelMenu.Button {
             this._proxy.QuitRemote();
         });
         this.menu.addMenuItem(quitItem);
+    }
+
+    _checkForUpdates() {
+        // Show checking notification
+        Main.notify('TalkType', 'Checking for updates...');
+        this._updatesItem.label.text = 'Checking...';
+        this._updatesItem.setSensitive(false);
+
+        // Call D-Bus method - results come via signal
+        this._proxy.CheckForUpdatesRemote();
+
+        // Re-enable menu item after timeout (in case signal fails)
+        GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 30, () => {
+            this._updatesItem.label.text = 'Check for Updates...';
+            this._updatesItem.setSensitive(true);
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    _handleUpdateCheckResult(params) {
+        // Restore menu item
+        this._updatesItem.label.text = 'Check for Updates...';
+        this._updatesItem.setSensitive(true);
+
+        const [success, currentVersion, latestVersion, updateAvailable,
+               extCurrent, extLatest, extUpdate, releaseUrl, error] = params;
+
+        if (!success) {
+            Main.notify('TalkType', `Update check failed: ${error || 'Unknown error'}`);
+            return;
+        }
+
+        if (updateAvailable || extUpdate) {
+            // Updates available
+            let message = '';
+
+            if (updateAvailable) {
+                message += `TalkType ${currentVersion} → ${latestVersion}`;
+            }
+
+            if (extUpdate && extCurrent >= 0) {
+                if (message) message += '\n';
+                message += `Extension: ${extCurrent} → ${extLatest}`;
+            }
+
+            // Show notification with action to open release page
+            if (releaseUrl) {
+                Main.notify('TalkType Update Available!', message);
+                // Note: GNOME Shell notifications don't support clickable actions easily
+                // User can open Preferences → Updates tab to get the full experience
+            } else {
+                Main.notify('TalkType Update Available!', message);
+            }
+        } else {
+            // No updates
+            let extInfo = extCurrent >= 0 ? ` | Extension: v${extCurrent}` : '';
+            Main.notify('TalkType', `You're up to date! (v${currentVersion}${extInfo})`);
+        }
     }
 
     _updatePresetSelection(activePreset) {

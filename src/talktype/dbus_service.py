@@ -167,11 +167,55 @@ class TalkTypeDBusService(dbus.service.Object):
             GLib.idle_add(self.app.show_help)
 
     @dbus.service.method(DBUS_INTERFACE)
+    def ShowAbout(self):
+        """Show the about dialog"""
+        print("D-Bus: ShowAbout called")
+        if hasattr(self.app, 'show_about'):
+            GLib.idle_add(self.app.show_about)
+
+    @dbus.service.method(DBUS_INTERFACE)
     def Quit(self):
         """Quit the application"""
         print("D-Bus: Quit called")
         if hasattr(self.app, 'quit'):
             GLib.idle_add(self.app.quit)
+
+    @dbus.service.method(DBUS_INTERFACE)
+    def CheckForUpdates(self):
+        """
+        Check for updates asynchronously.
+        Results are sent via UpdateCheckComplete signal.
+        """
+        print("D-Bus: CheckForUpdates called")
+        import threading
+
+        def do_check():
+            try:
+                from . import update_checker
+                result = update_checker.check_for_updates()
+
+                # Send signal with results
+                GLib.idle_add(
+                    self.UpdateCheckComplete,
+                    result.get("success", False),
+                    result.get("current_version", "unknown"),
+                    result.get("latest_version", "unknown"),
+                    result.get("update_available", False),
+                    result.get("extension_current", -1) if result.get("extension_current") else -1,
+                    result.get("extension_latest", -1) if result.get("extension_latest") else -1,
+                    result.get("extension_update", False),
+                    result.get("release", {}).get("html_url", "") if result.get("release") else "",
+                    result.get("error", "") if result.get("error") else ""
+                )
+            except Exception as e:
+                print(f"D-Bus: CheckForUpdates error: {e}")
+                GLib.idle_add(
+                    self.UpdateCheckComplete,
+                    False, "unknown", "unknown", False, -1, -1, False, "", str(e)
+                )
+
+        thread = threading.Thread(target=do_check, daemon=True)
+        thread.start()
 
     # ==================== Signals ====================
 
@@ -198,6 +242,27 @@ class TalkTypeDBusService(dbus.service.Object):
     @dbus.service.signal(DBUS_INTERFACE, signature='ss')
     def ErrorOccurred(self, error_type: str, message: str):
         """Emitted when an error occurs"""
+        pass
+
+    @dbus.service.signal(DBUS_INTERFACE, signature='bssbiibss')
+    def UpdateCheckComplete(self, success: bool, current_version: str,
+                           latest_version: str, update_available: bool,
+                           extension_current: int, extension_latest: int,
+                           extension_update: bool, release_url: str, error: str):
+        """
+        Emitted when update check completes.
+
+        Args:
+            success: True if check succeeded
+            current_version: Current AppImage version
+            latest_version: Latest available version
+            update_available: True if AppImage update available
+            extension_current: Installed extension version (-1 if not installed)
+            extension_latest: Latest extension version (-1 if unknown)
+            extension_update: True if extension update available
+            release_url: URL to release page on GitHub
+            error: Error message if check failed
+        """
         pass
 
     # ==================== Helper Methods ====================
