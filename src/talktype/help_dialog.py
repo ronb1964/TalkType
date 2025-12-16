@@ -23,8 +23,9 @@ def show_help_dialog():
     dialog.set_geometry_hints(None, geo, Gdk.WindowHints.MIN_SIZE | Gdk.WindowHints.MAX_SIZE)
 
     dialog.set_resizable(False)
-    dialog.set_modal(True)
+    dialog.set_modal(False)  # Non-modal so it works without parent window
     dialog.set_position(Gtk.WindowPosition.CENTER)
+    dialog.set_keep_above(True)  # Ensure it appears on top
 
     content = dialog.get_content_area()
     content.set_margin_top(10)
@@ -368,6 +369,8 @@ other processing, so you can include punctuation in replacements.
     close_button.connect("clicked", lambda w: dialog.destroy())
     dialog.add_action_widget(close_button, Gtk.ResponseType.CLOSE)
 
+    # Connect response to destroy (for non-blocking operation)
+    dialog.connect("response", lambda d, r: d.destroy())
+
     dialog.show_all()
-    dialog.run()
-    dialog.destroy()
+    dialog.present()  # Bring to front and focus
