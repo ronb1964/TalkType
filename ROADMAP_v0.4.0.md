@@ -1,6 +1,6 @@
 # TalkType Roadmap
 
-Last updated: December 12, 2025
+Last updated: December 15, 2025
 
 All features are designed to add value **without increasing AppImage size**.
 
@@ -48,6 +48,18 @@ All v0.4.0 features are complete! Ready for release.
 ---
 
 ## Phase 2: v0.5.0 (Enhanced UX)
+
+### Update Checker System
+**Priority: Next**
+- Periodic auto-check for updates (daily/weekly configurable)
+- Manual "Check for Updates" button in Preferences
+- Check both AppImage AND GNOME extension versions
+- Notification when updates available
+- Settings:
+  - Toggle: Auto-check for updates (on/off)
+  - Toggle: Auto-apply updates vs notification only
+  - Check frequency (daily/weekly/manual only)
+- Uses GitHub API: `api.github.com/repos/ronb1964/TalkType/releases/latest`
 
 ### Session Statistics
 Track and display in tray menu:
@@ -126,6 +138,6 @@ Direct tray menu access to voice commands reference with test feature.
 
 ## Notes
 
-**Current AppImage size:** ~870MB (target: under 1GB)
+**Current AppImage size:** ~306MB (CPU-only PyTorch, down from ~900MB)
 
 **AT-SPI Note:** AT-SPI accessibility framework was found to cause 15+ second delays when the D-Bus socket is unavailable (common on Wayland). The current implementation uses fast process-based detection instead, falling back to paste mode which works universally with Ctrl+Shift+V.
