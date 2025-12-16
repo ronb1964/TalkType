@@ -41,6 +41,12 @@ chmod +x TalkType-v*.AppImage
 
 The AppImage includes everything needed - just run it!
 
+> **Note:** AppImages require FUSE 2 to run. If you see an error about `libfuse.so.2`, install it:
+> - **Fedora/RHEL**: `sudo dnf install fuse`
+> - **Ubuntu/Debian**: `sudo apt install libfuse2`
+> - **Arch/Manjaro**: `sudo pacman -S fuse2`
+> - **openSUSE**: `sudo zypper install libfuse2`
+
 ### From Source (Development)
 
 #### Prerequisites
