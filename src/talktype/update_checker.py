@@ -414,6 +414,43 @@ def open_release_page(url: str):
         logger.error(f"Could not open release page: {e}")
 
 
+def should_check_today(last_check: str) -> bool:
+    """
+    Determine if we should check for updates (once per day).
+
+    Args:
+        last_check: ISO timestamp string of last check, or empty string
+
+    Returns:
+        bool: True if we should check (no check today or never checked)
+    """
+    from datetime import datetime, date
+
+    if not last_check:
+        return True
+
+    try:
+        # Parse the ISO timestamp
+        last_check_time = datetime.fromisoformat(last_check)
+        last_check_date = last_check_time.date()
+        today = date.today()
+        return last_check_date < today
+    except (ValueError, TypeError):
+        # Invalid timestamp, check anyway
+        return True
+
+
+def get_current_timestamp() -> str:
+    """
+    Get current time as ISO timestamp string.
+
+    Returns:
+        str: Current time in ISO format
+    """
+    from datetime import datetime
+    return datetime.now().isoformat()
+
+
 # For testing
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)

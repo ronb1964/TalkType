@@ -854,39 +854,28 @@ class DictationTray:
         thread.start()
 
     def _show_update_result_dialog(self, result):
-        """Show dialog with update check results."""
+        """Show dialog with update check results.
+
+        Note: GTK tray only shows AppImage updates. Extension updates are handled
+        by the GNOME extension menu, which opens Preferences -> Updates tab.
+        GTK tray users are either non-GNOME (can't use extension) or GNOME users
+        who chose not to install the extension.
+        """
         from . import update_checker
 
         has_update = result.get("update_available", False)
-        has_ext_update = result.get("extension_update", False)
         current = result.get("current_version", "unknown")
         latest = result.get("latest_version", "unknown")
-        ext_current = result.get("extension_current")
-        ext_latest = result.get("extension_latest")
         release = result.get("release", {})
 
-        if not has_update and not has_ext_update:
-            # No updates available
+        if not has_update:
+            # No AppImage update available
             dialog = Gtk.MessageDialog(
                 message_type=Gtk.MessageType.INFO,
                 buttons=Gtk.ButtonsType.OK,
                 text="You're Up to Date!"
             )
-
-            # Build message - only show extension info on GNOME
             message = f"<b>TalkType {current}</b> is the latest version."
-
-            if is_gnome():
-                # Build extension status message for GNOME users
-                if ext_current is not None:
-                    if ext_latest is not None:
-                        ext_status = f"Version {ext_current} (latest: {ext_latest})"
-                    else:
-                        ext_status = f"Version {ext_current}"
-                else:
-                    ext_status = "Not installed"
-                message += f"\n\nGNOME Extension: {ext_status}"
-
             dialog.format_secondary_markup(message)
             dialog.set_position(Gtk.WindowPosition.CENTER)
             dialog.run()
@@ -915,36 +904,12 @@ class DictationTray:
         content.pack_start(header, False, False, 0)
 
         # Version info
-        if has_update:
-            version_label = Gtk.Label()
-            version_label.set_markup(
-                f"<b>TalkType:</b> {current} → <b>{latest}</b>"
-            )
-            version_label.set_halign(Gtk.Align.START)
-            content.pack_start(version_label, False, False, 5)
-
-        # Extension status (only show on GNOME)
-        if is_gnome() and ext_current is not None:
-            ext_label = Gtk.Label()
-            if has_ext_update:
-                ext_label.set_markup(
-                    f"<b>GNOME Extension:</b> {ext_current} → <b>{ext_latest}</b> (update available)"
-                )
-            else:
-                ext_label.set_markup(
-                    f"<b>GNOME Extension:</b> Version {ext_current} (up to date)"
-                )
-            ext_label.set_halign(Gtk.Align.START)
-            content.pack_start(ext_label, False, False, 5)
-
-        # Note about extension updates requiring logout (only on GNOME)
-        if is_gnome() and has_ext_update:
-            note_label = Gtk.Label()
-            note_label.set_markup(
-                "<span size='small' color='#888888'>Note: Extension updates require logout/login to take effect.</span>"
-            )
-            note_label.set_halign(Gtk.Align.START)
-            content.pack_start(note_label, False, False, 5)
+        version_label = Gtk.Label()
+        version_label.set_markup(
+            f"<b>TalkType:</b> {current} → <b>{latest}</b>"
+        )
+        version_label.set_halign(Gtk.Align.START)
+        content.pack_start(version_label, False, False, 5)
 
         # Release notes in scrolled window
         if release.get("body"):
@@ -1095,6 +1060,92 @@ class DictationTray:
         # Start download
         thread = threading.Thread(target=do_download, daemon=True)
         thread.start()
+
+    def auto_check_for_updates(self):
+        """
+        Automatically check for updates on startup (once per day).
+
+        Silently checks in the background. If an update is found,
+        shows a notification that opens the Updates tab when clicked.
+        """
+        import threading
+        from . import update_checker
+        from .config import load_config, save_config
+
+        config = load_config()
+
+        # Check if auto-check is enabled
+        if not config.auto_check_updates:
+            logger.debug("Auto-update check disabled in config")
+            return False
+
+        # Check if we already checked today
+        if not update_checker.should_check_today(config.last_update_check):
+            logger.debug("Already checked for updates today")
+            return False
+
+        logger.info("Auto-checking for updates...")
+
+        def do_check():
+            """Background thread to check for updates."""
+            try:
+                result = update_checker.check_for_updates()
+
+                # Update last check timestamp
+                config.last_update_check = update_checker.get_current_timestamp()
+                save_config(config)
+
+                if result and result.get("success"):
+                    has_update = result.get("update_available", False)
+                    has_ext_update = result.get("extension_update", False)
+
+                    if has_update or has_ext_update:
+                        # Update available - show notification
+                        latest = result.get("latest_version", "unknown")
+                        GLib.idle_add(lambda: self._show_update_notification(latest, has_update, has_ext_update))
+                    else:
+                        logger.info("No updates available")
+                else:
+                    logger.debug(f"Update check failed: {result.get('error', 'unknown')}")
+            except Exception as e:
+                logger.error(f"Error in auto-update check: {e}")
+
+        # Run in background thread
+        thread = threading.Thread(target=do_check, daemon=True)
+        thread.start()
+        return False  # Don't repeat GLib timeout
+
+    def _show_update_notification(self, latest_version, has_app_update, has_ext_update):
+        """Show desktop notification about available update."""
+        try:
+            import subprocess
+
+            if has_app_update and has_ext_update:
+                title = "TalkType Updates Available"
+                body = f"TalkType {latest_version} and extension update available"
+            elif has_app_update:
+                title = "TalkType Update Available"
+                body = f"TalkType {latest_version} is now available"
+            else:
+                title = "Extension Update Available"
+                body = "A new GNOME extension version is available"
+
+            # Show notification using notify-send
+            subprocess.run([
+                "notify-send",
+                "--app-name=TalkType",
+                "--icon=software-update-available",
+                title,
+                body + "\nClick 'Check for Updates' in menu for details."
+            ], capture_output=True)
+
+            logger.info(f"Showed update notification: {title}")
+
+            # Also open preferences to Updates tab automatically
+            self.open_preferences_updates(None)
+
+        except Exception as e:
+            logger.error(f"Could not show update notification: {e}")
 
     def quit_app(self, _):
         """Quit the tray and stop the dictation service."""
@@ -1336,11 +1387,13 @@ def main():
         else:
             # Not first run, auto-start immediately
             GLib.timeout_add(1000, tray._auto_start_service)
+            # Check for updates after a delay (don't interfere with startup)
+            GLib.timeout_add(5000, tray.auto_check_for_updates)
     except Exception as e:
         # If any error, still try to auto-start
         logger.error(f"Error in first run setup: {e}")
         GLib.timeout_add(1000, tray._auto_start_service)
-    
+
     Gtk.main()
 
 if __name__ == "__main__":

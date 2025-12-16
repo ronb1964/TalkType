@@ -188,7 +188,8 @@ class PreferencesWindow:
             "injection_mode": "auto",
             "launch_at_login": False,
             "auto_timeout_enabled": True,
-            "auto_timeout_minutes": 5
+            "auto_timeout_minutes": 5,
+            "auto_check_updates": True
         }
         
         if os.path.exists(CONFIG_PATH):
@@ -1303,12 +1304,33 @@ class PreferencesWindow:
         self.view_release_btn.set_no_show_all(True)
         self.update_actions_box.pack_start(self.view_release_btn, False, False, 0)
 
+        # Update Extension button (only relevant for GNOME users with extension installed)
+        self.update_extension_btn = Gtk.Button(label="Update Extension")
+        self.update_extension_btn.connect("clicked", self._on_update_extension_clicked)
+        self.update_extension_btn.set_no_show_all(True)
+        self.update_actions_box.pack_start(self.update_extension_btn, False, False, 0)
+
         self.update_status_box.pack_start(self.update_actions_box, False, False, 0)
         self.update_status_frame.add(self.update_status_box)
         vbox.pack_start(self.update_status_frame, False, False, 10)
 
         # Store release info for download button
         self._current_release = None
+
+        # Auto-check option
+        auto_check_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        auto_check_box.set_margin_top(10)
+
+        auto_check_toggle = Gtk.CheckButton(label="Automatically check for updates on startup")
+        auto_check_toggle.set_active(self.config.get("auto_check_updates", True))
+        auto_check_toggle.connect("toggled", lambda x: self.update_config("auto_check_updates", x.get_active()))
+        auto_check_toggle.set_tooltip_text(
+            "When enabled, TalkType will check for updates once per day when it starts.\n"
+            "If an update is found, you'll be notified and the Updates tab will open."
+        )
+        auto_check_box.pack_start(auto_check_toggle, False, False, 0)
+
+        vbox.pack_start(auto_check_box, False, False, 5)
 
         # Info text
         info_label = Gtk.Label()
@@ -1327,10 +1349,11 @@ class PreferencesWindow:
         import threading
         from . import update_checker
 
-        # Update status
+        # Update status and hide action buttons
         self.update_status_label.set_text("Checking for updates...")
         self.download_btn.hide()
         self.view_release_btn.hide()
+        self.update_extension_btn.hide()
         button.set_sensitive(False)
 
         def do_check():
@@ -1382,6 +1405,7 @@ class PreferencesWindow:
 
         self.update_status_label.set_markup("\n".join(status_lines))
 
+        # Show/hide buttons based on available updates
         if has_update:
             if release.get("appimage_url"):
                 self.download_btn.show()
@@ -1390,6 +1414,12 @@ class PreferencesWindow:
         else:
             self.download_btn.hide()
             self.view_release_btn.hide()
+
+        # Show extension update button if extension update available
+        if has_ext_update:
+            self.update_extension_btn.show()
+        else:
+            self.update_extension_btn.hide()
 
     def _on_download_update_clicked(self, button):
         """Handle download update button click."""
@@ -1486,6 +1516,96 @@ class PreferencesWindow:
 
         if self._current_release and self._current_release.get("html_url"):
             update_checker.open_release_page(self._current_release["html_url"])
+
+    def _on_update_extension_clicked(self, button):
+        """Handle Update Extension button click - downloads and installs latest extension."""
+        import threading
+        from . import extension_helper
+
+        # Create progress dialog
+        progress_dialog = Gtk.Dialog(
+            title="Updating Extension",
+            transient_for=self.window,
+            flags=Gtk.DialogFlags.MODAL
+        )
+        progress_dialog.set_default_size(350, 100)
+
+        content = progress_dialog.get_content_area()
+        content.set_spacing(10)
+        content.set_margin_start(20)
+        content.set_margin_end(20)
+        content.set_margin_top(20)
+        content.set_margin_bottom(10)
+
+        status_label = Gtk.Label(label="Downloading extension...")
+        status_label.set_halign(Gtk.Align.START)
+        content.pack_start(status_label, False, False, 0)
+
+        progress_bar = Gtk.ProgressBar()
+        progress_bar.set_show_text(True)
+        content.pack_start(progress_bar, False, False, 10)
+
+        progress_dialog.show_all()
+
+        success_holder = [False]
+
+        def progress_callback(message, percent):
+            """Update progress in main thread."""
+            def update_ui():
+                status_label.set_text(message)
+                progress_bar.set_fraction(percent / 100.0)
+                progress_bar.set_text(f"{percent}%")
+                return False
+            GLib.idle_add(update_ui)
+
+        def do_install():
+            """Background thread to install extension."""
+            success_holder[0] = extension_helper.download_and_install_extension(progress_callback)
+            GLib.idle_add(finish_install)
+
+        def finish_install():
+            """Finish up in main thread."""
+            progress_dialog.destroy()
+
+            if success_holder[0]:
+                # Success dialog
+                success_dialog = Gtk.MessageDialog(
+                    transient_for=self.window,
+                    message_type=Gtk.MessageType.INFO,
+                    buttons=Gtk.ButtonsType.OK,
+                    text="Extension Updated!"
+                )
+                success_dialog.format_secondary_text(
+                    "The GNOME extension has been updated.\n\n"
+                    "You need to log out and log back in for the changes to take effect."
+                )
+                success_dialog.run()
+                success_dialog.destroy()
+
+                # Update UI to reflect new state
+                self.update_extension_btn.hide()
+                self.update_status_label.set_markup(
+                    "<span color='#4CAF50'>Extension updated!</span>\n"
+                    "Log out and log back in to activate the new version."
+                )
+            else:
+                # Error dialog
+                error_dialog = Gtk.MessageDialog(
+                    transient_for=self.window,
+                    message_type=Gtk.MessageType.ERROR,
+                    buttons=Gtk.ButtonsType.OK,
+                    text="Update Failed"
+                )
+                error_dialog.format_secondary_text(
+                    "Failed to update the GNOME extension.\n"
+                    "Check the log file for details."
+                )
+                error_dialog.run()
+                error_dialog.destroy()
+
+        # Start installation in background
+        thread = threading.Thread(target=do_install, daemon=True)
+        thread.start()
 
     def _on_cell_editing_started(self, renderer, editable, path, column_idx):
         """Handle when a cell starts being edited - setup focus-out commit and Tab navigation."""

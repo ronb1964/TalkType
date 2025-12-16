@@ -40,6 +40,8 @@ class Settings:
     indicator_offset_x: int = 0         # custom X offset from position anchor (pixels, can be negative)
     indicator_offset_y: int = 0         # custom Y offset from position anchor (pixels, can be negative)
     indicator_size: str = "medium"      # indicator size: small, medium, large
+    auto_check_updates: bool = True      # automatically check for updates on startup (once per day)
+    last_update_check: str = ""          # ISO timestamp of last update check
 
 def validate_config(s: Settings) -> None:
     """
@@ -144,6 +146,8 @@ def load_config() -> Settings:
             s.indicator_offset_x = int(data.get("indicator_offset_x", s.indicator_offset_x))
             s.indicator_offset_y = int(data.get("indicator_offset_y", s.indicator_offset_y))
             s.indicator_size = str(data.get("indicator_size", s.indicator_size))
+            s.auto_check_updates = bool(data.get("auto_check_updates", s.auto_check_updates))
+            s.last_update_check = str(data.get("last_update_check", s.last_update_check))
         except Exception as e:
             # Only print error once by using a module-level flag
             if not getattr(load_config, '_error_printed', False):
@@ -200,6 +204,8 @@ def save_config(s: Settings) -> None:
         f.write(f'indicator_offset_x = {s.indicator_offset_x}\n')
         f.write(f'indicator_offset_y = {s.indicator_offset_y}\n')
         f.write(f'indicator_size = "{s.indicator_size}"\n')
+        f.write(f'auto_check_updates = {str(s.auto_check_updates).lower()}\n')
+        f.write(f'last_update_check = "{s.last_update_check}"\n')
 
 def get_data_dir():
     """
