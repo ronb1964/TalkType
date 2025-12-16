@@ -1,10 +1,15 @@
+import os
+# CRITICAL: Disable HuggingFace XET downloads BEFORE any imports
+# XET bypasses tqdm_class progress tracking, breaking our download progress UI
+os.environ["HF_HUB_DISABLE_XET"] = "1"
+
 import gi
 gi.require_version("Gtk", "3.0")
 gi.require_version("AppIndicator3", "0.1")
-from gi.repository import Gtk, AppIndicator3, GLib
+gi.require_version("Gdk", "3.0")
+from gi.repository import Gtk, Gdk, AppIndicator3, GLib
 import subprocess
 import time
-import os
 import sys
 import atexit
 import fcntl
@@ -435,10 +440,22 @@ class DictationTray:
             "model": "tiny",
             "device": "cpu"
         },
+        "light": {
+            "label": "Light",
+            "description": "base model, CPU",
+            "model": "base",
+            "device": "cpu"
+        },
         "balanced": {
             "label": "Balanced",
             "description": "small model, GPU if available",
             "model": "small",
+            "device": "cuda"  # Will fall back to CPU if no GPU
+        },
+        "quality": {
+            "label": "Quality",
+            "description": "medium model, GPU if available",
+            "model": "medium",
             "device": "cuda"  # Will fall back to CPU if no GPU
         },
         "accurate": {
@@ -480,9 +497,34 @@ class DictationTray:
             return
 
         preset = self.PERFORMANCE_PRESETS[preset_id]
+        model_name = preset["model"]
 
         try:
             from .config import load_config, save_config
+            from .model_helper import is_model_cached, download_model_with_progress
+
+            # Check if model is cached
+            if not is_model_cached(model_name):
+                logger.info(f"Model {model_name} not cached, showing download dialog")
+                # Show download dialog - this returns the model or None if cancelled
+                model = download_model_with_progress(model_name, device="cpu", show_confirmation=True)
+                if model is None:
+                    # User cancelled download or download failed
+                    logger.info(f"Model download cancelled for preset {preset_id}")
+                    # Revert radio button to current preset
+                    self._updating_preset = True
+                    current_preset = self._get_current_preset()
+                    if current_preset in self.preset_radios:
+                        self.preset_radios[current_preset].set_active(True)
+                    elif hasattr(self, 'preset_custom'):
+                        self.preset_custom.set_active(True)
+                    self._updating_preset = False
+                    return
+                else:
+                    # Model downloaded successfully, free it (will be loaded by service)
+                    del model
+                    logger.info(f"Model {model_name} downloaded successfully")
+
             cfg = load_config()
 
             # Apply preset settings
@@ -500,7 +542,7 @@ class DictationTray:
             # Notify user
             from .app import _notify
             logger.info(f"Applied performance preset: {preset['label']}")
-            _notify("TalkType", f"Performance: {preset['label']}\nRestart service to apply changes.")
+            _notify("TalkType", f"Performance: {preset['label']}\nRestarting service...")
 
             # Update menu display
             self.update_menu_display()
@@ -716,6 +758,40 @@ class DictationTray:
     
     def build_menu(self):
         menu = Gtk.Menu()
+
+        # Apply custom CSS for better readability (solid dark background)
+        css_provider = Gtk.CssProvider()
+        css = b"""
+        menu {
+            background-color: #2d2d2d;
+            border: 1px solid #1a1a1a;
+            border-radius: 8px;
+            padding: 4px 0;
+        }
+        menuitem {
+            padding: 6px 12px;
+            color: #ffffff;
+        }
+        menuitem:hover {
+            background-color: #404040;
+        }
+        menuitem:disabled {
+            color: #888888;
+        }
+        menuitem label {
+            color: inherit;
+        }
+        separator {
+            background-color: #404040;
+            margin: 4px 8px;
+        }
+        """
+        css_provider.load_from_data(css)
+        Gtk.StyleContext.add_provider_for_screen(
+            Gdk.Screen.get_default(),
+            css_provider,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )
         
         # Dictation Service toggle (using CheckMenuItem for ON/OFF display)
         self.service_toggle = Gtk.CheckMenuItem(label="Dictation Service")
@@ -754,8 +830,8 @@ class DictationTray:
         self.preset_radios = {}
         preset_group = None
 
-        # Add preset options in order
-        preset_order = ["fastest", "balanced", "accurate", "battery"]
+        # Add preset options in order (smallest to largest model, then battery saver)
+        preset_order = ["fastest", "light", "balanced", "quality", "accurate", "battery"]
         for preset_id in preset_order:
             preset = self.PERFORMANCE_PRESETS[preset_id]
             label = f"{preset['label']} ({preset['description']})"

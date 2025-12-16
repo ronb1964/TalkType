@@ -1,8 +1,13 @@
+import os
+# CRITICAL: Disable HuggingFace XET downloads BEFORE any imports
+# XET bypasses tqdm_class progress tracking, breaking our download progress UI
+os.environ["HF_HUB_DISABLE_XET"] = "1"
+
 # Import torch_init FIRST to configure CUDA library paths before any torch imports
 from .torch_init import init_cuda_for_pytorch
 init_cuda_for_pytorch()
 
-import os, sys, time, shutil, subprocess, tempfile, wave, atexit, argparse, fcntl
+import sys, time, shutil, subprocess, tempfile, wave, atexit, argparse, fcntl
 from dataclasses import dataclass
 import numpy as np
 import sounddevice as sd

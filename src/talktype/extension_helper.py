@@ -94,9 +94,99 @@ def install_extension_from_local(source_dir: str, auto_enable: bool = True) -> b
         return False
 
 
+def get_bundled_extension_path() -> Optional[str]:
+    """
+    Find the bundled GNOME extension in the AppImage or dev environment.
+
+    Returns:
+        str: Path to bundled extension directory, or None if not found
+    """
+    import sys
+
+    # Possible locations for bundled extension
+    possible_paths = []
+
+    # Check if running from AppImage
+    appimage_path = os.environ.get('APPIMAGE')
+    if appimage_path:
+        # AppImage mount point - extension should be in usr/share/gnome-extension/
+        appimage_mount = os.path.dirname(sys.executable)
+        possible_paths.append(
+            os.path.join(appimage_mount, '..', 'share', 'gnome-extension', EXTENSION_UUID)
+        )
+
+    # Check squashfs mount point (AppImage internal path)
+    if '/tmp/.mount_' in sys.executable or 'squashfs-root' in sys.executable:
+        base = os.path.dirname(os.path.dirname(sys.executable))
+        possible_paths.append(
+            os.path.join(base, 'share', 'gnome-extension', EXTENSION_UUID)
+        )
+
+    # Development environment - relative to this file
+    this_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(os.path.dirname(this_dir))
+    possible_paths.append(
+        os.path.join(project_root, 'gnome-extension', EXTENSION_UUID)
+    )
+
+    # Check each path
+    for path in possible_paths:
+        normalized = os.path.normpath(path)
+        metadata_file = os.path.join(normalized, 'metadata.json')
+        if os.path.isfile(metadata_file):
+            print(f"✅ Found bundled extension at: {normalized}")
+            return normalized
+
+    return None
+
+
+def install_extension(progress_callback: Optional[Callable] = None) -> bool:
+    """
+    Install GNOME extension from bundled files or download from GitHub.
+
+    Tries to install from bundled files first (AppImage or dev environment),
+    falls back to downloading from GitHub releases if bundled files not found.
+
+    Args:
+        progress_callback: Optional function(message, percent) for progress updates
+
+    Returns:
+        bool: True if successful
+    """
+    if not is_extension_available():
+        if progress_callback:
+            progress_callback("GNOME desktop not detected", 0)
+        return False
+
+    # First, try to install from bundled files
+    bundled_path = get_bundled_extension_path()
+    if bundled_path:
+        if progress_callback:
+            progress_callback("Installing bundled extension...", 50)
+
+        if install_extension_from_local(bundled_path):
+            if progress_callback:
+                progress_callback("Extension installed successfully!", 100)
+
+            # Enable the extension
+            if enable_extension():
+                print("✅ Extension enabled - will be active after logout/login")
+            else:
+                print("⚠️  Failed to auto-enable extension - you can enable it manually from Extensions app")
+
+            return True
+        else:
+            print("⚠️  Failed to install bundled extension, trying download...")
+
+    # Fall back to downloading from GitHub
+    return download_and_install_extension(progress_callback)
+
+
 def download_and_install_extension(progress_callback: Optional[Callable] = None) -> bool:
     """
-    Download and install GNOME extension from GitHub release
+    Download and install GNOME extension from GitHub release.
+
+    This is the fallback when bundled extension is not available.
 
     Args:
         progress_callback: Optional function(message, percent) for progress updates
@@ -339,7 +429,7 @@ def offer_extension_installation(show_gui: bool = True) -> bool:
                 def progress(msg, percent):
                     GLib.idle_add(lambda: progress_label.set_text(msg))
 
-                success[0] = download_and_install_extension(progress)
+                success[0] = install_extension(progress)
                 GLib.idle_add(progress_dialog.destroy)
 
             import threading
@@ -391,7 +481,7 @@ def offer_extension_installation(show_gui: bool = True) -> bool:
     else:
         # CLI mode
         if offer_extension_installation_cli():
-            return download_and_install_extension()
+            return install_extension()
         return False
 
 

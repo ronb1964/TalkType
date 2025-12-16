@@ -1009,7 +1009,7 @@ class PreferencesWindow:
         # Download CUDA button
         self.download_cuda_button = Gtk.Button(label="📦 Download CUDA Libraries")
         self.download_cuda_button.connect("clicked", self._on_download_cuda_clicked)
-        self.download_cuda_button.set_tooltip_text("Download CUDA libraries for GPU acceleration (~1.7GB download, 1.2GB installed)")
+        self.download_cuda_button.set_tooltip_text("Download CUDA libraries for GPU acceleration (~800MB download)")
         self.download_cuda_button.set_sensitive(False)
         gpu_button_box.pack_start(self.download_cuda_button, False, False, 0)
 
@@ -1396,8 +1396,12 @@ class PreferencesWindow:
 
     def _handle_autostart(self, enable):
         """Create or remove autostart desktop file."""
+        from . import config
+
         autostart_dir = os.path.expanduser("~/.config/autostart")
-        desktop_file = os.path.join(autostart_dir, "talktype.desktop")
+        # Use different filename for dev mode vs production
+        filename = "talktype-dev.desktop" if config.DEV_MODE else "talktype.desktop"
+        desktop_file = os.path.join(autostart_dir, filename)
 
         if enable:
             # Create autostart directory if it doesn't exist
@@ -1409,11 +1413,20 @@ class PreferencesWindow:
             icon_path = self._get_icon_path()
 
             # Create desktop file content
+            app_name = "TalkType (Dev)" if config.DEV_MODE else "TalkType"
+            comment = "AI-powered dictation - Development Version" if config.DEV_MODE else "AI-powered dictation for Wayland using Faster-Whisper"
+
+            # For dev mode, add Path directive so run-dev.sh works correctly
+            path_line = ""
+            if config.DEV_MODE:
+                project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                path_line = f"Path={project_root}\n"
+
             desktop_content = f"""[Desktop Entry]
 Type=Application
-Name=TalkType
+Name={app_name}
 GenericName=Voice Dictation
-Comment=AI-powered dictation for Wayland using Faster-Whisper
+Comment={comment}
 Exec={exec_cmd}
 Icon={icon_path}
 Terminal=false
@@ -1422,7 +1435,7 @@ Keywords=dictation;voice;speech;whisper;ai;transcription;
 StartupNotify=true
 StartupWMClass=TalkType
 X-GNOME-Autostart-enabled=true
-"""
+{path_line}"""
 
             try:
                 with open(desktop_file, "w") as f:
@@ -2411,7 +2424,7 @@ X-GNOME-Autostart-enabled=true
         dialog = Gtk.Dialog(title="Downloading Model")
         dialog.set_transient_for(self.window)
         dialog.set_modal(True)
-        dialog.set_default_size(450, 150)
+        dialog.set_default_size(450, 180)
         dialog.set_resizable(False)
 
         content = dialog.get_content_area()
@@ -2421,38 +2434,99 @@ X-GNOME-Autostart-enabled=true
         content.set_margin_end(20)
         content.set_spacing(15)
 
+        # Model sizes for display
+        model_sizes = {
+            "tiny": "39 MB",
+            "base": "74 MB",
+            "small": "244 MB",
+            "medium": "769 MB",
+            "large-v3": "~3 GB"
+        }
+        size_str = model_sizes.get(model_name, "unknown size")
+
         # Status label
         status_label = Gtk.Label()
-        status_label.set_markup(f'<b>Downloading Whisper model: {model_name}</b>\n\nThis may take a few minutes depending on your connection...')
+        status_label.set_markup(f'<b>Downloading Whisper model: {model_name}</b>\n<span size="small">({size_str})</span>\n\nThis may take a few minutes depending on your connection...')
         status_label.set_line_wrap(True)
         content.pack_start(status_label, False, False, 0)
 
-        # Progress bar
+        # Progress bar with percentage
         progress_bar = Gtk.ProgressBar()
-        progress_bar.set_pulse_step(0.1)
+        progress_bar.set_show_text(True)
+        progress_bar.set_text("0%")
         content.pack_start(progress_bar, False, False, 0)
+
+        # Add Cancel button
+        cancel_button = Gtk.Button(label="Cancel")
+        cancel_button.set_can_default(True)
+        cancel_button.show()
+        dialog.add_action_widget(cancel_button, Gtk.ResponseType.CANCEL)
 
         dialog.show_all()
 
-        # Download in background thread
+        # Download in background thread with cancellation support
         import threading
-        download_complete = {"done": False, "success": False}
+        import os as prefs_os
+        cancel_event = threading.Event()
+        download_complete = {"done": False, "success": False, "cancelled": False}
+        progress_state = {'last_percent': -1}
+
+        # Model sizes in bytes for progress estimation (actual download sizes)
+        model_sizes_bytes = {
+            "tiny": 75 * 1024 * 1024,       # ~75 MB actual
+            "base": 145 * 1024 * 1024,      # ~145 MB actual
+            "small": 488 * 1024 * 1024,     # ~488 MB actual
+            "medium": 1533 * 1024 * 1024,   # ~1.5 GB actual
+            "large-v3": 3100 * 1024 * 1024, # ~3.1 GB actual
+        }
+        expected_size = model_sizes_bytes.get(model_name, 500 * 1024 * 1024)
+
+        def get_cache_dir_size():
+            """Get the size of HuggingFace cache for this model"""
+            try:
+                cache_base = prefs_os.path.expanduser("~/.cache/huggingface/hub")
+                repo_folder = f"models--Systran--faster-whisper-{model_name}"
+                cache_path = prefs_os.path.join(cache_base, repo_folder)
+
+                if not prefs_os.path.exists(cache_path):
+                    return 0
+
+                total_size = 0
+                for dirpath, dirnames, filenames in prefs_os.walk(cache_path):
+                    for f in filenames:
+                        fp = prefs_os.path.join(dirpath, f)
+                        try:
+                            total_size += prefs_os.path.getsize(fp)
+                        except OSError:
+                            pass
+                return total_size
+            except Exception:
+                return 0
 
         def download_model():
             try:
                 import warnings
 
                 # Suppress PyTorch CUDA warnings BEFORE importing anything that imports torch
-                # (warnings happen at torch import time, not at WhisperModel usage time)
                 warnings.filterwarnings('ignore', message='Could not load CUDA library.*')
                 warnings.filterwarnings('ignore', category=UserWarning, module='torch')
 
+                # Check for cancellation before starting
+                if cancel_event.is_set():
+                    download_complete["cancelled"] = True
+                    return
+
                 from faster_whisper import WhisperModel
 
-                # This will download the model (using CPU mode for download)
+                # This will download the model if needed
                 WhisperModel(model_name, device="cpu", compute_type="int8")
 
-                download_complete["success"] = True
+                # Check for cancellation after download
+                if cancel_event.is_set():
+                    download_complete["cancelled"] = True
+                else:
+                    download_complete["success"] = True
+
             except Exception as e:
                 print(f"Model download failed: {e}")
                 download_complete["success"] = False
@@ -2463,19 +2537,40 @@ X-GNOME-Autostart-enabled=true
         thread.daemon = True
         thread.start()
 
-        # Pulse progress bar while downloading
+        # Update progress bar by monitoring cache directory size
         def update_progress():
-            if not download_complete["done"]:
-                progress_bar.pulse()
-                return True  # Continue
-            else:
-                dialog.destroy()
-                return False  # Stop
+            if download_complete["done"]:
+                # Set to 100% before closing
+                progress_bar.set_fraction(1.0)
+                progress_bar.set_text("100%")
+                GLib.timeout_add(200, lambda: dialog.response(Gtk.ResponseType.OK) or False)
+                return False
 
-        GLib.timeout_add(100, update_progress)
+            if cancel_event.is_set():
+                return False
 
-        # Wait for download
-        dialog.run()
+            current_size = get_cache_dir_size()
+            percent = min(99, int((current_size / expected_size) * 100))
+
+            if percent != progress_state['last_percent']:
+                progress_state['last_percent'] = percent
+                progress_bar.set_fraction(percent / 100.0)
+                progress_bar.set_text(f"{percent}%")
+
+            return True
+
+        GLib.timeout_add(200, update_progress)
+
+        # Wait for download (dialog.run() blocks until response)
+        response = dialog.run()
+
+        # Handle cancel button click
+        if response == Gtk.ResponseType.CANCEL:
+            cancel_event.set()
+            download_complete["cancelled"] = True
+            print(f"User cancelled {model_name} model download")
+
+        dialog.destroy()
 
         # Show success message if download completed successfully
         if download_complete["success"]:

@@ -40,13 +40,19 @@ echo "   ℹ️  Dev data preserved: ~/.local/share/TalkType-dev/"
 echo "   ✓ AppImage CUDA libraries removed"
 echo "   ℹ️  Dev CUDA libraries preserved (if you had them)"
 
-# 4. Remove Hugging Face model cache
+# 4. Remove Hugging Face model cache (including xet chunk cache)
 echo "4. Removing Hugging Face model cache..."
 if [ -d ~/.cache/huggingface/hub ]; then
     rm -rf ~/.cache/huggingface/hub/models--Systran--faster-whisper-* 2>/dev/null || true
+    rm -rf ~/.cache/huggingface/hub/.locks/models--Systran--faster-whisper-* 2>/dev/null || true
     echo "   ✓ All whisper models removed (small, medium, large - will be re-downloaded)"
 else
     echo "   ✓ No model cache found"
+fi
+# Also clear xet cache (HuggingFace's chunked storage - can be huge!)
+if [ -d ~/.cache/huggingface/xet ]; then
+    rm -rf ~/.cache/huggingface/xet
+    echo "   ✓ HuggingFace xet chunk cache removed"
 fi
 
 # 5. Uninstall GNOME extension

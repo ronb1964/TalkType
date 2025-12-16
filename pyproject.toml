@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "talktype"
-version = "0.3.9"
+version = "0.4.0"
 description = "Press-and-hold dictation for Wayland (F8), Faster-Whisper + ydotool, with smart punctuation."
 authors = ["Ron"]
 license = "MIT"
@@ -17,9 +17,10 @@ pyperclip = "*"
 toml = "*"
 # pygobject - using system package (copied manually in build script)
 # pycairo - using system package (copied manually in build script)
-torch = "^2.9.0"
-torchvision = "*"
-torchaudio = "*"
+# PyTorch CPU-only: TalkType uses faster-whisper/CTranslate2 for inference (not PyTorch)
+# PyTorch is only needed for HuggingFace model downloading
+torch = {version = "^2.9.0", source = "pytorch-cpu"}
+# torchvision/torchaudio removed - not needed, only torch required for HuggingFace Hub
 
 [tool.poetry.scripts]
 dictate-tray = "talktype.tray:main"
@@ -32,11 +33,12 @@ black = "^25.1.0"
 ruff = "^0.12.9"
 
 
-# PyTorch CUDA source - only needed for AppImage builds with specific CUDA version
-# [[tool.poetry.source]]
-# name = "pytorch"
-# url = "https://download.pytorch.org/whl/cu124"
-# priority = "explicit"
+# PyTorch CPU-only source - saves ~600MB in AppImage
+# GPU acceleration uses CTranslate2's CUDA support (downloaded separately via cuda_helper.py)
+[[tool.poetry.source]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+priority = "explicit"
 
 [tool.black]
 line-length = 100

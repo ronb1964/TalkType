@@ -148,14 +148,17 @@ rsync -a \
     "$VENV_PATH/lib/python${PYTHON_VERSION}/site-packages/" \
     "AppDir/usr/lib/python${PYTHON_VERSION}/site-packages/"
 
-# Copy PyTorch with CUDA support
-echo "   Copying PyTorch with CUDA..."
+# Copy PyTorch (CPU-only - GPU acceleration uses CTranslate2's separate CUDA support)
+echo "   Copying PyTorch (CPU-only)..."
 VENV_TORCH="$VENV_PATH/lib/python${PYTHON_VERSION}/site-packages/torch"
 if [ -d "$VENV_TORCH" ]; then
     echo "   Found PyTorch at $VENV_TORCH"
     cp -r "$VENV_TORCH" "AppDir/usr/lib/python${PYTHON_VERSION}/site-packages/"
     cp -r "$VENV_PATH/lib/python${PYTHON_VERSION}/site-packages/torch-"*.dist-info \
           "AppDir/usr/lib/python${PYTHON_VERSION}/site-packages/" 2>/dev/null || true
+    # Report size to verify CPU-only (should be ~140MB, not ~1.7GB)
+    TORCH_SIZE=$(du -sh "AppDir/usr/lib/python${PYTHON_VERSION}/site-packages/torch" | cut -f1)
+    echo "   ✅ PyTorch size: $TORCH_SIZE (CPU-only)"
 else
     echo "❌ ERROR: Could not find PyTorch installation at $VENV_TORCH"
     ls -la "$VENV_PATH/lib/python${PYTHON_VERSION}/site-packages/" | head -20
@@ -219,8 +222,8 @@ install -Dm755 /usr/lib/x86_64-linux-gnu/libcairo-gobject.so.2 AppDir/usr/lib/li
 install -Dm755 /usr/lib/x86_64-linux-gnu/libpangocairo-1.0.so.0 AppDir/usr/lib/libpangocairo-1.0.so.0
 echo "     ✓ Copied Cairo C libraries"
 
-# Patch PyTorch for graceful CUDA fallback
-echo "   Patching PyTorch for CPU/GPU flexibility..."
+# Patch PyTorch for graceful handling (safety measure - CPU-only torch shouldn't need this)
+echo "   Patching PyTorch (safety measure)..."
 python3 /build/patch_pytorch.py "AppDir/usr/lib/python${PYTHON_VERSION}/site-packages/torch/__init__.py"
 
 # Build ydotool
@@ -270,6 +273,9 @@ echo "   ✅ AppIndicator3 typelib bundled successfully"
 echo "   Copying TalkType source..."
 cp -r src/talktype AppDir/usr/src/
 
+# NOTE: GNOME extension is NOT bundled - it's downloaded from GitHub releases during onboarding
+# This allows users to update the extension independently of the AppImage
+
 # Create entry points
 cat > AppDir/usr/bin/dictate-tray << 'EOF'
 #!/bin/sh
@@ -297,6 +303,10 @@ export LD_LIBRARY_PATH="${HERE}/usr/lib:${LD_LIBRARY_PATH}"
 export PYTHONPATH="${HERE}/usr/src:${HERE}/usr/lib/python3.10/site-packages"
 export GI_TYPELIB_PATH="${HERE}/usr/lib/girepository-1.0"
 export PYTHONHOME="${HERE}/usr"
+# Force XWayland mode to enable recording indicator positioning on Wayland
+export GDK_BACKEND=x11
+# Disable HuggingFace XET downloads - they bypass progress tracking
+export HF_HUB_DISABLE_XET=1
 cd "$HOME"
 if [ "$1" = "prefs" ]; then
     exec "${HERE}/usr/bin/python3" -m talktype.prefs

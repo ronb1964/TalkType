@@ -1,0 +1,22 @@
+pkgbase = talktype-appimage
+	pkgdesc = Voice dictation for Linux Wayland using Whisper AI
+	pkgver = 0.4.0
+	pkgrel = 1
+	url = https://github.com/ronb1964/TalkType
+	arch = x86_64
+	license = MIT
+	depends = fuse2
+	depends = ydotool
+	depends = wl-clipboard
+	optdepends = pipewire-pulse: PipeWire audio support
+	optdepends = pulseaudio: PulseAudio support
+	provides = talktype
+	conflicts = talktype
+	options = !strip
+	noextract = TalkType-v0.4.0-x86_64.AppImage
+	source = TalkType-v0.4.0-x86_64.AppImage::https://github.com/ronb1964/TalkType/releases/download/v0.4.0/TalkType-v0.4.0-x86_64.AppImage
+	source = talktype.desktop
+	sha256sums = f32c25478edfc53ed8d8b4030fb0738c34878584e52835c6fecc57d1d088daa0
+	sha256sums = SKIP
+
+pkgname = talktype-appimage

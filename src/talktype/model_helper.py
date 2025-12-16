@@ -3,6 +3,11 @@ Model Download Helper for TalkType
 Handles WhisperModel downloads with progress UI
 """
 import os
+
+# CRITICAL: Disable XET downloads BEFORE huggingface_hub is imported anywhere
+# XET bypasses tqdm_class progress tracking, breaking our progress UI
+os.environ["HF_HUB_DISABLE_XET"] = "1"
+
 import threading
 import gi
 gi.require_version('Gtk', '3.0')
@@ -10,6 +15,24 @@ from gi.repository import Gtk, GLib
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
+
+# Model repository names on HuggingFace
+MODEL_REPOS = {
+    "tiny": "Systran/faster-whisper-tiny",
+    "base": "Systran/faster-whisper-base",
+    "small": "Systran/faster-whisper-small",
+    "medium": "Systran/faster-whisper-medium",
+    "large-v3": "Systran/faster-whisper-large-v3",
+}
+
+# Model sizes for display (compressed size users will download)
+MODEL_DISPLAY_SIZES = {
+    "tiny": "39 MB",
+    "base": "74 MB",
+    "small": "244 MB",
+    "medium": "769 MB",
+    "large-v3": "~3 GB"
+}
 
 
 def is_model_cached(model_name):
@@ -58,17 +81,10 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
         logger.info(f"Model {model_name} already cached, loading directly")
         return WhisperModel(model_name, device=device, compute_type=compute_type)
 
+    size_str = MODEL_DISPLAY_SIZES.get(model_name, "unknown size")
+
     # Show confirmation dialog before starting download
     if show_confirmation:
-        model_sizes = {
-            "tiny": "39 MB",
-            "base": "74 MB",
-            "small": "244 MB",
-            "medium": "769 MB",
-            "large-v3": "~3 GB"
-        }
-        size_str = model_sizes.get(model_name, "unknown size")
-
         confirm_dialog = Gtk.MessageDialog(
             parent=parent,
             message_type=Gtk.MessageType.QUESTION,
@@ -117,14 +133,6 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
 
     # Title
     title_label = Gtk.Label()
-    model_sizes = {
-        "tiny": "39 MB",
-        "base": "74 MB",
-        "small": "244 MB",
-        "medium": "769 MB",
-        "large-v3": "~3 GB"
-    }
-    size_str = model_sizes.get(model_name, "unknown size")
     title_label.set_markup(f'<span size="large"><b>Downloading {model_name} Model</b></span>')
     content.pack_start(title_label, False, False, 0)
 
@@ -134,8 +142,10 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
     status_label.set_line_wrap(True)
     content.pack_start(status_label, False, False, 0)
 
-    # Progress bar (indeterminate pulse mode since we can't track HF download progress)
+    # Progress bar with percentage text
     progress_bar = Gtk.ProgressBar()
+    progress_bar.set_show_text(True)
+    progress_bar.set_text("0%")
     content.pack_start(progress_bar, False, False, 0)
 
     # Info label
@@ -157,34 +167,171 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
     cancel_event = threading.Event()
     download_result = [None]
     download_error = [None]
+    download_done = [False]
 
-    def pulse_progress():
-        """Pulse the progress bar while downloading"""
-        if not cancel_event.is_set():
-            progress_bar.pulse()
-            return True  # Continue pulsing
-        return False  # Stop pulsing
+    # Progress tracking state (shared between threads)
+    progress_state = {
+        'total_bytes': 0,
+        'downloaded_bytes': 0,
+        'current_file': '',
+        'last_percent': -1
+    }
+
+    def update_ui_progress(percent, file_info=""):
+        """Update progress bar from main thread"""
+        # Only update if percent changed (reduces UI updates)
+        if int(percent) == progress_state['last_percent']:
+            return
+        progress_state['last_percent'] = int(percent)
+
+        def do_update():
+            progress_bar.set_fraction(percent / 100.0)
+            progress_bar.set_text(f"{int(percent)}%")
+            if file_info:
+                status_label.set_markup(f'<span>{file_info}</span>')
+            return False
+        GLib.idle_add(do_update)
 
     def do_download():
-        """Download model in background thread"""
+        """Download model files with byte-level progress tracking"""
         try:
-            # Periodically check for cancellation (faster-whisper doesn't support cancel)
-            # We'll just load the model - if user cancels, we abandon the download
-            if not cancel_event.is_set():
+            if cancel_event.is_set():
+                return
+
+            logger.info(f"Downloading model {model_name} using huggingface_hub")
+
+            # Import huggingface_hub
+            from huggingface_hub import hf_hub_download, list_repo_tree
+            from huggingface_hub.utils import disable_progress_bars
+            import tqdm
+
+            # Disable huggingface_hub's console progress bars
+            disable_progress_bars()
+
+            repo_id = MODEL_REPOS.get(model_name)
+            if not repo_id:
+                raise ValueError(f"Unknown model: {model_name}")
+
+            # Get list of files with sizes
+            try:
+                files_info = list(list_repo_tree(repo_id, recursive=True))
+                # Filter to only files (not directories)
+                files_with_sizes = [(f.path, f.size) for f in files_info if hasattr(f, 'size') and f.size is not None]
+                total_bytes = sum(size for _, size in files_with_sizes)
+                progress_state['total_bytes'] = total_bytes
+                logger.info(f"Model {model_name}: {len(files_with_sizes)} files, {total_bytes / 1024 / 1024:.1f} MB total")
+            except Exception as e:
+                logger.warning(f"Could not get file sizes: {e}")
+                files_with_sizes = []
+                total_bytes = 0
+
+            if not files_with_sizes:
+                # Fallback - just load the model directly
+                update_ui_progress(50, "Downloading model...")
                 model = WhisperModel(
                     model_name,
                     device=device,
                     compute_type=compute_type,
                     cpu_threads=os.cpu_count() or 4
                 )
-                if not cancel_event.is_set():
-                    download_result[0] = model
+                download_result[0] = model
+                return
+
+            # Create custom tqdm class that updates our progress bar
+            class GtkProgressTqdm(tqdm.tqdm):
+                """Custom tqdm that updates GTK progress bar"""
+                def __init__(self, *args, **kwargs):
+                    import io
+                    # Store the file being downloaded
+                    self._current_file = kwargs.get('desc', 'file')
+                    # Pop 'name' kwarg that huggingface_hub passes but tqdm doesn't accept
+                    kwargs.pop('name', None)
+                    # CRITICAL: Force disable=False - tqdm sets disable=True when no TTY,
+                    # but we're updating a GTK progress bar, not a terminal!
+                    kwargs['disable'] = False
+                    # Suppress console output - redirect to null device
+                    kwargs['file'] = io.StringIO()
+                    super().__init__(*args, **kwargs)
+
+                def update(self, n=1):
+                    if cancel_event.is_set():
+                        raise InterruptedError("Download cancelled")
+
+                    # Call parent update
+                    super().update(n)
+
+                    # Update downloaded bytes
+                    progress_state['downloaded_bytes'] += n
+
+                    # Calculate overall progress
+                    if progress_state['total_bytes'] > 0:
+                        percent = (progress_state['downloaded_bytes'] / progress_state['total_bytes']) * 95
+                        percent = min(95, percent)  # Cap at 95% until model loads
+                        update_ui_progress(percent, f"Downloading {self._current_file}...")
+
+            # Download each file with progress tracking
+            for filename, file_size in files_with_sizes:
+                if cancel_event.is_set():
+                    raise InterruptedError("Download cancelled")
+
+                progress_state['current_file'] = filename
+                bytes_before = progress_state['downloaded_bytes']
+
+                try:
+                    # Download with our custom tqdm class
+                    hf_hub_download(
+                        repo_id=repo_id,
+                        filename=filename,
+                        tqdm_class=GtkProgressTqdm,
+                    )
+                    # If no progress updates happened, file was cached - update manually
+                    if progress_state['downloaded_bytes'] == bytes_before:
+                        progress_state['downloaded_bytes'] += file_size
+                        if progress_state['total_bytes'] > 0:
+                            percent = (progress_state['downloaded_bytes'] / progress_state['total_bytes']) * 95
+                            percent = min(95, percent)
+                            update_ui_progress(percent, f"Loaded from cache: {filename}")
+                except InterruptedError:
+                    raise
+                except Exception as e:
+                    # Some files might already be cached or optional
+                    logger.warning(f"Error downloading {filename}: {e}")
+                    # Add file size to downloaded bytes anyway (might be cached)
+                    progress_state['downloaded_bytes'] += file_size
+
+            if cancel_event.is_set():
+                return
+
+            # Final progress update
+            update_ui_progress(95, "Loading model...")
+            logger.info(f"All files downloaded, loading model {model_name}")
+
+            # Now load the model from cache
+            model = WhisperModel(
+                model_name,
+                device=device,
+                compute_type=compute_type,
+                cpu_threads=os.cpu_count() or 4
+            )
+
+            if not cancel_event.is_set():
+                download_result[0] = model
+                logger.info(f"Model {model_name} loaded successfully")
+
+        except InterruptedError:
+            logger.info(f"Model download interrupted by user")
         except Exception as e:
             download_error[0] = e
             logger.error(f"Model download failed: {e}")
+        finally:
+            download_done[0] = True
 
         def close_dialog():
-            progress_dialog.response(Gtk.ResponseType.OK)
+            # Set to 100% before closing
+            progress_bar.set_fraction(1.0)
+            progress_bar.set_text("100%")
+            # Small delay so user sees 100%
+            GLib.timeout_add(200, lambda: progress_dialog.response(Gtk.ResponseType.OK) or False)
             return False
         GLib.idle_add(close_dialog)
 
@@ -192,9 +339,6 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
     download_thread = threading.Thread(target=do_download)
     download_thread.daemon = True
     download_thread.start()
-
-    # Start progress bar pulsing
-    GLib.timeout_add(100, pulse_progress)
 
     # Run dialog
     response = progress_dialog.run()

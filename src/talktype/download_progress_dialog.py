@@ -344,7 +344,7 @@ def show_unified_download_dialog(cuda=False, extension=False, parent=None):
         def extension_download(progress_callback, cancel_event):
             """Wrapper for extension installation with progress tracking."""
             progress_callback("Installing GNOME extension...", 30)
-            success = extension_helper.download_and_install_extension()
+            success = extension_helper.install_extension()
             if success:
                 progress_callback("Extension installed successfully!", 100)
             else:
