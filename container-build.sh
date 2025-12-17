@@ -289,7 +289,7 @@ chmod +x AppDir/usr/bin/dictate-tray
 
 # Copy desktop files and icons
 echo "   Adding desktop integration..."
-cp icons/OFFICIAL_ICON_DO_NOT_CHANGE.svg AppDir/io.github.ronb1964.TalkType.png
+cp io.github.ronb1964.TalkType.png AppDir/
 cp io.github.ronb1964.TalkType.desktop AppDir/
 cp io.github.ronb1964.TalkType.appdata.xml AppDir/usr/share/metainfo/
 

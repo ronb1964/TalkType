@@ -613,6 +613,118 @@ def install_update_and_restart(
         return (False, f"Failed to install update: {e}")
 
 
+def _refresh_desktop_menu_cache():
+    """
+    Refresh the desktop menu cache after creating/removing a .desktop file.
+
+    This is especially needed for KDE/Plasma which doesn't auto-refresh.
+    Runs silently - failures are logged but don't raise exceptions.
+    """
+    import subprocess
+    import shutil
+
+    # Try KDE's cache refresh (kbuildsycoca5 or kbuildsycoca6)
+    for cmd in ['kbuildsycoca6', 'kbuildsycoca5']:
+        if shutil.which(cmd):
+            try:
+                subprocess.run([cmd, '--noincremental'],
+                             capture_output=True, timeout=10)
+                logger.debug(f"Desktop menu cache refreshed using {cmd}")
+                return
+            except Exception as e:
+                logger.debug(f"Could not run {cmd}: {e}")
+
+    # Try update-desktop-database for other desktops
+    if shutil.which('update-desktop-database'):
+        try:
+            apps_dir = os.path.dirname(DESKTOP_FILE_PATH)
+            subprocess.run(['update-desktop-database', apps_dir],
+                         capture_output=True, timeout=10)
+            logger.debug("Desktop menu cache refreshed using update-desktop-database")
+        except Exception as e:
+            logger.debug(f"Could not run update-desktop-database: {e}")
+
+
+def _install_app_icon() -> Optional[str]:
+    """
+    Install the TalkType icon to the user's icon directory.
+
+    Copies the app icon from the AppImage or source to ~/.local/share/icons/
+    so it can be referenced by the desktop launcher.
+
+    Returns:
+        str: Icon name to use in .desktop file, or None if installation failed
+    """
+    import shutil
+    import sys
+
+    icon_dest_dir = os.path.expanduser("~/.local/share/icons/hicolor/256x256/apps")
+    icon_dest_path = os.path.join(icon_dest_dir, "talktype.png")
+
+    # If icon already installed, just return the name
+    if os.path.exists(icon_dest_path):
+        return "talktype"
+
+    # Find the source icon
+    icon_source = None
+
+    # Try 1: Look in AppImage location
+    appimage_path = os.environ.get("APPIMAGE")
+    if appimage_path:
+        # Icon should be next to the AppImage or inside mounted AppDir
+        appdir = os.environ.get("APPDIR", "")
+        if appdir:
+            possible_paths = [
+                os.path.join(appdir, "io.github.ronb1964.TalkType.png"),
+                os.path.join(appdir, "talktype.png"),
+                os.path.join(appdir, "usr", "share", "icons", "hicolor", "256x256", "apps", "talktype.png"),
+            ]
+            for p in possible_paths:
+                if os.path.exists(p):
+                    icon_source = p
+                    break
+
+    # Try 2: Look relative to this module (for dev mode)
+    if not icon_source:
+        module_dir = Path(__file__).parent
+        project_root = module_dir.parent.parent
+        possible_paths = [
+            project_root / "io.github.ronb1964.TalkType.png",
+            project_root / "icons" / "TT_square_light.png",
+        ]
+        for p in possible_paths:
+            if p.exists():
+                icon_source = str(p)
+                break
+
+    if not icon_source:
+        logger.debug("Could not find TalkType icon to install")
+        return None
+
+    try:
+        # Create icon directory
+        os.makedirs(icon_dest_dir, exist_ok=True)
+
+        # Copy icon
+        shutil.copy2(icon_source, icon_dest_path)
+        logger.info(f"Installed TalkType icon to {icon_dest_path}")
+
+        # Update icon cache (for GTK-based desktops)
+        import subprocess
+        try:
+            icons_base = os.path.expanduser("~/.local/share/icons/hicolor")
+            subprocess.run(['gtk-update-icon-cache', '-f', '-t', icons_base],
+                         capture_output=True, timeout=10)
+        except Exception:
+            pass  # Not critical
+
+        return "talktype"
+
+    except Exception as e:
+        logger.warning(f"Could not install TalkType icon: {e}")
+        return None
+
+
 def create_desktop_launcher() -> Tuple[bool, str]:
     """
     Create a desktop launcher (.desktop file) for TalkType.
@@ -628,6 +740,11 @@ def create_desktop_launcher() -> Tuple[bool, str]:
         apps_dir = os.path.dirname(DESKTOP_FILE_PATH)
         os.makedirs(apps_dir, exist_ok=True)
 
+        # Install the TalkType icon and get the icon name to use
+        icon_name = _install_app_icon()
+        if not icon_name:
+            icon_name = "audio-input-microphone"  # Fallback to system icon
+
         # Get the current version for the comment
         version = get_current_version()
 
@@ -636,7 +753,7 @@ def create_desktop_launcher() -> Tuple[bool, str]:
 Name=TalkType
 Comment=AI-powered speech recognition and dictation (v{version})
 Exec={APPIMAGE_PATH}
-Icon=audio-input-microphone
+Icon={icon_name}
 Type=Application
 Categories=Utility;Accessibility;AudioVideo;
 Keywords=dictation;speech;voice;transcription;whisper;
@@ -650,6 +767,9 @@ Terminal=false
 
         # Make it executable (not strictly required but good practice)
         os.chmod(DESKTOP_FILE_PATH, 0o755)
+
+        # Refresh desktop menu cache (especially needed for KDE/Plasma)
+        _refresh_desktop_menu_cache()
 
         logger.info(f"Desktop launcher created at {DESKTOP_FILE_PATH}")
         return (True, f"Desktop launcher created!\n\nTalkType is now in your Applications menu.")

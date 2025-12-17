@@ -2117,7 +2117,7 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False)
         launcher_created: True if desktop launcher was created
     """
     dialog = Gtk.Dialog(title="TalkType - Ready!")
-    dialog.set_default_size(500, 480)
+    dialog.set_default_size(450, -1)  # Auto-height to fit content
     dialog.set_border_width(0)
     dialog.set_resizable(False)
     dialog.set_position(Gtk.WindowPosition.CENTER)
@@ -2125,123 +2125,99 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False)
     content = dialog.get_content_area()
     content.set_spacing(0)
 
-    # Create scrollable container for content
-    scrolled = Gtk.ScrolledWindow()
-    scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-    content.pack_start(scrolled, True, True, 0)
+    # Main container - compact spacing
+    vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+    vbox.set_margin_start(25)
+    vbox.set_margin_end(25)
+    vbox.set_margin_top(20)
+    vbox.set_margin_bottom(20)
+    content.pack_start(vbox, True, True, 0)
 
-    # Main container
-    vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=15)
-    vbox.set_margin_start(40)
-    vbox.set_margin_end(40)
-    vbox.set_margin_top(30)
-    vbox.set_margin_bottom(30)
-    scrolled.add(vbox)
-
-    # Success header
+    # Success header - combined emoji and title on one line
     header_label = Gtk.Label()
-    header_label.set_markup('<span size="xx-large">🎉</span>')
+    header_label.set_markup('<span size="x-large">🎉 <b>Setup Complete!</b></span>')
     vbox.pack_start(header_label, False, False, 0)
 
-    title_label = Gtk.Label()
-    title_label.set_markup('<span size="x-large"><b>Setup Complete!</b></span>')
-    vbox.pack_start(title_label, False, False, 0)
-
     subtitle_label = Gtk.Label()
-    subtitle_label.set_markup('<span size="medium">TalkType is ready to use.</span>')
-    subtitle_label.set_margin_top(5)
+    subtitle_label.set_markup('TalkType is ready to use.')
+    subtitle_label.set_margin_top(2)
     vbox.pack_start(subtitle_label, False, False, 0)
 
-    # Show installation info if AppImage was installed
+    # Show installation info if AppImage was installed (compact)
     if appimage_installed or launcher_created:
-        install_sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
-        install_sep.set_margin_top(15)
-        install_sep.set_margin_bottom(10)
-        vbox.pack_start(install_sep, False, False, 0)
-
-        install_header = Gtk.Label()
-        install_header.set_markup('<span size="large"><b>📁 Installed Location</b></span>')
-        install_header.set_halign(Gtk.Align.START)
-        vbox.pack_start(install_header, False, False, 0)
-
-        install_info_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
-        install_info_box.set_margin_start(10)
-        install_info_box.set_margin_top(5)
+        install_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        install_box.set_margin_top(10)
 
         if appimage_installed:
             path_label = Gtk.Label()
-            path_label.set_markup('✅ TalkType installed to: <b>~/AppImages/TalkType.AppImage</b>')
+            path_label.set_markup('<span size="small">📁 Installed to: <b>~/AppImages/TalkType.AppImage</b></span>')
             path_label.set_halign(Gtk.Align.START)
-            path_label.set_line_wrap(True)
-            install_info_box.pack_start(path_label, False, False, 0)
+            install_box.pack_start(path_label, False, False, 0)
 
         if launcher_created:
             launcher_label = Gtk.Label()
-            launcher_label.set_markup('✅ <b>TalkType</b> added to your Applications menu')
+            launcher_label.set_markup('<span size="small">✅ Added to Applications menu</span>')
             launcher_label.set_halign(Gtk.Align.START)
-            launcher_label.set_line_wrap(True)
-            install_info_box.pack_start(launcher_label, False, False, 0)
+            install_box.pack_start(launcher_label, False, False, 0)
 
-        vbox.pack_start(install_info_box, False, False, 0)
+        vbox.pack_start(install_box, False, False, 0)
 
     # Separator
     sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
-    sep.set_margin_top(15)
-    sep.set_margin_bottom(15)
+    sep.set_margin_top(10)
+    sep.set_margin_bottom(8)
     vbox.pack_start(sep, False, False, 0)
 
-    # Quick start instructions
+    # Quick start instructions - compact
     instructions_label = Gtk.Label()
-    instructions_label.set_markup('<span size="large"><b>🚀 How to Start Dictating</b></span>')
+    instructions_label.set_markup('<b>🚀 Quick Start</b>')
     instructions_label.set_halign(Gtk.Align.START)
     vbox.pack_start(instructions_label, False, False, 0)
 
-    steps_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-    steps_box.set_margin_start(10)
-    steps_box.set_margin_top(10)
+    steps_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+    steps_box.set_margin_start(5)
+    steps_box.set_margin_top(5)
 
     steps = [
-        "1️⃣  Press and hold <b>F8</b> (or your configured hotkey)",
-        "2️⃣  Speak clearly into your microphone",
-        "3️⃣  Release the key when done — text appears instantly!",
+        "1. Press and hold <b>F8</b> (or your hotkey)",
+        "2. Speak clearly into your microphone",
+        "3. Release — text appears instantly!",
     ]
 
     for step in steps:
         step_label = Gtk.Label()
-        step_label.set_markup(step)
+        step_label.set_markup(f'<span size="small">{step}</span>')
         step_label.set_halign(Gtk.Align.START)
-        step_label.set_line_wrap(True)
         steps_box.pack_start(step_label, False, False, 0)
 
     vbox.pack_start(steps_box, False, False, 0)
 
-    # Tip
+    # Tips - combined into one line
     tip_label = Gtk.Label()
     tip_label.set_markup(
-        '<span size="small"><i>💡 Tip: Say "period", "comma", or "new paragraph" for punctuation!</i></span>'
+        '<span size="small"><i>💡 Say "period", "comma", "new paragraph" for punctuation</i></span>'
     )
     tip_label.set_halign(Gtk.Align.START)
-    tip_label.set_margin_top(15)
+    tip_label.set_margin_top(8)
     tip_label.set_opacity(0.8)
     vbox.pack_start(tip_label, False, False, 0)
 
-    # Access settings note
     settings_label = Gtk.Label()
     settings_label.set_markup(
-        '<span size="small"><i>⚙️ Right-click the tray icon for settings and help.</i></span>'
+        '<span size="small"><i>⚙️ Right-click tray icon for settings</i></span>'
     )
     settings_label.set_halign(Gtk.Align.START)
-    settings_label.set_margin_top(5)
+    settings_label.set_margin_top(2)
     settings_label.set_opacity(0.8)
     vbox.pack_start(settings_label, False, False, 0)
 
-    # Start button
+    # Start button - smaller
     button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
     button_box.set_halign(Gtk.Align.CENTER)
-    button_box.set_margin_top(20)
+    button_box.set_margin_top(12)
 
     start_button = Gtk.Button(label="Start Using TalkType!")
-    start_button.set_size_request(200, 40)
+    start_button.set_size_request(180, 35)
     start_button.get_style_context().add_class("suggested-action")
     start_button.connect("clicked", lambda w: dialog.response(Gtk.ResponseType.OK))
     button_box.pack_start(start_button, False, False, 0)
