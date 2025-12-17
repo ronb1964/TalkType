@@ -287,7 +287,11 @@ class PreferencesWindow:
 
         # Notebook for tabs
         self.notebook = Gtk.Notebook()
+        self.main_scrolled = scrolled  # Store reference for scroll-to-top on tab switch
         notebook = self.notebook  # Local alias for compatibility
+
+        # Connect to tab switch signal to scroll to top
+        notebook.connect("switch-page", self.on_tab_switched)
 
         # General tab
         general_tab = self.create_general_tab()
@@ -1173,23 +1177,42 @@ class PreferencesWindow:
         desc.set_xalign(0)
         desc.set_line_wrap(True)
         vbox.pack_start(desc, False, False, 5)
-        
+
+        # Buttons for add/remove (at the top for easy access)
+        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        button_box.set_margin_top(5)
+        button_box.set_margin_bottom(5)
+
+        add_btn = Gtk.Button(label="➕ Add Command")
+        add_btn.connect("clicked", self._on_add_command)
+        add_btn.set_tooltip_text("Add a new custom voice command")
+        button_box.pack_start(add_btn, False, False, 0)
+
+        remove_btn = Gtk.Button(label="➖ Remove Selected")
+        remove_btn.connect("clicked", self._on_remove_command)
+        remove_btn.set_tooltip_text("Remove the selected command")
+        button_box.pack_start(remove_btn, False, False, 0)
+
+        vbox.pack_start(button_box, False, False, 0)
+
         # Create list store for commands: phrase, replacement
         self.commands_store = Gtk.ListStore(str, str)
-        
+
         # Load existing commands
         commands = load_custom_commands()
         for phrase, replacement in commands.items():
             self.commands_store.append([phrase, replacement])
-        
+
         # Create tree view
         scrolled = Gtk.ScrolledWindow()
         scrolled.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        scrolled.set_min_content_height(200)
-        
+        # Set reasonable height limits - grows with content but doesn't fill empty space
+        scrolled.set_min_content_height(80)   # Small minimum - just header + a couple rows
+        scrolled.set_max_content_height(200)  # Cap it so tips are always visible
+
         self.commands_tree = Gtk.TreeView(model=self.commands_store)
         self.commands_tree.set_headers_visible(True)
-        
+
         # Phrase column (editable)
         phrase_renderer = Gtk.CellRendererText()
         phrase_renderer.set_property("editable", True)
@@ -1209,24 +1232,9 @@ class PreferencesWindow:
         replacement_column.set_expand(True)
         replacement_column.set_min_width(200)
         self.commands_tree.append_column(replacement_column)
-        
+
         scrolled.add(self.commands_tree)
-        vbox.pack_start(scrolled, True, True, 0)
-        
-        # Buttons for add/remove
-        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        
-        add_btn = Gtk.Button(label="➕ Add Command")
-        add_btn.connect("clicked", self._on_add_command)
-        add_btn.set_tooltip_text("Add a new custom voice command")
-        button_box.pack_start(add_btn, False, False, 0)
-        
-        remove_btn = Gtk.Button(label="➖ Remove Selected")
-        remove_btn.connect("clicked", self._on_remove_command)
-        remove_btn.set_tooltip_text("Remove the selected command")
-        button_box.pack_start(remove_btn, False, False, 0)
-        
-        vbox.pack_start(button_box, False, False, 5)
+        vbox.pack_start(scrolled, False, False, 0)  # Don't expand - stay compact
         
         # Tips section
         tips = Gtk.Label()
@@ -1310,9 +1318,10 @@ class PreferencesWindow:
         self.update_actions_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         self.update_actions_box.set_margin_top(10)
 
-        self.download_btn = Gtk.Button(label="Download Update")
+        self.download_btn = Gtk.Button(label="Download & Install")
         self.download_btn.connect("clicked", self._on_download_update_clicked)
         self.download_btn.set_no_show_all(True)
+        self.download_btn.set_tooltip_text("Download the update and automatically install & restart TalkType")
         self.update_actions_box.pack_start(self.download_btn, False, False, 0)
 
         self.view_release_btn = Gtk.Button(label="View on GitHub")
@@ -1351,8 +1360,8 @@ class PreferencesWindow:
         # Info text
         info_label = Gtk.Label()
         info_label.set_markup(
-            '<span size="small">Updates are downloaded to ~/.local/share/TalkType/updates/\n'
-            'After downloading, close TalkType and replace your AppImage.</span>'
+            '<span size="small"><b>AppImage location:</b> ~/AppImages/TalkType.AppImage\n'
+            'Updates are downloaded, installed, and TalkType restarts automatically.</span>'
         )
         info_label.set_xalign(0)
         info_label.set_line_wrap(True)
@@ -1446,7 +1455,7 @@ class PreferencesWindow:
             self.update_extension_btn.hide()
 
     def _on_download_update_clicked(self, button):
-        """Handle download update button click."""
+        """Handle download update button click - downloads, installs, and restarts."""
         import threading
         from . import update_checker
 
@@ -1459,13 +1468,37 @@ class PreferencesWindow:
         if not url:
             return
 
+        # Confirm with user
+        confirm_dialog = Gtk.MessageDialog(
+            transient_for=self.window,
+            message_type=Gtk.MessageType.QUESTION,
+            buttons=Gtk.ButtonsType.YES_NO,
+            text="Download & Install Update?"
+        )
+        confirm_dialog.format_secondary_text(
+            "TalkType will:\n"
+            "1. Download the new version\n"
+            "2. Install it to ~/AppImages/TalkType.AppImage\n"
+            "3. Restart automatically\n\n"
+            "Any unsaved preferences changes will be saved first."
+        )
+        response = confirm_dialog.run()
+        confirm_dialog.destroy()
+
+        if response != Gtk.ResponseType.YES:
+            return
+
+        # Save any pending config changes first
+        self.save_config()
+
         # Create progress dialog
         progress_dialog = Gtk.Dialog(
-            title="Downloading Update",
+            title="Updating TalkType",
             transient_for=self.window,
             flags=Gtk.DialogFlags.MODAL
         )
-        progress_dialog.set_default_size(400, 100)
+        progress_dialog.set_default_size(400, 120)
+        progress_dialog.set_deletable(False)  # Prevent closing during update
 
         content = progress_dialog.get_content_area()
         content.set_spacing(10)
@@ -1484,54 +1517,62 @@ class PreferencesWindow:
 
         progress_dialog.show_all()
 
-        result_holder = [None]
+        result_holder = {"download_path": None, "error": None}
 
         def progress_callback(message, percent):
             GLib.idle_add(lambda: status_label.set_text(message))
             GLib.idle_add(lambda: progress_bar.set_fraction(percent / 100.0))
             GLib.idle_add(lambda: progress_bar.set_text(f"{percent}%"))
 
-        def do_download():
-            result_holder[0] = update_checker.download_update(url, filename, progress_callback)
-            GLib.idle_add(download_complete)
+        def do_download_and_install():
+            # Step 1: Download
+            downloaded_path = update_checker.download_update(url, filename, progress_callback)
 
-        def download_complete():
+            if not downloaded_path:
+                result_holder["error"] = "Download failed"
+                GLib.idle_add(download_failed)
+                return
+
+            result_holder["download_path"] = downloaded_path
+
+            # Step 2: Install and restart
+            GLib.idle_add(lambda: status_label.set_text("Installing update..."))
+            GLib.idle_add(lambda: progress_bar.set_fraction(0.9))
+
+            success, message = update_checker.install_update_and_restart(
+                downloaded_path,
+                progress_callback
+            )
+
+            # If we get here, something went wrong (install_update_and_restart should exec)
+            if not success:
+                result_holder["error"] = message
+                GLib.idle_add(download_failed)
+
+        def download_failed():
             progress_dialog.destroy()
 
-            downloaded_path = result_holder[0]
-            if downloaded_path:
-                self.update_status_label.set_markup(
-                    f"<span color='#4CAF50'><b>Download complete!</b></span>\n"
-                    f"Saved to: {downloaded_path}\n\n"
-                    f"To install: Close TalkType, replace your AppImage, restart."
-                )
+            error_msg = result_holder.get("error", "Unknown error")
+            self.update_status_label.set_markup(
+                f"<span color='red'>Update failed: {error_msg}</span>\n"
+                f"Please try again or download manually from GitHub."
+            )
 
-                # Show open folder dialog
-                dialog = Gtk.MessageDialog(
-                    transient_for=self.window,
-                    message_type=Gtk.MessageType.INFO,
-                    buttons=Gtk.ButtonsType.OK,
-                    text="Download Complete!"
-                )
-                dialog.format_secondary_text(
-                    f"The update has been downloaded.\n\n"
-                    f"To install:\n"
-                    f"1. Close TalkType\n"
-                    f"2. Replace your AppImage with the downloaded file\n"
-                    f"3. Restart TalkType"
-                )
-                dialog.add_button("Open Folder", Gtk.ResponseType.ACCEPT)
+            # Show error dialog
+            dialog = Gtk.MessageDialog(
+                transient_for=self.window,
+                message_type=Gtk.MessageType.ERROR,
+                buttons=Gtk.ButtonsType.OK,
+                text="Update Failed"
+            )
+            dialog.format_secondary_text(
+                f"{error_msg}\n\n"
+                f"You can try again or download the update manually from GitHub."
+            )
+            dialog.run()
+            dialog.destroy()
 
-                response = dialog.run()
-                if response == Gtk.ResponseType.ACCEPT:
-                    update_checker.open_update_directory()
-                dialog.destroy()
-            else:
-                self.update_status_label.set_markup(
-                    f"<span color='red'>Download failed. Please try again or download manually.</span>"
-                )
-
-        thread = threading.Thread(target=do_download, daemon=True)
+        thread = threading.Thread(target=do_download_and_install, daemon=True)
         thread.start()
 
     def _on_view_release_clicked(self, button):
@@ -3074,6 +3115,14 @@ X-GNOME-Autostart-enabled=true
             print(f"Failed to restart service: {e}")
             return False
     
+    def on_tab_switched(self, notebook, page, page_num):
+        """Scroll to top when switching tabs."""
+        if hasattr(self, 'main_scrolled') and self.main_scrolled:
+            # Get the vertical adjustment and scroll to top
+            vadj = self.main_scrolled.get_vadjustment()
+            if vadj:
+                vadj.set_value(0)
+
     def on_apply(self, button):
         """Apply changes and restart service without closing."""
         # Save custom commands first

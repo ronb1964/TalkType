@@ -1452,6 +1452,9 @@ Right-click the tray icon → "Help..." for full documentation
         except Exception as e:
             logger.error(f"Failed to show welcome dialog after hotkey change: {e}")
 
+    # Track which device is grabbed (to prevent hotkey from passing through to apps)
+    grabbed_device = None
+
     while True:
         current_time = time.time()
 
@@ -1473,9 +1476,22 @@ Right-click the tray icon → "Help..." for full documentation
                                 if timeout_enabled:
                                     last_activity_time = current_time
                                 if event.value == 1 and not state.is_recording:
+                                    # Grab device to prevent hotkey from passing through to apps (e.g., terminals)
+                                    try:
+                                        dev.grab()
+                                        grabbed_device = dev
+                                    except Exception as e:
+                                        logger.debug(f"Could not grab device: {e}")
                                     start_recording(cfg.beeps, cfg.notify, input_device_idx)
                                 elif event.value == 0 and state.is_recording:
                                     stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language, cfg.auto_space, cfg.auto_period, cfg.injection_mode)
+                                    # Ungrab device after recording stops
+                                    if grabbed_device:
+                                        try:
+                                            grabbed_device.ungrab()
+                                        except Exception:
+                                            pass
+                                        grabbed_device = None
                         else:  # toggle mode: press to start, press again to stop
                             if event.code == toggle_key and event.value == 1:
                                 # Reset timeout timer only when TalkType hotkey is used
@@ -1491,6 +1507,13 @@ Right-click the tray icon → "Help..." for full documentation
                             if timeout_enabled:
                                 last_activity_time = current_time
                             cancel_recording(cfg.beeps, cfg.notify, "Cancelled by ESC")
+                            # Ungrab device if recording was cancelled
+                            if grabbed_device:
+                                try:
+                                    grabbed_device.ungrab()
+                                except Exception:
+                                    pass
+                                grabbed_device = None
             except BlockingIOError:
                 pass
             except Exception:

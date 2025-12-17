@@ -395,6 +395,166 @@ def detect_package_manager():
     return (None, None)
 
 
+# =============================================================================
+# PortAudio Detection and Installation
+# =============================================================================
+
+def check_portaudio_installed():
+    """
+    Check if PortAudio library is installed on the system.
+    PortAudio is required by sounddevice for audio recording.
+
+    Returns:
+        tuple: (installed: bool, message: str)
+    """
+    import ctypes.util
+
+    # Try to find libportaudio
+    portaudio_lib = ctypes.util.find_library('portaudio')
+
+    if portaudio_lib:
+        logger.debug(f"PortAudio found: {portaudio_lib}")
+        return (True, f"PortAudio library found: {portaudio_lib}")
+
+    # Fallback: Try common library paths directly
+    common_paths = [
+        '/usr/lib/libportaudio.so.2',
+        '/usr/lib64/libportaudio.so.2',
+        '/usr/lib/x86_64-linux-gnu/libportaudio.so.2',
+        '/usr/lib/aarch64-linux-gnu/libportaudio.so.2',
+    ]
+
+    for path in common_paths:
+        if os.path.exists(path):
+            logger.debug(f"PortAudio found at: {path}")
+            return (True, f"PortAudio library found: {path}")
+
+    logger.warning("PortAudio library not found")
+    return (False, "PortAudio library not found. Audio recording requires libportaudio.")
+
+
+def get_portaudio_install_command():
+    """
+    Get the package manager command to install PortAudio.
+
+    Returns:
+        tuple: (package_manager: str, install_command: list) or (None, None) if not detected
+    """
+    import shutil
+
+    # Package names differ by distro
+    # Ubuntu/Debian: libportaudio2
+    # Fedora/RHEL: portaudio
+    # Arch: portaudio
+    # openSUSE: portaudio
+    package_managers = [
+        ('dnf', ['dnf', 'install', '-y', 'portaudio']),           # Fedora, RHEL, CentOS
+        ('apt', ['apt', 'install', '-y', 'libportaudio2']),       # Debian, Ubuntu
+        ('pacman', ['pacman', '-S', '--noconfirm', 'portaudio']), # Arch, Manjaro
+        ('zypper', ['zypper', 'install', '-y', 'portaudio']),     # openSUSE
+        ('apk', ['apk', 'add', 'portaudio']),                     # Alpine
+    ]
+
+    for pm_name, install_cmd in package_managers:
+        if shutil.which(pm_name):
+            logger.debug(f"PortAudio install command for {pm_name}: {install_cmd}")
+            return (pm_name, install_cmd)
+
+    logger.warning("No supported package manager detected for PortAudio")
+    return (None, None)
+
+
+def install_portaudio_with_pkexec(parent_window=None):
+    """
+    Install PortAudio using the system package manager with pkexec for privilege escalation.
+
+    Args:
+        parent_window: Optional GTK parent window for the pkexec dialog
+
+    Returns:
+        tuple: (success: bool, message: str)
+    """
+    import subprocess
+
+    # Check if already installed
+    installed, _ = check_portaudio_installed()
+    if installed:
+        return (True, "PortAudio is already installed!")
+
+    # Detect package manager and get install command
+    pm_name, install_cmd = get_portaudio_install_command()
+
+    if not pm_name:
+        return (False, "Could not detect your package manager.\n"
+                      "Please install PortAudio manually:\n"
+                      "  Ubuntu/Debian: sudo apt install libportaudio2\n"
+                      "  Fedora: sudo dnf install portaudio\n"
+                      "  Arch: sudo pacman -S portaudio")
+
+    logger.info(f"Installing PortAudio using {pm_name}...")
+
+    try:
+        # Run the install command with pkexec
+        full_cmd = ['pkexec'] + install_cmd
+        logger.info(f"Running: {' '.join(full_cmd)}")
+
+        result = subprocess.run(full_cmd, capture_output=True, text=True, timeout=300)
+
+        if result.returncode == 0:
+            # Verify installation
+            installed, msg = check_portaudio_installed()
+            if installed:
+                logger.info("PortAudio installed successfully")
+                return (True, "PortAudio installed successfully!")
+            else:
+                return (False, "Installation appeared to succeed but PortAudio not found. "
+                              "You may need to restart TalkType.")
+        elif result.returncode == 126:
+            # User cancelled authentication
+            logger.info("User cancelled pkexec authentication for PortAudio install")
+            return (False, "Installation was cancelled.")
+        else:
+            error_msg = result.stderr or result.stdout or "Unknown error"
+            logger.error(f"Failed to install PortAudio: {error_msg}")
+            return (False, f"Installation failed:\n{error_msg}")
+
+    except subprocess.TimeoutExpired:
+        logger.error("PortAudio installation timed out")
+        return (False, "Installation timed out. Please try again or install manually.")
+    except FileNotFoundError:
+        logger.error("pkexec not found")
+        return (False, "pkexec not found. Please install polkit or install PortAudio manually.")
+    except Exception as e:
+        logger.error(f"Error installing PortAudio: {e}")
+        return (False, f"Error: {e}")
+
+
+def get_portaudio_status():
+    """
+    Get comprehensive status of PortAudio installation.
+
+    Returns:
+        dict: Status information with keys:
+            - installed: bool
+            - needs_install: bool
+            - message: str
+    """
+    installed, message = check_portaudio_installed()
+
+    if installed:
+        return {
+            'installed': True,
+            'needs_install': False,
+            'message': "PortAudio is installed - audio recording ready"
+        }
+
+    return {
+        'installed': False,
+        'needs_install': True,
+        'message': "PortAudio not installed - required for audio recording"
+    }
+
+
 def install_ydotool_with_pkexec(parent_window=None):
     """
     Install ydotool using the system package manager with pkexec for privilege escalation.

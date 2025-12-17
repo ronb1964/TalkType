@@ -134,6 +134,43 @@ def detect_ydotoold_status():
             }
 
 
+def detect_portaudio_status():
+    """
+    Detect if PortAudio library is installed (required for audio recording).
+
+    Returns:
+        dict: Status with keys:
+            - installed: bool - whether PortAudio is available
+            - needs_install: bool - whether installation is needed
+            - message: str - human-readable status
+    """
+    try:
+        from talktype.uinput_helper import get_portaudio_status
+        return get_portaudio_status()
+    except ImportError as e:
+        logger.warning(f"Could not import uinput_helper for PortAudio check: {e}")
+        # Fallback: try to import sounddevice
+        try:
+            import sounddevice
+            return {
+                'installed': True,
+                'needs_install': False,
+                'message': "PortAudio is installed - audio recording ready"
+            }
+        except OSError:
+            return {
+                'installed': False,
+                'needs_install': True,
+                'message': "PortAudio not installed - required for audio recording"
+            }
+        except Exception:
+            return {
+                'installed': True,  # Assume OK if we can't check
+                'needs_install': False,
+                'message': "Could not verify PortAudio status"
+            }
+
+
 class SplashScreen:
     """
     Simple splash screen showing TalkType icon.
@@ -365,6 +402,13 @@ class WelcomeDialog:
                    f"installed={self.ydotoold_status.get('ydotool_installed')}, "
                    f"needs_setup={self.needs_ydotoold_setup}")
 
+        # Detect PortAudio status (required for audio recording)
+        self.portaudio_status = detect_portaudio_status()
+        self.needs_portaudio_install = self.portaudio_status.get('needs_install', False)
+
+        logger.info(f"PortAudio status: installed={self.portaudio_status.get('installed')}, "
+                   f"needs_install={self.needs_portaudio_install}")
+
         # Calculate height based on what sections we'll show
         # Base height for core content
         base_height = 700
@@ -378,11 +422,14 @@ class WelcomeDialog:
         # Typing setup section shows if either uinput OR ydotoold needs fixing
         if self.needs_uinput_fix or self.needs_ydotoold_setup:
             additional_height += 250  # Typing setup section (increased for ydotoold info)
+        # PortAudio setup section
+        if self.needs_portaudio_install:
+            additional_height += 180  # PortAudio section
 
         self.height = base_height + additional_height
 
         logger.info(f"Welcome dialog: GNOME={self.has_gnome}, NVIDIA={self.has_nvidia}, "
-                   f"needs_uinput_fix={self.needs_uinput_fix}")
+                   f"needs_uinput_fix={self.needs_uinput_fix}, needs_portaudio={self.needs_portaudio_install}")
 
         # Build the dialog
         self.dialog = None
@@ -393,6 +440,9 @@ class WelcomeDialog:
         self.typing_status_label = None
         self.uinput_fixed = False  # Track if user fixed uinput during this dialog
         self.ydotoold_fixed = False  # Track if user fixed ydotoold during this dialog
+        self.install_portaudio_button = None
+        self.portaudio_status_label = None
+        self.portaudio_fixed = False  # Track if user installed PortAudio during this dialog
         self._build_dialog()
 
     def _build_dialog(self):
@@ -479,7 +529,7 @@ class WelcomeDialog:
         self._build_base_content(vbox)
 
         # Add optional features if applicable
-        if self.has_gnome or self.has_nvidia or self.needs_uinput_fix or self.needs_ydotoold_setup:
+        if self.has_gnome or self.has_nvidia or self.needs_uinput_fix or self.needs_ydotoold_setup or self.needs_portaudio_install:
             self._build_optional_features(vbox)
 
         self._build_footer(vbox)
@@ -573,14 +623,25 @@ class WelcomeDialog:
         vbox.pack_start(quickstart_box, False, False, 0)
 
     def _build_optional_features(self, vbox):
-        """Build the optional features section (GNOME extension, CUDA, and/or uinput fix)."""
+        """Build the optional features section (GNOME extension, CUDA, PortAudio, and/or uinput fix)."""
         # Separator before optional features
         sep3 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
         sep3.set_margin_top(10)
         sep3.set_margin_bottom(10)
         vbox.pack_start(sep3, False, False, 0)
 
-        # Typing setup section (shown FIRST if needed - this is critical for typing to work)
+        # PortAudio setup section (shown FIRST if needed - required for audio recording)
+        if self.needs_portaudio_install:
+            self._build_portaudio_setup_section(vbox)
+
+            # Separator after PortAudio section
+            if self.needs_uinput_fix or self.needs_ydotoold_setup or self.has_gnome or self.has_nvidia:
+                sep_portaudio = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+                sep_portaudio.set_margin_top(15)
+                sep_portaudio.set_margin_bottom(10)
+                vbox.pack_start(sep_portaudio, False, False, 0)
+
+        # Typing setup section (shown if needed - this is critical for typing to work)
         # Shows if either uinput permissions OR ydotoold daemon needs fixing
         if self.needs_uinput_fix or self.needs_ydotoold_setup:
             self._build_typing_setup_section(vbox)
@@ -614,6 +675,155 @@ class WelcomeDialog:
             note.set_margin_top(10)
             note.set_opacity(0.7)
             vbox.pack_start(note, False, False, 0)
+
+    def _build_portaudio_setup_section(self, vbox):
+        """Build the PortAudio setup section (required for audio recording)."""
+        portaudio_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        portaudio_box.set_margin_start(10)
+        portaudio_box.set_margin_top(5)
+
+        # Header with warning icon
+        header_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        header_label = Gtk.Label()
+        header_label.set_markup('<span size="large"><b>⚠️ Audio Library Required</b></span>')
+        header_label.set_halign(Gtk.Align.START)
+        header_box.pack_start(header_label, False, False, 0)
+        portaudio_box.pack_start(header_box, False, False, 0)
+
+        # Explanation
+        explain_label = Gtk.Label()
+        explain_label.set_markup(
+            '<span>TalkType needs PortAudio to record audio from your microphone.\n'
+            'This library is not installed on your system.</span>'
+        )
+        explain_label.set_halign(Gtk.Align.START)
+        explain_label.set_line_wrap(True)
+        explain_label.set_max_width_chars(60)
+        explain_label.set_margin_start(10)
+        explain_label.set_margin_top(5)
+        portaudio_box.pack_start(explain_label, False, False, 0)
+
+        # Status display
+        status_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        status_box.set_margin_start(15)
+        status_box.set_margin_top(8)
+
+        status_label = Gtk.Label()
+        status_label.set_markup('❌ <span color="#f44336">PortAudio library not found</span>')
+        status_label.set_halign(Gtk.Align.START)
+        status_box.pack_start(status_label, False, False, 0)
+
+        portaudio_box.pack_start(status_box, False, False, 0)
+
+        # What the install does
+        what_label = Gtk.Label()
+        what_label.set_markup('<b>What "Install PortAudio" does:</b>')
+        what_label.set_halign(Gtk.Align.START)
+        what_label.set_margin_start(10)
+        what_label.set_margin_top(10)
+        portaudio_box.pack_start(what_label, False, False, 0)
+
+        details = [
+            "📦 Installs the PortAudio library using your package manager",
+            "🎤 Enables microphone recording for speech recognition"
+        ]
+
+        details_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        details_box.set_margin_start(25)
+
+        for detail in details:
+            label = Gtk.Label()
+            label.set_markup(detail)
+            label.set_halign(Gtk.Align.START)
+            label.set_opacity(0.9)
+            details_box.pack_start(label, False, False, 0)
+
+        portaudio_box.pack_start(details_box, False, False, 0)
+
+        # Install button
+        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        button_box.set_margin_start(10)
+        button_box.set_margin_top(12)
+
+        self.install_portaudio_button = Gtk.Button(label="📦 Install PortAudio (Recommended)")
+        self.install_portaudio_button.get_style_context().add_class("suggested-action")
+        self.install_portaudio_button.connect("clicked", self._on_install_portaudio_clicked)
+        self.install_portaudio_button.set_tooltip_text(
+            "Install PortAudio library using your system's package manager.\n"
+            "This will prompt for your admin password."
+        )
+        button_box.pack_start(self.install_portaudio_button, False, False, 0)
+
+        # Status label (shown after install attempt)
+        self.portaudio_status_label = Gtk.Label()
+        self.portaudio_status_label.set_halign(Gtk.Align.START)
+        button_box.pack_start(self.portaudio_status_label, False, False, 10)
+
+        portaudio_box.pack_start(button_box, False, False, 0)
+
+        vbox.pack_start(portaudio_box, False, False, 0)
+
+    def _on_install_portaudio_clicked(self, button):
+        """Handle the Install PortAudio button click."""
+        try:
+            from talktype.uinput_helper import install_portaudio_with_pkexec, check_portaudio_installed
+
+            # Disable button while processing
+            button.set_sensitive(False)
+            button.set_label("Installing...")
+            self.portaudio_status_label.set_markup('<span>Installing PortAudio...</span>')
+
+            # Process GTK events so UI updates
+            while Gtk.events_pending():
+                Gtk.main_iteration()
+
+            # Run the installation
+            success, message = install_portaudio_with_pkexec(self.dialog)
+
+            if success:
+                button.set_label("✅ Installed!")
+                self.portaudio_status_label.set_markup(
+                    '<span color="#4CAF50"><b>PortAudio installed!</b> Audio recording is now available.</span>'
+                )
+
+                # Update internal state
+                self.portaudio_fixed = True
+                self.needs_portaudio_install = False
+
+                # Show success message
+                msg = Gtk.MessageDialog(
+                    transient_for=self.dialog,
+                    modal=True,
+                    message_type=Gtk.MessageType.INFO,
+                    buttons=Gtk.ButtonsType.OK,
+                    text="PortAudio Installed!"
+                )
+                msg.format_secondary_text(
+                    "PortAudio has been installed successfully.\n\n"
+                    "TalkType can now record audio from your microphone for speech recognition."
+                )
+                msg.run()
+                msg.destroy()
+            else:
+                button.set_sensitive(True)
+                button.set_label("📦 Install PortAudio (Recommended)")
+
+                if "cancelled" in message.lower():
+                    self.portaudio_status_label.set_markup(
+                        '<span color="#FF9800">Installation cancelled. You can try again.</span>'
+                    )
+                else:
+                    self.portaudio_status_label.set_markup(
+                        f'<span color="#f44336">{message}</span>'
+                    )
+
+        except Exception as e:
+            logger.error(f"Error installing PortAudio: {e}")
+            button.set_sensitive(True)
+            button.set_label("📦 Install PortAudio (Recommended)")
+            self.portaudio_status_label.set_markup(
+                f'<span color="#f44336">Error: {str(e)}</span>'
+            )
 
     def _build_typing_setup_section(self, vbox):
         """Build the typing setup section (uinput permissions + ydotoold daemon)."""
@@ -1188,6 +1398,10 @@ class WelcomeDialog:
         result['ydotoold_setup'] = not self.needs_ydotoold_setup or self.ydotoold_fixed
         result['needs_typing_setup'] = (self.needs_uinput_fix and not self.uinput_fixed) or \
                                        (self.needs_ydotoold_setup and not self.ydotoold_fixed)
+
+        # Include PortAudio status
+        result['portaudio_installed'] = not self.needs_portaudio_install or self.portaudio_fixed
+        result['needs_portaudio'] = self.needs_portaudio_install and not self.portaudio_fixed
 
         logger.info(f"Welcome dialog result: {result}")
 
@@ -1852,9 +2066,191 @@ def show_welcome_and_install():
             except Exception:
                 pass  # Last resort failed, app will try to download on first run
 
+    # Install AppImage to standard location and create desktop launcher (if running from AppImage)
+    appimage_installed = False
+    launcher_created = False
+    try:
+        from talktype.update_checker import (
+            is_running_from_appimage,
+            ensure_appimage_in_standard_location,
+            copy_appimage_to_standard_location,
+            create_desktop_launcher,
+            desktop_launcher_exists,
+            APPIMAGE_PATH
+        )
+
+        if is_running_from_appimage():
+            # Check if AppImage is already in standard location
+            already_there, current_path = ensure_appimage_in_standard_location()
+
+            if not already_there and current_path:
+                # Copy AppImage to ~/AppImages/TalkType.AppImage
+                success, msg = copy_appimage_to_standard_location()
+                if success:
+                    appimage_installed = True
+                    logger.info(f"AppImage installed to standard location: {APPIMAGE_PATH}")
+
+            # Create desktop launcher if it doesn't exist
+            if not desktop_launcher_exists():
+                success, msg = create_desktop_launcher()
+                if success:
+                    launcher_created = True
+                    logger.info("Desktop launcher created")
+    except Exception as e:
+        logger.warning(f"Could not set up AppImage/launcher: {e}")
+
+    # Show final "Ready to Go!" screen after successful model download
+    show_setup_complete_dialog(appimage_installed=appimage_installed, launcher_created=launcher_created)
+
     logger.info("First-run setup completed")
 
     return result
+
+
+def show_setup_complete_dialog(appimage_installed=False, launcher_created=False):
+    """
+    Show the final setup complete dialog after model download.
+    Tells the user they're ready to start dictating.
+
+    Args:
+        appimage_installed: True if AppImage was copied to ~/AppImages/
+        launcher_created: True if desktop launcher was created
+    """
+    dialog = Gtk.Dialog(title="TalkType - Ready!")
+    dialog.set_default_size(500, 480)
+    dialog.set_border_width(0)
+    dialog.set_resizable(False)
+    dialog.set_position(Gtk.WindowPosition.CENTER)
+
+    content = dialog.get_content_area()
+    content.set_spacing(0)
+
+    # Create scrollable container for content
+    scrolled = Gtk.ScrolledWindow()
+    scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+    content.pack_start(scrolled, True, True, 0)
+
+    # Main container
+    vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=15)
+    vbox.set_margin_start(40)
+    vbox.set_margin_end(40)
+    vbox.set_margin_top(30)
+    vbox.set_margin_bottom(30)
+    scrolled.add(vbox)
+
+    # Success header
+    header_label = Gtk.Label()
+    header_label.set_markup('<span size="xx-large">🎉</span>')
+    vbox.pack_start(header_label, False, False, 0)
+
+    title_label = Gtk.Label()
+    title_label.set_markup('<span size="x-large"><b>Setup Complete!</b></span>')
+    vbox.pack_start(title_label, False, False, 0)
+
+    subtitle_label = Gtk.Label()
+    subtitle_label.set_markup('<span size="medium">TalkType is ready to use.</span>')
+    subtitle_label.set_margin_top(5)
+    vbox.pack_start(subtitle_label, False, False, 0)
+
+    # Show installation info if AppImage was installed
+    if appimage_installed or launcher_created:
+        install_sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        install_sep.set_margin_top(15)
+        install_sep.set_margin_bottom(10)
+        vbox.pack_start(install_sep, False, False, 0)
+
+        install_header = Gtk.Label()
+        install_header.set_markup('<span size="large"><b>📁 Installed Location</b></span>')
+        install_header.set_halign(Gtk.Align.START)
+        vbox.pack_start(install_header, False, False, 0)
+
+        install_info_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
+        install_info_box.set_margin_start(10)
+        install_info_box.set_margin_top(5)
+
+        if appimage_installed:
+            path_label = Gtk.Label()
+            path_label.set_markup('✅ TalkType installed to: <b>~/AppImages/TalkType.AppImage</b>')
+            path_label.set_halign(Gtk.Align.START)
+            path_label.set_line_wrap(True)
+            install_info_box.pack_start(path_label, False, False, 0)
+
+        if launcher_created:
+            launcher_label = Gtk.Label()
+            launcher_label.set_markup('✅ <b>TalkType</b> added to your Applications menu')
+            launcher_label.set_halign(Gtk.Align.START)
+            launcher_label.set_line_wrap(True)
+            install_info_box.pack_start(launcher_label, False, False, 0)
+
+        vbox.pack_start(install_info_box, False, False, 0)
+
+    # Separator
+    sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+    sep.set_margin_top(15)
+    sep.set_margin_bottom(15)
+    vbox.pack_start(sep, False, False, 0)
+
+    # Quick start instructions
+    instructions_label = Gtk.Label()
+    instructions_label.set_markup('<span size="large"><b>🚀 How to Start Dictating</b></span>')
+    instructions_label.set_halign(Gtk.Align.START)
+    vbox.pack_start(instructions_label, False, False, 0)
+
+    steps_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+    steps_box.set_margin_start(10)
+    steps_box.set_margin_top(10)
+
+    steps = [
+        "1️⃣  Press and hold <b>F8</b> (or your configured hotkey)",
+        "2️⃣  Speak clearly into your microphone",
+        "3️⃣  Release the key when done — text appears instantly!",
+    ]
+
+    for step in steps:
+        step_label = Gtk.Label()
+        step_label.set_markup(step)
+        step_label.set_halign(Gtk.Align.START)
+        step_label.set_line_wrap(True)
+        steps_box.pack_start(step_label, False, False, 0)
+
+    vbox.pack_start(steps_box, False, False, 0)
+
+    # Tip
+    tip_label = Gtk.Label()
+    tip_label.set_markup(
+        '<span size="small"><i>💡 Tip: Say "period", "comma", or "new paragraph" for punctuation!</i></span>'
+    )
+    tip_label.set_halign(Gtk.Align.START)
+    tip_label.set_margin_top(15)
+    tip_label.set_opacity(0.8)
+    vbox.pack_start(tip_label, False, False, 0)
+
+    # Access settings note
+    settings_label = Gtk.Label()
+    settings_label.set_markup(
+        '<span size="small"><i>⚙️ Right-click the tray icon for settings and help.</i></span>'
+    )
+    settings_label.set_halign(Gtk.Align.START)
+    settings_label.set_margin_top(5)
+    settings_label.set_opacity(0.8)
+    vbox.pack_start(settings_label, False, False, 0)
+
+    # Start button
+    button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+    button_box.set_halign(Gtk.Align.CENTER)
+    button_box.set_margin_top(20)
+
+    start_button = Gtk.Button(label="Start Using TalkType!")
+    start_button.set_size_request(200, 40)
+    start_button.get_style_context().add_class("suggested-action")
+    start_button.connect("clicked", lambda w: dialog.response(Gtk.ResponseType.OK))
+    button_box.pack_start(start_button, False, False, 0)
+
+    vbox.pack_start(button_box, False, False, 0)
+
+    dialog.show_all()
+    dialog.run()
+    dialog.destroy()
 
 
 if __name__ == '__main__':

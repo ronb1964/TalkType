@@ -14,15 +14,13 @@ def show_help_dialog():
     dialog = Gtk.Dialog(title="TalkType Help")
     dialog.set_default_size(650, 550)
 
-    # Use geometry hints to force exact size
+    # Set minimum size but allow resizing larger
     geo = Gdk.Geometry()
-    geo.min_width = 650
-    geo.max_width = 650
-    geo.min_height = 550
-    geo.max_height = 550
-    dialog.set_geometry_hints(None, geo, Gdk.WindowHints.MIN_SIZE | Gdk.WindowHints.MAX_SIZE)
+    geo.min_width = 500
+    geo.min_height = 400
+    dialog.set_geometry_hints(None, geo, Gdk.WindowHints.MIN_SIZE)
 
-    dialog.set_resizable(False)
+    dialog.set_resizable(True)  # Allow resizing
     dialog.set_modal(False)  # Non-modal so it works without parent window
     dialog.set_position(Gtk.WindowPosition.CENTER)
     dialog.set_keep_above(True)  # Ensure it appears on top
@@ -335,6 +333,15 @@ other processing, so you can include punctuation in replacements.
 • Tray icon shows service status (bright = running, dimmed = stopped)
 • Red recording indicator appears on screen during dictation
 • Audio beeps indicate recording start/stop (can be disabled)
+
+<b>Installation &amp; Updates:</b>
+• <b>AppImage location:</b> ~/AppImages/TalkType.AppImage
+• <b>Desktop launcher:</b> TalkType appears in your Applications menu
+• <b>Check for updates:</b> Preferences → Updates tab
+• <b>Auto-update:</b> Click "Download &amp; Install" to update automatically
+• Updates are downloaded, installed, and TalkType restarts seamlessly
+• <b>Config files:</b> ~/.config/talktype/
+• <b>AI Models:</b> ~/.cache/huggingface/
 
 <b>Common Issues:</b>
 

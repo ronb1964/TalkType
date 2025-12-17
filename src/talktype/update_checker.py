@@ -28,6 +28,14 @@ EXTENSION_UUID = "talktype@ronb1964.github.io"
 # Download directory for updates
 UPDATE_DIR = os.path.expanduser("~/.local/share/TalkType/updates")
 
+# Standard AppImage install location
+APPIMAGE_DIR = os.path.expanduser("~/AppImages")
+APPIMAGE_NAME = "TalkType.AppImage"
+APPIMAGE_PATH = os.path.join(APPIMAGE_DIR, APPIMAGE_NAME)
+
+# Desktop launcher location
+DESKTOP_FILE_PATH = os.path.expanduser("~/.local/share/applications/talktype.desktop")
+
 
 def get_current_version() -> str:
     """
@@ -499,6 +507,245 @@ def get_current_timestamp() -> str:
     return datetime.now().isoformat()
 
 
+def get_appimage_path() -> str:
+    """Get the standard AppImage installation path."""
+    return APPIMAGE_PATH
+
+
+def get_appimage_dir() -> str:
+    """Get the standard AppImage directory."""
+    return APPIMAGE_DIR
+
+
+def is_running_from_appimage() -> bool:
+    """
+    Check if currently running from an AppImage.
+
+    Returns:
+        bool: True if running from AppImage, False otherwise
+    """
+    import sys
+    # AppImages run from /tmp/.mount_* or use APPIMAGE env var
+    appimage_env = os.environ.get("APPIMAGE", "")
+    return bool(appimage_env) or "/tmp/.mount_" in sys.executable
+
+
+def get_running_appimage_path() -> Optional[str]:
+    """
+    Get the path to the currently running AppImage.
+
+    Returns:
+        str: Path to AppImage, or None if not running from AppImage
+    """
+    return os.environ.get("APPIMAGE")
+
+
+def install_update_and_restart(
+    downloaded_path: str,
+    progress_callback: Optional[Callable[[str, int], None]] = None
+) -> Tuple[bool, str]:
+    """
+    Install a downloaded AppImage update and restart the application.
+
+    This function:
+    1. Creates the AppImages directory if needed
+    2. Copies the downloaded AppImage to ~/AppImages/TalkType.AppImage
+    3. Makes it executable
+    4. Restarts the application using the new AppImage
+
+    Args:
+        downloaded_path: Path to the downloaded AppImage
+        progress_callback: Optional function(message, percent) for progress updates
+
+    Returns:
+        Tuple[bool, str]: (success, message)
+    """
+    import shutil
+    import stat
+
+    try:
+        if progress_callback:
+            progress_callback("Installing update...", 50)
+
+        # Ensure AppImages directory exists
+        os.makedirs(APPIMAGE_DIR, exist_ok=True)
+
+        # Copy downloaded AppImage to standard location
+        if progress_callback:
+            progress_callback("Copying to AppImages folder...", 60)
+
+        shutil.copy2(downloaded_path, APPIMAGE_PATH)
+
+        # Make executable
+        os.chmod(APPIMAGE_PATH, stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
+
+        if progress_callback:
+            progress_callback("Update installed!", 80)
+
+        # Clean up the downloaded file from temp location
+        try:
+            os.remove(downloaded_path)
+        except Exception:
+            pass  # Not critical if cleanup fails
+
+        # Clean up update directory
+        try:
+            update_dir = os.path.dirname(downloaded_path)
+            if update_dir and os.path.isdir(update_dir):
+                shutil.rmtree(update_dir, ignore_errors=True)
+        except Exception:
+            pass
+
+        if progress_callback:
+            progress_callback("Restarting TalkType...", 90)
+
+        logger.info(f"Update installed to {APPIMAGE_PATH}, restarting...")
+
+        # Restart the application using the new AppImage
+        # Use os.execv to replace the current process
+        os.execv(APPIMAGE_PATH, [APPIMAGE_PATH])
+
+        # Note: If execv succeeds, we never reach here
+        return (True, "Update installed and restarting...")
+
+    except Exception as e:
+        logger.error(f"Failed to install update: {e}")
+        return (False, f"Failed to install update: {e}")
+
+
+def create_desktop_launcher() -> Tuple[bool, str]:
+    """
+    Create a desktop launcher (.desktop file) for TalkType.
+
+    Creates a launcher in ~/.local/share/applications/ that points to
+    the standard AppImage location (~/AppImages/TalkType.AppImage).
+
+    Returns:
+        Tuple[bool, str]: (success, message)
+    """
+    try:
+        # Ensure applications directory exists
+        apps_dir = os.path.dirname(DESKTOP_FILE_PATH)
+        os.makedirs(apps_dir, exist_ok=True)
+
+        # Get the current version for the comment
+        version = get_current_version()
+
+        # Desktop file content
+        desktop_content = f"""[Desktop Entry]
+Name=TalkType
+Comment=AI-powered speech recognition and dictation (v{version})
+Exec={APPIMAGE_PATH}
+Icon=audio-input-microphone
+Type=Application
+Categories=Utility;Accessibility;AudioVideo;
+Keywords=dictation;speech;voice;transcription;whisper;
+StartupNotify=true
+Terminal=false
+"""
+
+        # Write the desktop file
+        with open(DESKTOP_FILE_PATH, "w") as f:
+            f.write(desktop_content)
+
+        # Make it executable (not strictly required but good practice)
+        os.chmod(DESKTOP_FILE_PATH, 0o755)
+
+        logger.info(f"Desktop launcher created at {DESKTOP_FILE_PATH}")
+        return (True, f"Desktop launcher created!\n\nTalkType is now in your Applications menu.")
+
+    except Exception as e:
+        logger.error(f"Failed to create desktop launcher: {e}")
+        return (False, f"Failed to create launcher: {e}")
+
+
+def desktop_launcher_exists() -> bool:
+    """
+    Check if desktop launcher already exists.
+
+    Returns:
+        bool: True if launcher exists
+    """
+    return os.path.exists(DESKTOP_FILE_PATH)
+
+
+def remove_desktop_launcher() -> Tuple[bool, str]:
+    """
+    Remove the desktop launcher.
+
+    Returns:
+        Tuple[bool, str]: (success, message)
+    """
+    try:
+        if os.path.exists(DESKTOP_FILE_PATH):
+            os.remove(DESKTOP_FILE_PATH)
+            logger.info("Desktop launcher removed")
+            return (True, "Desktop launcher removed.")
+        else:
+            return (True, "Desktop launcher was not installed.")
+    except Exception as e:
+        logger.error(f"Failed to remove desktop launcher: {e}")
+        return (False, f"Failed to remove launcher: {e}")
+
+
+def ensure_appimage_in_standard_location() -> Tuple[bool, str]:
+    """
+    Ensure the AppImage is in the standard location.
+
+    If running from an AppImage that's not in ~/AppImages/, offer to copy it there.
+
+    Returns:
+        Tuple[bool, str]: (already_there, current_path)
+            - already_there: True if AppImage is already in standard location
+            - current_path: Path to the running AppImage (or None if not AppImage)
+    """
+    current_path = get_running_appimage_path()
+
+    if not current_path:
+        return (False, None)
+
+    # Normalize paths for comparison
+    current_normalized = os.path.realpath(current_path)
+    standard_normalized = os.path.realpath(APPIMAGE_PATH)
+
+    if current_normalized == standard_normalized:
+        return (True, current_path)
+
+    return (False, current_path)
+
+
+def copy_appimage_to_standard_location() -> Tuple[bool, str]:
+    """
+    Copy the currently running AppImage to the standard location.
+
+    Returns:
+        Tuple[bool, str]: (success, message)
+    """
+    import shutil
+    import stat
+
+    current_path = get_running_appimage_path()
+    if not current_path:
+        return (False, "Not running from an AppImage.")
+
+    try:
+        # Ensure directory exists
+        os.makedirs(APPIMAGE_DIR, exist_ok=True)
+
+        # Copy AppImage
+        shutil.copy2(current_path, APPIMAGE_PATH)
+
+        # Make executable
+        os.chmod(APPIMAGE_PATH, stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
+
+        logger.info(f"AppImage copied to {APPIMAGE_PATH}")
+        return (True, f"AppImage installed to:\n{APPIMAGE_PATH}")
+
+    except Exception as e:
+        logger.error(f"Failed to copy AppImage: {e}")
+        return (False, f"Failed to copy AppImage: {e}")
+
+
 # For testing
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
@@ -506,6 +753,10 @@ if __name__ == "__main__":
     print("Testing update checker...")
     print(f"Current version: {get_current_version()}")
     print(f"Extension version: {get_extension_version()}")
+    print(f"Running from AppImage: {is_running_from_appimage()}")
+    print(f"AppImage path: {get_running_appimage_path()}")
+    print(f"Standard location: {APPIMAGE_PATH}")
+    print(f"Desktop launcher exists: {desktop_launcher_exists()}")
 
     print("\nChecking for updates...")
     result = check_for_updates()
