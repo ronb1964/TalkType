@@ -1452,13 +1452,16 @@ def main():
             # Schedule the welcome dialog after tray is initialized
             def show_first_run_setup():
                 # Show unified welcome dialog with all setup options
-                show_welcome_and_install()
+                result = show_welcome_and_install()
 
-                # Mark first run as complete
-                try:
-                    cuda_helper.mark_first_run_complete()
-                except Exception as e:
-                    logger.error(f"Failed to mark first run complete: {e}")
+                # Only mark first run complete if user completed the wizard
+                if result and result.get('continue'):
+                    try:
+                        cuda_helper.mark_first_run_complete()
+                    except Exception as e:
+                        logger.error(f"Failed to mark first run complete: {e}")
+                else:
+                    logger.info("User cancelled onboarding - will show again next launch")
 
                 # Refresh menu after installations
                 tray.refresh_menu()

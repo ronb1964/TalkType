@@ -114,8 +114,9 @@ class PreferencesWindow:
         # Create window FIRST
         self.window = Gtk.Window(title="TalkType Preferences")
         self.window.set_name("preferences_window")  # Give window a name for CSS targeting
-        self.window.set_default_size(500, 400)
+        self.window.set_default_size(500, 600)
         self.window.set_position(Gtk.WindowPosition.CENTER)
+        self.window.set_resizable(True)  # Allow resizing for smaller screens
 
         # Load custom CSS styling (after window is created)
         self._load_css()
@@ -265,34 +266,41 @@ class PreferencesWindow:
             return False
     
     def create_ui(self):
+        main_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+
+        # Scrolled window for main content (allows scrolling on small screens)
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scrolled.set_min_content_height(300)  # Minimum before scrolling kicks in
+
         vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         # Use newer margin methods to avoid deprecation warnings
         vbox.set_margin_start(20)
         vbox.set_margin_end(20)
         vbox.set_margin_top(20)
         vbox.set_margin_bottom(20)
-        
+
         # Title
         title = Gtk.Label()
         title.set_markup("<big><b>TalkType Preferences</b></big>")
         vbox.pack_start(title, False, False, 0)
-        
+
         # Notebook for tabs
         self.notebook = Gtk.Notebook()
         notebook = self.notebook  # Local alias for compatibility
-        
+
         # General tab
         general_tab = self.create_general_tab()
         notebook.append_page(general_tab, Gtk.Label(label="General"))
-        
-        # Audio tab  
+
+        # Audio tab
         audio_tab = self.create_audio_tab()
         notebook.append_page(audio_tab, Gtk.Label(label="Audio"))
-        
+
         # Advanced tab
         advanced_tab = self.create_advanced_tab()
         notebook.append_page(advanced_tab, Gtk.Label(label="Advanced"))
-        
+
         # Commands tab (custom voice commands)
         commands_tab = self.create_commands_tab()
         notebook.append_page(commands_tab, Gtk.Label(label="Commands"))
@@ -312,8 +320,16 @@ class PreferencesWindow:
         version_label.set_margin_end(5)
         vbox.pack_start(version_label, False, False, 0)
 
-        # Buttons
+        # Add content to scrolled window
+        scrolled.add(vbox)
+        main_vbox.pack_start(scrolled, True, True, 0)
+
+        # Buttons (outside scrolled area so always visible)
         button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        button_box.set_margin_start(20)
+        button_box.set_margin_end(20)
+        button_box.set_margin_top(10)
+        button_box.set_margin_bottom(15)
 
         # Help button on the left
         help_btn = Gtk.Button(label="❓ Help")
@@ -339,8 +355,8 @@ class PreferencesWindow:
         button_box.pack_start(apply_btn, False, False, 0)
         button_box.pack_start(self.ok_btn, False, False, 0)
 
-        vbox.pack_start(button_box, False, False, 0)
-        self.window.add(vbox)
+        main_vbox.pack_start(button_box, False, False, 0)
+        self.window.add(main_vbox)
     
     def create_general_tab(self):
         grid = Gtk.Grid()
