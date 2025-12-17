@@ -484,14 +484,22 @@ class DictationTray:
     def _get_current_preset(self) -> str:
         """
         Determine which preset matches current settings, or 'custom' if none match.
+        Match primarily by model - device varies by available hardware.
         """
         try:
             from .config import load_config
             cfg = load_config()
 
+            # First try exact match (model + device)
             for preset_id, preset in self.PERFORMANCE_PRESETS.items():
                 if cfg.model == preset["model"] and cfg.device == preset["device"]:
                     return preset_id
+
+            # Fall back to model-only match (device may differ due to hardware)
+            for preset_id, preset in self.PERFORMANCE_PRESETS.items():
+                if cfg.model == preset["model"]:
+                    return preset_id
+
             return "custom"
         except Exception:
             return "custom"
