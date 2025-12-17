@@ -1113,29 +1113,40 @@ class DictationTray:
 
             downloaded_path = result_holder[0]
             if downloaded_path:
-                # Success - show completion dialog
-                success_dialog = Gtk.MessageDialog(
+                # Success - automatically install and restart
+                # Show brief status dialog
+                status_dialog = Gtk.MessageDialog(
                     message_type=Gtk.MessageType.INFO,
-                    buttons=Gtk.ButtonsType.OK,
-                    text="Download Complete!"
+                    buttons=Gtk.ButtonsType.NONE,
+                    text="Installing Update..."
                 )
-                success_dialog.format_secondary_markup(
-                    f"The update has been downloaded to:\n"
-                    f"<b>{downloaded_path}</b>\n\n"
-                    f"<b>To install:</b>\n"
-                    f"1. Close TalkType\n"
-                    f"2. Replace your current AppImage with the downloaded file\n"
-                    f"3. Restart TalkType"
+                status_dialog.format_secondary_text(
+                    "TalkType will restart automatically with the new version."
                 )
-                success_dialog.add_button("Open Downloads Folder", Gtk.ResponseType.ACCEPT)
-                success_dialog.set_position(Gtk.WindowPosition.CENTER)
+                status_dialog.set_position(Gtk.WindowPosition.CENTER)
+                status_dialog.show_all()
 
-                response = success_dialog.run()
-                if response == Gtk.ResponseType.ACCEPT:
-                    update_checker.open_update_directory()
-                success_dialog.destroy()
+                # Process events so dialog shows
+                while Gtk.events_pending():
+                    Gtk.main_iteration()
+
+                # Install and restart (this replaces the current process)
+                success, message = update_checker.install_update_and_restart(downloaded_path)
+
+                # Only reach here if install failed (execv didn't work)
+                status_dialog.destroy()
+                if not success:
+                    error_dialog = Gtk.MessageDialog(
+                        message_type=Gtk.MessageType.ERROR,
+                        buttons=Gtk.ButtonsType.OK,
+                        text="Update Failed"
+                    )
+                    error_dialog.format_secondary_text(message)
+                    error_dialog.set_position(Gtk.WindowPosition.CENTER)
+                    error_dialog.run()
+                    error_dialog.destroy()
             else:
-                # Failed
+                # Download failed
                 error_dialog = Gtk.MessageDialog(
                     message_type=Gtk.MessageType.ERROR,
                     buttons=Gtk.ButtonsType.OK,
