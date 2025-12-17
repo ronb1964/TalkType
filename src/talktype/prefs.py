@@ -2502,9 +2502,9 @@ X-GNOME-Autostart-enabled=true
                 )
                 msg.format_secondary_text(
                     "The system has been configured for keystroke injection.\n\n"
-                    "IMPORTANT: You need to log out and log back in for the "
-                    "changes to take effect.\n\n"
-                    "After logging back in, TalkType will be able to type "
+                    "IMPORTANT: Log out and back in to apply the changes.\n"
+                    "(Some systems may require a full reboot instead.)\n\n"
+                    "After that, TalkType will be able to type "
                     "directly into your applications."
                 )
                 msg.run()

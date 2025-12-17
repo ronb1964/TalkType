@@ -196,6 +196,270 @@ def test_ydotool_works():
         return (False, reason)
 
 
+# ydotoold systemd service content
+YDOTOOLD_SERVICE_CONTENT = '''[Unit]
+Description=ydotool daemon (TalkType keystroke injection)
+After=graphical-session.target
+
+[Service]
+Environment=XDG_RUNTIME_DIR=%t
+ExecStart=/usr/bin/ydotoold --socket-path=%t/.ydotool_socket
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
+'''
+
+
+def check_ydotoold_running():
+    """
+    Check if ydotoold daemon is currently running.
+
+    Returns:
+        bool: True if ydotoold is running, False otherwise
+    """
+    try:
+        result = subprocess.run(['pgrep', '-f', 'ydotoold'],
+                               capture_output=True, timeout=2)
+        return result.returncode == 0
+    except Exception as e:
+        logger.warning(f"Could not check ydotoold status: {e}")
+        return False
+
+
+def check_ydotoold_service_exists():
+    """
+    Check if ydotoold systemd user service is installed.
+
+    Returns:
+        bool: True if service file exists, False otherwise
+    """
+    service_path = os.path.expanduser("~/.config/systemd/user/ydotoold.service")
+    return os.path.exists(service_path)
+
+
+def check_system_ydotool_installed():
+    """
+    Check if ydotool is installed system-wide.
+
+    Returns:
+        tuple: (installed: bool, path: str or None)
+    """
+    try:
+        result = subprocess.run(['which', 'ydotool'],
+                               capture_output=True, text=True, timeout=2)
+        if result.returncode == 0:
+            return (True, result.stdout.strip())
+        return (False, None)
+    except Exception:
+        return (False, None)
+
+
+def setup_ydotoold_service():
+    """
+    Set up the ydotoold systemd user service.
+    Creates the service file and enables/starts it.
+
+    Returns:
+        tuple: (success: bool, message: str)
+    """
+    try:
+        # Check if ydotool is installed system-wide
+        ydotool_installed, ydotool_path = check_system_ydotool_installed()
+
+        if not ydotool_installed:
+            return (False, "ydotool is not installed. Please install it first:\n"
+                          "  Ubuntu/Debian: sudo apt install ydotool\n"
+                          "  Fedora: sudo dnf install ydotool\n"
+                          "  Arch: sudo pacman -S ydotool")
+
+        # Create systemd user directory if it doesn't exist
+        systemd_user_dir = os.path.expanduser("~/.config/systemd/user")
+        os.makedirs(systemd_user_dir, exist_ok=True)
+
+        # Write the service file
+        service_path = os.path.join(systemd_user_dir, "ydotoold.service")
+        with open(service_path, 'w') as f:
+            f.write(YDOTOOLD_SERVICE_CONTENT)
+
+        logger.info(f"Created ydotoold service at {service_path}")
+
+        # Reload systemd user daemon
+        subprocess.run(['systemctl', '--user', 'daemon-reload'],
+                      capture_output=True, timeout=10)
+
+        # Enable the service
+        result = subprocess.run(['systemctl', '--user', 'enable', 'ydotoold.service'],
+                               capture_output=True, text=True, timeout=10)
+        if result.returncode != 0:
+            logger.warning(f"Failed to enable ydotoold: {result.stderr}")
+
+        # Start the service
+        result = subprocess.run(['systemctl', '--user', 'start', 'ydotoold.service'],
+                               capture_output=True, text=True, timeout=10)
+        if result.returncode != 0:
+            return (False, f"Failed to start ydotoold service: {result.stderr}")
+
+        # Verify it's running
+        import time
+        time.sleep(0.5)  # Give it a moment to start
+
+        if check_ydotoold_running():
+            return (True, "ydotoold service set up and running successfully!")
+        else:
+            return (False, "Service was set up but failed to start. "
+                          "Check: systemctl --user status ydotoold")
+
+    except Exception as e:
+        logger.error(f"Error setting up ydotoold service: {e}")
+        return (False, f"Error setting up ydotoold: {e}")
+
+
+def get_ydotoold_status():
+    """
+    Get comprehensive status of ydotoold.
+
+    Returns:
+        dict: Status information with keys:
+            - running: bool
+            - service_exists: bool
+            - ydotool_installed: bool
+            - needs_setup: bool
+            - message: str
+    """
+    running = check_ydotoold_running()
+    service_exists = check_ydotoold_service_exists()
+    ydotool_installed, _ = check_system_ydotool_installed()
+
+    if running:
+        return {
+            'running': True,
+            'service_exists': service_exists,
+            'ydotool_installed': ydotool_installed,
+            'needs_setup': False,
+            'message': "ydotoold is running - keystroke injection ready"
+        }
+
+    if not ydotool_installed:
+        return {
+            'running': False,
+            'service_exists': service_exists,
+            'ydotool_installed': False,
+            'needs_setup': True,
+            'message': "ydotool is not installed on this system"
+        }
+
+    if not service_exists:
+        return {
+            'running': False,
+            'service_exists': False,
+            'ydotool_installed': True,
+            'needs_setup': True,
+            'message': "ydotoold service needs to be set up"
+        }
+
+    # Service exists but not running
+    return {
+        'running': False,
+        'service_exists': True,
+        'ydotool_installed': True,
+        'needs_setup': True,
+        'message': "ydotoold service exists but is not running"
+    }
+
+
+def detect_package_manager():
+    """
+    Detect which package manager is available on the system.
+
+    Returns:
+        tuple: (package_manager: str, install_command: list) or (None, None) if not detected
+    """
+    import shutil
+
+    # Check for package managers in order of preference
+    package_managers = [
+        ('dnf', ['dnf', 'install', '-y', 'ydotool']),      # Fedora, RHEL, CentOS
+        ('apt', ['apt', 'install', '-y', 'ydotool']),      # Debian, Ubuntu
+        ('pacman', ['pacman', '-S', '--noconfirm', 'ydotool']),  # Arch, Manjaro
+        ('zypper', ['zypper', 'install', '-y', 'ydotool']),  # openSUSE
+        ('apk', ['apk', 'add', 'ydotool']),                # Alpine
+    ]
+
+    for pm_name, install_cmd in package_managers:
+        if shutil.which(pm_name):
+            logger.debug(f"Detected package manager: {pm_name}")
+            return (pm_name, install_cmd)
+
+    logger.warning("No supported package manager detected")
+    return (None, None)
+
+
+def install_ydotool_with_pkexec(parent_window=None):
+    """
+    Install ydotool using the system package manager with pkexec for privilege escalation.
+
+    Args:
+        parent_window: Optional GTK parent window for the pkexec dialog
+
+    Returns:
+        tuple: (success: bool, message: str)
+    """
+    import subprocess
+
+    # Check if already installed
+    installed, _ = check_system_ydotool_installed()
+    if installed:
+        return (True, "ydotool is already installed!")
+
+    # Detect package manager
+    pm_name, install_cmd = detect_package_manager()
+
+    if not pm_name:
+        return (False, "Could not detect your package manager.\n"
+                      "Please install ydotool manually:\n"
+                      "  Ubuntu/Debian: sudo apt install ydotool\n"
+                      "  Fedora: sudo dnf install ydotool\n"
+                      "  Arch: sudo pacman -S ydotool")
+
+    logger.info(f"Installing ydotool using {pm_name}...")
+
+    try:
+        # Run the install command with pkexec
+        full_cmd = ['pkexec'] + install_cmd
+        logger.info(f"Running: {' '.join(full_cmd)}")
+
+        result = subprocess.run(full_cmd, capture_output=True, text=True, timeout=300)
+
+        if result.returncode == 0:
+            # Verify installation
+            installed, path = check_system_ydotool_installed()
+            if installed:
+                logger.info(f"ydotool installed successfully at {path}")
+                return (True, "ydotool installed successfully!")
+            else:
+                return (False, "Installation appeared to succeed but ydotool not found. "
+                              "You may need to restart your terminal or log out and back in.")
+        elif result.returncode == 126:
+            # User cancelled authentication
+            logger.info("User cancelled pkexec authentication for ydotool install")
+            return (False, "Installation was cancelled.")
+        else:
+            error_msg = result.stderr or result.stdout or "Unknown error"
+            logger.error(f"Failed to install ydotool: {error_msg}")
+            return (False, f"Installation failed:\n{error_msg}")
+
+    except subprocess.TimeoutExpired:
+        logger.error("ydotool installation timed out")
+        return (False, "Installation timed out. Please try again or install manually.")
+    except FileNotFoundError:
+        logger.error("pkexec not found")
+        return (False, "pkexec not found. Please install polkit or install ydotool manually.")
+    except Exception as e:
+        logger.error(f"Error installing ydotool: {e}")
+        return (False, f"Error: {e}")
+
+
 def get_fix_script_content():
     """
     Get the shell script content that fixes uinput permissions.
@@ -235,8 +499,8 @@ udevadm trigger
 echo ""
 echo "Success! Uinput permissions configured."
 echo ""
-echo "IMPORTANT: You need to log out and log back in for the"
-echo "group changes to take effect."
+echo "IMPORTANT: Log out and back in to apply the group changes."
+echo "(Some systems may require a full reboot instead.)"
 '''
 
 
@@ -279,7 +543,7 @@ def install_udev_rule_with_pkexec(parent_window=None):
         if result.returncode == 0:
             logger.info("Udev rule installed successfully")
             return (True, "Permissions configured successfully!\n\n"
-                         "Please log out and log back in for the changes to take effect.")
+                         "Log out and back in to apply (some systems require reboot).")
         elif result.returncode == 126:
             # User cancelled the authentication dialog
             logger.info("User cancelled pkexec authentication")
@@ -353,7 +617,7 @@ def show_uinput_fix_dialog(parent=None):
             "We'll add a system rule that grants your user account access to the "
             "input device. This is a one-time setup that requires your admin password.\n\n"
             "<b>After the fix:</b>\n"
-            "You'll need to <b>log out and log back in</b> for the change to take effect."
+            "Log out and back in to apply (some systems may require a reboot)."
         )
         
         dialog.add_button("Use Clipboard Instead", Gtk.ResponseType.CANCEL)
