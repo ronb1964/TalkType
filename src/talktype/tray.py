@@ -831,7 +831,7 @@ class DictationTray:
 
         # Copyright and author
         copyright_label = Gtk.Label()
-        copyright_label.set_markup('<span size="small">© 2024-2025 Ron B. • GPL-3.0 License</span>')
+        copyright_label.set_markup('<span size="small">© 2024-2025 Ron B. • MIT License</span>')
         content.pack_start(copyright_label, False, False, 0)
 
         # What's New section
