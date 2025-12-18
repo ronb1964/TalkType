@@ -1222,8 +1222,8 @@ class PreferencesWindow:
         scrolled = Gtk.ScrolledWindow()
         scrolled.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
         # Set reasonable height limits - grows with content but doesn't fill empty space
-        scrolled.set_min_content_height(80)   # Small minimum - just header + a couple rows
-        scrolled.set_max_content_height(200)  # Cap it so tips are always visible
+        scrolled.set_min_content_height(160)  # Show ~5 rows minimum for easier browsing
+        scrolled.set_max_content_height(280)  # Cap at ~10 rows so tips stay visible
 
         self.commands_tree = Gtk.TreeView(model=self.commands_store)
         self.commands_tree.set_headers_visible(True)
