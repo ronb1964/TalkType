@@ -1919,13 +1919,23 @@ X-GNOME-Autostart-enabled=true
             except Exception as e:
                 print(f"❌ Failed to create autostart file: {e}")
         else:
-            # Remove autostart file
+            # Disable autostart using XDG standard Hidden=true
+            # This is more reliable than deleting, especially on KDE which caches entries
             try:
-                if os.path.exists(desktop_file):
-                    os.remove(desktop_file)
-                    print(f"✅ Removed autostart file: {desktop_file}")
+                os.makedirs(autostart_dir, exist_ok=True)
+
+                # Write a minimal desktop file with Hidden=true to disable autostart
+                # This overrides any existing entry and tells the DE to ignore it
+                disabled_content = f"""[Desktop Entry]
+Type=Application
+Name=TalkType
+Hidden=true
+"""
+                with open(desktop_file, "w") as f:
+                    f.write(disabled_content)
+                print(f"✅ Disabled autostart: {desktop_file}")
             except Exception as e:
-                print(f"❌ Failed to remove autostart file: {e}")
+                print(f"❌ Failed to disable autostart file: {e}")
 
     def _get_launch_command(self):
         """
