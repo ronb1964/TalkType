@@ -77,9 +77,17 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
     from faster_whisper import WhisperModel
 
     # Check if already cached
-    if is_model_cached(model_name):
-        logger.info(f"Model {model_name} already cached, loading directly")
+    cached = is_model_cached(model_name)
+    logger.info(f"Model cache check: {model_name} cached={cached}")
+    print(f"📦 Model cache check: {model_name} cached={cached}")
+
+    if cached:
+        logger.info(f"Model {model_name} already cached, loading directly (no download window)")
+        print(f"✅ Model {model_name} already cached - loading without download")
         return WhisperModel(model_name, device=device, compute_type=compute_type)
+
+    logger.info(f"Model {model_name} NOT cached - showing download progress dialog")
+    print(f"📥 Model {model_name} NOT cached - will download and show progress")
 
     size_str = MODEL_DISPLAY_SIZES.get(model_name, "unknown size")
 

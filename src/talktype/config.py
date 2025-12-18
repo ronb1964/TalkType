@@ -20,11 +20,11 @@ CONFIG_PATH = os.path.expanduser(f"~/.config/{CONFIG_DIR}/config.toml")
 class Settings:
     model: str = "small"        # tiny/base/small/medium/large-v3 …
     device: str = "cpu"         # "cpu" or "cuda"
-    hotkey: str = "F8"          # hold-to-talk hotkey
+    hotkey: str = ""            # hold-to-talk hotkey (empty until user picks during onboarding)
     beeps: bool = True          # beeps on/off
     smart_quotes: bool = True   # "smart quotes"
     mode: str = "hold"          # "hold" or "toggle"
-    toggle_hotkey: str = "F9"   # used only when mode="toggle"
+    toggle_hotkey: str = ""     # used only when mode="toggle" (empty until user picks during onboarding)
     mic: str = ""               # substring to match input device (empty = default)
     notify: bool = False        # desktop notifications
     language: str = ""          # optional language code (e.g., "en"); empty = auto-detect
@@ -84,13 +84,15 @@ def validate_config(s: Settings) -> None:
     if s.auto_timeout_minutes <= 0:
         errors.append(f"Invalid auto_timeout_minutes '{s.auto_timeout_minutes}'. Must be positive")
 
-    # Basic hotkey validation - just check it's not empty and looks reasonable
-    if not s.hotkey or len(s.hotkey.strip()) == 0:
-        errors.append("Invalid hotkey: cannot be empty")
+    # Hotkey validation - empty is OK (means not configured yet, user must complete onboarding)
+    # Only validate format if hotkey is set
+    if s.hotkey and s.hotkey.strip():
+        # Could add format validation here if needed
+        pass
 
-    if s.mode.lower() == "toggle":
-        if not s.toggle_hotkey or len(s.toggle_hotkey.strip()) == 0:
-            errors.append("Invalid toggle_hotkey: cannot be empty when mode is 'toggle'")
+    if s.mode.lower() == "toggle" and s.toggle_hotkey and s.toggle_hotkey.strip():
+        # Could add format validation here if needed
+        pass
 
     # Valid indicator positions
     valid_positions = {

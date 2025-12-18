@@ -196,14 +196,14 @@ def test_ydotool_works():
         return (False, reason)
 
 
-# ydotoold systemd service content
-YDOTOOLD_SERVICE_CONTENT = '''[Unit]
+# ydotoold systemd service template - {ydotoold_path} will be replaced with actual path
+YDOTOOLD_SERVICE_TEMPLATE = '''[Unit]
 Description=ydotool daemon (TalkType keystroke injection)
 After=graphical-session.target
 
 [Service]
 Environment=XDG_RUNTIME_DIR=%t
-ExecStart=/usr/bin/ydotoold --socket-path=%t/.ydotool_socket
+ExecStart={ydotoold_path} --socket-path=%t/.ydotool_socket
 Restart=on-failure
 
 [Install]
@@ -211,20 +211,102 @@ WantedBy=default.target
 '''
 
 
+def find_ydotoold_path():
+    """
+    Find the actual path to ydotoold binary on the SYSTEM (not inside AppImage).
+
+    IMPORTANT: This function ONLY returns system paths, NEVER AppImage paths.
+    If ydotoold is not found at a system location, it returns None.
+
+    Returns:
+        str or None: Path to ydotoold on SYSTEM, or None if not found
+    """
+    def is_appimage_path(path):
+        """Check if path is inside an AppImage mount point."""
+        if not path:
+            return False
+        # Check common AppImage mount patterns
+        path_lower = path.lower()
+        return ('/tmp/.mount_' in path or
+                '/tmp/appimage' in path_lower or
+                '/appimage' in path_lower or
+                os.environ.get('APPDIR', '') and os.environ.get('APPDIR', '') in path)
+
+    # Check AppImage environment
+    appdir = os.environ.get('APPDIR', '')
+    if appdir:
+        logger.info(f"Running from AppImage (APPDIR={appdir}) - will only use system ydotoold")
+
+    # First try 'which' command with CLEAN PATH (only standard system dirs)
+    # This avoids any PATH contamination from AppImage
+    try:
+        env = os.environ.copy()
+        # Use ONLY standard system paths - no user or AppImage paths
+        env['PATH'] = "/usr/sbin:/sbin:/usr/bin:/bin:/usr/local/bin:/usr/local/sbin"
+        result = subprocess.run(['which', 'ydotoold'],
+                               capture_output=True, text=True, timeout=2, env=env)
+        if result.returncode == 0:
+            found_path = result.stdout.strip()
+            # Verify it's not an AppImage path (sanity check)
+            if not is_appimage_path(found_path):
+                logger.info(f"Found system ydotoold via which: {found_path}")
+                return found_path
+            else:
+                logger.warning(f"Rejecting AppImage path from which: {found_path}")
+    except Exception as e:
+        logger.debug(f"which ydotoold failed: {e}")
+
+    # Check common SYSTEM locations directly (never AppImage paths)
+    common_paths = [
+        '/usr/bin/ydotoold',
+        '/usr/sbin/ydotoold',
+        '/usr/local/bin/ydotoold',
+        '/bin/ydotoold',
+        '/sbin/ydotoold',
+    ]
+
+    logger.debug(f"Checking common paths for ydotoold: {common_paths}")
+    for path in common_paths:
+        exists = os.path.isfile(path)
+        executable = os.access(path, os.X_OK) if exists else False
+        logger.debug(f"  {path}: exists={exists}, executable={executable}")
+        if exists and executable:
+            logger.info(f"Found ydotoold at: {path}")
+            return path
+
+    logger.warning("ydotoold not found in any common location")
+    return None
+
+
 def check_ydotoold_running():
     """
     Check if ydotoold daemon is currently running.
 
+    Checks both:
+    1. Process is running (via pgrep)
+    2. Socket file exists (more reliable indicator)
+
     Returns:
         bool: True if ydotoold is running, False otherwise
     """
+    # Check if socket file exists (most reliable indicator)
+    runtime_dir = os.environ.get('XDG_RUNTIME_DIR', f'/run/user/{os.getuid()}')
+    socket_path = os.path.join(runtime_dir, '.ydotool_socket')
+    if os.path.exists(socket_path):
+        logger.debug(f"ydotool socket found at {socket_path}")
+        return True
+
+    # Fallback: check if process is running
     try:
         result = subprocess.run(['pgrep', '-f', 'ydotoold'],
                                capture_output=True, timeout=2)
-        return result.returncode == 0
+        if result.returncode == 0:
+            logger.debug("ydotoold process found via pgrep")
+            return True
     except Exception as e:
         logger.warning(f"Could not check ydotoold status: {e}")
-        return False
+
+    return False
 
 
 def check_ydotoold_service_exists():
@@ -273,14 +355,23 @@ def setup_ydotoold_service():
                           "  Fedora: sudo dnf install ydotool\n"
                           "  Arch: sudo pacman -S ydotool")
 
+        # Find ydotoold binary path (it's the daemon, not the CLI tool)
+        ydotoold_path = find_ydotoold_path()
+        if not ydotoold_path:
+            return (False, "ydotoold daemon not found. The ydotool package may be incomplete.\n"
+                          "Try reinstalling: sudo apt install --reinstall ydotool")
+
+        logger.info(f"Found ydotoold at: {ydotoold_path}")
+
         # Create systemd user directory if it doesn't exist
         systemd_user_dir = os.path.expanduser("~/.config/systemd/user")
         os.makedirs(systemd_user_dir, exist_ok=True)
 
-        # Write the service file
+        # Write the service file with the actual ydotoold path
         service_path = os.path.join(systemd_user_dir, "ydotoold.service")
+        service_content = YDOTOOLD_SERVICE_TEMPLATE.format(ydotoold_path=ydotoold_path)
         with open(service_path, 'w') as f:
-            f.write(YDOTOOLD_SERVICE_CONTENT)
+            f.write(service_content)
 
         logger.info(f"Created ydotoold service at {service_path}")
 
@@ -298,17 +389,35 @@ def setup_ydotoold_service():
         result = subprocess.run(['systemctl', '--user', 'start', 'ydotoold.service'],
                                capture_output=True, text=True, timeout=10)
         if result.returncode != 0:
+            logger.error(f"systemctl start failed: {result.stderr}")
             return (False, f"Failed to start ydotoold service: {result.stderr}")
 
-        # Verify it's running
+        # Verify it's running (with retries - service may take a moment to create socket)
         import time
-        time.sleep(0.5)  # Give it a moment to start
-
-        if check_ydotoold_running():
-            return (True, "ydotoold service set up and running successfully!")
+        for attempt in range(5):
+            time.sleep(0.5)  # Wait 0.5s between checks (total up to 2.5s)
+            if check_ydotoold_running():
+                logger.info(f"ydotoold running after {attempt + 1} check(s)")
+                return (True, "ydotoold service set up and running successfully!")
+            logger.debug(f"ydotoold check attempt {attempt + 1} failed, retrying...")
         else:
-            return (False, "Service was set up but failed to start. "
-                          "Check: systemctl --user status ydotoold")
+            # Get detailed status for debugging
+            status_result = subprocess.run(
+                ['systemctl', '--user', 'status', 'ydotoold.service'],
+                capture_output=True, text=True, timeout=10
+            )
+            logger.error(f"ydotoold service status:\n{status_result.stdout}\n{status_result.stderr}")
+
+            # Also check journal for errors
+            journal_result = subprocess.run(
+                ['journalctl', '--user', '-u', 'ydotoold.service', '-n', '10', '--no-pager'],
+                capture_output=True, text=True, timeout=10
+            )
+            logger.error(f"ydotoold journal:\n{journal_result.stdout}")
+
+            return (False, f"Service was set up but failed to start. "
+                          f"Check: systemctl --user status ydotoold\n"
+                          f"Service file uses: {ydotoold_path}")
 
     except Exception as e:
         logger.error(f"Error setting up ydotoold service: {e}")
@@ -868,6 +977,9 @@ if __name__ == "__main__":
     
     status = get_typing_status()
     print(f"\nTyping status: {status}")
+
+
+
 
 
 

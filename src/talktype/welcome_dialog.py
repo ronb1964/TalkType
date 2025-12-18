@@ -703,15 +703,15 @@ class WelcomeDialog:
         explain_label.set_margin_top(5)
         portaudio_box.pack_start(explain_label, False, False, 0)
 
-        # Status display
+        # Status display (initial "not found" message - will be updated after install)
         status_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         status_box.set_margin_start(15)
         status_box.set_margin_top(8)
 
-        status_label = Gtk.Label()
-        status_label.set_markup('❌ <span color="#f44336">PortAudio library not found</span>')
-        status_label.set_halign(Gtk.Align.START)
-        status_box.pack_start(status_label, False, False, 0)
+        self.portaudio_initial_status = Gtk.Label()
+        self.portaudio_initial_status.set_markup('❌ <span color="#f44336">PortAudio library not found</span>')
+        self.portaudio_initial_status.set_halign(Gtk.Align.START)
+        status_box.pack_start(self.portaudio_initial_status, False, False, 0)
 
         portaudio_box.pack_start(status_box, False, False, 0)
 
@@ -782,6 +782,10 @@ class WelcomeDialog:
 
             if success:
                 button.set_label("✅ Installed!")
+                # Update the initial "not found" status to show success
+                self.portaudio_initial_status.set_markup(
+                    '✅ <span color="#4CAF50">PortAudio library installed</span>'
+                )
                 self.portaudio_status_label.set_markup(
                     '<span color="#4CAF50"><b>PortAudio installed!</b> Audio recording is now available.</span>'
                 )
@@ -831,16 +835,20 @@ class WelcomeDialog:
         typing_box.set_margin_start(10)
         typing_box.set_margin_top(5)
 
-        # Header with warning icon
+        # Header with warning icon - make it clear this is REQUIRED
         header_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         header_label = Gtk.Label()
-        header_label.set_markup('<span size="large"><b>⚠️ Typing Setup Required</b></span>')
+        header_label.set_markup('<span size="large"><b>🔴 Typing Setup Required</b></span>')
         header_label.set_halign(Gtk.Align.START)
         header_box.pack_start(header_label, False, False, 0)
         typing_box.pack_start(header_box, False, False, 0)
 
-        # Explanation - varies based on what's needed
-        explain_text = '<span>TalkType needs to set up keystroke injection to type text into your applications.</span>'
+        # Explanation - make it VERY clear this is mandatory
+        explain_text = (
+            '<span><b>This step is required for TalkType to work.</b>\n'
+            'Without this setup, dictated text cannot be typed into your applications.\n'
+            'Click "Fix Typing" below, then log out and back in.</span>'
+        )
         explain_label = Gtk.Label()
         explain_label.set_markup(explain_text)
         explain_label.set_halign(Gtk.Align.START)
@@ -1022,22 +1030,18 @@ class WelcomeDialog:
 
             # Determine overall success
             ydotoold_running = check_ydotoold_running()
-            overall_success = ydotoold_running and (not self.needs_uinput_fix or self.uinput_fixed)
+            permissions_set = self.uinput_fixed or not self.needs_uinput_fix
 
-            if overall_success or (ydotoold_running and not self.needs_uinput_fix):
+            # Consider it success if ydotoold is running and permissions are set
+            # OR if permissions are set (ydotoold may start after logout/reboot)
+            if ydotoold_running and permissions_set:
+                # Full success - everything is working
                 button.set_label("✅ Fixed!")
+                button.set_sensitive(False)  # Disable - no more action needed
 
-                # Build status message
-                status_parts = []
-                if ydotoold_running:
-                    status_parts.append("ydotoold running")
-                if self.uinput_fixed:
-                    status_parts.append("permissions set")
-
-                status_msg = ", ".join(status_parts)
-                logout_note = " Log out/in to complete (reboot if needed)." if needs_logout else ""
+                logout_note = " Log out/in to complete." if needs_logout else ""
                 self.typing_status_label.set_markup(
-                    f'<span color="#4CAF50"><b>Success!</b> {status_msg}.{logout_note}</span>'
+                    f'<span color="#4CAF50"><b>✓ Ready!</b> ydotoold running, permissions set.{logout_note}</span>'
                 )
 
                 # Show success dialog
@@ -1048,29 +1052,48 @@ class WelcomeDialog:
                     buttons=Gtk.ButtonsType.OK,
                     text="Typing Setup Complete!"
                 )
-
-                if needs_logout:
-                    msg.format_secondary_text(
-                        "TalkType has been configured for keystroke injection.\n\n"
-                        "Results:\n" + "\n".join(results) + "\n\n"
-                        "IMPORTANT: Log out and back in to apply the permission changes.\n"
-                        "(Some systems may require a full reboot instead.)\n\n"
-                        "After that, TalkType will be able to type "
-                        "directly into your applications."
-                    )
-                else:
-                    msg.format_secondary_text(
-                        "TalkType has been configured for keystroke injection.\n\n"
-                        "Results:\n" + "\n".join(results) + "\n\n"
-                        "You're all set! TalkType can now type directly into your applications."
-                    )
+                msg.format_secondary_text(
+                    "TalkType is configured for keystroke injection.\n\n"
+                    + ("Log out and back in to apply permission changes.\n\n" if needs_logout else "")
+                    + "TalkType can now type directly into your applications!"
+                )
                 msg.run()
                 msg.destroy()
+
+            elif permissions_set:
+                # Partial success - permissions set but ydotoold not running
+                # This is OK - ydotoold may start after logout/reboot on some systems
+                button.set_label("✅ Permissions Set")
+                button.set_sensitive(False)  # Disable - permissions are done
+
+                self.typing_status_label.set_markup(
+                    '<span color="#4CAF50"><b>✓ Device permissions configured</b></span>\n'
+                    '<span color="#FF9800">Note: Log out and back in to complete setup.</span>'
+                )
+
+                # Show partial success dialog
+                msg = Gtk.MessageDialog(
+                    transient_for=self.dialog,
+                    modal=True,
+                    message_type=Gtk.MessageType.INFO,
+                    buttons=Gtk.ButtonsType.OK,
+                    text="Permissions Configured"
+                )
+                msg.format_secondary_text(
+                    "Device permissions have been configured.\n\n"
+                    "IMPORTANT: Log out and back in to complete the setup.\n"
+                    "(Some systems may require a full reboot.)\n\n"
+                    "After logging back in, TalkType will be ready to use."
+                )
+                msg.run()
+                msg.destroy()
+
             else:
+                # Setup failed or was cancelled
                 button.set_sensitive(True)
                 button.set_label("🔧 Fix Typing (Recommended)")
 
-                # Show partial results
+                # Show what failed
                 result_text = "\n".join(results) if results else "Setup was cancelled"
                 self.typing_status_label.set_markup(
                     f'<span color="#FF9800">{result_text}</span>'
@@ -1729,13 +1752,115 @@ def show_hotkey_test_dialog():
     Show hotkey testing dialog for first-run experience.
     Allows users to test and customize both hotkeys in one place.
 
+    Uses EVDEV for key detection (same as dictation service) to bypass
+    Wayland compositor key grabbing issues on KDE/Plasma.
+
     Returns:
         bool: True if user completed the test
     """
+    import subprocess
+    import threading
+    import time
+    import select
     from talktype.config import load_config, save_config
+
+    # CRITICAL: Kill any running dictation service IMMEDIATELY
+    # The service would intercept F8/F9 before we can detect them
+    def kill_dictation_service():
+        """Kill any running dictation service processes with extreme prejudice."""
+        try:
+            # Use SIGKILL (-9) for immediate termination - no chance to respawn
+            # Try multiple patterns to catch all possible process names
+            patterns = [
+                "talktype.app",      # Dev mode: python -m talktype.app
+                "talktype/app",      # Path-based match
+                "-m talktype",       # Module execution
+            ]
+            for pattern in patterns:
+                subprocess.run(["pkill", "-9", "-f", pattern], capture_output=True)
+
+            # Give processes time to die
+            time.sleep(0.3)
+
+            # Verify no processes remain
+            result = subprocess.run(["pgrep", "-f", "talktype.app"], capture_output=True)
+            if result.returncode == 0:
+                # Still running! Try again
+                print("⚠️ Service still running, killing again...")
+                subprocess.run(["pkill", "-9", "-f", "talktype.app"], capture_output=True)
+                time.sleep(0.2)
+        except Exception as e:
+            logger.warning(f"Error killing service: {e}")
+
+    # Kill service right away - multiple times to be sure
+    print("🔪 Killing dictation service for hotkey test...")
+    kill_dictation_service()
+    time.sleep(0.5)  # Extra wait
+    kill_dictation_service()  # Double-tap
+    logger.info("Killed any running dictation service for hotkey test")
+    print("✅ Dictation service killed")
+
+    # Try to import evdev for low-level key detection
+    try:
+        from evdev import InputDevice, ecodes, list_devices
+        EVDEV_AVAILABLE = True
+        logger.info("evdev available for hotkey testing")
+        print("✅ Using evdev for hotkey detection (bypasses Wayland)")
+    except ImportError:
+        EVDEV_AVAILABLE = False
+        logger.warning("evdev not available - falling back to GTK key events")
+        print("⚠️ evdev not available - using GTK key events")
 
     config = load_config()
 
+    # State variables (accessible from threads)
+    # Use F8/F9 as suggested defaults if config is empty (first run)
+    # These won't be saved to config until user confirms
+    current_hold_key = [config.hotkey if config.hotkey else "F8"]
+    current_toggle_key = [config.toggle_hotkey if config.toggle_hotkey else "F9"]
+    tested_keys = {"hold": False, "toggle": False}
+    capturing_key = [None]  # "hold", "toggle", or None
+    dialog_ready = [False]
+    stop_evdev = threading.Event()
+
+    # Map evdev key codes to key names (like F8, F9, etc.)
+    def evdev_code_to_name(code):
+        """Convert evdev key code to human-readable name."""
+        if not EVDEV_AVAILABLE:
+            return None
+        # Function keys
+        for i in range(1, 13):
+            if code == getattr(ecodes, f"KEY_F{i}"):
+                return f"F{i}"
+        # Letter keys
+        for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
+            if code == getattr(ecodes, f"KEY_{c}", None):
+                return c.lower()
+        # Special keys
+        special = {
+            ecodes.KEY_ESC: "Escape",
+            ecodes.KEY_SPACE: "space",
+            ecodes.KEY_TAB: "Tab",
+            ecodes.KEY_ENTER: "Return",
+            ecodes.KEY_BACKSPACE: "BackSpace",
+        }
+        return special.get(code)
+
+    def name_to_evdev_code(name):
+        """Convert key name to evdev code."""
+        if not EVDEV_AVAILABLE:
+            return None
+        n = (name or "F8").strip().upper()
+        # Function keys
+        for i in range(1, 13):
+            if n == f"F{i}":
+                return getattr(ecodes, f"KEY_F{i}")
+        # Letter keys
+        if len(n) == 1 and "A" <= n <= "Z":
+            return getattr(ecodes, f"KEY_{n}", None)
+        return None
+
+    # Build dialog
     dialog = Gtk.Dialog(title="Test Your Hotkeys")
     dialog.set_default_size(550, 420)
     dialog.set_modal(True)
@@ -1753,12 +1878,6 @@ def show_hotkey_test_dialog():
     instructions.set_markup('<span size="large"><b>Configure Your Hotkeys</b></span>\n\nTest both hotkeys to ensure they work on your system:')
     instructions.set_xalign(0)
     content.pack_start(instructions, False, False, 0)
-
-    # State variables
-    current_hold_key = [config.hotkey]
-    current_toggle_key = [config.toggle_hotkey]
-    tested_keys = {"hold": False, "toggle": False}
-    capturing_key = [None]  # "hold", "toggle", or None
 
     # Hotkey configuration box with buttons
     hotkey_config_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
@@ -1811,21 +1930,22 @@ def show_hotkey_test_dialog():
     capture_instruction.set_no_show_all(True)
     content.pack_start(capture_instruction, False, False, 0)
 
-    # Key press event handler
-    def on_key_press(widget, event):
-        keyname = Gtk.accelerator_name(event.keyval, 0)
+    def update_ui_for_key(keyname, is_capture_mode):
+        """Update UI when a key is detected. Called from main thread via GLib.idle_add."""
+        if not dialog_ready[0]:
+            return False
 
-        # If we're capturing a new key
-        if capturing_key[0]:
+        logger.info(f"Hotkey test: detected key '{keyname}', capture_mode={is_capture_mode}, looking for hold='{current_hold_key[0]}', toggle='{current_toggle_key[0]}'")
+        print(f"🔑 Key detected: {keyname}")
+
+        if is_capture_mode and capturing_key[0]:
             if keyname == "Escape":
-                # Cancel capture
                 capturing_key[0] = None
                 capture_instruction.hide()
                 hold_change_btn.set_sensitive(True)
                 toggle_change_btn.set_sensitive(True)
-                return True
+                return False
 
-            # Update the appropriate key
             if capturing_key[0] == "hold":
                 current_hold_key[0] = keyname
                 hold_label.set_markup(f'<b>Push-to-talk:</b> {keyname}')
@@ -1841,16 +1961,90 @@ def show_hotkey_test_dialog():
             capture_instruction.hide()
             hold_change_btn.set_sensitive(True)
             toggle_change_btn.set_sensitive(True)
+        else:
+            # Normal testing mode
+            if keyname == current_hold_key[0]:
+                tested_keys["hold"] = True
+                hold_status.set_markup('<span color="#4CAF50">✓ Working!</span>')
+            elif keyname == current_toggle_key[0]:
+                tested_keys["toggle"] = True
+                toggle_status.set_markup('<span color="#4CAF50">✓ Working!</span>')
+
+        return False  # Don't repeat
+
+    # EVDEV key reading thread
+    def evdev_key_reader():
+        """Background thread that reads keys via evdev (bypasses Wayland)."""
+        if not EVDEV_AVAILABLE:
+            return
+
+        # Find input devices - use the SAME approach as app.py (the dictation service)
+        # Don't filter too strictly - just open all devices that have EV_KEY
+        devices = []
+        try:
+            for path in list_devices():
+                try:
+                    dev = InputDevice(path)
+                    caps = dev.capabilities()
+                    # Just check for EV_KEY capability (same as app.py does)
+                    if ecodes.EV_KEY in caps:
+                        dev.set_nonblocking(True)
+                        devices.append(dev)
+                        logger.info(f"Opened input device: {dev.name} at {path}")
+                except PermissionError:
+                    logger.debug(f"Permission denied for {path}")
+                except Exception as e:
+                    logger.debug(f"Could not open {path}: {e}")
+        except Exception as e:
+            logger.error(f"Error listing devices: {e}")
+
+        # Rename for clarity
+        keyboards = devices
+
+        if not keyboards:
+            logger.warning("No keyboards found via evdev")
+            print("⚠️ No keyboards found for evdev - some keys may not work")
+            return
+
+        print(f"🎹 Monitoring {len(keyboards)} keyboard(s) via evdev")
+
+        while not stop_evdev.is_set():
+            try:
+                # Use select to wait for events with timeout
+                r, w, x = select.select(keyboards, [], [], 0.1)
+                for dev in r:
+                    try:
+                        for event in dev.read():
+                            if event.type == ecodes.EV_KEY and event.value == 1:  # Key press
+                                keyname = evdev_code_to_name(event.code)
+                                if keyname:
+                                    is_capture = capturing_key[0] is not None
+                                    GLib.idle_add(update_ui_for_key, keyname, is_capture)
+                    except Exception as e:
+                        logger.debug(f"Error reading from {dev.name}: {e}")
+            except Exception as e:
+                if not stop_evdev.is_set():
+                    logger.debug(f"Select error: {e}")
+                time.sleep(0.1)
+
+        # Close devices
+        for dev in keyboards:
+            try:
+                dev.close()
+            except:
+                pass
+
+    # GTK key handler (fallback if evdev doesn't work)
+    def on_key_press(widget, event):
+        if not dialog_ready[0]:
             return True
 
-        # Normal testing mode
-        if keyname == current_hold_key[0]:
-            tested_keys["hold"] = True
-            hold_status.set_markup('<span color="#4CAF50">✓ Working!</span>')
-        elif keyname == current_toggle_key[0]:
-            tested_keys["toggle"] = True
-            toggle_status.set_markup('<span color="#4CAF50">✓ Working!</span>')
+        keyname = Gtk.accelerator_name(event.keyval, 0)
+        logger.info(f"GTK key: keyval={event.keyval}, keyname='{keyname}'")
+        print(f"🔑 GTK key: {keyname}")
 
+        is_capture = capturing_key[0] is not None
+        update_ui_for_key(keyname, is_capture)
         return True
 
     # Change button handlers
@@ -1869,7 +2063,7 @@ def show_hotkey_test_dialog():
     hold_change_btn.connect("clicked", on_change_hold)
     toggle_change_btn.connect("clicked", on_change_toggle)
 
-    # Connect key press handler
+    # Connect GTK key handler as fallback
     dialog.connect("key-press-event", on_key_press)
 
     # Info label
@@ -1897,7 +2091,6 @@ def show_hotkey_test_dialog():
     continue_button = Gtk.Button(label="Continue")
 
     def on_continue(button):
-        # Save the keys to config
         config.hotkey = current_hold_key[0]
         config.toggle_hotkey = current_toggle_key[0]
         save_config(config)
@@ -1908,8 +2101,49 @@ def show_hotkey_test_dialog():
     dialog.add_action_widget(continue_button, Gtk.ResponseType.OK)
 
     dialog.show_all()
+
+    # Service killer thread - keeps killing dictation service while dialog is open
+    # This prevents the service from grabbing F8/F9 before we can detect them
+    stop_killer = threading.Event()
+
+    def service_killer_thread():
+        """Periodically kill any dictation service that might start."""
+        while not stop_killer.is_set():
+            kill_dictation_service()
+            time.sleep(0.5)  # Check every 500ms
+
+    killer_thread = threading.Thread(target=service_killer_thread, daemon=True)
+    killer_thread.start()
+    logger.info("Started service killer thread")
+
+    # Start evdev reader thread
+    evdev_thread = None
+    if EVDEV_AVAILABLE:
+        evdev_thread = threading.Thread(target=evdev_key_reader, daemon=True)
+        evdev_thread.start()
+
+    # Enable key handling after dialog is shown
+    def enable_key_handling():
+        dialog_ready[0] = True
+        return False
+
+    GLib.timeout_add(300, enable_key_handling)
+
     response = dialog.run()
     dialog.destroy()
+
+    # Stop killer thread
+    stop_killer.set()
+    killer_thread.join(timeout=1.0)
+    logger.info("Stopped service killer thread")
+
+    # Stop evdev thread
+    stop_evdev.set()
+    if evdev_thread:
+        evdev_thread.join(timeout=1.0)
+
+    logger.info("Hotkey test complete")
+    print("✅ Hotkey test complete")
 
     return response == Gtk.ResponseType.OK
 
@@ -1983,9 +2217,15 @@ def show_welcome_and_install():
             from talktype.model_helper import download_model_with_progress, is_model_cached
             from talktype.config import load_config, save_config
 
+            # Check if model is already cached
+            already_cached = is_model_cached(selected_model)
+            logger.info(f"Model {selected_model} cached status: {already_cached}")
+            print(f"📦 Model {selected_model} cached: {already_cached}")
+
             config = load_config()
             device = config.device
             compute_type = "float16" if device.lower() == "cuda" else "int8"
+            logger.info(f"Download config: device={device}, compute_type={compute_type}")
 
             # Download model WITHOUT confirmation (user already selected it)
             model = download_model_with_progress(

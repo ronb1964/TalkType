@@ -6,7 +6,22 @@ import os
 import subprocess
 import sys
 import atexit
+import dbus
 from .config import CONFIG_PATH, load_custom_commands, save_custom_commands
+
+# D-Bus interface for communicating with the TalkType service
+DBUS_SERVICE = "io.github.ronb1964.TalkType"
+DBUS_OBJECT = "/io/github/ronb1964/TalkType"
+DBUS_INTERFACE = "io.github.ronb1964.TalkType"
+
+def _get_dbus_interface():
+    """Get the D-Bus interface for TalkType service, or None if not available."""
+    try:
+        bus = dbus.SessionBus()
+        proxy = bus.get_object(DBUS_SERVICE, DBUS_OBJECT)
+        return dbus.Interface(proxy, DBUS_INTERFACE)
+    except Exception:
+        return None
 
 
 def apply_dark_dialog_style(dialog):
@@ -3283,8 +3298,22 @@ X-GNOME-Autostart-enabled=true
         """Show hotkey test dialog."""
         from evdev import ecodes
 
+        # IMPORTANT: Stop the dictation service first!
+        # The service grabs keys at the evdev level (kernel), which intercepts them
+        # BEFORE GTK can see them. We must stop the service to test hotkeys properly.
+        service_was_running = False
+        dbus_iface = _get_dbus_interface()
+        if dbus_iface:
+            try:
+                # Check if service is running by trying to get its status
+                dbus_iface.StopService()
+                service_was_running = True
+                print("Stopped dictation service for hotkey testing")
+            except Exception as e:
+                print(f"Could not stop service (may not be running): {e}")
+
         dialog = Gtk.Dialog(title="Test Hotkeys", transient_for=self.window)
-        dialog.set_default_size(450, 250)
+        dialog.set_default_size(450, 280)
         dialog.set_modal(True)
         dialog.set_position(Gtk.WindowPosition.CENTER)
 
@@ -3343,7 +3372,7 @@ X-GNOME-Autostart-enabled=true
 
         # Info label
         info_label = Gtk.Label()
-        info_label.set_markup('<i>Note: If a key doesn\'t work, it may be used by another application.</i>')
+        info_label.set_markup('<i>The dictation service is paused while this dialog is open.\nClose this dialog to resume dictation.</i>')
         info_label.set_line_wrap(True)
         info_label.set_xalign(0)
         info_label.set_margin_top(10)
@@ -3357,6 +3386,14 @@ X-GNOME-Autostart-enabled=true
         dialog.show_all()
         dialog.run()
         dialog.destroy()
+
+        # Restart the dictation service if it was running before
+        if service_was_running and dbus_iface:
+            try:
+                dbus_iface.StartService()
+                print("Restarted dictation service after hotkey testing")
+            except Exception as e:
+                print(f"Could not restart service: {e}")
 
     def on_help(self, button):
         """Show help dialog with TalkType features and instructions."""

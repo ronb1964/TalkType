@@ -111,6 +111,9 @@ class DictationTray:
         # Track subprocess windows
         self.preferences_process = None
 
+        # Track onboarding state - service should not start during onboarding
+        self.onboarding_in_progress = False
+
         # Initialize D-Bus service (optional - for GNOME extension integration)
         self.dbus_service = None
         self._init_dbus_service()
@@ -220,16 +223,24 @@ class DictationTray:
     def is_service_running(self):
         """Check if the dictation service is active."""
         try:
-            # Check for running talktype.app process
-            result = subprocess.run(["pgrep", "-f", "talktype.app"],
+            # Check both patterns: "talktype.app" (dev) and "bin/dictate" (AppImage)
+            result1 = subprocess.run(["pgrep", "-f", "talktype.app"],
                                   capture_output=True, text=True)
-            return result.returncode == 0 and result.stdout.strip()
+            result2 = subprocess.run(["pgrep", "-f", "bin/dictate"],
+                                  capture_output=True, text=True)
+            return (result1.returncode == 0 and result1.stdout.strip()) or \
+                   (result2.returncode == 0 and result2.stdout.strip())
         except Exception:
             return False
 
     def _auto_start_service(self):
         """Auto-start the dictation service if not already running."""
         try:
+            # NEVER start during onboarding - hotkey test needs to capture keys
+            if self.onboarding_in_progress:
+                logger.info("Onboarding in progress - refusing to auto-start service")
+                return False
+
             # Only start if not already running
             if not self.is_service_running():
                 logger.info("Auto-starting dictation service...")
@@ -269,6 +280,12 @@ class DictationTray:
     
     def start_service(self, _):
         """Start the dictation service directly."""
+        # CRITICAL: Never start service during onboarding - hotkeys must not be active
+        if self.onboarding_in_progress:
+            logger.info("Onboarding in progress - refusing to start service")
+            print("⛔ Service blocked: onboarding in progress")
+            return
+
         try:
             # Find the dictate script relative to this module
             # __file__ is in usr/src/talktype/tray.py
@@ -315,7 +332,9 @@ class DictationTray:
     def stop_service(self, _):
         """Stop the dictation service directly."""
         try:
+            # Kill both patterns: "talktype.app" (dev) and "bin/dictate" (AppImage)
             subprocess.run(["pkill", "-f", "talktype.app"], capture_output=True)
+            subprocess.run(["pkill", "-f", "bin/dictate"], capture_output=True)
             logger.info("Stopped dictation service")
 
             # Emit D-Bus signal if available
@@ -328,9 +347,16 @@ class DictationTray:
     
     def restart_service(self, _):
         """Restart the dictation service directly."""
+        # CRITICAL: Never restart service during onboarding
+        if self.onboarding_in_progress:
+            logger.info("Onboarding in progress - refusing to restart service")
+            print("⛔ Service restart blocked: onboarding in progress")
+            return
+
         try:
-            # Stop first
+            # Stop first - kill both patterns: "talktype.app" (dev) and "bin/dictate" (AppImage)
             subprocess.run(["pkill", "-f", "talktype.app"], capture_output=True)
+            subprocess.run(["pkill", "-f", "bin/dictate"], capture_output=True)
             # Wait a moment for processes to terminate
             time.sleep(1)
 
@@ -1131,10 +1157,16 @@ class DictationTray:
                     Gtk.main_iteration()
 
                 # Install and restart (this replaces the current process)
-                success, message = update_checker.install_update_and_restart(downloaded_path)
+                try:
+                    success, message = update_checker.install_update_and_restart(downloaded_path)
+                except Exception as install_error:
+                    logger.error(f"Exception during install_update_and_restart: {install_error}")
+                    success = False
+                    message = f"Install failed with exception: {install_error}"
 
                 # Only reach here if install failed (execv didn't work)
                 status_dialog.destroy()
+                logger.info(f"install_update_and_restart returned: success={success}, message={message}")
                 if not success:
                     error_dialog = Gtk.MessageDialog(
                         message_type=Gtk.MessageType.ERROR,
@@ -1253,8 +1285,9 @@ class DictationTray:
     def quit_app(self, _):
         """Quit the tray and stop the dictation service."""
         try:
-            # Stop the dictation service first
+            # Stop the dictation service first - kill both patterns
             subprocess.run(["pkill", "-f", "talktype.app"], capture_output=True)
+            subprocess.run(["pkill", "-f", "bin/dictate"], capture_output=True)
             logger.info("Stopped dictation service")
         except Exception as e:
             logger.error(f"Error stopping dictation service: {e}")
@@ -1460,7 +1493,35 @@ def main():
     _ensure_ydotoold_running()
 
     tray = DictationTray()
-    
+
+    # Check if we just updated and show notification
+    def check_and_show_update_notification():
+        try:
+            from . import update_checker
+            from . import __version__
+            previous_version = update_checker.check_just_updated()
+            if previous_version:
+                # Show a brief notification that update completed
+                dialog = Gtk.MessageDialog(
+                    message_type=Gtk.MessageType.INFO,
+                    buttons=Gtk.ButtonsType.OK,
+                    text="Update Complete!"
+                )
+                dialog.format_secondary_markup(
+                    f"TalkType has been updated to <b>v{__version__}</b>\n\n"
+                    f"The update was installed automatically and "
+                    f"TalkType has restarted with the new version."
+                )
+                dialog.set_position(Gtk.WindowPosition.CENTER)
+                dialog.run()
+                dialog.destroy()
+        except Exception as e:
+            logger.debug(f"Error checking for update notification: {e}")
+        return False  # Don't repeat
+
+    # Schedule update notification check after tray is up
+    GLib.timeout_add(500, check_and_show_update_notification)
+
     # Check for first run and show welcome dialog if applicable
     try:
         import talktype.cuda_helper as cuda_helper
@@ -1468,6 +1529,16 @@ def main():
 
         # Only show welcome dialog on first tray launch (not for prefs)
         if cuda_helper.is_first_run():
+            logger.info("First run detected - starting onboarding")
+            # Set flag BEFORE scheduling to prevent any auto-start during onboarding
+            tray.onboarding_in_progress = True
+
+            # Kill any existing service that might be running - use SIGKILL for immediate termination
+            subprocess.run(["pkill", "-9", "-f", "talktype.app"], capture_output=True)
+            subprocess.run(["pkill", "-9", "-f", "bin/dictate"], capture_output=True)
+            subprocess.run(["pkill", "-9", "-f", "-m talktype"], capture_output=True)
+            time.sleep(0.5)  # Give processes time to die
+
             # Schedule the welcome dialog after tray is initialized
             def show_first_run_setup():
                 # Show unified welcome dialog with all setup options
@@ -1485,20 +1556,40 @@ def main():
                 # Refresh menu after installations
                 tray.refresh_menu()
 
-                # NOW start the service (after welcome dialog)
+                # Onboarding complete - NOW allow service to start
+                tray.onboarding_in_progress = False
+                logger.info("Onboarding complete - starting service")
+
+                # Refresh KDE menu cache so TalkType shows in start menu immediately
+                # This must run AFTER the .desktop file is created by the welcome dialog
+                try:
+                    subprocess.run(["kbuildsycoca6"], capture_output=True, timeout=15)
+                    logger.info("KDE menu cache refreshed (kbuildsycoca6)")
+                except FileNotFoundError:
+                    # Not KDE, try kbuildsycoca5
+                    try:
+                        subprocess.run(["kbuildsycoca5"], capture_output=True, timeout=15)
+                        logger.info("KDE menu cache refreshed (kbuildsycoca5)")
+                    except FileNotFoundError:
+                        pass  # Not KDE
+                except Exception as e:
+                    logger.debug(f"Could not refresh KDE menu cache: {e}")
+
                 GLib.timeout_add(500, tray._auto_start_service)
                 return False  # Don't repeat
 
             GLib.timeout_add(1500, show_first_run_setup)  # Show after 1.5 seconds
         else:
             # Not first run, auto-start immediately
+            logger.info("Not first run - auto-starting service")
             GLib.timeout_add(1000, tray._auto_start_service)
             # Check for updates after a delay (don't interfere with startup)
             GLib.timeout_add(5000, tray.auto_check_for_updates)
     except Exception as e:
-        # If any error, still try to auto-start
+        # If any error, only auto-start if NOT during onboarding
         logger.error(f"Error in first run setup: {e}")
-        GLib.timeout_add(1000, tray._auto_start_service)
+        if not tray.onboarding_in_progress:
+            GLib.timeout_add(1000, tray._auto_start_service)
 
     Gtk.main()
 

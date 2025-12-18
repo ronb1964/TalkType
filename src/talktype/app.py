@@ -458,13 +458,16 @@ def _sd_callback(indata, frames_count, time_info, status):
             normalized = min(1.0, rms / 3000.0)
             recording_indicator.set_audio_level(normalized)
 
-def _keycode_from_name(name: str) -> int:
-    n = (name or "F8").strip().upper()
+def _keycode_from_name(name: str) -> int | None:
+    """Convert key name to evdev keycode. Returns None if name is empty (no hotkey configured)."""
+    if not name or not name.strip():
+        return None  # No hotkey configured - don't activate any key
+    n = name.strip().upper()
     fkeys = {f"F{i}": getattr(ecodes, f"KEY_F{i}") for i in range(1,13)}
     if n in fkeys: return fkeys[n]
     if len(n) == 1 and "A" <= n <= "Z":
         return getattr(ecodes, f"KEY_{n}")
-    return ecodes.KEY_F8
+    return None  # Unknown key name - don't activate
 
 def _pick_input_device(mic_substring: str | None):
     """Return device index or None for default."""
@@ -594,17 +597,25 @@ def _type_text_raw(text: str):
         try:
             env = os.environ.copy()
             runtime = env.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
-            env.setdefault("YDOTOOL_SOCKET", os.path.join(runtime, ".ydotool_socket"))
+            socket_path = os.path.join(runtime, ".ydotool_socket")
+            env.setdefault("YDOTOOL_SOCKET", socket_path)
             # -d = delay between keydown and keyup (ms)
             # -H = hold time before next key (ms)
             # Lower values are faster but may cause letters to arrive out of order
             delay_str = str(max(5, min(50, _typing_delay)))  # Clamp to 5-50ms
+            logger.info(f"ydotool type: delay={delay_str}ms, socket={socket_path}, text_len={len(text)}")
             proc = subprocess.Popen(
                 ["ydotool", "type", "-d", delay_str, "-H", delay_str, "-f", "-"],
                 stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 env=env
             )
-            proc.communicate(input=text.encode("utf-8"), timeout=20)
+            stdout, stderr = proc.communicate(input=text.encode("utf-8"), timeout=20)
+            if proc.returncode != 0:
+                logger.error(f"ydotool type failed: rc={proc.returncode}, stderr={stderr.decode()}")
+            else:
+                logger.info(f"ydotool type succeeded: rc=0, typed {len(text)} chars")
             return
         except Exception as e:
             logger.debug(f"ydotool failed: {e}")
@@ -1163,15 +1174,29 @@ def _loop_evdev(cfg: Settings, input_device_idx):
         try: dev.set_nonblocking(True)
         except Exception: pass
 
-    hold_key = _keycode_from_name(cfg.hotkey)
-    toggle_key = _keycode_from_name(cfg.toggle_hotkey) if mode == "toggle" else None
-
-    # Check if this is the first run
+    # Check if this is the first run BEFORE setting up hotkeys
+    # If first run (onboarding not complete), don't monitor ANY keys
     try:
         from talktype.cuda_helper import is_first_run, mark_first_run_complete
         first_run = is_first_run()
     except Exception:
         first_run = False
+
+    if first_run:
+        logger.info("First run detected - onboarding not complete")
+        logger.info("Service will NOT monitor any keys until onboarding is done")
+        print("Onboarding not complete. No hotkeys will be active until setup is finished.")
+        return  # Exit - tray will restart service after onboarding
+
+    hold_key = _keycode_from_name(cfg.hotkey)
+    toggle_key = _keycode_from_name(cfg.toggle_hotkey) if mode == "toggle" else None
+
+    # If no hotkeys are configured, exit gracefully
+    if hold_key is None:
+        logger.info("No hotkey configured - service will not monitor any keys")
+        logger.info("Hotkeys will be activated after user completes onboarding")
+        print("No hotkey configured. Complete onboarding to activate dictation.")
+        return  # Exit the service - it will be restarted after onboarding
 
     # Check if we should show welcome dialog (after user changed keys)
     show_welcome_after_change = False
@@ -1489,8 +1514,7 @@ Right-click the tray icon → "Help..." for full documentation
                                     grabbed_device = grabbed_devices if grabbed_devices else None
                                     start_recording(cfg.beeps, cfg.notify, input_device_idx)
                                 elif event.value == 0 and state.is_recording:
-                                    stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language, cfg.auto_space, cfg.auto_period, cfg.injection_mode)
-                                    # Ungrab all devices after recording stops
+                                    # Ungrab all devices BEFORE text injection so ydotool can work
                                     if grabbed_device:
                                         for ungrab_dev in grabbed_device:
                                             try:
@@ -1499,6 +1523,7 @@ Right-click the tray icon → "Help..." for full documentation
                                             except Exception:
                                                 pass
                                         grabbed_device = None
+                                    stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language, cfg.auto_space, cfg.auto_period, cfg.injection_mode)
                         else:  # toggle mode: press to start, press again to stop
                             if event.code == toggle_key and event.value == 1:
                                 # Reset timeout timer only when TalkType hotkey is used

@@ -574,6 +574,18 @@ def install_update_and_restart(
         if progress_callback:
             progress_callback("Copying to AppImages folder...", 60)
 
+        # IMPORTANT: On Linux, you can't write to a file that's currently executing
+        # ("Text file busy" error). We need to REMOVE the old file first, then
+        # copy/move the new one. Removing works because Linux uses reference counting -
+        # the running process keeps its copy in memory.
+        if os.path.exists(APPIMAGE_PATH):
+            try:
+                os.remove(APPIMAGE_PATH)
+                logger.debug(f"Removed old AppImage at {APPIMAGE_PATH}")
+            except Exception as e:
+                logger.warning(f"Could not remove old AppImage: {e}")
+                # Try to continue anyway - maybe it's not the one we're running from
+
         shutil.copy2(downloaded_path, APPIMAGE_PATH)
 
         # Make executable
@@ -601,9 +613,31 @@ def install_update_and_restart(
 
         logger.info(f"Update installed to {APPIMAGE_PATH}, restarting...")
 
+        # Write a flag so the new version knows it just updated
+        # This allows showing a "update complete" message after restart
+        try:
+            just_updated_file = os.path.join(os.path.dirname(APPIMAGE_PATH), ".talktype_just_updated")
+            with open(just_updated_file, "w") as f:
+                from . import __version__
+                f.write(__version__)
+        except Exception:
+            pass  # Not critical
+
         # Restart the application using the new AppImage
         # Use os.execv to replace the current process
-        os.execv(APPIMAGE_PATH, [APPIMAGE_PATH])
+        logger.info(f"About to execv: {APPIMAGE_PATH}")
+
+        # Verify the file exists and is executable before execv
+        if not os.path.exists(APPIMAGE_PATH):
+            return (False, f"AppImage not found at {APPIMAGE_PATH}")
+        if not os.access(APPIMAGE_PATH, os.X_OK):
+            return (False, f"AppImage is not executable: {APPIMAGE_PATH}")
+
+        try:
+            os.execv(APPIMAGE_PATH, [APPIMAGE_PATH])
+        except Exception as execv_error:
+            logger.error(f"execv failed: {execv_error}")
+            return (False, f"Failed to restart: {execv_error}")
 
         # Note: If execv succeeds, we never reach here
         return (True, "Update installed and restarting...")
@@ -622,27 +656,77 @@ def _refresh_desktop_menu_cache():
     """
     import subprocess
     import shutil
+    import time
+
+    # Small delay to ensure .desktop file is fully written
+    time.sleep(0.5)
+
+    logger.info("Refreshing desktop menu cache...")
 
     # Try KDE's cache refresh (kbuildsycoca5 or kbuildsycoca6)
-    for cmd in ['kbuildsycoca6', 'kbuildsycoca5']:
-        if shutil.which(cmd):
-            try:
-                subprocess.run([cmd, '--noincremental'],
-                             capture_output=True, timeout=10)
-                logger.debug(f"Desktop menu cache refreshed using {cmd}")
+    # Check both PATH and common absolute locations (AppImage may not have full PATH)
+    kde_commands = [
+        '/usr/bin/kbuildsycoca6', '/usr/bin/kbuildsycoca5',
+        'kbuildsycoca6', 'kbuildsycoca5',
+    ]
+
+    # First, try running kbuildsycoca via shell (most reliable for AppImage)
+    # This uses the user's actual PATH, not the AppImage's modified environment
+    # Try both with and without --noincremental (user reported plain command works better)
+    for cmd in ['kbuildsycoca6', 'kbuildsycoca5', 'kbuildsycoca6 --noincremental', 'kbuildsycoca5 --noincremental']:
+        try:
+            print(f"🔄 Running: {cmd}")
+            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=15)
+            if result.returncode == 0:
+                logger.info(f"Desktop menu cache refreshed using: {cmd}")
+                print(f"✅ Desktop menu refreshed with: {cmd}")
                 return
+            else:
+                logger.debug(f"{cmd} returned {result.returncode}: {result.stderr}")
+                print(f"⚠️ {cmd} returned {result.returncode}")
+        except Exception as e:
+            logger.debug(f"Could not run {cmd}: {e}")
+            print(f"❌ Could not run {cmd}: {e}")
+
+    # Fallback: try direct path execution
+    for cmd in kde_commands:
+        # Check if command exists (either in PATH or as absolute path)
+        if cmd.startswith('/'):
+            cmd_exists = os.path.exists(cmd)
+            actual_cmd = cmd
+        else:
+            actual_cmd = shutil.which(cmd)
+            cmd_exists = actual_cmd is not None
+
+        logger.debug(f"Checking {cmd}: exists={cmd_exists}")
+
+        if cmd_exists:
+            try:
+                result = subprocess.run([actual_cmd, '--noincremental'],
+                             capture_output=True, text=True, timeout=15)
+                if result.returncode == 0:
+                    logger.info(f"Desktop menu cache refreshed using {actual_cmd}")
+                    return
+                else:
+                    logger.warning(f"{actual_cmd} returned {result.returncode}: {result.stderr}")
             except Exception as e:
                 logger.debug(f"Could not run {cmd}: {e}")
 
     # Try update-desktop-database for other desktops
-    if shutil.which('update-desktop-database'):
-        try:
-            apps_dir = os.path.dirname(DESKTOP_FILE_PATH)
-            subprocess.run(['update-desktop-database', apps_dir],
-                         capture_output=True, timeout=10)
-            logger.debug("Desktop menu cache refreshed using update-desktop-database")
-        except Exception as e:
-            logger.debug(f"Could not run update-desktop-database: {e}")
+    for cmd in ['update-desktop-database', '/usr/bin/update-desktop-database']:
+        cmd_exists = shutil.which(cmd) if not cmd.startswith('/') else os.path.exists(cmd)
+        if cmd_exists:
+            try:
+                actual_cmd = cmd if cmd.startswith('/') else shutil.which(cmd)
+                apps_dir = os.path.dirname(DESKTOP_FILE_PATH)
+                subprocess.run([actual_cmd, apps_dir],
+                             capture_output=True, timeout=15)
+                logger.info("Desktop menu cache refreshed using update-desktop-database")
+                return
+            except Exception as e:
+                logger.debug(f"Could not run {cmd}: {e}")
+
+    logger.warning("Could not refresh desktop menu cache - no suitable command found")
 
 
 def _install_app_icon() -> Optional[str]:
@@ -652,17 +736,20 @@ def _install_app_icon() -> Optional[str]:
     Copies the app icon from the AppImage or source to ~/.local/share/icons/
     so it can be referenced by the desktop launcher.
 
+    For KDE/Plasma compatibility, installs icons in multiple sizes.
+
     Returns:
         str: Icon name to use in .desktop file, or None if installation failed
     """
     import shutil
     import sys
 
-    icon_dest_dir = os.path.expanduser("~/.local/share/icons/hicolor/256x256/apps")
-    icon_dest_path = os.path.join(icon_dest_dir, "talktype.png")
+    icons_base = os.path.expanduser("~/.local/share/icons/hicolor")
+    primary_icon_path = os.path.join(icons_base, "256x256", "apps", "talktype.png")
 
     # If icon already installed, just return the name
-    if os.path.exists(icon_dest_path):
+    if os.path.exists(primary_icon_path):
+        logger.debug("TalkType icon already installed")
         return "talktype"
 
     # Find the source icon
@@ -682,6 +769,7 @@ def _install_app_icon() -> Optional[str]:
             for p in possible_paths:
                 if os.path.exists(p):
                     icon_source = p
+                    logger.info(f"Found icon in AppImage: {p}")
                     break
 
     # Try 2: Look relative to this module (for dev mode)
@@ -695,33 +783,56 @@ def _install_app_icon() -> Optional[str]:
         for p in possible_paths:
             if p.exists():
                 icon_source = str(p)
+                logger.info(f"Found icon at: {p}")
                 break
 
     if not icon_source:
-        logger.debug("Could not find TalkType icon to install")
+        logger.warning("Could not find TalkType icon to install")
+        print("⚠️ Could not find TalkType icon source")
         return None
 
     try:
-        # Create icon directory
-        os.makedirs(icon_dest_dir, exist_ok=True)
+        # Install icon in multiple sizes for better KDE/Plasma compatibility
+        # KDE looks for icons in various sizes and may not scale properly
+        icon_sizes = ["256x256", "128x128", "64x64", "48x48", "32x32"]
 
-        # Copy icon
-        shutil.copy2(icon_source, icon_dest_path)
-        logger.info(f"Installed TalkType icon to {icon_dest_path}")
+        for size in icon_sizes:
+            icon_dir = os.path.join(icons_base, size, "apps")
+            icon_path = os.path.join(icon_dir, "talktype.png")
+
+            # Create icon directory
+            os.makedirs(icon_dir, exist_ok=True)
+
+            # Copy icon (same source for all sizes - KDE will handle scaling)
+            shutil.copy2(icon_source, icon_path)
+            logger.debug(f"Installed icon to {icon_path}")
+
+        logger.info(f"Installed TalkType icon to {icons_base} ({len(icon_sizes)} sizes)")
+        print(f"✅ Installed TalkType icon ({len(icon_sizes)} sizes)")
 
         # Update icon cache (for GTK-based desktops)
         import subprocess
         try:
-            icons_base = os.path.expanduser("~/.local/share/icons/hicolor")
             subprocess.run(['gtk-update-icon-cache', '-f', '-t', icons_base],
                          capture_output=True, timeout=10)
-        except Exception:
-            pass  # Not critical
+            logger.debug("Updated GTK icon cache")
+        except Exception as e:
+            logger.debug(f"GTK icon cache update failed (not critical): {e}")
+
+        # Also try KDE's icon cache (breeze-icon-theme uses this)
+        try:
+            # xdg-icon-resource is more universal
+            subprocess.run(['xdg-icon-resource', 'forceupdate', '--mode', 'user'],
+                         capture_output=True, timeout=10)
+            logger.debug("Updated XDG icon cache")
+        except Exception as e:
+            logger.debug(f"XDG icon cache update failed (not critical): {e}")
 
         return "talktype"
 
     except Exception as e:
         logger.warning(f"Could not install TalkType icon: {e}")
+        print(f"⚠️ Failed to install icon: {e}")
         return None
 
 
@@ -748,11 +859,17 @@ def create_desktop_launcher() -> Tuple[bool, str]:
         # Get the current version for the comment
         version = get_current_version()
 
+        # IMPORTANT: Compute the AppImage path fresh at runtime to ensure
+        # it's correct for the current user (not baked in at build time)
+        appimage_exec_path = os.path.expanduser("~/AppImages/TalkType.AppImage")
+        logger.info(f"Desktop launcher Exec path: {appimage_exec_path}")
+        print(f"📍 Desktop launcher will use: {appimage_exec_path}")
+
         # Desktop file content
         desktop_content = f"""[Desktop Entry]
 Name=TalkType
 Comment=AI-powered speech recognition and dictation (v{version})
-Exec={APPIMAGE_PATH}
+Exec={appimage_exec_path}
 Icon={icon_name}
 Type=Application
 Categories=Utility;Accessibility;AudioVideo;
@@ -864,6 +981,40 @@ def copy_appimage_to_standard_location() -> Tuple[bool, str]:
     except Exception as e:
         logger.error(f"Failed to copy AppImage: {e}")
         return (False, f"Failed to copy AppImage: {e}")
+
+
+def check_just_updated() -> Optional[str]:
+    """
+    Check if the app was just updated and return the previous version.
+
+    This checks for a flag file written by install_update_and_restart()
+    before the app restarted. If found, the flag is deleted and the
+    previous version is returned so a notification can be shown.
+
+    Returns:
+        str: Previous version string if just updated, None otherwise
+    """
+    just_updated_file = os.path.join(APPIMAGE_DIR, ".talktype_just_updated")
+
+    if not os.path.exists(just_updated_file):
+        return None
+
+    try:
+        with open(just_updated_file, "r") as f:
+            previous_version = f.read().strip()
+
+        # Delete the flag file
+        os.remove(just_updated_file)
+
+        return previous_version
+    except Exception as e:
+        logger.debug(f"Error checking just_updated flag: {e}")
+        # Try to clean up the file anyway
+        try:
+            os.remove(just_updated_file)
+        except Exception:
+            pass
+        return None
 
 
 # For testing
