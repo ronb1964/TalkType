@@ -369,7 +369,16 @@ other processing, so you can include punctuation in replacements.
 • Enable Launch at Login to start automatically
 • Use toggle mode (F9) for hands-free extended dictation
 • Set auto-timeout to save battery when not in use
-• Create custom voice commands for frequently-typed text''')
+• Create custom voice commands for frequently-typed text
+
+<b>Bug Reports &amp; Feedback:</b>
+Found a bug or have a feature request? We'd love to hear from you!
+
+• <b>Report bugs:</b> https://github.com/ronb1964/TalkType/issues
+• <b>Include:</b> Your Linux distro, desktop environment, and TalkType version
+• <b>Log file:</b> ~/.config/talktype/talktype.log (helpful for debugging)
+
+Your feedback helps make TalkType better for everyone!''')
 
     # Close button
     close_button = Gtk.Button(label="Close")
