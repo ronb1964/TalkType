@@ -119,6 +119,102 @@ def _acquire_prefs_singleton():
             pass
     atexit.register(_cleanup)
 
+
+class SegmentedVUMeter(Gtk.DrawingArea):
+    """
+    Custom segmented VU meter widget that looks like a classic LED audio meter.
+
+    Segments are colored based on their position:
+    - Green: Safe/normal levels (0-60%)
+    - Yellow: Getting loud (60-80%)
+    - Red: Danger/clipping zone (80-100%)
+
+    Unlit segments are shown in dark gray.
+    """
+
+    def __init__(self, num_segments=20):
+        super().__init__()
+        self.num_segments = num_segments
+        self.level = 0.0  # 0.0 to 1.0
+
+        # Set minimum size
+        self.set_size_request(200, 20)
+
+        # Connect draw signal
+        self.connect("draw", self._on_draw)
+
+        # Colors for segments based on position (as RGB tuples, 0-1 range)
+        # Bright, vivid colors like a real VU meter / LED display
+        # Green zone: 0-60% of segments
+        # Yellow zone: 60-80% of segments
+        # Red zone: 80-100% of segments
+        self.color_green = (0.0, 0.90, 0.46)     # #00E676 - bright lime green
+        self.color_yellow = (1.0, 0.84, 0.0)     # #FFD600 - bright yellow
+        self.color_red = (1.0, 0.09, 0.27)       # #FF1744 - bright red
+        self.color_off = (0.18, 0.18, 0.18)      # #2E2E2E - dark gray for unlit
+        self.color_border = (0.12, 0.12, 0.12)   # #1F1F1F - darker border
+
+    def set_value(self, level):
+        """Set the meter level (0.0 to 1.0)."""
+        self.level = max(0.0, min(1.0, level))
+        self.queue_draw()  # Trigger redraw
+
+    def get_value(self):
+        """Get the current meter level."""
+        return self.level
+
+    def _get_segment_color(self, segment_index, is_lit):
+        """Get the color for a segment based on its position and lit state."""
+        if not is_lit:
+            return self.color_off
+
+        # Calculate position as percentage (0.0 to 1.0)
+        position = segment_index / self.num_segments
+
+        if position < 0.60:
+            return self.color_green   # Green zone (0-60%)
+        elif position < 0.80:
+            return self.color_yellow  # Yellow zone (60-80%)
+        else:
+            return self.color_red     # Red zone (80-100%)
+
+    def _on_draw(self, widget, cr):
+        """Draw the segmented meter."""
+        # Get widget dimensions
+        width = widget.get_allocated_width()
+        height = widget.get_allocated_height()
+
+        # Calculate segment dimensions
+        segment_gap = 2  # Gap between segments
+        total_gaps = (self.num_segments - 1) * segment_gap
+        segment_width = (width - total_gaps) / self.num_segments
+        segment_height = height - 4  # Leave some margin
+
+        # Calculate how many segments should be lit
+        lit_segments = int(self.level * self.num_segments)
+
+        # Draw each segment
+        for i in range(self.num_segments):
+            x = i * (segment_width + segment_gap)
+            y = 2  # Top margin
+
+            is_lit = i < lit_segments
+            color = self._get_segment_color(i, is_lit)
+
+            # Draw segment background
+            cr.set_source_rgb(*color)
+            cr.rectangle(x, y, segment_width, segment_height)
+            cr.fill()
+
+            # Draw subtle border around each segment
+            cr.set_source_rgb(*self.color_border)
+            cr.rectangle(x, y, segment_width, segment_height)
+            cr.set_line_width(1)
+            cr.stroke()
+
+        return False
+
+
 class PreferencesWindow:
     def __init__(self):
         # Set GTK theme to prefer dark mode
@@ -183,6 +279,16 @@ class PreferencesWindow:
                 print(f"⚠️  CSS file not found: {css_file}")
         except Exception as e:
             print(f"❌ Failed to load CSS: {e}")
+
+    def _block_combo_scroll(self, combo):
+        """
+        Prevent scroll wheel from changing ComboBox value.
+
+        By default, GTK ComboBoxes capture scroll events and change their value,
+        which is annoying when trying to scroll the preferences window and your
+        cursor happens to be over a dropdown.
+        """
+        combo.connect("scroll-event", lambda w, e: True)  # Return True to block
 
     def load_config(self):
         """Load config from TOML file."""
@@ -415,6 +521,7 @@ class PreferencesWindow:
         model_combo = Gtk.ComboBoxText()
         model_combo.set_can_focus(True)
         model_combo.connect("button-press-event", self._on_combo_button_press)
+        self._block_combo_scroll(model_combo)
 
         models = ["tiny", "base", "small", "medium", "large-v3"]
         for model in models:
@@ -444,6 +551,7 @@ class PreferencesWindow:
         device_combo = Gtk.ComboBoxText()
         device_combo.set_can_focus(True)
         device_combo.connect("button-press-event", self._on_combo_button_press)
+        self._block_combo_scroll(device_combo)
 
         device_combo.append("cpu", "CPU")
         
@@ -464,6 +572,7 @@ class PreferencesWindow:
         self.lang_mode_combo = Gtk.ComboBoxText()
         self.lang_mode_combo.set_can_focus(True)
         self.lang_mode_combo.connect("button-press-event", self._on_combo_button_press)
+        self._block_combo_scroll(self.lang_mode_combo)
         self.lang_mode_combo.append("auto", "Auto-detect")
         self.lang_mode_combo.append("manual", "Manual Selection (Faster)")
         self.lang_mode_combo.set_active_id(self.config.get("language_mode", "auto"))
@@ -479,6 +588,7 @@ class PreferencesWindow:
         self.lang_combo = Gtk.ComboBoxText()
         self.lang_combo.set_can_focus(True)
         self.lang_combo.connect("button-press-event", self._on_combo_button_press)
+        self._block_combo_scroll(self.lang_combo)
 
         # Add language options with flags
         languages = [
@@ -555,6 +665,7 @@ class PreferencesWindow:
         self.mode_combo = Gtk.ComboBoxText()
         self.mode_combo.set_can_focus(True)
         self.mode_combo.connect("button-press-event", self._on_combo_button_press)
+        self._block_combo_scroll(self.mode_combo)
 
         self.mode_combo.append("hold", "Hold to Talk")
         self.mode_combo.append("toggle", "Press to Toggle")
@@ -572,6 +683,7 @@ class PreferencesWindow:
         self.hotkey_combo = Gtk.ComboBoxText()
         self.hotkey_combo.set_can_focus(True)
         self.hotkey_combo.connect("button-press-event", self._on_combo_button_press)
+        self._block_combo_scroll(self.hotkey_combo)
 
         # Add F-key options (most practical for dictation)
         hotkeys = ["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12"]
@@ -597,6 +709,7 @@ class PreferencesWindow:
         self.toggle_combo = Gtk.ComboBoxText()
         self.toggle_combo.set_can_focus(True)
         self.toggle_combo.connect("button-press-event", self._on_combo_button_press)
+        self._block_combo_scroll(self.toggle_combo)
 
         # Add same options for toggle key
         for key in hotkeys:
@@ -676,6 +789,7 @@ class PreferencesWindow:
         mic_combo = Gtk.ComboBoxText()
         mic_combo.set_can_focus(True)
         mic_combo.connect("button-press-event", self._on_combo_button_press)
+        self._block_combo_scroll(mic_combo)
 
         # Get available input devices
         try:
@@ -731,18 +845,29 @@ class PreferencesWindow:
         volume_box.pack_start(self.volume_scale, True, True, 0)
         mic_test_box.pack_start(volume_box, False, False, 0)
         
-        # Level meter
+        # Level meter - shows real-time audio level with segmented VU meter
         level_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
         level_label = Gtk.Label(label="Input Level:")
-        self.level_bar = Gtk.LevelBar()
-        self.level_bar.set_min_value(0.0)
-        self.level_bar.set_max_value(1.0)
-        self.level_bar.set_value(0.0)
+
+        # Custom segmented VU meter (classic LED meter look)
+        # Green segments (0-60%), Yellow (60-80%), Red (80-100%)
+        self.level_bar = SegmentedVUMeter(num_segments=20)
         self.level_bar.set_hexpand(True)
-        self.level_bar.set_tooltip_text("Real-time microphone input level")
+        self.level_bar.set_tooltip_text(
+            "Green = safe levels, Yellow = getting loud, Red = too loud!\n"
+            "Aim to stay mostly in the green with occasional yellow peaks."
+        )
+
         level_box.pack_start(level_label, False, False, 0)
         level_box.pack_start(self.level_bar, True, True, 0)
         mic_test_box.pack_start(level_box, False, False, 0)
+
+        # Status/grade label - shows recording quality after you stop
+        self.level_status = Gtk.Label(label="Click 'Start Recording' and speak to test your mic levels")
+        self.level_status.set_xalign(0)
+        self.level_status.set_margin_start(75)  # Align with level bar
+        self.level_status.set_line_wrap(True)
+        mic_test_box.pack_start(self.level_status, False, False, 0)
         
         # Control buttons
         button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
@@ -816,6 +941,7 @@ class PreferencesWindow:
 
         size_combo = Gtk.ComboBoxText()
         size_combo.connect("button-press-event", self._on_combo_button_press)
+        self._block_combo_scroll(size_combo)
         size_combo.append("small", "Small (60%)")
         size_combo.append("medium", "Medium (100%)")
         size_combo.append("large", "Large (140%)")
@@ -859,6 +985,7 @@ class PreferencesWindow:
 
         position_combo = Gtk.ComboBoxText()
         position_combo.connect("button-press-event", self._on_combo_button_press)
+        self._block_combo_scroll(position_combo)
         for pos_id, pos_label_text in positions:
             position_combo.append(pos_id, pos_label_text)
 
@@ -969,6 +1096,7 @@ class PreferencesWindow:
         inject_combo = Gtk.ComboBoxText()
         inject_combo.set_can_focus(True)
         inject_combo.connect("button-press-event", self._on_combo_button_press)
+        self._block_combo_scroll(inject_combo)
 
         inject_combo.append("auto", "Auto (Smart Detection)")
         inject_combo.append("type", "Keystroke Typing")
@@ -2086,8 +2214,16 @@ Hidden=true
             pass
     
     def update_level_bar(self, level):
-        """Update the level bar with current audio level."""
+        """Update the VU meter with current audio level."""
+        # The SegmentedVUMeter handles colors automatically based on level
         self.level_bar.set_value(level)
+
+        # Track statistics for post-recording evaluation
+        if hasattr(self, '_level_samples'):
+            self._level_samples.append(level)
+            if level > self._peak_level:
+                self._peak_level = level
+
         return False  # Don't repeat
     
     def on_start_recording(self, button):
@@ -2101,6 +2237,17 @@ Hidden=true
             # Start recording
             self.recording = True
             self.recorded_frames = []
+
+            # Initialize level tracking for post-recording evaluation
+            self._level_samples = []
+            self._peak_level = 0.0
+
+            # Clear any previous status message
+            self.level_status.set_text("🎤 Recording... speak normally")
+            style_context = self.level_status.get_style_context()
+            style_context.remove_class("level-too-quiet")
+            style_context.remove_class("level-good")
+            style_context.remove_class("level-too-loud")
 
             def audio_callback(indata, frames, time, status):
                 if self.recording:
@@ -2147,9 +2294,57 @@ Hidden=true
             
             # Reset level bar
             self.level_bar.set_value(0.0)
-            
+
+            # Evaluate recording quality and show grade
+            self._show_recording_grade()
+
         except Exception as e:
             self.show_error_dialog("Stop recording failed!", str(e))
+
+    def _show_recording_grade(self):
+        """Evaluate the recording and show a quality grade."""
+        style_context = self.level_status.get_style_context()
+        style_context.remove_class("level-too-quiet")
+        style_context.remove_class("level-good")
+        style_context.remove_class("level-too-loud")
+
+        # Check if we have level data
+        if not hasattr(self, '_level_samples') or not self._level_samples:
+            self.level_status.set_text("No audio detected")
+            style_context.add_class("level-too-quiet")
+            return
+
+        # Calculate statistics (convert to Python floats to avoid numpy type issues)
+        samples = [float(s) for s in self._level_samples]
+        avg_level = sum(samples) / len(samples)
+        peak_level = float(self._peak_level)
+
+        # Filter out silence to get "speaking" samples (above 0.08)
+        speaking_samples = [s for s in samples if s > 0.08]
+        speaking_avg = sum(speaking_samples) / len(speaking_samples) if speaking_samples else 0
+
+        # Evaluate based on average level while speaking and peak
+        # Thresholds tuned for typical speech:
+        # - speaking_avg < 0.15: Too quiet
+        # - speaking_avg 0.15-0.70: Good
+        # - peak > 0.95: Clipping/distortion risk
+
+        if len(speaking_samples) < 5:
+            # Not enough speech detected
+            self.level_status.set_text("⚠️ Too quiet - speak louder or move closer to the mic")
+            style_context.add_class("level-too-quiet")
+        elif peak_level > 0.95:
+            # Clipping detected
+            self.level_status.set_text("⚠️ Too loud - reduce volume to avoid distortion")
+            style_context.add_class("level-too-loud")
+        elif speaking_avg < 0.20:
+            # Speech detected but too quiet
+            self.level_status.set_text("⚠️ A bit quiet - try speaking louder for best results")
+            style_context.add_class("level-too-quiet")
+        else:
+            # Good levels!
+            self.level_status.set_text("✓ Good levels - should transcribe well!")
+            style_context.add_class("level-good")
     
     def on_replay_recording(self, button):
         """Replay the recorded audio."""

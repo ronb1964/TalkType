@@ -422,3 +422,19 @@ notebook > stack > grid > label:first-child {
     color: #7eb7dd;
     font-weight: 600;
 }
+
+/* ===== RECORDING QUALITY GRADE LABELS ===== */
+.level-too-quiet {
+    color: #d25b5b;
+    font-weight: 600;
+}
+
+.level-good {
+    color: #6db896;
+    font-weight: 600;
+}
+
+.level-too-loud {
+    color: #e6aa3c;
+    font-weight: 600;
+}

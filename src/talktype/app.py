@@ -429,8 +429,73 @@ def _apply_custom_commands(text: str) -> str:
     
     if result != text:
         logger.info(f"Custom commands applied: {text!r} -> {result!r}")
-    
+
     return result
+
+
+# Common Whisper hallucination phrases that appear at the end of audio
+# These are phrases Whisper was trained on from YouTube video endings
+_HALLUCINATION_PHRASES = [
+    "thank you",
+    "thanks for watching",
+    "thanks for listening",
+    "bye",
+    "goodbye",
+    "see you next time",
+    "subscribe",
+    "like and subscribe",
+    "you",  # Often just "you" appears as a fragment
+]
+
+def _strip_hallucinations(text: str) -> str:
+    """
+    Remove common Whisper hallucination phrases from the end of transcribed text.
+
+    Whisper was trained on YouTube videos and often hallucinates phrases like
+    "thank you" or "thanks for watching" when it encounters silence or low-quality
+    audio at the end of a recording.
+
+    Args:
+        text: Raw transcribed text
+
+    Returns:
+        Text with trailing hallucination phrases removed
+    """
+    if not text:
+        return text
+
+    original = text
+    text = text.strip()
+
+    # Keep removing hallucinations from the end until none are found
+    # (handles cases like "... thank you. Bye.")
+    changed = True
+    while changed:
+        changed = False
+        lower_text = text.lower()
+
+        for phrase in _HALLUCINATION_PHRASES:
+            # Check if text ends with this phrase (with optional trailing punctuation)
+            # Match: "... thank you" or "... thank you." or "... thank you!"
+            if lower_text.endswith(phrase) or lower_text.endswith(phrase + ".") or lower_text.endswith(phrase + "!"):
+                # Find where the hallucination starts
+                phrase_start = lower_text.rfind(phrase)
+                if phrase_start > 0:
+                    # Remove the hallucination and any trailing punctuation/whitespace
+                    text = text[:phrase_start].rstrip(" .,!?")
+                    changed = True
+                    break
+                elif phrase_start == 0:
+                    # The entire text is just the hallucination
+                    text = ""
+                    changed = True
+                    break
+
+    if text != original:
+        logger.info(f"Stripped hallucination: {original!r} -> {text!r}")
+
+    return text
+
 
 def _beep(enabled: bool, freq=1000, duration=0.15):
     if not enabled:
@@ -936,14 +1001,28 @@ def stop_recording(
 
         # Time the transcription to identify delays
         transcribe_start = time.time()
+        # VAD parameters tuned for dictation:
+        # - Lower threshold (0.35) = less aggressive at cutting off speech
+        # - Higher speech_pad_ms (600) = more padding around detected speech to avoid cutting words
+        # - Higher min_silence_duration_ms (2500) = wait longer before splitting on silence
+        vad_params = {
+            "threshold": 0.35,           # Default 0.5 - lower = less likely to cut off speech
+            "speech_pad_ms": 600,        # Default 400 - more padding around speech
+            "min_silence_duration_ms": 2500,  # Default 2000 - longer silence needed to split
+        }
+
         segments, _ = model.transcribe(
                 audio_f32,
                 vad_filter=True,
+                vad_parameters=vad_params,
                 beam_size=1,
                 condition_on_previous_text=False,
                 temperature=0.0,
                 without_timestamps=True,
                 language=(language or None),
+                # Detect and skip hallucinations that occur after 2+ seconds of silence
+                # Common hallucinations: "thank you", "thanks for watching", "bye", etc.
+                hallucination_silence_threshold=2.0,
             )
         transcribe_time = time.time() - transcribe_start
         print(f"⏱️  TIMING: Transcription took {transcribe_time:.2f}s")
@@ -952,8 +1031,14 @@ def stop_recording(
             logger.warning(f"⚠️  Transcription took {transcribe_time:.2f}s (first run may be slower due to CUDA compilation)")
         
         raw = " ".join(seg.text for seg in segments).strip()
-        print(f"📝 Raw: {raw!r}")
-        logger.info(f"Raw transcription: {raw!r}")
+        print(f"📝 Raw (before filter): {raw!r}")
+        logger.info(f"Raw transcription (before hallucination filter): {raw!r}")
+
+        # Strip common Whisper hallucinations like "thank you" from the end
+        raw = _strip_hallucinations(raw)
+        if raw:
+            print(f"📝 Raw (after filter): {raw!r}")
+            logger.info(f"Raw transcription (after hallucination filter): {raw!r}")
         
         post_transcribe_time = time.time() - stop_recording_start
         print(f"⏱️  TIMING: Total time to transcription: {post_transcribe_time:.2f}s")
