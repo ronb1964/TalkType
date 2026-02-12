@@ -433,33 +433,60 @@ def _apply_custom_commands(text: str) -> str:
     return result
 
 
-# Common Whisper hallucination phrases that appear at the end of audio
-# These are phrases Whisper was trained on from YouTube video endings
-_HALLUCINATION_PHRASES = [
-    "thank you",
+# YouTube-specific phrases that are NEVER real dictation.
+# Safe to strip from the end of any transcription.
+_YOUTUBE_HALLUCINATION_PHRASES = [
     "thanks for watching",
     "thanks for listening",
-    "bye",
-    "goodbye",
+    "thank you for watching",
+    "thank you for listening",
     "see you next time",
+    "see you in the next video",
+    "see you in the next one",
     "subscribe",
     "like and subscribe",
-    "you",  # Often just "you" appears as a fragment
+    "please subscribe",
+    "don't forget to subscribe",
+    "hit the bell",
 ]
+
+# Common words/phrases that Whisper hallucinates from silence.
+# These are only stripped when they are the ENTIRE transcription,
+# because they could also be real speech at the end of a sentence
+# (e.g., "I want to say thank you" should keep "thank you").
+_WHOLE_TEXT_HALLUCINATION_PHRASES = [
+    "thank you",
+    "thank you very much",
+    "thank you so much",
+    "thanks",
+    "bye",
+    "bye bye",
+    "goodbye",
+    "you",
+    "oh",
+    "ah",
+    "hmm",
+    "uh",
+    "um",
+]
+
 
 def _strip_hallucinations(text: str) -> str:
     """
-    Remove common Whisper hallucination phrases from the end of transcribed text.
+    Remove common Whisper hallucination phrases from transcribed text.
 
-    Whisper was trained on YouTube videos and often hallucinates phrases like
-    "thank you" or "thanks for watching" when it encounters silence or low-quality
-    audio at the end of a recording.
+    Two-tier approach:
+    1. YouTube-specific phrases ("thanks for watching", "like and subscribe")
+       are always stripped from the end - nobody dictates these.
+    2. Common words ("thank you", "bye") are only discarded when they are
+       the ENTIRE transcription (pure hallucination from silence), so real
+       speech like "I want to say thank you" is preserved.
 
     Args:
         text: Raw transcribed text
 
     Returns:
-        Text with trailing hallucination phrases removed
+        Text with hallucination phrases removed
     """
     if not text:
         return text
@@ -467,22 +494,31 @@ def _strip_hallucinations(text: str) -> str:
     original = text
     text = text.strip()
 
-    # Keep removing hallucinations from the end until none are found
-    # (handles cases like "... thank you. Bye.")
+    # Strip any trailing punctuation for comparison
+    lower_clean = text.lower().rstrip(" .,!?;:")
+
+    # Tier 1: If the ENTIRE text is a common hallucination phrase, discard it.
+    # This catches silence -> "Thank you." or silence -> "Bye." etc.
+    if lower_clean in _WHOLE_TEXT_HALLUCINATION_PHRASES:
+        logger.info(f"Stripped whole-text hallucination: {original!r}")
+        return ""
+
+    # Tier 2: Strip YouTube-specific phrases from the end of text.
+    # These are never real dictation so they're always safe to remove.
     changed = True
     while changed:
         changed = False
         lower_text = text.lower()
 
-        for phrase in _HALLUCINATION_PHRASES:
+        for phrase in _YOUTUBE_HALLUCINATION_PHRASES:
             # Check if text ends with this phrase (with optional trailing punctuation)
-            # Match: "... thank you" or "... thank you." or "... thank you!"
-            if lower_text.endswith(phrase) or lower_text.endswith(phrase + ".") or lower_text.endswith(phrase + "!"):
+            stripped = lower_text.rstrip(" .,!?;:")
+            if stripped.endswith(phrase):
                 # Find where the hallucination starts
-                phrase_start = lower_text.rfind(phrase)
+                phrase_start = stripped.rfind(phrase)
                 if phrase_start > 0:
                     # Remove the hallucination and any trailing punctuation/whitespace
-                    text = text[:phrase_start].rstrip(" .,!?")
+                    text = text[:phrase_start].rstrip(" .,!?;:")
                     changed = True
                     break
                 elif phrase_start == 0:
@@ -1020,9 +1056,10 @@ def stop_recording(
                 temperature=0.0,
                 without_timestamps=True,
                 language=(language or None),
-                # Detect and skip hallucinations that occur after 2+ seconds of silence
-                # Common hallucinations: "thank you", "thanks for watching", "bye", etc.
-                hallucination_silence_threshold=2.0,
+                # NOTE: hallucination_silence_threshold was removed because it
+                # silently drops real speech after natural 2+ second pauses,
+                # causing middle sentences to vanish from longer paragraphs.
+                # Hallucination filtering is handled by _strip_hallucinations().
             )
         transcribe_time = time.time() - transcribe_start
         print(f"⏱️  TIMING: Transcription took {transcribe_time:.2f}s")
