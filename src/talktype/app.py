@@ -471,7 +471,7 @@ _WHOLE_TEXT_HALLUCINATION_PHRASES = [
 ]
 
 
-def _strip_hallucinations(text: str) -> str:
+def _strip_hallucinations(text: str, no_speech_prob: float = 0.0) -> str:
     """
     Remove common Whisper hallucination phrases from transcribed text.
 
@@ -479,11 +479,14 @@ def _strip_hallucinations(text: str) -> str:
     1. YouTube-specific phrases ("thanks for watching", "like and subscribe")
        are always stripped from the end - nobody dictates these.
     2. Common words ("thank you", "bye") are only discarded when they are
-       the ENTIRE transcription (pure hallucination from silence), so real
-       speech like "I want to say thank you" is preserved.
+       the ENTIRE transcription AND Whisper's no_speech_prob indicates
+       it likely wasn't real speech. This preserves intentional dictation
+       of phrases like "Thank you."
 
     Args:
         text: Raw transcribed text
+        no_speech_prob: Whisper's estimate (0-1) that the audio contained
+            no real speech. High values (>0.6) suggest hallucination.
 
     Returns:
         Text with hallucination phrases removed
@@ -497,10 +500,11 @@ def _strip_hallucinations(text: str) -> str:
     # Strip any trailing punctuation for comparison
     lower_clean = text.lower().rstrip(" .,!?;:")
 
-    # Tier 1: If the ENTIRE text is a common hallucination phrase, discard it.
-    # This catches silence -> "Thank you." or silence -> "Bye." etc.
-    if lower_clean in _WHOLE_TEXT_HALLUCINATION_PHRASES:
-        logger.info(f"Stripped whole-text hallucination: {original!r}")
+    # Tier 1: If the ENTIRE text is a common hallucination phrase AND
+    # Whisper thinks there was no real speech, discard it.
+    # This catches silence -> "Thank you." while preserving real "Thank you."
+    if lower_clean in _WHOLE_TEXT_HALLUCINATION_PHRASES and no_speech_prob > 0.6:
+        logger.info(f"Stripped whole-text hallucination (no_speech_prob={no_speech_prob:.2f}): {original!r}")
         return ""
 
     # Tier 2: Strip YouTube-specific phrases from the end of text.
@@ -1067,12 +1071,18 @@ def stop_recording(
         if transcribe_time > 2.0:  # Log if transcription takes more than 2 seconds
             logger.warning(f"⚠️  Transcription took {transcribe_time:.2f}s (first run may be slower due to CUDA compilation)")
         
-        raw = " ".join(seg.text for seg in segments).strip()
-        print(f"📝 Raw (before filter): {raw!r}")
-        logger.info(f"Raw transcription (before hallucination filter): {raw!r}")
+        # Collect segments into a list so we can read both text and
+        # no_speech_prob (the generator can only be consumed once)
+        seg_list = list(segments)
+        raw = " ".join(seg.text for seg in seg_list).strip()
+        # Get Whisper's confidence that there was NO real speech.
+        # High value = likely hallucination from silence, not real words.
+        max_no_speech_prob = max((seg.no_speech_prob for seg in seg_list), default=0.0)
+        print(f"📝 Raw (before filter): {raw!r}  [no_speech_prob={max_no_speech_prob:.2f}]")
+        logger.info(f"Raw transcription (before hallucination filter): {raw!r}  [no_speech_prob={max_no_speech_prob:.2f}]")
 
         # Strip common Whisper hallucinations like "thank you" from the end
-        raw = _strip_hallucinations(raw)
+        raw = _strip_hallucinations(raw, no_speech_prob=max_no_speech_prob)
         if raw:
             print(f"📝 Raw (after filter): {raw!r}")
             logger.info(f"Raw transcription (after hallucination filter): {raw!r}")
