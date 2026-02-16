@@ -537,6 +537,18 @@ def _strip_hallucinations(text: str, no_speech_prob: float = 0.0) -> str:
     return text
 
 
+def _find_output_device():
+    """Find a working output device. Default may be a mic-only USB device."""
+    for name_hint in ['pipewire', 'pulse', 'sysdefault', 'default']:
+        for i, d in enumerate(sd.query_devices()):
+            if d['max_output_channels'] > 0 and name_hint in d.get('name', '').lower():
+                try:
+                    sd.check_output_settings(device=i, samplerate=44100, channels=1)
+                    return i
+                except Exception:
+                    continue
+    return None  # Fall back to sounddevice default
+
 def _beep(enabled: bool, freq=1000, duration=0.15):
     if not enabled:
         return
@@ -544,7 +556,7 @@ def _beep(enabled: bool, freq=1000, duration=0.15):
     t = np.linspace(0, duration, int(samplerate * duration), False)
     tone = (np.sin(freq * t * 2 * np.pi) * 0.2).astype(np.float32)
     try:
-        sd.play(tone, samplerate); sd.wait()
+        sd.play(tone, samplerate, device=_find_output_device()); sd.wait()
     except Exception:
         pass
 
@@ -588,13 +600,50 @@ def _pick_input_device(mic_substring: str | None):
         return candidates[0][0]
     return None
 
+def _get_device_samplerate(device_idx):
+    """Get the native sample rate for a device, falling back to SAMPLE_RATE.
+
+    Some ALSA hw: devices only support their native rate (e.g. 48000 Hz)
+    and reject 16000 Hz. We detect this and record at the native rate,
+    then resample to 16000 Hz afterward.
+    """
+    try:
+        sd.check_input_settings(device=device_idx, samplerate=SAMPLE_RATE, channels=CHANNELS)
+        return SAMPLE_RATE  # Device supports 16kHz directly
+    except sd.PortAudioError:
+        pass
+    # Fall back to device's default sample rate
+    try:
+        info = sd.query_devices(device_idx)
+        native_sr = int(info['default_samplerate'])
+        sd.check_input_settings(device=device_idx, samplerate=native_sr, channels=CHANNELS)
+        print(f"ℹ️  Mic doesn't support {SAMPLE_RATE}Hz, recording at {native_sr}Hz (will resample)")
+        return native_sr
+    except Exception:
+        return SAMPLE_RATE  # Last resort, let it fail naturally
+
+def _resample_audio(audio, orig_sr, target_sr):
+    """Resample audio from orig_sr to target_sr using linear interpolation.
+
+    Good enough for speech audio going to Whisper. No extra dependencies needed.
+    """
+    if orig_sr == target_sr:
+        return audio
+    # Calculate new length and interpolate
+    duration = len(audio) / orig_sr
+    target_len = int(duration * target_sr)
+    orig_indices = np.linspace(0, len(audio) - 1, target_len)
+    return np.interp(orig_indices, np.arange(len(audio)), audio.astype(np.float64)).astype(audio.dtype)
+
 def start_recording(beeps_on: bool, notify_on: bool, input_device_idx):
     state.frames = []
     state.was_cancelled = False
     state.is_recording = True
     state.press_t0 = time.time()
+    # Use the device's native sample rate (may differ from 16kHz on ALSA hw: devices)
+    state.recording_samplerate = _get_device_samplerate(input_device_idx)
     sd.default.channels = CHANNELS
-    sd.default.samplerate = SAMPLE_RATE
+    sd.default.samplerate = state.recording_samplerate
     state.stream = sd.InputStream(callback=_sd_callback, dtype='int16', device=input_device_idx)
     state.stream.start()
     print("🎙️  Recording…")
@@ -1038,6 +1087,10 @@ def stop_recording(
             logger.debug("No audio captured during recording")
             return
         audio_f32 = (pcm_int16.astype(np.float32) / 32768.0)
+        # Resample to 16kHz if recorded at a different rate (e.g. 48kHz ALSA device)
+        rec_sr = getattr(state, 'recording_samplerate', SAMPLE_RATE)
+        if rec_sr != SAMPLE_RATE:
+            audio_f32 = _resample_audio(audio_f32, rec_sr, SAMPLE_RATE)
 
         # Time the transcription to identify delays
         transcribe_start = time.time()

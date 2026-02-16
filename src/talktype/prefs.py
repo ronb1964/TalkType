@@ -2158,6 +2158,27 @@ Hidden=true
         # Fallback to system icon name
         return 'audio-input-microphone'
 
+    def _get_device_samplerate(self, device_idx):
+        """Get the native sample rate for a device, falling back to 16000.
+
+        Some ALSA hw: devices only support their native rate (e.g. 48000 Hz)
+        and reject 16000 Hz. We detect this and record at the native rate,
+        then resample afterward.
+        """
+        import sounddevice as sd
+        try:
+            sd.check_input_settings(device=device_idx, samplerate=16000, channels=1)
+            return 16000
+        except sd.PortAudioError:
+            pass
+        try:
+            info = sd.query_devices(device_idx)
+            native_sr = int(info['default_samplerate'])
+            sd.check_input_settings(device=device_idx, samplerate=native_sr, channels=1)
+            return native_sr
+        except Exception:
+            return 16000
+
     def get_selected_device_idx(self):
         """Get the device index for the currently selected microphone."""
         current_mic = self.config.get("mic", "")
@@ -2179,21 +2200,23 @@ Hidden=true
         try:
             import sounddevice as sd
             import numpy as np
-            
+
             device_idx = self.get_selected_device_idx()
-            
+            # Use device's native sample rate (some ALSA devices reject 16kHz)
+            mic_sr = self._get_device_samplerate(device_idx)
+
             def audio_callback(indata, frames, time, status):
                 if self.recording or self.level_monitor_timer:
                     # Calculate RMS level
                     rms = np.sqrt(np.mean(indata**2))
                     # Update level bar on main thread
                     GLib.idle_add(self.update_level_bar, min(rms * 10, 1.0))
-            
+
             # Start input stream for level monitoring
             self.level_stream = sd.InputStream(
                 callback=audio_callback,
                 channels=1,
-                samplerate=16000,
+                samplerate=mic_sr,
                 device=device_idx,
                 blocksize=1024
             )
@@ -2233,6 +2256,8 @@ Hidden=true
             import numpy as np
 
             device_idx = self.get_selected_device_idx()
+            # Use device's native sample rate (some ALSA devices reject 16kHz)
+            self._recording_sr = self._get_device_samplerate(device_idx)
 
             # Start recording
             self.recording = True
@@ -2259,7 +2284,7 @@ Hidden=true
             self.record_stream = sd.InputStream(
                 callback=audio_callback,
                 channels=1,
-                samplerate=16000,
+                samplerate=self._recording_sr,
                 device=device_idx,
                 dtype='float32'
             )
@@ -2346,6 +2371,31 @@ Hidden=true
             self.level_status.set_text("✓ Good levels - should transcribe well!")
             style_context.add_class("level-good")
     
+    def _find_playback_device(self):
+        """Find a working output device and its supported sample rate.
+
+        The default device may be a mic-only USB device that can't play audio.
+        Search for a real output device (PipeWire/PulseAudio) directly to avoid
+        probing the broken default which can leave PortAudio in a bad state.
+        """
+        import sounddevice as sd
+        playback_sr = getattr(self, '_recording_sr', 48000)
+
+        for name_hint in ['pipewire', 'pulse', 'sysdefault', 'default', 'analog']:
+            for i, d in enumerate(sd.query_devices()):
+                if d['max_output_channels'] > 0 and name_hint in d.get('name', '').lower():
+                    try:
+                        sd.check_output_settings(device=i, samplerate=playback_sr, channels=1)
+                        return i, playback_sr
+                    except Exception:
+                        try:
+                            native = int(d['default_samplerate'])
+                            sd.check_output_settings(device=i, samplerate=native, channels=1)
+                            return i, native
+                        except Exception:
+                            continue
+        return None, playback_sr
+
     def on_replay_recording(self, button):
         """Replay the recorded audio."""
         try:
@@ -2359,7 +2409,21 @@ Hidden=true
                 # Ensure we don't clip (values stay between -1 and 1)
                 amplified_audio = np.clip(amplified_audio, -1.0, 1.0)
 
-                sd.play(amplified_audio, samplerate=16000)
+                # Find a working output device (default may be a mic-only USB device)
+                out_device, out_sr = self._find_playback_device()
+                rec_sr = getattr(self, '_recording_sr', 48000)
+
+                # Resample if playback device needs a different rate
+                if out_sr != rec_sr:
+                    duration = len(amplified_audio) / rec_sr
+                    target_len = int(duration * out_sr)
+                    orig_indices = np.linspace(0, len(amplified_audio) - 1, target_len)
+                    amplified_audio = np.interp(
+                        orig_indices, np.arange(len(amplified_audio)),
+                        amplified_audio.astype(np.float64).flatten()
+                    ).astype(np.float32)
+
+                sd.play(amplified_audio, samplerate=out_sr, device=out_device)
 
         except Exception as e:
             self.show_error_dialog("Playback failed!", str(e))
