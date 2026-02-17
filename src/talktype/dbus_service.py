@@ -7,7 +7,10 @@ from gi.repository import GLib
 import dbus
 import dbus.service
 import dbus.mainloop.glib
-from typing import Optional, Callable
+
+from .logger import setup_logger
+
+logger = setup_logger(__name__)
 
 
 class TalkTypeDBusService(dbus.service.Object):
@@ -39,7 +42,21 @@ class TalkTypeDBusService(dbus.service.Object):
         # Initialize parent
         super().__init__(self.bus_name, self.DBUS_PATH)
 
-        print(f"✅ D-Bus service started: {self.DBUS_NAME}")
+        logger.info(f"D-Bus service started: {self.DBUS_NAME}")
+
+    # ==================== Internal Helpers ====================
+
+    def _dispatch(self, method_name, *args):
+        """Dispatch a D-Bus method call to the app instance via GLib main loop.
+
+        All D-Bus action methods follow the same pattern: log the call,
+        check if the app has the method, then schedule it on the main loop.
+        This helper eliminates that repetition.
+        """
+        logger.debug(f"D-Bus: {method_name} called" +
+                      (f" with {args}" if args else ""))
+        if hasattr(self.app, method_name):
+            GLib.idle_add(getattr(self.app, method_name), *args)
 
     # ==================== Properties ====================
 
@@ -92,44 +109,37 @@ class TalkTypeDBusService(dbus.service.Object):
     @dbus.service.method(DBUS_INTERFACE)
     def StartRecording(self):
         """Start recording (hold mode)"""
-        print("D-Bus: StartRecording called")
-        if hasattr(self.app, 'start_recording'):
-            GLib.idle_add(self.app.start_recording)
+        self._dispatch('start_recording')
 
     @dbus.service.method(DBUS_INTERFACE)
     def StopRecording(self):
         """Stop recording"""
-        print("D-Bus: StopRecording called")
-        if hasattr(self.app, 'stop_recording'):
-            GLib.idle_add(self.app.stop_recording)
+        self._dispatch('stop_recording')
 
     @dbus.service.method(DBUS_INTERFACE)
     def ToggleRecording(self):
         """Toggle recording on/off"""
-        print("D-Bus: ToggleRecording called")
-        if hasattr(self.app, 'toggle_recording'):
-            GLib.idle_add(self.app.toggle_recording)
+        self._dispatch('toggle_recording')
 
     @dbus.service.method(DBUS_INTERFACE)
     def StartService(self):
         """Start the dictation service"""
-        print("D-Bus: StartService called")
-        if hasattr(self.app, 'start_service'):
-            GLib.idle_add(self.app.start_service)
+        self._dispatch('start_service')
 
     @dbus.service.method(DBUS_INTERFACE)
     def StopService(self):
         """Stop the dictation service"""
-        print("D-Bus: StopService called")
-        if hasattr(self.app, 'stop_service'):
-            GLib.idle_add(self.app.stop_service)
+        self._dispatch('stop_service')
+
+    @dbus.service.method(DBUS_INTERFACE)
+    def RestartService(self):
+        """Restart the dictation service"""
+        self._dispatch('restart_service')
 
     @dbus.service.method(DBUS_INTERFACE, in_signature='s')
     def SetModel(self, model_name: str):
         """Change the Whisper model"""
-        print(f"D-Bus: SetModel called with {model_name}")
-        if hasattr(self.app, 'set_model'):
-            GLib.idle_add(self.app.set_model, model_name)
+        self._dispatch('set_model', model_name)
 
     @dbus.service.method(DBUS_INTERFACE, out_signature='s')
     def GetInjectionMode(self):
@@ -141,51 +151,48 @@ class TalkTypeDBusService(dbus.service.Object):
     @dbus.service.method(DBUS_INTERFACE, in_signature='s')
     def SetInjectionMode(self, mode: str):
         """Change the text injection mode"""
-        print(f"D-Bus: SetInjectionMode called with {mode}")
-        if hasattr(self.app, 'set_injection_mode'):
-            GLib.idle_add(self.app.set_injection_mode, mode)
+        self._dispatch('set_injection_mode', mode)
 
     @dbus.service.method(DBUS_INTERFACE, in_signature='s')
     def ApplyPerformancePreset(self, preset: str):
         """Apply a performance preset (fastest/balanced/accurate/battery)"""
-        print(f"D-Bus: ApplyPerformancePreset called with {preset}")
-        if hasattr(self.app, 'set_performance_preset'):
-            GLib.idle_add(self.app.set_performance_preset, preset)
+        self._dispatch('set_performance_preset', preset)
 
     @dbus.service.method(DBUS_INTERFACE)
     def OpenPreferences(self):
         """Open the preferences window"""
-        print("D-Bus: OpenPreferences called")
-        if hasattr(self.app, 'show_preferences'):
-            GLib.idle_add(self.app.show_preferences)
+        self._dispatch('show_preferences')
 
     @dbus.service.method(DBUS_INTERFACE)
     def OpenPreferencesUpdates(self):
         """Open the preferences window directly to the Updates tab"""
-        print("D-Bus: OpenPreferencesUpdates called")
-        if hasattr(self.app, 'show_preferences_updates'):
-            GLib.idle_add(self.app.show_preferences_updates)
+        self._dispatch('show_preferences_updates')
 
     @dbus.service.method(DBUS_INTERFACE)
     def ShowHelp(self):
         """Show the help dialog"""
-        print("D-Bus: ShowHelp called")
-        if hasattr(self.app, 'show_help'):
-            GLib.idle_add(self.app.show_help)
+        self._dispatch('show_help')
 
     @dbus.service.method(DBUS_INTERFACE)
     def ShowAbout(self):
         """Show the about dialog"""
-        print("D-Bus: ShowAbout called")
-        if hasattr(self.app, 'show_about'):
-            GLib.idle_add(self.app.show_about)
+        self._dispatch('show_about')
 
     @dbus.service.method(DBUS_INTERFACE)
     def Quit(self):
         """Quit the application"""
-        print("D-Bus: Quit called")
-        if hasattr(self.app, 'quit'):
-            GLib.idle_add(self.app.quit)
+        self._dispatch('quit')
+
+    @dbus.service.method(DBUS_INTERFACE, in_signature='b')
+    def NotifyRecordingState(self, is_recording: bool):
+        """
+        Called by the dictation engine (app.py) to report recording state changes.
+        The tray owns the D-Bus name, so only it can emit signals that the
+        GNOME extension will receive. App.py calls this method to relay the state.
+        """
+        logger.debug(f"D-Bus: NotifyRecordingState called: {is_recording}")
+        self.app.is_recording = is_recording
+        self.RecordingStateChanged(is_recording)
 
     @dbus.service.method(DBUS_INTERFACE)
     def CheckForUpdates(self):
@@ -193,7 +200,7 @@ class TalkTypeDBusService(dbus.service.Object):
         Check for updates asynchronously.
         Results are sent via UpdateCheckComplete signal.
         """
-        print("D-Bus: CheckForUpdates called")
+        logger.debug("D-Bus: CheckForUpdates called")
         import threading
 
         def do_check():
@@ -215,7 +222,7 @@ class TalkTypeDBusService(dbus.service.Object):
                     result.get("error", "") if result.get("error") else ""
                 )
             except Exception as e:
-                print(f"D-Bus: CheckForUpdates error: {e}")
+                logger.error(f"CheckForUpdates error: {e}")
                 GLib.idle_add(
                     self.UpdateCheckComplete,
                     False, "unknown", "unknown", False, -1, -1, False, "", str(e)
@@ -244,6 +251,11 @@ class TalkTypeDBusService(dbus.service.Object):
     @dbus.service.signal(DBUS_INTERFACE, signature='s')
     def ModelChanged(self, model_name: str):
         """Emitted when the model is changed"""
+        pass
+
+    @dbus.service.signal(DBUS_INTERFACE, signature='s')
+    def InjectionModeChanged(self, mode: str):
+        """Emitted when injection mode changes (auto/paste/type)"""
         pass
 
     @dbus.service.signal(DBUS_INTERFACE, signature='ss')
@@ -290,42 +302,10 @@ class TalkTypeDBusService(dbus.service.Object):
         """Emit model changed signal"""
         self.ModelChanged(model_name)
 
+    def emit_injection_mode_changed(self, mode: str):
+        """Emit injection mode changed signal"""
+        self.InjectionModeChanged(mode)
+
     def emit_error(self, error_type: str, message: str):
         """Emit error signal"""
         self.ErrorOccurred(error_type, message)
-
-
-def test_dbus_service():
-    """Test D-Bus service standalone"""
-
-    class MockApp:
-        """Mock app for testing"""
-        is_recording = False
-        service_running = True
-        config = {'model_size': 'large-v3', 'device': 'cuda'}
-
-        def start_recording(self):
-            print("Mock: start_recording called")
-            self.is_recording = True
-
-        def stop_recording(self):
-            print("Mock: stop_recording called")
-            self.is_recording = False
-
-    print("Testing D-Bus service...")
-    app = MockApp()
-    service = TalkTypeDBusService(app)
-
-    print("\nD-Bus service ready. Testing with dbus-send:")
-    print(f"  dbus-send --session --print-reply --dest={TalkTypeDBusService.DBUS_NAME} {TalkTypeDBusService.DBUS_PATH} {TalkTypeDBusService.DBUS_INTERFACE}.GetStatus")
-
-    # Run main loop
-    loop = GLib.MainLoop()
-    try:
-        loop.run()
-    except KeyboardInterrupt:
-        print("\nShutting down...")
-
-
-if __name__ == "__main__":
-    test_dbus_service()

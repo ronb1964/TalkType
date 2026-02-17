@@ -7,7 +7,7 @@ os.environ["HF_HUB_DISABLE_XET"] = "1"
 from .torch_init import init_cuda_for_pytorch
 init_cuda_for_pytorch()
 
-import sys, time, shutil, subprocess, tempfile, wave, atexit, argparse, fcntl
+import sys, time, re, shutil, subprocess, tempfile, wave, atexit, argparse, fcntl, signal
 from dataclasses import dataclass
 import numpy as np
 import sounddevice as sd
@@ -21,6 +21,14 @@ from .recording_indicator import RecordingIndicator
 import threading
 
 logger = setup_logger(__name__)
+
+# Cached tool path lookups — avoids searching PATH on every text injection
+_tool_cache = {}
+def _which(name):
+    """Cached shutil.which() — tools don't move during a session."""
+    if name not in _tool_cache:
+        _tool_cache[name] = shutil.which(name)
+    return _tool_cache[name]
 
 # Optional desktop notifications via libnotify (gi)
 _notify_ready = False
@@ -42,280 +50,12 @@ def _notify(title: str, body: str):
     except Exception:
         pass
 
-def show_hotkey_test_dialog(mode, hold_key, toggle_key):
-    """Show modal dialog requiring user to test hotkeys before continuing."""
-    try:
-        gi.require_version('Gtk', '3.0')
-        from gi.repository import Gtk, GLib
-
-        dialog = Gtk.Dialog(title="Verify Your Hotkeys")
-        dialog.set_default_size(520, 320)
-        dialog.set_resizable(False)
-        dialog.set_modal(True)
-        dialog.set_position(Gtk.WindowPosition.CENTER)
-        dialog.set_keep_above(True)
-
-        content = dialog.get_content_area()
-        content.set_margin_top(20)
-        content.set_margin_bottom(20)
-        content.set_margin_start(25)
-        content.set_margin_end(25)
-        content.set_spacing(15)
-
-        # Header
-        header = Gtk.Label()
-        header.set_markup('<span size="large"><b>🎹 Verify Your Hotkeys</b></span>')
-        content.pack_start(header, False, False, 0)
-
-        # Instructions - always test both keys
-        instructions = Gtk.Label()
-        instructions.set_markup(
-            '<b>Before you can start dictating, please test both hotkeys:</b>\n\n'
-            f'1. Press <b>{hold_key}</b> (push-to-talk mode)\n'
-            f'2. Press <b>{toggle_key}</b> (toggle mode)\n\n'
-            'This ensures your hotkeys work and don\'t conflict with other apps.'
-        )
-        instructions.set_line_wrap(True)
-        instructions.set_xalign(0)
-        content.pack_start(instructions, False, False, 0)
-
-        # Status labels
-        status_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        status_box.set_margin_top(10)
-
-        hold_status = Gtk.Label()
-        hold_status.set_markup(f'<b>{hold_key}</b>: <span color="#999999">⏳ Waiting...</span>')
-        hold_status.set_xalign(0)
-        status_box.pack_start(hold_status, False, False, 0)
-
-        toggle_status = Gtk.Label()
-        toggle_status.set_markup(f'<b>{toggle_key}</b>: <span color="#999999">⏳ Waiting...</span>')
-        toggle_status.set_xalign(0)
-        status_box.pack_start(toggle_status, False, False, 0)
-
-        content.pack_start(status_box, False, False, 0)
-
-        # Track tested keys
-        tested = {"hold": False, "toggle": False}
-
-        # Buttons (action area is managed automatically by dialog)
-        change_keys_btn = Gtk.Button(label="Change Keys...")
-        change_keys_btn.connect("clicked", lambda w: dialog.response(Gtk.ResponseType.APPLY))
-        change_keys_btn.set_tooltip_text("Open Preferences to change hotkeys")
-        dialog.add_action_widget(change_keys_btn, Gtk.ResponseType.APPLY)
-
-        skip_btn = Gtk.Button(label="Skip")
-        skip_btn.connect("clicked", lambda w: dialog.response(Gtk.ResponseType.CANCEL))
-        skip_btn.set_tooltip_text("Skip verification (not recommended)")
-        dialog.add_action_widget(skip_btn, Gtk.ResponseType.CANCEL)
-
-        continue_btn = Gtk.Button(label="Continue")
-        continue_btn.set_sensitive(False)  # Disabled until both keys tested
-        continue_btn.get_style_context().add_class("suggested-action")
-        continue_btn.connect("clicked", lambda w: dialog.response(Gtk.ResponseType.OK))
-        dialog.add_action_widget(continue_btn, Gtk.ResponseType.OK)
-
-        # Key press handler
-        def on_key_press(widget, event):
-            from gi.repository import Gdk
-            keyname = Gdk.keyval_name(event.keyval)
-
-            if keyname == hold_key and not tested["hold"]:
-                tested["hold"] = True
-                hold_status.set_markup(f'<b>{hold_key}</b>: <span color="#4CAF50">✓ Working!</span>')
-
-                # Enable continue button when both keys tested
-                if tested["hold"] and tested["toggle"]:
-                    continue_btn.set_sensitive(True)
-                    continue_btn.set_label("✓ Continue")
-
-            elif keyname == toggle_key and not tested["toggle"]:
-                tested["toggle"] = True
-                toggle_status.set_markup(f'<b>{toggle_key}</b>: <span color="#4CAF50">✓ Working!</span>')
-
-                # Enable continue button when both keys tested
-                if tested["hold"] and tested["toggle"]:
-                    continue_btn.set_sensitive(True)
-                    continue_btn.set_label("✓ Continue")
-
-            return True
-
-        dialog.connect("key-press-event", on_key_press)
-
-        # Dialog response handling
-        result = {"action": None, "verified": False}
-
-        def on_response(dialog, response_id):
-            if response_id == Gtk.ResponseType.OK:
-                result["action"] = "verified"
-                result["verified"] = tested["hold"] and tested["toggle"]
-            elif response_id == Gtk.ResponseType.APPLY:
-                result["action"] = "change_keys"
-            else:
-                result["action"] = "skipped"
-            dialog.destroy()
-            Gtk.main_quit()
-
-        dialog.connect("response", on_response)
-        dialog.show_all()
-
-        # Run a GTK main loop for this dialog
-        Gtk.main()
-
-        # Return results
-        return (result["action"], result["verified"])
-
-    except Exception as e:
-        logger.error(f"Failed to show hotkey test dialog: {e}")
-        return ("error", True)  # Fallback: allow continuation if dialog fails
-
-def show_simple_hotkey_change_dialog(current_mode, current_hold_key, current_toggle_key):
-    """Show a simple modal dialog to change hotkeys during first run."""
-    try:
-        gi.require_version('Gtk', '3.0')
-        from gi.repository import Gtk
-
-        dialog = Gtk.Dialog(title="Change Your Hotkeys")
-        dialog.set_default_size(500, 350)
-        dialog.set_resizable(False)
-        dialog.set_modal(True)
-        dialog.set_position(Gtk.WindowPosition.CENTER)
-
-        content = dialog.get_content_area()
-        content.set_margin_top(20)
-        content.set_margin_bottom(20)
-        content.set_margin_start(25)
-        content.set_margin_end(25)
-        content.set_spacing(15)
-
-        # Header
-        header = Gtk.Label()
-        header.set_markup('<span size="large"><b>🎹 Choose Your Hotkeys</b></span>')
-        content.pack_start(header, False, False, 0)
-
-        # Instructions
-        instructions = Gtk.Label()
-        instructions.set_markup(
-            'Select the hotkeys you want to use for dictation.\n'
-            'Choose keys that won\'t conflict with other apps.'
-        )
-        instructions.set_line_wrap(True)
-        content.pack_start(instructions, False, False, 0)
-
-        # Mode selection
-        mode_frame = Gtk.Frame(label="Activation Mode")
-        mode_frame.set_margin_top(10)
-        mode_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-        mode_box.set_margin_top(10)
-        mode_box.set_margin_bottom(10)
-        mode_box.set_margin_start(15)
-        mode_box.set_margin_end(15)
-
-        hold_radio = Gtk.RadioButton(label="Push-to-Talk (Hold key to record)")
-        toggle_radio = Gtk.RadioButton(label="Toggle (Press once to start, again to stop)", group=hold_radio)
-
-        if current_mode == "toggle":
-            toggle_radio.set_active(True)
-        else:
-            hold_radio.set_active(True)
-
-        mode_box.pack_start(hold_radio, False, False, 0)
-        mode_box.pack_start(toggle_radio, False, False, 0)
-        mode_frame.add(mode_box)
-        content.pack_start(mode_frame, False, False, 0)
-
-        # Hotkey selection
-        hotkey_frame = Gtk.Frame(label="Hotkeys")
-        hotkey_frame.set_margin_top(10)
-        hotkey_grid = Gtk.Grid()
-        hotkey_grid.set_row_spacing(10)
-        hotkey_grid.set_column_spacing(10)
-        hotkey_grid.set_margin_top(10)
-        hotkey_grid.set_margin_bottom(10)
-        hotkey_grid.set_margin_start(15)
-        hotkey_grid.set_margin_end(15)
-
-        # Hold key
-        hold_label = Gtk.Label(label="Push-to-Talk Key:")
-        hold_label.set_xalign(0)
-        hold_combo = Gtk.ComboBoxText()
-        for key in ["F8", "F9", "F10", "F11", "F12", "F1", "F2", "F3", "F4", "F5", "F6", "F7"]:
-            hold_combo.append_text(key)
-        hold_combo.set_active_id(current_hold_key)
-        if hold_combo.get_active() == -1:
-            hold_combo.set_active(0)
-
-        hotkey_grid.attach(hold_label, 0, 0, 1, 1)
-        hotkey_grid.attach(hold_combo, 1, 0, 1, 1)
-
-        # Toggle key
-        toggle_label = Gtk.Label(label="Toggle Key:")
-        toggle_label.set_xalign(0)
-        toggle_combo = Gtk.ComboBoxText()
-        for key in ["F8", "F9", "F10", "F11", "F12", "F1", "F2", "F3", "F4", "F5", "F6", "F7"]:
-            toggle_combo.append_text(key)
-        toggle_combo.set_active_id(current_toggle_key)
-        if toggle_combo.get_active() == -1:
-            toggle_combo.set_active(1)
-
-        hotkey_grid.attach(toggle_label, 0, 1, 1, 1)
-        hotkey_grid.attach(toggle_combo, 1, 1, 1, 1)
-
-        hotkey_frame.add(hotkey_grid)
-        content.pack_start(hotkey_frame, False, False, 0)
-
-        # Buttons
-        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        button_box.set_halign(Gtk.Align.CENTER)
-        button_box.set_margin_top(15)
-
-        cancel_btn = Gtk.Button(label="Cancel")
-        cancel_btn.connect("clicked", lambda w: dialog.response(Gtk.ResponseType.CANCEL))
-        button_box.pack_start(cancel_btn, False, False, 0)
-
-        save_btn = Gtk.Button(label="Save & Continue")
-        save_btn.get_style_context().add_class("suggested-action")
-        save_btn.connect("clicked", lambda w: dialog.response(Gtk.ResponseType.OK))
-        button_box.pack_start(save_btn, False, False, 0)
-
-        content.pack_start(button_box, False, False, 0)
-
-        # Show dialog
-        dialog.show_all()
-        response = dialog.run()
-
-        # Get values
-        new_mode = "toggle" if toggle_radio.get_active() else "hold"
-        new_hold_key = hold_combo.get_active_text()
-        new_toggle_key = toggle_combo.get_active_text()
-
-        dialog.destroy()
-
-        if response == Gtk.ResponseType.OK:
-            return (True, new_mode, new_hold_key, new_toggle_key)
-        else:
-            return (False, None, None, None)
-
-    except Exception as e:
-        logger.error(f"Failed to show hotkey change dialog: {e}")
-        return (False, None, None, None)
+# NOTE: Hotkey test/change dialogs live in welcome_dialog.py (used during onboarding).
+# The old app.py versions were removed — they were unreachable dead code.
 
 # --- Single instance lock (user runtime dir) ---
 def _runtime_dir():
     return os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
-
-_PIDFILE = os.path.join(_runtime_dir(), "talktype.pid")
-
-def _pid_running(pid: int) -> bool:
-    if pid <= 0: return False
-    proc = f"/proc/{pid}"
-    if not os.path.exists(proc): return False
-    try:
-        with open(os.path.join(proc, "cmdline"), "rb") as f:
-            cmd = f.read().decode(errors="ignore")
-        return ("talktype.app" in cmd) or ("dictate" in cmd)
-    except Exception:
-        return True  # if in doubt, assume running
 
 def _acquire_single_instance():
     """
@@ -371,10 +111,6 @@ class RecordingState:
     frames: list = None
     stream: object = None
     press_t0: float = None
-    # Hotkey testing state
-    hold_key_tested: bool = False
-    toggle_key_tested: bool = False
-    hotkey_test_start_time: float = None
     # Undo history - tracks last inserted text for voice-activated undo
     last_inserted_text: str = ""
     # Mid-sentence continuation - if True, lowercase the first letter of next dictation
@@ -390,6 +126,84 @@ state = RecordingState()
 # Global recording indicator and D-Bus service (initialized in main)
 recording_indicator = None
 dbus_service = None
+
+# ---------------------------------------------------------------------------
+# Ydotool environment helper — used by all ydotool calls to set socket path
+# ---------------------------------------------------------------------------
+def _get_ydotool_env():
+    """Return env dict with YDOTOOL_SOCKET set for subprocess calls."""
+    env = os.environ.copy()
+    runtime = env.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+    env.setdefault("YDOTOOL_SOCKET", os.path.join(runtime, ".ydotool_socket"))
+    return env
+
+# ---------------------------------------------------------------------------
+# Constants that never change but were being recreated on every call
+# ---------------------------------------------------------------------------
+
+# Hotkey options offered in the setup dialogs (F-keys, listed in preferred order)
+HOTKEY_OPTIONS = ["F8", "F9", "F10", "F11", "F12", "F1", "F2", "F3", "F4", "F5", "F6", "F7"]
+
+# Voice command patterns for undo functionality
+UNDO_PATTERNS = {
+    'word': ['undo last word', 'undo the last word', 'delete last word', 'remove last word'],
+    'sentence': ['undo last sentence', 'undo the last sentence', 'delete last sentence', 'remove last sentence'],
+    'paragraph': ['undo last paragraph', 'undo the last paragraph', 'delete last paragraph', 'remove last paragraph'],
+    'everything': ['undo everything', 'undo all', 'delete everything', 'delete all', 'clear everything', 'clear all'],
+}
+
+# VAD parameters tuned for dictation (used by faster-whisper transcription)
+# - Lower threshold (0.35) = less aggressive at cutting off speech
+# - Higher speech_pad_ms (600) = more padding around detected speech
+# - Higher min_silence_duration_ms (2500) = longer silence needed to split
+VAD_PARAMS = {
+    "threshold": 0.35,
+    "speech_pad_ms": 600,
+    "min_silence_duration_ms": 2500,
+}
+
+# D-Bus proxy for notifying the tray process of recording state changes.
+# The tray owns the D-Bus name and relays signals to the GNOME extension.
+_tray_dbus_proxy = None
+
+# Thread-safe recording command flags — set by signal handler or D-Bus thread, consumed by evdev loop.
+# Using two separate Events (rather than one flag) so start and stop can't overwrite each other.
+_cmd_start_recording = threading.Event()
+_cmd_stop_recording = threading.Event()
+
+def _handle_sigusr1(signum, frame):
+    """SIGUSR1 = toggle recording. Sent by the tray process via os.kill().
+    Sets the appropriate Event; the evdev loop consumes it from the main thread.
+    """
+    if state.is_recording:
+        _cmd_stop_recording.set()
+    else:
+        _cmd_start_recording.set()
+
+def _notify_tray_recording_state(is_recording: bool):
+    """Send recording state to the tray's D-Bus service.
+
+    The tray process owns the D-Bus name that the GNOME extension listens to.
+    App.py cannot emit signals that the extension will see, so we call
+    the tray's NotifyRecordingState method which then emits the signal.
+    """
+    global _tray_dbus_proxy
+    try:
+        import dbus
+        if _tray_dbus_proxy is None:
+            import dbus.mainloop.glib
+            dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+            bus = dbus.SessionBus()
+            _tray_dbus_proxy = bus.get_object(
+                'io.github.ronb1964.TalkType',
+                '/io/github/ronb1964/TalkType'
+            )
+        _tray_dbus_proxy.NotifyRecordingState(
+            dbus.Boolean(is_recording),
+            dbus_interface='io.github.ronb1964.TalkType'
+        )
+    except Exception as e:
+        logger.debug(f"Could not notify tray of recording state: {e}")
 
 # Global typing delay (set from config in main)
 _typing_delay = 12  # milliseconds, default value
@@ -411,8 +225,6 @@ def _apply_custom_commands(text: str) -> str:
     Returns:
         Text with custom commands applied
     """
-    import re
-    
     if not _custom_commands or not text:
         return text
     
@@ -537,16 +349,25 @@ def _strip_hallucinations(text: str, no_speech_prob: float = 0.0) -> str:
     return text
 
 
+_cached_output_device = None
+_output_device_cached = False
+
 def _find_output_device():
-    """Find a working output device. Default may be a mic-only USB device."""
+    """Find a working output device. Cached — device doesn't change during a session."""
+    global _cached_output_device, _output_device_cached
+    if _output_device_cached:
+        return _cached_output_device
     for name_hint in ['pipewire', 'pulse', 'sysdefault', 'default']:
         for i, d in enumerate(sd.query_devices()):
             if d['max_output_channels'] > 0 and name_hint in d.get('name', '').lower():
                 try:
                     sd.check_output_settings(device=i, samplerate=44100, channels=1)
+                    _cached_output_device = i
+                    _output_device_cached = True
                     return i
                 except Exception:
                     continue
+    _output_device_cached = True  # Cache the "not found" result too
     return None  # Fall back to sounddevice default
 
 def _beep(enabled: bool, freq=1000, duration=0.15):
@@ -587,18 +408,15 @@ def _keycode_from_name(name: str) -> int | None:
     return None  # Unknown key name - don't activate
 
 def _pick_input_device(mic_substring: str | None):
-    """Return device index or None for default."""
-    try:
-        q = sd.query_devices()
-    except Exception:
-        return None
-    if not mic_substring:
-        return None
-    m = mic_substring.lower()
-    candidates = [ (i,d) for i,d in enumerate(q) if d.get("max_input_channels",0) > 0 and m in d.get("name","").lower() ]
-    if candidates:
-        return candidates[0][0]
-    return None
+    """Return device index for the best matching input device.
+
+    Delegates to config.find_input_device() which handles PipeWire
+    auto-detection when no mic name is configured. This avoids the
+    broken ALSA "default" virtual device that returns garbage audio
+    on PipeWire systems.
+    """
+    from .config import find_input_device
+    return find_input_device(mic_substring)
 
 def _get_device_samplerate(device_idx):
     """Get the native sample rate for a device, falling back to SAMPLE_RATE.
@@ -651,6 +469,9 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx):
     _beep(beeps_on, *START_BEEP)
     if notify_on: _notify("TalkType", "Recording… (speak now)")
 
+    # Notify GNOME extension that recording started (turns icon red)
+    _notify_tray_recording_state(True)
+
     # Show recording indicator
     if recording_indicator:
         try:
@@ -681,13 +502,14 @@ def cancel_recording(beeps_on: bool, notify_on: bool, reason="Cancelled"):
     if recording_indicator:
         recording_indicator.hide_indicator()
 
+    # Notify GNOME extension that recording stopped (icon returns to normal)
+    _notify_tray_recording_state(False)
+
 def _send_shift_enter():
     """Send Shift+Enter keystrokes to create line break without submitting."""
-    if shutil.which("ydotool"):
+    if _which("ydotool"):
         try:
-            env = os.environ.copy()
-            runtime = env.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
-            env.setdefault("YDOTOOL_SOCKET", os.path.join(runtime, ".ydotool_socket"))
+            env = _get_ydotool_env()
             # KEY_LEFTSHIFT (42), KEY_ENTER (28)
             subprocess.run(["ydotool", "key", "42:1", "28:1", "28:0", "42:0"], check=False, env=env)
             return True
@@ -697,11 +519,9 @@ def _send_shift_enter():
 
 def _send_enter():
     """Send Enter keystroke to create a new line."""
-    if shutil.which("ydotool"):
+    if _which("ydotool"):
         try:
-            env = os.environ.copy()
-            runtime = env.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
-            env.setdefault("YDOTOOL_SOCKET", os.path.join(runtime, ".ydotool_socket"))
+            env = _get_ydotool_env()
             # KEY_ENTER (28)
             subprocess.run(["ydotool", "key", "28:1", "28:0"], check=False, env=env)
             return True
@@ -747,17 +567,14 @@ def _type_text_raw(text: str):
     """
     global _typing_delay
     
-    if shutil.which("ydotool"):
+    if _which("ydotool"):
         try:
-            env = os.environ.copy()
-            runtime = env.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
-            socket_path = os.path.join(runtime, ".ydotool_socket")
-            env.setdefault("YDOTOOL_SOCKET", socket_path)
+            env = _get_ydotool_env()
             # -d = delay between keydown and keyup (ms)
             # -H = hold time before next key (ms)
             # Lower values are faster but may cause letters to arrive out of order
             delay_str = str(max(5, min(50, _typing_delay)))  # Clamp to 5-50ms
-            logger.info(f"ydotool type: delay={delay_str}ms, socket={socket_path}, text_len={len(text)}")
+            logger.info(f"ydotool type: delay={delay_str}ms, text_len={len(text)}")
             proc = subprocess.Popen(
                 ["ydotool", "type", "-d", delay_str, "-H", delay_str, "-f", "-"],
                 stdin=subprocess.PIPE,
@@ -773,9 +590,9 @@ def _type_text_raw(text: str):
             return
         except Exception as e:
             logger.debug(f"ydotool failed: {e}")
-    if shutil.which("wtype"):
+    if _which("wtype"):
         subprocess.run(["wtype", "--", text], check=False); return
-    if shutil.which("wl-copy"):
+    if _which("wl-copy"):
         try:
             import pyperclip
             pyperclip.copy(text)
@@ -799,60 +616,48 @@ def _paste_text(text: str, send_trailing_keys: bool = False):
         send_trailing_keys: If True, send additional key presses after paste
     """
     try:
-        if shutil.which("wl-copy") and shutil.which("ydotool"):
+        if _which("wl-copy") and _which("ydotool"):
             # Always use Ctrl+Shift+V for paste - works in both terminals and regular apps
             # This avoids complex and unreliable terminal detection
             # (Ctrl+Shift+V works universally on Wayland/GNOME)
             
             # Copy text to clipboard
             # wl-copy needs to stay running to serve clipboard requests
-            import subprocess as _sp
             paste_start = time.time()
-            print(f"⏱️  PASTE: Starting paste operation for {len(text)} chars")
             logger.info(f"TIMING: Starting paste operation for {len(text)} chars")
-            proc = _sp.Popen(["wl-copy"], stdin=_sp.PIPE, stdout=_sp.PIPE, stderr=_sp.PIPE)
+            proc = subprocess.Popen(["wl-copy"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             proc.stdin.write(text.encode("utf-8"))
             proc.stdin.close()
             wl_copy_time = time.time() - paste_start
-            print(f"⏱️  PASTE: wl-copy started in {wl_copy_time:.3f}s")
             logger.info(f"TIMING: wl-copy started in {wl_copy_time:.3f}s")
 
             # Wait for clipboard to be ready (needs time for wl-copy to set up)
-            print(f"⏱️  PASTE: Waiting 0.08s for clipboard...")
             time.sleep(0.08)
-            after_wait_time = time.time() - paste_start
-            print(f"⏱️  PASTE: After clipboard wait: {after_wait_time:.3f}s")
-            logger.info(f"TIMING: After clipboard wait: {after_wait_time:.3f}s")
 
             # Send Ctrl+Shift+V to paste - works universally in terminals and regular apps
             # KEY_LEFTSHIFT (42), KEY_LEFTCTRL (29), KEY_V (47)
-            env = os.environ.copy()
-            runtime = env.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
-            env.setdefault("YDOTOOL_SOCKET", os.path.join(runtime, ".ydotool_socket"))
+            env = _get_ydotool_env()
 
             ydotool_start = time.time()
             # Always use Ctrl+Shift+V - works for both terminals and regular apps
             logger.debug("Using Ctrl+Shift+V for paste (universal)")
             # KEY_LEFTSHIFT=42, KEY_LEFTCTRL=29, KEY_V=47
             # Format: keycode:1 (down) or keycode:0 (up)
-            _sp.run(["ydotool", "key",
+            subprocess.run(["ydotool", "key",
                     "42:1", "29:1", "47:1", "47:0", "29:0", "42:0"],
                    check=False, env=env)
             ydotool_time = time.time() - ydotool_start
-            print(f"⏱️  PASTE: ydotool command took {ydotool_time:.3f}s")
             logger.info(f"TIMING: ydotool paste command took {ydotool_time:.3f}s")
-            
+
             # Brief delay for paste to register, then terminate wl-copy
-            print(f"⏱️  PASTE: Waiting 0.05s for paste to register...")
             time.sleep(0.05)
             total_paste_time = time.time() - paste_start
-            print(f"⏱️  PASTE: Total paste operation: {total_paste_time:.3f}s")
             logger.info(f"TIMING: Total paste operation time: {total_paste_time:.3f}s")
             try:
                 proc.terminate()
                 proc.wait(timeout=0.3)
-            except:
-                pass
+            except Exception:
+                pass  # wl-copy cleanup is best-effort
 
             return True
     except subprocess.TimeoutExpired as e:
@@ -864,16 +669,14 @@ def _paste_text(text: str, send_trailing_keys: bool = False):
 
 def _press_space():
     # Inject a literal Space keypress via ydotool when possible; fallback to typing a space
-    if shutil.which("ydotool"):
+    if _which("ydotool"):
         try:
-            env = os.environ.copy()
-            runtime = env.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
-            env.setdefault("YDOTOOL_SOCKET", os.path.join(runtime, ".ydotool_socket"))
+            env = _get_ydotool_env()
             subprocess.run(["ydotool", "key", "57:1", "57:0"], check=False, env=env)
             return
         except Exception:
             pass
-    if shutil.which("wtype"):
+    if _which("wtype"):
         subprocess.run(["wtype", "--", " "], check=False); return
 
 def _determine_injection_method(injection_mode: str) -> tuple[str, str, str]:
@@ -939,11 +742,9 @@ def _send_backspaces(count: int):
     """Send multiple backspace keypresses to delete characters."""
     if count <= 0:
         return
-    if shutil.which("ydotool"):
+    if _which("ydotool"):
         try:
-            env = os.environ.copy()
-            runtime = env.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
-            env.setdefault("YDOTOOL_SOCKET", os.path.join(runtime, ".ydotool_socket"))
+            env = _get_ydotool_env()
             # KEY_BACKSPACE = 14
             # Build key sequence: press and release backspace 'count' times
             key_sequence = []
@@ -963,19 +764,11 @@ def _detect_undo_command(raw_text: str) -> str | None:
     Uses case-insensitive matching and handles common Whisper transcription variations.
     """
     # Normalize: lowercase, strip punctuation and extra whitespace
-    import re
     normalized = re.sub(r'[^\w\s]', '', raw_text.lower()).strip()
     normalized = ' '.join(normalized.split())  # Collapse whitespace
     
     # Match undo commands - be flexible with variations Whisper might produce
-    undo_patterns = {
-        'word': ['undo last word', 'undo the last word', 'delete last word', 'remove last word'],
-        'sentence': ['undo last sentence', 'undo the last sentence', 'delete last sentence', 'remove last sentence'],
-        'paragraph': ['undo last paragraph', 'undo the last paragraph', 'delete last paragraph', 'remove last paragraph'],
-        'everything': ['undo everything', 'undo all', 'delete everything', 'delete all', 'clear everything', 'clear all'],
-    }
-    
-    for undo_type, patterns in undo_patterns.items():
+    for undo_type, patterns in UNDO_PATTERNS.items():
         for pattern in patterns:
             if normalized == pattern:
                 return undo_type
@@ -1019,7 +812,6 @@ def _calculate_undo_length(text: str, undo_type: str) -> int:
     elif undo_type == 'sentence':
         # Find last sentence boundary (. ? ! …)
         # Work backwards from the end, skip any trailing punctuation
-        import re
         # Remove trailing punctuation to find the previous sentence end
         text_stripped = text_to_analyze.rstrip('.?!… ')
         # Find the last sentence-ending punctuation
@@ -1052,6 +844,210 @@ def _calculate_undo_length(text: str, undo_type: str) -> int:
     
     return 0
 
+def _transcribe_audio(audio_f32, language: str | None) -> str | None:
+    """Run Whisper transcription on audio and filter hallucinations.
+
+    Returns the raw transcribed text, or None if no speech was detected.
+    """
+    transcribe_start = time.time()
+    segments, _ = model.transcribe(
+        audio_f32,
+        vad_filter=True,
+        vad_parameters=VAD_PARAMS,
+        beam_size=1,
+        condition_on_previous_text=False,
+        temperature=0.0,
+        without_timestamps=True,
+        language=(language or None),
+        # NOTE: hallucination_silence_threshold was removed because it
+        # silently drops real speech after natural 2+ second pauses,
+        # causing middle sentences to vanish from longer paragraphs.
+        # Hallucination filtering is handled by _strip_hallucinations().
+    )
+    transcribe_time = time.time() - transcribe_start
+    logger.info(f"TIMING: Transcription completed in {transcribe_time:.2f}s")
+    if transcribe_time > 2.0:
+        logger.warning(f"\u26a0\ufe0f  Transcription took {transcribe_time:.2f}s (first run may be slower due to CUDA compilation)")
+
+    # Collect segments (generator can only be consumed once)
+    seg_list = list(segments)
+    raw = " ".join(seg.text for seg in seg_list).strip()
+    max_no_speech_prob = max((seg.no_speech_prob for seg in seg_list), default=0.0)
+    print(f"\U0001f4dd Raw (before filter): {raw!r}  [no_speech_prob={max_no_speech_prob:.2f}]")
+    logger.info(f"Raw transcription (before hallucination filter): {raw!r}  [no_speech_prob={max_no_speech_prob:.2f}]")
+
+    # Strip common Whisper hallucinations like "thank you" from the end
+    raw = _strip_hallucinations(raw, no_speech_prob=max_no_speech_prob)
+    if raw:
+        print(f"\U0001f4dd Raw (after filter): {raw!r}")
+        logger.info(f"Raw transcription (after hallucination filter): {raw!r}")
+    return raw or None
+
+
+def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
+    """Check if raw text is an undo command and execute it.
+
+    Returns True if an undo was handled (caller should return early).
+    """
+    undo_type = _detect_undo_command(raw)
+    if not undo_type:
+        return False
+
+    logger.info(f"Undo command detected: {undo_type}")
+    print(f"\U0001f519 Undo command: {undo_type}")
+
+    if not state.last_inserted_text:
+        print("\u2139\ufe0f  Nothing to undo (no previous dictation)")
+        logger.info("Undo requested but no previous text to undo")
+        _beep(beeps_on, *CANCEL_BEEP)
+        if notify_on: _notify("TalkType", "Nothing to undo")
+        return True
+
+    # Calculate how many characters to delete
+    delete_count = _calculate_undo_length(state.last_inserted_text, undo_type)
+    logger.info(f"Undo: deleting {delete_count} characters (last text was {len(state.last_inserted_text)} chars)")
+    print(f"\U0001f519 Undoing {delete_count} characters ({undo_type})")
+
+    if delete_count > 0:
+        _send_backspaces(delete_count)
+        # Update last_inserted_text to reflect what remains
+        if delete_count >= len(state.last_inserted_text):
+            state.last_inserted_text = ""
+            state.continue_mid_sentence = False
+        else:
+            state.last_inserted_text = state.last_inserted_text[:-delete_count]
+            remaining = state.last_inserted_text.rstrip()
+            if remaining and not remaining.endswith(('.', '?', '!', '\u2026')):
+                state.continue_mid_sentence = True
+                logger.info("Mid-sentence continuation enabled for next dictation")
+            else:
+                state.continue_mid_sentence = False
+        _beep(beeps_on, *READY_BEEP)
+        if notify_on: _notify("TalkType", f"Undid last {undo_type}")
+    else:
+        print("\u2139\ufe0f  Nothing to undo for this scope")
+        _beep(beeps_on, *CANCEL_BEEP)
+    return True
+
+
+def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: bool) -> str:
+    """Apply voice commands, normalize, handle mid-sentence, add auto-period/space.
+
+    Returns the final text string ready for injection.
+    """
+    # Apply custom voice commands (phrase \u2192 replacement)
+    processed = _apply_custom_commands(raw)
+
+    # Normalize text (capitalization, punctuation, etc.)
+    text = normalize_text(processed if smart_quotes else processed.replace("\u201c","\"").replace("\u201d","\""))
+
+    # Handle mid-sentence continuation after undo:
+    # lowercase the first letter if we're continuing a sentence
+    if state.continue_mid_sentence and text:
+        if text[0].isupper():
+            text = text[0].lower() + text[1:]
+            logger.info("Lowercased first letter for mid-sentence continuation")
+        state.continue_mid_sentence = False
+
+    # Auto-period and auto-space (skip if text contains line break markers)
+    has_break_markers = "\xa7SHIFT_ENTER\xa7" in text
+    text_without_markers = text.replace("\xa7SHIFT_ENTER\xa7", "").strip()
+    is_only_markers = has_break_markers and not text_without_markers
+
+    if auto_period and text and not is_only_markers and not text.rstrip().endswith((".","?","!","\u2026")):
+        text = text.rstrip() + "."
+    if auto_space and text and not is_only_markers and not text.endswith((" ", "\n", "\t")):
+        text = text + " "
+    logger.info(f"Normalized text: {text!r}")
+    return text
+
+
+def _inject_text(text: str, injection_mode: str, t0: float):
+    """Determine the best injection method and insert text into the active app.
+
+    Tries AT-SPI first (if auto mode recommends it), then paste, then typing.
+    t0 is the timestamp when stop_recording began (for timing logs).
+    """
+    # Determine injection method (auto mode does smart detection)
+    detection_start = time.time()
+    actual_mode, use_atspi, reason = _determine_injection_method(injection_mode)
+    detection_time = time.time() - detection_start
+    logger.info(f"TIMING: Injection method detection took {detection_time:.3f}s")
+    if detection_time > 0.1:
+        logger.warning(f"Injection method detection slow: {detection_time:.2f}s")
+
+    injection_start = time.time()
+    use_paste = (actual_mode == "paste")
+    logger.info(f"Injection mode: configured={injection_mode!r}, actual={actual_mode!r}, atspi={use_atspi}, reason={reason}")
+    if injection_mode == "auto":
+        print(f"\U0001f50d Auto mode: {reason}")
+
+    # --- AT-SPI insertion (accessibility API, fastest when supported) ---
+    if use_atspi:
+        logger.info(f"Attempting AT-SPI insertion: {reason}")
+        print("\U0001f52e Attempting AT-SPI insertion...")
+        try:
+            from .atspi_helper import insert_text_atspi
+            if insert_text_atspi(text):
+                print(f"\u2728 AT-SPI insertion successful! ({len(text)} chars)")
+                logger.info("AT-SPI text insertion succeeded")
+            else:
+                print("\u26a0\ufe0f  AT-SPI insertion failed, falling back to typing")
+                logger.warning("AT-SPI insertion failed, using typing fallback")
+                _type_text(text)
+        except Exception as e:
+            logger.error(f"AT-SPI insertion error: {e}")
+            print("\u26a0\ufe0f  AT-SPI error, falling back to typing")
+            _type_text(text)
+
+    # --- Smart hybrid paste (text with line-break markers) ---
+    elif use_paste and ("\xa7SHIFT_ENTER\xa7" in text or "\n" in text):
+        logger.info("Smart hybrid mode: splitting text on markers")
+        parts = text.split("\xa7SHIFT_ENTER\xa7")
+        logger.info(f"Split into {len(parts)} parts")
+        success = True
+        for i, part in enumerate(parts):
+            if part:
+                logger.info(f"Pasting part {i+1}/{len(parts)}: {len(part)} chars")
+                if not _paste_text(part):
+                    logger.warning(f"Paste failed on part {i+1}, falling back to typing mode")
+                    success = False
+                    break
+                time.sleep(0.08)
+            if i < len(parts) - 1:
+                logger.info(f"Sending Shift+Enter after part {i+1}")
+                _send_shift_enter()
+                time.sleep(0.05)
+        if success:
+            print(f"\u2702\ufe0f  Inject (smart paste) {len(parts)} chunks, {len(text)} total chars")
+            logger.info(f"Smart hybrid paste completed: {len(parts)} chunks")
+        else:
+            print(f"\u2328\ufe0f  Inject (type) len={len(text)} [paste failed, typing fallback]")
+            _type_text(text)
+
+    # --- Simple paste (no markers) ---
+    elif use_paste and _paste_text(text):
+        injection_time = time.time() - injection_start
+        total_time = time.time() - t0
+        logger.info(f"TIMING: Paste injection completed in {injection_time:.2f}s")
+        logger.info(f"Text injected via paste: {len(text)} chars in {injection_time:.2f}s")
+        if injection_time > 1.0:
+            logger.warning(f"Paste injection slow: {injection_time:.2f}s")
+
+    # --- Typing fallback ---
+    else:
+        _type_text(text)
+        injection_time = time.time() - injection_start
+        logger.info(f"TIMING: Typing injection completed in {injection_time:.2f}s")
+        logger.info(f"Text injected via typing: {len(text)} chars in {injection_time:.2f}s")
+        if injection_time > 1.0:
+            logger.warning(f"Typing injection slow: {injection_time:.2f}s")
+
+    # Track injected text for undo functionality
+    state.last_inserted_text = text
+    logger.debug(f"Stored last inserted text for undo: {len(text)} chars")
+
+
 def stop_recording(
     beeps_on: bool,
     smart_quotes: bool,
@@ -1061,284 +1057,197 @@ def stop_recording(
     auto_period: bool = True,
     injection_mode: str = "type",
 ):
+    """Stop recording, transcribe audio, and inject text into the active app.
+
+    Pipeline: validate \u2192 convert audio \u2192 transcribe \u2192 check undo \u2192 prepare \u2192 beep \u2192 inject
+    """
     held_ms = int((time.time() - (state.press_t0 or time.time())) * 1000)
     if held_ms < MIN_HOLD_MS:
         cancel_recording(beeps_on, notify_on, f"Cancelled (held {held_ms} ms)"); return
     state.is_recording = False
     _stop_stream_safely()
+    _notify_tray_recording_state(False)  # Tell GNOME extension recording stopped
     if state.was_cancelled: return
 
-    # Hide recording indicator immediately when recording stops
-    # This prevents it from interfering with text injection
+    # Hide recording indicator before text injection
     if recording_indicator:
         recording_indicator.hide_indicator()
 
     print("🛑 Recording stopped. Transcribing…")
-    stop_recording_start = time.time()
-    print(f"⏱️  TIMING: Stop recording at {stop_recording_start:.3f}")
-    logger.info("=" * 60)
-    logger.info("TIMING: Recording stopped, starting transcription")
-    logger.debug("Recording stopped, starting transcription")
-    # Convert captured bytes -> float32 mono PCM in [-1, 1]
+    t0 = time.time()
+    logger.info("Recording stopped, starting transcription")
+
     try:
+        # Convert captured bytes \u2192 float32 mono PCM in [-1, 1]
         pcm_int16 = np.frombuffer(b''.join(state.frames), dtype=np.int16)
         if pcm_int16.size == 0:
-            print("ℹ️  (No audio captured)")
-            logger.debug("No audio captured during recording")
+            print("\u2139\ufe0f  (No audio captured)")
             return
-        audio_f32 = (pcm_int16.astype(np.float32) / 32768.0)
-        # Resample to 16kHz if recorded at a different rate (e.g. 48kHz ALSA device)
+        audio_f32 = pcm_int16.astype(np.float32) / 32768.0
         rec_sr = getattr(state, 'recording_samplerate', SAMPLE_RATE)
         if rec_sr != SAMPLE_RATE:
             audio_f32 = _resample_audio(audio_f32, rec_sr, SAMPLE_RATE)
 
-        # Time the transcription to identify delays
-        transcribe_start = time.time()
-        # VAD parameters tuned for dictation:
-        # - Lower threshold (0.35) = less aggressive at cutting off speech
-        # - Higher speech_pad_ms (600) = more padding around detected speech to avoid cutting words
-        # - Higher min_silence_duration_ms (2500) = wait longer before splitting on silence
-        vad_params = {
-            "threshold": 0.35,           # Default 0.5 - lower = less likely to cut off speech
-            "speech_pad_ms": 600,        # Default 400 - more padding around speech
-            "min_silence_duration_ms": 2500,  # Default 2000 - longer silence needed to split
-        }
+        # Stage 1: Transcribe audio \u2192 raw text
+        raw = _transcribe_audio(audio_f32, language)
+        post_transcribe = time.time() - t0
+        logger.info(f"TIMING: Transcription pipeline took {post_transcribe:.2f}s")
+        if not raw:
+            print("\u2139\ufe0f  (No speech recognized)")
+            return
 
-        segments, _ = model.transcribe(
-                audio_f32,
-                vad_filter=True,
-                vad_parameters=vad_params,
-                beam_size=1,
-                condition_on_previous_text=False,
-                temperature=0.0,
-                without_timestamps=True,
-                language=(language or None),
-                # NOTE: hallucination_silence_threshold was removed because it
-                # silently drops real speech after natural 2+ second pauses,
-                # causing middle sentences to vanish from longer paragraphs.
-                # Hallucination filtering is handled by _strip_hallucinations().
-            )
-        transcribe_time = time.time() - transcribe_start
-        print(f"⏱️  TIMING: Transcription took {transcribe_time:.2f}s")
-        logger.info(f"TIMING: Transcription completed in {transcribe_time:.2f}s")
-        if transcribe_time > 2.0:  # Log if transcription takes more than 2 seconds
-            logger.warning(f"⚠️  Transcription took {transcribe_time:.2f}s (first run may be slower due to CUDA compilation)")
-        
-        # Collect segments into a list so we can read both text and
-        # no_speech_prob (the generator can only be consumed once)
-        seg_list = list(segments)
-        raw = " ".join(seg.text for seg in seg_list).strip()
-        # Get Whisper's confidence that there was NO real speech.
-        # High value = likely hallucination from silence, not real words.
-        max_no_speech_prob = max((seg.no_speech_prob for seg in seg_list), default=0.0)
-        print(f"📝 Raw (before filter): {raw!r}  [no_speech_prob={max_no_speech_prob:.2f}]")
-        logger.info(f"Raw transcription (before hallucination filter): {raw!r}  [no_speech_prob={max_no_speech_prob:.2f}]")
+        # Stage 2: Check for undo commands ("undo that", "undo word", etc.)
+        if _handle_undo(raw, beeps_on, notify_on):
+            return
 
-        # Strip common Whisper hallucinations like "thank you" from the end
-        raw = _strip_hallucinations(raw, no_speech_prob=max_no_speech_prob)
-        if raw:
-            print(f"📝 Raw (after filter): {raw!r}")
-            logger.info(f"Raw transcription (after hallucination filter): {raw!r}")
-        
-        post_transcribe_time = time.time() - stop_recording_start
-        print(f"⏱️  TIMING: Total time to transcription: {post_transcribe_time:.2f}s")
-        logger.info(f"TIMING: Time from stop_recording to transcription complete: {post_transcribe_time:.2f}s")
-        
-        # Check for undo commands before normalizing
-        undo_type = _detect_undo_command(raw)
-        if undo_type:
-            logger.info(f"Undo command detected: {undo_type}")
-            print(f"🔙 Undo command: {undo_type}")
-            
-            if not state.last_inserted_text:
-                print("ℹ️  Nothing to undo (no previous dictation)")
-                logger.info("Undo requested but no previous text to undo")
-                _beep(beeps_on, *CANCEL_BEEP)
-                if notify_on: _notify("TalkType", "Nothing to undo")
-                return
-            
-            # Calculate how many characters to delete
-            delete_count = _calculate_undo_length(state.last_inserted_text, undo_type)
-            logger.info(f"Undo: deleting {delete_count} characters (last text was {len(state.last_inserted_text)} chars)")
-            print(f"🔙 Undoing {delete_count} characters ({undo_type})")
-            
-            if delete_count > 0:
-                _send_backspaces(delete_count)
-                # Update the last_inserted_text to reflect what remains
-                if delete_count >= len(state.last_inserted_text):
-                    state.last_inserted_text = ""
-                    state.continue_mid_sentence = False  # Starting fresh
-                else:
-                    state.last_inserted_text = state.last_inserted_text[:-delete_count]
-                    # Check if we're mid-sentence (remaining text doesn't end with sentence punctuation)
-                    remaining = state.last_inserted_text.rstrip()
-                    if remaining and not remaining.endswith(('.', '?', '!', '…')):
-                        state.continue_mid_sentence = True
-                        logger.info("Mid-sentence continuation enabled for next dictation")
-                    else:
-                        state.continue_mid_sentence = False
-                
-                _beep(beeps_on, *READY_BEEP)
-                if notify_on: _notify("TalkType", f"Undid last {undo_type}")
-            else:
-                print("ℹ️  Nothing to undo for this scope")
-                _beep(beeps_on, *CANCEL_BEEP)
-            
-            return  # Don't inject the undo command as text
-        
-        # Apply custom voice commands (phrase → replacement)
-        processed_raw = _apply_custom_commands(raw)
-        
-        text = normalize_text(processed_raw if smart_quotes else processed_raw.replace(""","\"").replace(""","\""))
+        # Stage 3: Normalize text (voice commands, punctuation, spacing)
+        text = _prepare_text(raw, smart_quotes, auto_period, auto_space)
 
-        # Handle mid-sentence continuation after undo
-        # Lowercase the first letter if we're continuing a sentence
-        if state.continue_mid_sentence and text:
-            # Only lowercase if the first character is uppercase
-            if text[0].isupper():
-                text = text[0].lower() + text[1:]
-                logger.info(f"Lowercased first letter for mid-sentence continuation")
-            state.continue_mid_sentence = False  # Reset the flag
-
-        # Simple spacing: always add period+space or just space when auto features are on
-        # Don't add auto-period or auto-space if text contains paragraph/line break markers
-        # Also skip if text is ONLY markers (no actual content)
-        has_break_markers = "§SHIFT_ENTER§" in text
-        text_without_markers = text.replace("§SHIFT_ENTER§", "").strip()
-        is_only_markers = has_break_markers and not text_without_markers
-
-        if auto_period and text and not is_only_markers and not text.rstrip().endswith((".","?","!","…")):
-            text = text.rstrip() + "."
-        if auto_space and text and not is_only_markers and not text.endswith((" ", "\n", "\t")):
-            text = text + " "
-        logger.info(f"Normalized text: {text!r}")
-
-        # Beep immediately after transcription completes (user feedback)
-        pre_beep_time = time.time() - stop_recording_start
-        print(f"⏱️  TIMING: About to beep at {pre_beep_time:.2f}s")
-        logger.info(f"TIMING: Time before beep: {pre_beep_time:.2f}s")
+        # Beep to confirm transcription is done
         _beep(beeps_on, *READY_BEEP)
-        post_beep_time = time.time() - stop_recording_start
-        print(f"⏱️  TIMING: Beep completed at {post_beep_time:.2f}s")
-        logger.info(f"TIMING: Time after beep: {post_beep_time:.2f}s")
-        if notify_on: _notify("TalkType", f"Transcribed: {text[:80]}{'…' if len(text)>80 else ''}")
+        if notify_on: _notify("TalkType", f"Transcribed: {text[:80]}{'\u2026' if len(text)>80 else ''}")
+
+        # Stage 4: Inject text into the active application
         if text:
-            # No delay - start injection immediately after transcription
+            _inject_text(text, injection_mode, t0)
 
-            # Determine injection method (handles auto mode with smart detection)
-            # Time this to see if it's causing the delay
-            detection_start = time.time()
-            print(f"⏱️  TIMING: Starting injection method detection...")
-            logger.info("TIMING: Starting injection method detection...")
-            actual_mode, use_atspi, reason = _determine_injection_method(injection_mode)
-            detection_time = time.time() - detection_start
-            print(f"⏱️  TIMING: Injection method detection took {detection_time:.3f}s (mode: {actual_mode})")
-            logger.info(f"TIMING: Injection method detection took {detection_time:.3f}s")
-            if detection_time > 0.1:  # Log if it takes more than 100ms
-                logger.warning(f"⚠️  Injection method detection took {detection_time:.2f}s - this may cause delays!")
-            
-            # Time the actual injection
-            injection_start = time.time()
-            logger.info(f"TIMING: Starting text injection (mode: {actual_mode})...")
-            
-            use_paste = (actual_mode == "paste")
-            
-            logger.info(f"Injection mode: configured={injection_mode!r}, actual={actual_mode!r}, atspi={use_atspi}, reason={reason}")
-            if injection_mode == "auto":
-                print(f"🔍 Auto mode: {reason}")
-
-            # Try AT-SPI insertion first if recommended
-            if use_atspi:
-                logger.info(f"Attempting AT-SPI insertion: {reason}")
-                print(f"🔮 Attempting AT-SPI insertion...")
-                try:
-                    from .atspi_helper import insert_text_atspi
-                    if insert_text_atspi(text):
-                        print(f"✨ AT-SPI insertion successful! ({len(text)} chars)")
-                        logger.info("AT-SPI text insertion succeeded")
-                    else:
-                        # AT-SPI failed, fall back to typing
-                        print(f"⚠️  AT-SPI insertion failed, falling back to typing")
-                        logger.warning("AT-SPI insertion failed, using typing fallback")
-                        _type_text(text)
-                except Exception as e:
-                    logger.error(f"AT-SPI insertion error: {e}")
-                    print(f"⚠️  AT-SPI error, falling back to typing")
-                    _type_text(text)
-            # Smart hybrid mode: Split text on markers and paste each chunk separately
-            # This gives us fast paste for long text while properly handling formatting commands
-            elif use_paste and ("§SHIFT_ENTER§" in text or "\n" in text):
-                logger.info(f"Smart hybrid mode: splitting text on markers")
-
-                # Split on §SHIFT_ENTER§ markers
-                parts = text.split("§SHIFT_ENTER§")
-                logger.info(f"Split into {len(parts)} parts")
-
-                success = True
-                for i, part in enumerate(parts):
-                    if part:  # Only paste non-empty parts
-                        logger.info(f"Pasting part {i+1}/{len(parts)}: {len(part)} chars")
-                        if not _paste_text(part):
-                            # Paste failed, fall back to typing the whole thing
-                            logger.warning(f"Paste failed on part {i+1}, falling back to typing mode")
-                            success = False
-                            break
-                        time.sleep(0.08)  # Brief delay after each paste
-
-                    # Send Shift+Enter after each part except the last
-                    if i < len(parts) - 1:
-                        logger.info(f"Sending Shift+Enter after part {i+1}")
-                        _send_shift_enter()
-                        time.sleep(0.05)
-
-                if success:
-                    print(f"✂️  Inject (smart paste) {len(parts)} chunks, {len(text)} total chars")
-                    logger.info(f"Smart hybrid paste completed: {len(parts)} chunks")
-                else:
-                    # Fall back to typing mode
-                    print(f"⌨️  Inject (type) len={len(text)} [paste failed, typing fallback]")
-                    logger.info(f"Falling back to typing mode")
-                    _type_text(text)
-            elif use_paste and _paste_text(text):
-                # Simple paste, no special markers
-                injection_time = time.time() - injection_start
-                total_time = time.time() - stop_recording_start
-                print(f"⏱️  TIMING: Paste injection completed in {injection_time:.2f}s")
-                print(f"⏱️  TIMING: TOTAL TIME from stop to text appearing: {total_time:.2f}s")
-                logger.info(f"TIMING: Paste injection completed in {injection_time:.2f}s")
-                logger.info(f"TIMING: Total time from stop_recording to injection complete: {total_time:.2f}s")
-                if injection_time > 1.0:
-                    logger.warning(f"⚠️  Paste injection took {injection_time:.2f}s - this is unusually slow!")
-                print(f"✂️  Inject (paste) len={len(text)}")
-                logger.info(f"Text injected via paste: {len(text)} chars in {injection_time:.2f}s")
-            else:
-                # Use typing mode
-                injection_time = time.time() - injection_start
-                total_time = time.time() - stop_recording_start
-                logger.info(f"TIMING: Typing injection completed in {injection_time:.2f}s")
-                logger.info(f"TIMING: Total time from stop_recording to injection complete: {total_time:.2f}s")
-                if injection_time > 1.0:
-                    logger.warning(f"⚠️  Typing injection took {injection_time:.2f}s - this is unusually slow!")
-                print(f"⌨️  Inject (type) len={len(text)}")
-                logger.info(f"Text injected via typing: {len(text)} chars in {injection_time:.2f}s")
-                _type_text(text)
-            
-            # Track the injected text for undo functionality
-            state.last_inserted_text = text
-            logger.debug(f"Stored last inserted text for undo: {len(text)} chars")
-        else:
-            print("ℹ️  (No speech recognized)")
-            logger.debug("No speech recognized in audio")
     except Exception as e:
-            logger.error(f"Transcription error: {e}", exc_info=True)
-            print(f"❌ Transcription error: {e}")
-            _beep(beeps_on, *READY_BEEP)  # Still play the ready beep so user knows it's done
-            if notify_on: _notify("TalkType", f"Transcription failed: {str(e)[:60]}{'…' if len(str(e))>60 else ''}")
-    finally:
-        # Ensure recording indicator is hidden (already hidden at start of stop_recording)
-        pass
+        logger.error(f"Transcription error: {e}", exc_info=True)
+        print(f"\u274c Transcription error: {e}")
+        _beep(beeps_on, *READY_BEEP)
+        if notify_on: _notify("TalkType", f"Transcription failed: {str(e)[:60]}{'\u2026' if len(str(e))>60 else ''}")
+
+def _show_welcome_after_change(cfg, mode):
+    """Show 'Hotkeys Updated!' dialog after user changed keys via Preferences.
+
+    This runs once before the main event loop when a flag file is present.
+    """
+    print("\U0001f44b Showing welcome dialog after hotkey change...")
+    logger.info("Showing welcome dialog after user changed hotkeys")
+    try:
+        gi.require_version('Gtk', '3.0')
+        from gi.repository import Gtk
+
+        ready_dialog = Gtk.Dialog(title="Hotkeys Updated!")
+        ready_dialog.set_default_size(500, 300)
+        ready_dialog.set_resizable(False)
+        ready_dialog.set_modal(True)
+        ready_dialog.set_position(Gtk.WindowPosition.CENTER)
+
+        content = ready_dialog.get_content_area()
+        content.set_margin_top(20)
+        content.set_margin_bottom(20)
+        content.set_margin_start(25)
+        content.set_margin_end(25)
+        content.set_spacing(15)
+
+        # Build dynamic hotkey message based on mode
+        if mode == "toggle":
+            hotkey_msg = f'''<b>\U0001f3a4 Your New Hotkeys:</b>
+\u2022 Press <b>{cfg.hotkey}</b> to hold and record (hold mode)
+\u2022 Press <b>{cfg.toggle_hotkey}</b> to start/stop recording (toggle mode)'''
+        else:
+            hotkey_msg = f'''<b>\U0001f3a4 Your New Hotkey:</b>
+\u2022 Press and hold <b>{cfg.hotkey}</b> to record (push-to-talk mode)'''
+
+        message = Gtk.Label()
+        message.set_markup(f'''<span size="large"><b>\u2705 You're All Set!</b></span>
+
+<b>\U0001f389 Hotkeys Updated Successfully!</b>
+
+Your new hotkeys are ready to use.
+
+{hotkey_msg}
+
+<b>\u23f1\ufe0f Auto-Timeout:</b>
+The service will automatically stop after 5 minutes of inactivity
+to conserve system resources. Just press your hotkey to wake it up!
+
+<b>\U0001f4da Need Help?</b>
+Right-click the tray icon \u2192 "Help..." for full documentation
+
+<b>Happy dictating! \U0001f680</b>''')
+        message.set_line_wrap(True)
+        message.set_xalign(0)
+        message.set_yalign(0)
+        content.pack_start(message, True, True, 0)
+
+        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        button_box.set_halign(Gtk.Align.CENTER)
+        button_box.set_margin_top(10)
+
+        ok_btn = Gtk.Button(label="Let's Go!")
+        ok_btn.get_style_context().add_class("suggested-action")
+        ok_btn.connect("clicked", lambda w: ready_dialog.response(Gtk.ResponseType.OK))
+        button_box.pack_start(ok_btn, False, False, 0)
+
+        content.pack_start(button_box, False, False, 0)
+
+        ready_dialog.show_all()
+        ready_dialog.run()
+        ready_dialog.destroy()
+        logger.info("Welcome dialog closed, continuing to main loop")
+
+    except Exception as e:
+        logger.error(f"Failed to show welcome dialog after hotkey change: {e}")
+
+
+def _handle_key_event(event, mode, hold_key, toggle_key, devices, grabbed_device, cfg, input_device_idx):
+    """Handle a single keyboard event. Both hold (F8) and toggle (F9) are always active.
+
+    Returns the updated grabbed_device state (may be modified by grab/ungrab).
+    """
+    # --- Hold-to-talk: hold key down to record, release to stop ---
+    if event.code == hold_key:
+        if event.value == 1 and not state.is_recording:
+            # Grab ALL keyboard devices to prevent hotkey from passing through
+            grabbed_devices = []
+            for grab_dev in devices:
+                try:
+                    grab_dev.grab()
+                    grabbed_devices.append(grab_dev)
+                    logger.info(f"Grabbed device: {grab_dev.name}")
+                except Exception as e:
+                    logger.warning(f"Could not grab {grab_dev.name}: {e}")
+            grabbed_device = grabbed_devices if grabbed_devices else None
+            start_recording(cfg.beeps, cfg.notify, input_device_idx)
+        elif event.value == 0 and state.is_recording:
+            # Ungrab BEFORE text injection so ydotool can work
+            if grabbed_device:
+                for ungrab_dev in grabbed_device:
+                    try:
+                        ungrab_dev.ungrab()
+                        logger.info(f"Ungrabbed device: {ungrab_dev.name}")
+                    except Exception:
+                        pass
+                grabbed_device = None
+            stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
+                           cfg.auto_space, cfg.auto_period, cfg.injection_mode)
+
+    # --- Tap-to-toggle: press once to start, press again to stop ---
+    if toggle_key and event.code == toggle_key and event.value == 1:
+        if not state.is_recording:
+            start_recording(cfg.beeps, cfg.notify, input_device_idx)
+        else:
+            stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
+                           cfg.auto_space, cfg.auto_period, cfg.injection_mode)
+
+    # --- ESC cancels in any mode ---
+    if event.code == ecodes.KEY_ESC and state.is_recording and event.value == 1:
+        cancel_recording(cfg.beeps, cfg.notify, "Cancelled by ESC")
+        if grabbed_device:
+            for ungrab_dev in grabbed_device:
+                try:
+                    ungrab_dev.ungrab()
+                except Exception:
+                    pass
+            grabbed_device = None
+
+    return grabbed_device
+
 
 def _loop_evdev(cfg: Settings, input_device_idx):
+    """Main event loop: monitor keyboard for hotkey presses and dispatch to recording."""
     session = os.environ.get("XDG_SESSION_TYPE", "").lower()
     print(f"Session: {session} | Wayland={session=='wayland'}")
     logger.info(f"Session type: {session}, Wayland: {session=='wayland'}")
@@ -1359,379 +1268,84 @@ def _loop_evdev(cfg: Settings, input_device_idx):
         try: dev.set_nonblocking(True)
         except Exception: pass
 
-    # Check if this is the first run BEFORE setting up hotkeys
-    # If first run (onboarding not complete), don't monitor ANY keys
+    # First run check: exit early if onboarding not complete
     try:
-        from talktype.cuda_helper import is_first_run, mark_first_run_complete
+        from talktype.cuda_helper import is_first_run
         first_run = is_first_run()
     except Exception:
         first_run = False
 
     if first_run:
         logger.info("First run detected - onboarding not complete")
-        logger.info("Service will NOT monitor any keys until onboarding is done")
         print("Onboarding not complete. No hotkeys will be active until setup is finished.")
-        return  # Exit - tray will restart service after onboarding
+        return
 
     hold_key = _keycode_from_name(cfg.hotkey)
-    toggle_key = _keycode_from_name(cfg.toggle_hotkey) if mode == "toggle" else None
+    toggle_key = _keycode_from_name(cfg.toggle_hotkey) if cfg.toggle_hotkey else None
 
-    # If no hotkeys are configured, exit gracefully
     if hold_key is None:
         logger.info("No hotkey configured - service will not monitor any keys")
-        logger.info("Hotkeys will be activated after user completes onboarding")
         print("No hotkey configured. Complete onboarding to activate dictation.")
-        return  # Exit the service - it will be restarted after onboarding
+        return
 
-    # Check if we should show welcome dialog (after user changed keys)
-    show_welcome_after_change = False
+    # Show welcome dialog if user just changed hotkeys via Preferences
     from .config import get_data_dir
     welcome_flag_file = os.path.join(get_data_dir(), ".show_welcome_on_restart")
     if os.path.exists(welcome_flag_file):
-        show_welcome_after_change = True
         try:
             os.remove(welcome_flag_file)
             logger.info("Removed welcome flag, will show welcome dialog")
         except Exception as e:
             logger.error(f"Failed to remove welcome flag: {e}")
+        _show_welcome_after_change(cfg, mode)
 
-    # Only show hotkey verification on first run
-    if first_run:
-        # Loop until user verifies or skips
-        while True:
-            # Initialize hotkey testing
-            state.hotkey_test_start_time = time.time()
-            state.hold_key_tested = False
-            state.toggle_key_tested = False
-
-            # Show hotkey verification dialog
-            print(f"🎹 Showing hotkey verification dialog...")
-            logger.info(f"Showing hotkey verification dialog for user")
-
-            # Run dialog directly (GTK must run in main thread)
-            action, verified = show_hotkey_test_dialog(mode, cfg.hotkey, cfg.toggle_hotkey)
-
-            if action == "change_keys":
-                # User wants to change hotkeys
-                print("🔧 User wants to change hotkeys...")
-                logger.info("Showing simple hotkey change dialog")
-
-                # Show simple hotkey change dialog
-                saved, new_mode, new_hold_key, new_toggle_key = show_simple_hotkey_change_dialog(
-                    mode, cfg.hotkey, cfg.toggle_hotkey
-                )
-
-                if saved:
-                    # Save new hotkeys to config
-                    print(f"💾 Saving new hotkeys: mode={new_mode}, hold={new_hold_key}, toggle={new_toggle_key}")
-                    logger.info(f"User changed hotkeys: mode={new_mode}, hold={new_hold_key}, toggle={new_toggle_key}")
-
-                    # Update config
-                    cfg.mode = new_mode
-                    cfg.hotkey = new_hold_key
-                    cfg.toggle_hotkey = new_toggle_key
-
-                    # Save to file
-                    from talktype.config import save_config
-                    save_config(cfg)
-                    logger.info("Config saved with new hotkeys")
-
-                    # Update mode and keycodes for this session
-                    mode = new_mode
-                    hold_key = _keycode_from_name(new_hold_key)
-                    toggle_key = _keycode_from_name(new_toggle_key) if mode == "toggle" else None
-
-                    # Loop back to verification with new keys
-                    print(f"🔄 Now test your new hotkeys: {new_hold_key} and {new_toggle_key}")
-                    logger.info("Looping back to verification with new hotkeys")
-                    continue  # Go back to start of while loop
-                else:
-                    print("⚠️ User cancelled hotkey change, returning to verification")
-                    logger.info("User cancelled hotkey change, returning to verification")
-                    continue  # Go back to verification with original keys
-
-            elif action == "verified" and verified:
-                state.hold_key_tested = True
-                if mode == "toggle":
-                    state.toggle_key_tested = True
-                print(f"✓ Hotkeys verified successfully")
-                logger.info(f"Hotkeys verified by user")
-
-                # Mark first run as complete
-                try:
-                    mark_first_run_complete()
-                    logger.info("First run marked as complete")
-                except Exception as e:
-                    logger.error(f"Failed to mark first run complete: {e}")
-
-                break  # Exit the while loop
-
-            else:
-                # User skipped verification
-                print("⚠️ Hotkey verification skipped by user")
-                logger.warning("Hotkey verification skipped")
-                break  # Exit the while loop
-
-        # After verification loop, show final ready dialog if verified
-        if action == "verified" and verified:
-
-            # Show final "Ready!" message with nice welcome-style dialog
-            try:
-                gi.require_version('Gtk', '3.0')
-                from gi.repository import Gtk
-
-                ready_dialog = Gtk.Dialog(title="Ready to Dictate!")
-                ready_dialog.set_default_size(500, 300)
-                ready_dialog.set_resizable(False)
-                ready_dialog.set_modal(True)
-                ready_dialog.set_position(Gtk.WindowPosition.CENTER)
-
-                content = ready_dialog.get_content_area()
-                content.set_margin_top(20)
-                content.set_margin_bottom(20)
-                content.set_margin_start(25)
-                content.set_margin_end(25)
-                content.set_spacing(15)
-
-                # Main message
-                message = Gtk.Label()
-                message.set_markup('''<span size="large"><b>✅ You're All Set!</b></span>
-
-<b>🎉 Hotkeys Verified Successfully!</b>
-
-Your hotkeys are working perfectly and ready to use.
-
-<b>🎤 Start Dictating Now:</b>
-• Press <b>F8</b> for push-to-talk mode (hold to record)
-• Press <b>F9</b> for toggle mode (press once to start, again to stop)
-
-<b>⏱️ Auto-Timeout:</b>
-The service will automatically stop after 5 minutes of inactivity
-to conserve system resources. Just press your hotkey to wake it up!
-
-<b>📚 Need Help?</b>
-Right-click the tray icon → "Help..." for full documentation
-
-<b>Happy dictating! 🚀</b>''')
-                message.set_line_wrap(True)
-                message.set_xalign(0)
-                message.set_yalign(0)
-                content.pack_start(message, True, True, 0)
-
-                # Button
-                button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-                button_box.set_halign(Gtk.Align.CENTER)
-                button_box.set_margin_top(10)
-
-                ok_btn = Gtk.Button(label="Let's Go!")
-                ok_btn.get_style_context().add_class("suggested-action")
-                ok_btn.connect("clicked", lambda w: ready_dialog.response(Gtk.ResponseType.OK))
-                button_box.pack_start(ok_btn, False, False, 0)
-
-                content.pack_start(button_box, False, False, 0)
-
-                # Proper GTK dialog handling
-                def on_response(dialog, response_id):
-                    dialog.destroy()
-                    Gtk.main_quit()
-
-                ready_dialog.connect("response", on_response)
-                ready_dialog.show_all()
-
-                # Run GTK main loop for this dialog
-                Gtk.main()
-
-            except Exception as e:
-                logger.error(f"Failed to show ready dialog: {e}")
-        elif action == "change_keys":
-            print("🔧 User wants to change hotkeys...")
-            logger.info("Showing simple hotkey change dialog")
-
-            # Show simple hotkey change dialog
-            saved, new_mode, new_hold_key, new_toggle_key = show_simple_hotkey_change_dialog(
-                mode, cfg.hotkey, cfg.toggle_hotkey
-            )
-
-            if saved:
-                # Save new hotkeys to config
-                print(f"💾 Saving new hotkeys: mode={new_mode}, hold={new_hold_key}, toggle={new_toggle_key}")
-                logger.info(f"User changed hotkeys: mode={new_mode}, hold={new_hold_key}, toggle={new_toggle_key}")
-
-                # Update config
-                cfg.mode = new_mode
-                cfg.hotkey = new_hold_key
-                cfg.toggle_hotkey = new_toggle_key
-
-                # Save to file
-                from talktype.config import save_config
-                save_config(cfg)
-                logger.info("Config saved with new hotkeys")
-
-                # Update mode and keycodes for this session
-                mode = new_mode
-                hold_key = _keycode_from_name(new_hold_key)
-                toggle_key = _keycode_from_name(new_toggle_key) if mode == "toggle" else None
-
-                # Mark first run as complete
-                try:
-                    mark_first_run_complete()
-                    logger.info("First run marked as complete (user changed hotkeys)")
-                except Exception as e:
-                    logger.error(f"Failed to mark first run complete: {e}")
-
-                # Show success message
-                print(f"✅ Hotkeys saved! You can now start dictating with your new keys.")
-                logger.info("User finished changing hotkeys, ready to start")
-            else:
-                print("⚠️ User cancelled hotkey change, skipping verification")
-                logger.info("User cancelled hotkey change, continuing with original hotkeys")
-        else:
-            print("⚠️ Hotkey verification skipped by user")
-            logger.warning("Hotkey verification skipped")
-    elif show_welcome_after_change:
-        # Show welcome dialog after user changed keys (no verification needed)
-        print("👋 Showing welcome dialog after hotkey change...")
-        logger.info("Showing welcome dialog after user changed hotkeys")
-        try:
-            gi.require_version('Gtk', '3.0')
-            from gi.repository import Gtk
-
-            ready_dialog = Gtk.Dialog(title="Hotkeys Updated!")
-            ready_dialog.set_default_size(500, 300)
-            ready_dialog.set_resizable(False)
-            ready_dialog.set_modal(True)
-            ready_dialog.set_position(Gtk.WindowPosition.CENTER)
-
-            content = ready_dialog.get_content_area()
-            content.set_margin_top(20)
-            content.set_margin_bottom(20)
-            content.set_margin_start(25)
-            content.set_margin_end(25)
-            content.set_spacing(15)
-
-            # Build dynamic hotkey message based on mode
-            if mode == "toggle":
-                hotkey_msg = f'''<b>🎤 Your New Hotkeys:</b>
-• Press <b>{cfg.hotkey}</b> to hold and record (hold mode)
-• Press <b>{cfg.toggle_hotkey}</b> to start/stop recording (toggle mode)'''
-            else:
-                hotkey_msg = f'''<b>🎤 Your New Hotkey:</b>
-• Press and hold <b>{cfg.hotkey}</b> to record (push-to-talk mode)'''
-
-            # Main message
-            message = Gtk.Label()
-            message.set_markup(f'''<span size="large"><b>✅ You're All Set!</b></span>
-
-<b>🎉 Hotkeys Updated Successfully!</b>
-
-Your new hotkeys are ready to use.
-
-{hotkey_msg}
-
-<b>⏱️ Auto-Timeout:</b>
-The service will automatically stop after 5 minutes of inactivity
-to conserve system resources. Just press your hotkey to wake it up!
-
-<b>📚 Need Help?</b>
-Right-click the tray icon → "Help..." for full documentation
-
-<b>Happy dictating! 🚀</b>''')
-            message.set_line_wrap(True)
-            message.set_xalign(0)
-            message.set_yalign(0)
-            content.pack_start(message, True, True, 0)
-
-            # Button
-            button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-            button_box.set_halign(Gtk.Align.CENTER)
-            button_box.set_margin_top(10)
-
-            ok_btn = Gtk.Button(label="Let's Go!")
-            ok_btn.get_style_context().add_class("suggested-action")
-            ok_btn.connect("clicked", lambda w: ready_dialog.response(Gtk.ResponseType.OK))
-            button_box.pack_start(ok_btn, False, False, 0)
-
-            content.pack_start(button_box, False, False, 0)
-
-            # Show dialog and wait for response
-            ready_dialog.show_all()
-            ready_dialog.run()
-            ready_dialog.destroy()
-            logger.info("Welcome dialog closed, continuing to main loop")
-
-        except Exception as e:
-            logger.error(f"Failed to show welcome dialog after hotkey change: {e}")
-
-    # Track which device is grabbed (to prevent hotkey from passing through to apps)
+    # Main event loop
     grabbed_device = None
-
     while True:
         current_time = time.time()
 
-        # Check for auto-timeout
+        # Check for D-Bus-triggered recording commands (thread-safe via threading.Events).
+        # The GLib thread sets these flags; we consume them here on the main thread.
+        if _cmd_start_recording.is_set():
+            _cmd_start_recording.clear()
+            if not state.is_recording:
+                start_recording(cfg.beeps, cfg.notify, input_device_idx)
+                last_activity_time = current_time  # Reset auto-timeout
+
+        if _cmd_stop_recording.is_set():
+            _cmd_stop_recording.clear()
+            if state.is_recording:
+                # Must ungrab keyboard devices before stopping (same as hold-mode release)
+                if grabbed_device:
+                    for ungrab_dev in grabbed_device:
+                        try:
+                            ungrab_dev.ungrab()
+                        except Exception:
+                            pass
+                    grabbed_device = None
+                stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
+                               cfg.auto_space, cfg.auto_period, cfg.injection_mode)
+                last_activity_time = current_time  # Reset auto-timeout
+
+        # Auto-timeout: shut down if no activity for configured minutes
         if timeout_enabled and not state.is_recording:
             if current_time - last_activity_time > timeout_seconds:
-                print(f"⏰ Auto-timeout: No activity for {timeout_minutes} minutes, shutting down...")
+                print(f"\u23f0 Auto-timeout: No activity for {timeout_minutes} minutes, shutting down...")
                 if cfg.notify:
                     _notify("TalkType Auto-Timeout", f"Service stopped after {timeout_minutes} minutes of inactivity")
                 sys.exit(0)
 
+        # Poll all input devices for key events
         for dev in devices:
             try:
                 for event in dev.read():
                     if event.type == ecodes.EV_KEY:
-                        if mode == "hold":
-                            if event.code == hold_key:
-                                # Reset timeout timer only when TalkType hotkey is used
-                                if timeout_enabled:
-                                    last_activity_time = current_time
-                                if event.value == 1 and not state.is_recording:
-                                    # Grab ALL keyboard devices to prevent hotkey from passing through to apps
-                                    # This stops key repeat on terminals where F-keys produce characters
-                                    grabbed_devices = []
-                                    for grab_dev in devices:
-                                        try:
-                                            grab_dev.grab()
-                                            grabbed_devices.append(grab_dev)
-                                            logger.info(f"Grabbed device: {grab_dev.name}")
-                                        except Exception as e:
-                                            logger.warning(f"Could not grab {grab_dev.name}: {e}")
-                                    grabbed_device = grabbed_devices if grabbed_devices else None
-                                    start_recording(cfg.beeps, cfg.notify, input_device_idx)
-                                elif event.value == 0 and state.is_recording:
-                                    # Ungrab all devices BEFORE text injection so ydotool can work
-                                    if grabbed_device:
-                                        for ungrab_dev in grabbed_device:
-                                            try:
-                                                ungrab_dev.ungrab()
-                                                logger.info(f"Ungrabbed device: {ungrab_dev.name}")
-                                            except Exception:
-                                                pass
-                                        grabbed_device = None
-                                    stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language, cfg.auto_space, cfg.auto_period, cfg.injection_mode)
-                        else:  # toggle mode: press to start, press again to stop
-                            if event.code == toggle_key and event.value == 1:
-                                # Reset timeout timer only when TalkType hotkey is used
-                                if timeout_enabled:
-                                    last_activity_time = current_time
-                                if not state.is_recording:
-                                    start_recording(cfg.beeps, cfg.notify, input_device_idx)
-                                else:
-                                     stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language, cfg.auto_space, cfg.auto_period, cfg.injection_mode)
-                        # ESC cancels in any mode
-                        if event.code == ecodes.KEY_ESC and state.is_recording and event.value == 1:
-                            # Reset timeout timer when ESC is used to cancel
-                            if timeout_enabled:
-                                last_activity_time = current_time
-                            cancel_recording(cfg.beeps, cfg.notify, "Cancelled by ESC")
-                            # Ungrab all devices if recording was cancelled
-                            if grabbed_device:
-                                for ungrab_dev in grabbed_device:
-                                    try:
-                                        ungrab_dev.ungrab()
-                                    except Exception:
-                                        pass
-                                grabbed_device = None
+                        # Reset timeout on any hotkey activity
+                        if timeout_enabled and event.code in (hold_key, toggle_key, ecodes.KEY_ESC):
+                            last_activity_time = current_time
+                        grabbed_device = _handle_key_event(
+                            event, mode, hold_key, toggle_key, devices,
+                            grabbed_device, cfg, input_device_idx)
             except BlockingIOError:
                 pass
             except Exception:
@@ -1859,9 +1473,13 @@ def main():
                 class AppInstance:
                     def __init__(self, cfg):
                         self.config = cfg
-                        self.is_recording = False
                         self.service_running = True
                         self.dbus_service = None
+
+                    @property
+                    def is_recording(self):
+                        """Live recording state from the dictation engine."""
+                        return state.is_recording
 
                     def show_preferences(self):
                         """Open preferences window"""
@@ -1869,16 +1487,21 @@ def main():
                         subprocess.Popen([sys.executable, "-m", "talktype.prefs"])
 
                     def start_recording(self):
-                        """Start recording - not implemented in D-Bus only mode"""
-                        pass
+                        """Signal the evdev loop to start recording (thread-safe)."""
+                        if not state.is_recording:
+                            _cmd_start_recording.set()
 
                     def stop_recording(self):
-                        """Stop recording - not implemented in D-Bus only mode"""
-                        pass
+                        """Signal the evdev loop to stop recording (thread-safe)."""
+                        if state.is_recording:
+                            _cmd_stop_recording.set()
 
                     def toggle_recording(self):
-                        """Toggle recording - not implemented in D-Bus only mode"""
-                        pass
+                        """Toggle recording state (thread-safe)."""
+                        if state.is_recording:
+                            _cmd_stop_recording.set()
+                        else:
+                            _cmd_start_recording.set()
 
                     def start_service(self):
                         """Start the dictation service"""
@@ -2005,6 +1628,8 @@ def main():
     model = build_model(cfg)
     print(f"Config: model={cfg.model} device={cfg.device} lang={cfg.language or 'auto'} auto_space={cfg.auto_space} auto_period={cfg.auto_period}")
     logger.info(f"Configuration: model={cfg.model}, device={cfg.device}, language={cfg.language or 'auto'}, auto_space={cfg.auto_space}, auto_period={cfg.auto_period}")
+    # Register SIGUSR1 handler so the tray process can toggle recording via os.kill()
+    signal.signal(signal.SIGUSR1, _handle_sigusr1)
     _loop_evdev(cfg, input_device_idx)
 
 if __name__ == "__main__":

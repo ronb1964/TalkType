@@ -1,4 +1,5 @@
 import os
+import signal
 # CRITICAL: Disable HuggingFace XET downloads BEFORE any imports
 # XET bypasses tqdm_class progress tracking, breaking our download progress UI
 os.environ["HF_HUB_DISABLE_XET"] = "1"
@@ -14,9 +15,34 @@ import sys
 import atexit
 import fcntl
 from .logger import setup_logger
-from .desktop_detect import is_gnome
-
 logger = setup_logger(__name__)
+
+# CSS styling for the tray popup menu (solid dark background for readability)
+_MENU_CSS = b"""
+menu {
+    background-color: #2d2d2d;
+    border: 1px solid #1a1a1a;
+    border-radius: 8px;
+    padding: 4px 0;
+}
+menuitem {
+    padding: 6px 12px;
+    color: #ffffff;
+}
+menuitem:hover {
+    background-color: #404040;
+}
+menuitem:disabled {
+    color: #888888;
+}
+menuitem label {
+    color: inherit;
+}
+separator {
+    background-color: #404040;
+    margin: 4px 8px;
+}
+"""
 
 # D-Bus service import (optional - only needed for GNOME extension)
 try:
@@ -26,23 +52,9 @@ except ImportError:
     DBUS_AVAILABLE = False
     logger.warning("D-Bus service not available - GNOME extension integration disabled")
 
-SERVICE = "talktype.service"  # Not used anymore - we check processes directly
-
 def _runtime_dir():
     return os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
 
-_TRAY_PIDFILE = os.path.join(_runtime_dir(), "talktype-tray.pid")
-
-def _pid_running(pid: int) -> bool:
-    if pid <= 0: return False
-    proc = f"/proc/{pid}"
-    if not os.path.exists(proc): return False
-    try:
-        with open(os.path.join(proc, "cmdline"), "rb") as f:
-            cmd = f.read().decode(errors="ignore")
-        return ("talktype.tray" in cmd) or ("dictate-tray" in cmd)
-    except Exception:
-        return True  # if in doubt, assume running
 
 def _acquire_tray_singleton():
     """
@@ -104,12 +116,11 @@ class DictationTray:
 
         self.indicator.set_title("TalkType")  # Set the app name
 
-        # Store menu items for dynamic updates
-        self.start_item = None
-        self.stop_item = None
-
         # Track subprocess windows
         self.preferences_process = None
+
+        # Cached PID of the dictation service (for fast /proc-based status checks)
+        self._service_pid = None
 
         # Track onboarding state - service should not start during onboarding
         self.onboarding_in_progress = False
@@ -180,6 +191,29 @@ class DictationTray:
                     """Stop service via tray."""
                     GLib.idle_add(self.tray.stop_service, None)
 
+                def restart_service(self):
+                    """Restart service via tray."""
+                    GLib.idle_add(self.tray.restart_service, None)
+
+                def toggle_recording(self):
+                    """Toggle recording in the service process via SIGUSR1."""
+                    pid = getattr(self.tray, '_service_pid', None)
+                    if pid:
+                        try:
+                            os.kill(pid, signal.SIGUSR1)
+                        except (ProcessLookupError, PermissionError):
+                            pass
+
+                def start_recording(self):
+                    """Start recording if not already recording."""
+                    if not self.is_recording:
+                        self.toggle_recording()
+
+                def stop_recording(self):
+                    """Stop recording if currently recording."""
+                    if self.is_recording:
+                        self.toggle_recording()
+
                 def show_preferences(self):
                     """Open preferences via tray."""
                     GLib.idle_add(self.tray.open_preferences, None)
@@ -221,16 +255,44 @@ class DictationTray:
             self.dbus_service = None
 
     def is_service_running(self):
-        """Check if the dictation service is active."""
+        """Check if the dictation service is active via /proc (no subprocess spawn).
+
+        Uses a cached PID for fast lookups. Falls back to scanning /proc if
+        the PID is unknown (e.g., service was started before the tray).
+        """
+        # Fast path: check cached PID directly via /proc
+        pid = getattr(self, '_service_pid', None)
+        if pid:
+            if self._check_pid_is_service(pid):
+                return True
+            # PID no longer valid — clear it
+            self._service_pid = None
+
+        # Slow path: scan /proc to find an existing service process
+        # (handles case where service started before tray, e.g., at boot)
         try:
-            # Check both patterns: "talktype.app" (dev) and "bin/dictate" (AppImage)
-            result1 = subprocess.run(["pgrep", "-f", "talktype.app"],
-                                  capture_output=True, text=True)
-            result2 = subprocess.run(["pgrep", "-f", "bin/dictate"],
-                                  capture_output=True, text=True)
-            return (result1.returncode == 0 and result1.stdout.strip()) or \
-                   (result2.returncode == 0 and result2.stdout.strip())
+            my_pid = os.getpid()
+            for entry in os.listdir("/proc"):
+                if not entry.isdigit():
+                    continue
+                entry_pid = int(entry)
+                if entry_pid == my_pid:
+                    continue
+                if self._check_pid_is_service(entry_pid):
+                    self._service_pid = entry_pid
+                    return True
         except Exception:
+            pass
+        return False
+
+    @staticmethod
+    def _check_pid_is_service(pid):
+        """Check if a given PID is a TalkType dictation service process."""
+        try:
+            with open(f"/proc/{pid}/cmdline", "rb") as f:
+                cmd = f.read().decode(errors="ignore")
+            return "talktype.app" in cmd or "bin/dictate" in cmd
+        except (FileNotFoundError, PermissionError, ProcessLookupError):
             return False
 
     def _auto_start_service(self):
@@ -251,13 +313,18 @@ class DictationTray:
             logger.error(f"Failed to auto-start service: {e}", exc_info=True)
         return False  # Don't repeat this timer
 
-    def update_icon_status(self):
-        """Update icon based on service status."""
-        if self.is_service_running():
-            # Try different icon names for active state
+    def update_icon_status(self, is_running=None):
+        """Update icon based on service status.
+
+        Args:
+            is_running: Pre-computed service state (avoids redundant checks).
+                        If None, checks service status directly.
+        """
+        if is_running is None:
+            is_running = self.is_service_running()
+        if is_running:
             self.indicator.set_icon_full("microphone-sensitivity-high", "TalkType: Active")
         else:
-            # Use muted icon for stopped state
             self.indicator.set_icon_full("microphone-sensitivity-muted", "TalkType: Stopped")
         return True  # Continue the timer
 
@@ -278,116 +345,112 @@ class DictationTray:
 
         return False  # Don't repeat
     
+    # ----- Service management helpers -----
+
+    def _get_dev_pythonpath(self):
+        """Build PYTHONPATH for dev mode (includes src/ and system PyGObject).
+
+        Returns the PYTHONPATH string if in dev mode, or None for AppImage.
+        """
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+        src_dir_check = os.path.join(project_root, "src")
+        if os.path.exists(src_dir_check):
+            return ":".join([
+                os.path.abspath(src_dir_check),
+                "/usr/lib64/python3.14/site-packages",
+                "/usr/lib/python3.14/site-packages",
+            ])
+        return None
+
+    def _launch_service(self):
+        """Launch the dictation service subprocess.
+
+        Finds the dictate script (AppImage) or falls back to python -m (dev mode).
+        """
+        # AppImage path: __file__ → usr/src/talktype/tray.py → usr/bin/dictate
+        src_dir = os.path.dirname(__file__)
+        usr_dir = os.path.dirname(os.path.dirname(src_dir))
+        dictate_script = os.path.join(usr_dir, "bin", "dictate")
+
+        if os.path.exists(dictate_script):
+            proc = subprocess.Popen([dictate_script], env=os.environ.copy())
+            self._service_pid = proc.pid
+            logger.info(f"Started dictation service via {dictate_script} (PID {proc.pid})")
+        else:
+            # Dev mode fallback
+            env = os.environ.copy()
+            pythonpath = self._get_dev_pythonpath()
+            if pythonpath:
+                env["PYTHONPATH"] = pythonpath
+                logger.info(f"Dev mode detected - setting PYTHONPATH")
+            proc = subprocess.Popen([sys.executable, "-m", "talktype.app"], env=env)
+            self._service_pid = proc.pid
+            logger.info(f"Started dictation service via Python module (PID {proc.pid})")
+
+    def _kill_service(self):
+        """Kill all running dictation service processes."""
+        subprocess.run(["pkill", "-f", "talktype.app"], capture_output=True)
+        subprocess.run(["pkill", "-f", "bin/dictate"], capture_output=True)
+
     def start_service(self, _):
         """Start the dictation service directly."""
         # CRITICAL: Never start service during onboarding - hotkeys must not be active
         if self.onboarding_in_progress:
             logger.info("Onboarding in progress - refusing to start service")
-            print("⛔ Service blocked: onboarding in progress")
             return
 
         try:
-            # Find the dictate script relative to this module
-            # __file__ is in usr/src/talktype/tray.py
-            # dictate is in usr/bin/dictate
-            src_dir = os.path.dirname(__file__)  # usr/src/talktype
-            usr_dir = os.path.dirname(os.path.dirname(src_dir))  # usr
-            dictate_script = os.path.join(usr_dir, "bin", "dictate")
-
-            if os.path.exists(dictate_script):
-                # Use the dictate script which has proper paths set up
-                subprocess.Popen([dictate_script], env=os.environ.copy())
-                logger.info(f"Started dictation service via {dictate_script}")
-            else:
-                # Fallback: use sys.executable (bundled Python or dev environment)
-                # In dev mode, we need to set PYTHONPATH to find the talktype module
-                env = os.environ.copy()
-
-                # Check if we're in dev mode (src/talktype structure exists relative to __file__)
-                project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-                src_dir_check = os.path.join(project_root, "src")
-                if os.path.exists(src_dir_check):
-                    # Dev mode - set PYTHONPATH to include src/ AND system PyGObject
-                    # Use absolute paths!
-                    pythonpath_parts = [
-                        os.path.abspath(src_dir_check),
-                        "/usr/lib64/python3.14/site-packages",  # System PyGObject on Fedora/Nobara
-                        "/usr/lib/python3.14/site-packages"      # Alternative location
-                    ]
-                    env["PYTHONPATH"] = ":".join(pythonpath_parts)
-                    logger.info(f"Dev mode detected - setting PYTHONPATH={env['PYTHONPATH']}")
-
-                subprocess.Popen([sys.executable, "-m", "talktype.app"],
-                               env=env)
-                logger.info("Started dictation service via Python module")
+            self._launch_service()
 
             # Emit D-Bus signal if available
             if self.dbus_service:
                 GLib.timeout_add_seconds(1, lambda: self._emit_service_state_after_check(True))
         except Exception as e:
-            print(f"Failed to start service: {e}")
             logger.error(f"Failed to start service: {e}", exc_info=True)
-        GLib.timeout_add_seconds(1, self.update_status_and_menu_once)
-    
+        GLib.timeout_add_seconds(1, lambda: self.update_status_and_menu(repeat=False))
+
     def stop_service(self, _):
         """Stop the dictation service directly."""
         try:
-            # Kill both patterns: "talktype.app" (dev) and "bin/dictate" (AppImage)
-            subprocess.run(["pkill", "-f", "talktype.app"], capture_output=True)
-            subprocess.run(["pkill", "-f", "bin/dictate"], capture_output=True)
+            self._kill_service()
             logger.info("Stopped dictation service")
 
             # Emit D-Bus signal if available
             if self.dbus_service:
                 GLib.timeout_add_seconds(1, lambda: self._emit_service_state_after_check(False))
         except Exception as e:
-            print(f"Failed to stop service: {e}")
             logger.error(f"Failed to stop service: {e}")
-        GLib.timeout_add_seconds(1, self.update_status_and_menu_once)
-    
+        GLib.timeout_add_seconds(1, lambda: self.update_status_and_menu(repeat=False))
+
     def restart_service(self, _):
         """Restart the dictation service directly."""
         # CRITICAL: Never restart service during onboarding
         if self.onboarding_in_progress:
             logger.info("Onboarding in progress - refusing to restart service")
-            print("⛔ Service restart blocked: onboarding in progress")
             return
 
         try:
-            # Stop first - kill both patterns: "talktype.app" (dev) and "bin/dictate" (AppImage)
-            subprocess.run(["pkill", "-f", "talktype.app"], capture_output=True)
-            subprocess.run(["pkill", "-f", "bin/dictate"], capture_output=True)
-            # Wait a moment for processes to terminate
-            time.sleep(1)
-
-            # Find the dictate script relative to this module
-            src_dir = os.path.dirname(__file__)  # usr/src/talktype
-            usr_dir = os.path.dirname(os.path.dirname(src_dir))  # usr
-            dictate_script = os.path.join(usr_dir, "bin", "dictate")
-
-            if os.path.exists(dictate_script):
-                # Use the dictate script which has proper paths set up
-                subprocess.Popen([dictate_script], env=os.environ.copy())
-                logger.info(f"Restarted dictation service via {dictate_script}")
-            else:
-                # Fallback: use sys.executable (bundled Python)
-                subprocess.Popen([sys.executable, "-m", "talktype.app"],
-                               env=os.environ.copy())
-                logger.info("Restarted dictation service via Python module")
+            self._kill_service()
+            time.sleep(1)  # Wait for processes to terminate
+            self._launch_service()
         except Exception as e:
-            print(f"Failed to restart service: {e}")
             logger.error(f"Failed to restart service: {e}", exc_info=True)
-        GLib.timeout_add_seconds(2, self.update_status_and_menu_once)
+        GLib.timeout_add_seconds(2, lambda: self.update_status_and_menu(repeat=False))
     
-    def update_status_and_menu(self):
-        """Update icon and menu display based on service status."""
+    def update_status_and_menu(self, repeat=True):
+        """Update icon and menu display based on service status.
+
+        Args:
+            repeat: If True (default), keeps the GLib timer running.
+                    Pass False for a one-shot update.
+        """
         # Store previous state to detect changes
         old_state = getattr(self, '_last_service_state', None)
         new_state = self.is_service_running()
 
-        # Update UI
-        self.update_icon_status()
-        self.update_menu_display()
+        # Update UI — pass pre-computed state to avoid redundant checks
+        self.update_icon_status(is_running=new_state)
+        self.update_menu_display(is_running=new_state)
 
         # If state changed, emit D-Bus signal
         if old_state is not None and old_state != new_state:
@@ -400,30 +463,7 @@ class DictationTray:
                     logger.error(f"Failed to emit D-Bus service state: {e}")
 
         self._last_service_state = new_state
-        return True  # Continue the timer
-    
-    def update_status_and_menu_once(self):
-        """Update icon and menu items once."""
-        # Store previous state to detect changes
-        old_state = getattr(self, '_last_service_state', None)
-        new_state = self.is_service_running()
-
-        # Update UI
-        self.update_icon_status()
-        self.update_menu_display()
-
-        # If state changed, emit D-Bus signal
-        if old_state is not None and old_state != new_state:
-            logger.info(f"Service state changed (one-time update): {old_state} -> {new_state}")
-            if self.dbus_service:
-                try:
-                    self.dbus_service.emit_service_state(new_state)
-                    logger.debug(f"Emitted D-Bus service state: {new_state}")
-                except Exception as e:
-                    logger.error(f"Failed to emit D-Bus service state: {e}")
-
-        self._last_service_state = new_state
-        return False  # Don't repeat
+        return repeat
 
     def toggle_service(self, widget):
         """Toggle dictation service on/off."""
@@ -462,6 +502,13 @@ class DictationTray:
             mode_name = mode_names.get(mode, mode)
             logger.info(f"Switched to {mode_name} mode")
             _notify("TalkType", f"Input mode: {mode_name}")
+
+            # Notify GNOME extension of mode change via D-Bus signal
+            if self.dbus_service:
+                try:
+                    self.dbus_service.emit_injection_mode_changed(mode)
+                except Exception as e:
+                    logger.error(f"Failed to emit injection mode change: {e}")
 
         except Exception as e:
             logger.error(f"Failed to set injection mode: {e}")
@@ -596,11 +643,17 @@ class DictationTray:
         except Exception as e:
             logger.error(f"Failed to apply performance preset: {e}")
 
-    def update_menu_display(self):
-        """Update menu display with current service status and model."""
+    def update_menu_display(self, is_running=None):
+        """Update menu display with current service status and model.
+
+        Args:
+            is_running: Pre-computed service state (avoids redundant checks).
+                        If None, checks service status directly.
+        """
         if hasattr(self, 'service_toggle'):
             # Update service toggle state
-            is_running = self.is_service_running()
+            if is_running is None:
+                is_running = self.is_service_running()
             self._updating_toggle = True
             self.service_toggle.set_active(is_running)
             self._updating_toggle = False
@@ -608,14 +661,8 @@ class DictationTray:
         # Update active model display
         if hasattr(self, 'model_display_item'):
             try:
-                from .config import load_config, CONFIG_PATH
+                from .config import load_config
                 cfg = load_config()
-                # Debug: print config values every 10 seconds (not every update)
-                if not hasattr(self, '_debug_counter'):
-                    self._debug_counter = 0
-                self._debug_counter += 1
-                if self._debug_counter % 10 == 1:  # Every ~10 seconds
-                    logger.debug(f"Config read from {CONFIG_PATH}: model={cfg.model}, device={cfg.device}")
                 model_names = {
                     'tiny': 'Tiny (fastest)',
                     'base': 'Base',
@@ -661,98 +708,57 @@ class DictationTray:
                 self.model_display_item.set_label("Active Model: Unknown")
                 self.device_display_item.set_label("Device: Unknown")
     
+    def _launch_preferences(self, tab=None):
+        """Launch the preferences window subprocess.
+
+        Args:
+            tab: Optional tab name to open directly (e.g. "updates").
+        """
+        # Don't open a second window
+        if self.preferences_process and self.preferences_process.poll() is None:
+            logger.info("Preferences window already open")
+            return
+
+        tab_desc = f" ({tab} tab)" if tab else ""
+
+        # AppImage path: __file__ → usr/src/talktype/tray.py → usr/bin/dictate-prefs
+        src_dir = os.path.dirname(__file__)
+        usr_dir = os.path.dirname(os.path.dirname(src_dir))
+        prefs_script = os.path.join(usr_dir, "bin", "dictate-prefs")
+
+        if os.path.exists(prefs_script):
+            cmd = [prefs_script]
+            if tab:
+                cmd.append(f"--tab={tab}")
+            self.preferences_process = subprocess.Popen(cmd, env=os.environ.copy())
+            logger.info(f"Opened preferences{tab_desc} via {prefs_script}")
+        else:
+            # Dev mode fallback
+            env = os.environ.copy()
+            pythonpath = self._get_dev_pythonpath()
+            if pythonpath:
+                # Prefs also needs Python 3.13 paths for GTK bindings
+                pythonpath += ":/usr/lib64/python3.13/site-packages:/usr/lib/python3.13/site-packages"
+                env["PYTHONPATH"] = pythonpath
+            cmd = [sys.executable, "-m", "talktype.prefs"]
+            if tab:
+                cmd.append(f"--tab={tab}")
+            self.preferences_process = subprocess.Popen(cmd, env=env)
+            logger.info(f"Opened preferences{tab_desc} via Python module")
+
     def open_preferences(self, _):
         """Launch preferences window."""
         try:
-            # Check if preferences is already open
-            if self.preferences_process and self.preferences_process.poll() is None:
-                logger.info("Preferences window already open")
-                return
-
-            # Find the dictate-prefs script relative to this module (AppImage path)
-            # __file__ is in usr/src/talktype/tray.py
-            # dictate-prefs is in usr/bin/dictate-prefs
-            src_dir = os.path.dirname(__file__)  # usr/src/talktype
-            usr_dir = os.path.dirname(os.path.dirname(src_dir))  # usr
-            prefs_script = os.path.join(usr_dir, "bin", "dictate-prefs")
-
-            if os.path.exists(prefs_script):
-                # Use the dictate-prefs script which has proper paths set up (AppImage)
-                self.preferences_process = subprocess.Popen([prefs_script], env=os.environ.copy())
-                logger.info(f"Opened preferences window via {prefs_script}")
-            else:
-                # Fallback: use sys.executable (dev environment)
-                env = os.environ.copy()
-
-                # Check if we're in dev mode (src/talktype structure exists relative to __file__)
-                project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-                src_dir_check = os.path.join(project_root, "src")
-                if os.path.exists(src_dir_check):
-                    # Dev mode - set PYTHONPATH to include src/ AND system PyGObject
-                    pythonpath_parts = [
-                        os.path.abspath(src_dir_check),
-                        "/usr/lib64/python3.14/site-packages",
-                        "/usr/lib/python3.14/site-packages",
-                        "/usr/lib64/python3.13/site-packages",
-                        "/usr/lib/python3.13/site-packages"
-                    ]
-                    env["PYTHONPATH"] = ":".join(pythonpath_parts)
-                    logger.info(f"Dev mode detected - setting PYTHONPATH for prefs")
-
-                self.preferences_process = subprocess.Popen(
-                    [sys.executable, "-m", "talktype.prefs"],
-                    env=env
-                )
-                logger.info("Opened preferences window via Python module")
+            self._launch_preferences()
         except Exception as e:
             logger.error(f"Failed to open preferences: {e}")
-            print(f"Failed to open preferences: {e}")
 
     def open_preferences_updates(self, _):
         """Launch preferences window directly to Updates tab."""
         try:
-            # Check if preferences is already open
-            if self.preferences_process and self.preferences_process.poll() is None:
-                logger.info("Preferences window already open")
-                return
-
-            # Find the dictate-prefs script relative to this module (AppImage path)
-            src_dir = os.path.dirname(__file__)
-            usr_dir = os.path.dirname(os.path.dirname(src_dir))
-            prefs_script = os.path.join(usr_dir, "bin", "dictate-prefs")
-
-            if os.path.exists(prefs_script):
-                # Use the dictate-prefs script with --tab argument
-                self.preferences_process = subprocess.Popen(
-                    [prefs_script, "--tab=updates"],
-                    env=os.environ.copy()
-                )
-                logger.info(f"Opened preferences Updates tab via {prefs_script}")
-            else:
-                # Fallback: use sys.executable (dev environment)
-                env = os.environ.copy()
-
-                # Check if we're in dev mode
-                project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-                src_dir_check = os.path.join(project_root, "src")
-                if os.path.exists(src_dir_check):
-                    pythonpath_parts = [
-                        os.path.abspath(src_dir_check),
-                        "/usr/lib64/python3.14/site-packages",
-                        "/usr/lib/python3.14/site-packages",
-                        "/usr/lib64/python3.13/site-packages",
-                        "/usr/lib/python3.13/site-packages"
-                    ]
-                    env["PYTHONPATH"] = ":".join(pythonpath_parts)
-
-                self.preferences_process = subprocess.Popen(
-                    [sys.executable, "-m", "talktype.prefs", "--tab=updates"],
-                    env=env
-                )
-                logger.info("Opened preferences Updates tab via Python module")
+            self._launch_preferences(tab="updates")
         except Exception as e:
             logger.error(f"Failed to open preferences updates tab: {e}")
-            print(f"Failed to open preferences updates tab: {e}")
 
     def download_cuda(self, _):
         """Download CUDA libraries for GPU acceleration."""
@@ -798,7 +804,6 @@ class DictationTray:
             else:
                 logger.error("CUDA download failed")
         except Exception as e:
-            print(f"Error downloading CUDA: {e}")
             logger.error(f"Error downloading CUDA: {e}")
     
     def show_help(self, _):
@@ -1285,9 +1290,7 @@ class DictationTray:
     def quit_app(self, _):
         """Quit the tray and stop the dictation service."""
         try:
-            # Stop the dictation service first - kill both patterns
-            subprocess.run(["pkill", "-f", "talktype.app"], capture_output=True)
-            subprocess.run(["pkill", "-f", "bin/dictate"], capture_output=True)
+            self._kill_service()
             logger.info("Stopped dictation service")
         except Exception as e:
             logger.error(f"Error stopping dictation service: {e}")
@@ -1302,7 +1305,7 @@ class DictationTray:
                 logger.error(f"Error closing preferences window: {e}")
                 try:
                     self.preferences_process.kill()
-                except:
+                except Exception:
                     pass
 
         # Clean up D-Bus service if it exists
@@ -1322,77 +1325,39 @@ class DictationTray:
         # Use a small delay to allow GTK cleanup
         GLib.timeout_add(100, lambda: sys.exit(0))
     
-    def build_menu(self):
-        menu = Gtk.Menu()
+    def _build_injection_submenu(self):
+        """Build the Text Injection Mode submenu (Auto / Keyboard Typing / Clipboard Paste).
 
-        # Apply custom CSS for better readability (solid dark background)
-        css_provider = Gtk.CssProvider()
-        css = b"""
-        menu {
-            background-color: #2d2d2d;
-            border: 1px solid #1a1a1a;
-            border-radius: 8px;
-            padding: 4px 0;
-        }
-        menuitem {
-            padding: 6px 12px;
-            color: #ffffff;
-        }
-        menuitem:hover {
-            background-color: #404040;
-        }
-        menuitem:disabled {
-            color: #888888;
-        }
-        menuitem label {
-            color: inherit;
-        }
-        separator {
-            background-color: #404040;
-            margin: 4px 8px;
-        }
+        Stores radio button references on self for later state updates.
+        Returns the parent MenuItem that contains the submenu.
         """
-        css_provider.load_from_data(css)
-        Gtk.StyleContext.add_provider_for_screen(
-            Gdk.Screen.get_default(),
-            css_provider,
-            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
-        )
-        
-        # Dictation Service toggle (using CheckMenuItem for ON/OFF display)
-        self.service_toggle = Gtk.CheckMenuItem(label="Dictation Service")
-        self.service_toggle.connect("toggled", self.toggle_service)
-
-        # Active model display (non-clickable)
-        self.model_display_item = Gtk.MenuItem(label="Active Model: Loading...")
-        self.model_display_item.set_sensitive(False)
-
-        # Device mode display (non-clickable)
-        self.device_display_item = Gtk.MenuItem(label="Device: Loading...")
-        self.device_display_item.set_sensitive(False)
-
-        # Injection mode submenu (Auto / Keyboard Typing / Clipboard Paste)
-        injection_mode_submenu = Gtk.Menu()
+        submenu = Gtk.Menu()
         self.injection_mode_group = None
-        
+
         self.injection_mode_auto = Gtk.RadioMenuItem(label="Auto (Smart Detection)")
         self.injection_mode_auto.connect("activate", lambda w: self.set_injection_mode("auto"))
-        injection_mode_submenu.append(self.injection_mode_auto)
+        submenu.append(self.injection_mode_auto)
         self.injection_mode_group = self.injection_mode_auto
-        
+
         self.injection_mode_type = Gtk.RadioMenuItem(label="Keyboard Typing", group=self.injection_mode_group)
         self.injection_mode_type.connect("activate", lambda w: self.set_injection_mode("type"))
-        injection_mode_submenu.append(self.injection_mode_type)
-        
+        submenu.append(self.injection_mode_type)
+
         self.injection_mode_paste = Gtk.RadioMenuItem(label="Clipboard Paste", group=self.injection_mode_group)
         self.injection_mode_paste.connect("activate", lambda w: self.set_injection_mode("paste"))
-        injection_mode_submenu.append(self.injection_mode_paste)
-        
-        self.injection_mode_menu_item = Gtk.MenuItem(label="Text Injection Mode")
-        self.injection_mode_menu_item.set_submenu(injection_mode_submenu)
+        submenu.append(self.injection_mode_paste)
 
-        # Performance preset submenu
-        performance_submenu = Gtk.Menu()
+        item = Gtk.MenuItem(label="Text Injection Mode")
+        item.set_submenu(submenu)
+        return item
+
+    def _build_performance_submenu(self):
+        """Build the Performance preset submenu (6 presets + Custom fallback).
+
+        Stores radio button references on self for later state updates.
+        Returns the parent MenuItem that contains the submenu.
+        """
+        submenu = Gtk.Menu()
         self.preset_radios = {}
         preset_group = None
 
@@ -1401,63 +1366,87 @@ class DictationTray:
         for preset_id in preset_order:
             preset = self.PERFORMANCE_PRESETS[preset_id]
             label = f"{preset['label']} ({preset['description']})"
-
             if preset_group is None:
                 radio = Gtk.RadioMenuItem(label=label)
                 preset_group = radio
             else:
                 radio = Gtk.RadioMenuItem(label=label, group=preset_group)
-
             radio.connect("activate", lambda w, pid=preset_id: self.set_performance_preset(pid))
-            performance_submenu.append(radio)
+            submenu.append(radio)
             self.preset_radios[preset_id] = radio
 
-        # Add separator and "Custom" option (shown when settings don't match any preset)
-        performance_submenu.append(Gtk.SeparatorMenuItem())
+        # "Custom" option (shown when settings don't match any preset)
+        submenu.append(Gtk.SeparatorMenuItem())
         self.preset_custom = Gtk.RadioMenuItem(label="Custom (via Preferences)", group=preset_group)
-        self.preset_custom.set_sensitive(False)  # Can't select - just shows current state
-        performance_submenu.append(self.preset_custom)
+        self.preset_custom.set_sensitive(False)
+        submenu.append(self.preset_custom)
 
-        self.performance_menu_item = Gtk.MenuItem(label="Performance")
-        self.performance_menu_item.set_submenu(performance_submenu)
+        item = Gtk.MenuItem(label="Performance")
+        item.set_submenu(submenu)
+        return item
 
-        # Menu items
+    def build_menu(self):
+        """Build the complete GTK tray menu.
+
+        Menu order is kept in sync with the GNOME extension (see extension.js).
+        """
+        menu = Gtk.Menu()
+
+        # Apply dark-theme CSS
+        css_provider = Gtk.CssProvider()
+        css_provider.load_from_data(_MENU_CSS)
+        Gtk.StyleContext.add_provider_for_screen(
+            Gdk.Screen.get_default(),
+            css_provider,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )
+
+        # Service toggle and status displays
+        self.service_toggle = Gtk.CheckMenuItem(label="Dictation Service")
+        self.service_toggle.connect("toggled", self.toggle_service)
+        self.model_display_item = Gtk.MenuItem(label="Active Model: Loading...")
+        self.model_display_item.set_sensitive(False)
+        self.device_display_item = Gtk.MenuItem(label="Device: Loading...")
+        self.device_display_item.set_sensitive(False)
+
+        # Submenus
+        self.injection_mode_menu_item = self._build_injection_submenu()
+        self.performance_menu_item = self._build_performance_submenu()
+
+        # Service management items
+        restart_item = Gtk.MenuItem(label="Restart Service")
+        restart_item.connect("activate", self.restart_service)
+
+        # Action items
         prefs_item = Gtk.MenuItem(label="Preferences...")
         help_item = Gtk.MenuItem(label="Help...")
         about_item = Gtk.MenuItem(label="About TalkType...")
         updates_item = Gtk.MenuItem(label="Check for Updates...")
         quit_item = Gtk.MenuItem(label="Quit TalkType")
-
         prefs_item.connect("activate", self.open_preferences)
         help_item.connect("activate", self.show_help)
         about_item.connect("activate", self.show_about_dialog)
         updates_item.connect("activate", self.check_for_updates_clicked)
         quit_item.connect("activate", self.quit_app)
 
-        # Build menu in exact same order as extension
-        menu_items = [
+        # Assemble in exact same order as GNOME extension
+        for item in [
             self.service_toggle,
+            restart_item,
             Gtk.SeparatorMenuItem(),
             self.model_display_item,
             self.device_display_item,
             self.performance_menu_item,
             self.injection_mode_menu_item,
             Gtk.SeparatorMenuItem(),
-            prefs_item,
-            help_item,
-            about_item,
-            updates_item,
+            prefs_item, help_item, about_item, updates_item,
             Gtk.SeparatorMenuItem(),
-            quit_item
-        ]
-
-        for item in menu_items:
+            quit_item,
+        ]:
             menu.append(item)
         menu.show_all()
 
-        # Set initial menu state
         self.update_menu_display()
-
         return menu
     
     def refresh_menu(self):

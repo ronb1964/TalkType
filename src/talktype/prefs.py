@@ -529,20 +529,6 @@ class PreferencesWindow:
         model_combo.set_active_id(self.config["model"])
         self.model_combo = model_combo  # Store reference for later use
         model_combo.connect("changed", self._on_model_changed)
-        # TESTING: Tooltip disabled to check if it interferes with dropdown popup
-        # model_combo.set_tooltip_text(
-        #     "Whisper AI model size - choose based on your needs:\n\n"
-        #     "• tiny (39 MB): Fastest, basic accuracy - quick notes\n"
-        #     "• base (74 MB): Fast, good accuracy - casual use\n"
-        #     "• small (244 MB): Balanced - recommended for most users\n"
-        #     "• medium (769 MB): Slower, very accurate - professional use\n"
-        #     "• large-v3 (~3 GB): Best accuracy - technical/professional work\n"
-        #     "  ⚠️ Takes 30-60 seconds to load initially\n\n"
-        #     "Larger models provide:\n"
-        #     "• Better word recognition (technical terms, proper nouns)\n"
-        #     "• Improved punctuation and context awareness\n"
-        #     "• Better handling of accents and background noise"
-        # )
         grid.attach(model_combo, 1, row, 1, 1)
         row += 1
         
@@ -658,26 +644,9 @@ class PreferencesWindow:
         grid.attach(hotkey_header, 0, row, 2, 1)
         row += 1
 
-        # Mode selection
-        mode_label = Gtk.Label(label="Mode 💡:", xalign=0)
-        mode_label.set_tooltip_text("How to activate dictation:\n• Hold to Talk: hold hotkey down while speaking\n• Press to Toggle: press once to start, press again to stop")
-        grid.attach(mode_label, 0, row, 1, 1)
-        self.mode_combo = Gtk.ComboBoxText()
-        self.mode_combo.set_can_focus(True)
-        self.mode_combo.connect("button-press-event", self._on_combo_button_press)
-        self._block_combo_scroll(self.mode_combo)
-
-        self.mode_combo.append("hold", "Hold to Talk")
-        self.mode_combo.append("toggle", "Press to Toggle")
-        self.mode_combo.set_active_id(self.config["mode"])
-        self.mode_combo.connect("changed", lambda x: self.update_config("mode", x.get_active_id()))
-        self.mode_combo.connect("changed", self._on_mode_changed)
-        grid.attach(self.mode_combo, 1, row, 1, 1)
-        row += 1
-        
-        # Dynamic Hotkey (shows based on mode)
+        # Hold-to-talk hotkey
         self.hotkey_label = Gtk.Label(label="Hold Hotkey 💡:", xalign=0)
-        self.hotkey_label.set_tooltip_text("Choose the key to hold down for dictation.\nRecommended: F8 (default), F6, F7, F9, F10\nAvoid: F1 (help), F5 (refresh), F11 (fullscreen), F12 (dev tools)")
+        self.hotkey_label.set_tooltip_text("Hold this key while speaking — release to stop and transcribe.\nBoth hotkeys are always active simultaneously.\nRecommended: F8 (default). Avoid: F1, F5, F11, F12.")
         grid.attach(self.hotkey_label, 0, row, 1, 1)
 
         self.hotkey_combo = Gtk.ComboBoxText()
@@ -705,7 +674,7 @@ class PreferencesWindow:
         
         # Toggle hotkey (initially hidden for hold mode)
         self.toggle_label = Gtk.Label(label="Toggle Hotkey 💡:", xalign=0)
-        self.toggle_label.set_tooltip_text("Choose the key for toggle mode (press once to start, press again to stop).\nRecommended: F9 (default), F10, F6, F7\nOnly used when Mode is set to 'Press to Toggle'.")
+        self.toggle_label.set_tooltip_text("Press once to start recording, press again to stop.\nBoth hotkeys are always active simultaneously.\nRecommended: F9 (default).")
         self.toggle_combo = Gtk.ComboBoxText()
         self.toggle_combo.set_can_focus(True)
         self.toggle_combo.connect("button-press-event", self._on_combo_button_press)
@@ -739,7 +708,7 @@ class PreferencesWindow:
         grid.attach(test_hotkeys_btn, 0, row, 2, 1)
         row += 1
 
-        # Initial visibility will be set by _update_hotkey_ui_state
+        # Both hotkeys are always shown (no mode-based hiding)
 
         # ===== STARTUP OPTIONS SECTION =====
         separator2 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
@@ -958,7 +927,6 @@ class PreferencesWindow:
         grid.attach(pos_label, 0, row, 1, 1)
 
         # Check if running on Wayland
-        import os
         is_wayland = os.environ.get('WAYLAND_DISPLAY') or os.environ.get('XDG_SESSION_TYPE') == 'wayland'
 
         # Check if GNOME extension is available (enables positioning on Wayland)
@@ -968,7 +936,7 @@ class PreferencesWindow:
                 from . import extension_helper
                 ext_status = extension_helper.get_extension_status()
                 has_extension = ext_status.get('installed', False) and ext_status.get('enabled', False)
-            except:
+            except Exception:
                 pass
 
         positions = [
@@ -2180,20 +2148,15 @@ Hidden=true
             return 16000
 
     def get_selected_device_idx(self):
-        """Get the device index for the currently selected microphone."""
+        """Get the device index for the currently selected microphone.
+
+        Uses config.find_input_device() for smart PipeWire-aware detection
+        when no mic name is configured, avoiding the broken ALSA default
+        virtual device that returns garbage audio.
+        """
+        from .config import find_input_device
         current_mic = self.config.get("mic", "")
-        if not current_mic:
-            return None
-            
-        try:
-            import sounddevice as sd
-            devices = sd.query_devices()
-            for i, device in enumerate(devices):
-                if device.get("max_input_channels", 0) > 0 and current_mic in device.get("name", ""):
-                    return i
-        except Exception:
-            pass
-        return None
+        return find_input_device(current_mic)
     
     def start_level_monitoring(self):
         """Start monitoring microphone input levels."""
@@ -2542,22 +2505,6 @@ Hidden=true
         volume = int(scale.get_value())
         self.set_system_mic_volume(volume)
     
-    def _on_mode_changed(self, widget):
-        """Handle mode change to show/hide appropriate hotkey fields."""
-        mode = widget.get_active_id()
-        if mode == "hold":
-            # Show hold hotkey, hide toggle hotkey
-            self.hotkey_label.set_visible(True)
-            self.hotkey_combo.set_visible(True)
-            self.toggle_label.set_visible(False)
-            self.toggle_combo.set_visible(False)
-        else:  # toggle mode
-            # Show toggle hotkey, hide hold hotkey
-            self.hotkey_label.set_visible(False)
-            self.hotkey_combo.set_visible(False)
-            self.toggle_label.set_visible(True)
-            self.toggle_combo.set_visible(True)
-    
     def _on_language_mode_changed(self, widget):
         """Handle language mode change to show/hide language selection."""
         mode = widget.get_active_id()
@@ -2571,20 +2518,7 @@ Hidden=true
             self.lang_combo.set_visible(True)
     
     def _update_hotkey_ui_state(self):
-        """Update hotkey UI state based on current config."""
-        mode = self.config.get("mode", "hold")
-        if mode == "hold":
-            # Show hold hotkey, hide toggle hotkey
-            self.hotkey_label.set_visible(True)
-            self.hotkey_combo.set_visible(True)
-            self.toggle_label.set_visible(False)
-            self.toggle_combo.set_visible(False)
-        else:  # toggle mode
-            # Show toggle hotkey, hide hold hotkey
-            self.hotkey_label.set_visible(False)
-            self.hotkey_combo.set_visible(False)
-            self.toggle_label.set_visible(True)
-            self.toggle_combo.set_visible(True)
+        """Both hotkeys are always visible — nothing to show/hide."""
         return False  # Don't repeat
     
     def _update_language_ui_state(self):
@@ -3150,8 +3084,6 @@ Hidden=true
         Returns:
             tuple: (success: bool, was_downloaded: bool)
         """
-        import os
-
         # Check if model is already cached
         cache_dir = os.path.expanduser("~/.cache/huggingface/hub")
         model_dir = f"models--Systran--faster-whisper-{model_name}"
@@ -3209,7 +3141,6 @@ Hidden=true
 
         # Download in background thread with cancellation support
         import threading
-        import os as prefs_os
         cancel_event = threading.Event()
         download_complete = {"done": False, "success": False, "cancelled": False}
         progress_state = {'last_percent': -1}
@@ -3227,19 +3158,19 @@ Hidden=true
         def get_cache_dir_size():
             """Get the size of HuggingFace cache for this model"""
             try:
-                cache_base = prefs_os.path.expanduser("~/.cache/huggingface/hub")
+                cache_base = os.path.expanduser("~/.cache/huggingface/hub")
                 repo_folder = f"models--Systran--faster-whisper-{model_name}"
-                cache_path = prefs_os.path.join(cache_base, repo_folder)
+                cache_path = os.path.join(cache_base, repo_folder)
 
-                if not prefs_os.path.exists(cache_path):
+                if not os.path.exists(cache_path):
                     return 0
 
                 total_size = 0
-                for dirpath, dirnames, filenames in prefs_os.walk(cache_path):
+                for dirpath, dirnames, filenames in os.walk(cache_path):
                     for f in filenames:
-                        fp = prefs_os.path.join(dirpath, f)
+                        fp = os.path.join(dirpath, f)
                         try:
-                            total_size += prefs_os.path.getsize(fp)
+                            total_size += os.path.getsize(fp)
                         except OSError:
                             pass
                 return total_size
@@ -3565,8 +3496,6 @@ Hidden=true
 
     def _on_test_hotkeys(self, button):
         """Show hotkey test dialog."""
-        from evdev import ecodes
-
         # IMPORTANT: Stop the dictation service first!
         # The service grabs keys at the evdev level (kernel), which intercepts them
         # BEFORE GTK can see them. We must stop the service to test hotkeys properly.
@@ -3599,22 +3528,36 @@ Hidden=true
         instructions.set_xalign(0)
         content.pack_start(instructions, False, False, 0)
 
-        # Get current mode and hotkeys
-        mode = self.config.get("mode", "hold")
+        # Get current hotkeys
         hold_key = self.config.get("hotkey", "F8")
         toggle_key = self.config.get("toggle_hotkey", "F9")
+
+        # Convert key name strings ("F8", "F9") to GDK keyvals for comparison.
+        # We compare event.keyval directly instead of using accelerator_name(keyval, 0),
+        # which strips modifiers and causes false positives: GNOME sends Alt+F8 to
+        # focused windows (it's bound to "begin-resize"), and stripping Alt makes it
+        # look like a bare F8 press, matching the hotkey setting.
+        hold_keyval, _ = Gtk.accelerator_parse(hold_key)
+        toggle_keyval, _ = Gtk.accelerator_parse(toggle_key)
+
+        # Modifier mask: Alt (MOD1) | Ctrl | Super.
+        # We require NO modifiers — user hotkeys are bare function keys.
+        # This rejects GNOME's Alt+F8 (begin-resize) and Alt+F7 (begin-move) events.
+        _NO_MODIFIER_MASK = (Gdk.ModifierType.MOD1_MASK |
+                             Gdk.ModifierType.CONTROL_MASK |
+                             Gdk.ModifierType.SUPER_MASK)
 
         # Test status labels
         status_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         status_box.set_margin_top(10)
 
         hold_label = Gtk.Label()
-        hold_label.set_markup(f'<b>{hold_key}</b> (Push-to-talk): <span color="#999999">Not tested</span>')
+        hold_label.set_markup(f'<b>{hold_key}</b> (Hold-to-talk): <span color="#999999">Not tested</span>')
         hold_label.set_xalign(0)
         status_box.pack_start(hold_label, False, False, 0)
 
         toggle_label = Gtk.Label()
-        toggle_label.set_markup(f'<b>{toggle_key}</b> (Toggle mode): <span color="#999999">Not tested</span>')
+        toggle_label.set_markup(f'<b>{toggle_key}</b> (Tap-to-toggle): <span color="#999999">Not tested</span>')
         toggle_label.set_xalign(0)
         status_box.pack_start(toggle_label, False, False, 0)
 
@@ -3623,16 +3566,29 @@ Hidden=true
         # Track tested keys
         tested_keys = {"hold": False, "toggle": False}
 
+        # Flag: ignore all events until dialog is fully shown and queue drained.
+        dialog_ready = [False]
+
         # Key press event handler
         def on_key_press(widget, event):
-            keyname = Gtk.accelerator_name(event.keyval, 0)
+            if not dialog_ready[0]:
+                return True  # Discard events that arrive before dialog is ready
 
-            if keyname == hold_key:
+            if event.type != Gdk.EventType.KEY_PRESS:
+                return True  # Ignore key-release events
+
+            # Ignore events with Alt, Ctrl, or Super held.
+            # GNOME delivers Alt+F8 (begin-resize binding) to focused windows —
+            # we must reject it or it falsely matches the F8 hotkey.
+            if event.state & _NO_MODIFIER_MASK:
+                return True
+
+            if hold_keyval and event.keyval == hold_keyval:
                 tested_keys["hold"] = True
-                hold_label.set_markup(f'<b>{hold_key}</b> (Push-to-talk): <span color="#4CAF50">✓ Working!</span>')
-            elif keyname == toggle_key:
+                hold_label.set_markup(f'<b>{hold_key}</b> (Hold-to-talk): <span color="#4CAF50">✓ Working!</span>')
+            elif toggle_keyval and event.keyval == toggle_keyval:
                 tested_keys["toggle"] = True
-                toggle_label.set_markup(f'<b>{toggle_key}</b> (Toggle mode): <span color="#4CAF50">✓ Working!</span>')
+                toggle_label.set_markup(f'<b>{toggle_key}</b> (Tap-to-toggle): <span color="#4CAF50">✓ Working!</span>')
 
             return True  # Stop event propagation
 
@@ -3653,6 +3609,16 @@ Hidden=true
         dialog.add_action_widget(close_button, Gtk.ResponseType.CLOSE)
 
         dialog.show_all()
+
+        # Drain ALL pending GLib/GDK events before accepting user input.
+        # show_all() renders widgets but does NOT flush the event queue —
+        # stale events are delivered when dialog.run() starts its modal loop.
+        # By draining here (while dialog_ready is still False), stale events
+        # are processed and silently discarded by the guard in on_key_press.
+        while Gtk.events_pending():
+            Gtk.main_iteration_do(False)
+
+        dialog_ready[0] = True  # NOW accept key events — queue is clean
         dialog.run()
         dialog.destroy()
 

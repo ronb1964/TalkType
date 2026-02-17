@@ -4,6 +4,7 @@
  * Provides native GNOME integration for TalkType speech recognition
  */
 
+import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import St from 'gi://St';
 import Gio from 'gi://Gio';
@@ -43,6 +44,7 @@ const TalkTypeIface = `
     <method name="ToggleRecording"/>
     <method name="StartService"/>
     <method name="StopService"/>
+    <method name="RestartService"/>
     <method name="SetModel">
       <arg type="s" direction="in" name="model"/>
     </method>
@@ -72,6 +74,9 @@ const TalkTypeIface = `
     <signal name="ModelChanged">
       <arg type="s" name="model_name"/>
     </signal>
+    <signal name="InjectionModeChanged">
+      <arg type="s" name="mode"/>
+    </signal>
     <signal name="ErrorOccurred">
       <arg type="s" name="error_type"/>
       <arg type="s" name="message"/>
@@ -91,6 +96,7 @@ const TalkTypeIface = `
 </node>`;
 
 // Performance presets - must match tray.py definitions
+// Order matters: Object.entries() preserves insertion order for the submenu
 const PERFORMANCE_PRESETS = {
     'fastest': {
         label: 'Fastest',
@@ -98,10 +104,22 @@ const PERFORMANCE_PRESETS = {
         model: 'tiny',
         device: 'cpu'
     },
+    'light': {
+        label: 'Light',
+        description: 'base model, CPU',
+        model: 'base',
+        device: 'cpu'
+    },
     'balanced': {
         label: 'Balanced',
         description: 'small model, GPU if available',
         model: 'small',
+        device: 'cuda'
+    },
+    'quality': {
+        label: 'Quality',
+        description: 'medium model, GPU if available',
+        model: 'medium',
         device: 'cuda'
     },
     'accurate': {
@@ -183,6 +201,11 @@ class TalkTypeIndicator extends PanelMenu.Button {
                 this._updateMenu();
             });
 
+            this._proxy.connectSignal('InjectionModeChanged', (proxy, sender, [mode]) => {
+                this._currentInjectionMode = mode;
+                this._updateInjectionSelection(mode);
+            });
+
             this._proxy.connectSignal('UpdateCheckComplete', (proxy, sender, params) => {
                 this._handleUpdateCheckResult(params);
             });
@@ -234,6 +257,13 @@ class TalkTypeIndicator extends PanelMenu.Button {
             }
         });
         this.menu.addMenuItem(this._serviceItem);
+
+        // Restart service
+        let restartItem = new PopupMenu.PopupMenuItem('Restart Service');
+        restartItem.connect('activate', () => {
+            this._proxy.RestartServiceRemote();
+        });
+        this.menu.addMenuItem(restartItem);
 
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 

@@ -69,9 +69,9 @@ On first launch, TalkType shows a welcome dialog that:
 • Adapts automatically to your system capabilities
 
 <b>1. Begin Dictating</b>
-Press <b>F8</b> (push-to-talk) or <b>F9</b> (toggle mode) to start
-• <b>F8:</b> Hold to record, release to stop
-• <b>F9:</b> Press once to start, press again to stop
+Both hotkeys are always active simultaneously:
+• <b>F8:</b> Hold to record, release to stop (hold-to-talk)
+• <b>F9:</b> Press once to start, press again to stop (tap-to-toggle)
 • <b>Recording Indicator:</b> A red microphone icon appears during active dictation
 
 <b>2. Configure Settings</b>
@@ -95,8 +95,8 @@ system resources. Adjust this in Preferences → Advanced.
     # Tab 2: Features
     create_tab("✨ Features", '''<span size="large"><b>Key Features</b></span>
 
-<b>Dual Hotkey Modes</b>
-• F8 (push-to-talk) or F9 (toggle) - fully customizable
+<b>Both Hotkeys Always Active</b>
+• F8 (hold-to-talk) AND F9 (tap-to-toggle) work simultaneously
 • Visual recording indicator on screen during active recording
 • Audio beeps for start/stop feedback
 
@@ -367,7 +367,7 @@ other processing, so you can include punctuation in replacements.
 
 <b>Pro Tips:</b>
 • Enable Launch at Login to start automatically
-• Use toggle mode (F9) for hands-free extended dictation
+• Use F9 tap-to-toggle for hands-free extended dictation
 • Set auto-timeout to save battery when not in use
 • Create custom voice commands for frequently-typed text
 

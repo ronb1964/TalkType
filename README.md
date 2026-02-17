@@ -1,6 +1,6 @@
 # TalkType
 
-**Voice dictation for Linux Wayland** - Press F8 to talk, release to type. Powered by OpenAI's Whisper AI for accurate speech recognition.
+**Voice dictation for Linux Wayland** - F8 hold-to-talk or F9 tap-to-toggle, both always active. Powered by OpenAI's Whisper AI for accurate speech recognition.
 
 [![AUR version](https://img.shields.io/aur/version/talktype-appimage)](https://aur.archlinux.org/packages/talktype-appimage)
 [![GitHub release](https://img.shields.io/github/v/release/ronb1964/TalkType)](https://github.com/ronb1964/TalkType/releases)
@@ -47,7 +47,7 @@
 
 ## Features
 
-- **Push-to-Talk or Toggle Mode** - F8 (hold) or F9 (toggle) - fully customizable hotkeys
+- **Dual Hotkeys Always Active** - F8 (hold-to-talk) AND F9 (tap-to-toggle) simultaneously - fully customizable
 - **AI-Powered Transcription** - Uses OpenAI's Whisper models (tiny to large-v3)
 - **GPU Acceleration** - Optional NVIDIA CUDA support for 3-5x faster transcription
 - **Smart Text Processing** - Auto-punctuation, smart quotes, auto-spacing
@@ -102,16 +102,16 @@ The AppImage includes everything needed - just download and run!
 
 1. **Launch TalkType** - Run the AppImage or use your app launcher
 2. **First-run setup** - TalkType will guide you through initial configuration
-3. **Start dictating** - Press **F8** (hold to record) or **F9** (toggle mode)
+3. **Start dictating** - Press **F8** (hold to record) or **F9** (tap to toggle) — both always active
 4. **Speak naturally** - Text appears where your cursor is
 5. **Use voice commands** - Say "comma", "period", "new line", etc.
 
-### Hotkey Modes
+### Hotkeys (Both Always Active)
 
-| Mode | Hotkey | How it works |
-|------|--------|--------------|
-| **Push-to-Talk** | F8 | Hold to record, release to transcribe |
-| **Toggle** | F9 | Press to start, press again to stop |
+| Hotkey | How it works |
+|--------|--------------|
+| **F8** | Hold to record, release to transcribe (hold-to-talk) |
+| **F9** | Press once to start, press again to stop (tap-to-toggle) |
 
 ---
 
@@ -185,9 +185,9 @@ Settings are stored in `~/.config/talktype/config.toml`:
 ```toml
 model = "small"           # AI model: tiny, base, small, medium, large-v3
 device = "cpu"            # "cpu" or "cuda" (GPU)
-hold_hotkey = "F8"        # Push-to-talk key
-toggle_hotkey = "F9"      # Toggle recording key
-mode = "hold"             # Default mode: "hold" or "toggle"
+hold_hotkey = "F8"        # Hold-to-talk key (hold to record, release to stop)
+toggle_hotkey = "F9"      # Tap-to-toggle key (press once start, press again stop)
+# Both hotkeys are always active simultaneously
 language_mode = "auto"    # "auto" or specific language code
 beeps = true              # Audio feedback sounds
 smart_quotes = true       # Use curly quotes " "
