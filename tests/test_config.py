@@ -60,17 +60,17 @@ def test_zero_timeout():
 
 
 def test_empty_hotkey():
-    """Test that empty hotkey fails validation"""
+    """Test that empty hotkey passes validation (allowed during onboarding)."""
     s = Settings(hotkey="")
-    with pytest.raises(SystemExit):
-        validate_config(s)
+    # Empty hotkey is valid — the welcome dialog handles hotkey assignment
+    validate_config(s)
 
 
 def test_empty_toggle_hotkey_in_toggle_mode():
-    """Test that empty toggle_hotkey fails when mode is toggle"""
+    """Test that empty toggle_hotkey passes even in toggle mode (allowed during onboarding)."""
     s = Settings(mode="toggle", toggle_hotkey="")
-    with pytest.raises(SystemExit):
-        validate_config(s)
+    # Empty toggle_hotkey is valid — set during onboarding
+    validate_config(s)
 
 
 def test_empty_toggle_hotkey_in_hold_mode():

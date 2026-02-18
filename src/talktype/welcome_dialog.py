@@ -25,28 +25,6 @@ except ImportError:
     logger = logging.getLogger(__name__)
 
 
-def detect_gnome_desktop():
-    """
-    Detect if running on GNOME desktop environment.
-
-    Returns:
-        bool: True if GNOME desktop is detected, False otherwise
-    """
-    # Check XDG_CURRENT_DESKTOP environment variable
-    current_desktop = os.environ.get('XDG_CURRENT_DESKTOP', '').lower()
-    desktop_session = os.environ.get('DESKTOP_SESSION', '').lower()
-
-    gnome_indicators = ['gnome', 'gnome-xorg', 'gnome-wayland']
-
-    is_gnome = any(indicator in current_desktop for indicator in gnome_indicators) or \
-               any(indicator in desktop_session for indicator in gnome_indicators)
-
-    logger.debug(f"GNOME detection: XDG_CURRENT_DESKTOP={current_desktop}, "
-                 f"DESKTOP_SESSION={desktop_session}, is_gnome={is_gnome}")
-
-    return is_gnome
-
-
 def detect_nvidia_gpu():
     """
     Detect if NVIDIA GPU is present in the system.
@@ -383,7 +361,8 @@ class WelcomeDialog:
         self.parent = parent
 
         # Detect system capabilities (or use forced values for testing)
-        self.has_gnome = detect_gnome_desktop() if force_gnome is None else force_gnome
+        from .desktop_detect import is_gnome
+        self.has_gnome = is_gnome() if force_gnome is None else force_gnome
         self.has_nvidia = detect_nvidia_gpu() if force_nvidia is None else force_nvidia
         
         # Detect uinput access (for keystroke injection)
@@ -2031,7 +2010,7 @@ def show_hotkey_test_dialog():
         for dev in keyboards:
             try:
                 dev.close()
-            except:
+            except Exception:
                 pass
 
     # GTK key handler (fallback if evdev doesn't work)

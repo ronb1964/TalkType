@@ -511,7 +511,7 @@ def _get_active_window_title() -> str:
                         for window in data:
                             if window.get('focus'):
                                 return window.get('title', '')
-                    except:
+                    except Exception:
                         pass
             except Exception:
                 pass

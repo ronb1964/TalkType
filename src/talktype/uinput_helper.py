@@ -806,7 +806,7 @@ def install_udev_rule_with_pkexec(parent_window=None):
         # Clean up temp file
         try:
             os.unlink(script_path)
-        except:
+        except Exception:
             pass
         
         if result.returncode == 0:
@@ -977,8 +977,6 @@ if __name__ == "__main__":
     
     status = get_typing_status()
     print(f"\nTyping status: {status}")
-
-
 
 
 
