@@ -2014,8 +2014,20 @@ def show_hotkey_test_dialog():
                 pass
 
     # GTK key handler (fallback if evdev doesn't work)
+    # Modifier mask: reject Alt (MOD1), Ctrl, Super — GNOME delivers Alt+F8
+    # (begin-resize binding) to focused windows; stripping modifiers would
+    # make it look like a plain F8 press, causing a false positive.
+    _NO_MODIFIER_MASK = (Gdk.ModifierType.MOD1_MASK |
+                         Gdk.ModifierType.CONTROL_MASK |
+                         Gdk.ModifierType.SUPER_MASK)
+
     def on_key_press(widget, event):
         if not dialog_ready[0]:
+            return True
+        if event.type != Gdk.EventType.KEY_PRESS:
+            return True
+        # Ignore events with Alt, Ctrl, or Super held (e.g. GNOME's Alt+F8 begin-resize)
+        if event.state & _NO_MODIFIER_MASK:
             return True
 
         keyname = Gtk.accelerator_name(event.keyval, 0)
@@ -2081,6 +2093,31 @@ def show_hotkey_test_dialog():
 
     dialog.show_all()
 
+    # Temporarily disable GNOME's Alt+F8 (begin-resize) binding.
+    # GNOME intercepts Alt+F8 and delivers a synthetic key event to the focused
+    # window WITHOUT the Alt modifier (state just has Num Lock = 16), making it
+    # indistinguishable from a real F8 press. Clear the binding while the dialog
+    # is open, then restore it afterward.
+    import subprocess as _sp
+    _gnome_begin_resize = None
+    _gnome_begin_move = None
+    try:
+        _gnome_begin_resize = _sp.check_output(
+            ["gsettings", "get", "org.gnome.desktop.wm.keybindings", "begin-resize"],
+            text=True
+        ).strip()
+        _gnome_begin_move = _sp.check_output(
+            ["gsettings", "get", "org.gnome.desktop.wm.keybindings", "begin-move"],
+            text=True
+        ).strip()
+        _sp.run(["gsettings", "set", "org.gnome.desktop.wm.keybindings", "begin-resize", "[]"], check=False)
+        _sp.run(["gsettings", "set", "org.gnome.desktop.wm.keybindings", "begin-move", "[]"], check=False)
+        logger.info("Temporarily disabled GNOME begin-resize/begin-move keybindings")
+    except Exception as e:
+        logger.debug(f"Could not disable GNOME keybindings: {e}")
+        _gnome_begin_resize = None
+        _gnome_begin_move = None
+
     # Service killer thread - keeps killing dictation service while dialog is open
     # This prevents the service from grabbing F8/F9 before we can detect them
     stop_killer = threading.Event()
@@ -2110,6 +2147,20 @@ def show_hotkey_test_dialog():
 
     response = dialog.run()
     dialog.destroy()
+
+    # Restore GNOME keybindings
+    if _gnome_begin_resize is not None:
+        try:
+            _sp.run(["gsettings", "set", "org.gnome.desktop.wm.keybindings", "begin-resize", _gnome_begin_resize], check=False)
+            logger.info(f"Restored begin-resize to {_gnome_begin_resize}")
+        except Exception as e:
+            logger.debug(f"Could not restore begin-resize: {e}")
+    if _gnome_begin_move is not None:
+        try:
+            _sp.run(["gsettings", "set", "org.gnome.desktop.wm.keybindings", "begin-move", _gnome_begin_move], check=False)
+            logger.info(f"Restored begin-move to {_gnome_begin_move}")
+        except Exception as e:
+            logger.debug(f"Could not restore begin-move: {e}")
 
     # Stop killer thread
     stop_killer.set()
@@ -2352,14 +2403,18 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False)
     vbox.set_margin_bottom(20)
     content.pack_start(vbox, True, True, 0)
 
-    # Success header - combined emoji and title on one line
+    # Success header - no emoji (unreliable in AppImage font environment)
     header_label = Gtk.Label()
-    header_label.set_markup('<span size="x-large">🎉 <b>Setup Complete!</b></span>')
+    header_label.set_markup('<span size="x-large"><b>Setup Complete!</b></span>')
+    header_label.set_halign(Gtk.Align.CENTER)
+    header_label.set_justify(Gtk.Justification.CENTER)
     vbox.pack_start(header_label, False, False, 0)
 
     subtitle_label = Gtk.Label()
     subtitle_label.set_markup('TalkType is ready to use.')
-    subtitle_label.set_margin_top(2)
+    subtitle_label.set_halign(Gtk.Align.CENTER)
+    subtitle_label.set_justify(Gtk.Justification.CENTER)
+    subtitle_label.set_margin_top(4)
     vbox.pack_start(subtitle_label, False, False, 0)
 
     # Show installation info if AppImage was installed (compact)
@@ -2370,13 +2425,13 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False)
         if appimage_installed:
             path_label = Gtk.Label()
             path_label.set_markup('<span size="small">📁 Installed to: <b>~/AppImages/TalkType.AppImage</b></span>')
-            path_label.set_halign(Gtk.Align.START)
+            path_label.set_halign(Gtk.Align.CENTER)
             install_box.pack_start(path_label, False, False, 0)
 
         if launcher_created:
             launcher_label = Gtk.Label()
             launcher_label.set_markup('<span size="small">✅ Added to Applications menu</span>')
-            launcher_label.set_halign(Gtk.Align.START)
+            launcher_label.set_halign(Gtk.Align.CENTER)
             install_box.pack_start(launcher_label, False, False, 0)
 
         vbox.pack_start(install_box, False, False, 0)

@@ -1105,7 +1105,8 @@ def stop_recording(
 
         # Beep to confirm transcription is done
         _beep(beeps_on, *READY_BEEP)
-        if notify_on: _notify("TalkType", f"Transcribed: {text[:80]}{'\u2026' if len(text)>80 else ''}")
+        _ellipsis = "\u2026"  # Must be outside f-string for Python 3.10 compat
+        if notify_on: _notify("TalkType", f"Transcribed: {text[:80]}{_ellipsis if len(text)>80 else ''}")
 
         # Stage 4: Inject text into the active application
         if text:
@@ -1115,7 +1116,8 @@ def stop_recording(
         logger.error(f"Transcription error: {e}", exc_info=True)
         print(f"\u274c Transcription error: {e}")
         _beep(beeps_on, *READY_BEEP)
-        if notify_on: _notify("TalkType", f"Transcription failed: {str(e)[:60]}{'\u2026' if len(str(e))>60 else ''}")
+        _ellipsis = "\u2026"  # Must be outside f-string for Python 3.10 compat
+        if notify_on: _notify("TalkType", f"Transcription failed: {str(e)[:60]}{_ellipsis if len(str(e))>60 else ''}")
 
 def _show_welcome_after_change(cfg, mode):
     """Show 'Hotkeys Updated!' dialog after user changed keys via Preferences.
