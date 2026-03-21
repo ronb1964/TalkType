@@ -35,13 +35,15 @@ def has_cuda_libraries():
     """
     Check if CUDA libraries are available for running GPU-accelerated models.
     This checks:
-    1. Downloaded CUDA in ~/.local/share/TalkType/cuda (preferred for AppImage)
+    1. Downloaded CUDA in TalkType data dir (respects DEV_MODE)
     2. System-wide CUDA installation (standard /usr paths)
     3. CUDA toolkit installation (/usr/local/cuda, /opt/cuda)
     """
-    # First check for downloaded CUDA libraries in AppImage location
-    # This is the preferred location for AppImage users
-    cuda_path = os.path.expanduser("~/.local/share/TalkType/cuda")
+    # First check for downloaded CUDA libraries in TalkType data dir.
+    # Uses get_appdir_cuda_path() which respects DEV_MODE, so dev version
+    # checks ~/.local/share/TalkType-dev/cuda and AppImage checks
+    # ~/.local/share/TalkType/cuda — they never interfere with each other.
+    cuda_path = get_appdir_cuda_path()
     lib_path = os.path.join(cuda_path, "lib")
     
     if os.path.exists(lib_path):

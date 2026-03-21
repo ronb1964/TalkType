@@ -230,6 +230,14 @@ class DictationTray:
                     """Open preferences to Updates tab via tray."""
                     GLib.idle_add(self.tray.open_preferences_updates, None)
 
+                def set_performance_preset(self, preset_id: str):
+                    """Apply a performance preset via tray (called from GNOME extension D-Bus)."""
+                    GLib.idle_add(self.tray.set_performance_preset, preset_id)
+
+                def set_injection_mode(self, mode: str):
+                    """Set text injection mode via tray (called from GNOME extension D-Bus)."""
+                    GLib.idle_add(self.tray.set_injection_mode, mode)
+
                 def quit(self):
                     """Quit via tray."""
                     GLib.idle_add(self.tray.quit_app, None)

@@ -13,14 +13,33 @@ import warnings
 from pathlib import Path
 
 # CRITICAL: Check for CUDA libraries BEFORE any imports that might load PyTorch
-# If CUDA libs don't exist, disable CUDA to prevent PyTorch from trying to load them
-cuda_base = Path.home() / ".local" / "share" / "TalkType" / "cuda"
-lib_path = cuda_base / "lib"
+# If CUDA libs don't exist, disable CUDA to prevent PyTorch from trying to load them.
+#
+# We check in two stages:
+#   1. If the AppImage CUDA download directory exists → let it proceed normally
+#   2. If not, check if ctranslate2 can already see the GPU (e.g. dev environment
+#      where CUDA libs live in the venv via LD_LIBRARY_PATH). If yes, don't disable.
+#   3. Only if neither exists do we set CUDA_VISIBLE_DEVICES='' for CPU-only mode.
+#
+# The old code used a hardcoded path (~/.local/share/TalkType/cuda) which always
+# failed in the dev environment, silently killing GPU access every time.
+_appimage_cuda_path = Path.home() / ".local" / "share" / "TalkType" / "cuda" / "lib"
+_dev_cuda_path = Path.home() / ".local" / "share" / "talktype-dev" / "cuda" / "lib"
 
-if not lib_path.exists():
-    # No CUDA libraries - force CPU-only mode before PyTorch can initialize
-    os.environ['CUDA_VISIBLE_DEVICES'] = ''
-    print("✓ No CUDA libraries found - forcing CPU-only mode")
+if not _appimage_cuda_path.exists() and not _dev_cuda_path.exists():
+    # No AppImage CUDA download found — check if GPU is still accessible
+    # (e.g. dev environment with ctranslate2/cuDNN libs in the venv)
+    try:
+        import ctranslate2 as _ct2
+        _has_gpu = _ct2.get_cuda_device_count() > 0
+        del _ct2
+    except Exception:
+        _has_gpu = False
+
+    if not _has_gpu:
+        # GPU truly not accessible — force CPU-only mode
+        os.environ['CUDA_VISIBLE_DEVICES'] = ''
+        print("✓ No CUDA libraries found - forcing CPU-only mode")
 
     # Suppress PyTorch CUDA library warnings since we're in CPU-only mode
     warnings.filterwarnings('ignore', message='Could not load CUDA library.*')

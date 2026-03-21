@@ -194,6 +194,16 @@ class TalkTypeDBusService(dbus.service.Object):
         self.app.is_recording = is_recording
         self.RecordingStateChanged(is_recording)
 
+    @dbus.service.method(DBUS_INTERFACE, in_signature='s')
+    def NotifyHotkeyPressed(self, key_name: str):
+        """
+        Called by app.py when a hotkey is pressed during test mode.
+        The tray owns the D-Bus name, so only it can emit signals that
+        the prefs dialog will receive. key_name is 'hold' or 'toggle'.
+        """
+        logger.debug(f"D-Bus: NotifyHotkeyPressed called: {key_name}")
+        self.HotkeyPressed(key_name)
+
     @dbus.service.method(DBUS_INTERFACE)
     def CheckForUpdates(self):
         """
@@ -263,6 +273,12 @@ class TalkTypeDBusService(dbus.service.Object):
         """Emitted when an error occurs"""
         pass
 
+    @dbus.service.signal(DBUS_INTERFACE, signature='s')
+    def HotkeyPressed(self, key_name: str):
+        """Emitted when a hotkey is pressed during test mode (PauseHotkeys).
+        key_name is 'hold' or 'toggle'."""
+        pass
+
     @dbus.service.signal(DBUS_INTERFACE, signature='bssbiibss')
     def UpdateCheckComplete(self, success: bool, current_version: str,
                            latest_version: str, update_available: bool,
@@ -309,3 +325,7 @@ class TalkTypeDBusService(dbus.service.Object):
     def emit_error(self, error_type: str, message: str):
         """Emit error signal"""
         self.ErrorOccurred(error_type, message)
+
+    def emit_hotkey_pressed(self, key_name: str):
+        """Emit hotkey pressed signal (during test mode)"""
+        self.HotkeyPressed(key_name)

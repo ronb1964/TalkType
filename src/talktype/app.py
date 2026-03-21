@@ -154,12 +154,15 @@ UNDO_PATTERNS = {
 
 # VAD parameters tuned for dictation (used by faster-whisper transcription)
 # - Lower threshold (0.35) = less aggressive at cutting off speech
-# - Higher speech_pad_ms (600) = more padding around detected speech
-# - Higher min_silence_duration_ms (2500) = longer silence needed to split
+# - Higher speech_pad_ms (800) = more padding around detected speech
+# - Higher min_silence_duration_ms (3500) = longer silence needed to split,
+#   which prevents the VAD from splitting audio during natural pauses in
+#   longer dictations. Splitting at pauses causes dropped sentences because
+#   each segment is transcribed independently and content at boundaries is lost.
 VAD_PARAMS = {
     "threshold": 0.35,
-    "speech_pad_ms": 600,
-    "min_silence_duration_ms": 2500,
+    "speech_pad_ms": 800,
+    "min_silence_duration_ms": 3500,
 }
 
 # D-Bus proxy for notifying the tray process of recording state changes.
@@ -170,6 +173,11 @@ _tray_dbus_proxy = None
 # Using two separate Events (rather than one flag) so start and stop can't overwrite each other.
 _cmd_start_recording = threading.Event()
 _cmd_stop_recording = threading.Event()
+
+# Hotkey test mode: when set, hotkey presses are reported via D-Bus HotkeyPressed
+# signal instead of starting/stopping recording. This keeps the evdev grab alive
+# and avoids XWayland phantom key-repeat floods in the Test Hotkeys dialog.
+_hotkey_test_mode = threading.Event()
 
 def _handle_sigusr1(signum, frame):
     """SIGUSR1 = toggle recording. Sent by the tray process via os.kill().
@@ -204,6 +212,41 @@ def _notify_tray_recording_state(is_recording: bool):
         )
     except Exception as e:
         logger.debug(f"Could not notify tray of recording state: {e}")
+
+def _handle_sigusr2(signum, frame):
+    """SIGUSR2 = toggle hotkey test mode. Sent by the tray's prefs dialog.
+    When active, hotkey presses are reported via D-Bus instead of recording.
+    """
+    if _hotkey_test_mode.is_set():
+        _hotkey_test_mode.clear()
+        print("[hotkey-test] Test mode DISABLED (SIGUSR2)", flush=True)
+    else:
+        _hotkey_test_mode.set()
+        print("[hotkey-test] Test mode ENABLED (SIGUSR2)", flush=True)
+
+def _notify_tray_hotkey_pressed(key_name: str):
+    """Send hotkey press notification to tray D-Bus service during test mode.
+
+    Called from the evdev loop when _hotkey_test_mode is set. The tray's D-Bus
+    service emits a HotkeyPressed signal that the prefs dialog listens for.
+    """
+    global _tray_dbus_proxy
+    try:
+        import dbus
+        if _tray_dbus_proxy is None:
+            import dbus.mainloop.glib
+            dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+            bus = dbus.SessionBus()
+            _tray_dbus_proxy = bus.get_object(
+                'io.github.ronb1964.TalkType',
+                '/io/github/ronb1964/TalkType'
+            )
+        _tray_dbus_proxy.NotifyHotkeyPressed(
+            key_name,
+            dbus_interface='io.github.ronb1964.TalkType'
+        )
+    except Exception as e:
+        logger.debug(f"Could not notify tray of hotkey press: {e}")
 
 # Global typing delay (set from config in main)
 _typing_delay = 12  # milliseconds, default value
@@ -282,18 +325,36 @@ _WHOLE_TEXT_HALLUCINATION_PHRASES = [
     "um",
 ]
 
+# Phrases that Whisper hallucinates at the END of longer dictations.
+# Only stripped when trailing real speech AND no_speech_prob is very high (>0.8),
+# which means Whisper itself is uncertain the audio contained real speech.
+# Kept separate from _WHOLE_TEXT_HALLUCINATION_PHRASES because the trailing
+# check needs a higher confidence threshold and minimum text length to avoid
+# false positives (e.g., "Sure, thank you." is real speech and should be kept).
+_TRAILING_HALLUCINATION_PHRASES = [
+    "thank you",
+    "thank you very much",
+    "thank you so much",
+    "thanks",
+    "you",
+]
+
 
 def _strip_hallucinations(text: str, no_speech_prob: float = 0.0) -> str:
     """
     Remove common Whisper hallucination phrases from transcribed text.
 
-    Two-tier approach:
+    Three-tier approach:
     1. YouTube-specific phrases ("thanks for watching", "like and subscribe")
        are always stripped from the end - nobody dictates these.
     2. Common words ("thank you", "bye") are only discarded when they are
        the ENTIRE transcription AND Whisper's no_speech_prob indicates
        it likely wasn't real speech. This preserves intentional dictation
        of phrases like "Thank you."
+    3. Trailing hallucinations ("thank you", "you") are stripped from the
+       end of longer dictations when no_speech_prob is very high (>0.8).
+       This catches the common pattern where Whisper appends hallucinated
+       phrases to real speech during the silence at the end of a recording.
 
     Args:
         text: Raw transcribed text
@@ -341,6 +402,20 @@ def _strip_hallucinations(text: str, no_speech_prob: float = 0.0) -> str:
                     # The entire text is just the hallucination
                     text = ""
                     changed = True
+                    break
+
+    # Tier 3: Strip trailing hallucination phrases from the end of real sentences.
+    # Only when: (a) no_speech_prob is very high (>0.8, Whisper is very uncertain),
+    # and (b) there's substantial text before the trailing phrase (>50 chars),
+    # so we don't accidentally strip real speech like "Sure, thank you."
+    if text and no_speech_prob > 0.8 and len(text) > 50:
+        lower_text = text.lower().rstrip(" .,!?;:")
+        for phrase in _TRAILING_HALLUCINATION_PHRASES:
+            if lower_text.endswith(phrase):
+                phrase_start = lower_text.rfind(phrase)
+                # Only strip if preceded by whitespace (segment boundary)
+                if phrase_start > 0 and text[phrase_start - 1] in " \t":
+                    text = text[:phrase_start].rstrip(" .,!?;:")
                     break
 
     if text != original:
@@ -1199,6 +1274,17 @@ def _handle_key_event(event, mode, hold_key, toggle_key, devices, grabbed_device
 
     Returns the updated grabbed_device state (may be modified by grab/ungrab).
     """
+    # --- Hotkey test mode: report presses via D-Bus instead of recording ---
+    if _hotkey_test_mode.is_set() and event.value == 1:
+        key_name = None
+        if event.code == hold_key:
+            key_name = "hold"
+        elif toggle_key and event.code == toggle_key:
+            key_name = "toggle"
+        if key_name:
+            _notify_tray_hotkey_pressed(key_name)
+        return grabbed_device  # Don't process hotkeys normally in test mode
+
     # --- Hold-to-talk: hold key down to record, release to stop ---
     if event.code == hold_key:
         if event.value == 1 and not state.is_recording:
@@ -1630,8 +1716,11 @@ def main():
     model = build_model(cfg)
     print(f"Config: model={cfg.model} device={cfg.device} lang={cfg.language or 'auto'} auto_space={cfg.auto_space} auto_period={cfg.auto_period}")
     logger.info(f"Configuration: model={cfg.model}, device={cfg.device}, language={cfg.language or 'auto'}, auto_space={cfg.auto_space}, auto_period={cfg.auto_period}")
-    # Register SIGUSR1 handler so the tray process can toggle recording via os.kill()
+    # Register signal handlers:
+    # SIGUSR1: toggle recording (sent by tray for D-Bus toggle commands)
+    # SIGUSR2: toggle hotkey test mode (sent by prefs dialog for Test Hotkeys)
     signal.signal(signal.SIGUSR1, _handle_sigusr1)
+    signal.signal(signal.SIGUSR2, _handle_sigusr2)
     _loop_evdev(cfg, input_device_idx)
 
 if __name__ == "__main__":

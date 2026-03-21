@@ -7,6 +7,7 @@ import subprocess
 import sys
 import atexit
 import dbus
+import dbus.mainloop.glib
 from .config import CONFIG_PATH, load_custom_commands, save_custom_commands
 
 # D-Bus interface for communicating with the TalkType service
@@ -3495,20 +3496,35 @@ Hidden=true
             Gtk.main_quit()
 
     def _on_test_hotkeys(self, button):
-        """Show hotkey test dialog."""
-        # IMPORTANT: Stop the dictation service first!
-        # The service grabs keys at the evdev level (kernel), which intercepts them
-        # BEFORE GTK can see them. We must stop the service to test hotkeys properly.
-        service_was_running = False
-        dbus_iface = _get_dbus_interface()
-        if dbus_iface:
+        """Show hotkey test dialog.
+
+        Instead of stopping the dictation service (which releases the evdev grab and
+        causes XWayland phantom key-repeat floods), we put the app.py process into
+        "hotkey test mode" via SIGUSR2. In this mode, the evdev grab stays active
+        (no phantom floods) and hotkey presses are reported back via D-Bus
+        HotkeyPressed signals instead of starting/stopping recording.
+        """
+        import subprocess as _sp
+
+        # Find the app.py process PID
+        app_pid = None
+        try:
+            result = _sp.run(["pgrep", "-f", "talktype.app"], capture_output=True, text=True)
+            if result.returncode == 0:
+                app_pid = int(result.stdout.strip().split('\n')[0])
+        except Exception:
+            pass
+
+        # Put app.py into test mode (SIGUSR2 toggles hotkey test mode)
+        test_mode_active = False
+        if app_pid:
             try:
-                # Check if service is running by trying to get its status
-                dbus_iface.StopService()
-                service_was_running = True
-                print("Stopped dictation service for hotkey testing")
+                import signal as _sig
+                os.kill(app_pid, _sig.SIGUSR2)
+                test_mode_active = True
+                print(f"[hotkey-test] Sent SIGUSR2 to app PID {app_pid} — test mode ON", flush=True)
             except Exception as e:
-                print(f"Could not stop service (may not be running): {e}")
+                print(f"[hotkey-test] Could not send SIGUSR2: {e}", flush=True)
 
         dialog = Gtk.Dialog(title="Test Hotkeys", transient_for=self.window)
         dialog.set_default_size(450, 280)
@@ -3532,21 +3548,6 @@ Hidden=true
         hold_key = self.config.get("hotkey", "F8")
         toggle_key = self.config.get("toggle_hotkey", "F9")
 
-        # Convert key name strings ("F8", "F9") to GDK keyvals for comparison.
-        # We compare event.keyval directly instead of using accelerator_name(keyval, 0),
-        # which strips modifiers and causes false positives: GNOME sends Alt+F8 to
-        # focused windows (it's bound to "begin-resize"), and stripping Alt makes it
-        # look like a bare F8 press, matching the hotkey setting.
-        hold_keyval, _ = Gtk.accelerator_parse(hold_key)
-        toggle_keyval, _ = Gtk.accelerator_parse(toggle_key)
-
-        # Modifier mask: Alt (MOD1) | Ctrl | Super.
-        # We require NO modifiers — user hotkeys are bare function keys.
-        # This rejects GNOME's Alt+F8 (begin-resize) and Alt+F7 (begin-move) events.
-        _NO_MODIFIER_MASK = (Gdk.ModifierType.MOD1_MASK |
-                             Gdk.ModifierType.CONTROL_MASK |
-                             Gdk.ModifierType.SUPER_MASK)
-
         # Test status labels
         status_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         status_box.set_margin_top(10)
@@ -3566,38 +3567,35 @@ Hidden=true
         # Track tested keys
         tested_keys = {"hold": False, "toggle": False}
 
-        # Flag: ignore all events until dialog is fully shown and queue drained.
-        dialog_ready = [False]
+        # Listen for HotkeyPressed D-Bus signals from app.py.
+        # The app's evdev loop detects hotkey presses and sends them to the
+        # tray's D-Bus service, which emits the HotkeyPressed signal.
+        import dbus
+        dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+        bus = dbus.SessionBus()
 
-        # Key press event handler
-        def on_key_press(widget, event):
-            if not dialog_ready[0]:
-                return True  # Discard events that arrive before dialog is ready
-
-            if event.type != Gdk.EventType.KEY_PRESS:
-                return True  # Ignore key-release events
-
-            # Ignore events with Alt, Ctrl, or Super held.
-            # GNOME delivers Alt+F8 (begin-resize binding) to focused windows —
-            # we must reject it or it falsely matches the F8 hotkey.
-            if event.state & _NO_MODIFIER_MASK:
-                return True
-
-            if hold_keyval and event.keyval == hold_keyval:
+        def _on_hotkey_signal(key_name):
+            """Called when app.py reports a hotkey press via D-Bus signal."""
+            print(f"[hotkey-test] D-Bus signal received: key_name={key_name}", flush=True)
+            if key_name == "hold" and not tested_keys["hold"]:
                 tested_keys["hold"] = True
                 hold_label.set_markup(f'<b>{hold_key}</b> (Hold-to-talk): <span color="#4CAF50">✓ Working!</span>')
-            elif toggle_keyval and event.keyval == toggle_keyval:
+            elif key_name == "toggle" and not tested_keys["toggle"]:
                 tested_keys["toggle"] = True
                 toggle_label.set_markup(f'<b>{toggle_key}</b> (Tap-to-toggle): <span color="#4CAF50">✓ Working!</span>')
 
-            return True  # Stop event propagation
-
-        # Connect key press handler to dialog
-        dialog.connect("key-press-event", on_key_press)
+        # Connect to the HotkeyPressed signal on the D-Bus
+        signal_match = bus.add_signal_receiver(
+            _on_hotkey_signal,
+            signal_name="HotkeyPressed",
+            dbus_interface="io.github.ronb1964.TalkType",
+            bus_name="io.github.ronb1964.TalkType",
+            path="/io/github/ronb1964/TalkType"
+        )
 
         # Info label
         info_label = Gtk.Label()
-        info_label.set_markup('<i>The dictation service is paused while this dialog is open.\nClose this dialog to resume dictation.</i>')
+        info_label.set_markup('<i>Dictation is paused while testing.\nClose this dialog to resume.</i>')
         info_label.set_line_wrap(True)
         info_label.set_xalign(0)
         info_label.set_margin_top(10)
@@ -3609,26 +3607,23 @@ Hidden=true
         dialog.add_action_widget(close_button, Gtk.ResponseType.CLOSE)
 
         dialog.show_all()
-
-        # Drain ALL pending GLib/GDK events before accepting user input.
-        # show_all() renders widgets but does NOT flush the event queue —
-        # stale events are delivered when dialog.run() starts its modal loop.
-        # By draining here (while dialog_ready is still False), stale events
-        # are processed and silently discarded by the guard in on_key_press.
-        while Gtk.events_pending():
-            Gtk.main_iteration_do(False)
-
-        dialog_ready[0] = True  # NOW accept key events — queue is clean
         dialog.run()
         dialog.destroy()
 
-        # Restart the dictation service if it was running before
-        if service_was_running and dbus_iface:
+        # Disconnect D-Bus signal listener
+        try:
+            signal_match.remove()
+        except Exception:
+            pass
+
+        # Resume normal hotkey processing (SIGUSR2 toggles test mode off)
+        if test_mode_active and app_pid:
             try:
-                dbus_iface.StartService()
-                print("Restarted dictation service after hotkey testing")
+                import signal as _sig
+                os.kill(app_pid, _sig.SIGUSR2)
+                print(f"[hotkey-test] Sent SIGUSR2 to app PID {app_pid} — test mode OFF", flush=True)
             except Exception as e:
-                print(f"Could not restart service: {e}")
+                print(f"[hotkey-test] Could not resume hotkeys: {e}", flush=True)
 
     def on_help(self, button):
         """Show help dialog with TalkType features and instructions."""
