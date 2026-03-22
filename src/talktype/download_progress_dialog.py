@@ -50,18 +50,22 @@ class UnifiedDownloadDialog:
     Each download task gets its own progress bar and cancel button.
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, title=None, description=None):
         """
         Initialize the unified download dialog.
 
         Args:
             parent: Optional parent window for the dialog
+            title: Optional custom title shown at the top of the dialog
+            description: Optional custom description shown below the title
         """
         self.parent = parent
         self.tasks = []
         self.task_widgets = {}  # Maps task to its UI widgets
         self.dialog = None
         self.all_completed = False
+        self._title = title
+        self._description = description
 
     def add_task(self, task):
         """Add a download task to the dialog."""
@@ -69,8 +73,10 @@ class UnifiedDownloadDialog:
 
     def _build_dialog(self):
         """Build the GTK dialog with progress bars for each task."""
-        self.dialog = Gtk.Dialog(title="Setting up TalkType")
-        self.dialog.set_default_size(600, 200 + (len(self.tasks) * 120))
+        self.dialog = Gtk.Dialog(title=self._title or "Setting up TalkType")
+        # Height: base 200px + 120px per task + 100px extra if we have a long description
+        _extra = 100 if self._description else 0
+        self.dialog.set_default_size(620, 200 + _extra + (len(self.tasks) * 120))
         self.dialog.set_modal(True)
         self.dialog.set_position(Gtk.WindowPosition.CENTER)
         self.dialog.set_resizable(False)
@@ -125,14 +131,19 @@ class UnifiedDownloadDialog:
         content.set_spacing(15)
 
         # Main title
+        title_text = self._title or "Setting up TalkType"
         title_label = Gtk.Label()
-        title_label.set_markup('<span size="x-large"><b>Setting up TalkType</b></span>')
+        title_label.set_markup(f'<span size="x-large"><b>{title_text}</b></span>')
         content.pack_start(title_label, False, False, 0)
 
-        # Description
+        # Description (can be multi-line for user-friendly explanations)
+        desc_text = self._description or "Downloading optional components..."
         desc_label = Gtk.Label()
-        desc_label.set_markup('<span>Downloading optional components...</span>')
+        desc_label.set_markup(f'<span>{desc_text}</span>')
         desc_label.set_opacity(0.8)
+        desc_label.set_line_wrap(True)
+        desc_label.set_max_width_chars(70)
+        desc_label.set_xalign(0.0)
         content.pack_start(desc_label, False, False, 5)
 
         # Separator
@@ -314,19 +325,38 @@ class UnifiedDownloadDialog:
         return results
 
 
-def show_unified_download_dialog(cuda=False, extension=False, parent=None):
+def show_unified_download_dialog(cuda=False, extension=False, model=None, parent=None,
+                                  title=None, description=None):
     """
     Convenience function to show unified download dialog.
 
     Args:
         cuda: Whether to download CUDA libraries
         extension: Whether to install GNOME extension
+        model: Optional model name to download (e.g. "large-v3"). Files are fetched to
+               HuggingFace cache only — the model is NOT loaded into memory here.
         parent: Optional parent window
+        title: Optional dialog title override
+        description: Optional description text override (shown below the title)
 
     Returns:
-        dict: Download results for each task
+        dict: Download results keyed by task name, each with keys:
+              'success' (bool), 'cancelled' (bool), 'completed' (bool)
     """
-    dialog = UnifiedDownloadDialog(parent=parent)
+    # Build default title/description when downloading CUDA + a model together
+    if title is None and cuda and model:
+        title = "Downloading 'Most Accurate' Components"
+    if description is None and cuda and model:
+        from talktype.model_helper import MODEL_DISPLAY_SIZES
+        model_size = MODEL_DISPLAY_SIZES.get(model, "~3 GB")
+        description = (
+            f"To use the 'Most Accurate' preset, TalkType needs two things:\n\n"
+            f"  • <b>CUDA GPU Libraries</b> (~800MB) — unlocks GPU acceleration on your NVIDIA card\n"
+            f"  • <b>{model} AI Model</b> ({model_size}) — the highest-accuracy speech recognition model\n\n"
+            f"Both are one-time downloads. This may take several minutes depending on your connection."
+        )
+
+    dialog = UnifiedDownloadDialog(parent=parent, title=title, description=description)
 
     if cuda:
         from talktype import cuda_helper
@@ -335,6 +365,17 @@ def show_unified_download_dialog(cuda=False, extension=False, parent=None):
             description="GPU acceleration libraries",
             size_text="~800MB",
             download_func=cuda_helper.download_cuda_libraries
+        )
+        dialog.add_task(task)
+
+    if model:
+        from talktype.model_helper import make_model_download_func, MODEL_DISPLAY_SIZES
+        model_size = MODEL_DISPLAY_SIZES.get(model, "unknown size")
+        task = DownloadTask(
+            name=f"{model} AI Model",
+            description=f"Speech recognition model ({model_size})",
+            size_text=model_size,
+            download_func=make_model_download_func(model)
         )
         dialog.add_task(task)
 

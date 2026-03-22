@@ -431,6 +431,7 @@ class WelcomeDialog:
         self.dialog.set_resizable(False)
         self.dialog.set_modal(True)
         self.dialog.set_position(Gtk.WindowPosition.CENTER)
+        self.dialog.set_keep_above(True)
 
         if self.parent:
             self.dialog.set_transient_for(self.parent)
@@ -1618,16 +1619,170 @@ def show_tips_and_features_dialog(extension_installed=False):
     model_label.set_markup('<b>Model:</b>')
     model_box.pack_start(model_label, False, False, 0)
 
-    model_combo = Gtk.ComboBoxText()
-    model_combo.append("small", "Small (recommended) - 244MB")
-    model_combo.append("tiny", "Tiny (fastest) - 39MB")
-    model_combo.append("medium", "Medium (better accuracy) - 769MB")
-    model_combo.append("large-v3", "Large (best quality) - 3GB")
-    model_combo.set_active_id("small")
-    model_combo.set_tooltip_text("Choose which AI model to download. You can change this later in Preferences.")
-    model_box.pack_start(model_combo, True, True, 0)
+    # Check GPU/CUDA availability to determine large-v3 eligibility
+    try:
+        from . import cuda_helper as _cuda_helper
+        _has_nvidia = bool(_cuda_helper.detect_nvidia_gpu())
+        _has_cuda   = _cuda_helper.has_talktype_cuda_libraries()
+    except Exception:
+        _has_nvidia = False
+        _has_cuda   = False
+
+    # Build model store — all models are always selectable (is_sensitive=True).
+    # If the user picks large-v3 without CUDA, a popup explains what's needed.
+    model_store = Gtk.ListStore(str, str, bool)
+    model_store.append(["small",    "Small (recommended) — 244MB", True])
+    model_store.append(["tiny",     "Tiny (fastest) — 39MB",       True])
+    model_store.append(["medium",   "Medium (better accuracy) — 769MB", True])
+    if _has_cuda:
+        model_store.append(["large-v3", "Large (best quality) — 3GB", True])
+    elif _has_nvidia:
+        model_store.append(["large-v3",
+            "Large (best quality) — 3GB · needs CUDA download", True])
+    else:
+        model_store.append(["large-v3",
+            "Large (best quality) — 3GB · NVIDIA GPU required", True])
+
+    model_combo = Gtk.ComboBox.new_with_model(model_store)
+    _renderer = Gtk.CellRendererText()
+    model_combo.pack_start(_renderer, True)
+    model_combo.add_attribute(_renderer, "text", 1)
+    model_combo.add_attribute(_renderer, "sensitive", 2)
+    model_combo.set_active(0)  # Default to Small
+    model_combo.set_size_request(320, -1)  # Fixed width — don't stretch to fill dialog
+    model_combo.set_tooltip_text(
+        "Choose which AI model to download. You can change this later in Preferences.")
+    model_box.pack_start(model_combo, False, False, 0)
 
     model_section.pack_start(model_box, False, False, 0)
+
+    # Track last valid selection to revert if large-v3 is blocked
+    _last_model_index = [0]  # Default to Small (index 0)
+    _updating_combo = [False]  # Prevent recursive "changed" signals
+
+    def _update_button_text(model_id):
+        """Update button label based on whether the selected model is cached."""
+        from .model_helper import is_model_cached
+        if is_model_cached(model_id):
+            get_started_button.set_label("Get Started!")
+        else:
+            get_started_button.set_label("Download and Get Started!")
+
+    def _on_onboarding_model_changed(combo):
+        """Handle model selection in onboarding — gate large-v3 behind CUDA."""
+        if _updating_combo[0]:
+            return
+
+        _it = combo.get_active_iter()
+        if _it is None:
+            return
+        _mid = model_store.get_value(_it, 0)
+
+        if _mid != "large-v3":
+            # Normal model — just remember the selection and update button
+            _last_model_index[0] = combo.get_active()
+            _update_button_text(_mid)
+            return
+
+        # large-v3 selected — check CUDA availability RIGHT NOW
+        # (it may have changed since the dialog opened, e.g. user just downloaded it)
+        try:
+            _cuda_now = _cuda_helper.has_talktype_cuda_libraries()
+        except Exception:
+            _cuda_now = False
+
+        if _cuda_now:
+            # CUDA is available — allow the selection
+            _last_model_index[0] = combo.get_active()
+            return
+
+        # --- CUDA not available — revert combo and show a helpful popup ---
+        _updating_combo[0] = True
+        combo.set_active(_last_model_index[0])
+        _updating_combo[0] = False
+
+        if _has_nvidia:
+            # NVIDIA present — offer unified CUDA + model download
+            _dlg = Gtk.MessageDialog(
+                transient_for=None,
+                flags=0,
+                message_type=Gtk.MessageType.QUESTION,
+                buttons=Gtk.ButtonsType.YES_NO,
+                text="Downloads Required"
+            )
+            _dlg.format_secondary_text(
+                "The Large model needs two downloads to get started:\n\n"
+                "1. CUDA GPU libraries (~800MB) — enables GPU acceleration\n"
+                "2. Large-v3 AI model (~3GB) — highest-accuracy transcription\n\n"
+                "Total: ~3.8GB. This may take several minutes.\n\n"
+                "Would you like to download both now?"
+            )
+            _dlg.set_keep_above(True)
+            _resp = _dlg.run()
+            _dlg.destroy()
+
+            if _resp == Gtk.ResponseType.YES:
+                try:
+                    from .download_progress_dialog import show_unified_download_dialog
+                    results = show_unified_download_dialog(
+                        cuda=True, model="large-v3",
+                        title="Downloading Large Model Components",
+                        description=(
+                            "TalkType is downloading two components for the Large model:\n\n"
+                            "  • <b>CUDA GPU Libraries</b> (~800MB) — unlocks GPU acceleration on your NVIDIA card\n"
+                            "  • <b>large-v3 AI Model</b> (~3GB) — the highest-accuracy speech recognition model\n\n"
+                            "Both are one-time downloads. This may take several minutes."
+                        )
+                    )
+                    # Check if BOTH succeeded
+                    _cuda_ok = results.get("CUDA Libraries", {}).get("success", False)
+                    _model_ok = results.get("large-v3 AI Model", {}).get("success", False)
+                    if _cuda_ok and _model_ok:
+                        # Update label and auto-select large-v3
+                        for row in model_store:
+                            if row[0] == "large-v3":
+                                row[1] = "Large (best quality) — 3GB"
+                                break
+                        _updating_combo[0] = True
+                        combo.set_active(3)  # large-v3 is index 3
+                        _updating_combo[0] = False
+                        _last_model_index[0] = 3
+                        # Update button text — model is already downloaded
+                        get_started_button.set_label("Get Started!")
+                        # Set device to cuda in config
+                        try:
+                            from .config import load_config, save_config
+                            cfg = load_config()
+                            cfg.device = "cuda"
+                            save_config(cfg)
+                        except Exception:
+                            pass
+                    elif _cuda_ok and not _model_ok:
+                        # CUDA worked but model failed — update label, keep small selected
+                        for row in model_store:
+                            if row[0] == "large-v3":
+                                row[1] = "Large (best quality) — 3GB"
+                                break
+                except Exception as _e:
+                    logger.warning(f"Failed to launch unified download: {_e}")
+        else:
+            # No NVIDIA GPU — explain the limitation
+            _dlg = Gtk.MessageDialog(
+                transient_for=None,
+                flags=0,
+                message_type=Gtk.MessageType.WARNING,
+                buttons=Gtk.ButtonsType.OK,
+                text="NVIDIA GPU Required"
+            )
+            _dlg.format_secondary_text(
+                "The Large model requires an NVIDIA GPU with CUDA support.\n\n"
+                "This model is not compatible with CPU-only or AMD/Intel GPU systems."
+            )
+            _dlg.set_keep_above(True)
+            _dlg.run()
+            _dlg.destroy()
+
+    model_combo.connect("changed", _on_onboarding_model_changed)
 
     # Model description
     model_desc = Gtk.Label()
@@ -1671,12 +1826,19 @@ def show_tips_and_features_dialog(extension_installed=False):
     get_started_button.get_style_context().add_class("suggested-action")
     get_started_button.set_size_request(200, -1)  # Wider for new text
 
+    # Helper to read the currently selected model ID from the ListStore combo
+    def get_combo_model_id():
+        it = model_combo.get_active_iter()
+        if it is not None:
+            return model_store.get_value(it, 0)
+        return "small"
+
     # Store selected model
-    selected_model = [model_combo.get_active_id()]  # Use list to make mutable
+    selected_model = [get_combo_model_id()]  # Use list to make mutable
 
     def on_get_started_clicked(button):
         """Handle Get Started button - close dialog and return selected model"""
-        selected_model[0] = model_combo.get_active_id()
+        selected_model[0] = get_combo_model_id()
         dialog.response(Gtk.ResponseType.OK)
 
     get_started_button.connect("clicked", on_get_started_clicked)
@@ -1844,6 +2006,7 @@ def show_hotkey_test_dialog():
     dialog.set_default_size(550, 420)
     dialog.set_modal(True)
     dialog.set_position(Gtk.WindowPosition.CENTER)
+    dialog.set_keep_above(True)
 
     content = dialog.get_content_area()
     content.set_margin_top(20)
@@ -1902,6 +2065,14 @@ def show_hotkey_test_dialog():
 
     content.pack_start(hotkey_config_box, False, False, 0)
 
+    # Status label — updated by key detection
+    ready_label = Gtk.Label()
+    ready_label.set_markup('<span size="small" color="#888888">Hold each hotkey, then release to confirm it works</span>')
+    ready_label.set_xalign(0)
+    ready_label.set_halign(Gtk.Align.CENTER)
+    ready_label.set_margin_top(2)
+    content.pack_start(ready_label, False, False, 0)
+
     # Capture instruction (hidden initially)
     capture_instruction = Gtk.Label()
     capture_instruction.set_markup('<span background="#FFA500" color="white"> Press any key to set hotkey... (ESC to cancel) </span>')
@@ -1909,15 +2080,21 @@ def show_hotkey_test_dialog():
     capture_instruction.set_no_show_all(True)
     content.pack_start(capture_instruction, False, False, 0)
 
-    def update_ui_for_key(keyname, is_capture_mode):
-        """Update UI when a key is detected. Called from main thread via GLib.idle_add."""
+    def update_ui_for_key(keyname, is_capture_mode, action="press"):
+        """Update UI when a key is pressed or released.
+        action='press'  → show yellow 'Holding...' (phantoms can only get this far)
+        action='release' → show green '✓ Working!' (requires physical key activity)
+        """
         if not dialog_ready[0]:
             return False
 
-        logger.info(f"Hotkey test: detected key '{keyname}', capture_mode={is_capture_mode}, looking for hold='{current_hold_key[0]}', toggle='{current_toggle_key[0]}'")
-        print(f"🔑 Key detected: {keyname}")
+        logger.info(f"Hotkey test: {action} '{keyname}', capture={is_capture_mode}")
+        print(f"🔑 Key {action}: {keyname}")
 
         if is_capture_mode and capturing_key[0]:
+            # In capture mode we only care about presses
+            if action != "press":
+                return False
             if keyname == "Escape":
                 capturing_key[0] = None
                 capture_instruction.hide()
@@ -1941,13 +2118,21 @@ def show_hotkey_test_dialog():
             hold_change_btn.set_sensitive(True)
             toggle_change_btn.set_sensitive(True)
         else:
-            # Normal testing mode
+            # Normal testing mode:
+            # press → yellow "Holding..." (phantom-safe, not counted as passing)
+            # release → green "✓ Working!" (counts as passing — physical action required)
             if keyname == current_hold_key[0]:
-                tested_keys["hold"] = True
-                hold_status.set_markup('<span color="#4CAF50">✓ Working!</span>')
+                if action == "press" and not tested_keys["hold"]:
+                    hold_status.set_markup('<span color="#FFA500">⏸ Holding...</span>')
+                elif action == "release":
+                    tested_keys["hold"] = True
+                    hold_status.set_markup('<span color="#4CAF50">✓ Working!</span>')
             elif keyname == current_toggle_key[0]:
-                tested_keys["toggle"] = True
-                toggle_status.set_markup('<span color="#4CAF50">✓ Working!</span>')
+                if action == "press" and not tested_keys["toggle"]:
+                    toggle_status.set_markup('<span color="#FFA500">⏸ Holding...</span>')
+                elif action == "release":
+                    tested_keys["toggle"] = True
+                    toggle_status.set_markup('<span color="#4CAF50">✓ Working!</span>')
 
         return False  # Don't repeat
 
@@ -1987,6 +2172,16 @@ def show_hotkey_test_dialog():
 
         print(f"🎹 Monitoring {len(keyboards)} keyboard(s) via evdev")
 
+        # Flush any stale events buffered in the kernel queue before we start
+        # monitoring. Without this, a prior F8 press (e.g. from using TalkType
+        # just before onboarding) would appear as "Working!" immediately.
+        for dev in keyboards:
+            try:
+                while True:
+                    dev.read()
+            except BlockingIOError:
+                pass  # Queue is now empty
+
         while not stop_evdev.is_set():
             try:
                 # Use select to wait for events with timeout
@@ -2021,6 +2216,12 @@ def show_hotkey_test_dialog():
                          Gdk.ModifierType.CONTROL_MASK |
                          Gdk.ModifierType.SUPER_MASK)
 
+    # Track currently-held hardware key codes to suppress GTK auto-repeat.
+    # GTK sends repeated KEY_PRESS events while a key is held — there's no
+    # built-in "is_repeat" flag. We ignore a press if the hardware keycode is
+    # already in this set, and clear it on KEY_RELEASE.
+    _held_keycodes = set()
+
     def on_key_press(widget, event):
         if not dialog_ready[0]:
             return True
@@ -2029,14 +2230,29 @@ def show_hotkey_test_dialog():
         # Ignore events with Alt, Ctrl, or Super held (e.g. GNOME's Alt+F8 begin-resize)
         if event.state & _NO_MODIFIER_MASK:
             return True
+        # Suppress GTK auto-repeat: ignore if this key is already held down
+        if event.hardware_keycode in _held_keycodes:
+            return True
+        _held_keycodes.add(event.hardware_keycode)
 
         keyname = Gtk.accelerator_name(event.keyval, 0)
-        logger.info(f"GTK key: keyval={event.keyval}, keyname='{keyname}'")
-        print(f"🔑 GTK key: {keyname}")
+        logger.info(f"GTK key press: keyval={event.keyval}, keyname='{keyname}'")
+        print(f"🔑 GTK press: {keyname}")
 
         is_capture = capturing_key[0] is not None
-        update_ui_for_key(keyname, is_capture)
+        update_ui_for_key(keyname, is_capture, action="press")
         return True
+
+    def on_key_release(widget, event):
+        # Clear the held state so the next press is treated as a fresh press
+        _held_keycodes.discard(event.hardware_keycode)
+        if not dialog_ready[0]:
+            return False
+        # Release = physical action confirmed — mark the key as working
+        keyname = Gtk.accelerator_name(event.keyval, 0)
+        is_capture = capturing_key[0] is not None
+        update_ui_for_key(keyname, is_capture, action="release")
+        return False
 
     # Change button handlers
     def on_change_hold(button):
@@ -2054,8 +2270,13 @@ def show_hotkey_test_dialog():
     hold_change_btn.connect("clicked", on_change_hold)
     toggle_change_btn.connect("clicked", on_change_toggle)
 
-    # Connect GTK key handler as fallback
+    # Always connect the GTK key handlers. Phantom events from killing the
+    # dictation service are prevented by stopping the service killer thread
+    # BEFORE setting dialog_ready=True in enable_key_handling() below.
+    # The handler itself also guards: it returns immediately if dialog_ready
+    # is False, so any events that arrive before the gate opens are ignored.
     dialog.connect("key-press-event", on_key_press)
+    dialog.connect("key-release-event", on_key_release)
 
     # Info label
     info_label = Gtk.Label()
@@ -2091,13 +2312,15 @@ def show_hotkey_test_dialog():
     continue_button.get_style_context().add_class("suggested-action")
     dialog.add_action_widget(continue_button, Gtk.ResponseType.OK)
 
-    dialog.show_all()
-
     # Temporarily disable GNOME's Alt+F8 (begin-resize) binding.
-    # GNOME intercepts Alt+F8 and delivers a synthetic key event to the focused
-    # window WITHOUT the Alt modifier (state just has Num Lock = 16), making it
-    # indistinguishable from a real F8 press. Clear the binding while the dialog
-    # is open, then restore it afterward.
+    # CRITICAL: Must happen BEFORE dialog.show_all() so our dialog doesn't have
+    # focus when GNOME processes the gsettings change. GNOME Shell takes ~1-2 seconds
+    # to process a gsettings change and may send a synthetic F8 key event to whatever
+    # window currently has focus. If we clear the binding after show_all(), our dialog
+    # has focus and receives that phantom F8 — bypassing the 2-second gate because
+    # the event arrives at almost exactly the same time the gate opens.
+    # By clearing BEFORE show_all(), any GNOME synthetic event goes to the previously
+    # focused window instead of ours.
     import subprocess as _sp
     _gnome_begin_resize = None
     _gnome_begin_move = None
@@ -2112,11 +2335,22 @@ def show_hotkey_test_dialog():
         ).strip()
         _sp.run(["gsettings", "set", "org.gnome.desktop.wm.keybindings", "begin-resize", "[]"], check=False)
         _sp.run(["gsettings", "set", "org.gnome.desktop.wm.keybindings", "begin-move", "[]"], check=False)
-        logger.info("Temporarily disabled GNOME begin-resize/begin-move keybindings")
+        logger.info("Temporarily disabled GNOME begin-resize/begin-move keybindings (before show_all)")
+        # Brief pause to let GNOME process the change before we take focus
+        time.sleep(0.3)
     except Exception as e:
         logger.debug(f"Could not disable GNOME keybindings: {e}")
         _gnome_begin_resize = None
         _gnome_begin_move = None
+
+    # Kill the dictation service BEFORE showing the dialog so its evdev keyboard
+    # grab is released cleanly. If we kill it AFTER the dialog gets focus, the
+    # kernel releases a stuck F8 key state and floods the dialog with phantom
+    # key-repeat events via GTK, making F8 appear "Working!" before being pressed.
+    kill_dictation_service()
+    time.sleep(0.3)  # Allow kernel/X server to settle keyboard state
+
+    dialog.show_all()
 
     # Service killer thread - keeps killing dictation service while dialog is open
     # This prevents the service from grabbing F8/F9 before we can detect them
@@ -2138,12 +2372,16 @@ def show_hotkey_test_dialog():
         evdev_thread = threading.Thread(target=evdev_key_reader, daemon=True)
         evdev_thread.start()
 
-    # Enable key handling after dialog is shown
-    def enable_key_handling():
-        dialog_ready[0] = True
-        return False
+    # Open the gate immediately — no timer needed.
+    # Phantom key events can only trigger yellow "Holding...", never green "✓ Working!",
+    # because green requires a KEY_RELEASE which phantoms never generate.
+    dialog_ready[0] = True
 
-    GLib.timeout_add(300, enable_key_handling)
+    # Stop the killer thread after 500ms — enough time for the service to die.
+    def stop_killer_stage():
+        stop_killer.set()
+        return False
+    GLib.timeout_add(500, stop_killer_stage)
 
     response = dialog.run()
     dialog.destroy()
@@ -2391,6 +2629,7 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False)
     dialog.set_border_width(0)
     dialog.set_resizable(False)
     dialog.set_position(Gtk.WindowPosition.CENTER)
+    dialog.set_keep_above(True)
 
     content = dialog.get_content_area()
     content.set_spacing(0)

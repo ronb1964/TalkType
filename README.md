@@ -1,10 +1,25 @@
-# TalkType
+# TalkType — Speech-to-Text for Linux
 
-**Voice dictation for Linux Wayland** - F8 hold-to-talk or F9 tap-to-toggle, both always active. Powered by OpenAI's Whisper AI for accurate speech recognition.
+**Free, offline voice dictation for Linux** — works on Wayland and X11 with any desktop environment. Powered by OpenAI's Whisper AI for accurate, private speech recognition. No cloud, no subscription, no data leaves your machine.
 
 [![AUR version](https://img.shields.io/aur/version/talktype-appimage)](https://aur.archlinux.org/packages/talktype-appimage)
 [![GitHub release](https://img.shields.io/github/v/release/ronb1964/TalkType)](https://github.com/ronb1964/TalkType/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Linux](https://img.shields.io/badge/platform-Linux-lightgrey)](https://github.com/ronb1964/TalkType)
+
+> **TL;DR:** Download the AppImage, run it, press F8 to talk. Text appears where your cursor is. Works in any app — browsers, editors, terminals, chat apps, everywhere.
+
+---
+
+## Why TalkType?
+
+Most voice dictation tools on Linux are either cloud-based (privacy concerns), command-line only (not user-friendly), or broken on Wayland. TalkType is different:
+
+- **100% offline** — All processing happens locally using Whisper AI. Nothing is sent to the cloud.
+- **Works on Wayland** — Built from the ground up for modern Linux desktops (also supports X11).
+- **Zero configuration** — Download the AppImage, run it, start talking. First-run wizard handles the rest.
+- **Any desktop environment** — GNOME (with native shell extension), KDE, XFCE, Sway, Hyprland, and more.
+- **GPU accelerated** — Optional NVIDIA CUDA support for 3-5x faster transcription.
 
 ---
 
@@ -273,6 +288,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 <p align="center">
   <b>TalkType</b> - Voice dictation that just works.<br>
   <a href="https://github.com/ronb1964/TalkType/releases">Download</a> &bull;
+  <a href="CHANGELOG.md">Changelog</a> &bull;
   <a href="https://github.com/ronb1964/TalkType/issues">Report Bug</a> &bull;
   <a href="https://github.com/ronb1964/TalkType/issues">Request Feature</a>
 </p>

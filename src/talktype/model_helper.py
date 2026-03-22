@@ -60,6 +60,131 @@ def is_model_cached(model_name):
         return False
 
 
+def make_model_download_func(model_name):
+    """
+    Create a DownloadTask-compatible function that downloads model files to the
+    HuggingFace cache without loading them into memory.
+
+    This is used with UnifiedDownloadDialog so the model download can run
+    alongside a CUDA libraries download in the same progress window.
+
+    Args:
+        model_name: Model size (e.g., "large-v3")
+
+    Returns:
+        Callable: Function with signature (progress_callback, cancel_event) -> bool
+                  progress_callback takes (message: str, percent: int)
+    """
+    def download_func(progress_callback, cancel_event):
+        """Download model files to HF cache only. Returns True on success."""
+        try:
+            from huggingface_hub import hf_hub_download, list_repo_tree
+            from huggingface_hub.utils import disable_progress_bars
+            import tqdm as tqdm_lib
+
+            # Disable huggingface_hub's own console progress bars
+            disable_progress_bars()
+
+            repo_id = MODEL_REPOS.get(model_name)
+            if not repo_id:
+                logger.error(f"Unknown model: {model_name}")
+                return False
+
+            progress_callback("Getting file list...", 1)
+
+            # Get all file names + sizes from the HuggingFace repo
+            try:
+                files_info = list(list_repo_tree(repo_id, recursive=True))
+                files_with_sizes = [
+                    (f.path, f.size)
+                    for f in files_info
+                    if hasattr(f, 'size') and f.size is not None
+                ]
+                total_bytes = sum(size for _, size in files_with_sizes)
+                logger.info(
+                    f"Model {model_name}: {len(files_with_sizes)} files, "
+                    f"{total_bytes / 1024 / 1024:.1f} MB total"
+                )
+            except Exception as e:
+                logger.warning(f"Could not list model files: {e}")
+                files_with_sizes = []
+                total_bytes = 0
+
+            if not files_with_sizes:
+                # Fallback: load via WhisperModel (triggers its own download)
+                progress_callback("Downloading model files...", 5)
+                from faster_whisper import WhisperModel
+                model = WhisperModel(model_name, device="cpu", local_files_only=False)
+                del model
+                progress_callback("Download complete!", 100)
+                return True
+
+            # Track bytes downloaded across all files
+            downloaded_bytes = [0]
+
+            # Custom tqdm class that relays byte-level progress to our callback
+            class ProgressTqdm(tqdm_lib.tqdm):
+                """Tqdm subclass that updates the unified download dialog progress bar."""
+
+                def __init__(self, *args, **kwargs):
+                    import io
+                    # Store the current filename from tqdm 'desc' kwarg
+                    self._current_file = kwargs.get('desc', 'file')
+                    # Remove kwargs that tqdm doesn't accept from huggingface_hub
+                    kwargs.pop('name', None)
+                    # Force enabled even when stdout is not a TTY
+                    kwargs['disable'] = False
+                    # Suppress all console output
+                    kwargs['file'] = io.StringIO()
+                    super().__init__(*args, **kwargs)
+
+                def update(self, n=1):
+                    if cancel_event.is_set():
+                        raise InterruptedError("Download cancelled")
+                    super().update(n)
+                    downloaded_bytes[0] += n
+                    if total_bytes > 0:
+                        percent = min(99, int((downloaded_bytes[0] / total_bytes) * 99))
+                        progress_callback(
+                            f"Downloading {self._current_file}...",
+                            percent
+                        )
+
+            # Download each file one by one
+            for filename, file_size in files_with_sizes:
+                if cancel_event.is_set():
+                    return False
+
+                bytes_before = downloaded_bytes[0]
+                try:
+                    hf_hub_download(
+                        repo_id=repo_id,
+                        filename=filename,
+                        tqdm_class=ProgressTqdm,
+                    )
+                    # If no progress fired, the file was already cached — count it anyway
+                    if downloaded_bytes[0] == bytes_before:
+                        downloaded_bytes[0] += file_size
+                        if total_bytes > 0:
+                            percent = min(99, int((downloaded_bytes[0] / total_bytes) * 99))
+                            progress_callback(f"Loaded from cache: {filename}", percent)
+                except InterruptedError:
+                    return False
+                except Exception as e:
+                    logger.warning(f"Error downloading {filename}: {e}")
+                    # Count even failed/cached files so progress doesn't stall
+                    downloaded_bytes[0] += file_size
+
+            progress_callback("All files downloaded!", 100)
+            return True
+
+        except Exception as e:
+            logger.error(f"Model download failed for {model_name}: {e}")
+            return False
+
+    return download_func
+
+
 def download_model_with_progress(model_name, device="cpu", compute_type="int8", parent=None, show_confirmation=True):
     """
     Download a Whisper model with progress dialog.

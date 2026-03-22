@@ -458,8 +458,9 @@ class PreferencesWindow:
         button_box.set_margin_bottom(15)
 
         # Help button on the left
-        help_btn = Gtk.Button(label="❓ Help")
+        help_btn = Gtk.Button(label="Help")
         help_btn.connect("clicked", self.on_help)
+        help_btn.get_child().set_xalign(0.5)
         help_btn.set_tooltip_text("Open TalkType help documentation")
         button_box.pack_start(help_btn, False, False, 0)
 
@@ -519,15 +520,56 @@ class PreferencesWindow:
             "• Better handling of accents and background noise"
         )
         grid.attach(model_label, 0, row, 1, 1)
-        model_combo = Gtk.ComboBoxText()
-        model_combo.set_can_focus(True)
-        model_combo.connect("button-press-event", self._on_combo_button_press)
-        self._block_combo_scroll(model_combo)
+        # Check CUDA/GPU availability to gate large-v3
+        try:
+            from . import cuda_helper as _ch
+            _has_nvidia = bool(_ch.detect_nvidia_gpu())
+            _has_cuda   = _ch.has_talktype_cuda_libraries()
+        except Exception:
+            _has_nvidia = False
+            _has_cuda   = False
 
-        models = ["tiny", "base", "small", "medium", "large-v3"]
-        for model in models:
-            model_combo.append(model, model)  # append(id, text) - use model name as both ID and text
-        model_combo.set_active_id(self.config["model"])
+        # Model store columns: [model_id, display_text, is_sensitive]
+        _MODEL_DISPLAY = {
+            "tiny":     "tiny — fastest, lowest accuracy",
+            "base":     "base — fast, basic accuracy",
+            "small":    "small — recommended balance",
+            "medium":   "medium — better accuracy",
+            "large-v3": "large-v3 — best accuracy",
+        }
+        self.model_store = Gtk.ListStore(str, str, bool)
+        for _mid in ["tiny", "base", "small", "medium", "large-v3"]:
+            if _mid == "large-v3":
+                if _has_cuda:
+                    self.model_store.append([_mid, _MODEL_DISPLAY[_mid], True])
+                elif _has_nvidia:
+                    # Selectable — clicking it will offer CUDA download
+                    self.model_store.append([_mid,
+                        "large-v3 — click to download required CUDA libraries", True])
+                else:
+                    # Selectable — clicking it will explain why it's not supported
+                    self.model_store.append([_mid,
+                        "large-v3 — requires NVIDIA GPU (not available)", True])
+            else:
+                self.model_store.append([_mid, _MODEL_DISPLAY[_mid], True])
+
+        model_combo = Gtk.ComboBox.new_with_model(self.model_store)
+        model_combo.set_can_focus(True)
+        self._block_combo_scroll(model_combo)
+        _renderer = Gtk.CellRendererText()
+        model_combo.pack_start(_renderer, True)
+        model_combo.add_attribute(_renderer, "text", 1)
+        model_combo.add_attribute(_renderer, "sensitive", 2)
+
+        # Set active row to match current config model
+        _current = self.config.get("model", "small")
+        for _i, _row in enumerate(self.model_store):
+            if _row[0] == _current:
+                model_combo.set_active(_i)
+                break
+        else:
+            model_combo.set_active(2)  # Fall back to small
+
         self.model_combo = model_combo  # Store reference for later use
         model_combo.connect("changed", self._on_model_changed)
         grid.attach(model_combo, 1, row, 1, 1)
@@ -578,8 +620,9 @@ class PreferencesWindow:
         self._block_combo_scroll(self.lang_combo)
 
         # Add language options with flags
+        # Note: Auto-detect is NOT listed here — it is handled by the Language Mode
+        # dropdown above. This list is only shown when "Manual selection" is active.
         languages = [
-            ("", "🌐 Auto-detect"),
             ("en", "🇺🇸 English"),
             ("es", "🇪🇸 Spanish"),
             ("fr", "🇫🇷 French"),
@@ -618,11 +661,12 @@ class PreferencesWindow:
         for code, name in languages:
             self.lang_combo.append(code, name)
         
-        # Set current selection
-        current_lang = self.config.get("language", "")
+        # Set current selection — default to English if unset or previously set
+        # to auto-detect (empty string, which no longer exists in this list)
+        current_lang = self.config.get("language", "") or "en"
         self.lang_combo.set_active_id(current_lang)
         if self.lang_combo.get_active_id() is None:
-            self.lang_combo.set_active_id("")  # Default to auto-detect
+            self.lang_combo.set_active_id("en")  # Safe fallback
 
         self.lang_combo.connect("changed", lambda x: self.update_config("language", x.get_active_id()))
         # Tooltip moved to label to avoid interference with dropdown popup
@@ -701,8 +745,9 @@ class PreferencesWindow:
         row += 1
 
         # Test Hotkeys button
-        test_hotkeys_btn = Gtk.Button(label="🎹 Test Hotkeys")
+        test_hotkeys_btn = Gtk.Button(label="Test Hotkeys")
         test_hotkeys_btn.connect("clicked", self._on_test_hotkeys)
+        test_hotkeys_btn.get_child().set_xalign(0.5)
         test_hotkeys_btn.set_tooltip_text("Test your configured hotkeys to make sure they work")
         test_hotkeys_btn.set_halign(Gtk.Align.START)
         test_hotkeys_btn.set_margin_top(10)
@@ -841,9 +886,12 @@ class PreferencesWindow:
         
         # Control buttons
         button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
-        self.start_record_btn = Gtk.Button(label="🔴 Start Recording")
-        self.stop_record_btn = Gtk.Button(label="⏹️ Stop Recording")
-        self.replay_btn = Gtk.Button(label="▶️ Replay")
+        self.start_record_btn = Gtk.Button(label="● Start Recording")
+        self.stop_record_btn = Gtk.Button(label="■ Stop Recording")
+        self.replay_btn = Gtk.Button(label="▶ Replay")
+        self.start_record_btn.get_child().set_xalign(0.5)
+        self.stop_record_btn.get_child().set_xalign(0.5)
+        self.replay_btn.get_child().set_xalign(0.5)
         
         self.start_record_btn.connect("clicked", self.on_start_recording)
         self.stop_record_btn.connect("clicked", self.on_stop_recording)
@@ -993,6 +1041,7 @@ class PreferencesWindow:
         offset_x_spin = Gtk.SpinButton(adjustment=offset_x_adj)
         offset_x_spin.set_value(self.config.get("indicator_offset_x", 0))
         offset_x_spin.connect("value-changed", lambda x: self.update_config("indicator_offset_x", int(x.get_value())))
+        offset_x_spin.connect("scroll-event", lambda *a: True)  # Disable scroll wheel to prevent accidental changes
         offset_x_spin.set_tooltip_text("Fine-tune horizontal position.\nPositive = right, Negative = left")
         if is_wayland and not has_extension:
             offset_x_spin.set_sensitive(False)
@@ -1007,6 +1056,7 @@ class PreferencesWindow:
         offset_y_spin = Gtk.SpinButton(adjustment=offset_y_adj)
         offset_y_spin.set_value(self.config.get("indicator_offset_y", 0))
         offset_y_spin.connect("value-changed", lambda x: self.update_config("indicator_offset_y", int(x.get_value())))
+        offset_y_spin.connect("scroll-event", lambda *a: True)  # Disable scroll wheel to prevent accidental changes
         offset_y_spin.set_tooltip_text("Fine-tune vertical position.\nPositive = down, Negative = up")
         if is_wayland and not has_extension:
             offset_y_spin.set_sensitive(False)
@@ -1108,6 +1158,7 @@ class PreferencesWindow:
         self.timeout_spin.set_increments(1, 5)
         self.timeout_spin.set_value(self.config.get("auto_timeout_minutes", 5))
         self.timeout_spin.connect("value-changed", lambda x: self.update_config("auto_timeout_minutes", int(x.get_value())))
+        self.timeout_spin.connect("scroll-event", lambda *a: True)  # Disable scroll wheel to prevent accidental changes
         self.timeout_spin.set_tooltip_text("Number of minutes of inactivity before automatically stopping dictation.\n• 1-5 minutes: Very aggressive (good for short sessions)\n• 5-15 minutes: Balanced (recommended for laptop use)\n• 15-30 minutes: Conservative (good for desktop use)")
         grid.attach(self.timeout_spin, 1, row, 1, 1)
         row += 1
@@ -1148,14 +1199,16 @@ class PreferencesWindow:
         gpu_button_box.set_margin_start(10)
 
         # Check GPU button
-        self.check_gpu_button = Gtk.Button(label="🔍 Check for NVIDIA GPU")
+        self.check_gpu_button = Gtk.Button(label="Check for NVIDIA GPU")
         self.check_gpu_button.connect("clicked", self._on_check_gpu_clicked)
+        self.check_gpu_button.get_child().set_xalign(0.5)
         self.check_gpu_button.set_tooltip_text("Check if an NVIDIA graphics card is present on your system")
         gpu_button_box.pack_start(self.check_gpu_button, False, False, 0)
 
         # Download CUDA button
-        self.download_cuda_button = Gtk.Button(label="📦 Download CUDA Libraries")
+        self.download_cuda_button = Gtk.Button(label="Download CUDA Libraries")
         self.download_cuda_button.connect("clicked", self._on_download_cuda_clicked)
+        self.download_cuda_button.get_child().set_xalign(0.5)
         self.download_cuda_button.set_tooltip_text("Download CUDA libraries for GPU acceleration (~800MB download)")
         self.download_cuda_button.set_sensitive(False)
         gpu_button_box.pack_start(self.download_cuda_button, False, False, 0)
@@ -1193,8 +1246,9 @@ class PreferencesWindow:
         typing_button_box.set_margin_start(10)
 
         # Fix Typing button
-        self.fix_typing_button = Gtk.Button(label="🔧 Fix Typing Permissions")
+        self.fix_typing_button = Gtk.Button(label="Fix Typing Permissions")
         self.fix_typing_button.connect("clicked", self._on_fix_typing_clicked)
+        self.fix_typing_button.get_child().set_xalign(0.5)
         self.fix_typing_button.set_tooltip_text(
             "Configure system permissions for keystroke injection.\n"
             "Required for typing mode to work. Uses /dev/uinput.\n"
@@ -1236,8 +1290,9 @@ class PreferencesWindow:
         ext_button_box.set_margin_start(10)
 
         # Install Extension button
-        self.install_extension_button = Gtk.Button(label="📦 Install Extension")
+        self.install_extension_button = Gtk.Button(label="Install Extension")
         self.install_extension_button.connect("clicked", self._on_install_extension_clicked)
+        self.install_extension_button.get_child().set_xalign(0.5)
         self.install_extension_button.set_tooltip_text(
             "Download and install GNOME Shell extension (~3KB)\n"
             "Adds panel indicator, service controls, and enables recording indicator positioning on Wayland"
@@ -1246,15 +1301,17 @@ class PreferencesWindow:
         ext_button_box.pack_start(self.install_extension_button, False, False, 0)
 
         # Uninstall Extension button
-        self.uninstall_extension_button = Gtk.Button(label="🗑️ Uninstall Extension")
+        self.uninstall_extension_button = Gtk.Button(label="Uninstall Extension")
         self.uninstall_extension_button.connect("clicked", self._on_uninstall_extension_clicked)
+        self.uninstall_extension_button.get_child().set_xalign(0.5)
         self.uninstall_extension_button.set_tooltip_text("Remove GNOME Shell extension")
         self.uninstall_extension_button.set_sensitive(False)
         ext_button_box.pack_start(self.uninstall_extension_button, False, False, 0)
 
         # Restart GNOME Shell info button
-        self.restart_info_button = Gtk.Button(label="ℹ️ Restart Info")
+        self.restart_info_button = Gtk.Button(label="Restart Info")
         self.restart_info_button.connect("clicked", self._on_restart_info_clicked)
+        self.restart_info_button.get_child().set_xalign(0.5)
         self.restart_info_button.set_tooltip_text("How to restart GNOME Shell to activate extension")
         ext_button_box.pack_start(self.restart_info_button, False, False, 0)
 
@@ -1295,13 +1352,15 @@ class PreferencesWindow:
         button_box.set_margin_top(5)
         button_box.set_margin_bottom(5)
 
-        add_btn = Gtk.Button(label="➕ Add Command")
+        add_btn = Gtk.Button(label="Add Command")
         add_btn.connect("clicked", self._on_add_command)
+        add_btn.get_child().set_xalign(0.5)
         add_btn.set_tooltip_text("Add a new custom voice command")
         button_box.pack_start(add_btn, False, False, 0)
 
-        remove_btn = Gtk.Button(label="➖ Remove Selected")
+        remove_btn = Gtk.Button(label="Remove Selected")
         remove_btn.connect("clicked", self._on_remove_command)
+        remove_btn.get_child().set_xalign(0.5)
         remove_btn.set_tooltip_text("Remove the selected command")
         button_box.pack_start(remove_btn, False, False, 0)
 
@@ -1919,13 +1978,83 @@ class PreferencesWindow:
         if hasattr(self, '_updating_model') and self._updating_model:
             return
 
-        new_model = combo.get_active_id()
+        # Read model ID from ListStore (column 0) via active iter
+        _it = combo.get_active_iter()
+        if _it is None:
+            return
+        new_model = self.model_store.get_value(_it, 0)
 
         # Track last selected model to avoid showing dialog when clicking same model
         if not hasattr(self, '_last_selected_model'):
             self._last_selected_model = self.config.get("model")
 
-        # Show warning dialog for large-v3 model ONLY if it's not already downloaded
+        # If large-v3 is selected, check CUDA availability first
+        if new_model == "large-v3":
+            try:
+                from .cuda_helper import has_talktype_cuda_libraries, detect_nvidia_gpu
+                _has_cuda = has_talktype_cuda_libraries()
+                _has_nvidia = bool(detect_nvidia_gpu())
+            except Exception:
+                _has_cuda = False
+                _has_nvidia = False
+
+            if not _has_cuda:
+                # Revert the combo immediately before showing the dialog
+                _prev = self._last_selected_model if hasattr(self, '_last_selected_model') else "small"
+                self._updating_model = True
+                combo.set_active_id(_prev)
+                self._updating_model = False
+
+                if _has_nvidia:
+                    # Offer unified CUDA + model download — same as tray behavior
+                    _dlg = Gtk.MessageDialog(
+                        transient_for=self.window,
+                        flags=0,
+                        message_type=Gtk.MessageType.QUESTION,
+                        buttons=Gtk.ButtonsType.YES_NO,
+                        text="Downloads Required"
+                    )
+                    _dlg.format_secondary_text(
+                        "The 'large-v3' model needs two downloads:\n\n"
+                        "  • CUDA GPU Libraries   (~800MB)\n"
+                        "  • Large-v3 AI Model    (~3GB)\n\n"
+                        "Total: ~3.8GB — one-time download.\n\n"
+                        "Would you like to download both now?"
+                    )
+                    _dlg.set_keep_above(True)
+                    _resp = _dlg.run()
+                    _dlg.destroy()
+                    if _resp == Gtk.ResponseType.YES:
+                        from .download_progress_dialog import show_unified_download_dialog
+                        _results = show_unified_download_dialog(
+                            cuda=True, model="large-v3",
+                            parent=self.window,
+                        )
+                        _cuda_ok = _results.get("CUDA Libraries", {}).get("success", False)
+                        _model_ok = _results.get("large-v3 AI Model", {}).get("success", False)
+                        if _cuda_ok and _model_ok:
+                            self._on_cuda_download_for_model()
+                        elif _cuda_ok and not _model_ok:
+                            # CUDA worked but model failed — refresh dropdown, don't auto-select
+                            self._refresh_device_dropdown()
+                else:
+                    _dlg = Gtk.MessageDialog(
+                        transient_for=self.window,
+                        flags=0,
+                        message_type=Gtk.MessageType.WARNING,
+                        buttons=Gtk.ButtonsType.OK,
+                        text="NVIDIA GPU Required"
+                    )
+                    _dlg.format_secondary_text(
+                        "The 'large-v3' model requires an NVIDIA GPU with CUDA support.\n\n"
+                        "This model is not compatible with CPU-only or AMD/Intel GPU systems."
+                    )
+                    _dlg.set_keep_above(True)
+                    _dlg.run()
+                    _dlg.destroy()
+                return
+
+        # Show size warning for large-v3 model ONLY if it's not already downloaded
         from .model_helper import is_model_cached
         if new_model == "large-v3" and not is_model_cached("large-v3"):
             dialog = Gtk.MessageDialog(
@@ -1964,6 +2093,26 @@ class PreferencesWindow:
         # Update config with new model and track it
         self._last_selected_model = new_model
         self.update_config("model", new_model)
+
+    def _on_cuda_download_for_model(self):
+        """Called after a successful CUDA download triggered from the model dropdown.
+        Updates the large-v3 entry label and auto-selects it so the user doesn't
+        have to pick it again manually.
+        """
+        # Update large-v3 label now that CUDA is available
+        for row in self.model_store:
+            if row[0] == "large-v3":
+                row[1] = "large-v3 — best accuracy"
+                break
+        # Also refresh the device dropdown to show CUDA
+        self._refresh_device_dropdown()
+        # Auto-select large-v3 so the user gets what they wanted
+        self._updating_model = True
+        if hasattr(self, 'model_combo'):
+            self.model_combo.set_active_id("large-v3")
+        self._updating_model = False
+        self.update_config("model", "large-v3")
+        self.update_config("device", "cuda")
 
     def _handle_autostart(self, enable):
         """Create or remove autostart desktop file."""
@@ -2662,6 +2811,14 @@ Hidden=true
                 self.save_config()
                 print("✅ Automatically switched to GPU mode after CUDA download")
 
+            # Unlock large-v3 in the model dropdown now that CUDA is available
+            if hasattr(self, 'model_store'):
+                for row in self.model_store:
+                    if row[0] == "large-v3":
+                        row[1] = "large-v3 — best accuracy"
+                        row[2] = True  # Make selectable
+                        break
+
         # Show the modern download dialog
         success = cuda_helper.show_cuda_download_dialog(
             parent=self.window,
@@ -3347,8 +3504,9 @@ Hidden=true
         
         if self.save_config():
             # Check if model needs downloading
-            if hasattr(self, 'model_combo'):
-                model_name = self.model_combo.get_active_text()
+            if hasattr(self, 'model_combo') and hasattr(self, 'model_store'):
+                _it = self.model_combo.get_active_iter()
+                model_name = self.model_store.get_value(_it, 0) if _it else None
                 if model_name:
                     success, was_downloaded = self.check_and_download_model(model_name)
                     if not success:
@@ -3437,8 +3595,9 @@ Hidden=true
             model_was_downloaded = False
 
             # Check if model needs downloading
-            if hasattr(self, 'model_combo'):
-                model_name = self.model_combo.get_active_text()
+            if hasattr(self, 'model_combo') and hasattr(self, 'model_store'):
+                _it = self.model_combo.get_active_iter()
+                model_name = self.model_store.get_value(_it, 0) if _it else None
                 if model_name:
                     success, was_downloaded = self.check_and_download_model(model_name)
                     model_was_downloaded = was_downloaded
@@ -3530,6 +3689,7 @@ Hidden=true
         dialog.set_default_size(450, 280)
         dialog.set_modal(True)
         dialog.set_position(Gtk.WindowPosition.CENTER)
+        dialog.set_keep_above(True)
 
         content = dialog.get_content_area()
         content.set_margin_top(20)

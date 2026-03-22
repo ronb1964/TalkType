@@ -53,6 +53,8 @@ def show_help_dialog():
 
         scrolled.add(label)
         tab_label = Gtk.Label(label=title)
+        tab_label.set_halign(Gtk.Align.CENTER)  # Center text within the tab
+        tab_label.set_hexpand(True)             # Expand to fill tab width
         notebook.append_page(scrolled, tab_label)
 
     # Tab 1: Getting Started (merged best of tray + prefs)

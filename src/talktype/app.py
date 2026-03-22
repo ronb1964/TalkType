@@ -1467,11 +1467,14 @@ def build_model(settings: Settings):
             logger.debug("CUDA traceback:", exc_info=True)
             print("🔄 Falling back to CPU...")
             try:
-                # Try CPU fallback with progress dialog
+                # Fall back to CPU — skip confirmation dialog since the user already
+                # chose this model via the preset; a surprise dialog in a background
+                # process would block silently and cause the service to hang.
                 model = download_model_with_progress(
                     settings.model,
                     device="cpu",
-                    compute_type="int8"
+                    compute_type="int8",
+                    show_confirmation=False
                 )
 
                 if model is None:
@@ -1479,6 +1482,19 @@ def build_model(settings: Settings):
 
                 print("✅ Model loaded successfully on CPU (fallback)")
                 logger.info("Model loaded on CPU (fallback from CUDA)")
+
+                # Persist device=cpu to config so future service restarts don't
+                # try CUDA again and crash in a loop.
+                try:
+                    from .config import load_config, save_config
+                    _cfg = load_config()
+                    if _cfg.device == "cuda":
+                        _cfg.device = "cpu"
+                        save_config(_cfg)
+                        logger.info("Updated config: device=cpu (CUDA unavailable — preventing crash loop)")
+                except Exception as _ce:
+                    logger.warning(f"Could not persist device=cpu after CUDA fallback: {_ce}")
+
                 return model
             except Exception as cpu_e:
                 print(f"❌ CPU fallback also failed: {cpu_e}")
@@ -1519,6 +1535,23 @@ def main():
     if args.smart_quotes: cfg.smart_quotes = (args.smart_quotes == "on")
     if args.notify: cfg.notify = (args.notify == "on")
     if args.language is not None: cfg.language = args.language
+
+    # Guard: large-v3 requires CUDA — silently fall back to medium if CUDA
+    # is not installed. This prevents the service from becoming completely
+    # non-functional when someone opens the app without CUDA after having
+    # previously configured it with the large model.
+    if cfg.model == "large-v3":
+        try:
+            from .cuda_helper import has_talktype_cuda_libraries
+            if not has_talktype_cuda_libraries():
+                logger.warning(
+                    "large-v3 selected but CUDA libraries not found — "
+                    "falling back to 'medium' to prevent non-functional state."
+                )
+                print("⚠️  large-v3 requires CUDA (not installed). Falling back to 'medium'.")
+                cfg.model = "medium"
+        except Exception:
+            pass  # If cuda_helper unavailable, let the existing error handling deal with it
 
     # Set global typing delay from config
     global _typing_delay

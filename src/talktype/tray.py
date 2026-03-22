@@ -601,6 +601,108 @@ class DictationTray:
             from .config import load_config, save_config
             from .model_helper import is_model_cached, download_model_with_progress
 
+            # large-v3 requires NVIDIA GPU + CUDA libraries.
+            # Check BEFORE anything else — if CUDA missing, show a dialog and bail out.
+            # NOTE: This block is intentionally outside the inner try/except so that
+            # an exception here CANNOT fall through to the model download below.
+            if model_name == "large-v3":
+                _cuda_ok = False
+                try:
+                    from .cuda_helper import has_talktype_cuda_libraries
+                    _cuda_ok = has_talktype_cuda_libraries()
+                except Exception as _e:
+                    logger.error(f"CUDA check error: {_e}")
+                    _cuda_ok = False  # Treat as missing — safer than allowing large-v3
+
+                if not _cuda_ok:
+                    # Detect NVIDIA GPU for the right error message and action
+                    _has_nvidia = False
+                    try:
+                        from .cuda_helper import detect_nvidia_gpu
+                        _has_nvidia = bool(detect_nvidia_gpu())
+                    except Exception:
+                        pass
+
+                    # Revert the radio button back to current preset (do this before
+                    # showing any dialog so the UI is already correct if user cancels)
+                    self._updating_preset = True
+                    try:
+                        _cur = self._get_current_preset()
+                        if _cur in self.preset_radios:
+                            self.preset_radios[_cur].set_active(True)
+                        elif hasattr(self, 'preset_custom'):
+                            self.preset_custom.set_active(True)
+                    except Exception as _re:
+                        logger.error(f"Failed to revert preset radio: {_re}")
+                    finally:
+                        self._updating_preset = False
+
+                    if _has_nvidia:
+                        # NVIDIA GPU detected — offer to download BOTH CUDA + large-v3 together.
+                        # One confirmation, then one unified dialog showing both progress bars.
+                        _dlg = Gtk.MessageDialog(
+                            parent=None,
+                            flags=0,
+                            message_type=Gtk.MessageType.QUESTION,
+                            buttons=Gtk.ButtonsType.YES_NO,
+                            text="Download Required for 'Most Accurate'"
+                        )
+                        _dlg.format_secondary_text(
+                            "Two components need to be downloaded before 'Most Accurate' can be used:\n\n"
+                            "  • CUDA GPU Libraries   (~800MB)\n"
+                            "  • Large-v3 AI Model    (~3GB)\n\n"
+                            "Total: ~3.8GB — one-time download, cached for future use.\n\n"
+                            "Would you like to download both now?"
+                        )
+                        _dlg.set_keep_above(True)
+                        _response = _dlg.run()
+                        _dlg.destroy()
+                        if _response == Gtk.ResponseType.YES:
+                            # Show the unified dialog — this blocks until both downloads finish
+                            # (or are cancelled).  After both succeed, auto-apply the preset.
+                            from .download_progress_dialog import show_unified_download_dialog
+                            _results = show_unified_download_dialog(
+                                cuda=True,
+                                model="large-v3",
+                            )
+                            _cuda_ok = _results.get("CUDA Libraries", {}).get("success", False)
+                            _model_ok = _results.get("large-v3 AI Model", {}).get("success", False)
+                            if _cuda_ok and _model_ok:
+                                # Both downloads succeeded — save the preset config and
+                                # restart the dictation service so it picks up CUDA + large-v3.
+                                try:
+                                    cfg = load_config()
+                                    cfg.model = "large-v3"
+                                    cfg.device = "cuda"
+                                    save_config(cfg)
+                                    logger.info(
+                                        "Both downloads complete — applied Most Accurate preset "
+                                        "(large-v3, cuda)"
+                                    )
+                                    self.update_menu_display()
+                                    self.restart_service(None)
+                                except Exception as _ae:
+                                    logger.error(f"Failed to apply preset after download: {_ae}")
+                    else:
+                        # No NVIDIA GPU — just inform, no download to offer
+                        _dlg = Gtk.MessageDialog(
+                            parent=None,
+                            flags=0,
+                            message_type=Gtk.MessageType.WARNING,
+                            buttons=Gtk.ButtonsType.OK,
+                            text="Cannot Apply 'Most Accurate' Preset"
+                        )
+                        _dlg.format_secondary_text(
+                            "'Most Accurate' requires an NVIDIA GPU + CUDA libraries.\n\n"
+                            "AMD and Intel GPUs are not supported for the large-v3 model.\n"
+                            "Please choose a different performance preset."
+                        )
+                        _dlg.set_keep_above(True)
+                        _dlg.run()
+                        _dlg.destroy()
+
+                    return  # Always stop here — never fall through to model download
+
             # Check if model is cached
             if not is_model_cached(model_name):
                 logger.info(f"Model {model_name} not cached, showing download dialog")
@@ -625,9 +727,24 @@ class DictationTray:
 
             cfg = load_config()
 
+            # Determine effective device — presets marked "cuda" require CUDA libraries.
+            # If CUDA isn't installed, silently use CPU so the service doesn't crash.
+            effective_device = preset["device"]
+            if effective_device == "cuda":
+                try:
+                    from .cuda_helper import has_talktype_cuda_libraries
+                    if not has_talktype_cuda_libraries():
+                        effective_device = "cpu"
+                        logger.info(
+                            f"Preset '{preset_id}' requests CUDA but libraries not installed — "
+                            "saving device=cpu to prevent service crash."
+                        )
+                except Exception:
+                    effective_device = "cpu"  # Safer to assume no CUDA if check fails
+
             # Apply preset settings
             cfg.model = preset["model"]
-            cfg.device = preset["device"]
+            cfg.device = effective_device
 
             # Battery saver also reduces timeout
             if preset_id == "battery":
@@ -784,6 +901,7 @@ class DictationTray:
             "Continue with download?"
         )
         confirm_dialog.set_position(Gtk.WindowPosition.CENTER)
+        confirm_dialog.set_keep_above(True)
         response = confirm_dialog.run()
         confirm_dialog.destroy()
 
@@ -832,6 +950,7 @@ class DictationTray:
         )
         dialog.set_default_size(500, 450)
         dialog.set_position(Gtk.WindowPosition.CENTER)
+        dialog.set_keep_above(True)
 
         content = dialog.get_content_area()
         content.set_spacing(10)
@@ -949,6 +1068,7 @@ class DictationTray:
         )
         progress_dialog.format_secondary_text("Connecting to GitHub...")
         progress_dialog.set_position(Gtk.WindowPosition.CENTER)
+        progress_dialog.set_keep_above(True)
         progress_dialog.show_all()
 
         result_holder = [None]
@@ -973,6 +1093,7 @@ class DictationTray:
                 error_msg = result.get("error", "Unknown error") if result else "Unknown error"
                 error_dialog.format_secondary_text(error_msg)
                 error_dialog.set_position(Gtk.WindowPosition.CENTER)
+                error_dialog.set_keep_above(True)
                 error_dialog.run()
                 error_dialog.destroy()
                 return
@@ -1009,6 +1130,7 @@ class DictationTray:
             message = f"<b>TalkType {current}</b> is the latest version."
             dialog.format_secondary_markup(message)
             dialog.set_position(Gtk.WindowPosition.CENTER)
+            dialog.set_keep_above(True)
             dialog.run()
             dialog.destroy()
             return
@@ -1020,6 +1142,7 @@ class DictationTray:
         )
         dialog.set_default_size(450, 350)
         dialog.set_position(Gtk.WindowPosition.CENTER)
+        dialog.set_keep_above(True)
 
         content = dialog.get_content_area()
         content.set_spacing(10)
@@ -1104,6 +1227,7 @@ class DictationTray:
             )
             error_dialog.format_secondary_text("Could not find download URL.")
             error_dialog.set_position(Gtk.WindowPosition.CENTER)
+            error_dialog.set_keep_above(True)
             error_dialog.run()
             error_dialog.destroy()
             return
@@ -1115,6 +1239,7 @@ class DictationTray:
         )
         progress_dialog.set_default_size(400, 120)
         progress_dialog.set_position(Gtk.WindowPosition.CENTER)
+        progress_dialog.set_keep_above(True)
 
         content = progress_dialog.get_content_area()
         content.set_spacing(10)
@@ -1163,6 +1288,7 @@ class DictationTray:
                     "TalkType will restart automatically with the new version."
                 )
                 status_dialog.set_position(Gtk.WindowPosition.CENTER)
+                status_dialog.set_keep_above(True)
                 status_dialog.show_all()
 
                 # Process events so dialog shows
@@ -1188,6 +1314,7 @@ class DictationTray:
                     )
                     error_dialog.format_secondary_text(message)
                     error_dialog.set_position(Gtk.WindowPosition.CENTER)
+                    error_dialog.set_keep_above(True)
                     error_dialog.run()
                     error_dialog.destroy()
             else:
@@ -1202,6 +1329,7 @@ class DictationTray:
                     "Please try again or download manually from GitHub."
                 )
                 error_dialog.set_position(Gtk.WindowPosition.CENTER)
+                error_dialog.set_keep_above(True)
                 error_dialog.run()
                 error_dialog.destroy()
 
@@ -1510,6 +1638,7 @@ def main():
                     f"TalkType has restarted with the new version."
                 )
                 dialog.set_position(Gtk.WindowPosition.CENTER)
+                dialog.set_keep_above(True)
                 dialog.run()
                 dialog.destroy()
         except Exception as e:
