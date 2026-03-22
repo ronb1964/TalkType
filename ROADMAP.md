@@ -55,6 +55,12 @@ Future features, improvements, and expansion ideas. Check off items as they're i
 - [ ] Activities search integration
 - [ ] Publish extension to extensions.gnome.org
 
+## Settings Management
+
+- [ ] Backup settings — export config, custom commands, and preferences to a file
+- [ ] Restore settings — import a previously saved backup to restore your setup
+- [ ] Settings accessible from Preferences (Backup / Restore buttons)
+
 ## First-Run & Onboarding
 
 - [ ] Guided `/dev/uinput` permission setup with pkexec one-click fix
