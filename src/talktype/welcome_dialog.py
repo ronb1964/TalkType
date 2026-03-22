@@ -1837,9 +1837,34 @@ def show_tips_and_features_dialog(extension_installed=False):
     selected_model = [get_combo_model_id()]  # Use list to make mutable
 
     def on_get_started_clicked(button):
-        """Handle Get Started button - close dialog and return selected model"""
+        """Handle Get Started button - show animated feedback then close dialog"""
         selected_model[0] = get_combo_model_id()
-        dialog.response(Gtk.ResponseType.OK)
+
+        # Gray out button and start animated "Setting up TalkType" dots
+        button.set_sensitive(False)
+        label_widget = button.get_child()
+        if label_widget and hasattr(label_widget, 'set_xalign'):
+            label_widget.set_xalign(0.5)
+
+        # Animated dot cycle: "" → "." → ".." → "..." → "" → ...
+        dot_phase = [0]
+        def animate_dots():
+            dots = "." * (dot_phase[0] % 4)
+            button.set_label(f"Setting up TalkType{dots}")
+            lbl = button.get_child()
+            if lbl and hasattr(lbl, 'set_xalign'):
+                lbl.set_xalign(0.5)
+            dot_phase[0] += 1
+            return True
+
+        button.set_label("Setting up TalkType")
+        anim_id = GLib.timeout_add(350, animate_dots)
+
+        def close_dialog():
+            GLib.source_remove(anim_id)
+            dialog.response(Gtk.ResponseType.OK)
+            return False
+        GLib.timeout_add(1200, close_dialog)
 
     get_started_button.connect("clicked", on_get_started_clicked)
 
@@ -2082,7 +2107,7 @@ def show_hotkey_test_dialog():
 
     def update_ui_for_key(keyname, is_capture_mode, action="press"):
         """Update UI when a key is pressed or released.
-        action='press'  → show yellow 'Holding...' (phantoms can only get this far)
+        action='press'  → no UI change (phantoms only generate presses — ignore them)
         action='release' → show green '✓ Working!' (requires physical key activity)
         """
         if not dialog_ready[0]:
@@ -2119,18 +2144,13 @@ def show_hotkey_test_dialog():
             toggle_change_btn.set_sensitive(True)
         else:
             # Normal testing mode:
-            # press → yellow "Holding..." (phantom-safe, not counted as passing)
-            # release → green "✓ Working!" (counts as passing — physical action required)
-            if keyname == current_hold_key[0]:
-                if action == "press" and not tested_keys["hold"]:
-                    hold_status.set_markup('<span color="#FFA500">⏸ Holding...</span>')
-                elif action == "release":
+            # press → no UI change (phantoms only generate presses, so we ignore them entirely)
+            # release → green "✓ Working!" (requires a physical press+release, phantom-proof)
+            if action == "release":
+                if keyname == current_hold_key[0]:
                     tested_keys["hold"] = True
                     hold_status.set_markup('<span color="#4CAF50">✓ Working!</span>')
-            elif keyname == current_toggle_key[0]:
-                if action == "press" and not tested_keys["toggle"]:
-                    toggle_status.set_markup('<span color="#FFA500">⏸ Holding...</span>')
-                elif action == "release":
+                elif keyname == current_toggle_key[0]:
                     tested_keys["toggle"] = True
                     toggle_status.set_markup('<span color="#4CAF50">✓ Working!</span>')
 
@@ -2373,8 +2393,8 @@ def show_hotkey_test_dialog():
         evdev_thread.start()
 
     # Open the gate immediately — no timer needed.
-    # Phantom key events can only trigger yellow "Holding...", never green "✓ Working!",
-    # because green requires a KEY_RELEASE which phantoms never generate.
+    # KEY_PRESS events are ignored entirely (phantoms only generate presses).
+    # Only KEY_RELEASE events update the UI, which phantoms never generate.
     dialog_ready[0] = True
 
     # Stop the killer thread after 500ms — enough time for the service to die.
@@ -2495,22 +2515,41 @@ def show_welcome_and_install():
             compute_type = "float16" if device.lower() == "cuda" else "int8"
             logger.info(f"Download config: device={device}, compute_type={compute_type}")
 
-            # Download model WITHOUT confirmation (user already selected it)
-            model = download_model_with_progress(
-                selected_model,
-                device=device,
-                compute_type=compute_type,
-                parent=None,
-                show_confirmation=False  # No confirmation - user already chose
-            )
-
-            if model:
-                logger.info(f"✅ {selected_model} model downloaded successfully")
-                # Update config with selected model
+            if already_cached:
+                # Model files already on disk — just save config and move on.
+                # DO NOT load the model here; the dictation service will load it
+                # when it starts. Loading large models (especially large-v3 on CUDA)
+                # takes 5-10 seconds and would freeze the UI with no feedback.
+                logger.info(f"✅ {selected_model} already cached — skipping load, saving config")
+                print(f"✅ {selected_model} already cached — skipping model load")
                 config.model = selected_model
                 save_config(config)
-                logger.info(f"✅ Config updated to use {selected_model} model")
-                del model  # Clean up - will be reloaded when service starts
+                model = True  # Treat as success so the flow continues normally
+            else:
+                # Model not on disk yet — download it with a progress bar
+                model = download_model_with_progress(
+                    selected_model,
+                    device=device,
+                    compute_type=compute_type,
+                    parent=None,
+                    show_confirmation=False  # No confirmation - user already chose
+                )
+
+            if model:
+                if model is not True:
+                    # Freshly downloaded — update config and free the loaded model.
+                    # IMPORTANT: freeing a large model (especially on CUDA) can take
+                    # several seconds on the main thread and freeze the UI. We pass the
+                    # model to a background thread so it's freed there instead.
+                    config.model = selected_model
+                    save_config(config)
+                    logger.info(f"✅ Config updated to use {selected_model} model")
+                    import threading as _th
+                    def _free_in_background(m):
+                        pass  # m goes out of scope here, freeing memory in background thread
+                    _th.Thread(target=_free_in_background, args=(model,), daemon=True).start()
+                    del model  # Remove main thread's ref; background thread holds the last ref
+                logger.info(f"✅ {selected_model} model ready")
             else:
                 # Download failed or was cancelled - fall back to smaller model
                 logger.warning(f"Model download returned None for {selected_model} (likely cancelled or failed)")
@@ -2574,7 +2613,9 @@ def show_welcome_and_install():
             except Exception:
                 pass  # Last resort failed, app will try to download on first run
 
-    # Install AppImage to standard location and create desktop launcher (if running from AppImage)
+    # Install AppImage to standard location and create desktop launcher (if running from AppImage).
+    # The AppImage copy is 300MB+ so we run it in a background thread to avoid freezing the UI.
+    # The "Ready!" screen shows immediately — the copy finishes silently in the background.
     appimage_installed = False
     launcher_created = False
     try:
@@ -2588,17 +2629,27 @@ def show_welcome_and_install():
         )
 
         if is_running_from_appimage():
-            # Check if AppImage is already in standard location
             already_there, current_path = ensure_appimage_in_standard_location()
 
             if not already_there and current_path:
-                # Copy AppImage to ~/AppImages/TalkType.AppImage
-                success, msg = copy_appimage_to_standard_location()
-                if success:
-                    appimage_installed = True
-                    logger.info(f"AppImage installed to standard location: {APPIMAGE_PATH}")
+                # Kick off the 300MB copy in a background thread — don't block the UI
+                def _bg_install():
+                    try:
+                        success, msg = copy_appimage_to_standard_location()
+                        if success:
+                            logger.info(f"AppImage installed to standard location: {APPIMAGE_PATH}")
+                        else:
+                            logger.warning(f"AppImage install failed: {msg}")
+                    except Exception as e:
+                        logger.warning(f"Background AppImage install error: {e}")
 
-            # Create desktop launcher if it doesn't exist
+                import threading as _threading
+                _threading.Thread(target=_bg_install, daemon=True).start()
+                appimage_installed = True  # Optimistically mark as installed for the Ready screen
+            else:
+                appimage_installed = already_there
+
+            # Create desktop launcher synchronously — it's just writing a small text file
             if not desktop_launcher_exists():
                 success, msg = create_desktop_launcher()
                 if success:
