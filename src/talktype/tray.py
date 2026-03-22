@@ -518,6 +518,9 @@ class DictationTray:
                 except Exception as e:
                     logger.error(f"Failed to emit injection mode change: {e}")
 
+            # Restart service so new injection mode takes effect immediately
+            self.restart_service(None)
+
         except Exception as e:
             logger.error(f"Failed to set injection mode: {e}")
 
