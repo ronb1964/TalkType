@@ -9,6 +9,10 @@
 
 > **TL;DR:** Download the AppImage, run it, press F8 to talk. Text appears where your cursor is. Works in any app — browsers, editors, terminals, chat apps, everywhere.
 
+<p align="center">
+  <img src="screenshots/demo.gif" alt="TalkType in action — press F8, speak, text appears" width="720">
+</p>
+
 ---
 
 ## Why TalkType?
