@@ -19,14 +19,14 @@ LITERAL_REPLACEMENTS = {
     "comma": "__LIT_COMMA__",
     "tab": "__LIT_TAB__",
     "newline": "__LIT_NEWLINE__",
-    "new line": "__LIT_NEWLINE__",
-    "return": "__LIT_NEWLINE__",
-    "line break": "__LIT_NEWLINE__",
+    "new line": "__LIT_NEW_LINE__",
+    "return": "__LIT_RETURN__",
+    "line break": "__LIT_LINEBREAK__",
     "new paragraph": "__LIT_NEWPARA__",
-    "paragraph break": "__LIT_NEWPARA__",
+    "paragraph break": "__LIT_PARABK__",
     "question mark": "__LIT_QMARK__",
     "exclamation point": "__LIT_EPOINT__",
-    "exclamation mark": "__LIT_EPOINT__",
+    "exclamation mark": "__LIT_EPOINT2__",
     "semicolon": "__LIT_SEMICOLON__",
     "colon": "__LIT_COLON__",
     "apostrophe": "__LIT_APOSTROPHE__",
@@ -34,16 +34,11 @@ LITERAL_REPLACEMENTS = {
     "hyphen": "__LIT_HYPHEN__",
     "dash": "__LIT_DASH__",
     "ellipsis": "__LIT_ELLIPSIS__",
-    "dot dot dot": "__LIT_ELLIPSIS__",
+    "dot dot dot": "__LIT_DOTDOTDOT__",
 }
 
-# Auto-compute the restore mapping (placeholder → original word)
-# Only keep one entry per unique placeholder (first occurrence wins)
-_seen_placeholders = {}
-for _word, _ph in LITERAL_REPLACEMENTS.items():
-    if _ph not in _seen_placeholders:
-        _seen_placeholders[_ph] = _word
-LITERAL_RESTORE = _seen_placeholders
+# Restore mapping: each placeholder → its original spoken word (1:1, lossless)
+LITERAL_RESTORE = {ph: word for word, ph in LITERAL_REPLACEMENTS.items()}
 
 # Precompile literal escape patterns: "literal <word>" or "the word <word>"
 _LITERAL_PATTERNS = [
