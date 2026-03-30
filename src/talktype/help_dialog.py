@@ -292,6 +292,10 @@ Examples:
 Custom commands are matched case-insensitively and replaced before
 other processing, so you can include punctuation in replacements.
 
+To inject a replacement exactly as typed — bypassing auto-capitalization
+and punctuation — wrap the replacement text in double quotes:
+• "my email" → "user@example.com"  (injected verbatim, no changes)
+
 <b>Undo Commands:</b>
 • Say <b>undo last word</b> to delete the last word you dictated
 • Say <b>undo last sentence</b> to delete back to the previous sentence

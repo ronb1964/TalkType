@@ -254,38 +254,54 @@ _typing_delay = 12  # milliseconds, default value
 # Global custom commands (loaded from config in main)
 _custom_commands: dict[str, str] = {}
 
-def _apply_custom_commands(text: str) -> str:
+def _apply_custom_commands(text: str) -> tuple[str, dict[str, str]]:
     """
     Apply user-defined custom voice commands to the transcribed text.
-    
+
     Replaces spoken phrases with their configured replacements.
     Uses case-insensitive matching with word boundaries to avoid
     accidental replacements within longer words.
-    
+
+    If a replacement value is wrapped in double quotes (e.g. "Hello, world!"),
+    the quotes are stripped and the text is protected from normalization by
+    substituting a placeholder token. The caller must restore these tokens
+    after normalize_text() runs.
+
     Args:
         text: Raw transcribed text
-        
+
     Returns:
-        Text with custom commands applied
+        Tuple of (processed text, protected dict mapping placeholder → literal text)
     """
     if not _custom_commands or not text:
-        return text
-    
+        return text, {}
+
     result = text
-    
+    protected: dict[str, str] = {}  # placeholder → literal replacement text
+    counter = 0
+
     # Sort by phrase length (longest first) to avoid partial matches
     sorted_commands = sorted(_custom_commands.items(), key=lambda x: len(x[0]), reverse=True)
-    
+
     for phrase, replacement in sorted_commands:
         # Create a case-insensitive word boundary pattern
         # \b ensures we match whole words/phrases, not substrings
         pattern = r'\b' + re.escape(phrase) + r'\b'
-        result = re.sub(pattern, replacement, result, flags=re.IGNORECASE)
-    
+
+        if replacement.startswith('"') and replacement.endswith('"') and len(replacement) >= 2:
+            # Quoted replacement — inject exactly as written, bypass normalization
+            literal_text = replacement[1:-1]
+            placeholder = f"§CMDLIT_{counter}§"
+            counter += 1
+            protected[placeholder] = literal_text
+            result = re.sub(pattern, placeholder, result, flags=re.IGNORECASE)
+        else:
+            result = re.sub(pattern, replacement, result, flags=re.IGNORECASE)
+
     if result != text:
         logger.info(f"Custom commands applied: {text!r} -> {result!r}")
 
-    return result
+    return result, protected
 
 
 # YouTube-specific phrases that are NEVER real dictation.
@@ -1010,11 +1026,17 @@ def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: b
 
     Returns the final text string ready for injection.
     """
-    # Apply custom voice commands (phrase \u2192 replacement)
-    processed = _apply_custom_commands(raw)
+    # Apply custom voice commands (phrase → replacement)
+    # Quoted replacements come back as placeholder tokens in `protected`
+    processed, protected = _apply_custom_commands(raw)
 
     # Normalize text (capitalization, punctuation, etc.)
     text = normalize_text(processed if smart_quotes else processed.replace("\u201c","\"").replace("\u201d","\""))
+
+    # Restore quoted (literal) custom command replacements before any further
+    # processing so that auto-period/space checks see the real final text.
+    for placeholder, literal in protected.items():
+        text = text.replace(placeholder, literal)
 
     # Handle mid-sentence continuation after undo:
     # lowercase the first letter if we're continuing a sentence

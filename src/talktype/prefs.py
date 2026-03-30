@@ -1414,6 +1414,7 @@ class PreferencesWindow:
             '• Click on a cell to edit it directly\n'
             '• Phrases are matched case-insensitively\n'
             '• Use \\n in replacement for line breaks\n'
+            '• Wrap replacement in "quotes" to inject it exactly as typed (no auto-capitalization or punctuation changes)\n'
             '• Changes are saved when you click Apply or OK\n'
             '• Restart the dictation service for changes to take effect</span>'
         )

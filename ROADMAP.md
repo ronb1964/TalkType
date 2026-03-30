@@ -4,6 +4,10 @@ Future features, improvements, and expansion ideas. Check off items as they're i
 
 ---
 
+## Custom Commands
+
+- [x] Quoted replacement text — if a custom command's replacement is wrapped in quotes (e.g., `"/btw "`), inject it exactly as written, bypassing all normalization (no auto-capitalization, no punctuation changes). Unquoted replacements continue to flow through normalization as today. Implementation: detect quoted values in `_apply_custom_commands()`, protect them with placeholder tokens before `normalize_text()` runs, restore after. Update tooltip on the replacement field in Preferences, the Help dialog, and the README to explain the quoted syntax.
+
 ## Transcription & AI
 
 - [ ] Silence auto-stop (VAD) with configurable end-of-speech timeout
@@ -11,6 +15,7 @@ Future features, improvements, and expansion ideas. Check off items as they're i
 - [ ] Language quick switch in tray menu for multilingual users
 - [ ] Confidence threshold control — filter low-quality transcriptions from background noise
 - [ ] Dictation templates — voice-activated templates (e.g., "compose email" inserts email structure)
+- [ ] Time format normalization — post-process transcribed times like "5 p. m." or "5. 30 p. m." into clean formats like "5 PM" or "5:30 PM"
 - [ ] Empty transcription indicator — visual/audio feedback when no speech detected
 - [ ] Optional transcription history — last 10-20 transcriptions, click to copy from tray
 
