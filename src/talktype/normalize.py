@@ -147,20 +147,22 @@ _EMAIL_TLD_FIXES = [
 ]
 
 # --- 15) Time formatting ---
-# Fix Whisper's mangled time output: "11. 30 p. m." → "11:30 PM"
-# Matches hours 1-12, period or colon separator, minutes 00-59, then AM/PM variants.
-# AM/PM variants handled: "p. m.", "p.m.", "PM", "a. m.", "a.m.", "AM" (any case/spacing).
+# Fix Whisper's mangled time output: "11. 30 p. m." → "11:30 PM", "11 p. m." → "11 PM"
+# Minutes are optional — handles both "11:30 p. m." and bare "11 p. m."
+# AM/PM variants handled: "p. m.", "p. M.", "p.m.", "PM", "a. m.", "a.m.", "AM" (any case/spacing).
 _RE_TIME_FORMAT = re.compile(
-    r'\b(1[0-2]|0?[1-9])[.:]\s*([0-5][0-9])\s*([Pp]\.?\s*[Mm]\.?|[Aa]\.?\s*[Mm]\.?)\b',
+    r'\b(1[0-2]|0?[1-9])(?:[.:]\s*([0-5][0-9]))?\s+([Pp]\.?\s*[Mm]\.?|[Aa]\.?\s*[Mm]\.?)',
     re.IGNORECASE
 )
 
 def _fix_time_ampm(m: re.Match) -> str:
-    """Normalize a matched time string to HH:MM AM/PM format."""
+    """Normalize a matched time string to HH:MM AM/PM or HH AM/PM format."""
     hour = m.group(1)
-    minute = m.group(2)
-    ampm = re.sub(r'[\s.]', '', m.group(3)).upper()  # "p. m." → "PM"
-    return f"{hour}:{minute} {ampm}"
+    minute = m.group(2)  # None if no minutes were present
+    ampm = re.sub(r'[\s.]', '', m.group(3)).upper()  # "p. m." / "p. M." → "PM"
+    if minute:
+        return f"{hour}:{minute} {ampm}"
+    return f"{hour} {ampm}"
 
 
 # =====================================================================
