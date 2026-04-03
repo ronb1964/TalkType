@@ -57,6 +57,7 @@ const TalkTypeIface = `
     <method name="OpenPreferences"/>
     <method name="OpenPreferencesUpdates"/>
     <method name="ShowHelp"/>
+    <method name="ShowVoiceCommands"/>
     <method name="ShowAbout"/>
     <method name="CheckForUpdates"/>
     <method name="Quit"/>
@@ -322,6 +323,13 @@ class TalkTypeIndicator extends PanelMenu.Button {
             this._proxy.OpenPreferencesRemote();
         });
         this.menu.addMenuItem(prefsItem);
+
+        // Voice Commands quick reference
+        let voiceCmdsItem = new PopupMenu.PopupMenuItem('Voice Commands...');
+        voiceCmdsItem.connect('activate', () => {
+            this._proxy.ShowVoiceCommandsRemote();
+        });
+        this.menu.addMenuItem(voiceCmdsItem);
 
         // Help
         let helpItem = new PopupMenu.PopupMenuItem('Help...');

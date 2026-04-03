@@ -69,6 +69,7 @@ class Settings:
     indicator_offset_x: int = 0         # custom X offset from position anchor (pixels, can be negative)
     indicator_offset_y: int = 0         # custom Y offset from position anchor (pixels, can be negative)
     indicator_size: str = "medium"      # indicator size: small, medium, large
+    voice_commands_hotkey: str = "Ctrl+Alt+V"  # hotkey combo to open voice commands quick reference
     auto_check_updates: bool = True      # automatically check for updates on startup (once per day)
     last_update_check: str = ""          # ISO timestamp of last update check
 

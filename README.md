@@ -111,7 +111,7 @@ The AppImage includes everything needed - just download and run!
 | Requirement | Details |
 |------------|---------|
 | **OS** | Linux with Wayland |
-| **Dependencies** | ydotool, wl-clipboard (installed automatically on first run) |
+| **Dependencies** | ydotool, wl-clipboard (must be installed on your system; ydotoold daemon is started automatically on first run) |
 | **Audio** | Working microphone |
 | **GPU (optional)** | NVIDIA GPU for CUDA acceleration |
 

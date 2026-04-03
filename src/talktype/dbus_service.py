@@ -174,6 +174,11 @@ class TalkTypeDBusService(dbus.service.Object):
         self._dispatch('show_help')
 
     @dbus.service.method(DBUS_INTERFACE)
+    def ShowVoiceCommands(self):
+        """Show the voice commands quick reference popup"""
+        self._dispatch('show_voice_commands')
+
+    @dbus.service.method(DBUS_INTERFACE)
     def ShowAbout(self):
         """Show the about dialog"""
         self._dispatch('show_about')

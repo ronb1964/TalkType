@@ -222,6 +222,10 @@ class DictationTray:
                     """Show help via tray."""
                     GLib.idle_add(self.tray.show_help, None)
 
+                def show_voice_commands(self):
+                    """Show voice commands quick reference via tray."""
+                    GLib.idle_add(self.tray.show_voice_commands, None)
+
                 def show_about(self):
                     """Show about dialog via tray."""
                     GLib.idle_add(self.tray.show_about_dialog, None)
@@ -940,6 +944,11 @@ class DictationTray:
         from .help_dialog import show_help_dialog
         show_help_dialog()
 
+    def show_voice_commands(self, _):
+        """Show voice commands quick reference popup."""
+        from .voice_commands_dialog import show_voice_commands_dialog
+        show_voice_commands_dialog()
+
     def show_about_dialog(self, _):
         """Show About dialog with app info, version, and changelog."""
         import threading
@@ -1558,11 +1567,13 @@ class DictationTray:
 
         # Action items
         prefs_item = Gtk.MenuItem(label="Preferences...")
+        voice_cmds_item = Gtk.MenuItem(label="Voice Commands...")
         help_item = Gtk.MenuItem(label="Help...")
         about_item = Gtk.MenuItem(label="About TalkType...")
         updates_item = Gtk.MenuItem(label="Check for Updates...")
         quit_item = Gtk.MenuItem(label="Quit TalkType")
         prefs_item.connect("activate", self.open_preferences)
+        voice_cmds_item.connect("activate", self.show_voice_commands)
         help_item.connect("activate", self.show_help)
         about_item.connect("activate", self.show_about_dialog)
         updates_item.connect("activate", self.check_for_updates_clicked)
@@ -1578,7 +1589,7 @@ class DictationTray:
             self.performance_menu_item,
             self.injection_mode_menu_item,
             Gtk.SeparatorMenuItem(),
-            prefs_item, help_item, about_item, updates_item,
+            prefs_item, voice_cmds_item, help_item, about_item, updates_item,
             Gtk.SeparatorMenuItem(),
             quit_item,
         ]:

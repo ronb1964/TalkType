@@ -221,6 +221,9 @@ Fine-tune audio in Preferences → Audio tab:
 
 Use these spoken commands during dictation to insert punctuation and formatting.
 
+<b>💡 Quick Access:</b> Set a Voice Commands hotkey in Preferences → General
+to pop up a compact cheat sheet anytime. Also available from the tray menu.
+
 <b>Punctuation:</b>
 • Say <b>comma</b> for ,
 • Say <b>period</b> or <b>full stop</b> for .
@@ -321,6 +324,7 @@ and punctuation — wrap the replacement text in double quotes:
 <b>Keyboard Shortcuts:</b>
 • <b>F8:</b> Push-to-talk (hold to record, release to stop)
 • <b>F9:</b> Toggle recording (press once to start, again to stop)
+• <b>Voice Commands shortcut:</b> Set in Preferences → General to instantly pop up the voice commands cheat sheet
 • Hotkeys work globally in any application
 • Customize hotkeys in Preferences → General
 

@@ -312,7 +312,8 @@ class PreferencesWindow:
             "launch_at_login": False,
             "auto_timeout_enabled": True,
             "auto_timeout_minutes": 5,
-            "auto_check_updates": True
+            "auto_check_updates": True,
+            "voice_commands_hotkey": "Ctrl+Alt+V"
         }
         
         if os.path.exists(CONFIG_PATH):
@@ -755,6 +756,47 @@ class PreferencesWindow:
         row += 1
 
         # Both hotkeys are always shown (no mode-based hiding)
+
+        # Voice Commands hotkey (optional combo shortcut to open quick reference)
+        vc_label = Gtk.Label(label="Voice Commands Hotkey:", xalign=0)
+        vc_label.set_tooltip_text(
+            "Press this key combo to pop up a quick reference of all voice commands.\n"
+            "Leave set to 'None' to disable the shortcut.\n"
+            "The reference is also available from the tray menu."
+        )
+        grid.attach(vc_label, 0, row, 1, 1)
+
+        self.vc_hotkey_combo = Gtk.ComboBoxText()
+        self.vc_hotkey_combo.set_can_focus(True)
+        self.vc_hotkey_combo.connect("button-press-event", self._on_combo_button_press)
+        self._block_combo_scroll(self.vc_hotkey_combo)
+
+        # Pre-defined combos that avoid common system/app conflicts
+        # Ctrl+Shift combos conflict with browsers; Super+H is GNOME minimize
+        vc_combos = [
+            ("", "None (disabled)"),
+            ("Ctrl+Alt+V", "Ctrl+Alt+V (recommended)"),
+            ("Ctrl+Alt+H", "Ctrl+Alt+H"),
+            ("Ctrl+Super+V", "Ctrl+Super+V"),
+            ("Ctrl+Super+H", "Ctrl+Super+H"),
+        ]
+        for combo_id, combo_label in vc_combos:
+            self.vc_hotkey_combo.append(combo_id, combo_label)
+
+        current_vc = self.config.get("voice_commands_hotkey", "")
+        # If the saved value matches a known combo, select it; otherwise default to None
+        known_ids = [c[0] for c in vc_combos]
+        if current_vc in known_ids:
+            self.vc_hotkey_combo.set_active_id(current_vc)
+        else:
+            self.vc_hotkey_combo.set_active_id("")  # None
+
+        self.vc_hotkey_combo.connect("changed", lambda x: self.update_config(
+            "voice_commands_hotkey", x.get_active_id() or ""
+        ))
+
+        grid.attach(self.vc_hotkey_combo, 1, row, 1, 1)
+        row += 1
 
         # ===== STARTUP OPTIONS SECTION =====
         separator2 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)

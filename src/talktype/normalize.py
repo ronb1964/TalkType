@@ -146,6 +146,22 @@ _EMAIL_TLD_FIXES = [
     (re.compile(r"\.\s*([Ff]r)\b"), ".fr"),
 ]
 
+# --- 15) Time formatting ---
+# Fix Whisper's mangled time output: "11. 30 p. m." → "11:30 PM"
+# Matches hours 1-12, period or colon separator, minutes 00-59, then AM/PM variants.
+# AM/PM variants handled: "p. m.", "p.m.", "PM", "a. m.", "a.m.", "AM" (any case/spacing).
+_RE_TIME_FORMAT = re.compile(
+    r'\b(1[0-2]|0?[1-9])[.:]\s*([0-5][0-9])\s*([Pp]\.?\s*[Mm]\.?|[Aa]\.?\s*[Mm]\.?)\b',
+    re.IGNORECASE
+)
+
+def _fix_time_ampm(m: re.Match) -> str:
+    """Normalize a matched time string to HH:MM AM/PM format."""
+    hour = m.group(1)
+    minute = m.group(2)
+    ampm = re.sub(r'[\s.]', '', m.group(3)).upper()  # "p. m." → "PM"
+    return f"{hour}:{minute} {ampm}"
+
 
 # =====================================================================
 # Main normalization function
@@ -268,5 +284,9 @@ def normalize_text(text: str) -> str:
     text = _RE_EMAIL_AT_WORD.sub(r"\1@\2.\3", text)
     for pat, repl in _EMAIL_TLD_FIXES:
         text = pat.sub(repl, text)
+
+    # --- 15) Fix time formatting ---
+    # "11. 30 p. m." → "11:30 PM", "3:15 a. m." → "3:15 AM", etc.
+    text = _RE_TIME_FORMAT.sub(_fix_time_ampm, text)
 
     return text

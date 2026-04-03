@@ -224,29 +224,44 @@ def _handle_sigusr2(signum, frame):
         _hotkey_test_mode.set()
         print("[hotkey-test] Test mode ENABLED (SIGUSR2)", flush=True)
 
+def _get_tray_dbus_proxy():
+    """Get or create the D-Bus proxy for communicating with the tray process."""
+    global _tray_dbus_proxy
+    import dbus
+    if _tray_dbus_proxy is None:
+        import dbus.mainloop.glib
+        dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+        bus = dbus.SessionBus()
+        _tray_dbus_proxy = bus.get_object(
+            'io.github.ronb1964.TalkType',
+            '/io/github/ronb1964/TalkType'
+        )
+    return _tray_dbus_proxy
+
+
 def _notify_tray_hotkey_pressed(key_name: str):
     """Send hotkey press notification to tray D-Bus service during test mode.
 
     Called from the evdev loop when _hotkey_test_mode is set. The tray's D-Bus
     service emits a HotkeyPressed signal that the prefs dialog listens for.
     """
-    global _tray_dbus_proxy
     try:
-        import dbus
-        if _tray_dbus_proxy is None:
-            import dbus.mainloop.glib
-            dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
-            bus = dbus.SessionBus()
-            _tray_dbus_proxy = bus.get_object(
-                'io.github.ronb1964.TalkType',
-                '/io/github/ronb1964/TalkType'
-            )
-        _tray_dbus_proxy.NotifyHotkeyPressed(
+        proxy = _get_tray_dbus_proxy()
+        proxy.NotifyHotkeyPressed(
             key_name,
             dbus_interface='io.github.ronb1964.TalkType'
         )
     except Exception as e:
         logger.debug(f"Could not notify tray of hotkey press: {e}")
+
+
+def _show_voice_commands_via_dbus():
+    """Tell the tray to show the voice commands quick reference via D-Bus."""
+    try:
+        proxy = _get_tray_dbus_proxy()
+        proxy.ShowVoiceCommands(dbus_interface='io.github.ronb1964.TalkType')
+    except Exception as e:
+        logger.debug(f"Could not show voice commands via D-Bus: {e}")
 
 # Global typing delay (set from config in main)
 _typing_delay = 12  # milliseconds, default value
@@ -497,6 +512,61 @@ def _keycode_from_name(name: str) -> int | None:
     if len(n) == 1 and "A" <= n <= "Z":
         return getattr(ecodes, f"KEY_{n}")
     return None  # Unknown key name - don't activate
+
+
+# Modifier key evdev codes for tracking combo hotkeys
+_MODIFIER_CODES = {
+    ecodes.KEY_LEFTCTRL, ecodes.KEY_RIGHTCTRL,
+    ecodes.KEY_LEFTSHIFT, ecodes.KEY_RIGHTSHIFT,
+    ecodes.KEY_LEFTALT, ecodes.KEY_RIGHTALT,
+    ecodes.KEY_LEFTMETA, ecodes.KEY_RIGHTMETA,
+}
+
+# Map modifier names to their evdev code pairs (left + right)
+_MODIFIER_NAMES = {
+    "CTRL":  (ecodes.KEY_LEFTCTRL,  ecodes.KEY_RIGHTCTRL),
+    "SHIFT": (ecodes.KEY_LEFTSHIFT, ecodes.KEY_RIGHTSHIFT),
+    "ALT":   (ecodes.KEY_LEFTALT,   ecodes.KEY_RIGHTALT),
+    "SUPER": (ecodes.KEY_LEFTMETA,  ecodes.KEY_RIGHTMETA),
+}
+
+
+def _parse_hotkey_combo(combo_str: str) -> tuple[set[str], int | None] | None:
+    """Parse a hotkey combo string like 'Ctrl+Shift+H' into (modifier_names, keycode).
+
+    Returns None if the string is empty or invalid.
+    modifier_names is a set of uppercase modifier names (e.g. {'CTRL', 'SHIFT'}).
+    keycode is the evdev keycode for the non-modifier key.
+    """
+    if not combo_str or not combo_str.strip():
+        return None
+
+    parts = [p.strip().upper() for p in combo_str.split("+")]
+    if len(parts) < 2:
+        return None  # Need at least one modifier + one key
+
+    # Last part is the main key, everything before is a modifier
+    modifiers = set()
+    for part in parts[:-1]:
+        if part in _MODIFIER_NAMES:
+            modifiers.add(part)
+        else:
+            return None  # Unknown modifier
+
+    main_key = _keycode_from_name(parts[-1])
+    if main_key is None:
+        return None  # Unknown key
+
+    return (modifiers, main_key)
+
+
+def _check_modifiers_held(required_mods: set[str], held_keys: set[int]) -> bool:
+    """Check if all required modifiers are currently held down."""
+    for mod_name in required_mods:
+        left, right = _MODIFIER_NAMES[mod_name]
+        if left not in held_keys and right not in held_keys:
+            return False
+    return True
 
 def _pick_input_device(mic_substring: str | None):
     """Return device index for the best matching input device.
@@ -1291,7 +1361,9 @@ Right-click the tray icon \u2192 "Help..." for full documentation
         logger.error(f"Failed to show welcome dialog after hotkey change: {e}")
 
 
-def _handle_key_event(event, mode, hold_key, toggle_key, devices, grabbed_device, cfg, input_device_idx):
+def _handle_key_event(event, mode, hold_key, toggle_key,
+                      voice_cmds_combo, held_modifiers,
+                      devices, grabbed_device, cfg, input_device_idx):
     """Handle a single keyboard event. Both hold (F8) and toggle (F9) are always active.
 
     Returns the updated grabbed_device state (may be modified by grab/ungrab).
@@ -1306,6 +1378,27 @@ def _handle_key_event(event, mode, hold_key, toggle_key, devices, grabbed_device
         if key_name:
             _notify_tray_hotkey_pressed(key_name)
         return grabbed_device  # Don't process hotkeys normally in test mode
+
+    # --- Voice Commands combo hotkey (e.g. Ctrl+Shift+H) ---
+    if voice_cmds_combo and event.value == 1:
+        required_mods, main_key = voice_cmds_combo
+        if event.code == main_key and _check_modifiers_held(required_mods, held_modifiers):
+            # Briefly grab all devices to prevent keypress leaking to focused app
+            temp_grabbed = []
+            for grab_dev in devices:
+                try:
+                    grab_dev.grab()
+                    temp_grabbed.append(grab_dev)
+                except Exception:
+                    pass
+            _show_voice_commands_via_dbus()
+            # Ungrab immediately — we only needed to suppress the key event
+            for grab_dev in temp_grabbed:
+                try:
+                    grab_dev.ungrab()
+                except Exception:
+                    pass
+            return grabbed_device
 
     # --- Hold-to-talk: hold key down to record, release to stop ---
     if event.code == hold_key:
@@ -1393,10 +1486,22 @@ def _loop_evdev(cfg: Settings, input_device_idx):
     hold_key = _keycode_from_name(cfg.hotkey)
     toggle_key = _keycode_from_name(cfg.toggle_hotkey) if cfg.toggle_hotkey else None
 
+    # Voice commands hotkey supports combos like "Ctrl+Shift+H"
+    vc_hotkey_str = getattr(cfg, 'voice_commands_hotkey', '')
+    voice_cmds_combo = _parse_hotkey_combo(vc_hotkey_str)
+    voice_cmds_main_key = voice_cmds_combo[1] if voice_cmds_combo else None
+
     if hold_key is None:
         logger.info("No hotkey configured - service will not monitor any keys")
         print("No hotkey configured. Complete onboarding to activate dictation.")
         return
+
+    if voice_cmds_combo:
+        print(f"Voice Commands hotkey: {vc_hotkey_str}")
+        logger.info(f"Voice Commands hotkey: {vc_hotkey_str}")
+
+    # Track which modifier keys are currently held (for combo detection)
+    held_modifiers: set[int] = set()
 
     # Show welcome dialog if user just changed hotkeys via Preferences
     from .config import get_data_dir
@@ -1450,12 +1555,20 @@ def _loop_evdev(cfg: Settings, input_device_idx):
             try:
                 for event in dev.read():
                     if event.type == ecodes.EV_KEY:
+                        # Track modifier key state for combo detection
+                        if event.code in _MODIFIER_CODES:
+                            if event.value in (1, 2):  # press or repeat
+                                held_modifiers.add(event.code)
+                            elif event.value == 0:  # release
+                                held_modifiers.discard(event.code)
+
                         # Reset timeout on any hotkey activity
-                        if timeout_enabled and event.code in (hold_key, toggle_key, ecodes.KEY_ESC):
+                        if timeout_enabled and event.code in (hold_key, toggle_key, ecodes.KEY_ESC, voice_cmds_main_key):
                             last_activity_time = current_time
                         grabbed_device = _handle_key_event(
-                            event, mode, hold_key, toggle_key, devices,
-                            grabbed_device, cfg, input_device_idx)
+                            event, mode, hold_key, toggle_key,
+                            voice_cmds_combo, held_modifiers,
+                            devices, grabbed_device, cfg, input_device_idx)
             except BlockingIOError:
                 pass
             except Exception:
