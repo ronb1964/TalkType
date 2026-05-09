@@ -2,6 +2,25 @@
 
 All notable changes to TalkType are documented here.
 
+## [0.5.16] - 2026-05-09
+
+### Bug Fixes
+- **Words vanishing from longer dictations** — Disabled Whisper's VAD pre-filter that was trimming speech onsets after natural sentence-ending pauses. Phrases like "Eight hours later, we were standing in a kitchen with collapsed ceilings" no longer disappear after pauses. See [faster-whisper#925](https://github.com/SYSTRAN/faster-whisper/issues/925).
+- **"period of time" mangled into "period. Of time"** — Command words like *period*, *comma*, *return*, *dash*, *quote* no longer get corrupted when used as ordinary English nouns. Phrases like "period of time", "in return", "tax return", "dash of salt", "great quote", and "comma operator" now transcribe correctly.
+- **Standalone "i" not capitalized mid-sentence** — Whisper transcribes the pronoun "I" as lowercase when it appears mid-sentence; TalkType now automatically capitalizes it (also catches "i'll", "i'm", "i've", "i'd").
+- Fixed *literal return* restoring as 'newline' instead of 'return'.
+- Fixed time normalization to handle hours without minutes (e.g., "11 PM").
+
+### New Features
+- **Voice Commands Dialog** — Press Ctrl+Alt+V (configurable) to see a quick reference of all voice commands. Supports combo hotkeys.
+- **Quoted Replacement Support for Custom Commands** — Custom commands can now use quoted strings for literal replacement (bypasses normalization).
+- Enabled GitHub Discussions on the project repository.
+
+### Improvements
+- Increased Whisper `beam_size` from 1 to 5 (faster-whisper's default) for noticeably better decoding accuracy on the trade of ~0.5s extra inference time.
+- D-Bus service refactor (internal).
+- Added 18 new test cases for normalization patterns.
+
 ## [0.5.15] - 2026-03-22
 
 ### New Features
