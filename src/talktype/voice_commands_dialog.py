@@ -132,10 +132,10 @@ def _build_markup():
   <b>soft break</b> → three spaces
 
 <b>Undo</b>
-  <b>undo last word</b> → delete last dictated word
-  <b>undo last sentence</b> → delete back to previous sentence
-  <b>undo last paragraph</b> → delete back to last line break
-  <b>undo everything</b> / <b>clear all</b> → delete all dictated text
+  <b>undo last word</b> / <b>delete last word</b> → delete last dictated word
+  <b>undo last sentence</b> / <b>delete last sentence</b> → delete back to previous sentence
+  <b>undo last paragraph</b> / <b>delete last paragraph</b> → delete back to last line break
+  <b>undo everything</b> / <b>delete all</b> / <b>clear all</b> → delete all dictated text
 
 <b>Literal Words</b>
 Say <b>literal</b> or <b>the word</b> before a command to type it as text:
