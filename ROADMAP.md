@@ -115,4 +115,4 @@ Future features, improvements, and expansion ideas. Check off items as they're i
 
 ---
 
-*Last updated: 2026-03-22 (v0.5.15)*
+*Last updated: 2026-05-09 (v0.5.16)*
