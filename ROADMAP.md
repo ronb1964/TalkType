@@ -7,6 +7,8 @@ Future features, improvements, and expansion ideas. Check off items as they're i
 ## Custom Commands
 
 - [x] Quoted replacement text — if a custom command's replacement is wrapped in quotes (e.g., `"/btw "`), inject it exactly as written, bypassing all normalization (no auto-capitalization, no punctuation changes). Unquoted replacements continue to flow through normalization as today. Implementation: detect quoted values in `_apply_custom_commands()`, protect them with placeholder tokens before `normalize_text()` runs, restore after. Update tooltip on the replacement field in Preferences, the Help dialog, and the README to explain the quoted syntax.
+- [ ] Auto-reload custom commands when edited — currently the Preferences Commands tab tells the user "Restart the dictation service for changes to take effect." Should reload `_custom_commands` in app.py automatically (e.g., file-watch on the config or a D-Bus signal from prefs → app) so edits take effect immediately. Removes a friction point users hit every time they touch this list.
+- [ ] Importable preset packs of custom commands — a "Linux developer" pack (`why do tool` → `ydotool`, `appy mage` → `AppImage`, `dee bus` → `D-Bus`, etc.), a "Claude Code user" pack with keywords, a "general English" pack with common Whisper trip-ups. Users could install a pack from a "Browse Packs" button in Preferences instead of building their list from scratch. Could grow into a community PR-driven library of shared packs.
 
 ## Transcription & AI
 
