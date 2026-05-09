@@ -46,6 +46,67 @@ _LITERAL_PATTERNS = [
     for word, placeholder in LITERAL_REPLACEMENTS.items()
 ]
 
+# --- 0.2) Context-aware protection for command words used as English nouns ---
+# Words like "period", "comma", "return", "dash", "quote" are command triggers
+# in dictation, but they are also normal English nouns in phrases like "period
+# of time", "in return", "a dash of salt", "the comma operator". Without this
+# pass, those phrases get corrupted: "period of time" → "period. Of time".
+#
+# Each pattern captures surrounding context and substitutes a placeholder for
+# just the protected word. Same mechanism as _LITERAL_PATTERNS — placeholders
+# are restored to their original words by the pass at step 12.
+_CONTEXT_PROTECT_PATTERNS = [
+    # "[article/adj/possessive] period" — strong noun signal
+    (re.compile(
+        r"\b(a|an|the|this|that|these|those|my|his|her|its|our|their|your|"
+        r"any|some|each|every|long|short|brief|extended|lengthy|given|"
+        r"certain|trial|grace|menstrual|test|same|full|half|specific|"
+        r"particular|entire|whole|two-week|three-month|24-hour)\s+period\b",
+        re.IGNORECASE,
+    ), r"\1 __LIT_PERIOD__"),
+    # "period of [word]" — fixed noun phrase: "period of time", "period of mourning"
+    (re.compile(r"\bperiod(\s+of\b)", re.IGNORECASE), r"__LIT_PERIOD__\1"),
+
+    # "[prep/article/possessive/adj] return" — noun/verb usage
+    (re.compile(
+        r"\b(in|on|at|the|a|an|my|his|her|its|our|their|your|tax|safe|"
+        r"swift|prompt|early|late|partial|full|complete|annual|monthly|"
+        r"yearly|first|second|third|grand|major|sudden|big|home|no|any|"
+        r"every|each|some|triumphant|long-awaited)\s+return\b",
+        re.IGNORECASE,
+    ), r"\1 __LIT_RETURN__"),
+    # "return [to/of/from/home/...]" — verb or noun-of-X usage
+    (re.compile(
+        r"\breturn(\s+(?:to|of|from|home|the|on|by|policy|address|trip|"
+        r"flight|ticket|date|window|policy|customer|item))\b",
+        re.IGNORECASE,
+    ), r"__LIT_RETURN__\1"),
+
+    # "[article/adj] dash"
+    (re.compile(
+        r"\b(a|an|the|this|that|my|his|her|every|each|any|some|"
+        r"quick|sudden|mad|small|tiny|little|big|huge)\s+dash\b",
+        re.IGNORECASE,
+    ), r"\1 __LIT_DASH__"),
+    # "dash of [word]"
+    (re.compile(r"\bdash(\s+of\b)", re.IGNORECASE), r"__LIT_DASH__\1"),
+
+    # "[article/adj/possessive] quote"
+    (re.compile(
+        r"\b(a|an|the|this|that|my|his|her|its|our|their|your|every|each|"
+        r"any|some|famous|great|good|nice|important|brief|long|short|"
+        r"memorable|favorite|powerful|funny|inspiring)\s+quote\b",
+        re.IGNORECASE,
+    ), r"\1 __LIT_QUOTE__"),
+
+    # "comma operator/splice/key" — programming / writing terminology
+    (re.compile(r"\bcomma\s+(operator|splice|key)\b", re.IGNORECASE),
+     r"__LIT_COMMA__ \1"),
+    # "Oxford/serial comma" — writing style
+    (re.compile(r"\b(oxford|serial)\s+comma\b", re.IGNORECASE),
+     r"\1 __LIT_COMMA__"),
+]
+
 # --- 1) Multi-word spoken punctuation → symbol ---
 _MULTI_WORD_REPLACEMENTS = [
     (re.compile(r"\s*\bnew\s*line\b[,.\s]*|\bnewline\b|\breturn\b|\bline\s+break\b", re.IGNORECASE), "§SHIFT_ENTER§"),
@@ -121,6 +182,11 @@ _RE_MULTI_SPACE = re.compile(r"[ ]{2,}")
 _RE_TRAILING_COMMA = re.compile(r",$")
 _RE_NO_END_PUNCT = re.compile(r"[.?!…]$")
 _RE_CAP_AFTER_ENDER = re.compile(r"([.?!…]\s+)([a-z])")
+# Standalone lowercase "i" → "I" (also catches "i'll", "i'm", "i've", "i'd"
+# because the apostrophe is a word boundary). Case-sensitive: an existing
+# "I" is left alone. Words like "in", "it", "iPad" are not matched because
+# they have no word boundary on the right side of the "i".
+_RE_STANDALONE_I = re.compile(r"\bi\b")
 
 # --- 11) Smart quote punctuation placement ---
 _RE_PUNCT_OUTSIDE_QUOTE = re.compile(r"\u201d( ?)([!?,;:.])")
@@ -186,6 +252,11 @@ def normalize_text(text: str) -> str:
     for pat, placeholder in _LITERAL_PATTERNS:
         text = pat.sub(placeholder, text)
 
+    # --- 0.2) Protect command words used as English nouns ("period of time",
+    #          "in return", "a dash of salt", "comma operator", etc.) ---
+    for pat, repl in _CONTEXT_PROTECT_PATTERNS:
+        text = pat.sub(repl, text)
+
     # --- 1) Multi-word replacements first (order matters) ---
     for pat, repl in _MULTI_WORD_REPLACEMENTS:
         text = pat.sub(repl, text)
@@ -244,6 +315,11 @@ def normalize_text(text: str) -> str:
         line = ("\t" * leading_tabs) + core
         lines.append(line.rstrip())
     text = "\n".join(lines)
+
+    # Capitalize standalone lowercase "i" (and "i'll", "i'm", "i've", "i'd")
+    # to "I". Done before the per-line capitalization pass so cap_first sees
+    # an already-correct string and doesn't have to special-case the pronoun.
+    text = _RE_STANDALONE_I.sub("I", text)
 
     # --- 10) Capitalization ---
     def cap_first(s: str) -> str:

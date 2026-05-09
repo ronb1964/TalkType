@@ -152,19 +152,6 @@ UNDO_PATTERNS = {
     'everything': ['undo everything', 'undo all', 'delete everything', 'delete all', 'clear everything', 'clear all'],
 }
 
-# VAD parameters tuned for dictation (used by faster-whisper transcription)
-# - Lower threshold (0.35) = less aggressive at cutting off speech
-# - Higher speech_pad_ms (800) = more padding around detected speech
-# - Higher min_silence_duration_ms (3500) = longer silence needed to split,
-#   which prevents the VAD from splitting audio during natural pauses in
-#   longer dictations. Splitting at pauses causes dropped sentences because
-#   each segment is transcribed independently and content at boundaries is lost.
-VAD_PARAMS = {
-    "threshold": 0.35,
-    "speech_pad_ms": 800,
-    "min_silence_duration_ms": 3500,
-}
-
 # D-Bus proxy for notifying the tray process of recording state changes.
 # The tray owns the D-Bus name and relays signals to the GNOME extension.
 _tray_dbus_proxy = None
@@ -1013,17 +1000,21 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
     transcribe_start = time.time()
     segments, _ = model.transcribe(
         audio_f32,
-        vad_filter=True,
-        vad_parameters=VAD_PARAMS,
-        beam_size=1,
+        vad_filter=False,
+        beam_size=5,
         condition_on_previous_text=False,
         temperature=0.0,
         without_timestamps=True,
         language=(language or None),
-        # NOTE: hallucination_silence_threshold was removed because it
-        # silently drops real speech after natural 2+ second pauses,
-        # causing middle sentences to vanish from longer paragraphs.
-        # Hallucination filtering is handled by _strip_hallucinations().
+        # vad_filter is disabled: Silero VAD trims speech onsets at segment
+        # boundaries (especially the start of recordings and after sentence
+        # pauses), causing leading words to vanish from raw Whisper output.
+        # See: github.com/SYSTRAN/faster-whisper/issues/925
+        # Push-to-talk dictation has minimal non-speech audio to filter,
+        # so disabling VAD has near-zero quality cost.
+        # hallucination_silence_threshold also stays unset — same reason:
+        # it drops real speech after natural 2+ second pauses. Trailing
+        # hallucination phrases are handled by _strip_hallucinations().
     )
     transcribe_time = time.time() - transcribe_start
     logger.info(f"TIMING: Transcription completed in {transcribe_time:.2f}s")

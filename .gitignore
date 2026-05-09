@@ -140,3 +140,6 @@ archive/
 # Claude Code
 # ============================================
 .claude/
+
+# Playwright MCP automation logs
+.playwright-mcp/
