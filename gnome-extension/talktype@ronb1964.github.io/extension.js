@@ -51,6 +51,9 @@ const TalkTypeIface = `
     <method name="SetInjectionMode">
       <arg type="s" direction="in" name="mode"/>
     </method>
+    <method name="SetFocusedWindowClass">
+      <arg type="s" direction="in" name="wm_class"/>
+    </method>
     <method name="ApplyPerformancePreset">
       <arg type="s" direction="in" name="preset"/>
     </method>
@@ -213,9 +216,37 @@ class TalkTypeIndicator extends PanelMenu.Button {
 
             this._dbusAvailable = true;
             console.log('TalkType: Connected to D-Bus service');
+
+            // Track focused window class so TalkType can pick the right
+            // paste keystroke (Ctrl+V for normal apps, Ctrl+Shift+V for terminals).
+            this._setupFocusTracking();
         } catch (e) {
             this._dbusAvailable = false;
             console.error('TalkType: Failed to connect to D-Bus:', e);
+        }
+    }
+
+    _setupFocusTracking() {
+        if (!global.display) return;
+        this._focusSignalId = global.display.connect(
+            'notify::focus-window',
+            () => this._pushFocusedWindowClass()
+        );
+        this._pushFocusedWindowClass();
+    }
+
+    _pushFocusedWindowClass() {
+        if (!this._proxy || !this._dbusAvailable) {
+            console.log('TalkType: skip focus push (proxy or dbus not ready)');
+            return;
+        }
+        try {
+            const win = global.display && global.display.focus_window;
+            const wmClass = (win && win.get_wm_class()) || '';
+            console.log(`TalkType: pushing focused wm_class=${JSON.stringify(wmClass)}`);
+            this._proxy.SetFocusedWindowClassRemote(wmClass, () => {});
+        } catch (e) {
+            console.error('TalkType: focus push failed:', e);
         }
     }
 
@@ -229,6 +260,9 @@ class TalkTypeIndicator extends PanelMenu.Button {
                 this._dbusAvailable = true;
                 this.show();
                 this._updateStatus();
+                // Re-push current focus so a freshly restarted Python service
+                // doesn't sit at class=None until the user changes windows.
+                this._pushFocusedWindowClass();
                 console.log('TalkType: D-Bus service appeared - showing indicator');
             },
             () => {
@@ -526,6 +560,12 @@ class TalkTypeIndicator extends PanelMenu.Button {
         if (this._nameWatcherId) {
             Gio.DBus.session.unwatch_name(this._nameWatcherId);
             this._nameWatcherId = null;
+        }
+
+        // Disconnect focus-window listener
+        if (this._focusSignalId && global.display) {
+            global.display.disconnect(this._focusSignalId);
+            this._focusSignalId = null;
         }
 
         if (this._proxy) {

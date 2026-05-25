@@ -13,6 +13,23 @@ from .logger import setup_logger
 logger = setup_logger(__name__)
 
 
+# Cache of the currently focused window's wm_class, pushed from the GNOME
+# extension whenever focus changes. Read by app._paste_text to decide between
+# plain Ctrl+V (regular apps) and Ctrl+Shift+V (terminals).
+_focused_window_class: str | None = None
+
+
+def get_focused_window_class() -> str | None:
+    """Return the wm_class of the currently focused window, or None if unknown.
+
+    NOTE: This reads the in-memory cache local to *this* process. It only works
+    inside the tray process, where the D-Bus service receives push updates.
+    The dictation engine (talktype.app) runs in a separate subprocess and must
+    query via D-Bus instead — see _query_focused_window_class() in app.py.
+    """
+    return _focused_window_class
+
+
 class TalkTypeDBusService(dbus.service.Object):
     """
     D-Bus service interface for TalkType
@@ -152,6 +169,29 @@ class TalkTypeDBusService(dbus.service.Object):
     def SetInjectionMode(self, mode: str):
         """Change the text injection mode"""
         self._dispatch('set_injection_mode', mode)
+
+    @dbus.service.method(DBUS_INTERFACE, in_signature='s')
+    def SetFocusedWindowClass(self, wm_class: str):
+        """Receive the focused window's wm_class from the GNOME extension.
+
+        Called on every focus change. Cached for cross-process query via
+        GetFocusedWindowClass — the dictation engine runs in a separate
+        subprocess from this service.
+        """
+        global _focused_window_class
+        new_class = wm_class if wm_class else None
+        if new_class != _focused_window_class:
+            logger.info(f"Focused window class: {new_class!r}")
+        _focused_window_class = new_class
+
+    @dbus.service.method(DBUS_INTERFACE, out_signature='s')
+    def GetFocusedWindowClass(self):
+        """Return the currently focused window's wm_class (empty string if unknown).
+
+        Used by the dictation engine subprocess (talktype.app) to read the cache
+        that the GNOME extension pushes into this tray-side service.
+        """
+        return _focused_window_class or ''
 
     @dbus.service.method(DBUS_INTERFACE, in_signature='s')
     def ApplyPerformancePreset(self, preset: str):

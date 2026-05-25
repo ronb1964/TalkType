@@ -752,6 +752,89 @@ def _type_text_raw(text: str):
     logger.error("Could not type text: no ydotool/wtype/wl-copy available")
     print("⚠️  Could not type text (no ydotool/wtype).")
 
+# Window classes that need Ctrl+Shift+V for paste (terminals).
+# All other apps get plain Ctrl+V — works in chat/editor/browser inputs and
+# avoids a Chromium/Electron regression that mishandles synthetic Ctrl+Shift+V.
+_TERMINAL_WM_CLASSES = frozenset({
+    "org.gnome.Ptyxis", "Ptyxis",
+    "org.gnome.Terminal", "Gnome-terminal",
+    "konsole", "org.kde.konsole",
+    "kitty",
+    "Alacritty",
+    "WezTerm", "org.wezfurlong.wezterm",
+    "foot", "footclient",
+    "Tilix", "com.gexperts.Tilix",
+    "Terminator",
+    "xterm", "XTerm", "UXTerm",
+    "rxvt", "URxvt",
+})
+
+# Electron/Chromium apps where synthetic paste (Ctrl+V via ydotool) is broken
+# on Wayland — modifier-key chords from /dev/uinput are silently dropped and
+# the focused input blurs. For these apps, route to a fast Type path instead
+# (plain character keystrokes still work, per OpenWhispr #240 and others).
+_ELECTRON_PASTE_BROKEN_CLASSES = frozenset({
+    "Claude", "claude", "claude-desktop", "Claude Desktop", "anthropic-claude",
+})
+
+
+def _query_focused_window_class() -> str | None:
+    """Query the tray's D-Bus service for the currently focused window's wm_class.
+
+    The dictation engine (this process) is a *subprocess* of the tray, so its
+    own in-memory `_focused_window_class` is always None. The tray owns the
+    D-Bus service and receives push updates from the GNOME extension; we ask
+    it across processes via a fast D-Bus call.
+
+    Returns the wm_class string, or None if unknown / D-Bus unavailable.
+    """
+    try:
+        import dbus
+        bus = dbus.SessionBus()
+        proxy = bus.get_object(
+            "io.github.ronb1964.TalkType",
+            "/io/github/ronb1964/TalkType",
+        )
+        result = proxy.GetFocusedWindowClass(
+            dbus_interface="io.github.ronb1964.TalkType",
+        )
+        s = str(result) if result else ""
+        return s if s else None
+    except Exception as e:
+        logger.debug(f"Focused window class query failed: {e}")
+        return None
+
+
+def _type_text_fast(text: str, delay_ms: int = 3):
+    """Type text via ydotool with a very small inter-event delay.
+
+    Used for Electron/Chromium apps where clipboard-paste is broken on Wayland.
+    Defaults to 3ms per event (~OpenWhispr's recommended value) — much faster
+    than the user-config Type mode, but still slow enough to avoid input-buffer
+    overflow in web apps.
+    """
+    if not _which("ydotool"):
+        logger.error("Fast-type fallback: ydotool unavailable")
+        return False
+    try:
+        env = _get_ydotool_env()
+        d = str(max(1, delay_ms))
+        logger.info(f"ydotool fast-type: delay={d}ms, text_len={len(text)}")
+        proc = subprocess.Popen(
+            ["ydotool", "type", "-d", d, "-H", d, "-f", "-"],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            env=env,
+        )
+        _stdout, stderr = proc.communicate(input=text.encode("utf-8"), timeout=30)
+        if proc.returncode != 0:
+            logger.error(f"ydotool fast-type failed: rc={proc.returncode}, stderr={stderr.decode(errors='replace')}")
+            return False
+        return True
+    except Exception as e:
+        logger.error(f"Fast-type exception: {e}")
+        return False
+
+
 def _paste_text(text: str, send_trailing_keys: bool = False):
     """
     Wayland paste injection: put text on clipboard, then Ctrl+V or Shift+Ctrl+V.
@@ -765,10 +848,13 @@ def _paste_text(text: str, send_trailing_keys: bool = False):
     """
     try:
         if _which("wl-copy") and _which("ydotool"):
-            # Always use Ctrl+Shift+V for paste - works in both terminals and regular apps
-            # This avoids complex and unreliable terminal detection
-            # (Ctrl+Shift+V works universally on Wayland/GNOME)
-            
+            # Pick paste keystroke from focused window's wm_class:
+            #   - terminals need Ctrl+Shift+V (Ctrl+V is the bash literal-char escape)
+            #   - everything else uses plain Ctrl+V (the canonical paste shortcut,
+            #     and avoids an Electron regression that mishandles synthetic
+            #     Ctrl+Shift+V — drops focus on the input).
+            # wm_class is pushed by the GNOME extension on every focus change.
+
             # Copy text to clipboard
             # wl-copy needs to stay running to serve clipboard requests
             paste_start = time.time()
@@ -782,18 +868,24 @@ def _paste_text(text: str, send_trailing_keys: bool = False):
             # Wait for clipboard to be ready (needs time for wl-copy to set up)
             time.sleep(0.08)
 
-            # Send Ctrl+Shift+V to paste - works universally in terminals and regular apps
-            # KEY_LEFTSHIFT (42), KEY_LEFTCTRL (29), KEY_V (47)
             env = _get_ydotool_env()
 
-            ydotool_start = time.time()
-            # Always use Ctrl+Shift+V - works for both terminals and regular apps
-            logger.debug("Using Ctrl+Shift+V for paste (universal)")
+            # Resolve focused window class via D-Bus query (tray-side cache).
+            # None when the extension hasn't pushed yet or the service is down.
+            focused_class = _query_focused_window_class()
+
+            is_terminal = focused_class in _TERMINAL_WM_CLASSES if focused_class else False
+
             # KEY_LEFTSHIFT=42, KEY_LEFTCTRL=29, KEY_V=47
-            # Format: keycode:1 (down) or keycode:0 (up)
-            subprocess.run(["ydotool", "key",
-                    "42:1", "29:1", "47:1", "47:0", "29:0", "42:0"],
-                   check=False, env=env)
+            if is_terminal:
+                keys = ["42:1", "29:1", "47:1", "47:0", "29:0", "42:0"]  # Ctrl+Shift+V
+                logger.info(f"Paste: Ctrl+Shift+V (terminal class={focused_class!r})")
+            else:
+                keys = ["29:1", "47:1", "47:0", "29:0"]  # Ctrl+V
+                logger.info(f"Paste: Ctrl+V (class={focused_class!r})")
+
+            ydotool_start = time.time()
+            subprocess.run(["ydotool", "key"] + keys, check=False, env=env)
             ydotool_time = time.time() - ydotool_start
             logger.info(f"TIMING: ydotool paste command took {ydotool_time:.3f}s")
 
@@ -1002,9 +1094,9 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
         audio_f32,
         vad_filter=False,
         beam_size=5,
-        condition_on_previous_text=False,
+        condition_on_previous_text=True,
         temperature=0.0,
-        without_timestamps=True,
+        word_timestamps=True,  # DIAGNOSTIC (temporary): per-word timing for boundary investigation
         language=(language or None),
         # vad_filter is disabled: Silero VAD trims speech onsets at segment
         # boundaries (especially the start of recordings and after sentence
@@ -1023,6 +1115,32 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
 
     # Collect segments (generator can only be consumed once)
     seg_list = list(segments)
+
+    # DIAGNOSTIC (temporary): log each segment's timing + text so we can see
+    # where Whisper's internal segmentation is dropping audio. Gaps > 0.5s
+    # between segments are pauses where leading words of the next segment
+    # may have been clipped. Word-level timing on the first few words of
+    # each segment further confirms onset-clipping if word.start is well
+    # after seg.start.
+    audio_duration = len(audio_f32) / SAMPLE_RATE
+    logger.info(f"DIAGNOSTIC: audio_duration={audio_duration:.2f}s, segments={len(seg_list)}")
+    prev_end = 0.0
+    for i, seg in enumerate(seg_list):
+        gap_before = seg.start - prev_end
+        gap_marker = f"  [GAP={gap_before:.2f}s]" if gap_before > 0.5 else ""
+        logger.info(
+            f"DIAGNOSTIC: seg {i}: [{seg.start:6.2f}s -> {seg.end:6.2f}s] "
+            f"no_speech={seg.no_speech_prob:.2f}{gap_marker}: {seg.text!r}"
+        )
+        if seg.words:
+            first_words = seg.words[:3]
+            words_str = ", ".join(f"{w.word!r}@{w.start:.2f}-{w.end:.2f}s" for w in first_words)
+            logger.info(f"DIAGNOSTIC: seg {i} first words: {words_str}")
+        prev_end = seg.end
+    tail_gap = audio_duration - prev_end
+    if tail_gap > 0.5:
+        logger.info(f"DIAGNOSTIC: trailing audio after last segment: {tail_gap:.2f}s")
+
     raw = " ".join(seg.text for seg in seg_list).strip()
     max_no_speech_prob = max((seg.no_speech_prob for seg in seg_list), default=0.0)
     print(f"\U0001f4dd Raw (before filter): {raw!r}  [no_speech_prob={max_no_speech_prob:.2f}]")
@@ -1135,6 +1253,45 @@ def _inject_text(text: str, injection_mode: str, t0: float):
         logger.warning(f"Injection method detection slow: {detection_time:.2f}s")
 
     injection_start = time.time()
+
+    # Electron-paste-broken override: if the focused window is an Electron app
+    # where synthetic Ctrl+V silently fails on Wayland, skip clipboard-paste and
+    # use fast direct typing instead. Only kicks in for auto/paste — if the user
+    # explicitly chose "type", we already use Type mode.
+    if injection_mode != "type":
+        focused_class = _query_focused_window_class()
+        logger.info(f"Electron-broken check: focused_class={focused_class!r}")
+        if focused_class in _ELECTRON_PASTE_BROKEN_CLASSES:
+            logger.info(f"Electron-paste-broken override: class={focused_class!r}, using fast-type")
+            print(f"⌨️  Electron app ({focused_class}): using fast-type fallback")
+
+            # Split on §SHIFT_ENTER§ (line-break voice command) and \n so
+            # we send actual Shift+Enter keystrokes between text chunks
+            # instead of typing the marker literally.
+            marker = "\xa7SHIFT_ENTER\xa7"
+            unified = text.replace("\n", marker) if "\n" in text else text
+            success = True
+            if marker in unified:
+                parts = unified.split(marker)
+                for i, part in enumerate(parts):
+                    if part and not _type_text_fast(part):
+                        success = False
+                        break
+                    if i < len(parts) - 1:
+                        time.sleep(0.03)
+                        _send_shift_enter()
+                        time.sleep(0.03)
+            else:
+                success = _type_text_fast(unified)
+
+            if success:
+                injection_time = time.time() - injection_start
+                logger.info(f"TIMING: Fast-type injection completed in {injection_time:.2f}s")
+                logger.info(f"Text injected via fast-type: {len(text)} chars in {injection_time:.2f}s")
+                return
+            # If fast-type fails, fall through to normal logic
+            logger.warning("Fast-type failed, falling through to normal injection")
+
     use_paste = (actual_mode == "paste")
     logger.info(f"Injection mode: configured={injection_mode!r}, actual={actual_mode!r}, atspi={use_atspi}, reason={reason}")
     if injection_mode == "auto":
