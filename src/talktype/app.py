@@ -18,6 +18,7 @@ from .normalize import normalize_text
 from .config import load_config, Settings, load_custom_commands
 from .logger import setup_logger
 from .recording_indicator import RecordingIndicator
+from .undo import detect_undo_command, calculate_undo_length
 import threading
 
 logger = setup_logger(__name__)
@@ -144,13 +145,8 @@ def _get_ydotool_env():
 # Hotkey options offered in the setup dialogs (F-keys, listed in preferred order)
 HOTKEY_OPTIONS = ["F8", "F9", "F10", "F11", "F12", "F1", "F2", "F3", "F4", "F5", "F6", "F7"]
 
-# Voice command patterns for undo functionality
-UNDO_PATTERNS = {
-    'word': ['undo last word', 'undo the last word', 'delete last word', 'remove last word'],
-    'sentence': ['undo last sentence', 'undo the last sentence', 'delete last sentence', 'remove last sentence'],
-    'paragraph': ['undo last paragraph', 'undo the last paragraph', 'delete last paragraph', 'remove last paragraph'],
-    'everything': ['undo everything', 'undo all', 'delete everything', 'delete all', 'clear everything', 'clear all'],
-}
+# Undo voice-command parsing/length logic lives in talktype.undo so it can
+# be unit-tested without dragging in heavy audio/CUDA imports.
 
 # D-Bus proxy for notifying the tray process of recording state changes.
 # The tray owns the D-Bus name and relays signals to the GNOME extension.
@@ -677,6 +673,25 @@ def _send_enter():
             logger.debug(f"ydotool enter failed: {e}")
     return False
 
+def _send_select_all_delete():
+    """Send Ctrl+A then Backspace to clear the entire input field.
+
+    Used by the 'delete everything' voice command — wipes the whole textarea
+    regardless of whether the contents came from TalkType, manual typing, or
+    pasting from elsewhere.
+    """
+    if _which("ydotool"):
+        try:
+            env = _get_ydotool_env()
+            # KEY_LEFTCTRL (29) + KEY_A (30), then KEY_BACKSPACE (14)
+            subprocess.run(["ydotool", "key", "29:1", "30:1", "30:0", "29:0"], check=False, env=env)
+            time.sleep(0.05)
+            subprocess.run(["ydotool", "key", "14:1", "14:0"], check=False, env=env)
+            return True
+        except Exception as e:
+            logger.debug(f"ydotool select-all-delete failed: {e}")
+    return False
+
 def _type_text(text: str):
     # Handle special markers first
     if "§SHIFT_ENTER§" in text:
@@ -805,13 +820,13 @@ def _query_focused_window_class() -> str | None:
         return None
 
 
-def _type_text_fast(text: str, delay_ms: int = 3):
+def _type_text_fast(text: str, delay_ms: int = 1):
     """Type text via ydotool with a very small inter-event delay.
 
     Used for Electron/Chromium apps where clipboard-paste is broken on Wayland.
-    Defaults to 3ms per event (~OpenWhispr's recommended value) — much faster
-    than the user-config Type mode, but still slow enough to avoid input-buffer
-    overflow in web apps.
+    1ms per event is the practical floor — ~415 chars/sec, ~3x faster than
+    the older 3ms default. Going lower risks Electron's input buffer dropping
+    characters under burst.
     """
     if not _which("ydotool"):
         logger.error("Fast-type fallback: ydotool unavailable")
@@ -996,94 +1011,6 @@ def _send_backspaces(count: int):
             logger.debug(f"ydotool backspace failed: {e}")
     return False
 
-def _detect_undo_command(raw_text: str) -> str | None:
-    """
-    Check if the raw transcription is an undo command.
-    
-    Returns the undo type ('word', 'sentence', 'paragraph') or None if not an undo command.
-    Uses case-insensitive matching and handles common Whisper transcription variations.
-    """
-    # Normalize: lowercase, strip punctuation and extra whitespace
-    normalized = re.sub(r'[^\w\s]', '', raw_text.lower()).strip()
-    normalized = ' '.join(normalized.split())  # Collapse whitespace
-    
-    # Match undo commands - be flexible with variations Whisper might produce
-    for undo_type, patterns in UNDO_PATTERNS.items():
-        for pattern in patterns:
-            if normalized == pattern:
-                return undo_type
-    
-    return None
-
-def _calculate_undo_length(text: str, undo_type: str) -> int:
-    """
-    Calculate how many characters to delete based on undo type.
-
-    Args:
-        text: The last inserted text
-        undo_type: 'word', 'sentence', 'paragraph', or 'everything'
-
-    Returns:
-        Number of characters to delete (backspaces to send)
-    """
-    if not text:
-        return 0
-
-    # For 'everything', delete all tracked text
-    if undo_type == 'everything':
-        return len(text)
-    
-    # Remove trailing space if present (we add auto-space after dictation)
-    text_to_analyze = text.rstrip()
-    trailing_space = len(text) - len(text_to_analyze)
-    
-    if undo_type == 'word':
-        # Find last word boundary (whitespace)
-        # Delete from end back to last whitespace
-        stripped = text_to_analyze.rstrip()
-        last_space = stripped.rfind(' ')
-        if last_space == -1:
-            # No space found - delete everything
-            return len(text)
-        else:
-            # Delete from after the last space to end (including trailing space)
-            return len(text) - last_space - 1
-    
-    elif undo_type == 'sentence':
-        # Find last sentence boundary (. ? ! …)
-        # Work backwards from the end, skip any trailing punctuation
-        # Remove trailing punctuation to find the previous sentence end
-        text_stripped = text_to_analyze.rstrip('.?!… ')
-        # Find the last sentence-ending punctuation
-        match = re.search(r'[.?!…]\s*', text_stripped[::-1])
-        if match:
-            # Found a previous sentence end
-            pos = len(text_stripped) - match.start()
-            return len(text) - pos
-        else:
-            # No previous sentence found - delete everything
-            return len(text)
-    
-    elif undo_type == 'paragraph':
-        # Find last paragraph boundary (newlines or §SHIFT_ENTER§ markers)
-        # First check for §SHIFT_ENTER§ marker
-        marker = "§SHIFT_ENTER§"
-        marker_pos = text_to_analyze.rfind(marker)
-        newline_pos = text_to_analyze.rfind('\n')
-        
-        # Use whichever is later (closer to end)
-        if marker_pos > newline_pos:
-            # Delete from after the marker to end
-            return len(text) - marker_pos - len(marker)
-        elif newline_pos != -1:
-            # Delete from after the newline to end
-            return len(text) - newline_pos - 1
-        else:
-            # No paragraph break found - delete everything
-            return len(text)
-    
-    return 0
-
 def _transcribe_audio(audio_f32, language: str | None) -> str | None:
     """Run Whisper transcription on audio and filter hallucinations.
 
@@ -1159,12 +1086,29 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
 
     Returns True if an undo was handled (caller should return early).
     """
-    undo_type = _detect_undo_command(raw)
-    if not undo_type:
+    detected = detect_undo_command(raw)
+    if not detected:
         return False
 
-    logger.info(f"Undo command detected: {undo_type}")
-    print(f"\U0001f519 Undo command: {undo_type}")
+    undo_type, count = detected
+    label = undo_type if count == 1 else f"{count} {undo_type}s"
+    logger.info(f"Undo command detected: {label}")
+    print(f"\U0001f519 Undo command: {label}")
+
+    # 'everything' clears the entire input field via Ctrl+A + Backspace.
+    # No tracked dictation required \u2014 wipes whatever is in the textarea,
+    # including text that wasn't typed by TalkType.
+    if undo_type == 'everything':
+        if _send_select_all_delete():
+            state.last_inserted_text = ""
+            state.continue_mid_sentence = False
+            _beep(beeps_on, *READY_BEEP)
+            if notify_on: _notify("TalkType", "Cleared input field")
+        else:
+            print("\u26a0\ufe0f  Could not clear input field (ydotool unavailable)")
+            _beep(beeps_on, *CANCEL_BEEP)
+            if notify_on: _notify("TalkType", "Could not clear field")
+        return True
 
     if not state.last_inserted_text:
         print("\u2139\ufe0f  Nothing to undo (no previous dictation)")
@@ -1173,10 +1117,10 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
         if notify_on: _notify("TalkType", "Nothing to undo")
         return True
 
-    # Calculate how many characters to delete
-    delete_count = _calculate_undo_length(state.last_inserted_text, undo_type)
-    logger.info(f"Undo: deleting {delete_count} characters (last text was {len(state.last_inserted_text)} chars)")
-    print(f"\U0001f519 Undoing {delete_count} characters ({undo_type})")
+    # Calculate how many characters to delete (iterates `count` times)
+    delete_count = calculate_undo_length(state.last_inserted_text, undo_type, count)
+    logger.info(f"Undo: deleting {delete_count} characters (last text was {len(state.last_inserted_text)} chars, count={count})")
+    print(f"\U0001f519 Undoing {delete_count} characters ({label})")
 
     if delete_count > 0:
         _send_backspaces(delete_count)
@@ -1193,7 +1137,7 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
             else:
                 state.continue_mid_sentence = False
         _beep(beeps_on, *READY_BEEP)
-        if notify_on: _notify("TalkType", f"Undid last {undo_type}")
+        if notify_on: _notify("TalkType", f"Undid last {label}")
     else:
         print("\u2139\ufe0f  Nothing to undo for this scope")
         _beep(beeps_on, *CANCEL_BEEP)
@@ -1268,8 +1212,13 @@ def _inject_text(text: str, injection_mode: str, t0: float):
             # Split on §SHIFT_ENTER§ (line-break voice command) and \n so
             # we send actual Shift+Enter keystrokes between text chunks
             # instead of typing the marker literally.
+            # Tab characters (from the "tab" voice command) are converted to
+            # 4 spaces here: a real Tab keypress moves focus from Claude Desktop's
+            # chat textarea to the Send button, and the next typed space then
+            # activates it — submitting the message mid-dictation.
             marker = "\xa7SHIFT_ENTER\xa7"
             unified = text.replace("\n", marker) if "\n" in text else text
+            unified = unified.replace("\t", "    ")
             success = True
             if marker in unified:
                 parts = unified.split(marker)
@@ -1288,6 +1237,10 @@ def _inject_text(text: str, injection_mode: str, t0: float):
                 injection_time = time.time() - injection_start
                 logger.info(f"TIMING: Fast-type injection completed in {injection_time:.2f}s")
                 logger.info(f"Text injected via fast-type: {len(text)} chars in {injection_time:.2f}s")
+                # Track injected text for undo. Store the typed form (tabs already
+                # replaced with 4 spaces) so backspace counts match what was sent.
+                state.last_inserted_text = text.replace("\t", "    ")
+                logger.debug(f"Stored last inserted text for undo: {len(state.last_inserted_text)} chars (fast-type)")
                 return
             # If fast-type fails, fall through to normal logic
             logger.warning("Fast-type failed, falling through to normal injection")
