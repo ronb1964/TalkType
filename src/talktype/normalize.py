@@ -67,12 +67,17 @@ _CONTEXT_PROTECT_PATTERNS = [
     # "period of [word]" — fixed noun phrase: "period of time", "period of mourning"
     (re.compile(r"\bperiod(\s+of\b)", re.IGNORECASE), r"__LIT_PERIOD__\1"),
 
-    # "[prep/article/possessive/adj] return" — noun/verb usage
+    # "[prep/article/possessive/adj/modal] return" — noun/verb usage.
+    # Modals ("will/can return") and infinitive "to return" are always the
+    # verb. Subject pronouns are deliberately NOT protected: "thank you
+    # return" is a very common command usage and must keep working.
     (re.compile(
         r"\b(in|on|at|the|a|an|my|his|her|its|our|their|your|tax|safe|"
         r"swift|prompt|early|late|partial|full|complete|annual|monthly|"
         r"yearly|first|second|third|grand|major|sudden|big|home|no|any|"
-        r"every|each|some|triumphant|long-awaited)\s+return\b",
+        r"every|each|some|triumphant|long-awaited|"
+        r"to|will|would|can|could|shall|should|may|might|must|never|not|"
+        r"ll|just|please)\s+return\b",
         re.IGNORECASE,
     ), r"\1 __LIT_RETURN__"),
     # "return [to/of/from/home/...]" — verb or noun-of-X usage
@@ -81,6 +86,29 @@ _CONTEXT_PROTECT_PATTERNS = [
         r"flight|ticket|date|window|policy|customer|item))\b",
         re.IGNORECASE,
     ), r"__LIT_RETURN__\1"),
+    # "return it/this/that TO/FOR/..." — pronoun object plus a second signal
+    # word. Bare "return this ..." is NOT protected: "this/it/a" are the most
+    # common sentence starters after a line-break command.
+    (re.compile(
+        r"\breturn(\s+(?:it|this|that|them|these|those)\s+"
+        r"(?:to|from|for|by|at|in|on|before|after|tomorrow|today|soon|"
+        r"later|now|please|immediately))\b",
+        re.IGNORECASE,
+    ), r"__LIT_RETURN__\1"),
+
+    # "[article/adj] tab" — browser/UI noun usage ("a new tab", "the wrong
+    # tab"). Ordinals are deliberately NOT protected: "first tab second tab
+    # third" is tab-as-field-separator dictation and must keep working.
+    (re.compile(
+        r"\b(a|an|the|this|that|these|those|my|his|her|its|our|their|your|"
+        r"new|another|current|wrong|right|same|other|browser|chrome|firefox)\s+tab\b",
+        re.IGNORECASE,
+    ), r"\1 __LIT_TAB__"),
+    # "tab [key/bar/...]" — noun compounds ("press tab key" is about the key name)
+    (re.compile(
+        r"\btab\s+(key|bar|stop|order|character|button|group|title)\b",
+        re.IGNORECASE,
+    ), r"__LIT_TAB__ \1"),
 
     # "[article/adj] dash"
     (re.compile(
@@ -135,8 +163,10 @@ _SINGLE_WORD_REPLACEMENTS = [
     (re.compile(r"\bperiod\b\.?", re.IGNORECASE), "."),
     (re.compile(r"\bapostrophe\b", re.IGNORECASE), "'"),
     (re.compile(r"\bquote\b", re.IGNORECASE), '"'),
-    (re.compile(r"\bhyphen\b|\bdash\b", re.IGNORECASE), "-"),
+    # "em dash" MUST run before the bare hyphen/dash rule — otherwise
+    # "em dash" is rewritten to "em -" first and this pattern never matches.
     (re.compile(r"\bem\s*dash\b", re.IGNORECASE), "—"),
+    (re.compile(r"\bhyphen\b|\bdash\b", re.IGNORECASE), "-"),
 ]
 
 # --- 3) Quotes/brackets spacing ---
@@ -181,7 +211,9 @@ _RE_MULTI_SPACE = re.compile(r"[ ]{2,}")
 # --- 10) Capitalization ---
 _RE_TRAILING_COMMA = re.compile(r",$")
 _RE_NO_END_PUNCT = re.compile(r"[.?!…]$")
-_RE_CAP_AFTER_ENDER = re.compile(r"([.?!…]\s+)([a-z])")
+# Negative lookbehind: don't capitalize after single-letter abbreviations
+# ("e.g. that" / "U.S. economy" must not become "e.g. That" / "U.S. Economy").
+_RE_CAP_AFTER_ENDER = re.compile(r"(?<![A-Za-z]\.[A-Za-z])([.?!…]\s+)([a-z])")
 # Standalone lowercase "i" → "I" (also catches "i'll", "i'm", "i've", "i'd"
 # because the apostrophe is a word boundary). Case-sensitive: an existing
 # "I" is left alone. Words like "in", "it", "iPad" are not matched because
@@ -216,8 +248,10 @@ _EMAIL_TLD_FIXES = [
 # Fix Whisper's mangled time output: "11. 30 p. m." → "11:30 PM", "11 p. m." → "11 PM"
 # Minutes are optional — handles both "11:30 p. m." and bare "11 p. m."
 # AM/PM variants handled: "p. m.", "p. M.", "p.m.", "PM", "a. m.", "a.m.", "AM" (any case/spacing).
+# The trailing (?![A-Za-z]) stops the AM/PM group from matching the start of
+# ordinary words: "5 among us" / "3 amazing" are not times.
 _RE_TIME_FORMAT = re.compile(
-    r'\b(1[0-2]|0?[1-9])(?:[.:]\s*([0-5][0-9]))?\s+([Pp]\.?\s*[Mm]\.?|[Aa]\.?\s*[Mm]\.?)',
+    r'\b(1[0-2]|0?[1-9])(?:[.:]\s*([0-5][0-9]))?\s+([Pp]\.?\s*[Mm]\.?|[Aa]\.?\s*[Mm]\.?)(?![A-Za-z])',
     re.IGNORECASE
 )
 
@@ -229,6 +263,56 @@ def _fix_time_ampm(m: re.Match) -> str:
     if minute:
         return f"{hour}:{minute} {ampm}"
     return f"{hour} {ampm}"
+
+
+def _space_after_ender_repl(m: re.Match) -> str:
+    """Insert a space after a sentence ender — except inside numbers and
+    single-letter abbreviations, where the period is part of the token:
+    '3.5', '$19.99', 'U.S.', 'e.g.', 'a.m.' must not be split apart."""
+    ch = m.group(1)
+    if ch == ".":
+        s, i = m.string, m.start(1)
+        prev = s[i - 1] if i > 0 else ""
+        prev2 = s[i - 2] if i > 1 else ""
+        nxt = s[i + 1] if i + 1 < len(s) else ""
+        nxt2 = s[i + 2] if i + 2 < len(s) else ""
+        # Decimal/price/version numbers: digit.digit
+        if prev.isdigit() and nxt.isdigit():
+            return ch
+        # Single-letter abbreviations: e.g., i.e., U.S., a.m.
+        # (single letter before the dot, letter+dot after it)
+        if prev.isalpha() and not prev2.isalpha() and nxt.isalpha() and nxt2 == ".":
+            return ch
+    return ch + " "
+
+
+# Trailing line-break markers (possibly repeated) at the end of an utterance.
+_RE_TRAILING_BREAKS = re.compile(r"(?:\s*(?:§SHIFT_ENTER§))+\s*$")
+
+
+def append_auto_punct(text: str, auto_period: bool, auto_space: bool) -> str:
+    """Append the automatic period/space to a finished utterance.
+
+    When the utterance ends with line-break markers ("hello new line"),
+    the period must land BEFORE the break — appending it after produced
+    an orphan ". " at the start of the next line. No trailing space is
+    added after a line break (the cursor is already on a fresh line).
+    """
+    if not text:
+        return text
+    m = _RE_TRAILING_BREAKS.search(text)
+    if m:
+        core, trailing = text[:m.start()], text[m.start():]
+        if not core.strip():
+            return text  # utterance is only line breaks — nothing to punctuate
+        if auto_period and not core.rstrip().endswith((".", "?", "!", "…")):
+            core = core.rstrip() + "."
+        return core + trailing
+    if auto_period and not text.rstrip().endswith((".", "?", "!", "…")):
+        text = text.rstrip() + "."
+    if auto_space and not text.endswith((" ", "\n", "\t")):
+        text = text + " "
+    return text
 
 
 # =====================================================================
@@ -293,7 +377,8 @@ def normalize_text(text: str) -> str:
     text = text.replace("...", "…")
 
     # --- 7) Ensure one space after sentence enders ---
-    text = _RE_SPACE_AFTER_ENDER.sub(r"\1 ", text)
+    # (callable repl skips decimals like 3.5 and abbreviations like U.S.)
+    text = _RE_SPACE_AFTER_ENDER.sub(_space_after_ender_repl, text)
 
     # --- 8) Em dash spacing; tight hyphens ---
     text = _RE_EM_DASH_SPACE.sub(" — ", text)
@@ -353,6 +438,15 @@ def normalize_text(text: str) -> str:
     # --- 12) Restore literal tokens ---
     for placeholder, word in LITERAL_RESTORE.items():
         text = text.replace(placeholder, word)
+
+    # --- 12.5) Re-capitalize line starts after literal restore ---
+    # cap_first() ran while protected words were placeholders like
+    # "__LIT_RETURN__" (whose first letter is already uppercase), so a line
+    # STARTING with a protected word came back lowercase ("return to sender
+    # was..."). Idempotent: lines already capitalized are left untouched.
+    temp_text = text.replace("§SHIFT_ENTER§", "\n")
+    temp_text = "\n".join(cap_first(line) for line in temp_text.split("\n"))
+    text = temp_text.replace("\n", "§SHIFT_ENTER§")
 
     # --- 13) Restore quoted sections with actual quote marks ---
     for i, quoted_text in enumerate(quoted_sections):

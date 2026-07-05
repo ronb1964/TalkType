@@ -14,7 +14,7 @@ import sounddevice as sd
 from faster_whisper import WhisperModel
 from evdev import InputDevice, ecodes, list_devices
 
-from .normalize import normalize_text
+from .normalize import normalize_text, append_auto_punct
 from .config import load_config, Settings, load_custom_commands
 from .logger import setup_logger
 from .recording_indicator import RecordingIndicator
@@ -1023,7 +1023,15 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
         beam_size=5,
         condition_on_previous_text=True,
         temperature=0.0,
-        word_timestamps=True,  # DIAGNOSTIC (temporary): per-word timing for boundary investigation
+        # Word-level timestamps strengthen Whisper's long-form seek logic,
+        # preventing dropped words at pause boundaries (the v0.5.17 fix —
+        # replaces the old without_timestamps=True footgun).
+        word_timestamps=True,
+        # Repetition-loop guards: Whisper can get stuck repeating one phrase
+        # many times in a row. A mild penalty plus n-gram blocking breaks
+        # the loop without changing normal decoding.
+        repetition_penalty=1.1,
+        no_repeat_ngram_size=5,
         language=(language or None),
         # vad_filter is disabled: Silero VAD trims speech onsets at segment
         # boundaries (especially the start of recordings and after sentence
@@ -1042,31 +1050,6 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
 
     # Collect segments (generator can only be consumed once)
     seg_list = list(segments)
-
-    # DIAGNOSTIC (temporary): log each segment's timing + text so we can see
-    # where Whisper's internal segmentation is dropping audio. Gaps > 0.5s
-    # between segments are pauses where leading words of the next segment
-    # may have been clipped. Word-level timing on the first few words of
-    # each segment further confirms onset-clipping if word.start is well
-    # after seg.start.
-    audio_duration = len(audio_f32) / SAMPLE_RATE
-    logger.info(f"DIAGNOSTIC: audio_duration={audio_duration:.2f}s, segments={len(seg_list)}")
-    prev_end = 0.0
-    for i, seg in enumerate(seg_list):
-        gap_before = seg.start - prev_end
-        gap_marker = f"  [GAP={gap_before:.2f}s]" if gap_before > 0.5 else ""
-        logger.info(
-            f"DIAGNOSTIC: seg {i}: [{seg.start:6.2f}s -> {seg.end:6.2f}s] "
-            f"no_speech={seg.no_speech_prob:.2f}{gap_marker}: {seg.text!r}"
-        )
-        if seg.words:
-            first_words = seg.words[:3]
-            words_str = ", ".join(f"{w.word!r}@{w.start:.2f}-{w.end:.2f}s" for w in first_words)
-            logger.info(f"DIAGNOSTIC: seg {i} first words: {words_str}")
-        prev_end = seg.end
-    tail_gap = audio_duration - prev_end
-    if tail_gap > 0.5:
-        logger.info(f"DIAGNOSTIC: trailing audio after last segment: {tail_gap:.2f}s")
 
     raw = " ".join(seg.text for seg in seg_list).strip()
     max_no_speech_prob = max((seg.no_speech_prob for seg in seg_list), default=0.0)
@@ -1169,15 +1152,10 @@ def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: b
             logger.info("Lowercased first letter for mid-sentence continuation")
         state.continue_mid_sentence = False
 
-    # Auto-period and auto-space (skip if text contains line break markers)
-    has_break_markers = "\xa7SHIFT_ENTER\xa7" in text
-    text_without_markers = text.replace("\xa7SHIFT_ENTER\xa7", "").strip()
-    is_only_markers = has_break_markers and not text_without_markers
-
-    if auto_period and text and not is_only_markers and not text.rstrip().endswith((".","?","!","\u2026")):
-        text = text.rstrip() + "."
-    if auto_space and text and not is_only_markers and not text.endswith((" ", "\n", "\t")):
-        text = text + " "
+    # Auto-period and auto-space. When the utterance ends with a line-break
+    # command, the period lands BEFORE the break and no trailing space is
+    # added (previously "hello new line" left an orphan ". " on the next line).
+    text = append_auto_punct(text, auto_period, auto_space)
     logger.info(f"Normalized text: {text!r}")
     return text
 
@@ -1237,9 +1215,11 @@ def _inject_text(text: str, injection_mode: str, t0: float):
                 injection_time = time.time() - injection_start
                 logger.info(f"TIMING: Fast-type injection completed in {injection_time:.2f}s")
                 logger.info(f"Text injected via fast-type: {len(text)} chars in {injection_time:.2f}s")
-                # Track injected text for undo. Store the typed form (tabs already
-                # replaced with 4 spaces) so backspace counts match what was sent.
-                state.last_inserted_text = text.replace("\t", "    ")
+                # Track injected text for undo. Store the typed form: tabs
+                # already replaced with 4 spaces, and each line-break marker
+                # as one '\n' (one Shift+Enter keystroke = one backspace),
+                # so backspace counts match what was actually sent.
+                state.last_inserted_text = unified.replace(marker, "\n")
                 logger.debug(f"Stored last inserted text for undo: {len(state.last_inserted_text)} chars (fast-type)")
                 return
             # If fast-type fails, fall through to normal logic
@@ -1311,9 +1291,11 @@ def _inject_text(text: str, injection_mode: str, t0: float):
         if injection_time > 1.0:
             logger.warning(f"Typing injection slow: {injection_time:.2f}s")
 
-    # Track injected text for undo functionality
-    state.last_inserted_text = text
-    logger.debug(f"Stored last inserted text for undo: {len(text)} chars")
+    # Track injected text for undo. Line-break markers are stored as '\n' —
+    # one keystroke on screen = one character in the buffer, so undo
+    # backspace counts stay in sync with what was actually typed.
+    state.last_inserted_text = text.replace("\xa7SHIFT_ENTER\xa7", "\n")
+    logger.debug(f"Stored last inserted text for undo: {len(state.last_inserted_text)} chars")
 
 
 def stop_recording(

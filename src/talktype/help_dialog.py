@@ -187,7 +187,7 @@ if you need better accuracy for professional or technical dictation.''')
 
 <b>🎮 GPU Acceleration</b>
 If you have an NVIDIA graphics card, enable GPU acceleration for 3-5x faster transcription:
-• On first run with NVIDIA GPU, you'll be offered to download CUDA libraries (~800MB)
+• On first run with NVIDIA GPU, you'll be offered to download CUDA libraries (~1.4GB)
 • After download completes, click OK or Apply in Preferences to activate GPU mode
 • Device automatically switches to "CUDA (GPU)" - no manual selection needed
 • GPU mode significantly reduces transcription time (3-5x faster)

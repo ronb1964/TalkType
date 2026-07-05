@@ -61,6 +61,7 @@ coverage.xml
 # ============================================
 *.AppImage
 *.AppImage.zsync
+SHA256SUMS.txt
 appimage-builder
 appimagetool
 appimagetool-extracted/

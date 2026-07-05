@@ -120,3 +120,56 @@ def test_positive_timeout():
     for minutes in [1, 5, 10, 30, 60]:
         s = Settings(auto_timeout_minutes=minutes)
         validate_config(s)  # Should not raise
+
+
+# =====================================================================
+# v0.5.17 Tier-2 fixes: language_mode round-trip + anti-clobber merge
+# =====================================================================
+
+def test_settings_has_language_mode_and_launch_at_login():
+    """These keys were prefs-only before: any save by the tray/service
+    dropped them from config.toml. They must round-trip via Settings."""
+    s = Settings()
+    assert s.language_mode == "auto"
+    assert s.launch_at_login is False
+
+
+def test_save_config_includes_language_mode(tmp_path, monkeypatch):
+    import talktype.config as cfg
+    monkeypatch.setattr(cfg, "CONFIG_PATH", str(tmp_path / "config.toml"))
+    cfg.save_config(Settings(language_mode="manual"))
+    text = (tmp_path / "config.toml").read_text()
+    assert 'language_mode = "manual"' in text
+    assert 'launch_at_login = false' in text
+
+
+def test_merge_changed_keys_preserves_external_changes():
+    """Keys the user did NOT touch keep the on-disk value (e.g. a model
+    switch made from the tray while Preferences was open)."""
+    from talktype.config import merge_changed_keys
+    original = {"model": "small", "device": "cpu", "beeps": True}
+    current = {"model": "small", "device": "cpu", "beeps": False}  # user toggled beeps
+    base = {"model": "medium", "device": "cpu", "beeps": True}     # tray changed model meanwhile
+    merged = merge_changed_keys(original, current, base)
+    assert merged["model"] == "medium"  # tray's change survives Apply
+    assert merged["beeps"] is False     # user's change is applied
+
+
+def test_merge_changed_keys_user_wins_on_conflict():
+    from talktype.config import merge_changed_keys
+    merged = merge_changed_keys({"model": "small"}, {"model": "large-v3"}, {"model": "medium"})
+    assert merged["model"] == "large-v3"
+
+
+def test_merge_changed_keys_adds_new_keys():
+    from talktype.config import merge_changed_keys
+    merged = merge_changed_keys({}, {"language_mode": "manual"}, {"model": "small"})
+    assert merged["language_mode"] == "manual"
+    assert merged["model"] == "small"
+
+
+def test_model_cache_check_fast_unknown_model():
+    """Lightweight cache check must not load model weights and must return
+    False for unknown models (used on every Apply/OK click in prefs)."""
+    from talktype.model_helper import is_model_cached_fast
+    assert is_model_cached_fast("no-such-model") is False

@@ -174,3 +174,23 @@ def test_single_unit_word_no_space():
 
 def test_single_unit_unknown_type():
     assert single_unit_length("text", "bogus") == 0
+
+
+# =====================================================================
+# v0.5.17 review fixes — the undo buffer now stores line breaks as '\n'
+# (one char = one backspace), so word boundaries must treat newlines
+# and tabs as separators, not as part of the word.
+# =====================================================================
+
+def test_word_boundary_at_newline():
+    """'hello\\nworld' — last word is 'world' (5 chars), not the whole string."""
+    assert single_unit_length("hello\nworld", "word") == 5
+
+
+def test_word_boundary_at_tab():
+    assert single_unit_length("hello\tworld", "word") == 5
+
+
+def test_paragraph_length_with_newline_breaks():
+    """Guard: '\\n'-separated paragraphs measure correctly."""
+    assert calculate_undo_length("first\nsecond", "paragraph", 1) == 6

@@ -8,7 +8,8 @@ import sys
 import atexit
 import dbus
 import dbus.mainloop.glib
-from .config import CONFIG_PATH, load_custom_commands, save_custom_commands
+from dataclasses import asdict
+from .config import CONFIG_PATH, Settings, merge_changed_keys, load_custom_commands, save_custom_commands
 
 # D-Bus interface for communicating with the TalkType service
 DBUS_SERVICE = "io.github.ronb1964.TalkType"
@@ -56,27 +57,37 @@ try:
         with open(path, "rb") as f:
             return tomllib.load(f)
 except ImportError:
-    try:
-        import toml
-        def load_toml(path):
-            with open(path, "r") as f:
-                return toml.load(f)
-    except ImportError:
-        def load_toml(path):
-            # Basic fallback parser
-            config = {}
-            with open(path, "r") as f:
-                for line in f:
-                    line = line.strip()
-                    if "=" in line and not line.startswith("#"):
-                        key, value = line.split("=", 1)
-                        key = key.strip()
-                        value = value.strip().strip('"').strip("'")
-                        if value.lower() in ("true", "false"):
-                            config[key] = value.lower() == "true"
-                        else:
-                            config[key] = value
-            return config
+    # Python < 3.11 fallback. There is deliberately NO hand-rolled parser
+    # beyond this: the old string-only fallback returned '5' instead of 5
+    # for spinbox values and crashed the window at startup.
+    import toml
+    def load_toml(path):
+        with open(path, "r") as f:
+            return toml.load(f)
+
+# Type coercion for on-disk config values. Configs written by the old
+# hand-rolled parser era (or hand-edited) can hold '5' where an int is
+# expected — Gtk.Adjustment(value='5') then crashes the window at startup.
+_COERCE_BOOL_TRUE = ("true", "1", "yes", "on")
+
+def _coerce_config_types(config: dict) -> dict:
+    """Coerce known Settings keys to their declared field types in place."""
+    from dataclasses import fields as _dc_fields
+    for fld in _dc_fields(Settings):
+        if fld.name not in config:
+            continue
+        value = config[fld.name]
+        try:
+            if fld.type == "bool" and not isinstance(value, bool):
+                config[fld.name] = str(value).strip().lower() in _COERCE_BOOL_TRUE
+            elif fld.type == "int" and not isinstance(value, int):
+                config[fld.name] = int(value)
+            elif fld.type == "str" and not isinstance(value, str):
+                config[fld.name] = str(value)
+        except Exception:
+            pass  # leave the bad value; Settings defaults cover it elsewhere
+    return config
+
 
 # Single instance management
 def _runtime_dir():
@@ -237,8 +248,11 @@ class PreferencesWindow:
         # This prevents the "Tried to map a popup with a non-top most parent" error
         self.window.set_type_hint(Gdk.WindowTypeHint.NORMAL)
 
-        # Load current config
+        # Load current config. Keep a snapshot of the window-open state so
+        # save_config() can write only the keys the user actually changed
+        # (see merge_changed_keys — protects tray changes made meanwhile).
         self.config = self.load_config()
+        self._config_at_open = dict(self.config)
 
         # Initialize model tracking to prevent repeated warnings
         self._last_selected_model = self.config.get("model")
@@ -292,38 +306,26 @@ class PreferencesWindow:
         combo.connect("scroll-event", lambda w, e: True)  # Return True to block
 
     def load_config(self):
-        """Load config from TOML file."""
-        defaults = {
-            "model": "small",
-            "device": "cuda",
-            "hotkey": "F8",
-            "beeps": True,
-            "smart_quotes": True,
-            "mode": "hold",
-            "toggle_hotkey": "F9",
-            "mic": "",
-            "notify": False,
-            "language": "",
-            "language_mode": "auto",
-            "auto_space": True,
-            "auto_period": True,
-            "paste_injection": False,
-            "injection_mode": "auto",
-            "launch_at_login": False,
-            "auto_timeout_enabled": True,
-            "auto_timeout_minutes": 5,
-            "auto_check_updates": True,
-            "voice_commands_hotkey": "Ctrl+Alt+V"
-        }
-        
+        """Load config from TOML file.
+
+        Defaults come from config.py's Settings dataclass — the single
+        source of truth shared with the service and tray. (The old private
+        defaults here had drifted: device 'cuda' vs 'cpu', hotkey 'F8'
+        vs '', so a missing config file made prefs display settings the
+        running service never had.)
+        """
+        defaults = asdict(Settings())
+
         if os.path.exists(CONFIG_PATH):
             try:
                 config = load_toml(CONFIG_PATH)
                 defaults.update(config)
             except Exception as e:
                 print(f"Error loading config: {e}")
-        
-        return defaults
+
+        # Fix wrongly-typed on-disk values ('5' instead of 5) that would
+        # otherwise crash spinbox construction in create_ui()
+        return _coerce_config_types(defaults)
 
     def _check_cuda_availability(self):
         """Check if CUDA is available for faster-whisper."""
@@ -369,20 +371,55 @@ class PreferencesWindow:
         self.device_combo.set_tooltip_text(tooltip_text)
     
     def save_config(self):
-        """Save config to TOML file."""
+        """Save config to TOML file (merge-on-save).
+
+        Only the keys the user changed in this window are overlaid onto a
+        fresh read of the file, so settings changed by the tray while the
+        window was open (model switch, performance preset, …) survive
+        Apply/OK instead of being silently reverted.
+        """
+        # Keep `language` consistent with the Language Mode dropdown — the
+        # service reads only `language` (empty string = auto-detect).
+        # Previously switching back to Auto-detect left the old forced
+        # language in the file, and switching to Manual saved '' unless the
+        # user actively re-picked a language from the combo.
+        if self.config.get("language_mode", "auto") == "auto":
+            self.config["language"] = ""
+        elif hasattr(self, "lang_combo"):
+            # Combo id can be None for a hand-edited language code that isn't
+            # in the dropdown list — keep the existing value in that case.
+            self.config["language"] = (self.lang_combo.get_active_id()
+                                       or self.config.get("language") or "en")
+
         try:
+            on_disk = {}
+            if os.path.exists(CONFIG_PATH):
+                try:
+                    on_disk = load_toml(CONFIG_PATH)
+                except Exception as e:
+                    print(f"Error re-reading config for merge: {e}")
+            # Base: window-open snapshot (has every key incl. defaults),
+            # updated with whatever is currently on disk.
+            base = dict(self._config_at_open)
+            base.update(on_disk)
+            merged = merge_changed_keys(self._config_at_open, self.config, base)
+
             os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
             with open(CONFIG_PATH, "w") as f:
                 f.write("# TalkType config\n")
-                for key, value in self.config.items():
-                    if isinstance(value, str):
-                        f.write(f'{key} = "{value}"\n')
-                    elif isinstance(value, bool):
+                for key, value in merged.items():
+                    if isinstance(value, bool):
                         f.write(f'{key} = {str(value).lower()}\n')
+                    elif isinstance(value, str):
+                        f.write(f'{key} = "{value}"\n')
                     else:
                         f.write(f'{key} = {value}\n')
                 f.flush()  # Ensure file is written to disk
                 os.fsync(f.fileno())  # Force write to disk
+
+            # Future saves in this window diff against what we just wrote
+            self.config = dict(merged)
+            self._config_at_open = dict(merged)
             return True
         except Exception as e:
             print(f"Error saving config: {e}")
@@ -525,7 +562,10 @@ class PreferencesWindow:
         try:
             from . import cuda_helper as _ch
             _has_nvidia = bool(_ch.detect_nvidia_gpu())
-            _has_cuda   = _ch.has_talktype_cuda_libraries()
+            # has_cuda_libraries() also accepts a system-wide CUDA install —
+            # same check the Device dropdown uses. (has_talktype_cuda_libraries
+            # is only for download-status display, per its own docstring.)
+            _has_cuda   = _ch.has_cuda_libraries()
         except Exception:
             _has_nvidia = False
             _has_cuda   = False
@@ -555,6 +595,10 @@ class PreferencesWindow:
                 self.model_store.append([_mid, _MODEL_DISPLAY[_mid], True])
 
         model_combo = Gtk.ComboBox.new_with_model(self.model_store)
+        # Column 0 holds the model id — without this, set_active_id() is a
+        # silent no-op (plain ComboBox has no id column by default), which
+        # broke every programmatic revert/select of the model dropdown.
+        model_combo.set_id_column(0)
         model_combo.set_can_focus(True)
         self._block_combo_scroll(model_combo)
         _renderer = Gtk.CellRendererText()
@@ -954,7 +998,6 @@ class PreferencesWindow:
         # Initialize microphone test state
         self.recording = False
         self.recorded_audio = None
-        self.level_monitor_timer = None
 
         # ===== AUDIO FEEDBACK SECTION =====
         separator1 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
@@ -1251,7 +1294,7 @@ class PreferencesWindow:
         self.download_cuda_button = Gtk.Button(label="Download CUDA Libraries")
         self.download_cuda_button.connect("clicked", self._on_download_cuda_clicked)
         self.download_cuda_button.get_child().set_xalign(0.5)
-        self.download_cuda_button.set_tooltip_text("Download CUDA libraries for GPU acceleration (~800MB download)")
+        self.download_cuda_button.set_tooltip_text("Download CUDA libraries for GPU acceleration (~1.4GB download)")
         self.download_cuda_button.set_sensitive(False)
         gpu_button_box.pack_start(self.download_cuda_button, False, False, 0)
 
@@ -1739,8 +1782,11 @@ class PreferencesWindow:
             GLib.idle_add(lambda: progress_bar.set_text(f"{percent}%"))
 
         def do_download_and_install():
-            # Step 1: Download
-            downloaded_path = update_checker.download_update(url, filename, progress_callback)
+            # Step 1: Download (verified against the release's SHA256SUMS.txt
+            # when the release publishes one)
+            downloaded_path = update_checker.download_update(
+                url, filename, progress_callback,
+                checksums_url=self._current_release.get("checksums_url"))
 
             if not downloaded_path:
                 result_holder["error"] = "Download failed"
@@ -1985,6 +2031,13 @@ class PreferencesWindow:
 
     def update_config(self, key, value):
         """Update config value."""
+        # GTK combos emit 'changed' with get_active_id()=None while being
+        # rebuilt (remove_all in _refresh_device_options). Writing that None
+        # would produce 'device = None' in the TOML file — invalid TOML that
+        # wipes ALL settings on the next load. Never a real user action.
+        if value is None:
+            return
+
         # Special handling for device changes - verify CUDA is available
         if key == "device" and value == "cuda":
             from talktype import cuda_helper
@@ -2034,8 +2087,10 @@ class PreferencesWindow:
         # If large-v3 is selected, check CUDA availability first
         if new_model == "large-v3":
             try:
-                from .cuda_helper import has_talktype_cuda_libraries, detect_nvidia_gpu
-                _has_cuda = has_talktype_cuda_libraries()
+                from .cuda_helper import has_cuda_libraries, detect_nvidia_gpu
+                # Same runtime check the Device dropdown uses (accepts a
+                # system-wide CUDA install, not just TalkType's own download)
+                _has_cuda = has_cuda_libraries()
                 _has_nvidia = bool(detect_nvidia_gpu())
             except Exception:
                 _has_cuda = False
@@ -2059,9 +2114,9 @@ class PreferencesWindow:
                     )
                     _dlg.format_secondary_text(
                         "The 'large-v3' model needs two downloads:\n\n"
-                        "  • CUDA GPU Libraries   (~800MB)\n"
+                        "  • CUDA GPU Libraries   (~1.4GB)\n"
                         "  • Large-v3 AI Model    (~3GB)\n\n"
-                        "Total: ~3.8GB — one-time download.\n\n"
+                        "Total: ~4.4GB — one-time download.\n\n"
                         "Would you like to download both now?"
                     )
                     _dlg.set_keep_above(True)
@@ -2079,7 +2134,7 @@ class PreferencesWindow:
                             self._on_cuda_download_for_model()
                         elif _cuda_ok and not _model_ok:
                             # CUDA worked but model failed — refresh dropdown, don't auto-select
-                            self._refresh_device_dropdown()
+                            self._refresh_device_options()
                 else:
                     _dlg = Gtk.MessageDialog(
                         transient_for=self.window,
@@ -2097,9 +2152,10 @@ class PreferencesWindow:
                     _dlg.destroy()
                 return
 
-        # Show size warning for large-v3 model ONLY if it's not already downloaded
-        from .model_helper import is_model_cached
-        if new_model == "large-v3" and not is_model_cached("large-v3"):
+        # Show size warning for large-v3 model ONLY if it's not already
+        # downloaded (fast file check — no model loading on the main thread)
+        from .model_helper import is_model_cached_fast
+        if new_model == "large-v3" and not is_model_cached_fast("large-v3"):
             dialog = Gtk.MessageDialog(
                 transient_for=self.window,
                 flags=0,
@@ -2148,7 +2204,7 @@ class PreferencesWindow:
                 row[1] = "large-v3 — best accuracy"
                 break
         # Also refresh the device dropdown to show CUDA
-        self._refresh_device_dropdown()
+        self._refresh_device_options()
         # Auto-select large-v3 so the user gets what they wanted
         self._updating_model = True
         if hasattr(self, 'model_combo'):
@@ -2156,6 +2212,11 @@ class PreferencesWindow:
         self._updating_model = False
         self.update_config("model", "large-v3")
         self.update_config("device", "cuda")
+        # Sync the device combo — _refresh_device_options() above restored
+        # the OLD device selection, so without this the dropdown shows CPU
+        # while the config now says cuda.
+        if hasattr(self, 'device_combo'):
+            self.device_combo.set_active_id("cuda")
 
     def _handle_autostart(self, enable):
         """Create or remove autostart desktop file."""
@@ -2350,47 +2411,6 @@ Hidden=true
         from .config import find_input_device
         current_mic = self.config.get("mic", "")
         return find_input_device(current_mic)
-    
-    def start_level_monitoring(self):
-        """Start monitoring microphone input levels."""
-        try:
-            import sounddevice as sd
-            import numpy as np
-
-            device_idx = self.get_selected_device_idx()
-            # Use device's native sample rate (some ALSA devices reject 16kHz)
-            mic_sr = self._get_device_samplerate(device_idx)
-
-            def audio_callback(indata, frames, time, status):
-                if self.recording or self.level_monitor_timer:
-                    # Calculate RMS level
-                    rms = np.sqrt(np.mean(indata**2))
-                    # Update level bar on main thread
-                    GLib.idle_add(self.update_level_bar, min(rms * 10, 1.0))
-
-            # Start input stream for level monitoring
-            self.level_stream = sd.InputStream(
-                callback=audio_callback,
-                channels=1,
-                samplerate=mic_sr,
-                device=device_idx,
-                blocksize=1024
-            )
-            self.level_stream.start()
-            
-        except Exception as e:
-            print(f"Failed to start level monitoring: {e}")
-    
-    def stop_level_monitoring(self):
-        """Stop monitoring microphone input levels."""
-        try:
-            if hasattr(self, 'level_stream'):
-                self.level_stream.stop()
-                self.level_stream.close()
-                delattr(self, 'level_stream')
-            self.level_bar.set_value(0.0)
-        except Exception:
-            pass
     
     def update_level_bar(self, level):
         """Update the VU meter with current audio level."""
@@ -2822,7 +2842,7 @@ Hidden=true
         from talktype.config import get_data_dir
         cuda_path = os.path.join(get_data_dir(), "cuda")
         confirm_dialog.format_secondary_text(
-            "This will download approximately 800MB of CUDA libraries for GPU acceleration.\n\n"
+            "This will download approximately 1.4GB of CUDA libraries for GPU acceleration.\n\n"
             f"The files will be stored in {cuda_path} and may take several minutes to download.\n\n"
             "Continue with download?"
         )
@@ -3248,17 +3268,8 @@ Hidden=true
         dialog.run()
         dialog.destroy()
 
-    def _start_level_monitoring(self):
-        """Initialize level monitoring after window is shown."""
-        self.start_level_monitoring()
-        return False  # Don't repeat
-    
-    def on_window_close(self, widget, event):
-        """Handle window close event to clean up PID file."""
-        # Stop level monitoring
-        self.stop_level_monitoring()
-        
-        # Stop any active recording
+    def _stop_mic_test(self):
+        """Stop an in-progress mic-test recording and release the stream."""
         if hasattr(self, 'recording') and self.recording:
             self.recording = False
             if hasattr(self, 'record_stream'):
@@ -3267,8 +3278,9 @@ Hidden=true
                     self.record_stream.close()
                 except Exception:
                     pass
-        
-        # Clean up PID file
+
+    def _release_pidfile(self):
+        """Remove the prefs singleton pidfile if it belongs to this process."""
         try:
             with open(_PREFS_PIDFILE, "r") as f:
                 cur = int(f.read().strip() or "0")
@@ -3276,6 +3288,23 @@ Hidden=true
                 os.remove(_PREFS_PIDFILE)
         except Exception:
             pass
+
+    def _show_save_error(self):
+        """Error dialog for a failed config save (disk full, permissions…)."""
+        dialog = Gtk.MessageDialog(
+            transient_for=self.window,
+            flags=0,
+            message_type=Gtk.MessageType.ERROR,
+            buttons=Gtk.ButtonsType.OK,
+            text="Failed to save settings!"
+        )
+        dialog.run()
+        dialog.destroy()
+
+    def on_window_close(self, widget, event):
+        """Handle window close event: stop the mic test, clean up PID file."""
+        self._stop_mic_test()
+        self._release_pidfile()
         Gtk.main_quit()
         return False
     
@@ -3283,16 +3312,18 @@ Hidden=true
         """Check if model exists, download with progress if needed.
 
         Returns:
-            tuple: (success: bool, was_downloaded: bool)
+            tuple: (success: bool, was_downloaded: bool, cancelled: bool)
         """
-        # Check if model is already cached
-        cache_dir = os.path.expanduser("~/.cache/huggingface/hub")
-        model_dir = f"models--Systran--faster-whisper-{model_name}"
-        model_path = os.path.join(cache_dir, model_dir)
+        from .model_helper import is_model_cached_fast, make_model_download_func
 
-        if os.path.exists(model_path):
+        # Completeness check on the cached files (no model loading — this
+        # runs on every Apply/OK click). A partial cache left by a cancelled
+        # or interrupted download correctly reports "not cached". (The old
+        # directory-exists check reported success for partial caches — the
+        # service then stalled silently finishing the download itself.)
+        if is_model_cached_fast(model_name):
             print(f"Model {model_name} already cached")
-            return (True, False)  # Success, but not downloaded
+            return (True, False, False)  # Success, but not downloaded
 
         # Model needs downloading - show progress dialog
         print(f"Model {model_name} not found, downloading...")
@@ -3340,115 +3371,58 @@ Hidden=true
 
         dialog.show_all()
 
-        # Download in background thread with cancellation support
+        # Download in background thread with REAL cancellation: the
+        # model_helper download function checks cancel_event between blocks
+        # and aborts within moments. (The old code ran the blocking
+        # WhisperModel() constructor, so Cancel closed the dialog but the
+        # multi-GB download kept running invisibly in the background.)
         import threading
         cancel_event = threading.Event()
-        download_complete = {"done": False, "success": False, "cancelled": False}
-        progress_state = {'last_percent': -1}
+        download_complete = {"done": False, "success": False}
+        dialog_closed = {"v": False}
 
-        # Model sizes in bytes for progress estimation (actual download sizes)
-        model_sizes_bytes = {
-            "tiny": 75 * 1024 * 1024,       # ~75 MB actual
-            "base": 145 * 1024 * 1024,      # ~145 MB actual
-            "small": 488 * 1024 * 1024,     # ~488 MB actual
-            "medium": 1533 * 1024 * 1024,   # ~1.5 GB actual
-            "large-v3": 3100 * 1024 * 1024, # ~3.1 GB actual
-        }
-        expected_size = model_sizes_bytes.get(model_name, 500 * 1024 * 1024)
-
-        def get_cache_dir_size():
-            """Get the size of HuggingFace cache for this model"""
-            try:
-                cache_base = os.path.expanduser("~/.cache/huggingface/hub")
-                repo_folder = f"models--Systran--faster-whisper-{model_name}"
-                cache_path = os.path.join(cache_base, repo_folder)
-
-                if not os.path.exists(cache_path):
-                    return 0
-
-                total_size = 0
-                for dirpath, dirnames, filenames in os.walk(cache_path):
-                    for f in filenames:
-                        fp = os.path.join(dirpath, f)
-                        try:
-                            total_size += os.path.getsize(fp)
-                        except OSError:
-                            pass
-                return total_size
-            except Exception:
-                return 0
+        def on_progress(message, percent):
+            # Called from the download thread — marshal to the GTK main loop
+            def _update():
+                if not dialog_closed["v"]:
+                    progress_bar.set_fraction(min(percent, 100) / 100.0)
+                    progress_bar.set_text(f"{percent}%")
+                return False
+            GLib.idle_add(_update)
 
         def download_model():
             try:
-                import warnings
-
-                # Suppress PyTorch CUDA warnings BEFORE importing anything that imports torch
-                warnings.filterwarnings('ignore', message='Could not load CUDA library.*')
-                warnings.filterwarnings('ignore', category=UserWarning, module='torch')
-
-                # Check for cancellation before starting
-                if cancel_event.is_set():
-                    download_complete["cancelled"] = True
-                    return
-
-                from faster_whisper import WhisperModel
-
-                # This will download the model if needed
-                WhisperModel(model_name, device="cpu", compute_type="int8")
-
-                # Check for cancellation after download
-                if cancel_event.is_set():
-                    download_complete["cancelled"] = True
-                else:
-                    download_complete["success"] = True
-
+                download_func = make_model_download_func(model_name)
+                download_complete["success"] = download_func(on_progress, cancel_event)
             except Exception as e:
                 print(f"Model download failed: {e}")
                 download_complete["success"] = False
             finally:
                 download_complete["done"] = True
+                def _close():
+                    if not dialog_closed["v"]:
+                        dialog.response(Gtk.ResponseType.OK)
+                    return False
+                GLib.idle_add(_close)
 
         thread = threading.Thread(target=download_model)
         thread.daemon = True
         thread.start()
 
-        # Update progress bar by monitoring cache directory size
-        def update_progress():
-            if download_complete["done"]:
-                # Set to 100% before closing
-                progress_bar.set_fraction(1.0)
-                progress_bar.set_text("100%")
-                GLib.timeout_add(200, lambda: dialog.response(Gtk.ResponseType.OK) or False)
-                return False
-
-            if cancel_event.is_set():
-                return False
-
-            current_size = get_cache_dir_size()
-            percent = min(99, int((current_size / expected_size) * 100))
-
-            if percent != progress_state['last_percent']:
-                progress_state['last_percent'] = percent
-                progress_bar.set_fraction(percent / 100.0)
-                progress_bar.set_text(f"{percent}%")
-
-            return True
-
-        GLib.timeout_add(200, update_progress)
-
         # Wait for download (dialog.run() blocks until response)
         response = dialog.run()
 
-        # Handle cancel button click
-        if response == Gtk.ResponseType.CANCEL:
+        # Any response except our own OK (Cancel button, Esc, window close)
+        # aborts the download thread at its next block boundary.
+        if response != Gtk.ResponseType.OK:
             cancel_event.set()
-            download_complete["cancelled"] = True
             print(f"User cancelled {model_name} model download")
 
+        dialog_closed["v"] = True
         dialog.destroy()
 
         # Show success message if download completed successfully
-        if download_complete["success"]:
+        if download_complete["success"] and not cancel_event.is_set():
             print(f"✅ Model {model_name} downloaded successfully")
 
             # Show success dialog
@@ -3469,7 +3443,13 @@ Hidden=true
             success_dialog.run()
             success_dialog.destroy()
 
-        return (download_complete["success"], download_complete["success"])  # (success, was_downloaded)
+        cancelled = cancel_event.is_set()
+        _ok = download_complete["success"] and not cancelled
+        # Belt and suspenders: trust the downloader only if the cache now
+        # actually contains every file.
+        if _ok:
+            _ok = is_model_cached_fast(model_name)
+        return (_ok, _ok, cancelled)  # (success, was_downloaded, cancelled)
 
     def restart_service(self):
         """Restart the dictation service."""
@@ -3539,38 +3519,54 @@ Hidden=true
             if vadj:
                 vadj.set_value(0)
 
+    def _download_selected_model(self):
+        """Download the model selected in the dropdown, if it needs it.
+
+        Shows the shared 'Model download failed!' error dialog on failure.
+        Returns (success, was_downloaded) — success True when nothing needed
+        downloading.
+        """
+        # Use the model that was actually SAVED (merged config) — if the tray
+        # switched models while this window was open, the combo may be stale.
+        model_name = self.config.get("model")
+        if not model_name:
+            return (True, False)
+
+        success, was_downloaded, cancelled = self.check_and_download_model(model_name)
+        if cancelled:
+            # User cancelled — no scary "check your internet connection"
+            # dialog; just report failure so Apply/OK stops cleanly.
+            return (False, False)
+        if not success:
+            dialog = Gtk.MessageDialog(
+                transient_for=self.window,
+                flags=0,
+                message_type=Gtk.MessageType.ERROR,
+                buttons=Gtk.ButtonsType.OK,
+                text="Model download failed!"
+            )
+
+            # Apply dark theme
+            settings = Gtk.Settings.get_default()
+            if settings:
+                settings.set_property("gtk-application-prefer-dark-theme", True)
+
+            dialog.format_secondary_text("Failed to download the Whisper model. Please check your internet connection.")
+            dialog.run()
+            dialog.destroy()
+        return (success, was_downloaded)
+
     def on_apply(self, button):
         """Apply changes and restart service without closing."""
         # Save custom commands first
         if hasattr(self, 'commands_store'):
             self._save_custom_commands()
-        
+
         if self.save_config():
             # Check if model needs downloading
-            if hasattr(self, 'model_combo') and hasattr(self, 'model_store'):
-                _it = self.model_combo.get_active_iter()
-                model_name = self.model_store.get_value(_it, 0) if _it else None
-                if model_name:
-                    success, was_downloaded = self.check_and_download_model(model_name)
-                    if not success:
-                        # Model download failed
-                        dialog = Gtk.MessageDialog(
-                            transient_for=self.window,
-                            flags=0,
-                            message_type=Gtk.MessageType.ERROR,
-                            buttons=Gtk.ButtonsType.OK,
-                            text="Model download failed!"
-                        )
-
-                        # Apply dark theme
-                        settings = Gtk.Settings.get_default()
-                        if settings:
-                            settings.set_property("gtk-application-prefer-dark-theme", True)
-
-                        dialog.format_secondary_text("Failed to download the Whisper model. Please check your internet connection.")
-                        dialog.run()
-                        dialog.destroy()
-                        return
+            success, _was_downloaded = self._download_selected_model()
+            if not success:
+                return
 
             # Restart the service
             if self.restart_service():
@@ -3604,27 +3600,14 @@ Hidden=true
                 dialog.run()
                 dialog.destroy()
         else:
-            # Show save error
-            dialog = Gtk.MessageDialog(
-                transient_for=self.window,
-                flags=0,
-                message_type=Gtk.MessageType.ERROR,
-                buttons=Gtk.ButtonsType.OK,
-                text="Failed to save settings!"
-            )
-            dialog.run()
-            dialog.destroy()
+            self._show_save_error()
     
     def on_cancel(self, button):
         """Cancel and close without saving."""
-        # Clean up PID file before closing
-        try:
-            with open(_PREFS_PIDFILE, "r") as f:
-                cur = int(f.read().strip() or "0")
-            if cur == os.getpid():
-                os.remove(_PREFS_PIDFILE)
-        except Exception:
-            pass
+        # Cancel/OK close via destroy(), which does NOT emit delete-event,
+        # so the on_window_close cleanup must be invoked explicitly here.
+        self._stop_mic_test()
+        self._release_pidfile()
         self.window.destroy()
         Gtk.main_quit()
     
@@ -3635,34 +3618,10 @@ Hidden=true
             self._save_custom_commands()
         
         if self.save_config():
-            model_was_downloaded = False
-
             # Check if model needs downloading
-            if hasattr(self, 'model_combo') and hasattr(self, 'model_store'):
-                _it = self.model_combo.get_active_iter()
-                model_name = self.model_store.get_value(_it, 0) if _it else None
-                if model_name:
-                    success, was_downloaded = self.check_and_download_model(model_name)
-                    model_was_downloaded = was_downloaded
-                    if not success:
-                        # Model download failed
-                        dialog = Gtk.MessageDialog(
-                            transient_for=self.window,
-                            flags=0,
-                            message_type=Gtk.MessageType.ERROR,
-                            buttons=Gtk.ButtonsType.OK,
-                            text="Model download failed!"
-                        )
-
-                        # Apply dark theme
-                        settings = Gtk.Settings.get_default()
-                        if settings:
-                            settings.set_property("gtk-application-prefer-dark-theme", True)
-
-                        dialog.format_secondary_text("Failed to download the Whisper model. Please check your internet connection.")
-                        dialog.run()
-                        dialog.destroy()
-                        return
+            success, model_was_downloaded = self._download_selected_model()
+            if not success:
+                return
 
             # Restart the service
             service_restarted = self.restart_service()
@@ -3672,14 +3631,9 @@ Hidden=true
                 # Don't close the window - let user make more changes if needed
                 return
 
-            # Clean up PID file before closing
-            try:
-                with open(_PREFS_PIDFILE, "r") as f:
-                    cur = int(f.read().strip() or "0")
-                if cur == os.getpid():
-                    os.remove(_PREFS_PIDFILE)
-            except Exception:
-                pass
+            # Stop the mic test (if running) and clean up PID file before closing
+            self._stop_mic_test()
+            self._release_pidfile()
 
             # Show final status if service restart failed
             if not service_restarted:
@@ -3696,6 +3650,10 @@ Hidden=true
 
             self.window.destroy()
             Gtk.main_quit()
+        else:
+            # Same failure dialog as Apply — previously OK silently did
+            # nothing on a save error, leaving the button looking dead.
+            self._show_save_error()
 
     def _on_test_hotkeys(self, button):
         """Show hotkey test dialog.

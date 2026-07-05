@@ -656,9 +656,9 @@ class DictationTray:
                         )
                         _dlg.format_secondary_text(
                             "Two components need to be downloaded before 'Most Accurate' can be used:\n\n"
-                            "  • CUDA GPU Libraries   (~800MB)\n"
+                            "  • CUDA GPU Libraries   (~1.4GB)\n"
                             "  • Large-v3 AI Model    (~3GB)\n\n"
-                            "Total: ~3.8GB — one-time download, cached for future use.\n\n"
+                            "Total: ~4.4GB — one-time download, cached for future use.\n\n"
                             "Would you like to download both now?"
                         )
                         _dlg.set_keep_above(True)
@@ -903,7 +903,7 @@ class DictationTray:
         from talktype.config import get_data_dir
         cuda_path = os.path.join(get_data_dir(), "cuda")
         confirm_dialog.format_secondary_text(
-            "This will download approximately 800MB of CUDA libraries for GPU acceleration.\n\n"
+            "This will download approximately 1.4GB of CUDA libraries for GPU acceleration.\n\n"
             f"The files will be stored in {cuda_path} and may take several minutes to download.\n\n"
             "Continue with download?"
         )
@@ -1280,7 +1280,9 @@ class DictationTray:
 
         def do_download():
             """Background thread to download update."""
-            result_holder[0] = update_checker.download_update(url, filename, progress_callback)
+            result_holder[0] = update_checker.download_update(
+                url, filename, progress_callback,
+                checksums_url=release.get("checksums_url"))
             GLib.idle_add(download_complete)
 
         def download_complete():

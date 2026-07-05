@@ -72,6 +72,8 @@ class Settings:
     voice_commands_hotkey: str = "Ctrl+Alt+V"  # hotkey combo to open voice commands quick reference
     auto_check_updates: bool = True      # automatically check for updates on startup (once per day)
     last_update_check: str = ""          # ISO timestamp of last update check
+    language_mode: str = "auto"          # "auto" (detect language) or "manual" (use `language`); UI state for prefs
+    launch_at_login: bool = False        # start TalkType automatically at login (prefs manages the autostart file)
 
 
 # ---------------------------------------------------------------------------
@@ -226,6 +228,22 @@ def save_config(s: Settings) -> None:
         f.write("# TalkType config\n")
         for fld in fields(s):
             f.write(f"{fld.name} = {_toml_value(getattr(s, fld.name))}\n")
+
+
+def merge_changed_keys(original: dict, current: dict, base: dict) -> dict:
+    """Overlay only the keys that changed between *original* and *current*
+    onto *base*, returning base.
+
+    Used by the Preferences window to avoid clobbering settings another
+    process (the tray) wrote while the window was open: *original* is the
+    config as loaded when the window opened, *current* is the UI state at
+    save time, and *base* is a fresh read of the file on disk. Keys the
+    user didn't touch keep their on-disk values; keys the user changed win.
+    """
+    for key, value in current.items():
+        if key not in original or original[key] != value:
+            base[key] = value
+    return base
 
 
 def get_data_dir():

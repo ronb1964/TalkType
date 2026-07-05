@@ -29,7 +29,7 @@ class DownloadTask:
         Args:
             name: Display name (e.g., "CUDA Libraries")
             description: Short description
-            size_text: Size indicator (e.g., "~800MB")
+            size_text: Size indicator (e.g., "~1.4GB")
             download_func: Function that performs the download
                           Should accept (progress_callback, cancel_event) args
                           progress_callback signature: func(message, percent)
@@ -351,7 +351,7 @@ def show_unified_download_dialog(cuda=False, extension=False, model=None, parent
         model_size = MODEL_DISPLAY_SIZES.get(model, "~3 GB")
         description = (
             f"To use the 'Most Accurate' preset, TalkType needs two things:\n\n"
-            f"  • <b>CUDA GPU Libraries</b> (~800MB) — unlocks GPU acceleration on your NVIDIA card\n"
+            f"  • <b>CUDA GPU Libraries</b> (~1.4GB) — unlocks GPU acceleration on your NVIDIA card\n"
             f"  • <b>{model} AI Model</b> ({model_size}) — the highest-accuracy speech recognition model\n\n"
             f"Both are one-time downloads. This may take several minutes depending on your connection."
         )
@@ -363,7 +363,7 @@ def show_unified_download_dialog(cuda=False, extension=False, model=None, parent
         task = DownloadTask(
             name="CUDA Libraries",
             description="GPU acceleration libraries",
-            size_text="~800MB",
+            size_text="~1.4GB",
             download_func=cuda_helper.download_cuda_libraries
         )
         dialog.add_task(task)
@@ -423,7 +423,7 @@ if __name__ == '__main__':
     task1 = DownloadTask(
         name="CUDA Libraries",
         description="GPU acceleration",
-        size_text="~800MB",
+        size_text="~1.4GB",
         download_func=dummy_download
     )
     dialog.add_task(task1)

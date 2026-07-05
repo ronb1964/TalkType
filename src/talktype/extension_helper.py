@@ -14,7 +14,29 @@ from . import desktop_detect
 
 
 EXTENSION_UUID = 'talktype@ronb1964.github.io'
-EXTENSION_DOWNLOAD_URL = 'https://github.com/ronb1964/TalkType/releases/latest/download/talktype-gnome-extension.zip'
+EXTENSION_ZIP_NAME = 'talktype-gnome-extension.zip'
+EXTENSION_DOWNLOAD_URL = f'https://github.com/ronb1964/TalkType/releases/latest/download/{EXTENSION_ZIP_NAME}'
+# The release publishes SHA256SUMS.txt alongside the zip. The extension
+# contains JavaScript that runs in GNOME Shell, so verifying the download
+# closes a code-execution vector (a corrupted or tampered zip).
+EXTENSION_CHECKSUMS_URL = 'https://github.com/ronb1964/TalkType/releases/latest/download/SHA256SUMS.txt'
+
+
+def _fetch_extension_sha256() -> Optional[str]:
+    """Fetch the expected sha256 of the extension zip from the release.
+
+    Returns None for older releases that don't publish SHA256SUMS.txt — the
+    caller then falls back to the size/truncation check only.
+    """
+    from .download_utils import parse_sha256sums
+    try:
+        request = urllib.request.Request(
+            EXTENSION_CHECKSUMS_URL, headers={"User-Agent": "TalkType"})
+        with urllib.request.urlopen(request, timeout=10) as response:
+            sums = parse_sha256sums(response.read().decode("utf-8"))
+        return sums.get(EXTENSION_ZIP_NAME)
+    except Exception:
+        return None
 
 
 def is_extension_available() -> bool:
@@ -211,18 +233,27 @@ def download_and_install_extension(progress_callback: Optional[Callable] = None)
                 progress_callback("Downloading extension...", 10)
 
             # Download hook
-            def download_progress_hook(block_num, block_size, total_size):
+            def download_progress_hook(downloaded, total_size):
                 if progress_callback and total_size > 0:
-                    downloaded = block_num * block_size
                     percent = min(90, 10 + int((downloaded / total_size) * 70))
                     progress_callback(f"Downloading... {int((downloaded / total_size) * 100)}%", percent)
 
-            # Download extension zip
-            urllib.request.urlretrieve(
+            # Download extension zip. The timeout matters: the old
+            # urlretrieve call had none, so a stalled connection hung the
+            # install dialog forever with no way out. The sha256 (when the
+            # release publishes it) verifies the JS bundle before install.
+            from .download_utils import download_file
+            expected_sha256 = _fetch_extension_sha256()
+            if not download_file(
                 EXTENSION_DOWNLOAD_URL,
                 zip_path,
-                reporthook=download_progress_hook
-            )
+                timeout=60,
+                progress_hook=download_progress_hook,
+                expected_sha256=expected_sha256,
+            ):
+                if progress_callback:
+                    progress_callback("Extension download failed or was corrupted", 0)
+                return False
 
             if progress_callback:
                 progress_callback("Extracting extension...", 85)
@@ -436,9 +467,14 @@ def offer_extension_installation(show_gui: bool = True) -> bool:
             thread = threading.Thread(target=do_install)
             thread.start()
 
-            # Wait for completion
+            # Wait for completion, keeping the UI responsive. The short sleep
+            # stops this loop from spinning a CPU core at 100% — non-blocking
+            # main_iteration_do returns immediately when there are no events.
+            import time as _time
             while thread.is_alive():
-                Gtk.main_iteration_do(False)
+                while Gtk.events_pending():
+                    Gtk.main_iteration_do(False)
+                _time.sleep(0.02)
 
             if success[0]:
                 # Show success message

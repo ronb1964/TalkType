@@ -154,3 +154,123 @@ def test_existing_uppercase_I_unchanged():
     """An already-capitalized 'I' is left alone (no double processing)."""
     s = "I already said I would"
     assert normalize_text(s) == "I already said I would."
+
+
+# =====================================================================
+# v0.5.17 review fixes — regression tests for verified corruption bugs.
+# Each case below was reproduced against the pre-fix code during the
+# 2026-07-04 full-codebase review.
+# =====================================================================
+
+def test_decimals_and_prices_preserved():
+    """Periods inside numbers must not get split: '3.5' stayed '3. 5' before fix."""
+    assert normalize_text("version 3.5 costs $19.99") == "Version 3.5 costs $19.99."
+
+
+def test_single_letter_abbreviations_preserved():
+    """'U.S.' / 'e.g.' must not be split into 'U. S.' / 'e. G.'"""
+    assert normalize_text("the U.S. economy grew") == "The U.S. economy grew."
+    assert normalize_text("this is useful e.g. when testing") == "This is useful e.g. when testing."
+
+
+def test_am_prefixed_words_not_time_formatted():
+    """Number + word starting with 'am'/'pm' must not be treated as a time."""
+    assert normalize_text("there are 5 among us") == "There are 5 among us."
+    assert normalize_text("I ate 3 amazing tacos") == "I ate 3 amazing tacos."
+
+
+def test_time_formatting_still_works():
+    """Real times keep getting normalized (guard for the am/pm fix)."""
+    assert "11:30 PM" in normalize_text("meet me at 11. 30 p. m. sharp")
+    assert "5 PM" in normalize_text("the store closes at 5 p. m. tonight")
+
+
+def test_em_dash_command_works():
+    """'em dash' was broken: the 'dash' rule ran first, leaving 'em-'."""
+    assert normalize_text("please use an em dash here") == "Please use an — here."
+
+
+def test_dash_command_still_works():
+    """Plain 'dash' still produces a tight hyphen (guard for the reorder)."""
+    assert normalize_text("five dash three") == "Five-three."
+
+
+def test_return_verb_not_treated_as_command():
+    """Common verb uses of 'return' must not insert a line break."""
+    out = normalize_text("I want to return this item tomorrow")
+    assert "§SHIFT_ENTER§" not in out
+    assert "return this item" in out
+
+    out = normalize_text("she will return next week")
+    assert "§SHIFT_ENTER§" not in out
+    assert "will return" in out
+
+    out = normalize_text("please return it to the store")
+    assert "§SHIFT_ENTER§" not in out
+
+
+def test_tab_noun_not_treated_as_command():
+    """Common noun uses of 'tab' must not insert a tab character."""
+    out = normalize_text("open a new tab in the browser")
+    assert "\t" not in out
+    assert "tab" in out
+
+    out = normalize_text("press the tab key to indent")
+    assert "\t" not in out
+    assert "tab key" in out
+
+
+def test_tab_command_still_works():
+    """Bare 'tab' at the start of dictation still produces a tab character."""
+    assert normalize_text("tab hello world").startswith("\t")
+
+
+# --- append_auto_punct: auto-period/space placement around line-break markers ---
+
+from talktype.normalize import append_auto_punct
+
+_M = "§SHIFT_ENTER§"
+
+
+def test_auto_punct_plain_text():
+    assert append_auto_punct("Hello world", True, True) == "Hello world. "
+    assert append_auto_punct("Hello world.", True, True) == "Hello world. "
+    assert append_auto_punct("Hello", False, False) == "Hello"
+
+
+def test_auto_punct_no_orphan_period_after_trailing_break():
+    """'hello new line' used to become 'Hello.' + newline + '. ' (orphan)."""
+    assert append_auto_punct(f"Hello.{_M}", True, True) == f"Hello.{_M}"
+
+
+def test_auto_punct_period_goes_before_trailing_break():
+    assert append_auto_punct(f"Hello{_M}", True, True) == f"Hello.{_M}"
+    assert append_auto_punct(f"Hello{_M}{_M}", True, True) == f"Hello.{_M}{_M}"
+
+
+def test_auto_punct_only_markers_untouched():
+    assert append_auto_punct(_M, True, True) == _M
+
+
+# --- Adversarial-review regressions: protection lists must not swallow the command ---
+
+def test_return_command_after_pronoun_still_works():
+    """'thank you return' is a very common dictation ending — must break line."""
+    assert normalize_text("thank you return") == f"Thank you.{_M}"
+
+
+def test_return_command_before_sentence_starter_still_works():
+    """Utterance-initial 'return' followed by a normal sentence must break + capitalize."""
+    out = normalize_text("return this is a test")
+    assert _M in out
+    assert "This is a test." in out
+
+
+def test_tab_field_separator_still_works():
+    """'first tab second tab third' — tab as field separator must keep working."""
+    assert normalize_text("first tab second tab third").count("\t") == 2
+
+
+def test_line_starting_with_protected_word_is_capitalized():
+    """A protected word at line start must still get sentence capitalization."""
+    assert normalize_text("return to sender was my favorite song") == "Return to sender was my favorite song."

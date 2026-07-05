@@ -203,70 +203,120 @@ def download_cuda_libraries(progress_callback=None, cancel_event=None):
     
     try:
         import tempfile
-        
+        from .download_utils import download_file, free_space_bytes
+
         with tempfile.TemporaryDirectory() as temp_dir:
-            # Use pip to download packages
-            for pkg_idx, pkg_name in enumerate(cuda_packages):
-                # Check for cancellation
+            # --- Phase 1: resolve wheel URLs + sizes + PyPI sha256 digests ---
+            if progress_callback:
+                # Start at 0 so the bar never jumps backwards when the first
+                # per-package download reports 0%.
+                progress_callback("Looking up CUDA packages...", 0)
+
+            import json
+            import urllib.request
+
+            wheels = []  # (pkg_name, url, filename, sha256, size_bytes)
+            for pkg_name in cuda_packages:
+                if cancel_event and cancel_event.is_set():
+                    logger.info("Download cancelled by user")
+                    cleanup_cuda_dir()
+                    return False
+                try:
+                    api_url = f"https://pypi.org/pypi/{pkg_name}/json"
+                    request = urllib.request.Request(
+                        api_url, headers={"User-Agent": "TalkType"})
+                    # timeout is required — without it a stalled PyPI
+                    # connection hung this thread forever
+                    with urllib.request.urlopen(request, timeout=30) as response:
+                        data = json.loads(response.read())
+
+                    # Find the wheel file for linux x86_64
+                    for file_info in data['urls']:
+                        if (file_info['packagetype'] == 'bdist_wheel' and
+                                'x86_64' in file_info['filename'] and
+                                'manylinux' in file_info['filename']):
+                            wheels.append((
+                                pkg_name,
+                                file_info['url'],
+                                file_info['filename'],
+                                # PyPI publishes the sha256 of every file —
+                                # verify it so a corrupted/tampered download
+                                # can never be installed
+                                file_info.get('digests', {}).get('sha256'),
+                                int(file_info.get('size', 0) or 0),
+                            ))
+                            break
+                    else:
+                        logger.error(f"No suitable wheel found for {pkg_name}")
+                        cleanup_cuda_dir()
+                        return False
+                except Exception as e:
+                    logger.error(f"Failed to look up {pkg_name} on PyPI: {e}")
+                    if progress_callback:
+                        progress_callback("Could not reach PyPI — check your internet connection", 0)
+                    cleanup_cuda_dir()
+                    return False
+
+            # --- Phase 2: disk-space check before committing to the download ---
+            # The wheels download into temp_dir (often /tmp, which is tmpfs =
+            # RAM on Fedora/Nobara) and the .so files extract into lib_path
+            # (under ~/.local/share). These can be different filesystems, so
+            # BOTH must be checked: temp_dir needs room for the wheels,
+            # lib_path needs room for the extracted libraries.
+            total_wheel_bytes = sum(w[4] for w in wheels)
+            checks = [
+                (temp_dir, total_wheel_bytes + 100 * 1024 * 1024, "download (temp)"),
+                (lib_path, total_wheel_bytes + 100 * 1024 * 1024, "install"),
+            ]
+            for check_path, need_bytes, label in checks:
+                free = free_space_bytes(check_path)
+                if total_wheel_bytes and free and free < need_bytes:
+                    need_gb = need_bytes / (1024 ** 3)
+                    free_gb = free / (1024 ** 3)
+                    msg = (f"Not enough disk space for {label}: need ~{need_gb:.1f} GB "
+                           f"free, only {free_gb:.1f} GB available")
+                    logger.error(f"{msg} (path: {check_path})")
+                    if progress_callback:
+                        progress_callback(msg, 0)
+                    cleanup_cuda_dir()
+                    return False
+
+            # --- Phase 3: download each wheel (timeout + cancel + sha256) ---
+            for pkg_idx, (pkg_name, wheel_url, wheel_filename, wheel_sha256, _size) in enumerate(wheels):
                 if cancel_event and cancel_event.is_set():
                     logger.info("Download cancelled by user")
                     cleanup_cuda_dir()
                     return False
 
                 if progress_callback:
-                    percent = int((pkg_idx / len(cuda_packages)) * 70)
+                    percent = int((pkg_idx / len(wheels)) * 70)
                     progress_callback(f"Downloading {pkg_name}...", percent)
 
                 logger.info(f"📥 Downloading {pkg_name}...")
-                
-                try:
-                    # Get the latest version from PyPI API and download directly
-                    import json
-                    import urllib.request
-                    
-                    # Get package info from PyPI
-                    api_url = f"https://pypi.org/pypi/{pkg_name}/json"
-                    with urllib.request.urlopen(api_url) as response:
-                        data = json.loads(response.read())
-                    
-                    # Find the wheel file for linux x86_64
-                    wheel_url = None
-                    for file_info in data['urls']:
-                        if (file_info['packagetype'] == 'bdist_wheel' and 
-                            'x86_64' in file_info['filename'] and
-                            'manylinux' in file_info['filename']):
-                            wheel_url = file_info['url']
-                            break
-                    
-                    if not wheel_url:
-                        logger.error(f"No suitable wheel found for {pkg_name}")
-                        cleanup_cuda_dir()
-                        return False
-                    
-                    # Download the wheel with progress updates
-                    wheel_filename = wheel_url.split('/')[-1]
-                    wheel_path = os.path.join(temp_dir, wheel_filename)
-                    
-                    def download_progress_hook(block_num, block_size, total_size):
-                        # Check for cancellation during download
-                        if cancel_event and cancel_event.is_set():
-                            raise InterruptedError("Download cancelled by user")
+                wheel_path = os.path.join(temp_dir, wheel_filename)
 
-                        if progress_callback and total_size > 0:
-                            downloaded = block_num * block_size
-                            download_percent = min(100, (downloaded / total_size) * 100)
-                            # Map to overall progress: each package gets ~23% of total progress
-                            base_percent = pkg_idx * 23
-                            current_percent = base_percent + int((download_percent / 100) * 23)
-                            progress_callback(f"Downloading {pkg_name}... {int(download_percent)}%", current_percent)
+                def progress_hook(downloaded, total, _pkg=pkg_name, _idx=pkg_idx):
+                    if progress_callback and total > 0:
+                        download_percent = min(100, (downloaded / total) * 100)
+                        # Map to overall progress: each package gets ~23% of total
+                        current_percent = _idx * 23 + int((download_percent / 100) * 23)
+                        progress_callback(
+                            f"Downloading {_pkg}... {int(download_percent)}%",
+                            current_percent)
 
-                    urllib.request.urlretrieve(wheel_url, wheel_path, reporthook=download_progress_hook)
-                    logger.info(f"✅ Downloaded {wheel_filename}")
-                        
-                except Exception as e:
-                    logger.error(f"Failed to download {pkg_name}: {e}")
+                if not download_file(
+                    wheel_url, wheel_path,
+                    timeout=60,
+                    cancel_event=cancel_event,
+                    progress_hook=progress_hook,
+                    expected_sha256=wheel_sha256,
+                ):
+                    logger.error(f"Failed to download {pkg_name}")
+                    if progress_callback and not (cancel_event and cancel_event.is_set()):
+                        progress_callback(f"Download of {pkg_name} failed or was corrupted", 0)
                     cleanup_cuda_dir()
                     return False
+                logger.info(f"✅ Downloaded and verified {wheel_filename}")
 
             # Check for cancellation before extraction
             if cancel_event and cancel_event.is_set():
@@ -387,7 +437,7 @@ def show_cuda_download_dialog(parent=None, on_success_callback=None):
 
     # Status label
     status_label = Gtk.Label()
-    status_label.set_markup('<span>Initializing download... (~800MB)</span>')
+    status_label.set_markup('<span>Initializing download... (~1.4GB)</span>')
     status_label.set_line_wrap(True)
     content.pack_start(status_label, False, False, 0)
 
@@ -626,7 +676,7 @@ def show_cuda_welcome_dialog():
         setup_label = Gtk.Label()
         from .config import get_data_dir
         data_dir = get_data_dir()
-        setup_label.set_markup(f'<b>📦 One-time setup:</b> ~800MB download\nLibraries will be stored in {data_dir}/')
+        setup_label.set_markup(f'<b>📦 One-time setup:</b> ~1.4GB download\nLibraries will be stored in {data_dir}/')
         setup_label.set_line_wrap(True)
         setup_label.set_margin_bottom(15)
         content.pack_start(setup_label, False, False, 0)
@@ -733,7 +783,7 @@ def offer_cuda_download_cli():
     print("  🎯 Better accuracy for longer recordings")
     print("  ⏱️ Real-time processing for live dictation")
     print("  💻 Lower CPU usage during transcription")
-    print("\n📦 One-time setup: ~800MB download")
+    print("\n📦 One-time setup: ~1.4GB download")
     from .config import get_data_dir
     print(f"Libraries will be stored in {get_data_dir()}/")
     print("="*60)

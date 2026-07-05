@@ -237,13 +237,11 @@ class TalkTypeIndicator extends PanelMenu.Button {
 
     _pushFocusedWindowClass() {
         if (!this._proxy || !this._dbusAvailable) {
-            console.log('TalkType: skip focus push (proxy or dbus not ready)');
             return;
         }
         try {
             const win = global.display && global.display.focus_window;
             const wmClass = (win && win.get_wm_class()) || '';
-            console.log(`TalkType: pushing focused wm_class=${JSON.stringify(wmClass)}`);
             this._proxy.SetFocusedWindowClassRemote(wmClass, () => {});
         } catch (e) {
             console.error('TalkType: focus push failed:', e);

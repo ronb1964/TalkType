@@ -258,14 +258,17 @@ def fetch_latest_release() -> Optional[dict]:
                 "assets": data.get("assets", []),
                 "appimage_url": None,
                 "extension_url": None,
+                "checksums_url": None,
             }
 
-            # Find AppImage and extension URLs in assets
+            # Find AppImage, extension, and checksums URLs in assets
             for asset in result["assets"]:
                 name = asset.get("name", "").lower()
                 url = asset.get("browser_download_url", "")
 
-                if name.endswith(".appimage"):
+                if name in ("sha256sums.txt", "checksums.txt"):
+                    result["checksums_url"] = url
+                elif name.endswith(".appimage"):
                     result["appimage_url"] = url
                     result["appimage_name"] = asset.get("name", "")
                 elif "extension" in name and name.endswith(".zip"):
@@ -359,22 +362,51 @@ def check_for_updates() -> dict:
     return result
 
 
+def fetch_expected_sha256(checksums_url: str, filename: str) -> Optional[str]:
+    """Fetch the release's SHA256SUMS.txt and return the hash for *filename*.
+
+    Returns None when the file can't be fetched or doesn't list the filename
+    (e.g. releases published before checksums were added).
+    """
+    from .download_utils import parse_sha256sums
+    try:
+        request = urllib.request.Request(
+            checksums_url,
+            headers={"User-Agent": "TalkType-UpdateChecker"}
+        )
+        with urllib.request.urlopen(request, timeout=10) as response:
+            sums = parse_sha256sums(response.read().decode("utf-8"))
+        return sums.get(filename)
+    except Exception as e:
+        logger.warning(f"Could not fetch checksums file: {e}")
+        return None
+
+
 def download_update(
     url: str,
     filename: str,
-    progress_callback: Optional[Callable[[str, int], None]] = None
+    progress_callback: Optional[Callable[[str, int], None]] = None,
+    checksums_url: Optional[str] = None,
 ) -> Optional[str]:
     """
-    Download an update file with progress tracking.
+    Download an update file with progress tracking and integrity checks.
+
+    The file is downloaded to a temp name and only renamed into place after
+    the size matches Content-Length and — when the release publishes a
+    SHA256SUMS.txt — the sha256 matches. A truncated or corrupted download
+    can therefore never be handed to the installer.
 
     Args:
         url: Download URL
         filename: Name for saved file
         progress_callback: Optional function(message, percent) for progress updates
+        checksums_url: Optional URL of the release's SHA256SUMS.txt asset
 
     Returns:
         str: Path to downloaded file, or None if failed
     """
+    from .download_utils import download_file
+
     try:
         # Create update directory
         os.makedirs(UPDATE_DIR, exist_ok=True)
@@ -383,49 +415,36 @@ def download_update(
         if progress_callback:
             progress_callback("Starting download...", 0)
 
-        # Progress hook for urlretrieve
-        def reporthook(block_num, block_size, total_size):
-            if progress_callback and total_size > 0:
-                downloaded = block_num * block_size
-                percent = min(100, int((downloaded / total_size) * 100))
+        # Look up the expected hash (older releases have no checksums file —
+        # in that case we still verify the byte count, just not the hash)
+        expected_sha256 = None
+        if checksums_url:
+            expected_sha256 = fetch_expected_sha256(checksums_url, filename)
+            if expected_sha256:
+                logger.info(f"Verifying download against published sha256 for {filename}")
+            else:
+                logger.warning(f"No published checksum found for {filename} — skipping hash check")
 
-                # Format size for display
+        def progress_hook(downloaded, total):
+            if progress_callback and total > 0:
+                percent = min(100, int((downloaded / total) * 100))
                 downloaded_mb = downloaded / (1024 * 1024)
-                total_mb = total_size / (1024 * 1024)
-
+                total_mb = total / (1024 * 1024)
                 progress_callback(
                     f"Downloading... {downloaded_mb:.1f} / {total_mb:.1f} MB",
                     percent
                 )
 
-        # Create request with User-Agent
-        request = urllib.request.Request(
-            url,
-            headers={"User-Agent": "TalkType-UpdateChecker"}
-        )
-
-        # Download file
-        with urllib.request.urlopen(request, timeout=300) as response:
-            total_size = int(response.headers.get("Content-Length", 0))
-            downloaded = 0
-            block_size = 8192
-
-            with open(dest_path, "wb") as f:
-                while True:
-                    block = response.read(block_size)
-                    if not block:
-                        break
-                    f.write(block)
-                    downloaded += len(block)
-
-                    if progress_callback and total_size > 0:
-                        percent = min(100, int((downloaded / total_size) * 100))
-                        downloaded_mb = downloaded / (1024 * 1024)
-                        total_mb = total_size / (1024 * 1024)
-                        progress_callback(
-                            f"Downloading... {downloaded_mb:.1f} / {total_mb:.1f} MB",
-                            percent
-                        )
+        if not download_file(
+            url, dest_path,
+            timeout=60,
+            progress_hook=progress_hook,
+            expected_sha256=expected_sha256,
+            user_agent="TalkType-UpdateChecker",
+        ):
+            if progress_callback:
+                progress_callback("Download failed or file was corrupted", 0)
+            return None
 
         if progress_callback:
             progress_callback("Download complete!", 100)
@@ -570,26 +589,41 @@ def install_update_and_restart(
         # Ensure AppImages directory exists
         os.makedirs(APPIMAGE_DIR, exist_ok=True)
 
+        # Disk-space check before staging a second full copy of the AppImage
+        from .download_utils import free_space_bytes
+        try:
+            needed = os.path.getsize(downloaded_path)
+        except OSError:
+            needed = 0
+        free = free_space_bytes(APPIMAGE_DIR)
+        if needed and free and free < needed + 50 * 1024 * 1024:
+            msg = (f"Not enough disk space to install the update: need "
+                   f"~{(needed) / (1024 ** 2):.0f} MB free in {APPIMAGE_DIR}")
+            logger.error(msg)
+            return (False, msg)
+
         # Copy downloaded AppImage to standard location
         if progress_callback:
             progress_callback("Copying to AppImages folder...", 60)
 
-        # IMPORTANT: On Linux, you can't write to a file that's currently executing
-        # ("Text file busy" error). We need to REMOVE the old file first, then
-        # copy/move the new one. Removing works because Linux uses reference counting -
-        # the running process keeps its copy in memory.
-        if os.path.exists(APPIMAGE_PATH):
+        # Stage the new AppImage next to the old one, then atomically rename
+        # it into place. os.replace() unlinks the running file rather than
+        # writing into it, so there is no "Text file busy" problem — and
+        # unlike the old delete-then-copy approach, a failure part-way
+        # through can never leave the user with NO working AppImage.
+        staging_path = APPIMAGE_PATH + ".new"
+        try:
+            shutil.copy2(downloaded_path, staging_path)
+            os.chmod(staging_path, stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
+            os.replace(staging_path, APPIMAGE_PATH)
+        except Exception:
+            # Never leave a partial ".new" file behind to clog ~/AppImages
             try:
-                os.remove(APPIMAGE_PATH)
-                logger.debug(f"Removed old AppImage at {APPIMAGE_PATH}")
-            except Exception as e:
-                logger.warning(f"Could not remove old AppImage: {e}")
-                # Try to continue anyway - maybe it's not the one we're running from
-
-        shutil.copy2(downloaded_path, APPIMAGE_PATH)
-
-        # Make executable
-        os.chmod(APPIMAGE_PATH, stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
+                if os.path.exists(staging_path):
+                    os.remove(staging_path)
+            except OSError:
+                pass
+            raise
 
         if progress_callback:
             progress_callback("Update installed!", 80)
@@ -670,13 +704,14 @@ def _refresh_desktop_menu_cache():
         'kbuildsycoca6', 'kbuildsycoca5',
     ]
 
-    # First, try running kbuildsycoca via shell (most reliable for AppImage)
-    # This uses the user's actual PATH, not the AppImage's modified environment
-    # Try both with and without --noincremental (user reported plain command works better)
-    for cmd in ['kbuildsycoca6', 'kbuildsycoca5', 'kbuildsycoca6 --noincremental', 'kbuildsycoca5 --noincremental']:
+    # Try both with and without --noincremental (user reported plain command works better).
+    # List-args with shell=False — same commands, without routing through /bin/sh.
+    for parts in [['kbuildsycoca6'], ['kbuildsycoca5'],
+                  ['kbuildsycoca6', '--noincremental'], ['kbuildsycoca5', '--noincremental']]:
+        cmd = ' '.join(parts)
         try:
             print(f"🔄 Running: {cmd}")
-            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=15)
+            result = subprocess.run(parts, capture_output=True, text=True, timeout=15)
             if result.returncode == 0:
                 logger.info(f"Desktop menu cache refreshed using: {cmd}")
                 print(f"✅ Desktop menu refreshed with: {cmd}")

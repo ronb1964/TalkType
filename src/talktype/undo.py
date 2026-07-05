@@ -80,10 +80,16 @@ def single_unit_length(text: str, undo_type: str) -> int:
     text_to_analyze = text.rstrip()
 
     if undo_type == 'word':
-        last_space = text_to_analyze.rfind(' ')
-        if last_space == -1:
+        # Any whitespace ends a word — the buffer stores line breaks as '\n'
+        # (one char = one backspace), so newlines/tabs are boundaries too.
+        last_ws = max(
+            text_to_analyze.rfind(' '),
+            text_to_analyze.rfind('\n'),
+            text_to_analyze.rfind('\t'),
+        )
+        if last_ws == -1:
             return len(text)
-        return len(text) - last_space - 1
+        return len(text) - last_ws - 1
 
     if undo_type == 'sentence':
         # Skip any trailing sentence-ending punctuation so we find the

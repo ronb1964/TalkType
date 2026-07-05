@@ -60,6 +60,33 @@ def is_model_cached(model_name):
         return False
 
 
+def is_model_cached_fast(model_name):
+    """
+    Lightweight cache-completeness check — file presence only.
+
+    Unlike is_model_cached(), this does NOT load the model into RAM (which
+    takes seconds and gigabytes for large-v3). snapshot_download with
+    local_files_only=True verifies every file of the cached revision exists
+    and raises if any is missing — so a partial cache from a cancelled
+    download correctly reports False. Safe to call on every Apply/OK click.
+    """
+    try:
+        from huggingface_hub import snapshot_download
+        repo_id = MODEL_REPOS.get(model_name)
+        if not repo_id:
+            return False
+        snapshot_path = snapshot_download(repo_id, local_files_only=True)
+        # snapshot_download does NOT verify completeness offline (verified
+        # empirically: it happily returns a snapshot containing only
+        # config.json). Check the files faster-whisper actually loads —
+        # hf_hub_download links a file into the snapshot only after its
+        # download fully completes, so presence implies completeness.
+        required = ("model.bin", "config.json", "tokenizer.json")
+        return all(os.path.isfile(os.path.join(snapshot_path, f)) for f in required)
+    except Exception:
+        return False
+
+
 def make_model_download_func(model_name):
     """
     Create a DownloadTask-compatible function that downloads model files to the
@@ -119,6 +146,20 @@ def make_model_download_func(model_name):
                 progress_callback("Download complete!", 100)
                 return True
 
+            # Disk-space check before committing to a multi-GB download —
+            # otherwise the failure surfaces later as a confusing per-file
+            # error instead of a clear message.
+            from .download_utils import free_space_bytes
+            free = free_space_bytes(os.path.expanduser("~/.cache/huggingface"))
+            if total_bytes and free and free < total_bytes * 1.1:
+                need_gb = (total_bytes * 1.1) / (1024 ** 3)
+                free_gb = free / (1024 ** 3)
+                msg = (f"Not enough disk space: model needs ~{need_gb:.1f} GB free, "
+                       f"only {free_gb:.1f} GB available")
+                logger.error(msg)
+                progress_callback(msg, 0)
+                return False
+
             # Track bytes downloaded across all files
             downloaded_bytes = [0]
 
@@ -151,6 +192,7 @@ def make_model_download_func(model_name):
                         )
 
             # Download each file one by one
+            failed_files = []
             for filename, file_size in files_with_sizes:
                 if cancel_event.is_set():
                     return False
@@ -172,8 +214,21 @@ def make_model_download_func(model_name):
                     return False
                 except Exception as e:
                     logger.warning(f"Error downloading {filename}: {e}")
-                    # Count even failed/cached files so progress doesn't stall
+                    # Keep the progress bar moving, but remember the failure —
+                    # a model with missing files must NOT be reported as
+                    # downloaded (the service would stall loading it).
+                    failed_files.append(filename)
                     downloaded_bytes[0] += file_size
+
+            if failed_files:
+                logger.error(
+                    f"Model {model_name} download incomplete: "
+                    f"{len(failed_files)} file(s) failed: {failed_files[:3]}"
+                )
+                progress_callback(
+                    f"Download failed: {len(failed_files)} file(s) could not be downloaded", 100
+                )
+                return False
 
             progress_callback("All files downloaded!", 100)
             return True

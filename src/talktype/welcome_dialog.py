@@ -1235,13 +1235,13 @@ class WelcomeDialog:
         self.cuda_check = Gtk.CheckButton()
         self.cuda_check.get_style_context().add_class('welcome-checkbox')
         cuda_label = Gtk.Label()
-        cuda_label.set_markup('📦 <b>Download CUDA Libraries</b> <span size="small">(~800MB)</span>')
+        cuda_label.set_markup('📦 <b>Download CUDA Libraries</b> <span size="small">(~1.4GB)</span>')
         cuda_label.set_halign(Gtk.Align.START)
         self.cuda_check.add(cuda_label)
         self.cuda_check.set_tooltip_text(
             "Download NVIDIA CUDA libraries for GPU-accelerated transcription.\n"
             "Provides 3-5x faster performance with your NVIDIA graphics card.\n"
-            "Download is ~800MB and may take a few minutes depending on connection speed.\n"
+            "Download is ~1.4GB and may take a few minutes depending on connection speed.\n"
             "GPU mode will be automatically enabled after successful download."
         )
         cuda_box.pack_start(self.cuda_check, False, False, 0)
@@ -1712,9 +1712,9 @@ def show_tips_and_features_dialog(extension_installed=False):
             )
             _dlg.format_secondary_text(
                 "The Large model needs two downloads to get started:\n\n"
-                "1. CUDA GPU libraries (~800MB) — enables GPU acceleration\n"
+                "1. CUDA GPU libraries (~1.4GB) — enables GPU acceleration\n"
                 "2. Large-v3 AI model (~3GB) — highest-accuracy transcription\n\n"
-                "Total: ~3.8GB. This may take several minutes.\n\n"
+                "Total: ~4.4GB. This may take several minutes.\n\n"
                 "Would you like to download both now?"
             )
             _dlg.set_keep_above(True)
@@ -1729,7 +1729,7 @@ def show_tips_and_features_dialog(extension_installed=False):
                         title="Downloading Large Model Components",
                         description=(
                             "TalkType is downloading two components for the Large model:\n\n"
-                            "  • <b>CUDA GPU Libraries</b> (~800MB) — unlocks GPU acceleration on your NVIDIA card\n"
+                            "  • <b>CUDA GPU Libraries</b> (~1.4GB) — unlocks GPU acceleration on your NVIDIA card\n"
                             "  • <b>large-v3 AI Model</b> (~3GB) — the highest-accuracy speech recognition model\n\n"
                             "Both are one-time downloads. This may take several minutes."
                         )
