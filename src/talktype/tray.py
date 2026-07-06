@@ -435,19 +435,44 @@ class DictationTray:
         GLib.timeout_add_seconds(1, lambda: self.update_status_and_menu(repeat=False))
 
     def restart_service(self, _):
-        """Restart the dictation service directly."""
+        """Restart the dictation service directly.
+
+        The kill/wait/relaunch runs on a background thread so the 1-second
+        wait for processes to die never freezes the tray/menu (this fires on
+        every injection-mode and performance-preset change).
+        """
         # CRITICAL: Never restart service during onboarding
         if self.onboarding_in_progress:
             logger.info("Onboarding in progress - refusing to restart service")
             return
 
-        try:
-            self._kill_service()
-            time.sleep(1)  # Wait for processes to terminate
-            self._launch_service()
-        except Exception as e:
-            logger.error(f"Failed to restart service: {e}", exc_info=True)
-        GLib.timeout_add_seconds(2, lambda: self.update_status_and_menu(repeat=False))
+        # Re-entrancy guard: the old synchronous version was serialized by the
+        # blocking sleep on the main loop. Now that the work runs on a thread,
+        # a second restart (injection-mode + preset changes both trigger one)
+        # firing within the 1s window could kill the freshly-launched service
+        # or leave two backends both grabbing the hotkey (double-typing).
+        if getattr(self, '_restarting', False):
+            logger.info("Restart already in progress - ignoring duplicate request")
+            return
+        self._restarting = True
+
+        import threading
+
+        def _do_restart():
+            try:
+                self._kill_service()
+                time.sleep(1)  # Wait for processes to terminate
+                GLib.idle_add(self._launch_service)
+            except Exception as e:
+                logger.error(f"Failed to restart service: {e}", exc_info=True)
+
+            def _finish():
+                self.update_status_and_menu(repeat=False)
+                self._restarting = False
+                return False
+            GLib.timeout_add_seconds(2, _finish)
+
+        threading.Thread(target=_do_restart, daemon=True).start()
     
     def update_status_and_menu(self, repeat=True):
         """Update icon and menu display based on service status.
@@ -1615,13 +1640,15 @@ def _ensure_ydotoold_running():
             logger.debug("ydotoold is already running")
             return
 
-        # Start ydotoold if not running
+        # Start ydotoold if not running. Don't block startup waiting for it —
+        # the daemon comes up within a moment and the first dictation is many
+        # seconds away, so the old time.sleep(2) just delayed the tray icon
+        # from appearing on every login.
         logger.info("Starting ydotoold daemon for text injection...")
         subprocess.Popen(["ydotoold"],
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL)
-        time.sleep(2)  # Give it time to start
-        logger.info("ydotoold started successfully")
+        logger.info("ydotoold launch requested")
     except FileNotFoundError:
         logger.warning("ydotoold not found in PATH - text injection may not work")
     except Exception as e:

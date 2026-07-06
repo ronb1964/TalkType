@@ -32,18 +32,29 @@ def detect_nvidia_gpu():
     Returns:
         bool: True if NVIDIA GPU is detected, False otherwise
     """
+    import subprocess
     try:
-        # Check for nvidia-smi command (most reliable)
-        result = os.popen('nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null').read()
-        if result.strip():
-            logger.debug(f"NVIDIA GPU detected: {result.strip()}")
-            return True
+        # Check for nvidia-smi command (most reliable). timeout guards against
+        # a hung nvidia-smi (a real NVIDIA driver failure mode) freezing the
+        # welcome dialog indefinitely — os.popen offered no timeout.
+        try:
+            result = subprocess.run(
+                ['nvidia-smi', '--query-gpu=name', '--format=csv,noheader'],
+                capture_output=True, text=True, timeout=5)
+            if result.returncode == 0 and result.stdout.strip():
+                logger.debug(f"NVIDIA GPU detected: {result.stdout.strip()}")
+                return True
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
 
         # Fallback: Check lspci
-        result = os.popen('lspci 2>/dev/null | grep -i nvidia').read()
-        if result.strip():
-            logger.debug(f"NVIDIA GPU detected via lspci: {result.strip()}")
-            return True
+        try:
+            result = subprocess.run(['lspci'], capture_output=True, text=True, timeout=5)
+            if result.returncode == 0 and 'nvidia' in result.stdout.lower():
+                logger.debug("NVIDIA GPU detected via lspci")
+                return True
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
 
         logger.debug("No NVIDIA GPU detected")
         return False

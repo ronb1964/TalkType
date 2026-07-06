@@ -188,31 +188,35 @@ class TalkTypeIndicator extends PanelMenu.Button {
                 '/io/github/ronb1964/TalkType'
             );
 
-            // Connect to signals
-            this._proxy.connectSignal('RecordingStateChanged', (proxy, sender, [isRecording]) => {
+            // Connect to signals. Store every subscription id so destroy()
+            // can disconnect them — otherwise the callbacks keep firing on
+            // the disposed panel button after the extension is disabled
+            // (e.g. on screen lock), throwing "already disposed" errors.
+            this._signalIds = [];
+            this._signalIds.push(this._proxy.connectSignal('RecordingStateChanged', (proxy, sender, [isRecording]) => {
                 this._isRecording = isRecording;
                 this._updateIcon();
-            });
+            }));
 
-            this._proxy.connectSignal('ServiceStateChanged', (proxy, sender, [isRunning]) => {
+            this._signalIds.push(this._proxy.connectSignal('ServiceStateChanged', (proxy, sender, [isRunning]) => {
                 this._isServiceRunning = isRunning;
                 this._updateIcon();
                 this._updateMenu();  // Update menu when service state changes
-            });
+            }));
 
-            this._proxy.connectSignal('ModelChanged', (proxy, sender, [modelName]) => {
+            this._signalIds.push(this._proxy.connectSignal('ModelChanged', (proxy, sender, [modelName]) => {
                 this._currentModel = modelName;
                 this._updateMenu();
-            });
+            }));
 
-            this._proxy.connectSignal('InjectionModeChanged', (proxy, sender, [mode]) => {
+            this._signalIds.push(this._proxy.connectSignal('InjectionModeChanged', (proxy, sender, [mode]) => {
                 this._currentInjectionMode = mode;
                 this._updateInjectionSelection(mode);
-            });
+            }));
 
-            this._proxy.connectSignal('UpdateCheckComplete', (proxy, sender, params) => {
+            this._signalIds.push(this._proxy.connectSignal('UpdateCheckComplete', (proxy, sender, params) => {
                 this._handleUpdateCheckResult(params);
-            });
+            }));
 
             this._dbusAvailable = true;
             console.log('TalkType: Connected to D-Bus service');
@@ -310,7 +314,8 @@ class TalkTypeIndicator extends PanelMenu.Button {
         this._deviceDisplayItem.label.style = 'font-weight: bold;';
         this.menu.addMenuItem(this._deviceDisplayItem);
 
-        this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        // (No separator here — Model/Device/Performance/Injection are one
+        // contiguous block, matching the GTK tray and CLAUDE.md menu order.)
 
         // Performance submenu
         this._performanceSubMenu = new PopupMenu.PopupSubMenuMenuItem('Performance');
@@ -567,6 +572,18 @@ class TalkTypeIndicator extends PanelMenu.Button {
         }
 
         if (this._proxy) {
+            // Disconnect every D-Bus signal subscription before dropping the
+            // proxy, so no callback fires on the destroyed button afterward.
+            if (this._signalIds) {
+                for (const id of this._signalIds) {
+                    try {
+                        this._proxy.disconnectSignal(id);
+                    } catch (e) {
+                        // proxy may already be tearing down — ignore
+                    }
+                }
+                this._signalIds = null;
+            }
             this._proxy = null;
         }
         super.destroy();

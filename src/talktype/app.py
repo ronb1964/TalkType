@@ -692,33 +692,39 @@ def _send_select_all_delete():
             logger.debug(f"ydotool select-all-delete failed: {e}")
     return False
 
-def _type_text(text: str):
+def _type_text(text: str) -> bool:
+    """Type text (handling line-break markers). Returns True if it was
+    actually typed into the focused app, False if injection failed."""
     # Handle special markers first
     if "§SHIFT_ENTER§" in text:
+        ok = True
         parts = text.split("§SHIFT_ENTER§")
         for i, part in enumerate(parts):
             if part:  # Type the text part
-                _type_text_raw(part)
+                if not _type_text_raw(part):
+                    ok = False
             if i < len(parts) - 1:  # Not the last part, send Shift+Enter
                 time.sleep(0.05)  # Small delay between text and key
                 _send_shift_enter()
                 time.sleep(0.05)  # Small delay after key
-        return
-    
+        return ok
+
     # Handle regular newlines by converting them to Enter key presses
     if "\n" in text:
+        ok = True
         parts = text.split("\n")
         for i, part in enumerate(parts):
             if part:  # Type the text part
-                _type_text_raw(part)
+                if not _type_text_raw(part):
+                    ok = False
             if i < len(parts) - 1:  # Not the last part, send Enter
                 time.sleep(0.05)  # Small delay between text and key
                 _send_enter()
                 time.sleep(0.05)  # Small delay after key
-        return
-    
+        return ok
+
     # Normal text typing
-    _type_text_raw(text)
+    return _type_text_raw(text)
 
 def _type_text_raw(text: str):
     """
@@ -745,27 +751,41 @@ def _type_text_raw(text: str):
                 stderr=subprocess.PIPE,
                 env=env
             )
-            stdout, stderr = proc.communicate(input=text.encode("utf-8"), timeout=20)
+            try:
+                stdout, stderr = proc.communicate(input=text.encode("utf-8"), timeout=20)
+            except subprocess.TimeoutExpired:
+                # Kill and reap the hung ydotool so it doesn't linger and keep
+                # typing into whatever is focused later.
+                proc.kill()
+                proc.communicate()
+                logger.error("ydotool type timed out after 20s; killed the process")
+                return False
             if proc.returncode != 0:
                 logger.error(f"ydotool type failed: rc={proc.returncode}, stderr={stderr.decode()}")
-            else:
-                logger.info(f"ydotool type succeeded: rc=0, typed {len(text)} chars")
-            return
+                return False
+            logger.info(f"ydotool type succeeded: rc=0, typed {len(text)} chars")
+            return True
         except Exception as e:
             logger.debug(f"ydotool failed: {e}")
     if _which("wtype"):
-        subprocess.run(["wtype", "--", text], check=False); return
+        # Report wtype's real exit code so the undo buffer only tracks text
+        # that was actually typed (consistent with the ydotool branch above).
+        wt = subprocess.run(["wtype", "--", text], check=False)
+        return wt.returncode == 0
     if _which("wl-copy"):
         try:
             import pyperclip
             pyperclip.copy(text)
             print("📋 Copied to clipboard. Ctrl+V to paste.")
             logger.info("Text copied to clipboard (fallback mode)")
-            return
+            # Nothing was actually typed into the field — report failure so
+            # the undo buffer doesn't track text the user must paste manually.
+            return False
         except Exception:
             pass
     logger.error("Could not type text: no ydotool/wtype/wl-copy available")
     print("⚠️  Could not type text (no ydotool/wtype).")
+    return False
 
 # Window classes that need Ctrl+Shift+V for paste (terminals).
 # All other apps get plain Ctrl+V — works in chat/editor/browser inputs and
@@ -840,7 +860,13 @@ def _type_text_fast(text: str, delay_ms: int = 1):
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             env=env,
         )
-        _stdout, stderr = proc.communicate(input=text.encode("utf-8"), timeout=30)
+        try:
+            _stdout, stderr = proc.communicate(input=text.encode("utf-8"), timeout=30)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.communicate()
+            logger.error("ydotool fast-type timed out after 30s; killed the process")
+            return False
         if proc.returncode != 0:
             logger.error(f"ydotool fast-type failed: rc={proc.returncode}, stderr={stderr.decode(errors='replace')}")
             return False
@@ -875,46 +901,49 @@ def _paste_text(text: str, send_trailing_keys: bool = False):
             paste_start = time.time()
             logger.info(f"TIMING: Starting paste operation for {len(text)} chars")
             proc = subprocess.Popen(["wl-copy"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            proc.stdin.write(text.encode("utf-8"))
-            proc.stdin.close()
-            wl_copy_time = time.time() - paste_start
-            logger.info(f"TIMING: wl-copy started in {wl_copy_time:.3f}s")
-
-            # Wait for clipboard to be ready (needs time for wl-copy to set up)
-            time.sleep(0.08)
-
-            env = _get_ydotool_env()
-
-            # Resolve focused window class via D-Bus query (tray-side cache).
-            # None when the extension hasn't pushed yet or the service is down.
-            focused_class = _query_focused_window_class()
-
-            is_terminal = focused_class in _TERMINAL_WM_CLASSES if focused_class else False
-
-            # KEY_LEFTSHIFT=42, KEY_LEFTCTRL=29, KEY_V=47
-            if is_terminal:
-                keys = ["42:1", "29:1", "47:1", "47:0", "29:0", "42:0"]  # Ctrl+Shift+V
-                logger.info(f"Paste: Ctrl+Shift+V (terminal class={focused_class!r})")
-            else:
-                keys = ["29:1", "47:1", "47:0", "29:0"]  # Ctrl+V
-                logger.info(f"Paste: Ctrl+V (class={focused_class!r})")
-
-            ydotool_start = time.time()
-            subprocess.run(["ydotool", "key"] + keys, check=False, env=env)
-            ydotool_time = time.time() - ydotool_start
-            logger.info(f"TIMING: ydotool paste command took {ydotool_time:.3f}s")
-
-            # Brief delay for paste to register, then terminate wl-copy
-            time.sleep(0.05)
-            total_paste_time = time.time() - paste_start
-            logger.info(f"TIMING: Total paste operation time: {total_paste_time:.3f}s")
             try:
-                proc.terminate()
-                proc.wait(timeout=0.3)
-            except Exception:
-                pass  # wl-copy cleanup is best-effort
+                proc.stdin.write(text.encode("utf-8"))
+                proc.stdin.close()
+                wl_copy_time = time.time() - paste_start
+                logger.info(f"TIMING: wl-copy started in {wl_copy_time:.3f}s")
 
-            return True
+                # Wait for clipboard to be ready (needs time for wl-copy to set up)
+                time.sleep(0.08)
+
+                env = _get_ydotool_env()
+
+                # Resolve focused window class via D-Bus query (tray-side cache).
+                # None when the extension hasn't pushed yet or the service is down.
+                focused_class = _query_focused_window_class()
+
+                is_terminal = focused_class in _TERMINAL_WM_CLASSES if focused_class else False
+
+                # KEY_LEFTSHIFT=42, KEY_LEFTCTRL=29, KEY_V=47
+                if is_terminal:
+                    keys = ["42:1", "29:1", "47:1", "47:0", "29:0", "42:0"]  # Ctrl+Shift+V
+                    logger.info(f"Paste: Ctrl+Shift+V (terminal class={focused_class!r})")
+                else:
+                    keys = ["29:1", "47:1", "47:0", "29:0"]  # Ctrl+V
+                    logger.info(f"Paste: Ctrl+V (class={focused_class!r})")
+
+                ydotool_start = time.time()
+                subprocess.run(["ydotool", "key"] + keys, check=False, env=env)
+                ydotool_time = time.time() - ydotool_start
+                logger.info(f"TIMING: ydotool paste command took {ydotool_time:.3f}s")
+
+                # Brief delay for paste to register
+                time.sleep(0.05)
+                total_paste_time = time.time() - paste_start
+                logger.info(f"TIMING: Total paste operation time: {total_paste_time:.3f}s")
+                return True
+            finally:
+                # Always reap wl-copy, even if the paste raised partway, so it
+                # never lingers as an orphan holding the clipboard open.
+                try:
+                    proc.terminate()
+                    proc.wait(timeout=0.3)
+                except Exception:
+                    pass  # wl-copy cleanup is best-effort
     except subprocess.TimeoutExpired as e:
         logger.error(f"Paste injection timeout: {e}")
     except Exception as e:
@@ -1230,6 +1259,11 @@ def _inject_text(text: str, injection_mode: str, t0: float):
     if injection_mode == "auto":
         print(f"\U0001f50d Auto mode: {reason}")
 
+    # Tracks whether text actually reached the focused app. Only a confirmed
+    # injection updates the undo buffer \u2014 otherwise a later "undo last word"
+    # would backspace characters the user's document never received.
+    inject_ok = True
+
     # --- AT-SPI insertion (accessibility API, fastest when supported) ---
     if use_atspi:
         logger.info(f"Attempting AT-SPI insertion: {reason}")
@@ -1242,11 +1276,11 @@ def _inject_text(text: str, injection_mode: str, t0: float):
             else:
                 print("\u26a0\ufe0f  AT-SPI insertion failed, falling back to typing")
                 logger.warning("AT-SPI insertion failed, using typing fallback")
-                _type_text(text)
+                inject_ok = _type_text(text)
         except Exception as e:
             logger.error(f"AT-SPI insertion error: {e}")
             print("\u26a0\ufe0f  AT-SPI error, falling back to typing")
-            _type_text(text)
+            inject_ok = _type_text(text)
 
     # --- Smart hybrid paste (text with line-break markers) ---
     elif use_paste and ("\xa7SHIFT_ENTER\xa7" in text or "\n" in text):
@@ -1271,7 +1305,7 @@ def _inject_text(text: str, injection_mode: str, t0: float):
             logger.info(f"Smart hybrid paste completed: {len(parts)} chunks")
         else:
             print(f"\u2328\ufe0f  Inject (type) len={len(text)} [paste failed, typing fallback]")
-            _type_text(text)
+            inject_ok = _type_text(text)
 
     # --- Simple paste (no markers) ---
     elif use_paste and _paste_text(text):
@@ -1284,18 +1318,23 @@ def _inject_text(text: str, injection_mode: str, t0: float):
 
     # --- Typing fallback ---
     else:
-        _type_text(text)
+        inject_ok = _type_text(text)
         injection_time = time.time() - injection_start
         logger.info(f"TIMING: Typing injection completed in {injection_time:.2f}s")
         logger.info(f"Text injected via typing: {len(text)} chars in {injection_time:.2f}s")
         if injection_time > 1.0:
             logger.warning(f"Typing injection slow: {injection_time:.2f}s")
 
-    # Track injected text for undo. Line-break markers are stored as '\n' —
-    # one keystroke on screen = one character in the buffer, so undo
-    # backspace counts stay in sync with what was actually typed.
-    state.last_inserted_text = text.replace("\xa7SHIFT_ENTER\xa7", "\n")
-    logger.debug(f"Stored last inserted text for undo: {len(state.last_inserted_text)} chars")
+    # Track injected text for undo — but ONLY when injection actually
+    # succeeded. Line-break markers are stored as '\n' (one keystroke on
+    # screen = one character in the buffer) so undo backspace counts stay in
+    # sync with what was typed. If injection failed, leave the previous
+    # buffer untouched so undo can't delete text the document never got.
+    if inject_ok:
+        state.last_inserted_text = text.replace("\xa7SHIFT_ENTER\xa7", "\n")
+        logger.debug(f"Stored last inserted text for undo: {len(state.last_inserted_text)} chars")
+    else:
+        logger.warning("Injection failed — undo buffer left unchanged")
 
 
 def stop_recording(

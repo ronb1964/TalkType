@@ -74,7 +74,17 @@ class RecordingIndicator(Gtk.Window):
         # Animation timer (60 FPS)
         self.animation_timeout_id = None
 
+        # Stop the animation timer if the window is ever destroyed directly
+        # (not via hide_indicator) — otherwise the 60fps callback keeps firing
+        # queue_draw() on a destroyed widget, spamming GLib-GObject-CRITICALs.
+        self.connect('destroy', self._on_destroy)
+
         self.set_app_paintable(True)
+
+    def _on_destroy(self, _widget):
+        if self.animation_timeout_id is not None:
+            GLib.source_remove(self.animation_timeout_id)
+            self.animation_timeout_id = None
 
     def show_at_position(self):
         """Show the indicator at the configured position"""

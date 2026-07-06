@@ -19,6 +19,8 @@ The solution:
 import os
 import subprocess
 import grp
+import pwd
+import shlex
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -737,13 +739,24 @@ def get_fix_script_content():
     Returns:
         str: Shell script content
     """
-    username = os.environ.get('USER', '')
-    
+    # Resolve the username from the passwd database (canonical — can't be
+    # spoofed via the USER env var) and shell-quote it. This script runs as
+    # ROOT via pkexec, so an unquoted/attacker-controlled username would be a
+    # root shell-injection vector.
+    try:
+        username = pwd.getpwuid(os.getuid()).pw_name
+    except Exception:
+        username = os.environ.get('USER', '')
+    quoted_user = shlex.quote(username)
+
     return f'''#!/bin/bash
 # TalkType uinput permission fix script
 # This script is run with administrator privileges via pkexec
 
 set -e
+
+# Username resolved and shell-quoted by TalkType; used only via "$TALKTYPE_USER"
+TALKTYPE_USER={quoted_user}
 
 echo "Setting up uinput access for TalkType..."
 
@@ -754,11 +767,11 @@ cat > {UDEV_RULE_PATH} << 'RULE'
 echo "Created udev rule at {UDEV_RULE_PATH}"
 
 # Add user to input group if not already
-if ! groups {username} | grep -q '\\binput\\b'; then
-    usermod -a -G input {username}
-    echo "Added {username} to input group"
+if ! groups "$TALKTYPE_USER" | grep -q '\\binput\\b'; then
+    usermod -a -G input "$TALKTYPE_USER"
+    echo "Added $TALKTYPE_USER to input group"
 else
-    echo "{username} is already in input group"
+    echo "$TALKTYPE_USER is already in input group"
 fi
 
 # Reload udev rules
