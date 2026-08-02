@@ -316,14 +316,23 @@ def test_am_at_end_of_text_keeps_its_period():
     assert normalize_text("It starts at 5 p.m.") == "It starts at 5 PM."
 
 
-def test_am_before_a_new_sentence_keeps_its_period():
+def test_am_mid_text_does_not_gain_a_period_even_before_a_capital():
+    """Deliberate limitation, documented rather than guessed at.
+
+    "9 a.m. We should be early" and "8 a.m. Tuesday" are grammatically
+    identical, and a following capital cannot tell them apart because Whisper
+    capitalizes proper nouns as well as sentence starts. Adding a period here
+    split ordinary sentences in two, which is worse than leaving one out: a
+    wrong split corrupts text the user must notice and repair, while a missing
+    full stop merely reads a little short.
+    """
     assert normalize_text("The meeting is at 9 a.m. We should be early.") == \
-        "The meeting is at 9 AM. We should be early."
+        "The meeting is at 9 AM We should be early."
 
 
-def test_am_with_minutes_before_a_new_sentence_keeps_its_period():
+def test_am_with_minutes_mid_text_does_not_gain_a_period():
     assert normalize_text("Dinner is at 7:30 p.m. Bring a dish.") == \
-        "Dinner is at 7:30 PM. Bring a dish."
+        "Dinner is at 7:30 PM Bring a dish."
 
 
 def test_am_mid_sentence_does_not_gain_a_period():
@@ -334,3 +343,29 @@ def test_am_mid_sentence_does_not_gain_a_period():
 def test_am_followed_by_a_lowercase_word_does_not_gain_a_period():
     assert normalize_text("I woke at 6 a.m. and went running.") == \
         "I woke at 6 AM and went running."
+
+
+# --- regression: a.m./p.m. must not split a sentence at a proper noun -------
+# Whisper capitalizes proper nouns as well as sentence starts, so "uppercase
+# word follows" is not evidence that the abbreviation's period was also a full
+# stop. "8 a.m. Tuesday" is an ordinary thing to dictate.
+
+def test_am_before_a_weekday_does_not_gain_a_period():
+    assert normalize_text("we start at 8 a.m. Tuesday") == "We start at 8 AM Tuesday."
+
+
+def test_pm_before_a_weekday_does_not_gain_a_period():
+    assert normalize_text("the deadline is 5 p.m. Friday") == "The deadline is 5 PM Friday."
+
+
+def test_am_before_a_month_does_not_gain_a_period():
+    assert normalize_text("the 8 a.m. January review") == "The 8 AM January review."
+
+
+def test_pm_before_a_timezone_does_not_gain_a_period():
+    assert normalize_text("call me at 5 p.m. EST") == "Call me at 5 PM EST."
+
+
+def test_am_mid_sentence_before_a_capitalized_word_does_not_gain_a_period():
+    assert normalize_text("the 9 a.m. Monday meeting is cancelled") == \
+        "The 9 AM Monday meeting is cancelled."

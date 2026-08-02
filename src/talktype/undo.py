@@ -97,8 +97,9 @@ def single_unit_length(text: str, undo_type: str) -> int:
         text_stripped = text_to_analyze.rstrip('.?!… ')
         for i in range(len(text_stripped) - 1, -1, -1):
             if text_stripped[i] in '.?!…' and _is_sentence_end(text_stripped, i):
-                # Delete from just past the punctuation to the end.
-                return len(text) - (i + 1)
+                # Delete from just past the punctuation — and past any closing
+                # quote or bracket that belongs with it — to the end.
+                return len(text) - _end_of_sentence(text_stripped, i)
         return len(text)
 
     if undo_type == 'paragraph':
@@ -123,16 +124,24 @@ def _is_sentence_end(text: str, i: int) -> bool:
     like a finished sentence and is easy to miss.
     """
     ch = text[i]
+    prev = text[i - 1] if i > 0 else ''
+    prev2 = text[i - 2] if i > 1 else ''
+    immediate = text[i + 1] if i + 1 < len(text) else ''
+
+    # Decimals, prices and version numbers: 19.99, 2.5
+    if ch == '.' and prev.isdigit() and immediate.isdigit():
+        return False
+
+    # Step over any closers that belong to this sentence. normalize_text moves
+    # sentence punctuation INSIDE a closing smart quote, so `."` is a shape this
+    # app produces itself — treating it as "not a sentence end" made undo skip
+    # the boundary and delete the previous sentence too, often the whole text.
+    end = _end_of_sentence(text, i)
+
     if ch in '?!…':
         return True
 
-    prev = text[i - 1] if i > 0 else ''
-    prev2 = text[i - 2] if i > 1 else ''
-    nxt = text[i + 1] if i + 1 < len(text) else ''
-
-    # Decimals, prices and version numbers: 19.99, 2.5
-    if prev.isdigit() and nxt.isdigit():
-        return False
+    nxt = text[end] if end < len(text) else ''
 
     # A sentence end is followed by whitespace, or by nothing at all.
     if nxt and not nxt.isspace():
@@ -141,10 +150,22 @@ def _is_sentence_end(text: str, i: int) -> bool:
     # Single-letter abbreviations — U.S., a.m., e.g. Their period can also be
     # doing double duty as the full stop, which a following capital reveals.
     if prev.isalpha() and (prev2 == '.' or not prev2.isalnum()):
-        following = text[i + 1:].lstrip()
+        following = text[end:].lstrip()
         return bool(following[:1].isupper())
 
     return True
+
+
+# Closing marks that belong to the sentence they follow, not to the next one.
+_SENTENCE_CLOSERS = '"\'”’)]}'
+
+
+def _end_of_sentence(text: str, i: int) -> int:
+    """Index just past the punctuation at *i* and any closing quotes/brackets."""
+    j = i + 1
+    while j < len(text) and text[j] in _SENTENCE_CLOSERS:
+        j += 1
+    return j
 
 
 def calculate_undo_length(text: str, undo_type: str, count: int = 1) -> int:

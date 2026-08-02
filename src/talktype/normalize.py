@@ -278,23 +278,25 @@ def _fix_time_ampm(m: re.Match) -> str:
     """Normalize a matched time string to HH:MM AM/PM or HH AM/PM format.
 
     The trailing period of "a.m." can be doing double duty as the sentence's
-    full stop. Stripping it unconditionally merged two sentences into one
-    ("at 9 a.m. We should" became "at 9 AM We should") and left text ending in
-    "p.m." with no terminating punctuation at all.
+    full stop, and rewriting the abbreviation to "AM" dropped it — so text
+    ending in "p.m." came out with no terminating punctuation at all.
 
-    Whisper capitalizes the sentences it transcribes, so an uppercase word after
-    the abbreviation — or nothing at all — marks a real sentence end, while a
-    lowercase word means the period belonged to the abbreviation alone.
+    The period is restored ONLY when the abbreviation ends the text, where it is
+    unambiguous. Mid-text is deliberately left alone: "9 a.m. We should be
+    early" and "8 a.m. Tuesday" are grammatically identical, and a following
+    capital does not distinguish them because Whisper capitalizes proper nouns
+    as well as sentence starts. Guessing there split ordinary sentences in two
+    ("We start at 8 AM. Tuesday."), which is worse than the missing period —
+    a wrong split corrupts text the user has to notice and repair, while a
+    missing full stop between two sentences merely reads a little short.
     """
     hour = m.group(1)
     minute = m.group(2)  # None if no minutes were present
     raw_ampm = m.group(3)
     ampm = re.sub(r'[\s.]', '', raw_ampm).upper()  # "p. m." / "p. M." → "PM"
 
-    following = m.string[m.end():].lstrip()
-    ends_sentence = raw_ampm.rstrip().endswith(".") and (
-        not following or following[0].isupper()
-    )
+    following = m.string[m.end():].strip()
+    ends_sentence = raw_ampm.rstrip().endswith(".") and not following
     tail = "." if ends_sentence else ""
 
     if minute:

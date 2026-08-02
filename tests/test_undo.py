@@ -235,3 +235,30 @@ def test_sentence_undo_still_finds_an_ordinary_boundary():
 def test_sentence_undo_handles_a_decimal_in_an_earlier_sentence():
     text = "It cost $19.99. That was too much."
     assert calculate_undo_length(text, "sentence", 1) == len(" That was too much.")
+
+
+# --- regression: a sentence ending inside a closing quote is still a boundary
+# normalize.py deliberately moves sentence punctuation INSIDE a closing smart
+# quote, so `."` is a shape this app manufactures itself. Requiring whitespace
+# immediately after the period made undo skip that boundary and delete the
+# previous sentence too — often the entire dictation.
+
+def test_sentence_ending_in_a_closing_quote_is_a_boundary():
+    text = 'He said, "Go." Then he left.'
+    assert calculate_undo_length(text, "sentence", 1) == len(" Then he left.")
+
+
+def test_sentence_ending_in_a_closing_smart_quote_is_a_boundary():
+    text = 'He said, “Go.” Then he left.'
+    assert calculate_undo_length(text, "sentence", 1) == len(" Then he left.")
+
+
+def test_sentence_ending_in_a_closing_parenthesis_is_a_boundary():
+    text = "We shipped it (finally.) Then we slept."
+    assert calculate_undo_length(text, "sentence", 1) == len(" Then we slept.")
+
+
+def test_undo_does_not_swallow_the_whole_buffer_on_quoted_text():
+    """The worst form of the regression: everything deleted."""
+    text = 'She replied, "No." I walked away.'
+    assert calculate_undo_length(text, "sentence", 1) < len(text)
