@@ -252,6 +252,30 @@ _typing_delay = 12  # milliseconds, default value
 # Global custom commands (loaded from config in main)
 _custom_commands: dict[str, str] = {}
 
+
+def _expand_escapes(replacement: str) -> str:
+    """Expand the two escapes the Preferences hint documents, and nothing else.
+
+    Replacements used to be passed to re.sub as a template, which interpreted
+    every backslash sequence — handy for \\n, fatal for anything else. Expanding
+    these two explicitly keeps the documented line-break feature working while
+    leaving a Windows path or a stray \\N as literal text.
+    """
+    return replacement.replace("\\n", "\n").replace("\\t", "\t")
+
+
+def _command_pattern(phrase: str) -> str:
+    """Build the match pattern for one trigger phrase.
+
+    Word boundaries are applied only at ends that actually start or finish with
+    a word character. A blanket \\b meant a trigger like "c++" or "#tag" could
+    never match — \\b after "+" requires a following word character, so the
+    phrase silently never fired despite looking configured in Preferences.
+    """
+    prefix = r"\b" if phrase[:1].isalnum() or phrase[:1] == "_" else ""
+    suffix = r"\b" if phrase[-1:].isalnum() or phrase[-1:] == "_" else ""
+    return prefix + re.escape(phrase) + suffix
+
 def _apply_custom_commands(text: str) -> tuple[str, dict[str, str]]:
     """
     Apply user-defined custom voice commands to the transcribed text.
@@ -274,32 +298,66 @@ def _apply_custom_commands(text: str) -> tuple[str, dict[str, str]]:
     if not _custom_commands or not text:
         return text, {}
 
-    result = text
+    # Longest phrase first, so "our brand customs llc" wins over the shorter
+    # "our brand customs" that is also a prefix of it.
+    phrases = sorted((p for p in _custom_commands if p), key=len, reverse=True)
+    if not phrases:
+        return text, {}
+
+    lookup = {p.lower(): _custom_commands[p] for p in phrases}
+    combined = "|".join(f"(?:{_command_pattern(p)})" for p in phrases)
+
     protected: dict[str, str] = {}  # placeholder → literal replacement text
     counter = 0
 
-    # Sort by phrase length (longest first) to avoid partial matches
-    sorted_commands = sorted(_custom_commands.items(), key=lambda x: len(x[0]), reverse=True)
+    def substitute(match):
+        """Return the replacement for one matched phrase.
 
-    for phrase, replacement in sorted_commands:
-        # Create a case-insensitive word boundary pattern
-        # \b ensures we match whole words/phrases, not substrings
-        pattern = r'\b' + re.escape(phrase) + r'\b'
+        Using a function rather than a template string is what makes a
+        replacement a value instead of a pattern: re.sub does not interpret
+        backslashes in what a function returns, so a Windows path or a stray
+        \\N in a user's command can no longer raise and kill every dictation.
+        """
+        nonlocal counter
+        replacement = lookup.get(match.group(0).lower())
+        if replacement is None:  # pragma: no cover — every branch is in lookup
+            return match.group(0)
 
-        if replacement.startswith('"') and replacement.endswith('"') and len(replacement) >= 2:
+        if len(replacement) >= 2 and replacement.startswith('"') and replacement.endswith('"'):
             # Quoted replacement — inject exactly as written, bypass normalization
-            literal_text = replacement[1:-1]
             placeholder = f"§CMDLIT_{counter}§"
             counter += 1
-            protected[placeholder] = literal_text
-            result = re.sub(pattern, placeholder, result, flags=re.IGNORECASE)
-        else:
-            result = re.sub(pattern, replacement, result, flags=re.IGNORECASE)
+            protected[placeholder] = replacement[1:-1]
+            return placeholder
+
+        return _expand_escapes(replacement)
+
+    # One pass over the original text. Applying commands one after another to
+    # the running result let an earlier command's output be re-scanned and
+    # rewritten by a later one.
+    result = re.sub(combined, substitute, text, flags=re.IGNORECASE)
 
     if result != text:
         logger.info(f"Custom commands applied: {text!r} -> {result!r}")
 
     return result, protected
+
+
+def _restore_protected(text: str, protected: dict[str, str]) -> str:
+    """Put quoted (literal) replacements back after normalization has run.
+
+    Quoted commands promise the text is injected exactly as written, so a
+    sentence-ending period that normalization parked directly against one is
+    dropped — but only when the literal already ends in something other than a
+    letter or digit. That covers a literal supplying its own punctuation
+    ("Hello, world!", "Thanks.") or deliberately ending in a space ("/btw "),
+    while a literal ending in a word still gets the period the user expects.
+    """
+    for placeholder, literal in protected.items():
+        if literal and not literal[-1].isalnum():
+            text = text.replace(placeholder + ".", literal)
+        text = text.replace(placeholder, literal)
+    return text
 
 
 # YouTube-specific phrases that are NEVER real dictation.
@@ -1313,8 +1371,7 @@ def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: b
 
     # Restore quoted (literal) custom command replacements before any further
     # processing so that auto-period/space checks see the real final text.
-    for placeholder, literal in protected.items():
-        text = text.replace(placeholder, literal)
+    text = _restore_protected(text, protected)
 
     # Handle mid-sentence continuation after undo:
     # lowercase the first letter if we're continuing a sentence
