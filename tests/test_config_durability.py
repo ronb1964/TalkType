@@ -20,6 +20,11 @@ def config_path(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "CONFIG_PATH", str(path))
     monkeypatch.setattr(config, "_config_cache", None)
     monkeypatch.setattr(config, "_config_mtime", 0.0)
+    # Per-process latches: real processes start fresh, tests must too.
+    monkeypatch.setattr(config, "_repair_attempted", False)
+    for latch in ("_error_printed", "_invalid_reported", "_read_error_printed"):
+        if hasattr(config.load_config, latch):
+            delattr(config.load_config, latch)
     return path
 
 
@@ -393,3 +398,134 @@ def test_no_temp_files_are_left_behind(tmp_path):
 
     leftovers = [p.name for p in tmp_path.iterdir() if ".tmp" in p.name]
     assert not leftovers, f"temp files left behind: {leftovers}"
+
+
+# --- repair must never destroy what it could not preserve -------------------
+
+def test_an_unreadable_config_is_never_overwritten(config_path):
+    """A config the app cannot READ is not a damaged config.
+
+    load_config catches any exception, so a permission error looked like
+    corruption. The quarantine copy then failed for the same reason — it was
+    only logged — and the file was replaced anyway, because os.replace needs
+    write permission on the DIRECTORY, not the file. A perfectly valid config
+    was destroyed with no copy kept and no backup.
+    """
+    good = config.Settings()
+    good.model = "large-v3"
+    good.device = "cuda"
+    good.hotkey = "F8"
+    config.save_config(good)
+    original = config_path.read_text()
+    backup = config_path.with_suffix(config_path.suffix + ".bak")
+    if backup.exists():
+        backup.unlink()
+
+    os.chmod(config_path, 0o000)
+    config._config_cache = None
+    config._config_mtime = 0.0
+    try:
+        config.load_config()  # must not raise
+    finally:
+        os.chmod(config_path, 0o600)
+
+    assert config_path.read_text() == original, "an unreadable but valid config was destroyed"
+
+
+def test_repair_is_skipped_when_the_damaged_file_cannot_be_quarantined(config_path, monkeypatch):
+    """If the only copy of the user's content cannot be preserved, leave it."""
+    good = config.Settings()
+    good.model = "tiny"
+    config.save_config(good)
+    second = config.Settings()
+    second.model = "base"
+    config.save_config(second)
+    config_path.write_text("garbage {{{")
+
+    def cannot_copy(*args, **kwargs):
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(config.shutil, "copy2", cannot_copy)
+    config._config_cache = None
+    config._config_mtime = 0.0
+    config.load_config()
+
+    assert config_path.read_text() == "garbage {{{", \
+        "overwrote the damaged file without keeping a copy of it"
+
+
+# --- the repair must produce valid TOML -------------------------------------
+
+def test_a_setting_containing_a_quote_survives_a_save(config_path):
+    """_toml_value wrapped strings in quotes without escaping, so a mic named
+    'Blue Yeti "Nano" USB' produced a file that would not parse."""
+    s = config.Settings()
+    s.mic = 'Blue Yeti "Nano" USB'
+    config.save_config(s)
+
+    config._config_cache = None
+    config._config_mtime = 0.0
+    assert config.load_config().mic == 'Blue Yeti "Nano" USB'
+
+
+def test_a_setting_containing_a_backslash_survives_a_save(config_path):
+    s = config.Settings()
+    s.mic = r"Mic\Device"
+    config.save_config(s)
+
+    config._config_cache = None
+    config._config_mtime = 0.0
+    assert config.load_config().mic == r"Mic\Device"
+
+
+def test_repair_never_leaves_the_file_unparseable(config_path):
+    """The livelock: a recovered value containing a quote was written back
+    unescaped, so the next poll re-detected damage and rewrote it again —
+    one quarantine file and one disk write every second, forever."""
+    backup = config_path.with_suffix(config_path.suffix + ".bak")
+    backup.write_text('# TalkType config\nmodel = "small"\nmic = "Blue Yeti \\"Nano\\" USB"\nhotkey = "F8"\n')
+    config_path.write_text("garbage {{{")
+
+    writes = []
+    real_write = config.write_text_atomic
+    original = config.write_text_atomic
+
+    def counting(*args, **kwargs):
+        writes.append(1)
+        return original(*args, **kwargs)
+
+    config.write_text_atomic = counting
+    try:
+        for _ in range(25):
+            config._config_cache = None
+            config._config_mtime = 0.0
+            config.load_config()
+    finally:
+        config.write_text_atomic = real_write
+
+    assert len(writes) <= 1, f"repair rewrote the file {len(writes)} times — livelock"
+    config._load_toml_file(str(config_path))  # must parse; raises otherwise
+
+
+def test_repair_happens_once_even_without_a_cache_reset(config_path):
+    """The tray's real call pattern: one long-lived process polling every second."""
+    good = config.Settings()
+    good.model = "tiny"
+    config.save_config(good)
+    second = config.Settings()
+    second.model = "base"
+    config.save_config(second)
+    config_path.write_text("garbage {{{")
+    config._config_cache = None
+    config._config_mtime = 0.0
+
+    writes = []
+    original = config.write_text_atomic
+    config.write_text_atomic = lambda *a, **k: (writes.append(1), original(*a, **k))[1]
+    try:
+        for _ in range(20):
+            config.load_config()
+    finally:
+        config.write_text_atomic = original
+
+    assert len(writes) == 1, f"repaired {len(writes)} times in one process"

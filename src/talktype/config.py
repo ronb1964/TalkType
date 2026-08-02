@@ -110,6 +110,18 @@ def _load_toml_file(path: str) -> dict:
     with open(path, file_mode) as f:
         return tomllib.load(f)
 
+
+def _parse_toml_text(text: str) -> dict:
+    """Parse TOML from a string. Raises if *text* is not valid TOML."""
+    if _USE_TOMLLIB:
+        return tomllib.loads(text)
+    return tomllib.loads(text)  # the toml fallback exposes loads() too
+
+
+# Set once a repair has been attempted in this process, so the tray's
+# once-per-second polling cannot turn recovery into a write loop.
+_repair_attempted = False
+
 def _env_bool(key: str, default: bool) -> bool:
     """Read a boolean from an environment variable, falling back to *default*.
 
@@ -218,8 +230,10 @@ def _recover_damaged_config(error: Exception) -> Settings:
     """
     stamp = time.strftime("%Y%m%d-%H%M%S")
     quarantine = f"{CONFIG_PATH}.corrupt-{stamp}"
+    quarantined = False
     try:
         shutil.copy2(CONFIG_PATH, quarantine)
+        quarantined = True
         logger.error(f"Damaged config saved to {quarantine}: {error}")
         print(f"⚠️  Settings file was unreadable ({error}).", file=sys.stderr)
         print(f"    A copy was kept at: {quarantine}", file=sys.stderr)
@@ -246,7 +260,14 @@ def _recover_damaged_config(error: Exception) -> Settings:
     if not restored_from_backup:
         print("    Settings have been reset to defaults.", file=sys.stderr)
 
-    _persist_recovered_config(recovered)
+    # Only replace the file when its previous contents are safely stored
+    # elsewhere. If the quarantine copy failed — an unreadable file, a full
+    # disk — the original bytes are the user's only copy, so leave them be and
+    # run from the in-memory recovery for this session.
+    if quarantined:
+        _persist_recovered_config(recovered)
+    else:
+        logger.warning("Damaged config left in place: it could not be copied aside first")
     return recovered
 
 
@@ -263,15 +284,30 @@ def _persist_recovered_config(recovered: Settings) -> None:
     it with garbage — removing the safety net at exactly the moment it matters.
     Ordinary saves keep refreshing the backup as usual.
     """
+    global _repair_attempted
+    if _repair_attempted:
+        # Belt and braces: the tray polls load_config() about once a second, so
+        # anything that lets the repair recur becomes a write every second for
+        # as long as the app runs. One attempt per process is always enough.
+        return
+    _repair_attempted = True
+
     try:
         lines = ["# TalkType config"]
         for fld in fields(recovered):
             lines.append(f"{fld.name} = {_toml_value(getattr(recovered, fld.name))}")
-        write_text_atomic(CONFIG_PATH, "\n".join(lines) + "\n", keep_backup=False)
+        text = "\n".join(lines) + "\n"
+
+        # Never replace a damaged file with another damaged file. Writing
+        # something that does not parse turns recovery into a livelock: the
+        # next poll sees damage again, quarantines again, and rewrites again.
+        _parse_toml_text(text)
+
+        write_text_atomic(CONFIG_PATH, text, keep_backup=False)
         logger.info("Damaged config replaced with recovered settings")
     except Exception as e:
-        # A read-only home or a full disk must not take the app down; the
-        # in-memory recovery is still usable for this run.
+        # A read-only home, a full disk, or settings that will not serialise
+        # cleanly. The in-memory recovery is still usable for this run.
         logger.error(f"Could not write recovered settings back: {e}")
 
 
@@ -303,11 +339,22 @@ def load_config() -> Settings:
                 if fld.name in data:
                     cast = _TYPE_CASTERS.get(fld.type, str)
                     setattr(s, fld.name, cast(data[fld.name]))
+        except OSError as e:
+            # The file could not be READ — permissions, a bad mount, too many
+            # open handles. That is not corruption, and it must never trigger
+            # the repair path: the contents may be perfectly good, and
+            # rewriting them would destroy settings that only needed a chmod.
+            logger.error(f"Could not read {CONFIG_PATH}: {e}")
+            if not getattr(load_config, "_read_error_printed", False):
+                print(f"⚠️  Could not read settings file: {e}", file=sys.stderr)
+                print("    Using defaults for now; the file has been left untouched.", file=sys.stderr)
+                load_config._read_error_printed = True
+            s = _config_cache or Settings()
         except Exception as e:
-            # Preserve the damaged file and fall back to the last known good
-            # settings. Silently resetting to defaults looked like a fresh
-            # install, and the next save overwrote the user's real settings for
-            # good.
+            # Genuinely unparseable content. Preserve the damaged file and fall
+            # back to the last known good settings. Silently resetting to
+            # defaults looked like a fresh install, and the next save overwrote
+            # the user's real settings for good.
             s = _recover_damaged_config(e)
 
     # Environment variable overrides
@@ -346,12 +393,18 @@ def load_config() -> Settings:
 
 
 def _toml_value(val) -> str:
-    """Format a Python value as a TOML literal."""
+    """Format a Python value as a TOML literal.
+
+    Strings go through _toml_string so quotes, backslashes and newlines are
+    escaped. Wrapping them in bare quotes produced a file that would not parse
+    — a microphone named 'Blue Yeti "Nano" USB' silently destroyed every
+    setting, because the next load treated the whole file as damaged.
+    """
     if isinstance(val, bool):
         return str(val).lower()     # true / false
     if isinstance(val, int):
         return str(val)             # bare integer
-    return f'"{val}"'               # quoted string
+    return _toml_string(str(val))
 
 
 def _toml_string(value: str) -> str:
