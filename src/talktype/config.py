@@ -3,6 +3,7 @@ import os
 import logging
 import shutil
 import subprocess
+import tempfile
 import time
 try:
     import tomllib  # Python 3.11+
@@ -209,7 +210,8 @@ _config_cache = None
 _config_mtime = 0.0
 
 def _recover_damaged_config(error: Exception) -> Settings:
-    """Set a damaged config aside and recover the last known good settings.
+    """Set a damaged config aside, recover the last known good settings, and
+    write them back so the file is actually repaired.
 
     Returns the recovered Settings — from the .bak written by the previous
     successful save when one exists, otherwise defaults.
@@ -224,24 +226,53 @@ def _recover_damaged_config(error: Exception) -> Settings:
     except OSError as copy_error:
         logger.error(f"Could not preserve damaged config: {copy_error}")
 
+    recovered = Settings()
+    restored_from_backup = False
     backup = f"{CONFIG_PATH}.bak"
     if os.path.exists(backup):
         try:
             data = _load_toml_file(backup)
             if data:
-                recovered = Settings()
                 for fld in fields(recovered):
                     if fld.name in data:
                         cast = _TYPE_CASTERS.get(fld.type, str)
                         setattr(recovered, fld.name, cast(data[fld.name]))
+                restored_from_backup = True
                 logger.info(f"Recovered settings from {backup}")
                 print("    Your previous settings were restored from backup.", file=sys.stderr)
-                return recovered
         except Exception as restore_error:
             logger.error(f"Backup at {backup} is also unreadable: {restore_error}")
 
-    print("    Settings have been reset to defaults.", file=sys.stderr)
-    return Settings()
+    if not restored_from_backup:
+        print("    Settings have been reset to defaults.", file=sys.stderr)
+
+    _persist_recovered_config(recovered)
+    return recovered
+
+
+def _persist_recovered_config(recovered: Settings) -> None:
+    """Replace the damaged file with the recovered settings.
+
+    Recovering in memory only left the damaged file in place, so every process
+    that starts — tray, dictation service, Preferences — quarantined it again
+    and showed the user the same alarming warning, accumulating a
+    config.toml.corrupt-* file each time while never fixing anything.
+
+    keep_backup is off deliberately: the existing .bak is the last copy of the
+    user's real settings, and backing up the damaged file first would overwrite
+    it with garbage — removing the safety net at exactly the moment it matters.
+    Ordinary saves keep refreshing the backup as usual.
+    """
+    try:
+        lines = ["# TalkType config"]
+        for fld in fields(recovered):
+            lines.append(f"{fld.name} = {_toml_value(getattr(recovered, fld.name))}")
+        write_text_atomic(CONFIG_PATH, "\n".join(lines) + "\n", keep_backup=False)
+        logger.info("Damaged config replaced with recovered settings")
+    except Exception as e:
+        # A read-only home or a full disk must not take the app down; the
+        # in-memory recovery is still usable for this run.
+        logger.error(f"Could not write recovered settings back: {e}")
 
 
 def load_config() -> Settings:
@@ -346,9 +377,13 @@ def write_text_atomic(path: str, text: str, keep_backup: bool = True) -> None:
     directory = os.path.dirname(path) or "."
     os.makedirs(directory, exist_ok=True)
 
-    tmp_path = f"{path}.tmp"
+    # A UNIQUE temp file per writer. TalkType runs three processes that all save
+    # settings — the tray, the dictation service and Preferences — and a shared
+    # temp name let them truncate each other's half-written file and then fail
+    # the rename with FileNotFoundError, raising out of save_config().
+    fd, tmp_path = tempfile.mkstemp(dir=directory, prefix=os.path.basename(path) + ".", suffix=".tmp")
     try:
-        with open(tmp_path, "w") as f:
+        with os.fdopen(fd, "w") as f:
             f.write(text)
             f.flush()
             os.fsync(f.fileno())
