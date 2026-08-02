@@ -1,0 +1,447 @@
+"""Tests for exclusive input-device grabbing.
+
+TalkType takes an exclusive grab on the keyboard while recording, so the hotkey
+doesn't leak into whatever app has focus. If a grab is ever taken and not
+released, the user's keyboard stops working *system-wide* until TalkType exits.
+
+These tests pin down the invariant that makes that impossible:
+
+    no matter how recording ends, every grab is released.
+"""
+
+import pytest
+from evdev import ecodes
+
+from talktype import app
+
+
+class FakeDevice:
+    """Stands in for an evdev InputDevice.
+
+    Records grab/ungrab calls so tests can assert on the real end state
+    rather than on a mock's call log.
+    """
+
+    def __init__(self, name="Fake Keyboard", caps=None, fail_grab=False, fail_ungrab=False):
+        self.name = name
+        self.is_grabbed = False
+        self._caps = caps if caps is not None else {ecodes.EV_KEY: [ecodes.KEY_A, ecodes.KEY_Z]}
+        self._fail_grab = fail_grab
+        self._fail_ungrab = fail_ungrab
+
+    def grab(self):
+        if self._fail_grab:
+            raise OSError("device busy")
+        self.is_grabbed = True
+
+    def ungrab(self):
+        if self._fail_ungrab:
+            raise OSError("device gone")
+        self.is_grabbed = False
+
+    def capabilities(self, absinfo=True):
+        return self._caps
+
+
+def keyboard(name="Keyboard"):
+    return FakeDevice(name, {ecodes.EV_KEY: [ecodes.KEY_A, ecodes.KEY_M, ecodes.KEY_Z]})
+
+
+def mouse(name="Logitech MX Master"):
+    return FakeDevice(name, {
+        ecodes.EV_KEY: [ecodes.BTN_LEFT, ecodes.BTN_RIGHT],
+        ecodes.EV_REL: [ecodes.REL_X, ecodes.REL_Y],
+    })
+
+
+def touchpad(name="Synaptics Touchpad"):
+    return FakeDevice(name, {
+        ecodes.EV_KEY: [ecodes.BTN_TOUCH],
+        ecodes.EV_ABS: [ecodes.ABS_X, ecodes.ABS_Y],
+    })
+
+
+def power_button(name="Power Button"):
+    return FakeDevice(name, {ecodes.EV_KEY: [ecodes.KEY_POWER]})
+
+
+@pytest.fixture(autouse=True)
+def clean_grab_registry():
+    """Every test starts and ends with no devices grabbed."""
+    app._release_all_grabs()
+    yield
+    app._release_all_grabs()
+
+
+@pytest.fixture
+def quiet_recording(monkeypatch):
+    """Silence the parts of start_recording that touch real hardware."""
+    monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
+    monkeypatch.setattr(app, "_notify", lambda *a, **k: None)
+    monkeypatch.setattr(app, "_notify_tray_recording_state", lambda *a, **k: None)
+    monkeypatch.setattr(app, "_get_device_samplerate", lambda idx: 16000)
+    monkeypatch.setattr(app, "recording_indicator", None)
+    app.state.is_recording = False
+    yield
+    app.state.is_recording = False
+    app.state.stream = None
+
+
+# --- releasing grabs -------------------------------------------------------
+
+def test_release_all_grabs_releases_every_grabbed_device():
+    devices = [keyboard("kb1"), keyboard("kb2"), keyboard("kb3")]
+    app._grab_all_devices(devices)
+    assert all(d.is_grabbed for d in devices)
+
+    app._release_all_grabs()
+
+    assert not any(d.is_grabbed for d in devices)
+
+
+def test_release_all_grabs_is_idempotent():
+    devices = [keyboard()]
+    app._grab_all_devices(devices)
+
+    app._release_all_grabs()
+    app._release_all_grabs()  # must not raise
+
+    assert not devices[0].is_grabbed
+
+
+def test_release_continues_when_one_device_fails_to_ungrab():
+    """A dead device must not strand the grabs on every other keyboard."""
+    good_before = keyboard("before")
+    broken = FakeDevice("unplugged", fail_ungrab=True)
+    good_after = keyboard("after")
+    app._grab_all_devices([good_before, broken, good_after])
+
+    app._release_all_grabs()
+
+    assert not good_before.is_grabbed
+    assert not good_after.is_grabbed
+
+
+def test_devices_that_fail_to_grab_are_not_tracked():
+    ok = keyboard("ok")
+    denied = FakeDevice("no permission", fail_grab=True)
+
+    app._grab_all_devices([ok, denied])
+
+    assert ok.is_grabbed
+    assert denied not in app._grabbed_devices
+
+
+# --- the lockup bugs -------------------------------------------------------
+
+def test_failed_recording_start_releases_the_keyboard(monkeypatch, quiet_recording):
+    """The system-wide keyboard lockup.
+
+    If the microphone can't be opened after the keyboard is grabbed, the grab
+    must still be released — otherwise the user's keyboard is dead everywhere
+    with no way to recover.
+    """
+    def boom(*args, **kwargs):
+        raise Exception("PortAudioError: Error querying device 99")
+
+    monkeypatch.setattr(app.sd, "InputStream", boom)
+
+    devices = [keyboard("kb"), keyboard("laptop-internal")]
+    app._grab_all_devices(devices)
+
+    started = app.start_recording(beeps_on=False, notify_on=False, input_device_idx=99)
+
+    assert started is False
+    assert not any(d.is_grabbed for d in devices), "keyboard left grabbed after mic failure"
+
+
+def test_failed_recording_start_clears_the_recording_flag(monkeypatch, quiet_recording):
+    """A stuck is_recording flag makes every later press take the wrong branch."""
+    monkeypatch.setattr(app.sd, "InputStream", lambda *a, **k: (_ for _ in ()).throw(Exception("no mic")))
+
+    app.start_recording(beeps_on=False, notify_on=False, input_device_idx=0)
+
+    assert app.state.is_recording is False
+
+
+def test_failed_recording_start_tells_the_user(monkeypatch, quiet_recording):
+    """Silent failure is what made this bug unrecoverable — the user must be told."""
+    monkeypatch.setattr(app.sd, "InputStream", lambda *a, **k: (_ for _ in ()).throw(Exception("no mic")))
+    seen = []
+    monkeypatch.setattr(app, "_notify", lambda title, msg: seen.append((title, msg)))
+
+    app.start_recording(beeps_on=False, notify_on=True, input_device_idx=0)
+
+    assert seen, "no notification shown when recording failed to start"
+    assert "microphone" in " ".join(seen[0]).lower()
+
+
+def test_successful_recording_start_reports_success(monkeypatch, quiet_recording):
+    class FakeStream:
+        def start(self):
+            pass
+
+    monkeypatch.setattr(app.sd, "InputStream", lambda *a, **k: FakeStream())
+
+    started = app.start_recording(beeps_on=False, notify_on=False, input_device_idx=0)
+
+    assert started is True
+    assert app.state.is_recording is True
+
+
+# --- device filtering ------------------------------------------------------
+
+def test_pointer_devices_are_not_treated_as_keyboards():
+    """Grabbing mice freezes the pointer for the whole recording."""
+    assert app._is_keyboard_device(mouse()) is False
+    assert app._is_keyboard_device(touchpad()) is False
+
+
+def test_real_keyboards_are_recognised():
+    assert app._is_keyboard_device(keyboard()) is True
+
+
+def test_power_button_is_not_treated_as_a_keyboard():
+    """It reports EV_KEY but has no letter keys — grabbing it kills the power button."""
+    assert app._is_keyboard_device(power_button()) is False
+
+
+def test_grab_filtering_leaves_the_mouse_alone():
+    kb = keyboard()
+    mx = mouse()
+
+    app._grab_all_devices([d for d in (kb, mx) if app._is_keyboard_device(d)])
+
+    assert kb.is_grabbed
+    assert not mx.is_grabbed, "mouse was grabbed — pointer would freeze while recording"
+
+
+# --- key-event handling: every path must end with the keyboard released ------
+
+class FakeEvent:
+    def __init__(self, code, value):
+        self.type = ecodes.EV_KEY
+        self.code = code
+        self.value = value  # 1 = press, 0 = release
+
+
+class FakeConfig:
+    mic = None
+    beeps = False
+    notify = False
+    smart_quotes = False
+    language = None
+    auto_space = True
+    auto_period = True
+    injection_mode = "type"
+    mode = "hold"
+
+
+HOLD = ecodes.KEY_F8
+TOGGLE = ecodes.KEY_F9
+
+
+@pytest.fixture
+def key_env(monkeypatch):
+    """Drive _handle_key_event without touching audio hardware."""
+    started, stopped = [], []
+
+    def fake_start(beeps_on, notify_on, input_device_idx):
+        app.state.is_recording = True
+        started.append(True)
+        return True
+
+    def fake_stop(*args, **kwargs):
+        app.state.is_recording = False
+        stopped.append(True)
+
+    monkeypatch.setattr(app, "start_recording", fake_start)
+    monkeypatch.setattr(app, "stop_recording", fake_stop)
+    monkeypatch.setattr(app, "cancel_recording", lambda *a, **k: setattr(app.state, "is_recording", False))
+    app.state.is_recording = False
+    yield started, stopped
+    app.state.is_recording = False
+
+
+def press_hold(devices):
+    app._handle_key_event(FakeEvent(HOLD, 1), "hold", HOLD, TOGGLE,
+                          None, set(), devices, FakeConfig(), 0)
+
+
+def test_holding_the_hotkey_grabs_only_keyboards(key_env):
+    kb, mx = keyboard(), mouse()
+    press_hold([kb, mx])
+
+    assert kb.is_grabbed
+    assert not mx.is_grabbed, "pointer would freeze for the whole recording"
+
+
+def test_releasing_the_hotkey_releases_the_keyboard(key_env):
+    kb = keyboard()
+    press_hold([kb])
+    assert kb.is_grabbed
+
+    app._handle_key_event(FakeEvent(HOLD, 0), "hold", HOLD, TOGGLE,
+                          None, set(), [kb], FakeConfig(), 0)
+
+    assert not kb.is_grabbed
+
+
+def test_toggle_key_pressed_while_holding_releases_the_keyboard(key_env):
+    """The fat-finger lockup: brushing F9 mid-dictation must not strand the grab."""
+    kb = keyboard()
+    press_hold([kb])
+    assert kb.is_grabbed
+
+    app._handle_key_event(FakeEvent(TOGGLE, 1), "hold", HOLD, TOGGLE,
+                          None, set(), [kb], FakeConfig(), 0)
+
+    assert not app.state.is_recording
+    assert not kb.is_grabbed, "keyboard left grabbed after toggle stopped recording"
+
+
+def test_escape_releases_the_keyboard(key_env):
+    kb = keyboard()
+    press_hold([kb])
+
+    app._handle_key_event(FakeEvent(ecodes.KEY_ESC, 1), "hold", HOLD, TOGGLE,
+                          None, set(), [kb], FakeConfig(), 0)
+
+    assert not kb.is_grabbed
+
+
+def test_microphone_failure_during_hold_leaves_nothing_grabbed(monkeypatch, quiet_recording):
+    """End to end: real start_recording, failing mic, keyboard must come back."""
+    monkeypatch.setattr(app.sd, "InputStream",
+                        lambda *a, **k: (_ for _ in ()).throw(Exception("no mic")))
+    kb = keyboard()
+
+    press_hold([kb])
+
+    assert not kb.is_grabbed, "SYSTEM-WIDE KEYBOARD LOCKUP"
+    assert app.state.is_recording is False
+
+
+# --- stale microphone index -------------------------------------------------
+
+def test_stale_microphone_index_is_re_resolved_and_retried(monkeypatch, quiet_recording):
+    """The real-world trigger.
+
+    The mic is stored as a device *number*, resolved once at startup. Unplug a
+    USB device and the numbers shift, so the stored one points at nothing.
+    Rather than failing, re-resolve it by name and try once more.
+    """
+    class FakeStream:
+        def start(self):
+            pass
+
+    tried = []
+
+    def fake_input_stream(*args, **kwargs):
+        device = kwargs.get("device")
+        tried.append(device)
+        if device == 99:
+            raise Exception("PortAudioError: Error querying device 99")
+        return FakeStream()
+
+    monkeypatch.setattr(app.sd, "InputStream", fake_input_stream)
+    monkeypatch.setattr(app, "_pick_input_device", lambda mic: 3)
+    monkeypatch.setattr(app, "load_config", lambda: FakeConfig())
+
+    kb = keyboard()
+    app._grab_all_devices([kb])
+
+    started = app.start_recording(beeps_on=False, notify_on=False, input_device_idx=99)
+
+    assert started is True
+    assert tried == [99, 3], "stale index was not re-resolved"
+    assert app.state.is_recording is True
+
+
+def test_keyboard_is_released_when_even_the_re_resolved_mic_fails(monkeypatch, quiet_recording):
+    monkeypatch.setattr(app.sd, "InputStream",
+                        lambda *a, **k: (_ for _ in ()).throw(Exception("no mic anywhere")))
+    monkeypatch.setattr(app, "_pick_input_device", lambda mic: 3)
+    monkeypatch.setattr(app, "load_config", lambda: FakeConfig())
+
+    kb = keyboard()
+    app._grab_all_devices([kb])
+
+    started = app.start_recording(beeps_on=False, notify_on=False, input_device_idx=99)
+
+    assert started is False
+    assert not kb.is_grabbed
+
+
+# --- safety net -------------------------------------------------------------
+
+def test_grabs_held_while_not_recording_are_released():
+    """Backstop for any future path that forgets to release.
+
+    Holding an exclusive grab while not recording has no legitimate meaning, so
+    the event loop treats it as a bug and recovers instead of leaving the user
+    with a dead keyboard.
+    """
+    kb = keyboard()
+    app._grab_all_devices([kb])
+    app.state.is_recording = False
+
+    recovered = app._release_grabs_if_not_recording()
+
+    assert recovered is True
+    assert not kb.is_grabbed
+
+
+def test_grabs_held_while_recording_are_left_alone():
+    kb = keyboard()
+    app._grab_all_devices([kb])
+    app.state.is_recording = True
+    try:
+        recovered = app._release_grabs_if_not_recording()
+    finally:
+        app.state.is_recording = False
+
+    assert recovered is False
+    assert kb.is_grabbed, "released the keyboard mid-recording"
+
+
+def test_keyboard_declaring_the_pointer_event_type_is_still_a_keyboard():
+    """Regression: Ron's Logitech K800, modelled from its real capabilities.
+
+    Unifying receivers advertise a superset HID descriptor, so this keyboard
+    declares the EV_REL *type* while exposing no actual REL_X axis. Rejecting
+    on the event type alone threw out a real keyboard, which would let the
+    hotkey leak into whatever app has focus.
+    """
+    k800 = FakeDevice("Logitech K800", {
+        ecodes.EV_KEY: sorted(app._LETTER_KEYS) + [ecodes.KEY_F8],
+        ecodes.EV_REL: [],
+        ecodes.EV_ABS: [],
+    })
+
+    assert app._is_keyboard_device(k800) is True
+
+
+def test_unifying_mouse_advertising_letter_keys_is_not_grabbed():
+    """Regression: Ron's MX Master / MX Ergo / MX Vertical.
+
+    The same superset descriptor makes these mice claim all 26 letter keys and
+    all 12 F-keys. What actually distinguishes them is real pointer motion plus
+    mouse buttons. Grabbing them freezes the pointer for the whole recording.
+    """
+    mx = FakeDevice("Logitech MX Master", {
+        ecodes.EV_KEY: sorted(app._LETTER_KEYS) + [ecodes.KEY_F8, ecodes.BTN_LEFT, ecodes.BTN_RIGHT],
+        ecodes.EV_REL: [ecodes.REL_X, ecodes.REL_Y],
+    })
+
+    assert app._is_keyboard_device(mx) is False
+
+
+def test_the_apps_own_injection_device_is_not_grabbed():
+    """ydotoold's virtual device is how TalkType types — never grab it."""
+    ydotool = FakeDevice("ydotoold virtual device", {
+        ecodes.EV_KEY: sorted(app._LETTER_KEYS) + [ecodes.BTN_LEFT],
+        ecodes.EV_REL: [ecodes.REL_X, ecodes.REL_Y],
+    })
+
+    assert app._is_keyboard_device(ydotool) is False

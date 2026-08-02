@@ -597,17 +597,158 @@ def _resample_audio(audio, orig_sr, target_sr):
     orig_indices = np.linspace(0, len(audio) - 1, target_len)
     return np.interp(orig_indices, np.arange(len(audio)), audio.astype(np.float64)).astype(audio.dtype)
 
-def start_recording(beeps_on: bool, notify_on: bool, input_device_idx):
-    state.frames = []
-    state.was_cancelled = False
-    state.is_recording = True
-    state.press_t0 = time.time()
+# ---------------------------------------------------------------------------
+# Exclusive input-device grabs
+#
+# While recording we take an exclusive grab on the keyboard so the hotkey
+# doesn't leak through to whatever app has focus. A grab that is taken and
+# never released leaves the user's keyboard dead SYSTEM-WIDE until TalkType
+# exits, so the grabbed devices are tracked in module state rather than being
+# threaded through return values — that way every exit path (normal stop,
+# cancel, toggle, ESC, or an exception) can release them with one call.
+# ---------------------------------------------------------------------------
+
+# Devices we currently hold an exclusive grab on.
+_grabbed_devices = []
+
+# Letter keys, used to tell a real keyboard from a device that merely reports
+# key events (power buttons, lid switches, mouse buttons, consumer-control nodes).
+# Built by name, not as a numeric range: evdev codes follow the physical
+# scancode order of a PC keyboard, so KEY_A..KEY_Z spans the home row and
+# several punctuation keys while leaving KEY_M outside it entirely.
+_LETTER_KEYS = frozenset(
+    getattr(ecodes, f"KEY_{letter}") for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+)
+
+
+def _is_keyboard_device(dev) -> bool:
+    """True if *dev* can deliver the hotkey and is therefore worth grabbing.
+
+    Grabbing everything under /dev/input also captures mice, touchpads, audio
+    jacks and the power button, freezing the pointer for the whole recording.
+
+    Two capability checks, in this order:
+
+    1. It must report letter keys. Power buttons, lid switches, audio jacks and
+       consumer-control nodes report none, so this drops them immediately.
+    2. It must not be a pointing device. Logitech Unifying receivers advertise a
+       superset HID descriptor, so a wireless mouse claims all 26 letter keys
+       and all 12 F-keys just like a keyboard does. What separates them is real
+       pointer motion (REL_X) combined with mouse buttons — the same test
+       libinput uses. This also excludes ydotoold's virtual device, which is how
+       TalkType types and must never be grabbed.
+
+    Note the check is REL_X specifically, not the EV_REL event type: the K800
+    keyboard declares EV_REL while exposing no motion axis, so testing the type
+    alone would throw out a real keyboard and let the hotkey leak through.
+    """
+    try:
+        caps = dev.capabilities()
+    except Exception:
+        return False
+
+    keys = set(caps.get(ecodes.EV_KEY) or [])
+    if sum(1 for k in keys if k in _LETTER_KEYS) < 3:
+        return False
+
+    rel_axes = set(caps.get(ecodes.EV_REL) or [])
+    is_pointer = ecodes.REL_X in rel_axes and ecodes.BTN_LEFT in keys
+    return not is_pointer
+
+
+def _grab_all_devices(devices) -> None:
+    """Take an exclusive grab on each device, tracking the ones that succeed.
+
+    Devices that refuse the grab (permissions, already grabbed) are skipped and
+    left untracked so we never try to release something we don't hold.
+    """
+    for dev in devices:
+        try:
+            dev.grab()
+            _grabbed_devices.append(dev)
+            logger.info(f"Grabbed device: {dev.name}")
+        except Exception as e:
+            logger.warning(f"Could not grab {getattr(dev, 'name', dev)}: {e}")
+
+
+def _release_all_grabs() -> None:
+    """Release every grab we hold. Idempotent, and safe to call from any path.
+
+    One unplugged device must not strand the grabs on every other keyboard, so
+    each release is attempted independently and the registry is always cleared.
+    """
+    global _grabbed_devices
+    for dev in _grabbed_devices:
+        try:
+            dev.ungrab()
+            logger.info(f"Ungrabbed device: {getattr(dev, 'name', dev)}")
+        except Exception as e:
+            logger.warning(f"Could not ungrab {getattr(dev, 'name', dev)}: {e}")
+    _grabbed_devices = []
+
+
+def _release_grabs_if_not_recording() -> bool:
+    """Safety net: holding an exclusive grab while not recording is always a bug.
+
+    Called once per event-loop pass so that any path which fails to release —
+    including one added later — self-heals within milliseconds instead of
+    leaving the user with a dead keyboard. Returns True if it had to recover.
+    """
+    if _grabbed_devices and not state.is_recording:
+        logger.warning(f"Releasing {len(_grabbed_devices)} stranded input grab(s)")
+        _release_all_grabs()
+        return True
+    return False
+
+
+def _open_input_stream(device_idx) -> None:
+    """Open and start the microphone stream. Raises if the device is unusable."""
     # Use the device's native sample rate (may differ from 16kHz on ALSA hw: devices)
-    state.recording_samplerate = _get_device_samplerate(input_device_idx)
+    state.recording_samplerate = _get_device_samplerate(device_idx)
     sd.default.channels = CHANNELS
     sd.default.samplerate = state.recording_samplerate
-    state.stream = sd.InputStream(callback=_sd_callback, dtype='int16', device=input_device_idx)
+    state.stream = sd.InputStream(callback=_sd_callback, dtype='int16', device=device_idx)
     state.stream.start()
+
+
+def start_recording(beeps_on: bool, notify_on: bool, input_device_idx) -> bool:
+    """Begin capturing audio. Returns True only if recording actually started.
+
+    On failure this releases any input-device grabs before returning. The
+    keyboard is grabbed just before this is called, so without that release a
+    microphone error would leave the user unable to type anywhere at all.
+    """
+    state.frames = []
+    state.was_cancelled = False
+    state.press_t0 = time.time()
+    # Set before the stream starts — _sd_callback drops frames unless it's set.
+    state.is_recording = True
+    try:
+        _open_input_stream(input_device_idx)
+    except Exception as first_error:
+        # The mic is stored as a device NUMBER, resolved once at startup. Unplug
+        # a USB device and the numbering shifts, leaving that number pointing at
+        # nothing. Re-resolve by name and try once more before giving up.
+        logger.warning(f"Microphone {input_device_idx} failed ({first_error}); re-resolving")
+        _stop_stream_safely()
+        try:
+            fresh_idx = _pick_input_device(load_config().mic)
+            _open_input_stream(fresh_idx)
+            logger.info(f"Microphone re-resolved to device {fresh_idx}")
+        except Exception as e:
+            # Genuinely unavailable: unplugged, or held exclusively by another
+            # app. Undo everything and tell the user — failing silently here is
+            # what left the keyboard grabbed and the machine unusable.
+            logger.error(f"Could not start recording: {e}", exc_info=True)
+            print(f"⚠️  Could not start recording: {e}")
+            state.is_recording = False
+            _stop_stream_safely()
+            _release_all_grabs()
+            _beep(beeps_on, *CANCEL_BEEP)
+            if notify_on:
+                _notify("TalkType", "Microphone unavailable — check that no other app is using it")
+            return False
+
     print("🎙️  Recording…")
     logger.debug("Recording started")
     _beep(beeps_on, *START_BEEP)
@@ -624,6 +765,8 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx):
         except Exception as e:
             print(f"⚠️  Failed to show recording indicator: {e}")
             logger.error(f"Failed to show recording indicator: {e}", exc_info=True)
+
+    return True
 
 def _stop_stream_safely():
     if state.stream:
@@ -1485,10 +1628,12 @@ Right-click the tray icon \u2192 "Help..." for full documentation
 
 def _handle_key_event(event, mode, hold_key, toggle_key,
                       voice_cmds_combo, held_modifiers,
-                      devices, grabbed_device, cfg, input_device_idx):
+                      devices, cfg, input_device_idx):
     """Handle a single keyboard event. Both hold (F8) and toggle (F9) are always active.
 
-    Returns the updated grabbed_device state (may be modified by grab/ungrab).
+    Grabbed devices are tracked in module state (see _grab_all_devices), not
+    returned, so that every way recording can end — release, toggle, ESC, or an
+    exception inside start_recording — releases the keyboard.
     """
     # --- Hotkey test mode: report presses via D-Bus instead of recording ---
     if _hotkey_test_mode.is_set() and event.value == 1:
@@ -1499,7 +1644,7 @@ def _handle_key_event(event, mode, hold_key, toggle_key,
             key_name = "toggle"
         if key_name:
             _notify_tray_hotkey_pressed(key_name)
-        return grabbed_device  # Don't process hotkeys normally in test mode
+        return  # Don't process hotkeys normally in test mode
 
     # --- Voice Commands combo hotkey (e.g. Ctrl+Shift+H) ---
     if voice_cmds_combo and event.value == 1:
@@ -1520,32 +1665,18 @@ def _handle_key_event(event, mode, hold_key, toggle_key,
                     grab_dev.ungrab()
                 except Exception:
                     pass
-            return grabbed_device
+            return
 
     # --- Hold-to-talk: hold key down to record, release to stop ---
     if event.code == hold_key:
         if event.value == 1 and not state.is_recording:
-            # Grab ALL keyboard devices to prevent hotkey from passing through
-            grabbed_devices = []
-            for grab_dev in devices:
-                try:
-                    grab_dev.grab()
-                    grabbed_devices.append(grab_dev)
-                    logger.info(f"Grabbed device: {grab_dev.name}")
-                except Exception as e:
-                    logger.warning(f"Could not grab {grab_dev.name}: {e}")
-            grabbed_device = grabbed_devices if grabbed_devices else None
+            # Grab the keyboards so the hotkey doesn't reach the focused app.
+            # start_recording releases them itself if the mic fails to open.
+            _grab_all_devices([d for d in devices if _is_keyboard_device(d)])
             start_recording(cfg.beeps, cfg.notify, input_device_idx)
         elif event.value == 0 and state.is_recording:
             # Ungrab BEFORE text injection so ydotool can work
-            if grabbed_device:
-                for ungrab_dev in grabbed_device:
-                    try:
-                        ungrab_dev.ungrab()
-                        logger.info(f"Ungrabbed device: {ungrab_dev.name}")
-                    except Exception:
-                        pass
-                grabbed_device = None
+            _release_all_grabs()
             stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
                            cfg.auto_space, cfg.auto_period, cfg.injection_mode)
 
@@ -1554,21 +1685,16 @@ def _handle_key_event(event, mode, hold_key, toggle_key,
         if not state.is_recording:
             start_recording(cfg.beeps, cfg.notify, input_device_idx)
         else:
+            # Also reached by brushing the toggle key mid-hold. Release first,
+            # or the hold key's release branch is skipped and the grab is stranded.
+            _release_all_grabs()
             stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
                            cfg.auto_space, cfg.auto_period, cfg.injection_mode)
 
     # --- ESC cancels in any mode ---
     if event.code == ecodes.KEY_ESC and state.is_recording and event.value == 1:
         cancel_recording(cfg.beeps, cfg.notify, "Cancelled by ESC")
-        if grabbed_device:
-            for ungrab_dev in grabbed_device:
-                try:
-                    ungrab_dev.ungrab()
-                except Exception:
-                    pass
-            grabbed_device = None
-
-    return grabbed_device
+        _release_all_grabs()
 
 
 def _loop_evdev(cfg: Settings, input_device_idx):
@@ -1637,7 +1763,7 @@ def _loop_evdev(cfg: Settings, input_device_idx):
         _show_welcome_after_change(cfg, mode)
 
     # Main event loop
-    grabbed_device = None
+    dead_devices = []
     while True:
         current_time = time.time()
 
@@ -1653,13 +1779,7 @@ def _loop_evdev(cfg: Settings, input_device_idx):
             _cmd_stop_recording.clear()
             if state.is_recording:
                 # Must ungrab keyboard devices before stopping (same as hold-mode release)
-                if grabbed_device:
-                    for ungrab_dev in grabbed_device:
-                        try:
-                            ungrab_dev.ungrab()
-                        except Exception:
-                            pass
-                    grabbed_device = None
+                _release_all_grabs()
                 stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
                                cfg.auto_space, cfg.auto_period, cfg.injection_mode)
                 last_activity_time = current_time  # Reset auto-timeout
@@ -1687,14 +1807,31 @@ def _loop_evdev(cfg: Settings, input_device_idx):
                         # Reset timeout on any hotkey activity
                         if timeout_enabled and event.code in (hold_key, toggle_key, ecodes.KEY_ESC, voice_cmds_main_key):
                             last_activity_time = current_time
-                        grabbed_device = _handle_key_event(
+                        _handle_key_event(
                             event, mode, hold_key, toggle_key,
                             voice_cmds_combo, held_modifiers,
-                            devices, grabbed_device, cfg, input_device_idx)
+                            devices, cfg, input_device_idx)
             except BlockingIOError:
                 pass
-            except Exception:
-                pass
+            except OSError as e:
+                # Device unplugged or suspended mid-read. Drop it so we stop
+                # polling a dead handle, but keep serving the others.
+                logger.warning(f"Input device {getattr(dev, 'name', dev)} failed, dropping it: {e}")
+                dead_devices.append(dev)
+            except Exception as e:
+                # Never swallow silently: an unlogged exception here is what
+                # turned a microphone error into an unexplained keyboard lockup.
+                logger.error(f"Error handling input event: {e}", exc_info=True)
+
+        if dead_devices:
+            for dev in dead_devices:
+                if dev in devices:
+                    devices.remove(dev)
+            dead_devices.clear()
+
+        # Backstop: we must never hold a keyboard grab while not recording.
+        _release_grabs_if_not_recording()
+
         time.sleep(0.005)
 
 def build_model(settings: Settings):
