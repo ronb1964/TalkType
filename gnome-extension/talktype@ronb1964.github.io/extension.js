@@ -205,8 +205,12 @@ class TalkTypeIndicator extends PanelMenu.Button {
             }));
 
             this._signalIds.push(this._proxy.connectSignal('ModelChanged', (proxy, sender, [modelName]) => {
+                // Re-query rather than patching the model alone: a preset also
+                // changes the device, and the preset dot is matched on both.
+                // Updating just the model left "Device:" reading the old value
+                // and the dot sitting on the wrong preset.
                 this._currentModel = modelName;
-                this._updateMenu();
+                this._updateStatus();
             }));
 
             this._signalIds.push(this._proxy.connectSignal('InjectionModeChanged', (proxy, sender, [mode]) => {
@@ -324,8 +328,13 @@ class TalkTypeIndicator extends PanelMenu.Button {
             let item = new PopupMenu.PopupMenuItem(`${preset.label} (${preset.description})`);
             item._presetKey = key;
             item.connect('activate', () => {
+                // Don't mark the choice here. The tray can legitimately refuse
+                // it ("Most Accurate" without an NVIDIA card, or a cancelled
+                // model download), and marking optimistically then showed a dot
+                // next to a preset that was never applied. The dot is driven
+                // only by the ModelChanged signal / status refresh below, which
+                // reflects what actually took effect.
                 this._proxy.ApplyPerformancePresetRemote(key);
-                this._updatePresetSelection(key);
             });
             this._presetItems[key] = item;
             this._performanceSubMenu.menu.addMenuItem(item);
@@ -335,10 +344,13 @@ class TalkTypeIndicator extends PanelMenu.Button {
         // Text Injection Mode submenu
         this._injectionSubMenu = new PopupMenu.PopupSubMenuMenuItem('Text Injection Mode');
         this._injectionItems = {};
+        // Order and labels must match the GTK tray exactly (see CLAUDE.md):
+        // anyone following instructions like "the second item under Text
+        // Injection Mode" has to land on the same option in both menus.
         const injectionModes = {
-            'auto': {label: 'Auto', description: 'Detect best method'},
-            'paste': {label: 'Paste', description: 'Use clipboard (Ctrl+Shift+V)'},
-            'type': {label: 'Type', description: 'Simulate keystrokes'}
+            'auto': {label: 'Auto', description: 'Smart Detection'},
+            'type': {label: 'Keyboard Typing', description: 'Simulate keystrokes'},
+            'paste': {label: 'Clipboard Paste', description: 'Copy and paste'}
         };
         for (let [key, mode] of Object.entries(injectionModes)) {
             let item = new PopupMenu.PopupMenuItem(`${mode.label} (${mode.description})`);
@@ -408,18 +420,38 @@ class TalkTypeIndicator extends PanelMenu.Button {
         // Call D-Bus method - results come via signal
         this._proxy.CheckForUpdatesRemote();
 
-        // Re-enable menu item after timeout (in case signal fails)
-        GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 30, () => {
-            this._updatesItem.label.text = 'Check for Updates...';
-            this._updatesItem.setSensitive(true);
+        // Re-enable menu item after timeout (in case signal fails).
+        // The id is kept so a result arriving first can cancel it, and so
+        // destroy() can remove it — an uncancelled source fires against a
+        // destroyed menu item after the extension is disabled or the screen
+        // locks, which logs errors and is a standard ego.gnome.org rejection.
+        this._clearUpdateTimeout();
+        this._updateTimeoutId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 30, () => {
+            this._updateTimeoutId = null;
+            this._restoreUpdatesItem();
             return GLib.SOURCE_REMOVE;
         });
     }
 
-    _handleUpdateCheckResult(params) {
-        // Restore menu item
+    _clearUpdateTimeout() {
+        if (this._updateTimeoutId) {
+            GLib.Source.remove(this._updateTimeoutId);
+            this._updateTimeoutId = null;
+        }
+    }
+
+    _restoreUpdatesItem() {
+        if (!this._updatesItem) {
+            return;
+        }
         this._updatesItem.label.text = 'Check for Updates...';
         this._updatesItem.setSensitive(true);
+    }
+
+    _handleUpdateCheckResult(params) {
+        // Result arrived — cancel the fallback timer before it can fire.
+        this._clearUpdateTimeout();
+        this._restoreUpdatesItem();
 
         const [success, currentVersion, latestVersion, updateAvailable,
                extCurrent, extLatest, extUpdate, releaseUrl, error] = params;
@@ -480,9 +512,19 @@ class TalkTypeIndicator extends PanelMenu.Button {
     }
 
     _getCurrentPreset() {
-        // Detect current preset based on model and device
+        // Two-pass match, mirroring _get_current_preset() in tray.py.
+        // Exact match first...
         for (let [key, preset] of Object.entries(PERFORMANCE_PRESETS)) {
             if (preset.model === this._currentModel && preset.device === this._currentDevice) {
+                return key;
+            }
+        }
+        // ...then model alone. The device gets downgraded from GPU to CPU on
+        // machines without CUDA, so requiring an exact match left the whole
+        // submenu showing nothing selected on AMD and Intel systems while the
+        // GTK tray showed the preset correctly.
+        for (let [key, preset] of Object.entries(PERFORMANCE_PRESETS)) {
+            if (preset.model === this._currentModel) {
                 return key;
             }
         }
@@ -559,6 +601,10 @@ class TalkTypeIndicator extends PanelMenu.Button {
     }
 
     destroy() {
+        // Cancel the update-check fallback timer so it can't fire against a
+        // destroyed menu item after the extension is disabled.
+        this._clearUpdateTimeout();
+
         // Clean up D-Bus name watcher
         if (this._nameWatcherId) {
             Gio.DBus.session.unwatch_name(this._nameWatcherId);

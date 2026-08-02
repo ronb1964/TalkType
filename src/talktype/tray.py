@@ -515,6 +515,21 @@ class DictationTray:
             # Turn service OFF
             self.stop_service(None)
 
+    def _emit_model_changed(self, model_name: str):
+        """Tell the GNOME extension that a model/device change has committed.
+
+        This process owns the D-Bus name the extension listens on, so the signal
+        has to originate here. Best-effort: the config is already saved by the
+        time this runs, so a bus problem must not fail the change itself.
+        """
+        if not self.dbus_service:
+            return
+        try:
+            self.dbus_service.emit_model_changed(model_name)
+            logger.info(f"Announced model change to extension: {model_name}")
+        except Exception as e:
+            logger.error(f"Failed to emit model change: {e}")
+
     def set_injection_mode(self, mode: str):
         """Set the injection mode (auto, type, or paste)."""
         # Prevent recursive calls when we programmatically set the radio buttons
@@ -794,6 +809,13 @@ class DictationTray:
             # Update menu display
             self.update_menu_display()
 
+            # Tell the GNOME extension the change actually took effect. The
+            # tray owns the D-Bus name the extension listens on, so this has to
+            # be emitted here — emitting it from the dictation service (which
+            # does not own the name) never reaches the extension, which is why
+            # its menu kept showing the previous model indefinitely.
+            self._emit_model_changed(cfg.model)
+
             # Restart service to apply new model
             self.restart_service(None)
 
@@ -957,6 +979,9 @@ class DictationTray:
                         logger.info("✅ Automatically switched to GPU mode after CUDA download")
                         # Refresh menu to show updated device
                         self.update_menu_display()
+                        # The device changed under the extension's feet — tell it,
+                        # or its Device line and preset dot stay on the old value.
+                        self._emit_model_changed(cfg.model)
                 except Exception as save_e:
                     logger.warning(f"Could not auto-enable GPU mode: {save_e}")
             else:
