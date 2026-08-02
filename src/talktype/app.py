@@ -850,29 +850,56 @@ def cancel_recording(beeps_on: bool, notify_on: bool, reason="Cancelled"):
     # Notify GNOME extension that recording stopped (icon returns to normal)
     _notify_tray_recording_state(False)
 
+def _is_wayland_session() -> bool:
+    """True when a Wayland compositor is available for wl-copy to talk to."""
+    return bool(os.environ.get("WAYLAND_DISPLAY"))
+
+
+# ydotool talks to ydotoold over a socket. These calls run on the same thread
+# that polls for the hotkey, so an untimed call against a wedged daemon stops
+# dictation responding at all, with the tray still showing the service as up.
+YDOTOOL_TIMEOUT_S = 5.0
+
+
+def _ydotool_key(keys, timeout: float = YDOTOOL_TIMEOUT_S, what: str = "keystroke") -> bool:
+    """Send raw key codes via ydotool. True only if they were actually delivered.
+
+    ydotool exits non-zero when it can't reach ydotoold ("Please check if
+    ydotoold is running"). That result used to be discarded with check=False, so
+    keystrokes that never happened were reported as success — which is how text
+    ended up in the undo buffer that the document had never received.
+    """
+    if not _which("ydotool"):
+        return False
+    try:
+        result = subprocess.run(
+            ["ydotool", "key"] + list(keys),
+            check=False, env=_get_ydotool_env(),
+            capture_output=True, text=True, timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        logger.error(f"ydotool {what} timed out after {timeout}s — is ydotoold wedged?")
+        return False
+    except Exception as e:
+        logger.debug(f"ydotool {what} failed: {e}")
+        return False
+
+    if result.returncode != 0:
+        detail = (result.stderr or "").strip()
+        logger.error(f"ydotool {what} failed (exit {result.returncode}): {detail}")
+        return False
+    return True
+
+
 def _send_shift_enter():
     """Send Shift+Enter keystrokes to create line break without submitting."""
-    if _which("ydotool"):
-        try:
-            env = _get_ydotool_env()
-            # KEY_LEFTSHIFT (42), KEY_ENTER (28)
-            subprocess.run(["ydotool", "key", "42:1", "28:1", "28:0", "42:0"], check=False, env=env)
-            return True
-        except Exception as e:
-            logger.debug(f"ydotool shift+enter failed: {e}")
-    return False
+    # KEY_LEFTSHIFT (42), KEY_ENTER (28)
+    return _ydotool_key(["42:1", "28:1", "28:0", "42:0"], what="shift+enter")
 
 def _send_enter():
     """Send Enter keystroke to create a new line."""
-    if _which("ydotool"):
-        try:
-            env = _get_ydotool_env()
-            # KEY_ENTER (28)
-            subprocess.run(["ydotool", "key", "28:1", "28:0"], check=False, env=env)
-            return True
-        except Exception as e:
-            logger.debug(f"ydotool enter failed: {e}")
-    return False
+    # KEY_ENTER (28)
+    return _ydotool_key(["28:1", "28:0"], what="enter")
 
 def _send_select_all_delete():
     """Send Ctrl+A then Backspace to clear the entire input field.
@@ -881,17 +908,11 @@ def _send_select_all_delete():
     regardless of whether the contents came from TalkType, manual typing, or
     pasting from elsewhere.
     """
-    if _which("ydotool"):
-        try:
-            env = _get_ydotool_env()
-            # KEY_LEFTCTRL (29) + KEY_A (30), then KEY_BACKSPACE (14)
-            subprocess.run(["ydotool", "key", "29:1", "30:1", "30:0", "29:0"], check=False, env=env)
-            time.sleep(0.05)
-            subprocess.run(["ydotool", "key", "14:1", "14:0"], check=False, env=env)
-            return True
-        except Exception as e:
-            logger.debug(f"ydotool select-all-delete failed: {e}")
-    return False
+    # KEY_LEFTCTRL (29) + KEY_A (30), then KEY_BACKSPACE (14)
+    if not _ydotool_key(["29:1", "30:1", "30:0", "29:0"], what="select-all"):
+        return False
+    time.sleep(0.05)
+    return _ydotool_key(["14:1", "14:0"], what="delete")
 
 def _type_text(text: str) -> bool:
     """Type text (handling line-break markers). Returns True if it was
@@ -1084,10 +1105,22 @@ def _paste_text(text: str, send_trailing_keys: bool = False):
     Automatically detects terminal applications and uses Shift+Ctrl+V for them,
     regular Ctrl+V for everything else.
 
+    Returns True only when the text actually reached the focused app. Reporting
+    success unconditionally caused two silent failures: on a session where the
+    clipboard was never set, Ctrl+V pasted whatever the user had copied earlier;
+    and text that never landed was still recorded in the undo buffer, so a later
+    "undo that" backspaced over the user's own writing.
+
     Args:
         text: Text to paste (should NOT contain §SHIFT_ENTER§ markers)
         send_trailing_keys: If True, send additional key presses after paste
     """
+    # wl-copy talks to a Wayland compositor. On an X11 login it fails instantly,
+    # and firing Ctrl+V anyway pastes the previous clipboard contents.
+    if not _is_wayland_session():
+        logger.info("Paste unavailable: not a Wayland session — falling back to typing")
+        return False
+
     try:
         if _which("wl-copy") and _which("ydotool"):
             # Pick paste keystroke from focused window's wm_class:
@@ -1111,7 +1144,14 @@ def _paste_text(text: str, send_trailing_keys: bool = False):
                 # Wait for clipboard to be ready (needs time for wl-copy to set up)
                 time.sleep(0.08)
 
-                env = _get_ydotool_env()
+                # wl-copy forks on success, so the process we spawned exits 0
+                # right away; a still-running one is serving the clipboard and
+                # is equally healthy. A non-zero exit means the clipboard was
+                # never set, and pasting now would insert the wrong text.
+                status = proc.poll()
+                if status is not None and status != 0:
+                    logger.error(f"wl-copy failed (exit {status}) — clipboard not set, skipping paste")
+                    return False
 
                 # Resolve focused window class via D-Bus query (tray-side cache).
                 # None when the extension hasn't pushed yet or the service is down.
@@ -1128,7 +1168,11 @@ def _paste_text(text: str, send_trailing_keys: bool = False):
                     logger.info(f"Paste: Ctrl+V (class={focused_class!r})")
 
                 ydotool_start = time.time()
-                subprocess.run(["ydotool", "key"] + keys, check=False, env=env)
+                if not _ydotool_key(keys, what="paste"):
+                    # The keystroke never reached the compositor: the text is
+                    # sitting on the clipboard but never made it into the app.
+                    logger.error("Paste keystroke failed — text was not inserted")
+                    return False
                 ydotool_time = time.time() - ydotool_start
                 logger.info(f"TIMING: ydotool paste command took {ydotool_time:.3f}s")
 
@@ -1154,15 +1198,11 @@ def _paste_text(text: str, send_trailing_keys: bool = False):
 
 def _press_space():
     # Inject a literal Space keypress via ydotool when possible; fallback to typing a space
-    if _which("ydotool"):
-        try:
-            env = _get_ydotool_env()
-            subprocess.run(["ydotool", "key", "57:1", "57:0"], check=False, env=env)
-            return
-        except Exception:
-            pass
+    # KEY_SPACE = 57
+    if _ydotool_key(["57:1", "57:0"], what="space"):
+        return
     if _which("wtype"):
-        subprocess.run(["wtype", "--", " "], check=False); return
+        subprocess.run(["wtype", "--", " "], check=False, timeout=YDOTOOL_TIMEOUT_S); return
 
 def _determine_injection_method(injection_mode: str) -> tuple[str, str, str]:
     """
@@ -1223,23 +1263,22 @@ def _determine_injection_method(injection_mode: str) -> tuple[str, str, str]:
     # Default: use paste (Ctrl+Shift+V works universally)
     return ("paste", False, "Auto: defaulting to paste")
 
-def _send_backspaces(count: int):
-    """Send multiple backspace keypresses to delete characters."""
+def _send_backspaces(count: int) -> bool:
+    """Send *count* backspace keypresses. True only if they were delivered.
+
+    The caller updates the undo buffer from this result, so a wrong answer here
+    desynchronises the buffer from the document and the next undo eats the
+    user's own writing.
+    """
     if count <= 0:
-        return
-    if _which("ydotool"):
-        try:
-            env = _get_ydotool_env()
-            # KEY_BACKSPACE = 14
-            # Build key sequence: press and release backspace 'count' times
-            key_sequence = []
-            for _ in range(count):
-                key_sequence.extend(["14:1", "14:0"])
-            subprocess.run(["ydotool", "key"] + key_sequence, check=False, env=env)
-            return True
-        except Exception as e:
-            logger.debug(f"ydotool backspace failed: {e}")
-    return False
+        return True
+    # KEY_BACKSPACE = 14, pressed and released once per character. A long undo
+    # is thousands of events, so the timeout scales with the work requested.
+    key_sequence = []
+    for _ in range(count):
+        key_sequence.extend(["14:1", "14:0"])
+    timeout = max(YDOTOOL_TIMEOUT_S, count * 0.02)
+    return _ydotool_key(key_sequence, timeout=timeout, what=f"{count} backspaces")
 
 def _transcribe_audio(audio_f32, language: str | None) -> str | None:
     """Run Whisper transcription on audio and filter hallucinations.
@@ -1336,7 +1375,18 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
     print(f"\U0001f519 Undoing {delete_count} characters ({label})")
 
     if delete_count > 0:
-        _send_backspaces(delete_count)
+        # Only shrink the buffer once the deletion is confirmed. Assuming it
+        # worked meant TalkType played the success beep while nothing had been
+        # deleted, leaving the buffer out of step with the document — so the
+        # next undo backspaced over text the user had typed themselves.
+        if not _send_backspaces(delete_count):
+            print("⚠️  Undo failed — nothing was deleted")
+            logger.error("Undo failed: backspaces were not delivered; buffer left unchanged")
+            _beep(beeps_on, *CANCEL_BEEP)
+            if notify_on:
+                _notify("TalkType", "Undo failed — check that ydotool is running")
+            return True
+
         # Update last_inserted_text to reflect what remains
         if delete_count >= len(state.last_inserted_text):
             state.last_inserted_text = ""
@@ -1427,18 +1477,23 @@ def _inject_text(text: str, injection_mode: str, t0: float):
             unified = text.replace("\n", marker) if "\n" in text else text
             unified = unified.replace("\t", "    ")
             success = True
+            delivered_parts = 0  # chunks confirmed in the document
             if marker in unified:
                 parts = unified.split(marker)
                 for i, part in enumerate(parts):
                     if part and not _type_text_fast(part):
                         success = False
                         break
+                    delivered_parts = i + 1
                     if i < len(parts) - 1:
                         time.sleep(0.03)
-                        _send_shift_enter()
+                        if not _send_shift_enter():
+                            success = False
+                            break
                         time.sleep(0.03)
             else:
                 success = _type_text_fast(unified)
+                delivered_parts = 1 if success else 0
 
             if success:
                 injection_time = time.time() - injection_start
@@ -1451,7 +1506,18 @@ def _inject_text(text: str, injection_mode: str, t0: float):
                 state.last_inserted_text = unified.replace(marker, "\n")
                 logger.debug(f"Stored last inserted text for undo: {len(state.last_inserted_text)} chars (fast-type)")
                 return
-            # If fast-type fails, fall through to normal logic
+
+            # Partial delivery: chunks already in the document must not be sent
+            # again by the fallback below, or the user gets a duplicate copy.
+            if delivered_parts:
+                landed = marker.join(unified.split(marker)[:delivered_parts])
+                state.last_inserted_text = landed.replace(marker, "\n")
+                logger.warning(
+                    f"Fast-type stopped after {delivered_parts} chunk(s) — "
+                    f"not re-injecting, undo buffer holds only what landed"
+                )
+                return
+            # Nothing landed, so the normal injection path can safely try again.
             logger.warning("Fast-type failed, falling through to normal injection")
 
     use_paste = (actual_mode == "paste")
@@ -1484,28 +1550,52 @@ def _inject_text(text: str, injection_mode: str, t0: float):
 
     # --- Smart hybrid paste (text with line-break markers) ---
     elif use_paste and ("\xa7SHIFT_ENTER\xa7" in text or "\n" in text):
+        marker = "\xa7SHIFT_ENTER\xa7"
         logger.info("Smart hybrid mode: splitting text on markers")
-        parts = text.split("\xa7SHIFT_ENTER\xa7")
+        parts = text.split(marker)
         logger.info(f"Split into {len(parts)} parts")
-        success = True
+
+        # Track where delivery stopped. Falling back by re-injecting the whole
+        # text left the document with the chunks that already landed followed by
+        # a complete second copy of everything, which undo could not clean up.
+        resume_at = None
+        needs_break = False
         for i, part in enumerate(parts):
             if part:
                 logger.info(f"Pasting part {i+1}/{len(parts)}: {len(part)} chars")
                 if not _paste_text(part):
-                    logger.warning(f"Paste failed on part {i+1}, falling back to typing mode")
-                    success = False
+                    logger.warning(f"Paste failed on part {i+1}; will type the remainder")
+                    resume_at = i
                     break
                 time.sleep(0.08)
             if i < len(parts) - 1:
                 logger.info(f"Sending Shift+Enter after part {i+1}")
-                _send_shift_enter()
+                if not _send_shift_enter():
+                    # The chunk landed but its line break didn't \u2014 resume from
+                    # the next chunk and supply the missing break.
+                    logger.warning(f"Line break failed after part {i+1}; will type the remainder")
+                    resume_at, needs_break = i + 1, True
+                    break
                 time.sleep(0.05)
-        if success:
+
+        if resume_at is None:
             print(f"\u2702\ufe0f  Inject (smart paste) {len(parts)} chunks, {len(text)} total chars")
             logger.info(f"Smart hybrid paste completed: {len(parts)} chunks")
         else:
-            print(f"\u2328\ufe0f  Inject (type) len={len(text)} [paste failed, typing fallback]")
-            inject_ok = _type_text(text)
+            remainder = (marker if needs_break else "") + marker.join(parts[resume_at:])
+            print(f"\u2328\ufe0f  Inject (type) remainder len={len(remainder)} [paste failed partway]")
+            if _type_text(remainder):
+                inject_ok = True  # delivered chunks + typed remainder == full text
+            else:
+                # Only the chunks before the failure reached the document. Record
+                # exactly those, so undo can't delete what was never inserted.
+                delivered = marker.join(parts[:resume_at])
+                state.last_inserted_text = delivered.replace(marker, "\n")
+                logger.warning(
+                    f"Injection stopped after {resume_at}/{len(parts)} chunks \u2014 "
+                    f"undo buffer holds only what landed"
+                )
+                return
 
     # --- Simple paste (no markers) ---
     elif use_paste and _paste_text(text):
