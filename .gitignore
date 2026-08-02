@@ -106,6 +106,13 @@ marketing-posts.md
 # ============================================
 # Dev/test scripts (root level)
 # (proper unit tests in tests/ are tracked)
+#
+# NOTE: the build and release toolchain does NOT belong in this section.
+# container-build.sh, patch_pytorch.py, package-extension.sh and
+# fresh-start-for-testing.sh were once filed here by mistake, which left a
+# clone of this repository unable to build or release itself — build-release.sh
+# is tracked but calls container-build.sh, which was not. Keep anything the
+# documented release process in CLAUDE.md depends on OUT of this list.
 # ============================================
 test-*.sh
 test-*.py
@@ -113,15 +120,13 @@ test_*.py
 !tests/test_*.py
 list-atspi-apps.py
 mcp-screenshot-server.py
-patch_pytorch.py
 launch-gtk-inspector.sh
 install-xdotool.sh
-package-extension.sh
 regenerate-autostart*.py
 cleanup-docker-artifacts.sh
-container-build.sh
 build-with-appimage-builder.sh
 fresh-start*.sh
+!fresh-start-for-testing.sh
 fresh-test-env.sh
 
 # ============================================

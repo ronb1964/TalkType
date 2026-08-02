@@ -1,0 +1,60 @@
+"""The repository must be able to build and release itself from a clean clone.
+
+build-release.sh is tracked in git, but the scripts it calls were once listed in
+.gitignore under "Dev/test scripts". They are not dev scripts — they are the
+release toolchain, and with them missing a fresh clone dies immediately with
+"No such file or directory". The whole ability to ship existed only as untracked
+files on one machine.
+"""
+
+import pathlib
+import re
+import subprocess
+
+import pytest
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+
+# Everything the documented release process in CLAUDE.md needs in order to run.
+REQUIRED_IN_GIT = [
+    "build-release.sh",        # step 3
+    "container-build.sh",      # called by build-release.sh
+    "patch_pytorch.py",        # called by container-build.sh
+    "package-extension.sh",    # step 10
+    "fresh-start-for-testing.sh",  # step 6
+]
+
+
+def tracked_files():
+    out = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True, text=True)
+    return set(out.stdout.split())
+
+
+@pytest.mark.parametrize("path", REQUIRED_IN_GIT)
+def test_release_toolchain_is_tracked(path):
+    assert path in tracked_files(), (
+        f"{path} is needed to build or release TalkType but is not in git. "
+        f"A fresh clone cannot ship a release without it."
+    )
+
+
+def test_build_script_calls_nothing_that_is_missing_from_git():
+    """Catches a new dependency being added and left untracked."""
+    tracked = tracked_files()
+    missing = []
+
+    for script in ("build-release.sh", "container-build.sh"):
+        script_path = ROOT / script
+        if not script_path.exists():
+            continue
+        text = script_path.read_text()
+        # Files referenced as /build/<name> inside the container, and as
+        # ./<name> or bare <name>.sh / <name>.py from the project root.
+        for name in re.findall(r"/build/([A-Za-z0-9_.-]+\.(?:sh|py))", text):
+            if (ROOT / name).exists() and name not in tracked:
+                missing.append(f"{script} -> {name}")
+
+    assert not missing, (
+        "the build calls files that exist locally but are not in git:\n  "
+        + "\n  ".join(missing)
+    )
