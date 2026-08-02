@@ -274,3 +274,63 @@ def test_tab_field_separator_still_works():
 def test_line_starting_with_protected_word_is_capitalized():
     """A protected word at line start must still get sentence capitalization."""
     assert normalize_text("return to sender was my favorite song") == "Return to sender was my favorite song."
+
+
+# --- cap_first: don't capitalize past the start of the line -----------------
+# The capitalization pass scanned forward to the first letter it could find,
+# so a line opening with a number or symbol capitalized the *second* word.
+
+def test_line_starting_with_a_year_does_not_capitalize_the_next_word():
+    assert normalize_text("2024 was a good year") == "2024 was a good year."
+
+
+def test_line_starting_with_a_price_does_not_capitalize_the_next_word():
+    assert normalize_text("$50 is too much") == "$50 is too much."
+
+
+def test_line_starting_with_a_count_does_not_capitalize_the_next_word():
+    assert normalize_text("15 minutes later he left") == "15 minutes later he left."
+
+
+def test_email_address_at_line_start_is_not_capitalized():
+    assert normalize_text("rbrand@example.com is my email") == "rbrand@example.com is my email."
+
+
+def test_url_at_line_start_is_not_capitalized():
+    assert normalize_text("github.com/ronb1964 has the code") == "github.com/ronb1964 has the code."
+
+
+def test_opening_quote_is_still_skipped_when_capitalizing():
+    assert normalize_text('"hello there" she said') == '"Hello there" she said.'
+
+
+def test_ordinary_sentences_are_still_capitalized():
+    assert normalize_text("the meeting went well") == "The meeting went well."
+
+
+# --- a.m./p.m. must not swallow the sentence period -------------------------
+# "a.m." ends in a period that can also be the full stop. Rewriting it to "AM"
+# dropped that period, merging two sentences into one.
+
+def test_am_at_end_of_text_keeps_its_period():
+    assert normalize_text("It starts at 5 p.m.") == "It starts at 5 PM."
+
+
+def test_am_before_a_new_sentence_keeps_its_period():
+    assert normalize_text("The meeting is at 9 a.m. We should be early.") == \
+        "The meeting is at 9 AM. We should be early."
+
+
+def test_am_with_minutes_before_a_new_sentence_keeps_its_period():
+    assert normalize_text("Dinner is at 7:30 p.m. Bring a dish.") == \
+        "Dinner is at 7:30 PM. Bring a dish."
+
+
+def test_am_mid_sentence_does_not_gain_a_period():
+    assert normalize_text("Call me at 9 a.m. tomorrow if you can.") == \
+        "Call me at 9 AM tomorrow if you can."
+
+
+def test_am_followed_by_a_lowercase_word_does_not_gain_a_period():
+    assert normalize_text("I woke at 6 a.m. and went running.") == \
+        "I woke at 6 AM and went running."

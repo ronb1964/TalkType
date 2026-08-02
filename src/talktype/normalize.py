@@ -250,19 +250,56 @@ _EMAIL_TLD_FIXES = [
 # AM/PM variants handled: "p. m.", "p. M.", "p.m.", "PM", "a. m.", "a.m.", "AM" (any case/spacing).
 # The trailing (?![A-Za-z]) stops the AM/PM group from matching the start of
 # ordinary words: "5 among us" / "3 amazing" are not times.
+# Characters that can precede the first word of a line without being the word:
+# straight and smart quotes, and opening brackets.
+_LINE_OPENERS = "\"'“‘([{"
+
+# An email address, URL, or bare domain at the start of a line. These are
+# written the way the user said them, so sentence capitalization leaves them be.
+# Matched against the rest of the line rather than its first word: the pass that
+# puts a space after a sentence period runs first, so by the time capitalization
+# happens "github.com" has already become "github. com".
+_RE_ADDRESSY = re.compile(
+    r'(?:'
+    r'[\w.-]*@'                                                 # email
+    r'|https?://'                                               # explicit URL
+    r'|www\.'                                                   # www host
+    r'|[\w-]+\.\s*(?:com|org|net|edu|gov|io|dev|co|uk)\b'       # bare domain
+    r')',
+    re.IGNORECASE
+)
+
 _RE_TIME_FORMAT = re.compile(
     r'\b(1[0-2]|0?[1-9])(?:[.:]\s*([0-5][0-9]))?\s+([Pp]\.?\s*[Mm]\.?|[Aa]\.?\s*[Mm]\.?)(?![A-Za-z])',
     re.IGNORECASE
 )
 
 def _fix_time_ampm(m: re.Match) -> str:
-    """Normalize a matched time string to HH:MM AM/PM or HH AM/PM format."""
+    """Normalize a matched time string to HH:MM AM/PM or HH AM/PM format.
+
+    The trailing period of "a.m." can be doing double duty as the sentence's
+    full stop. Stripping it unconditionally merged two sentences into one
+    ("at 9 a.m. We should" became "at 9 AM We should") and left text ending in
+    "p.m." with no terminating punctuation at all.
+
+    Whisper capitalizes the sentences it transcribes, so an uppercase word after
+    the abbreviation — or nothing at all — marks a real sentence end, while a
+    lowercase word means the period belonged to the abbreviation alone.
+    """
     hour = m.group(1)
     minute = m.group(2)  # None if no minutes were present
-    ampm = re.sub(r'[\s.]', '', m.group(3)).upper()  # "p. m." / "p. M." → "PM"
+    raw_ampm = m.group(3)
+    ampm = re.sub(r'[\s.]', '', raw_ampm).upper()  # "p. m." / "p. M." → "PM"
+
+    following = m.string[m.end():].lstrip()
+    ends_sentence = raw_ampm.rstrip().endswith(".") and (
+        not following or following[0].isupper()
+    )
+    tail = "." if ends_sentence else ""
+
     if minute:
-        return f"{hour}:{minute} {ampm}"
-    return f"{hour} {ampm}"
+        return f"{hour}:{minute} {ampm}{tail}"
+    return f"{hour} {ampm}{tail}"
 
 
 def _space_after_ender_repl(m: re.Match) -> str:
@@ -408,10 +445,23 @@ def normalize_text(text: str) -> str:
 
     # --- 10) Capitalization ---
     def cap_first(s: str) -> str:
-        for i, ch in enumerate(s):
-            if ch.isalpha():
-                return s[:i] + ch.upper() + s[i+1:]
-        return s
+        """Capitalize the first word of a line, or leave the line alone.
+
+        Only the *first* thing on the line is a candidate. Scanning ahead to the
+        first letter anywhere meant a line opening with a number or symbol
+        capitalized the second word instead: "2024 was a good year" became
+        "2024 Was a good year".
+        """
+        i = 0
+        # Opening quotes and brackets aren't the word — step over them.
+        while i < len(s) and (s[i].isspace() or s[i] in _LINE_OPENERS):
+            i += 1
+        if i >= len(s) or not s[i].isalpha():
+            return s
+        # An address or URL is written the way the user said it, not sentence-cased.
+        if _RE_ADDRESSY.match(s[i:]):
+            return s
+        return s[:i] + s[i].upper() + s[i+1:]
 
     # Temporarily convert §SHIFT_ENTER§ to newlines for capitalization processing
     temp_text = text.replace("§SHIFT_ENTER§", "\n")

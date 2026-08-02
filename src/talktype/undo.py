@@ -95,10 +95,10 @@ def single_unit_length(text: str, undo_type: str) -> int:
         # Skip any trailing sentence-ending punctuation so we find the
         # PREVIOUS sentence end, not the current one.
         text_stripped = text_to_analyze.rstrip('.?!… ')
-        match = re.search(r'[.?!…]\s*', text_stripped[::-1])
-        if match:
-            pos = len(text_stripped) - match.start()
-            return len(text) - pos
+        for i in range(len(text_stripped) - 1, -1, -1):
+            if text_stripped[i] in '.?!…' and _is_sentence_end(text_stripped, i):
+                # Delete from just past the punctuation to the end.
+                return len(text) - (i + 1)
         return len(text)
 
     if undo_type == 'paragraph':
@@ -112,6 +112,39 @@ def single_unit_length(text: str, undo_type: str) -> int:
         return len(text)
 
     return 0
+
+
+def _is_sentence_end(text: str, i: int) -> bool:
+    """True if the punctuation at index *i* really ends a sentence.
+
+    "Undo last sentence" used to accept any period, so a decimal or an
+    abbreviation was mistaken for a sentence boundary and undo deleted far too
+    little — "I paid $19.99 for the book." left "I paid $19.", which still looks
+    like a finished sentence and is easy to miss.
+    """
+    ch = text[i]
+    if ch in '?!…':
+        return True
+
+    prev = text[i - 1] if i > 0 else ''
+    prev2 = text[i - 2] if i > 1 else ''
+    nxt = text[i + 1] if i + 1 < len(text) else ''
+
+    # Decimals, prices and version numbers: 19.99, 2.5
+    if prev.isdigit() and nxt.isdigit():
+        return False
+
+    # A sentence end is followed by whitespace, or by nothing at all.
+    if nxt and not nxt.isspace():
+        return False
+
+    # Single-letter abbreviations — U.S., a.m., e.g. Their period can also be
+    # doing double duty as the full stop, which a following capital reveals.
+    if prev.isalpha() and (prev2 == '.' or not prev2.isalnum()):
+        following = text[i + 1:].lstrip()
+        return bool(following[:1].isupper())
+
+    return True
 
 
 def calculate_undo_length(text: str, undo_type: str, count: int = 1) -> int:

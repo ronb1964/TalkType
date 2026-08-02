@@ -194,3 +194,44 @@ def test_word_boundary_at_tab():
 def test_paragraph_length_with_newline_breaks():
     """Guard: '\\n'-separated paragraphs measure correctly."""
     assert calculate_undo_length("first\nsecond", "paragraph", 1) == 6
+
+
+# --- sentence undo must not cut inside numbers or abbreviations -------------
+# The sentence boundary search accepted any '.', so a decimal or an
+# abbreviation was mistaken for the end of a sentence and undo deleted far too
+# little — leaving behind something that still looked like a finished sentence.
+
+def test_sentence_undo_does_not_cut_inside_a_price():
+    text = "I paid $19.99 for the book."
+    assert calculate_undo_length(text, "sentence", 1) == len(text)
+
+
+def test_sentence_undo_does_not_cut_inside_a_version_number():
+    text = "Version 2.5 shipped today."
+    assert calculate_undo_length(text, "sentence", 1) == len(text)
+
+
+def test_sentence_undo_does_not_cut_inside_a_mid_sentence_abbreviation():
+    text = "I live in the U.S. and it is nice."
+    assert calculate_undo_length(text, "sentence", 1) == len(text)
+
+
+def test_sentence_undo_does_not_cut_inside_a_time_abbreviation():
+    text = "Meet at 9 a.m. sharp tomorrow."
+    assert calculate_undo_length(text, "sentence", 1) == len(text)
+
+
+def test_abbreviation_ending_a_sentence_is_still_a_boundary():
+    """When the next word is capitalized the period is doing double duty."""
+    text = "I live in the U.S. It is nice."
+    assert calculate_undo_length(text, "sentence", 1) == len(" It is nice.")
+
+
+def test_sentence_undo_still_finds_an_ordinary_boundary():
+    text = "First sentence. Second sentence."
+    assert calculate_undo_length(text, "sentence", 1) == len(" Second sentence.")
+
+
+def test_sentence_undo_handles_a_decimal_in_an_earlier_sentence():
+    text = "It cost $19.99. That was too much."
+    assert calculate_undo_length(text, "sentence", 1) == len(" That was too much.")
