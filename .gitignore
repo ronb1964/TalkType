@@ -130,6 +130,17 @@ fresh-start*.sh
 fresh-test-env.sh
 
 # ============================================
+# AUR publishing clone
+# ============================================
+# aur-repo/ is a working clone of the real AUR package repository
+# (ssh://aur@aur.archlinux.org/talktype-appimage.git) used to push releases to
+# Arch. It has its own .git, so committing it into this repository recorded it
+# as a submodule with no .gitmodules — which made `git clone
+# --recurse-submodules` fail and showed as a dead link on GitHub. The packaging
+# sources that belong to this project live in aur/ and are tracked there.
+aur-repo/
+
+# ============================================
 # Build artifacts & generated files
 # ============================================
 talktype-gnome-extension.zip
