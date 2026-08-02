@@ -1,7 +1,9 @@
 from __future__ import annotations
 import os
 import logging
+import shutil
 import subprocess
+import time
 try:
     import tomllib  # Python 3.11+
     _USE_TOMLLIB = True  # tomllib requires binary mode ("rb")
@@ -19,6 +21,27 @@ CONFIG_DIR = "talktype-dev" if DEV_MODE else "talktype"
 DATA_DIR = "TalkType-dev" if DEV_MODE else "TalkType"
 
 CONFIG_PATH = os.path.expanduser(f"~/.config/{CONFIG_DIR}/config.toml")
+
+
+class ConfigError(Exception):
+    """One or more settings hold values the app cannot use.
+
+    Carries the individual problems so a caller can show the user which setting
+    is wrong instead of just failing.
+    """
+
+    def __init__(self, errors, fields=None):
+        self.errors = list(errors)
+        self.fields = list(fields or [])
+        super().__init__("; ".join(self.errors))
+
+    def report(self) -> str:
+        """Human-readable summary, suitable for stderr or a dialog."""
+        lines = ["Configuration validation failed:"]
+        lines += [f"  • {e}" for e in self.errors]
+        lines.append(f"\nPlease fix your configuration in: {CONFIG_PATH}")
+        lines.append("Or use environment variables (DICTATE_MODEL, DICTATE_DEVICE, etc.)")
+        return "\n".join(lines)
 
 # ---------------------------------------------------------------------------
 # Validation constants — defined once, used by validate_config()
@@ -102,40 +125,73 @@ def _env_bool(key: str, default: bool) -> bool:
 # Validation
 # ---------------------------------------------------------------------------
 
-def validate_config(s: Settings) -> None:
+def _validation_problems(s: Settings) -> list[tuple[str, str]]:
+    """Return (field name, message) for every setting holding an unusable value.
+
+    Naming the field, not just the message, lets a caller repair that one
+    setting instead of discarding the whole configuration.
     """
-    Validate configuration settings and exit with clear error message if invalid.
-    """
-    errors = []
+    problems = []
 
     if s.model not in VALID_MODELS:
-        errors.append(f"Invalid model '{s.model}'. Valid options: {', '.join(sorted(VALID_MODELS))}")
+        problems.append(("model", f"Invalid model '{s.model}'. Valid options: {', '.join(sorted(VALID_MODELS))}"))
 
     if s.device.lower() not in VALID_DEVICES:
-        errors.append(f"Invalid device '{s.device}'. Must be 'cpu' or 'cuda'")
+        problems.append(("device", f"Invalid device '{s.device}'. Must be 'cpu' or 'cuda'"))
 
     if s.mode.lower() not in VALID_MODES:
-        errors.append(f"Invalid mode '{s.mode}'. Must be 'hold' or 'toggle'")
+        problems.append(("mode", f"Invalid mode '{s.mode}'. Must be 'hold' or 'toggle'"))
 
     if s.injection_mode.lower() not in VALID_INJECTION_MODES:
-        errors.append(f"Invalid injection_mode '{s.injection_mode}'. Must be 'type', 'paste', or 'auto'")
+        problems.append(("injection_mode", f"Invalid injection_mode '{s.injection_mode}'. Must be 'type', 'paste', or 'auto'"))
 
     if s.auto_timeout_minutes <= 0:
-        errors.append(f"Invalid auto_timeout_minutes '{s.auto_timeout_minutes}'. Must be positive")
+        problems.append(("auto_timeout_minutes", f"Invalid auto_timeout_minutes '{s.auto_timeout_minutes}'. Must be positive"))
 
     if s.indicator_position.lower() not in VALID_INDICATOR_POSITIONS:
-        errors.append(f"Invalid indicator_position '{s.indicator_position}'. Valid options: {', '.join(sorted(VALID_INDICATOR_POSITIONS))}")
+        problems.append(("indicator_position", f"Invalid indicator_position '{s.indicator_position}'. Valid options: {', '.join(sorted(VALID_INDICATOR_POSITIONS))}"))
 
     if s.indicator_size.lower() not in VALID_INDICATOR_SIZES:
-        errors.append(f"Invalid indicator_size '{s.indicator_size}'. Valid options: {', '.join(sorted(VALID_INDICATOR_SIZES))}")
+        problems.append(("indicator_size", f"Invalid indicator_size '{s.indicator_size}'. Valid options: {', '.join(sorted(VALID_INDICATOR_SIZES))}"))
 
-    if errors:
-        print("\u274c Configuration validation failed:", file=sys.stderr)
-        for error in errors:
-            print(f"  \u2022 {error}", file=sys.stderr)
-        print(f"\nPlease fix your configuration in: {CONFIG_PATH}", file=sys.stderr)
-        print("Or use environment variables (DICTATE_MODEL, DICTATE_DEVICE, etc.)", file=sys.stderr)
-        sys.exit(1)
+    return problems
+
+
+def validate_config(s: Settings) -> None:
+    """Raise ConfigError if any setting holds a value the app cannot use.
+
+    Raises rather than exits. This runs inside load_config(), which the tray
+    calls once per second \u2014 calling sys.exit() here made the tray icon
+    disappear from the panel within a second of a bad value being saved, with
+    no dialog and nothing to indicate which setting was at fault. SystemExit
+    also deliberately bypasses `except Exception`, so the tray's own error
+    handling could not catch it either.
+    """
+    problems = _validation_problems(s)
+    if problems:
+        raise ConfigError([msg for _, msg in problems],
+                          fields=[name for name, _ in problems])
+
+
+def _repair_invalid_fields(s: Settings, error: ConfigError) -> Settings:
+    """Reset only the settings that are unusable, keeping everything else.
+
+    One bad value should cost the user that one setting, not their whole
+    configuration and not a working tray icon.
+    """
+    defaults = Settings()
+    for name in error.fields:
+        default = getattr(defaults, name)
+        logger.warning(f"Resetting invalid setting {name!r} to default {default!r}")
+        setattr(s, name, default)
+
+    if not getattr(load_config, "_invalid_reported", False):
+        print("\u26a0\ufe0f  Some settings held invalid values and were reset to defaults:", file=sys.stderr)
+        for message in error.errors:
+            print(f"  \u2022 {message}", file=sys.stderr)
+        load_config._invalid_reported = True
+
+    return s
 
 
 # ---------------------------------------------------------------------------
@@ -151,6 +207,42 @@ _TYPE_CASTERS = {"str": str, "bool": bool, "int": int}
 # The tray polls load_config() every 1 second; this reduces disk I/O to near zero.
 _config_cache = None
 _config_mtime = 0.0
+
+def _recover_damaged_config(error: Exception) -> Settings:
+    """Set a damaged config aside and recover the last known good settings.
+
+    Returns the recovered Settings — from the .bak written by the previous
+    successful save when one exists, otherwise defaults.
+    """
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    quarantine = f"{CONFIG_PATH}.corrupt-{stamp}"
+    try:
+        shutil.copy2(CONFIG_PATH, quarantine)
+        logger.error(f"Damaged config saved to {quarantine}: {error}")
+        print(f"⚠️  Settings file was unreadable ({error}).", file=sys.stderr)
+        print(f"    A copy was kept at: {quarantine}", file=sys.stderr)
+    except OSError as copy_error:
+        logger.error(f"Could not preserve damaged config: {copy_error}")
+
+    backup = f"{CONFIG_PATH}.bak"
+    if os.path.exists(backup):
+        try:
+            data = _load_toml_file(backup)
+            if data:
+                recovered = Settings()
+                for fld in fields(recovered):
+                    if fld.name in data:
+                        cast = _TYPE_CASTERS.get(fld.type, str)
+                        setattr(recovered, fld.name, cast(data[fld.name]))
+                logger.info(f"Recovered settings from {backup}")
+                print("    Your previous settings were restored from backup.", file=sys.stderr)
+                return recovered
+        except Exception as restore_error:
+            logger.error(f"Backup at {backup} is also unreadable: {restore_error}")
+
+    print("    Settings have been reset to defaults.", file=sys.stderr)
+    return Settings()
+
 
 def load_config() -> Settings:
     global _config_cache, _config_mtime
@@ -170,15 +262,22 @@ def load_config() -> Settings:
     if os.path.exists(CONFIG_PATH):
         try:
             data = _load_toml_file(CONFIG_PATH)
+            # An existing file with nothing in it is damage, not configuration:
+            # empty parses as valid TOML, so it silently produced all-defaults \u2014
+            # including a blank hotkey, which kills dictation with no message.
+            if not data:
+                raise ValueError("config file is empty")
             # Apply TOML values using dataclass field types for casting
             for fld in fields(s):
                 if fld.name in data:
                     cast = _TYPE_CASTERS.get(fld.type, str)
                     setattr(s, fld.name, cast(data[fld.name]))
         except Exception as e:
-            if not getattr(load_config, '_error_printed', False):
-                print(f"\u26a0\ufe0f  Error loading config from {CONFIG_PATH}: {e}", file=sys.stderr)
-                load_config._error_printed = True
+            # Preserve the damaged file and fall back to the last known good
+            # settings. Silently resetting to defaults looked like a fresh
+            # install, and the next save overwrote the user's real settings for
+            # good.
+            s = _recover_damaged_config(e)
 
     # Environment variable overrides
     s.model = os.getenv("DICTATE_MODEL", s.model)
@@ -204,7 +303,13 @@ def load_config() -> Settings:
     if timeout_minutes is not None:
         s.auto_timeout_minutes = int(timeout_minutes)
 
-    validate_config(s)
+    try:
+        validate_config(s)
+    except ConfigError as e:
+        # Keep the process alive. The tray polls this once a second, so a single
+        # bad value must cost the user that setting, not their tray icon.
+        s = _repair_invalid_fields(s, e)
+
     _config_cache = s
     return s
 
@@ -218,16 +323,62 @@ def _toml_value(val) -> str:
     return f'"{val}"'               # quoted string
 
 
+def _toml_string(value: str) -> str:
+    """Quote and escape *value* as a TOML basic string."""
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+    return f'"{escaped}"'
+
+
+def write_text_atomic(path: str, text: str, keep_backup: bool = True) -> None:
+    """Replace *path* with *text* without ever leaving it half-written.
+
+    The previous version was opened in truncate mode, so an interruption —
+    most realistically a full disk, which this app can cause itself by
+    downloading multi-gigabyte models — left the file empty every time. On the
+    next launch every setting fell back to its default, including the hotkey,
+    which defaults to blank and silently kills dictation.
+
+    Writing to a sibling temp file and renaming is atomic on POSIX: readers see
+    either the old file or the new one, never a partial one. The fsync before
+    the rename is what makes that hold across a power loss rather than just a
+    crash.
+    """
+    directory = os.path.dirname(path) or "."
+    os.makedirs(directory, exist_ok=True)
+
+    tmp_path = f"{path}.tmp"
+    try:
+        with open(tmp_path, "w") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+
+        if keep_backup and os.path.exists(path):
+            try:
+                shutil.copy2(path, f"{path}.bak")
+            except OSError as e:
+                # A backup is a bonus, not a precondition for saving.
+                logger.warning(f"Could not back up {path}: {e}")
+
+        os.replace(tmp_path, path)
+    except BaseException:
+        # Never leave a stray temp file behind on failure.
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
 def save_config(s: Settings) -> None:
     """Save Settings to TOML file.
 
     Uses dataclass introspection so new fields are automatically included.
     """
-    os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
-    with open(CONFIG_PATH, "w") as f:
-        f.write("# TalkType config\n")
-        for fld in fields(s):
-            f.write(f"{fld.name} = {_toml_value(getattr(s, fld.name))}\n")
+    lines = ["# TalkType config"]
+    for fld in fields(s):
+        lines.append(f"{fld.name} = {_toml_value(getattr(s, fld.name))}")
+    write_text_atomic(CONFIG_PATH, "\n".join(lines) + "\n")
 
 
 def merge_changed_keys(original: dict, current: dict, base: dict) -> dict:
@@ -376,12 +527,19 @@ def save_custom_commands(commands: dict[str, str]) -> None:
     Args:
         commands: Dictionary mapping spoken phrases to replacement text
     """
-    os.makedirs(os.path.dirname(CUSTOM_COMMANDS_PATH), exist_ok=True)
-    with open(CUSTOM_COMMANDS_PATH, "w") as f:
-        f.write("# TalkType Custom Voice Commands\n")
-        f.write("# Format: \"spoken phrase\" = \"replacement text\"\n")
-        f.write("# Use \\n for line breaks in replacements\n\n")
-        f.write("[commands]\n")
-        for phrase, replacement in commands.items():
-            escaped_replacement = replacement.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
-            f.write(f'"{phrase}" = "{escaped_replacement}"\n')
+    lines = [
+        "# TalkType Custom Voice Commands",
+        '# Format: "spoken phrase" = "replacement text"',
+        "# Use \\n for line breaks in replacements",
+        "",
+        "[commands]",
+    ]
+    for phrase, replacement in commands.items():
+        # Escape BOTH sides. Only the replacement used to be escaped, so a
+        # phrase containing a double quote produced a malformed line that made
+        # the whole file unparseable — every custom command stopped working at
+        # once, and Preferences then showed an empty list and saved it back,
+        # deleting the lot.
+        lines.append(f'{_toml_string(phrase)} = {_toml_string(replacement)}')
+
+    write_text_atomic(CUSTOM_COMMANDS_PATH, "\n".join(lines) + "\n")

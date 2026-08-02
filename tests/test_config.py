@@ -1,6 +1,6 @@
 """Tests for config module validation logic"""
 import pytest
-from talktype.config import Settings, validate_config
+from talktype.config import Settings, validate_config, ConfigError
 
 
 def test_valid_config():
@@ -19,43 +19,43 @@ def test_valid_config():
 def test_invalid_model():
     """Test that invalid model name fails validation"""
     s = Settings(model="invalid-model")
-    with pytest.raises(SystemExit) as exc_info:
+    with pytest.raises(ConfigError) as exc_info:
         validate_config(s)
-    assert exc_info.value.code == 1
+    assert "model" in str(exc_info.value)
 
 
 def test_invalid_device():
     """Test that invalid device fails validation"""
     s = Settings(device="gpu")  # Should be "cuda" not "gpu"
-    with pytest.raises(SystemExit):
+    with pytest.raises(ConfigError):
         validate_config(s)
 
 
 def test_invalid_mode():
     """Test that invalid mode fails validation"""
     s = Settings(mode="press")  # Should be "hold" or "toggle"
-    with pytest.raises(SystemExit):
+    with pytest.raises(ConfigError):
         validate_config(s)
 
 
 def test_invalid_injection_mode():
     """Test that invalid injection_mode fails validation"""
     s = Settings(injection_mode="invalid")
-    with pytest.raises(SystemExit):
+    with pytest.raises(ConfigError):
         validate_config(s)
 
 
 def test_negative_timeout():
     """Test that negative timeout fails validation"""
     s = Settings(auto_timeout_minutes=-1)
-    with pytest.raises(SystemExit):
+    with pytest.raises(ConfigError):
         validate_config(s)
 
 
 def test_zero_timeout():
     """Test that zero timeout fails validation"""
     s = Settings(auto_timeout_minutes=0)
-    with pytest.raises(SystemExit):
+    with pytest.raises(ConfigError):
         validate_config(s)
 
 

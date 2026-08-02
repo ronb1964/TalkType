@@ -9,7 +9,8 @@ import atexit
 import dbus
 import dbus.mainloop.glib
 from dataclasses import asdict
-from .config import CONFIG_PATH, Settings, merge_changed_keys, load_custom_commands, save_custom_commands
+from .config import (CONFIG_PATH, Settings, merge_changed_keys, load_custom_commands,
+                     save_custom_commands, write_text_atomic)
 
 # D-Bus interface for communicating with the TalkType service
 DBUS_SERVICE = "io.github.ronb1964.TalkType"
@@ -404,18 +405,20 @@ class PreferencesWindow:
             base.update(on_disk)
             merged = merge_changed_keys(self._config_at_open, self.config, base)
 
-            os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
-            with open(CONFIG_PATH, "w") as f:
-                f.write("# TalkType config\n")
-                for key, value in merged.items():
-                    if isinstance(value, bool):
-                        f.write(f'{key} = {str(value).lower()}\n')
-                    elif isinstance(value, str):
-                        f.write(f'{key} = "{value}"\n')
-                    else:
-                        f.write(f'{key} = {value}\n')
-                f.flush()  # Ensure file is written to disk
-                os.fsync(f.fileno())  # Force write to disk
+            # Build the whole file in memory, then swap it into place in one
+            # step. Writing directly into CONFIG_PATH truncated it first, so an
+            # interruption — most realistically a full disk — left the user with
+            # an empty settings file and no hotkey. Shared with save_config()
+            # so both writers get the same guarantee.
+            lines = ["# TalkType config"]
+            for key, value in merged.items():
+                if isinstance(value, bool):
+                    lines.append(f'{key} = {str(value).lower()}')
+                elif isinstance(value, str):
+                    lines.append(f'{key} = "{value}"')
+                else:
+                    lines.append(f'{key} = {value}')
+            write_text_atomic(CONFIG_PATH, "\n".join(lines) + "\n")
 
             # Future saves in this window diff against what we just wrote
             self.config = dict(merged)
