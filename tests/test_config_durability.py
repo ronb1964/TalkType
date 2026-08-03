@@ -22,6 +22,7 @@ def config_path(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "_config_mtime", 0.0)
     # Per-process latches: real processes start fresh, tests must too.
     monkeypatch.setattr(config, "_repair_attempted", False)
+    monkeypatch.setattr(config, "_config_read_failed", False)
     for latch in ("_error_printed", "_invalid_reported", "_read_error_printed"):
         if hasattr(config.load_config, latch):
             delattr(config.load_config, latch)
@@ -191,7 +192,51 @@ def test_loading_a_config_with_one_bad_value_falls_back_for_that_key(config_path
 def commands_path(tmp_path, monkeypatch):
     path = tmp_path / "custom_commands.toml"
     monkeypatch.setattr(config, "CUSTOM_COMMANDS_PATH", str(path))
+    monkeypatch.setattr(config, "_commands_read_failed", False, raising=False)
     return path
+
+
+def test_a_damaged_commands_file_is_not_replaced_with_an_empty_one(commands_path):
+    """load_custom_commands() returns {} when the file cannot be parsed, and
+    Preferences writes its list back on every Apply/OK — so one damaged byte
+    turned into zero commands on disk, permanently, with no quarantine copy
+    and a .bak that had already been overwritten with the damaged file."""
+    commands_path.write_text('[commands]\n"talk type" = "TalkType"\nbroken {{{\n')
+    damaged = commands_path.read_text()
+
+    loaded = config.load_custom_commands()
+    assert loaded == {}          # cannot read it — as designed
+
+    with pytest.raises(config.ConfigNotLoadedError):
+        config.save_custom_commands(loaded)
+
+    assert commands_path.read_text() == damaged, "damaged file was overwritten"
+
+
+def test_commands_can_still_be_saved_after_the_file_is_repaired(commands_path):
+    """The refusal must clear itself once the file reads cleanly again."""
+    commands_path.write_text('[commands]\nbroken {{{\n')
+    assert config.load_custom_commands() == {}
+
+    commands_path.write_text('[commands]\n"talk type" = "TalkType"\n')
+    assert config.load_custom_commands() == {"talk type": "TalkType"}
+
+    config.save_custom_commands({"talk type": "TalkType", "new": "thing"})
+    assert config.load_custom_commands() == {"talk type": "TalkType", "new": "thing"}
+
+
+def test_deliberately_deleting_every_command_still_works(commands_path):
+    """Clearing the list is a legitimate user action when the file reads fine."""
+    config.save_custom_commands({"talk type": "TalkType"})
+    config.save_custom_commands({})
+    assert config.load_custom_commands() == {}
+
+
+def test_saving_commands_on_a_fresh_install_is_never_blocked(commands_path):
+    assert not commands_path.exists()
+    assert config.load_custom_commands() == {}
+    config.save_custom_commands({"talk type": "TalkType"})
+    assert config.load_custom_commands() == {"talk type": "TalkType"}
 
 
 def test_custom_commands_round_trip(commands_path):
@@ -529,3 +574,109 @@ def test_repair_happens_once_even_without_a_cache_reset(config_path):
         config.write_text_atomic = original
 
     assert len(writes) == 1, f"repaired {len(writes)} times in one process"
+
+
+# --- an unreadable (but intact) config must never be overwritten -----------
+
+def test_a_transient_read_error_does_not_pin_the_process_to_defaults(config_path,
+                                                                     monkeypatch):
+    """A one-off read failure must not poison the cache.
+
+    _config_mtime was updated *before* the read, so after an EACCES the
+    defaults were cached under the real file's mtime and every later
+    load_config() returned them from cache — the good file on disk was
+    never read again for the life of the process.
+    """
+    settings = config.Settings()
+    settings.model = "large-v3"
+    config.save_config(settings)
+    config._config_cache = None
+    config._config_mtime = 0.0
+
+    real = config._load_toml_file
+    calls = {"n": 0}
+
+    def flaky(path):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise OSError(13, "Permission denied")
+        return real(path)
+
+    monkeypatch.setattr(config, "_load_toml_file", flaky)
+
+    first = config.load_config()
+    assert first.model == "small"          # defaults for this call only
+
+    second = config.load_config()
+    assert second.model == "large-v3", "the good file on disk was never re-read"
+
+
+def test_an_unreadable_config_is_not_overwritten_with_defaults(config_path,
+                                                               monkeypatch):
+    """The killer combination: the tray's update check calls
+    save_config(load_config()) five seconds after launch. If the config
+    could not be READ, load_config returns defaults — and saving them
+    destroys a file whose contents were perfectly good.
+    """
+    settings = config.Settings()
+    settings.model = "large-v3"
+    settings.hotkey = "F8"
+    config.save_config(settings)
+    good = config_path.read_text()
+    config._config_cache = None
+    config._config_mtime = 0.0
+
+    def unreadable(path):
+        raise OSError(13, "Permission denied")
+
+    monkeypatch.setattr(config, "_load_toml_file", unreadable)
+
+    loaded = config.load_config()
+    assert loaded.model == "small"         # defaults, as designed
+
+    # The tray now writes that back — this must not destroy the file.
+    with pytest.raises(config.ConfigNotLoadedError):
+        config.save_config(loaded)
+
+    assert config_path.read_text() == good, "unreadable config was overwritten"
+
+
+def test_saving_still_works_once_the_config_can_be_read_again(config_path,
+                                                              monkeypatch):
+    """The refusal must clear itself — fixing the permissions and carrying
+    on must not leave the app permanently unable to save."""
+    settings = config.Settings()
+    settings.model = "large-v3"
+    config.save_config(settings)
+    config._config_cache = None
+    config._config_mtime = 0.0
+
+    real = config._load_toml_file
+    broken = {"yes": True}
+
+    def flaky(path):
+        if broken["yes"]:
+            raise OSError(13, "Permission denied")
+        return real(path)
+
+    monkeypatch.setattr(config, "_load_toml_file", flaky)
+    config.load_config()
+
+    broken["yes"] = False
+    recovered = config.load_config()
+    assert recovered.model == "large-v3"
+
+    recovered.model = "medium"
+    config.save_config(recovered)          # must not raise
+    assert "medium" in config_path.read_text()
+
+
+def test_saving_a_fresh_install_is_never_blocked(config_path):
+    """No file on disk yet is not a read failure — first save must work."""
+    assert not config_path.exists()
+    config._config_cache = None
+    config._config_mtime = 0.0
+    loaded = config.load_config()
+    loaded.model = "medium"
+    config.save_config(loaded)
+    assert "medium" in config_path.read_text()

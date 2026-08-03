@@ -415,15 +415,27 @@ def download_update(
         if progress_callback:
             progress_callback("Starting download...", 0)
 
-        # Look up the expected hash (older releases have no checksums file —
-        # in that case we still verify the byte count, just not the hash)
+        # Look up the expected hash. Releases published before checksums
+        # existed pass checksums_url=None, and only those may skip the hash.
+        #
+        # If the release DOES publish a checksums file and we still cannot get
+        # a hash for this filename, that is a failure, not a licence to
+        # proceed: the asset may be truncated, malformed, or serving someone
+        # else's content. This used to log "skipping hash check" and install
+        # the download anyway, which made the verification useless in exactly
+        # the situations it exists to catch.
         expected_sha256 = None
         if checksums_url:
             expected_sha256 = fetch_expected_sha256(checksums_url, filename)
-            if expected_sha256:
-                logger.info(f"Verifying download against published sha256 for {filename}")
-            else:
-                logger.warning(f"No published checksum found for {filename} — skipping hash check")
+            if not expected_sha256:
+                logger.error(
+                    f"{filename} is not listed in the release's SHA256SUMS.txt — "
+                    f"refusing to install an unverified update"
+                )
+                if progress_callback:
+                    progress_callback("Could not verify the update's integrity", 0)
+                return None
+            logger.info(f"Verifying download against published sha256 for {filename}")
 
         def progress_hook(downloaded, total):
             if progress_callback and total > 0:

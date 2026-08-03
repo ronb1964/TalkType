@@ -152,6 +152,14 @@ HOTKEY_OPTIONS = ["F8", "F9", "F10", "F11", "F12", "F1", "F2", "F3", "F4", "F5",
 # The tray owns the D-Bus name and relays signals to the GNOME extension.
 _tray_dbus_proxy = None
 
+# Every call to the tray is made from the input thread, which holds an
+# exclusive grab on all keyboards while recording. dbus-python's default
+# reply timeout is 25 seconds, so a busy tray — one loading a Whisper model
+# on its main loop, say — froze the user's keyboard system-wide for that
+# long, in every application, with no way to recover but to wait.
+# These are fire-and-forget notifications: a late one is worthless anyway.
+_TRAY_DBUS_TIMEOUT = 1.5
+
 # Thread-safe recording command flags — set by signal handler or D-Bus thread, consumed by evdev loop.
 # Using two separate Events (rather than one flag) so start and stop can't overwrite each other.
 _cmd_start_recording = threading.Event()
@@ -177,21 +185,17 @@ def _notify_tray_recording_state(is_recording: bool):
     The tray process owns the D-Bus name that the GNOME extension listens to.
     App.py cannot emit signals that the extension will see, so we call
     the tray's NotifyRecordingState method which then emits the signal.
+
+    Called from start_recording/stop_recording — that is, with every keyboard
+    exclusively grabbed. It must never block for long: see _TRAY_DBUS_TIMEOUT.
     """
-    global _tray_dbus_proxy
     try:
         import dbus
-        if _tray_dbus_proxy is None:
-            import dbus.mainloop.glib
-            dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
-            bus = dbus.SessionBus()
-            _tray_dbus_proxy = bus.get_object(
-                'io.github.ronb1964.TalkType',
-                '/io/github/ronb1964/TalkType'
-            )
-        _tray_dbus_proxy.NotifyRecordingState(
+        proxy = _get_tray_dbus_proxy()
+        proxy.NotifyRecordingState(
             dbus.Boolean(is_recording),
-            dbus_interface='io.github.ronb1964.TalkType'
+            dbus_interface='io.github.ronb1964.TalkType',
+            timeout=_TRAY_DBUS_TIMEOUT,
         )
     except Exception as e:
         logger.debug(f"Could not notify tray of recording state: {e}")
@@ -208,7 +212,14 @@ def _handle_sigusr2(signum, frame):
         print("[hotkey-test] Test mode ENABLED (SIGUSR2)", flush=True)
 
 def _get_tray_dbus_proxy():
-    """Get or create the D-Bus proxy for communicating with the tray process."""
+    """Get or create the D-Bus proxy for communicating with the tray process.
+
+    introspect=False matters: the default blocking Introspect() call is itself
+    subject to the 25-second reply timeout, so building the proxy while the
+    tray was busy doubled the worst-case stall to ~50s. The three methods we
+    call take 'b', 's' and no arguments, all of which dbus-python infers
+    correctly from the Python values, so introspection buys us nothing.
+    """
     global _tray_dbus_proxy
     import dbus
     if _tray_dbus_proxy is None:
@@ -217,7 +228,8 @@ def _get_tray_dbus_proxy():
         bus = dbus.SessionBus()
         _tray_dbus_proxy = bus.get_object(
             'io.github.ronb1964.TalkType',
-            '/io/github/ronb1964/TalkType'
+            '/io/github/ronb1964/TalkType',
+            introspect=False,
         )
     return _tray_dbus_proxy
 
@@ -232,7 +244,8 @@ def _notify_tray_hotkey_pressed(key_name: str):
         proxy = _get_tray_dbus_proxy()
         proxy.NotifyHotkeyPressed(
             key_name,
-            dbus_interface='io.github.ronb1964.TalkType'
+            dbus_interface='io.github.ronb1964.TalkType',
+            timeout=_TRAY_DBUS_TIMEOUT,
         )
     except Exception as e:
         logger.debug(f"Could not notify tray of hotkey press: {e}")
@@ -242,7 +255,10 @@ def _show_voice_commands_via_dbus():
     """Tell the tray to show the voice commands quick reference via D-Bus."""
     try:
         proxy = _get_tray_dbus_proxy()
-        proxy.ShowVoiceCommands(dbus_interface='io.github.ronb1964.TalkType')
+        proxy.ShowVoiceCommands(
+            dbus_interface='io.github.ronb1964.TalkType',
+            timeout=_TRAY_DBUS_TIMEOUT,
+        )
     except Exception as e:
         logger.debug(f"Could not show voice commands via D-Bus: {e}")
 
@@ -745,6 +761,40 @@ def _release_all_grabs() -> None:
     _grabbed_devices = []
 
 
+def _drop_dead_devices(dead_devices, devices, mode, cfg) -> None:
+    """Remove input devices that failed mid-read, ending a recording we could
+    no longer end any other way.
+
+    In hold mode the key-up that stops recording can only come from the device
+    the key was pressed on. If that device dies — a wireless receiver blip, a
+    USB reset, a resume from suspend — the release event is unreachable and
+    state.is_recording would stay True for the life of the process.
+
+    That matters far more than the lost device: both the stranded-grab
+    backstop and the auto-timeout are gated on `not state.is_recording`, so a
+    stuck flag leaves every *other* keyboard exclusively grabbed indefinitely
+    and stops the service ever timing out. The user cannot type anywhere, and
+    the only way back is the tray. So: end the recording deliberately.
+    """
+    if not dead_devices:
+        return
+
+    for dev in dead_devices:
+        if dev in devices:
+            devices.remove(dev)
+
+    if state.is_recording and mode == "hold":
+        logger.warning(
+            "Input device died while the hold hotkey was down — ending the "
+            "recording, since its key-up can no longer arrive"
+        )
+        _release_all_grabs()
+        stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
+                       cfg.auto_space, cfg.auto_period, cfg.injection_mode)
+
+    dead_devices.clear()
+
+
 def _release_grabs_if_not_recording() -> bool:
     """Safety net: holding an exclusive grab while not recording is always a bug.
 
@@ -927,7 +977,12 @@ def _type_text(text: str) -> bool:
                     ok = False
             if i < len(parts) - 1:  # Not the last part, send Shift+Enter
                 time.sleep(0.05)  # Small delay between text and key
-                _send_shift_enter()
+                # The line break is part of the text. Dropping this return
+                # value reported a partial injection as a complete one, and
+                # the undo buffer then held one character more than the
+                # document had — so "undo that" ate into the user's own text.
+                if not _send_shift_enter():
+                    ok = False
                 time.sleep(0.05)  # Small delay after key
         return ok
 
@@ -941,7 +996,8 @@ def _type_text(text: str) -> bool:
                     ok = False
             if i < len(parts) - 1:  # Not the last part, send Enter
                 time.sleep(0.05)  # Small delay between text and key
-                _send_enter()
+                if not _send_enter():
+                    ok = False
                 time.sleep(0.05)  # Small delay after key
         return ok
 
@@ -1797,21 +1853,20 @@ def _handle_key_event(event, mode, hold_key, toggle_key,
     if voice_cmds_combo and event.value == 1:
         required_mods, main_key = voice_cmds_combo
         if event.code == main_key and _check_modifiers_held(required_mods, held_modifiers):
-            # Briefly grab all devices to prevent keypress leaking to focused app
-            temp_grabbed = []
-            for grab_dev in devices:
-                try:
-                    grab_dev.grab()
-                    temp_grabbed.append(grab_dev)
-                except Exception:
-                    pass
-            _show_voice_commands_via_dbus()
-            # Ungrab immediately — we only needed to suppress the key event
-            for grab_dev in temp_grabbed:
-                try:
-                    grab_dev.ungrab()
-                except Exception:
-                    pass
+            # Briefly grab the keyboards to stop the keypress leaking into the
+            # focused app. Three things this used to get wrong, all of which
+            # the recording path already had right:
+            #   - it grabbed EVERY device, so the pointer froze too;
+            #   - it tracked them in a local list, invisible to
+            #     _release_all_grabs() and the stranded-grab backstop;
+            #   - an exception from the tray call skipped the ungrab entirely,
+            #     stranding the grabs with no way to recover them.
+            # Same helpers as recording, and a finally that always releases.
+            _grab_all_devices([d for d in devices if _is_keyboard_device(d)])
+            try:
+                _show_voice_commands_via_dbus()
+            finally:
+                _release_all_grabs()
             return
 
     # --- Hold-to-talk: hold key down to record, release to stop ---
@@ -1970,11 +2025,7 @@ def _loop_evdev(cfg: Settings, input_device_idx):
                 # turned a microphone error into an unexplained keyboard lockup.
                 logger.error(f"Error handling input event: {e}", exc_info=True)
 
-        if dead_devices:
-            for dev in dead_devices:
-                if dev in devices:
-                    devices.remove(dev)
-            dead_devices.clear()
+        _drop_dead_devices(dead_devices, devices, mode, cfg)
 
         # Backstop: we must never hold a keyboard grab while not recording.
         _release_grabs_if_not_recording()

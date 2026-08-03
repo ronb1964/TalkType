@@ -2336,7 +2336,14 @@ def show_hotkey_test_dialog():
     def on_continue(button):
         config.hotkey = current_hold_key[0]
         config.toggle_hotkey = current_toggle_key[0]
-        save_config(config)
+        try:
+            save_config(config)
+        except Exception as e:
+            # Never leave the user stuck on a dialog whose Continue button
+            # appears to do nothing. save_config refuses to write when the
+            # settings file could not be read, which is the right call — but
+            # onboarding must still move on rather than silently wedging.
+            logger.error(f"Could not save hotkey choice: {e}")
         dialog.response(Gtk.ResponseType.OK)
 
     continue_button.connect("clicked", on_continue)

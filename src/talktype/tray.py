@@ -646,7 +646,7 @@ class DictationTray:
 
         try:
             from .config import load_config, save_config
-            from .model_helper import is_model_cached, download_model_with_progress
+            from .model_helper import is_model_cached_fast, download_model_with_progress
 
             # large-v3 requires NVIDIA GPU + CUDA libraries.
             # Check BEFORE anything else — if CUDA missing, show a dialog and bail out.
@@ -750,8 +750,14 @@ class DictationTray:
 
                     return  # Always stop here — never fall through to model download
 
-            # Check if model is cached
-            if not is_model_cached(model_name):
+            # Check if model is cached. The fast variant answers this from
+            # file presence; is_model_cached() answered it by constructing a
+            # real WhisperModel, which blocks this GTK main loop for seconds
+            # to tens of seconds on large-v3. While it is blocked the tray
+            # dispatches no D-Bus, and the dictation service calls into the
+            # tray from the thread that holds an exclusive grab on every
+            # keyboard — so this call could freeze the whole system's input.
+            if not is_model_cached_fast(model_name):
                 logger.info(f"Model {model_name} not cached, showing download dialog")
                 # Show download dialog - this returns the model or None if cancelled
                 model = download_model_with_progress(model_name, device="cpu", show_confirmation=True)

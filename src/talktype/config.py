@@ -24,6 +24,17 @@ DATA_DIR = "TalkType-dev" if DEV_MODE else "TalkType"
 CONFIG_PATH = os.path.expanduser(f"~/.config/{CONFIG_DIR}/config.toml")
 
 
+class ConfigNotLoadedError(Exception):
+    """Refused to save because the settings on disk were never read.
+
+    When load_config() cannot READ the file (permissions, a bad mount, an
+    I/O error) it returns defaults so the app can keep running. Those
+    defaults must never be written back: the file's contents may be
+    perfectly good, and overwriting it destroys every setting the user has
+    — silently, because the app looks like it started normally.
+    """
+
+
 class ConfigError(Exception):
     """One or more settings hold values the app cannot use.
 
@@ -221,6 +232,11 @@ _TYPE_CASTERS = {"str": str, "bool": bool, "int": int}
 _config_cache = None
 _config_mtime = 0.0
 
+# True when the last load_config() could not READ an existing settings file.
+# Guards save_config() so the defaults handed out during the failure are never
+# written over a file whose contents may be perfectly good.
+_config_read_failed = False
+
 def _recover_damaged_config(error: Exception) -> Settings:
     """Set a damaged config aside, recover the last known good settings, and
     write them back so the file is actually repaired.
@@ -312,18 +328,24 @@ def _persist_recovered_config(recovered: Settings) -> None:
 
 
 def load_config() -> Settings:
-    global _config_cache, _config_mtime
+    global _config_cache, _config_mtime, _config_read_failed
 
-    # Return cached config if the file hasn't been modified
+    # Return cached config if the file hasn't been modified.
+    # The mtime is recorded only AFTER a successful read (see the end of this
+    # function). Stamping it here meant a single transient read error cached
+    # the defaults under the real file's mtime, so the cache looked current
+    # forever and the good file on disk was never read again.
+    current_mtime = None
     try:
         current_mtime = os.path.getmtime(CONFIG_PATH)
         if _config_cache is not None and current_mtime == _config_mtime:
             return _config_cache
-        _config_mtime = current_mtime
     except OSError:
         # File doesn't exist yet — return cache if we have one
         if _config_cache is not None:
             return _config_cache
+
+    _config_read_failed = False
 
     s = Settings()
     if os.path.exists(CONFIG_PATH):
@@ -350,6 +372,13 @@ def load_config() -> Settings:
                 print("    Using defaults for now; the file has been left untouched.", file=sys.stderr)
                 load_config._read_error_printed = True
             s = _config_cache or Settings()
+            # Hand out defaults so the app keeps running, but mark them as
+            # never-loaded: save_config() must refuse to write them back over
+            # a file it could not read. The tray's daily update check calls
+            # save_config(load_config()) five seconds after launch, which
+            # turned a chmod into permanent loss of every setting.
+            _config_read_failed = True
+            current_mtime = None
         except Exception as e:
             # Genuinely unparseable content. Preserve the damaged file and fall
             # back to the last known good settings. Silently resetting to
@@ -389,6 +418,10 @@ def load_config() -> Settings:
         s = _repair_invalid_fields(s, e)
 
     _config_cache = s
+    # Only now is the cache known to reflect the file. On a failed read
+    # current_mtime is None, so the next call re-reads instead of serving
+    # defaults from a cache that looks up to date.
+    _config_mtime = current_mtime
     return s
 
 
@@ -462,7 +495,18 @@ def save_config(s: Settings) -> None:
     """Save Settings to TOML file.
 
     Uses dataclass introspection so new fields are automatically included.
+
+    Refuses to write when the last load_config() could not read an existing
+    settings file: what it returned were defaults, and writing those back
+    destroys the real settings. Losing an update-check timestamp is a far
+    better outcome than losing the user's hotkey, model and device.
     """
+    if _config_read_failed and os.path.exists(CONFIG_PATH):
+        raise ConfigNotLoadedError(
+            f"Refusing to overwrite {CONFIG_PATH}: it could not be read, so the "
+            f"settings in memory are defaults rather than the user's own."
+        )
+
     lines = ["# TalkType config"]
     for fld in fields(s):
         lines.append(f"{fld.name} = {_toml_value(getattr(s, fld.name))}")
@@ -591,6 +635,11 @@ def find_input_device(mic_substring: str | None) -> int | None:
 # Custom voice commands configuration
 CUSTOM_COMMANDS_PATH = os.path.expanduser(f"~/.config/{CONFIG_DIR}/custom_commands.toml")
 
+# True when the last load_custom_commands() could not read an existing file.
+# Same guard as _config_read_failed: an empty dict produced by a read failure
+# must never be written back over the user's real commands.
+_commands_read_failed = False
+
 def load_custom_commands() -> dict[str, str]:
     """
     Load custom voice commands from TOML file.
@@ -599,6 +648,9 @@ def load_custom_commands() -> dict[str, str]:
         dict: Mapping of spoken phrases to replacement text
               e.g., {"my email": "user@example.com", "signature": "Best regards,\\nRon"}
     """
+    global _commands_read_failed
+
+    _commands_read_failed = False
     commands = {}
     if os.path.exists(CUSTOM_COMMANDS_PATH):
         try:
@@ -606,6 +658,11 @@ def load_custom_commands() -> dict[str, str]:
             commands = dict(data.get("commands", {}))
         except Exception as e:
             print(f"Warning: Could not load custom commands: {e}")
+            # Preferences rebuilds its list from whatever this returns and
+            # writes it back on every Apply/OK. Returning a bare {} therefore
+            # deleted every custom command the moment the user clicked Apply
+            # for any unrelated reason. Mark the failure so the writer refuses.
+            _commands_read_failed = True
     return commands
 
 def save_custom_commands(commands: dict[str, str]) -> None:
@@ -614,7 +671,18 @@ def save_custom_commands(commands: dict[str, str]) -> None:
 
     Args:
         commands: Dictionary mapping spoken phrases to replacement text
+
+    Raises:
+        ConfigNotLoadedError: if the existing file could not be read. What the
+            caller is holding is an empty list produced by that failure, not
+            the user's commands, and writing it would delete all of them.
     """
+    if _commands_read_failed and os.path.exists(CUSTOM_COMMANDS_PATH):
+        raise ConfigNotLoadedError(
+            f"Refusing to overwrite {CUSTOM_COMMANDS_PATH}: it could not be read, "
+            f"so the commands in memory are empty rather than the user's own."
+        )
+
     lines = [
         "# TalkType Custom Voice Commands",
         '# Format: "spoken phrase" = "replacement text"',

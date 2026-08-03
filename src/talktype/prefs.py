@@ -9,8 +9,9 @@ import atexit
 import dbus
 import dbus.mainloop.glib
 from dataclasses import asdict
-from .config import (CONFIG_PATH, Settings, merge_changed_keys, load_custom_commands,
-                     save_custom_commands, write_text_atomic)
+from .config import (CONFIG_PATH, ConfigNotLoadedError, Settings, merge_changed_keys,
+                     load_custom_commands, save_custom_commands, write_text_atomic,
+                     _toml_value)
 
 # D-Bus interface for communicating with the TalkType service
 DBUS_SERVICE = "io.github.ronb1964.TalkType"
@@ -398,7 +399,15 @@ class PreferencesWindow:
                 try:
                     on_disk = load_toml(CONFIG_PATH)
                 except Exception as e:
-                    print(f"Error re-reading config for merge: {e}")
+                    # The file exists but cannot be read. Everything this
+                    # window is showing is therefore defaults, not the user's
+                    # settings — and writing them would both persist those
+                    # defaults (blank hotkey included) and copy the damaged
+                    # file over config.toml.bak, destroying the last good
+                    # copy. Leave it alone; config.load_config()'s repair
+                    # path is what knows how to recover this safely.
+                    print(f"Refusing to save over an unreadable config: {e}")
+                    return False
             # Base: window-open snapshot (has every key incl. defaults),
             # updated with whatever is currently on disk.
             base = dict(self._config_at_open)
@@ -410,14 +419,15 @@ class PreferencesWindow:
             # interruption — most realistically a full disk — left the user with
             # an empty settings file and no hotkey. Shared with save_config()
             # so both writers get the same guarantee.
+            # Serialise through config._toml_value, the SAME writer
+            # config.save_config() uses. This window used to have its own
+            # copy that wrapped strings in bare quotes, so a microphone
+            # named 'Blue Yeti "Nano" USB' produced a file that would not
+            # parse — and the next load quarantined it and reset every
+            # setting, hotkey included. One writer, one escaping rule.
             lines = ["# TalkType config"]
             for key, value in merged.items():
-                if isinstance(value, bool):
-                    lines.append(f'{key} = {str(value).lower()}')
-                elif isinstance(value, str):
-                    lines.append(f'{key} = "{value}"')
-                else:
-                    lines.append(f'{key} = {value}')
+                lines.append(f"{key} = {_toml_value(value)}")
             write_text_atomic(CONFIG_PATH, "\n".join(lines) + "\n")
 
             # Future saves in this window diff against what we just wrote
@@ -753,12 +763,9 @@ class PreferencesWindow:
         for key in hotkeys:
             self.hotkey_combo.append(key, key)
         
-        # Set current selection or default to F8
-        current_hotkey = self.config.get("hotkey", "F8")
-        if current_hotkey in hotkeys:
-            self.hotkey_combo.set_active_id(current_hotkey)
-        else:
-            self.hotkey_combo.set_active_id("F8")  # Default fallback
+        # Selection for both combos is set once the toggle combo exists, by
+        # _apply_hotkey_fallbacks — see there for why the fallback must also
+        # be written back into self.config.
 
         self.hotkey_combo.connect("changed", lambda x: self.update_config("hotkey", x.get_active_id()))
         # Tooltip moved to label to avoid interference with dropdown popup
@@ -777,12 +784,8 @@ class PreferencesWindow:
         for key in hotkeys:
             self.toggle_combo.append(key, key)
             
-        # Set current selection or default to F9
-        current_toggle = self.config.get("toggle_hotkey", "F9")
-        if current_toggle in hotkeys:
-            self.toggle_combo.set_active_id(current_toggle)
-        else:
-            self.toggle_combo.set_active_id("F9")  # Default fallback
+        # Both combos exist now, so set their selections together.
+        self._apply_hotkey_fallbacks(hotkeys)
 
         self.toggle_combo.connect("changed", lambda x: self.update_config("toggle_hotkey", x.get_active_id()))
         # Tooltip moved to label to avoid interference with dropdown popup
@@ -2015,15 +2018,50 @@ class PreferencesWindow:
             model.remove(iter)
     
     def _save_custom_commands(self):
-        """Save custom commands from the list store."""
+        """Save custom commands from the list store.
+
+        Returns True if they were written, False if the existing file could
+        not be read — in which case the list on screen is empty because of
+        that failure, not because the user cleared it, and writing it would
+        delete every command they have.
+        """
         commands = {}
         for row in self.commands_store:
             phrase = row[0].strip().lower()
             replacement = row[1]
             if phrase:  # Only save non-empty phrases
                 commands[phrase] = replacement
-        save_custom_commands(commands)
+        try:
+            save_custom_commands(commands)
+            return True
+        except ConfigNotLoadedError as e:
+            # Runs first in both on_apply and on_ok — letting this propagate
+            # would abort the whole save and leave the window stuck open.
+            print(f"Custom commands not saved: {e}")
+            return False
     
+    def _apply_hotkey_fallbacks(self, hotkeys):
+        """Select the configured hotkeys, falling back to F8/F9 for display —
+        and record that fallback in self.config.
+
+        The fallback used to be display-only. A config with no hotkey (the
+        Settings default is "", which happens when onboarding is closed
+        instead of completed) showed "F8" in the dropdown while self.config
+        still held "". Clicking OK then saved the blank, so dictation stayed
+        dead; and because the combo was already on F8, re-selecting it emitted
+        no 'changed' signal, leaving no way to fix it from this screen at all.
+
+        Writing the fallback back means what the user sees is what gets saved.
+        """
+        for key, combo, default in (
+            ("hotkey", self.hotkey_combo, "F8"),
+            ("toggle_hotkey", self.toggle_combo, "F9"),
+        ):
+            current = self.config.get(key, default)
+            chosen = current if current in hotkeys else default
+            combo.set_active_id(chosen)
+            self.config[key] = chosen
+
     def _on_combo_button_press(self, widget, event):
         """Handle button press events on combo boxes to ensure they open reliably."""
         # Ensure the widget has focus before processing the click

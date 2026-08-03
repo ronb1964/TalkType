@@ -249,3 +249,42 @@ def test_undo_shrinks_its_buffer_when_the_backspaces_land(monkeypatch, undo_env)
     app._handle_undo("undo last word", beeps_on=False, notify_on=False)
 
     assert app.state.last_inserted_text == "hello "
+
+
+# --- line breaks are part of the text, and part of the report ---------------
+
+def test_type_text_reports_failure_when_the_enter_key_fails(monkeypatch):
+    """A dictation containing "new line" is typed in parts with an Enter key
+    between them. _type_text checked the text parts but threw away the return
+    of _send_enter(), so a dictation whose line breaks never landed was
+    reported as fully injected.
+
+    The undo buffer then records one more character than the document
+    actually received per failed break, and "undo that" backspaces that far
+    past the dictation — into text the user typed themselves.
+    """
+    monkeypatch.setattr(app, "_type_text_raw", lambda t: True)
+    monkeypatch.setattr(app, "_send_enter", lambda: False)
+
+    assert app._type_text("hello\nworld") is False
+
+
+def test_type_text_reports_failure_when_the_shift_enter_key_fails(monkeypatch):
+    monkeypatch.setattr(app, "_type_text_raw", lambda t: True)
+    monkeypatch.setattr(app, "_send_shift_enter", lambda: False)
+
+    assert app._type_text("hello§SHIFT_ENTER§world") is False
+
+
+def test_type_text_reports_success_when_every_part_lands(monkeypatch):
+    monkeypatch.setattr(app, "_type_text_raw", lambda t: True)
+    monkeypatch.setattr(app, "_send_enter", lambda: True)
+
+    assert app._type_text("hello\nworld") is True
+
+
+def test_type_text_still_reports_failure_when_a_text_part_fails(monkeypatch):
+    monkeypatch.setattr(app, "_type_text_raw", lambda t: False)
+    monkeypatch.setattr(app, "_send_enter", lambda: True)
+
+    assert app._type_text("hello\nworld") is False

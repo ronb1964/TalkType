@@ -445,3 +445,177 @@ def test_the_apps_own_injection_device_is_not_grabbed():
     })
 
     assert app._is_keyboard_device(ydotool) is False
+
+
+# --- the Voice Commands hotkey is a grab path too ---------------------------
+
+def _press_voice_combo(devices, monkeypatch, dbus=None):
+    """Press the Ctrl+Alt+V style combo (no modifiers required, for brevity)."""
+    monkeypatch.setattr(app, "_show_voice_commands_via_dbus", dbus or (lambda: None))
+    app._handle_key_event(FakeEvent(ecodes.KEY_V, 1), "hold", HOLD, TOGGLE,
+                          (set(), ecodes.KEY_V), set(), devices, FakeConfig(), 0)
+
+
+def test_voice_commands_hotkey_does_not_grab_the_mouse(key_env, monkeypatch):
+    """This branch grabbed every device under /dev/input, pointer included,
+    while the recording path was fixed to filter to keyboards. The grab is
+    held across the call to the tray, so that is when the pointer freezes —
+    check the state *during* the call, not after it."""
+    kb, mx = keyboard(), mouse()
+    during = {}
+
+    _press_voice_combo([kb, mx], monkeypatch,
+                       dbus=lambda: during.update(mouse=mx.is_grabbed,
+                                                  keyboard=kb.is_grabbed))
+
+    assert during["mouse"] is False, "pointer was frozen while the tray was called"
+
+
+def test_voice_commands_grabs_are_visible_to_the_recovery_backstop(key_env,
+                                                                   monkeypatch):
+    """The grabs were tracked in a local list, so _release_all_grabs() and the
+    stranded-grab backstop could not see or recover them."""
+    kb = keyboard()
+    during = {}
+
+    _press_voice_combo([kb], monkeypatch,
+                       dbus=lambda: during.update(tracked=list(app._grabbed_devices)))
+
+    assert kb in during["tracked"], "grab was invisible to the recovery paths"
+
+
+def test_voice_commands_hotkey_leaves_nothing_grabbed(key_env, monkeypatch):
+    kb, mx = keyboard(), mouse()
+    _press_voice_combo([kb, mx], monkeypatch)
+
+    assert not kb.is_grabbed
+    assert not mx.is_grabbed
+    assert app._grabbed_devices == []
+
+
+def test_voice_commands_grabs_are_released_even_if_the_tray_call_fails(key_env,
+                                                                       monkeypatch):
+    """The grabs were held in a local list the recovery paths cannot see, so
+    an exception between grab and ungrab stranded them permanently.
+
+    The exception itself is allowed to propagate — the event loop logs it
+    with a traceback (app.py) rather than swallowing it silently. What must
+    never happen is the keyboard staying grabbed on the way out.
+    """
+    kb = keyboard()
+
+    def boom():
+        raise RuntimeError("tray is not responding")
+
+    with pytest.raises(RuntimeError):
+        _press_voice_combo([kb], monkeypatch, dbus=boom)
+
+    assert not kb.is_grabbed, "keyboard left grabbed after the tray call failed"
+    assert app._grabbed_devices == []
+
+
+# --- no unbounded blocking while the keyboard is grabbed --------------------
+
+class RecordingProxy:
+    """Stands in for the tray's D-Bus proxy, recording how it was called."""
+
+    def __init__(self):
+        self.calls = []
+
+    def __getattr__(self, name):
+        def method(*args, **kwargs):
+            self.calls.append((name, kwargs))
+        return method
+
+
+@pytest.fixture
+def tray_proxy(monkeypatch):
+    proxy = RecordingProxy()
+    monkeypatch.setattr(app, "_tray_dbus_proxy", proxy)
+    yield proxy
+    monkeypatch.setattr(app, "_tray_dbus_proxy", None)
+
+
+def test_recording_state_notification_is_time_bounded(tray_proxy):
+    """_notify_tray_recording_state runs inside start_recording — after every
+    keyboard has been exclusively grabbed. dbus-python's default reply
+    timeout is 25s, and building the proxy adds a 25s introspect on top, so
+    an unresponsive tray froze every keyboard system-wide for ~50 seconds.
+    Nothing on that path may block without a bound.
+    """
+    app._notify_tray_recording_state(True)
+
+    assert tray_proxy.calls, "no D-Bus call was made"
+    _, kwargs = tray_proxy.calls[0]
+    assert "timeout" in kwargs, "unbounded call while the keyboard is grabbed"
+    assert kwargs["timeout"] <= 5
+
+
+def test_voice_commands_notification_is_time_bounded(tray_proxy):
+    """Same path, but this one also holds the grab across the call."""
+    app._show_voice_commands_via_dbus()
+
+    assert tray_proxy.calls
+    _, kwargs = tray_proxy.calls[0]
+    assert "timeout" in kwargs
+    assert kwargs["timeout"] <= 5
+
+
+def test_hotkey_press_notification_is_time_bounded(tray_proxy):
+    app._notify_tray_hotkey_pressed("hold")
+
+    assert tray_proxy.calls
+    _, kwargs = tray_proxy.calls[0]
+    assert "timeout" in kwargs
+    assert kwargs["timeout"] <= 5
+
+
+# --- a device dying mid-hold must not strand the grab -----------------------
+
+def test_dropping_a_device_mid_hold_ends_the_recording(key_env):
+    """The hold hotkey's key-up can only arrive from the device it was
+    pressed on. If that device dies — a Unifying receiver blip, a USB reset,
+    a resume from suspend — the release event is unreachable and
+    state.is_recording stays True forever.
+
+    That is not a cosmetic leak: _release_grabs_if_not_recording() is gated
+    on `not is_recording`, so the backstop is disabled and every OTHER
+    keyboard stays exclusively grabbed indefinitely. The auto-timeout is
+    gated the same way, so the process never exits either.
+    """
+    started, stopped = key_env
+    kb1, kb2 = keyboard("dies"), keyboard("survives")
+    devices = [kb1, kb2]
+    press_hold(devices)
+    assert app.state.is_recording
+
+    app._drop_dead_devices([kb1], devices, "hold", FakeConfig())
+
+    assert app.state.is_recording is False, "recording could never be ended"
+    assert stopped, "stop_recording was not called"
+    assert kb1 not in devices
+    assert kb2 in devices
+
+
+def test_dropping_a_device_releases_every_other_keyboard(key_env):
+    kb1, kb2 = keyboard("dies"), keyboard("survives")
+    devices = [kb1, kb2]
+    press_hold(devices)
+    assert kb2.is_grabbed
+
+    app._drop_dead_devices([kb1], devices, "hold", FakeConfig())
+
+    assert not kb2.is_grabbed, "other keyboards left grabbed — user cannot type"
+    assert app._grabbed_devices == []
+
+
+def test_dropping_a_device_while_idle_just_removes_it(key_env):
+    """No recording in progress: drop the handle and carry on quietly."""
+    started, stopped = key_env
+    kb1, kb2 = keyboard("dies"), keyboard("survives")
+    devices = [kb1, kb2]
+
+    app._drop_dead_devices([kb1], devices, "hold", FakeConfig())
+
+    assert devices == [kb2]
+    assert not stopped, "stopped a recording that was never running"
