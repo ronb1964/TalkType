@@ -67,7 +67,8 @@ def _saveable(tmp_path, monkeypatch, config, at_open=None):
     """A stand-in window whose save_config() writes to a throwaway path."""
     monkeypatch.setattr(P, "CONFIG_PATH", str(tmp_path / "config.toml"))
     return SimpleNamespace(config=dict(config),
-                           _config_at_open=dict(at_open if at_open is not None else {}))
+                           _config_at_open=dict(at_open if at_open is not None else {}),
+                           _handle_autostart=lambda v: None)
 
 
 def test_save_config_escapes_double_quotes(tmp_path, monkeypatch):
@@ -241,3 +242,59 @@ def test_a_configured_hotkey_is_left_alone(monkeypatch):
 
     assert d.hotkey_combo.get_active_id() == "F10"
     assert d.config["hotkey"] == "F10"
+
+
+# --- "Launch at login" must follow the save, not the click ------------------
+
+def test_toggling_launch_at_login_does_not_take_effect_immediately():
+    """update_config wrote the autostart .desktop file the moment the box was
+    ticked. Clicking Cancel then discarded the config change but left the file
+    behind, so the checkbox and reality disagreed from then on — permanently,
+    since the next open reads the checkbox state from the config."""
+    applied = []
+    d = SimpleNamespace(config={"launch_at_login": False},
+                        _handle_autostart=lambda v: applied.append(v))
+
+    PreferencesWindow.update_config(d, "launch_at_login", True)
+
+    assert d.config["launch_at_login"] is True      # staged
+    assert applied == [], "autostart was changed before the user saved"
+
+
+def test_saving_applies_launch_at_login(tmp_path, monkeypatch):
+    applied = []
+    d = _saveable(tmp_path, monkeypatch,
+                  {"launch_at_login": True, "language_mode": "auto"},
+                  {"launch_at_login": False, "language_mode": "auto"})
+    d._handle_autostart = lambda v: applied.append(v)
+
+    assert PreferencesWindow.save_config(d) is True
+
+    assert applied == [True], "autostart was not applied when the user saved"
+
+
+def test_saving_with_it_off_applies_removal(tmp_path, monkeypatch):
+    applied = []
+    d = _saveable(tmp_path, monkeypatch,
+                  {"launch_at_login": False, "language_mode": "auto"},
+                  {"launch_at_login": True, "language_mode": "auto"})
+    d._handle_autostart = lambda v: applied.append(v)
+
+    assert PreferencesWindow.save_config(d) is True
+
+    assert applied == [False]
+
+
+def test_a_failing_autostart_does_not_break_saving(tmp_path, monkeypatch):
+    """Writing the .desktop file can fail (read-only home). The settings the
+    user just saved must still be saved."""
+    def boom(v):
+        raise OSError("read-only file system")
+
+    d = _saveable(tmp_path, monkeypatch,
+                  {"launch_at_login": True, "language_mode": "auto"},
+                  {"launch_at_login": False, "language_mode": "auto"})
+    d._handle_autostart = boom
+
+    assert PreferencesWindow.save_config(d) is True
+    assert tomllib.loads((tmp_path / "config.toml").read_text())["launch_at_login"] is True

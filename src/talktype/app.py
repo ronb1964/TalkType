@@ -690,6 +690,11 @@ def _resample_audio(audio, orig_sr, target_sr):
 # Devices we currently hold an exclusive grab on.
 _grabbed_devices = []
 
+# How often to look for input devices that have appeared or come back.
+# Frequent enough that a reconnected keyboard starts working on its own,
+# rare enough that it costs nothing in a loop running ~200 times a second.
+DEVICE_RESCAN_SECONDS = 3.0
+
 # Letter keys, used to tell a real keyboard from a device that merely reports
 # key events (power buttons, lid switches, mouse buttons, consumer-control nodes).
 # Built by name, not as a numeric range: evdev codes follow the physical
@@ -764,6 +769,42 @@ def _release_all_grabs() -> None:
         except Exception as e:
             logger.warning(f"Could not ungrab {getattr(dev, 'name', dev)}: {e}")
     _grabbed_devices = []
+
+
+def _rediscover_devices(devices) -> int:
+    """Add keyboards that have appeared since the last scan. Returns how many.
+
+    Devices were enumerated once at startup and never again, so a device
+    dropped by _drop_dead_devices — after a wireless receiver blip, a USB
+    reset or a resume from suspend — was gone for the life of the process.
+    On a single-keyboard machine that means the hotkey silently stops working
+    until TalkType is restarted, with only a log line the user never sees.
+
+    Matched on the device node path, which is what identifies a device across
+    reconnects here. Non-keyboards are ignored so this never grows the poll
+    list with mice or power buttons.
+    """
+    known = {getattr(d, "path", None) for d in devices}
+    added = 0
+    for path in list_devices():
+        if path in known:
+            continue
+        try:
+            dev = InputDevice(path)
+            if not _is_keyboard_device(dev):
+                continue
+            try:
+                dev.set_nonblocking(True)
+            except Exception:
+                pass
+            devices.append(dev)
+            added += 1
+            logger.info(f"Input device appeared, now monitoring: {dev.name}")
+        except Exception as e:
+            # A node we cannot open (permissions, disappeared mid-scan) must
+            # not stop the rest of the scan.
+            logger.debug(f"Could not open {path}: {e}")
+    return added
 
 
 def _drop_dead_devices(dead_devices, devices, mode, cfg) -> None:
@@ -1964,6 +2005,7 @@ def _loop_evdev(cfg: Settings, input_device_idx):
     for dev in devices:
         try: dev.set_nonblocking(True)
         except Exception: pass
+    last_device_scan = time.time()
 
     # First run check: exit early if onboarding not complete
     try:
@@ -2070,6 +2112,14 @@ def _loop_evdev(cfg: Settings, input_device_idx):
                 logger.error(f"Error handling input event: {e}", exc_info=True)
 
         _drop_dead_devices(dead_devices, devices, mode, cfg)
+
+        # Pick up keyboards that have (re)appeared. Only while idle: rescanning
+        # mid-recording would add an ungrabbed device to a grabbed set, letting
+        # the hotkey leak into the focused app. Throttled because it stats
+        # every node under /dev/input and this loop runs ~200x a second.
+        if not state.is_recording and current_time - last_device_scan >= DEVICE_RESCAN_SECONDS:
+            last_device_scan = current_time
+            _rediscover_devices(devices)
 
         # Backstop: we must never hold a keyboard grab while not recording.
         _release_grabs_if_not_recording()

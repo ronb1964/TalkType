@@ -633,3 +633,65 @@ def test_focused_window_query_is_time_bounded(tray_proxy):
     assert name == "GetFocusedWindowClass"
     assert "timeout" in kwargs, "unbounded call on the injection path"
     assert kwargs["timeout"] <= 5
+
+
+# --- devices that come back must be picked up again -------------------------
+
+def test_a_device_that_returns_is_monitored_again(monkeypatch):
+    """Devices were enumerated once at startup and never again. A wireless
+    receiver blip or a USB reset dropped the keyboard from the poll list for
+    good, so the hotkey silently stopped working until TalkType was restarted
+    — with only a log line the user never sees."""
+    kb = keyboard("reconnected")
+    monkeypatch.setattr(app, "list_devices", lambda: ["/dev/input/event3"])
+    monkeypatch.setattr(app, "InputDevice", lambda p: kb)
+
+    devices = []
+    added = app._rediscover_devices(devices)
+
+    assert added == 1
+    assert kb in devices
+
+
+def test_rediscovery_does_not_duplicate_devices_already_watched(monkeypatch):
+    existing = keyboard("already here")
+    existing.path = "/dev/input/event3"
+    monkeypatch.setattr(app, "list_devices", lambda: ["/dev/input/event3"])
+    monkeypatch.setattr(app, "InputDevice", lambda p: keyboard("duplicate"))
+
+    devices = [existing]
+    added = app._rediscover_devices(devices)
+
+    assert added == 0
+    assert devices == [existing]
+
+
+def test_rediscovery_ignores_non_keyboards(monkeypatch):
+    mx = mouse()
+    mx.path = "/dev/input/event9"
+    monkeypatch.setattr(app, "list_devices", lambda: ["/dev/input/event9"])
+    monkeypatch.setattr(app, "InputDevice", lambda p: mx)
+
+    devices = []
+
+    assert app._rediscover_devices(devices) == 0
+    assert devices == []
+
+
+def test_rediscovery_survives_an_unreadable_device(monkeypatch):
+    """Permission denied on one node must not stop the others being found."""
+    good = keyboard("good")
+    good.path = "/dev/input/event4"
+
+    def make(path):
+        if path == "/dev/input/event3":
+            raise OSError("permission denied")
+        return good
+
+    monkeypatch.setattr(app, "list_devices", lambda: ["/dev/input/event3", "/dev/input/event4"])
+    monkeypatch.setattr(app, "InputDevice", make)
+
+    devices = []
+
+    assert app._rediscover_devices(devices) == 1
+    assert good in devices

@@ -430,6 +430,16 @@ class PreferencesWindow:
                 lines.append(f"{key} = {_toml_value(value)}")
             write_text_atomic(CONFIG_PATH, "\n".join(lines) + "\n")
 
+            # Apply settings that live outside the config file, now that the
+            # save has actually happened. Doing this on toggle instead meant
+            # Cancel could not undo it.
+            try:
+                self._handle_autostart(bool(merged.get("launch_at_login", False)))
+            except Exception as e:
+                # A read-only home must not cost the user the settings they
+                # just saved — the file is already written at this point.
+                print(f"Could not update autostart entry: {e}")
+
             # Future saves in this window diff against what we just wrote
             self.config = dict(merged)
             self._config_at_open = dict(merged)
@@ -2105,9 +2115,12 @@ class PreferencesWindow:
 
         self.config[key] = value
 
-        # Handle autostart desktop file creation/removal
-        if key == "launch_at_login":
-            self._handle_autostart(value)
+        # NOTE: launch_at_login used to write the autostart .desktop file right
+        # here, the instant the box was ticked. Cancel then discarded the config
+        # change but left the file on disk, so the checkbox and the real
+        # autostart state disagreed from then on. The file is now written by
+        # save_config(), so the setting takes effect exactly when the user
+        # saves it — and not at all when they cancel.
 
     def _on_model_changed(self, combo):
         """Handle model selection change with warning for large models."""
