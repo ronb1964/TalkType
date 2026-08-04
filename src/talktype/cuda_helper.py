@@ -31,6 +31,56 @@ def detect_nvidia_gpu():
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return False
 
+def _cuda_install_looks_complete(cuda_path: str) -> bool:
+    """True if *cuda_path* holds the key libraries of a usable install.
+
+    Deliberately stricter than has_cuda_libraries(): both libraries must be
+    present, so a directory holding only the debris of an interrupted
+    download does not read as complete.
+    """
+    lib_path = os.path.join(cuda_path, "lib")
+    if not os.path.isdir(lib_path):
+        return False
+    try:
+        names = os.listdir(lib_path)
+    except OSError:
+        return False
+    return all(
+        any(name.startswith(lib) for name in names)
+        for lib in ("libcudart.so", "libcublas.so")
+    )
+
+
+def _make_cuda_cleanup(cuda_path: str):
+    """Build the failure cleanup for a CUDA download attempt.
+
+    Snapshots whether a complete installation is already present *before* the
+    download starts. If one is, failure must leave it alone: the cleanup used
+    to rmtree the whole directory unconditionally, so any early failure — no
+    network, pip missing, the user cancelling — destroyed a working 1.4 GB
+    GPU setup that had nothing to do with the attempt that failed.
+    """
+    import shutil
+
+    pre_existing = _cuda_install_looks_complete(cuda_path)
+
+    def cleanup_cuda_dir():
+        if pre_existing:
+            logger.warning(
+                f"CUDA download failed, but {cuda_path} already held a complete "
+                f"installation before this attempt — leaving it in place"
+            )
+            return
+        try:
+            if os.path.exists(cuda_path):
+                shutil.rmtree(cuda_path)
+                logger.info(f"Cleaned up incomplete CUDA installation at {cuda_path}")
+        except Exception as e:
+            logger.warning(f"Could not clean up CUDA directory: {e}")
+
+    return cleanup_cuda_dir
+
+
 def has_cuda_libraries():
     """
     Check if CUDA libraries are available for running GPU-accelerated models.
@@ -188,15 +238,8 @@ def download_cuda_libraries(progress_callback=None, cancel_event=None):
     # Create directories
     os.makedirs(lib_path, exist_ok=True)
 
-    # Helper function to clean up on failure/cancellation
-    def cleanup_cuda_dir():
-        """Remove the CUDA directory if download fails or is cancelled."""
-        try:
-            if os.path.exists(cuda_path):
-                shutil.rmtree(cuda_path)
-                logger.info(f"Cleaned up incomplete CUDA installation at {cuda_path}")
-        except Exception as e:
-            logger.warning(f"Could not clean up CUDA directory: {e}")
+    # Clean up on failure/cancellation — but only what this run created.
+    cleanup_cuda_dir = _make_cuda_cleanup(cuda_path)
     
     # Use pip to download packages instead of direct URLs
     cuda_packages = ['nvidia-cuda-runtime-cu12', 'nvidia-cublas-cu12', 'nvidia-cudnn-cu12']

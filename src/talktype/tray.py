@@ -605,9 +605,20 @@ class DictationTray:
             "label": "Battery Saver",
             "description": "tiny model, CPU, short timeout",
             "model": "tiny",
-            "device": "cpu"
+            "device": "cpu",
+            # The short timeout is what distinguishes this from "Fastest" —
+            # they are otherwise the same tiny/CPU pair. Declaring it here
+            # rather than hard-coding it in set_performance_preset() lets
+            # _get_current_preset() tell the two apart, which it previously
+            # could not: it matched on model+device and returned the first
+            # hit, so Battery Saver could never show as the active preset.
+            "auto_timeout_enabled": True,
+            "auto_timeout_minutes": 2,
         }
     }
+
+    # Preset keys that are settings to compare/apply, beyond model and device.
+    _PRESET_EXTRA_KEYS = ("auto_timeout_enabled", "auto_timeout_minutes")
 
     def _get_current_preset(self) -> str:
         """
@@ -618,14 +629,42 @@ class DictationTray:
             from .config import load_config
             cfg = load_config()
 
-            # First try exact match (model + device)
+            def extras_match(preset):
+                """Presets that declare extra settings must match those too.
+
+                Without this, two presets sharing a model/device pair are
+                indistinguishable and the earlier one always wins.
+                """
+                return all(
+                    getattr(cfg, key, None) == preset[key]
+                    for key in self._PRESET_EXTRA_KEYS
+                    if key in preset
+                )
+
+            def declares_extras(preset):
+                return any(k in preset for k in self._PRESET_EXTRA_KEYS)
+
+            # Most specific first: only presets that declare extra settings,
+            # and only when those match too. Checking the less specific
+            # presets first would let "Fastest" claim a "Battery Saver"
+            # config, since the two share their model and device.
             for preset_id, preset in self.PERFORMANCE_PRESETS.items():
-                if cfg.model == preset["model"] and cfg.device == preset["device"]:
+                if (declares_extras(preset)
+                        and cfg.model == preset["model"]
+                        and cfg.device == preset["device"]
+                        and extras_match(preset)):
+                    return preset_id
+
+            # Then model + device, for presets that declare no extras.
+            for preset_id, preset in self.PERFORMANCE_PRESETS.items():
+                if (cfg.model == preset["model"] and cfg.device == preset["device"]
+                        and not any(k in preset for k in self._PRESET_EXTRA_KEYS)):
                     return preset_id
 
             # Fall back to model-only match (device may differ due to hardware)
             for preset_id, preset in self.PERFORMANCE_PRESETS.items():
-                if cfg.model == preset["model"]:
+                if (cfg.model == preset["model"]
+                        and not any(k in preset for k in self._PRESET_EXTRA_KEYS)):
                     return preset_id
 
             return "custom"
@@ -800,9 +839,11 @@ class DictationTray:
             cfg.device = effective_device
 
             # Battery saver also reduces timeout
-            if preset_id == "battery":
-                cfg.auto_timeout_enabled = True
-                cfg.auto_timeout_minutes = 2  # Shorter timeout for battery saving
+            # Apply any extra settings the preset declares, so what gets saved
+            # is exactly what _get_current_preset() matches against.
+            for key in self._PRESET_EXTRA_KEYS:
+                if key in preset:
+                    setattr(cfg, key, preset[key])
 
             # Save config
             save_config(cfg)

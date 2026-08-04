@@ -11,6 +11,7 @@ Cross-desktop compatible - works on GNOME, KDE, XFCE, etc.
 """
 
 import os
+import subprocess
 import gi
 gi.require_version('Gtk', '3.0')
 gi.require_version('Gdk', '3.0')
@@ -1924,6 +1925,55 @@ def show_tips_and_features_dialog(extension_installed=False):
     return selected_model[0]
 
 
+def _restore_gnome_keybindings(begin_resize, begin_move):
+    """Put GNOME's begin-resize/begin-move keybindings back.
+
+    Must be safe to call from a finally block, so it never raises and never
+    lets one failed restore skip the other. A None value means the original
+    was never captured, in which case writing anything would be a guess.
+
+    Leaving these disabled is not a transient glitch: gsettings persists, so
+    the user's Alt+F8 and Alt+F7 stay dead across reboots with nothing to
+    connect it back to TalkType.
+    """
+    for key, value in (("begin-resize", begin_resize), ("begin-move", begin_move)):
+        if value is None:
+            continue
+        try:
+            subprocess.run(
+                ["gsettings", "set", "org.gnome.desktop.wm.keybindings", key, value],
+                check=False,
+            )
+            logger.info(f"Restored {key} to {value}")
+        except Exception as e:
+            logger.debug(f"Could not restore {key}: {e}")
+
+
+def _flush_pending_events(devices):
+    """Drain whatever is already queued on each device, then return.
+
+    evdev's InputDevice.read() is a *generator function*: calling it builds a
+    generator and executes none of its body, so it neither reads anything nor
+    raises BlockingIOError until something iterates it. Written as a bare
+    `while True: dev.read()` this never terminated — it spun at 100% CPU and
+    the key-monitoring loop that follows it was never reached, so the hotkey
+    test silently detected nothing. Iterating the generator is what makes the
+    read actually happen and the "queue empty" signal actually arrive.
+    """
+    for dev in devices:
+        try:
+            while True:
+                drained = False
+                for _ in dev.read():
+                    drained = True
+                if not drained:
+                    break  # read() yielded nothing and did not raise
+        except BlockingIOError:
+            pass  # Queue is now empty
+        except Exception as e:
+            logger.debug(f"Could not flush events from {getattr(dev, 'name', dev)}: {e}")
+
+
 def show_hotkey_test_dialog():
     """
     Show hotkey testing dialog for first-run experience.
@@ -2206,12 +2256,7 @@ def show_hotkey_test_dialog():
         # Flush any stale events buffered in the kernel queue before we start
         # monitoring. Without this, a prior F8 press (e.g. from using TalkType
         # just before onboarding) would appear as "Working!" immediately.
-        for dev in keyboards:
-            try:
-                while True:
-                    dev.read()
-            except BlockingIOError:
-                pass  # Queue is now empty
+        _flush_pending_events(keyboards)
 
         while not stop_evdev.is_set():
             try:
@@ -2381,72 +2426,71 @@ def show_hotkey_test_dialog():
         _gnome_begin_resize = None
         _gnome_begin_move = None
 
-    # Kill the dictation service BEFORE showing the dialog so its evdev keyboard
-    # grab is released cleanly. If we kill it AFTER the dialog gets focus, the
-    # kernel releases a stuck F8 key state and floods the dialog with phantom
-    # key-repeat events via GTK, making F8 appear "Working!" before being pressed.
-    kill_dictation_service()
-    time.sleep(0.3)  # Allow kernel/X server to settle keyboard state
-
-    dialog.show_all()
-
-    # Service killer thread - keeps killing dictation service while dialog is open
-    # This prevents the service from grabbing F8/F9 before we can detect them
+    # Bound before the try so the finally can always clean them up, however
+    # early an exception lands.
     stop_killer = threading.Event()
-
-    def service_killer_thread():
-        """Periodically kill any dictation service that might start."""
-        while not stop_killer.is_set():
-            kill_dictation_service()
-            time.sleep(0.5)  # Check every 500ms
-
-    killer_thread = threading.Thread(target=service_killer_thread, daemon=True)
-    killer_thread.start()
-    logger.info("Started service killer thread")
-
-    # Start evdev reader thread
+    killer_thread = None
     evdev_thread = None
-    if EVDEV_AVAILABLE:
-        evdev_thread = threading.Thread(target=evdev_key_reader, daemon=True)
-        evdev_thread.start()
 
-    # Open the gate immediately — no timer needed.
-    # KEY_PRESS events are ignored entirely (phantoms only generate presses).
-    # Only KEY_RELEASE events update the UI, which phantoms never generate.
-    dialog_ready[0] = True
+    try:
+        # Kill the dictation service BEFORE showing the dialog so its evdev keyboard
+        # grab is released cleanly. If we kill it AFTER the dialog gets focus, the
+        # kernel releases a stuck F8 key state and floods the dialog with phantom
+        # key-repeat events via GTK, making F8 appear "Working!" before being pressed.
+        kill_dictation_service()
+        time.sleep(0.3)  # Allow kernel/X server to settle keyboard state
 
-    # Stop the killer thread after 500ms — enough time for the service to die.
-    def stop_killer_stage():
+        dialog.show_all()
+
+        # Service killer thread - keeps killing dictation service while dialog is open
+        # This prevents the service from grabbing F8/F9 before we can detect them
+
+        def service_killer_thread():
+            """Periodically kill any dictation service that might start."""
+            while not stop_killer.is_set():
+                kill_dictation_service()
+                time.sleep(0.5)  # Check every 500ms
+
+        killer_thread = threading.Thread(target=service_killer_thread, daemon=True)
+        killer_thread.start()
+        logger.info("Started service killer thread")
+
+        # Start evdev reader thread
+        if EVDEV_AVAILABLE:
+            evdev_thread = threading.Thread(target=evdev_key_reader, daemon=True)
+            evdev_thread.start()
+
+        # Open the gate immediately — no timer needed.
+        # KEY_PRESS events are ignored entirely (phantoms only generate presses).
+        # Only KEY_RELEASE events update the UI, which phantoms never generate.
+        dialog_ready[0] = True
+
+        # Stop the killer thread after 500ms — enough time for the service to die.
+        def stop_killer_stage():
+            stop_killer.set()
+            return False
+        GLib.timeout_add(500, stop_killer_stage)
+
+        response = dialog.run()
+        dialog.destroy()
+
+    finally:
+        # Always: an exception between disabling these and restoring them
+        # left the user's Alt+F8/Alt+F7 disabled permanently, because
+        # gsettings persists across reboots.
+        _restore_gnome_keybindings(_gnome_begin_resize, _gnome_begin_move)
+
+        # The killer thread kills the dictation service every 500ms. Leaking it
+        # on an exception would leave dictation permanently unable to start —
+        # so it is stopped here, not on the happy path.
         stop_killer.set()
-        return False
-    GLib.timeout_add(500, stop_killer_stage)
+        if killer_thread is not None:
+            killer_thread.join(timeout=1.0)
+        logger.info("Stopped service killer thread")
 
-    response = dialog.run()
-    dialog.destroy()
-
-    # Restore GNOME keybindings
-    if _gnome_begin_resize is not None:
-        try:
-            _sp.run(["gsettings", "set", "org.gnome.desktop.wm.keybindings", "begin-resize", _gnome_begin_resize], check=False)
-            logger.info(f"Restored begin-resize to {_gnome_begin_resize}")
-        except Exception as e:
-            logger.debug(f"Could not restore begin-resize: {e}")
-    if _gnome_begin_move is not None:
-        try:
-            _sp.run(["gsettings", "set", "org.gnome.desktop.wm.keybindings", "begin-move", _gnome_begin_move], check=False)
-            logger.info(f"Restored begin-move to {_gnome_begin_move}")
-        except Exception as e:
-            logger.debug(f"Could not restore begin-move: {e}")
-
-    # Stop killer thread
-    stop_killer.set()
-    killer_thread.join(timeout=1.0)
-    logger.info("Stopped service killer thread")
-
-    # Stop evdev thread
-    stop_evdev.set()
-    if evdev_thread:
-        evdev_thread.join(timeout=1.0)
+        stop_evdev.set()
+        if evdev_thread is not None:
+            evdev_thread.join(timeout=1.0)
 
     logger.info("Hotkey test complete")
     print("✅ Hotkey test complete")

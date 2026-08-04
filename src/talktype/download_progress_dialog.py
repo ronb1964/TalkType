@@ -223,6 +223,23 @@ class UnifiedDownloadDialog:
         widgets['cancel_btn'].set_sensitive(False)
         widgets['cancel_btn'].set_label("Cancelled")
 
+    def _cancel_unfinished_tasks(self):
+        """Stop any download still running when the window goes away.
+
+        The download loops check cancel_event between chunks. Closing the
+        window used to leave them running: the dialog was destroyed, run()
+        returned, and a multi-gigabyte transfer carried on writing to disk
+        with no window, no progress and no way to stop it.
+
+        Completed tasks are left untouched so a finished download is not
+        retrospectively marked cancelled.
+        """
+        for task in self.tasks:
+            if not task.completed:
+                task.cancelled = True
+                task.cancel_event.set()
+                logger.info(f"Window closed — cancelling {task.name}")
+
     def _update_task_progress(self, task, message, percent):
         """Update progress for a specific task (thread-safe)."""
         def update_ui():
@@ -311,6 +328,9 @@ class UnifiedDownloadDialog:
 
         # Run the dialog (blocks until closed)
         response = self.dialog.run()
+        # Whatever closed it — the X, Escape, or a button — nothing is left to
+        # show progress in, so no download may outlive it.
+        self._cancel_unfinished_tasks()
         self.dialog.destroy()
 
         # Return results

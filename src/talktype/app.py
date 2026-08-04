@@ -1470,6 +1470,37 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
     return True
 
 
+def _safe_to_lowercase_first_word(text: str) -> bool:
+    """True when the leading capital is Whisper's sentence-start capital and
+    nothing more, so undoing it is safe.
+
+    Two kinds of word are capitalized for reasons that have nothing to do with
+    where the sentence begins, and lowercasing them corrupts real text:
+
+      * the pronoun "I" (and I'm / I'll / I've / I'd), which became "i"
+      * acronyms, where only the first letter was touched: "NASA" -> "nASA"
+
+    Proper nouns like "Ron" are genuinely ambiguous — Whisper capitalizes them
+    both as names and as sentence starts — so they are left alone here and
+    remain a known limitation rather than a guess.
+    """
+    first = text.split(maxsplit=1)[0] if text.split() else ""
+    if not first:
+        return False
+
+    # The pronoun "I", bare or contracted.
+    stripped = first.rstrip(".,;:!?")
+    if stripped == "I" or stripped.startswith("I'"):
+        return False
+
+    # Acronyms: more than one capital and no lowercase letters ("NASA", "USA").
+    letters = [c for c in stripped if c.isalpha()]
+    if len(letters) > 1 and all(c.isupper() for c in letters):
+        return False
+
+    return True
+
+
 def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: bool) -> str:
     """Apply voice commands, normalize, handle mid-sentence, add auto-period/space.
 
@@ -1495,7 +1526,7 @@ def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: b
     # Handle mid-sentence continuation after undo:
     # lowercase the first letter if we're continuing a sentence
     if state.continue_mid_sentence and text:
-        if text[0].isupper():
+        if text[0].isupper() and _safe_to_lowercase_first_word(text):
             text = text[0].lower() + text[1:]
             logger.info("Lowercased first letter for mid-sentence continuation")
         state.continue_mid_sentence = False
