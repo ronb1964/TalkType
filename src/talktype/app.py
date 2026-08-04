@@ -2296,37 +2296,35 @@ def main():
                             logger.error(f"Failed to stop service: {e}", exc_info=True)
 
                     def set_model(self, model_name: str):
-                        """Change the Whisper model (requires service restart)"""
+                        """Change the Whisper model (requires service restart).
+
+                        Writes through config.save_config, the same path every
+                        other writer uses. This used to hand-roll JSON into
+                        ~/.config/talktype/settings.json — a file this app has
+                        never read or written; the real settings are TOML at
+                        ~/.config/TalkType/config.toml. The change therefore
+                        landed nowhere and was gone by the restart it asked
+                        the user to perform.
+                        """
                         try:
-                            # Update config file
-                            from .config import load_config
-                            config_path = os.path.expanduser("~/.config/talktype/settings.json")
+                            from .config import VALID_MODELS, load_config, save_config
 
-                            # Read current config
-                            import json
-                            if os.path.exists(config_path):
-                                with open(config_path, 'r') as f:
-                                    config_data = json.load(f)
-                            else:
-                                config_data = {}
+                            if model_name not in VALID_MODELS:
+                                logger.error(
+                                    f"SetModel: refusing unknown model {model_name!r}"
+                                )
+                                return
 
-                            # Update model
-                            config_data['model'] = model_name
+                            cfg = load_config()
+                            cfg.model = model_name
+                            save_config(cfg)
                             self.config.model = model_name
-
-                            # Write back
-                            os.makedirs(os.path.dirname(config_path), exist_ok=True)
-                            with open(config_path, 'w') as f:
-                                json.dump(config_data, f, indent=2)
 
                             logger.info(f"Model changed to {model_name} (restart required)")
 
                             # Emit signal so extension updates
                             if self.dbus_service:
                                 self.dbus_service.emit_model_changed(model_name)
-
-                            # Note: Actual model change requires service restart
-                            # For now, we just update config and notify
                         except Exception as e:
                             logger.error(f"Failed to set model: {e}", exc_info=True)
 

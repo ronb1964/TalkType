@@ -16,6 +16,24 @@ from .logger import setup_logger
 
 logger = setup_logger(__name__)
 
+# The files faster-whisper actually loads. Everything else in a model repo —
+# README.md, .gitattributes, alternative formats — is downloaded for
+# completeness but is not needed to run the model, so failing to fetch one
+# must not discard an otherwise finished multi-gigabyte download.
+ESSENTIAL_MODEL_FILES = ("model.bin", "config.json", "tokenizer.json")
+
+
+def _download_is_usable(failed_files) -> bool:
+    """True if the model can still be loaded despite *failed_files*.
+
+    Paths may be nested (list_repo_tree is recursive), so match on the file
+    name rather than the whole path.
+    """
+    import os as _os
+    failed_names = {_os.path.basename(p) for p in failed_files}
+    return not (failed_names & set(ESSENTIAL_MODEL_FILES))
+
+
 # Model repository names on HuggingFace
 MODEL_REPOS = {
     "tiny": "Systran/faster-whisper-tiny",
@@ -81,8 +99,8 @@ def is_model_cached_fast(model_name):
         # config.json). Check the files faster-whisper actually loads —
         # hf_hub_download links a file into the snapshot only after its
         # download fully completes, so presence implies completeness.
-        required = ("model.bin", "config.json", "tokenizer.json")
-        return all(os.path.isfile(os.path.join(snapshot_path, f)) for f in required)
+        return all(os.path.isfile(os.path.join(snapshot_path, f))
+                   for f in ESSENTIAL_MODEL_FILES)
     except Exception:
         return False
 
@@ -220,7 +238,7 @@ def make_model_download_func(model_name):
                     failed_files.append(filename)
                     downloaded_bytes[0] += file_size
 
-            if failed_files:
+            if failed_files and not _download_is_usable(failed_files):
                 logger.error(
                     f"Model {model_name} download incomplete: "
                     f"{len(failed_files)} file(s) failed: {failed_files[:3]}"
@@ -229,6 +247,16 @@ def make_model_download_func(model_name):
                     f"Download failed: {len(failed_files)} file(s) could not be downloaded", 100
                 )
                 return False
+
+            if failed_files:
+                # Only non-essential files (README, .gitattributes, alternative
+                # formats). Discarding a finished multi-gigabyte download over
+                # one of those, and telling the user it failed, was worse than
+                # the missing file.
+                logger.warning(
+                    f"Model {model_name}: {len(failed_files)} non-essential file(s) "
+                    f"could not be downloaded, model is still usable: {failed_files[:3]}"
+                )
 
             progress_callback("All files downloaded!", 100)
             return True

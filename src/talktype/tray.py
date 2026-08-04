@@ -242,6 +242,14 @@ class DictationTray:
                     """Set text injection mode via tray (called from GNOME extension D-Bus)."""
                     GLib.idle_add(self.tray.set_injection_mode, mode)
 
+                def set_model(self, model_name: str):
+                    """Change the model via tray (called from GNOME extension D-Bus).
+
+                    Without this method, DBusService._dispatch's hasattr check
+                    failed and SetModel was silently discarded.
+                    """
+                    GLib.idle_add(self.tray.set_model, model_name)
+
                 def quit(self):
                     """Quit via tray."""
                     GLib.idle_add(self.tray.quit_app, None)
@@ -529,6 +537,42 @@ class DictationTray:
             logger.info(f"Announced model change to extension: {model_name}")
         except Exception as e:
             logger.error(f"Failed to emit model change: {e}")
+
+    def set_model(self, model_name: str):
+        """Change the Whisper model. Reachable over D-Bus as SetModel.
+
+        The D-Bus interface has always advertised SetModel, but nothing
+        implemented it here — and DBusService._dispatch silently drops calls
+        for methods the app object does not have, so it failed without a
+        word. (The one implementation that did exist wrote to a JSON path
+        this app has never read.) Follows the same sequence as applying a
+        performance preset: persist, tell the extension, restart.
+        """
+        from .config import VALID_MODELS, load_config, save_config
+
+        if model_name not in VALID_MODELS:
+            logger.error(
+                f"SetModel: refusing unknown model {model_name!r}. "
+                f"Valid: {', '.join(sorted(VALID_MODELS))}"
+            )
+            return
+
+        try:
+            cfg = load_config()
+            if cfg.model == model_name:
+                logger.info(f"SetModel: already using {model_name}")
+                return
+            cfg.model = model_name
+            save_config(cfg)
+            logger.info(f"SetModel: switched to {model_name}")
+
+            self.update_menu_display()
+            # The tray owns the D-Bus name the extension listens on, so the
+            # change notification has to be emitted from here.
+            self._emit_model_changed(model_name)
+            self.restart_service(None)
+        except Exception as e:
+            logger.error(f"SetModel failed: {e}", exc_info=True)
 
     def set_injection_mode(self, mode: str):
         """Set the injection mode (auto, type, or paste)."""
