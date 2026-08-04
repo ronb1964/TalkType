@@ -369,3 +369,123 @@ def test_pm_before_a_timezone_does_not_gain_a_period():
 def test_am_mid_sentence_before_a_capitalized_word_does_not_gain_a_period():
     assert normalize_text("the 9 a.m. Monday meeting is cancelled") == \
         "The 9 AM Monday meeting is cancelled."
+
+
+# --- filenames must not be split into two sentences -------------------------
+
+def test_a_filename_is_not_split_into_two_sentences():
+    """The pass that puts a space after a sentence period protected decimals
+    ("19.99") and single-letter abbreviations ("e.g."), and a separate guard
+    protects domains ("example.com"). Filenames had neither, so "report.pdf"
+    became "report. Pdf" — the extension capitalized as a new sentence."""
+    assert normalize_text("the file is report.pdf") == "The file is report.pdf."
+
+
+def test_common_file_extensions_survive():
+    for name in ("notes.txt", "photo.jpeg", "archive.tar", "script.py",
+                 "sheet.xlsx", "song.mp3", "readme.md"):
+        out = normalize_text(f"open {name} now")
+        assert name in out, f"{name} was mangled into {out!r}"
+
+
+def test_a_domain_still_survives():
+    """Already worked — pin it so the filename fix doesn't regress it."""
+    assert "example.com" in normalize_text("go to example.com for info")
+
+
+def test_a_real_sentence_boundary_is_still_spaced():
+    """The guard must not stop genuine missing-space repairs."""
+    assert normalize_text("this is one.this is two") == "This is one. This is two."
+
+
+# --- i.e. is not the pronoun "I" --------------------------------------------
+
+def test_ie_is_not_capitalized_as_the_pronoun():
+    """The standalone-"i" rule uses \\bi\\b, and the dot in "i.e." is a word
+    boundary — so "i.e." became "I.e." in the middle of a sentence."""
+    assert normalize_text("use it, i.e. the new one") == "Use it, i.e. the new one."
+
+
+def test_the_pronoun_i_is_still_capitalized():
+    assert normalize_text("then i went home") == "Then I went home."
+
+
+def test_i_at_the_end_of_a_sentence_is_still_capitalized():
+    assert normalize_text("that was me and i") == "That was me and I."
+
+
+# --- a line already ending in punctuation gets no extra period --------------
+
+def test_a_line_ending_in_a_colon_gets_no_period():
+    """"[.?!…]" was the whole definition of "already punctuated", so a
+    dictated colon or semicolon collected a period: "the plan:." """
+    assert normalize_text("here is the plan colon") == "Here is the plan:"
+
+
+def test_a_line_ending_in_a_semicolon_gets_no_period():
+    assert normalize_text("first do this semicolon") == "First do this;"
+
+
+# --- times must not capitalize the word that follows -------------------------
+
+def test_a_spaced_am_does_not_capitalize_the_next_word():
+    """Whisper writes "9 a. m.". Time formatting collapsed that to "9 AM",
+    but it ran AFTER the capitalization pass — which had already treated the
+    "m." as a sentence ending and upper-cased the following word."""
+    assert normalize_text("meet at 9 a. m. tomorrow") == "Meet at 9 AM tomorrow."
+
+
+def test_a_spaced_pm_does_not_capitalize_the_next_word():
+    assert normalize_text("it was 5 p. m. and dark") == "It was 5 PM and dark."
+
+
+def test_a_time_with_minutes_still_formats():
+    assert "11:30 PM" in normalize_text("the meeting is at 11. 30 p. m. sharp")
+
+
+def test_a_time_ending_the_sentence_keeps_its_period():
+    """Pinned behaviour: the abbreviation's dot doubles as the full stop."""
+    assert normalize_text("we start at 8 a. m.") == "We start at 8 AM."
+
+
+# --- append_auto_punct edge cases ------------------------------------------
+
+from talktype.normalize import append_auto_punct
+
+
+def test_auto_punct_leaves_a_trailing_colon_alone():
+    assert append_auto_punct("here is the plan:", True, False) == "here is the plan:"
+
+
+def test_auto_punct_leaves_a_trailing_semicolon_alone():
+    assert append_auto_punct("first do this;", True, False) == "first do this;"
+
+
+def test_auto_punct_does_not_invent_a_period_from_silence():
+    """A whitespace-only utterance became a lone "." injected into the
+    document — a stray full stop appearing from a recording of nothing."""
+    assert append_auto_punct("   ", True, False).strip() == ""
+
+
+def test_auto_punct_still_adds_a_period_to_a_normal_sentence():
+    assert append_auto_punct("this is a sentence", True, False) == "this is a sentence."
+
+
+# --- the auto-period preference must actually be honoured -------------------
+
+def test_normalize_can_be_told_not_to_add_a_period():
+    """normalize_text appended a full stop to every line unconditionally, and
+    _prepare_text calls it BEFORE append_auto_punct — so the "Ensure period at
+    end of sentences" preference had no effect at all when unchecked: the
+    period was already there by the time the preference was consulted."""
+    assert normalize_text("this is a sentence", auto_period=False) == "This is a sentence"
+
+
+def test_normalize_adds_a_period_by_default():
+    assert normalize_text("this is a sentence") == "This is a sentence."
+
+
+def test_auto_period_off_still_normalizes_everything_else():
+    """Turning the period off must not turn off capitalization or spacing."""
+    out = normalize_text("hello comma world", auto_period=False)
+    assert out == "Hello, world"

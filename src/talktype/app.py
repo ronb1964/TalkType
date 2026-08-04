@@ -386,7 +386,12 @@ _YOUTUBE_HALLUCINATION_PHRASES = [
     "see you next time",
     "see you in the next video",
     "see you in the next one",
-    "subscribe",
+    # NOT bare "subscribe": it is an ordinary English verb, and stripping it
+    # from the end of any transcription silently ate the last word of real
+    # sentences ("tell them to subscribe" -> "tell them to"). It also matched
+    # before the longer phrases below, so "like and subscribe" was left as
+    # "like and". The multi-word forms below are what Whisper actually
+    # hallucinates, and nobody dictates those.
     "like and subscribe",
     "please subscribe",
     "don't forget to subscribe",
@@ -1102,14 +1107,16 @@ def _query_focused_window_class() -> str | None:
     Returns the wm_class string, or None if unknown / D-Bus unavailable.
     """
     try:
-        import dbus
-        bus = dbus.SessionBus()
-        proxy = bus.get_object(
-            "io.github.ronb1964.TalkType",
-            "/io/github/ronb1964/TalkType",
-        )
+        # Shared, cached, introspect-free proxy — this used to build a fresh
+        # one on every paste, paying a blocking Introspect() each time, and
+        # neither call carried a timeout. Both waits are 25s by default, on
+        # the thread between the user releasing the hotkey and their text
+        # appearing. This is only a hint for choosing the paste shortcut, so
+        # a slow answer is worth less than a fast "don't know".
+        proxy = _get_tray_dbus_proxy()
         result = proxy.GetFocusedWindowClass(
             dbus_interface="io.github.ronb1964.TalkType",
+            timeout=_TRAY_DBUS_TIMEOUT,
         )
         s = str(result) if result else ""
         return s if s else None
@@ -1472,8 +1479,14 @@ def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: b
     # Quoted replacements come back as placeholder tokens in `protected`
     processed, protected = _apply_custom_commands(raw)
 
-    # Normalize text (capitalization, punctuation, etc.)
-    text = normalize_text(processed if smart_quotes else processed.replace("\u201c","\"").replace("\u201d","\""))
+    # Normalize text (capitalization, punctuation, etc.). auto_period is passed
+    # through because this pass ends every line with a full stop of its own \u2014
+    # without it the preference was dead, since append_auto_punct below only
+    # ever saw text that had already been given a period.
+    text = normalize_text(
+        processed if smart_quotes else processed.replace("\u201c","\"").replace("\u201d","\""),
+        auto_period=auto_period,
+    )
 
     # Restore quoted (literal) custom command replacements before any further
     # processing so that auto-period/space checks see the real final text.

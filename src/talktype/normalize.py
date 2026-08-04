@@ -210,7 +210,10 @@ _RE_MULTI_SPACE = re.compile(r"[ ]{2,}")
 
 # --- 10) Capitalization ---
 _RE_TRAILING_COMMA = re.compile(r",$")
-_RE_NO_END_PUNCT = re.compile(r"[.?!…]$")
+# What counts as "this line is already punctuated". Colon and semicolon are
+# included: a dictated "colon" is deliberate punctuation, and treating it as
+# unpunctuated appended a full stop straight after it ("the plan:.").
+_RE_NO_END_PUNCT = re.compile(r"[.?!…:;]$")
 # Negative lookbehind: don't capitalize after single-letter abbreviations
 # ("e.g. that" / "U.S. economy" must not become "e.g. That" / "U.S. Economy").
 _RE_CAP_AFTER_ENDER = re.compile(r"(?<![A-Za-z]\.[A-Za-z])([.?!…]\s+)([a-z])")
@@ -218,7 +221,9 @@ _RE_CAP_AFTER_ENDER = re.compile(r"(?<![A-Za-z]\.[A-Za-z])([.?!…]\s+)([a-z])")
 # because the apostrophe is a word boundary). Case-sensitive: an existing
 # "I" is left alone. Words like "in", "it", "iPad" are not matched because
 # they have no word boundary on the right side of the "i".
-_RE_STANDALONE_I = re.compile(r"\bi\b")
+# The negative lookahead keeps "i.e." intact: the dot is a word boundary, so
+# \bi\b matched the abbreviation's first letter and produced "I.e." mid-sentence.
+_RE_STANDALONE_I = re.compile(r"\bi\b(?!\.\s*e\.)")
 
 # --- 11) Smart quote punctuation placement ---
 _RE_PUNCT_OUTSIDE_QUOTE = re.compile(r"\u201d( ?)([!?,;:.])")
@@ -269,6 +274,18 @@ _RE_ADDRESSY = re.compile(
     re.IGNORECASE
 )
 
+# File extensions the space-after-period pass must not split. Kept to formats
+# a person plausibly dictates the name of; the guard also requires a word
+# character immediately before the dot, so ordinary sentences are unaffected.
+_FILE_EXTENSIONS = (
+    "pdf|docx?|xlsx?|pptx?|odt|ods|odp|rtf|tex|csv|tsv|txt|md|log|conf|ini|cfg"
+    "|toml|ya?ml|json|xml|html?|css|js|ts|py|sh|rb|go|rs|java|c|cpp|h"
+    "|png|jpe?g|gif|bmp|svg|webp|ico|tiff?"
+    "|mp3|mp4|m4a|wav|flac|ogg|mov|avi|mkv|webm"
+    "|zip|tar|gz|bz2|xz|7z|rar|iso|deb|rpm|appimage|exe|dmg|apk"
+)
+_RE_FILE_EXT = re.compile(rf"\.(?:{_FILE_EXTENSIONS})\b", re.IGNORECASE)
+
 _RE_TIME_FORMAT = re.compile(
     r'\b(1[0-2]|0?[1-9])(?:[.:]\s*([0-5][0-9]))?\s+([Pp]\.?\s*[Mm]\.?|[Aa]\.?\s*[Mm]\.?)(?![A-Za-z])',
     re.IGNORECASE
@@ -305,9 +322,10 @@ def _fix_time_ampm(m: re.Match) -> str:
 
 
 def _space_after_ender_repl(m: re.Match) -> str:
-    """Insert a space after a sentence ender — except inside numbers and
-    single-letter abbreviations, where the period is part of the token:
-    '3.5', '$19.99', 'U.S.', 'e.g.', 'a.m.' must not be split apart."""
+    """Insert a space after a sentence ender — except inside numbers,
+    single-letter abbreviations and filenames, where the period is part of
+    the token: '3.5', '$19.99', 'U.S.', 'e.g.', 'a.m.', 'report.pdf' must
+    not be split apart."""
     ch = m.group(1)
     if ch == ".":
         s, i = m.string, m.start(1)
@@ -322,11 +340,25 @@ def _space_after_ender_repl(m: re.Match) -> str:
         # (single letter before the dot, letter+dot after it)
         if prev.isalpha() and not prev2.isalpha() and nxt.isalpha() and nxt2 == ".":
             return ch
+        # Filenames: the dot binds a name to its extension, so splitting here
+        # invents a sentence break and the capitalization pass then upper-cases
+        # the extension ("report.pdf" -> "report. Pdf"). Domains were already
+        # protected by _RE_ADDRESSY; filenames had no equivalent guard.
+        if (prev.isalnum() or prev in "_-") and _RE_FILE_EXT.match(s, i):
+            return ch
     return ch + " "
 
 
 # Trailing line-break markers (possibly repeated) at the end of an utterance.
 _RE_TRAILING_BREAKS = re.compile(r"(?:\s*(?:§SHIFT_ENTER§))+\s*$")
+
+# Punctuation that ends an utterance. Colon and semicolon count: a dictated
+# "colon" is deliberate, and appending a full stop after it gave "the plan:.".
+_END_PUNCT = (".", "?", "!", "…", ":", ";")
+
+
+def _ends_punctuated(text: str) -> bool:
+    return text.rstrip().endswith(_END_PUNCT)
 
 
 def append_auto_punct(text: str, auto_period: bool, auto_space: bool) -> str:
@@ -337,17 +369,20 @@ def append_auto_punct(text: str, auto_period: bool, auto_space: bool) -> str:
     an orphan ". " at the start of the next line. No trailing space is
     added after a line break (the cursor is already on a fresh line).
     """
-    if not text:
+    # Whitespace with nothing in it is not an utterance. Punctuating it put a
+    # lone "." into the document — a full stop appearing out of a recording
+    # that captured nothing.
+    if not text or not text.strip():
         return text
     m = _RE_TRAILING_BREAKS.search(text)
     if m:
         core, trailing = text[:m.start()], text[m.start():]
         if not core.strip():
             return text  # utterance is only line breaks — nothing to punctuate
-        if auto_period and not core.rstrip().endswith((".", "?", "!", "…")):
+        if auto_period and not _ends_punctuated(core):
             core = core.rstrip() + "."
         return core + trailing
-    if auto_period and not text.rstrip().endswith((".", "?", "!", "…")):
+    if auto_period and not _ends_punctuated(text):
         text = text.rstrip() + "."
     if auto_space and not text.endswith((" ", "\n", "\t")):
         text = text + " "
@@ -358,8 +393,14 @@ def append_auto_punct(text: str, auto_period: bool, auto_space: bool) -> str:
 # Main normalization function
 # =====================================================================
 
-def normalize_text(text: str) -> str:
-    """Spoken punctuation -> symbols; tidy punctuation; auto-capitalize; keep newlines/tabs."""
+def normalize_text(text: str, auto_period: bool = True) -> str:
+    """Spoken punctuation -> symbols; tidy punctuation; auto-capitalize; keep newlines/tabs.
+
+    auto_period mirrors the "Ensure period at end of sentences" preference.
+    It has to be honoured *here* as well as in append_auto_punct: this pass
+    ends every line with a full stop, and it runs first, so leaving it
+    unconditional made the preference do nothing when the user unchecked it.
+    """
     if not text:
         return text
 
@@ -414,6 +455,14 @@ def normalize_text(text: str) -> str:
     text = _RE_DOUBLE_DOT.sub(".", text)
     text = _RE_REPEATED_BANG_Q.sub(r"\1", text)
     text = text.replace("...", "…")
+
+    # --- 6.5) Fix time formatting ---
+    # "11. 30 p. m." → "11:30 PM", "3:15 a. m." → "3:15 AM", etc.
+    # This MUST run before the spacing and capitalization passes below. It used
+    # to run at the very end, by which point those passes had already read the
+    # "m." of "a. m." as a sentence ending and capitalized the following word
+    # ("meet at 9 a. m. tomorrow" → "9 AM Tomorrow").
+    text = _RE_TIME_FORMAT.sub(_fix_time_ampm, text)
 
     # --- 7) Ensure one space after sentence enders ---
     # (callable repl skips decimals like 3.5 and abbreviations like U.S.)
@@ -474,7 +523,8 @@ def normalize_text(text: str) -> str:
         # Convert trailing comma to period at end of line
         line = _RE_TRAILING_COMMA.sub(".", line)
         # Add period at end of line if no punctuation exists
-        if line and line.strip() and not _RE_NO_END_PUNCT.search(line.rstrip()):
+        if (auto_period and line and line.strip()
+                and not _RE_NO_END_PUNCT.search(line.rstrip())):
             line = line.rstrip() + "."
         # Capitalize after sentence enders
         line = _RE_CAP_AFTER_ENDER.sub(lambda m: m.group(1) + m.group(2).upper(), line)
@@ -509,8 +559,6 @@ def normalize_text(text: str) -> str:
     for pat, repl in _EMAIL_TLD_FIXES:
         text = pat.sub(repl, text)
 
-    # --- 15) Fix time formatting ---
-    # "11. 30 p. m." → "11:30 PM", "3:15 a. m." → "3:15 AM", etc.
-    text = _RE_TIME_FORMAT.sub(_fix_time_ampm, text)
+    # (Time formatting moved to step 6.5 — see the note there.)
 
     return text

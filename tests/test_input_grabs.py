@@ -619,3 +619,17 @@ def test_dropping_a_device_while_idle_just_removes_it(key_env):
 
     assert devices == [kb2]
     assert not stopped, "stopped a recording that was never running"
+
+
+def test_focused_window_query_is_time_bounded(tray_proxy):
+    """Runs on the input thread during paste injection, and built a brand new
+    proxy — with introspection — on every single paste. Two unbounded 25s
+    waits on the path between the user releasing the hotkey and their text
+    appearing."""
+    app._query_focused_window_class()
+
+    assert tray_proxy.calls, "no D-Bus call was made"
+    name, kwargs = tray_proxy.calls[0]
+    assert name == "GetFocusedWindowClass"
+    assert "timeout" in kwargs, "unbounded call on the injection path"
+    assert kwargs["timeout"] <= 5
