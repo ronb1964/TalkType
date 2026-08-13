@@ -49,10 +49,25 @@ cd "$SCRIPT_DIR/gnome-extension"
 rm -f talktype-gnome-extension.zip talktype@ronb1964.github.io.zip
 
 # Create fresh zip
+# NOTE: the exclude patterns must not match the extension's own UUID directory.
+# "talktype@ronb1964.github.io" contains the substring ".git" (from "github.io"),
+# so a pattern of "*.git*" matches EVERY path in the archive and zip exits with
+# "Nothing to do!" — after the old zip has already been deleted above. Anchor the
+# git patterns on a leading slash so they only match real git metadata.
 zip -r talktype-gnome-extension.zip talktype@ronb1964.github.io \
-    -x "*.git*" \
+    -x "*/.git/*" \
+    -x "*/.gitignore" \
     -x "*~" \
     -x "*.swp"
+
+# The zip must contain exactly the three extension files plus its UUID directory.
+# A silently under-filled archive installs as a broken extension, so fail loudly.
+PACKAGED_COUNT=$(unzip -l talktype-gnome-extension.zip | grep -c "talktype@ronb1964.github.io/.\+")
+if [ "$PACKAGED_COUNT" -lt 3 ]; then
+    echo "❌ Error: only $PACKAGED_COUNT file(s) packaged; expected extension.js,"
+    echo "   metadata.json and stylesheet.css. Check the -x exclude patterns."
+    exit 1
+fi
 
 # Move to project root
 mv talktype-gnome-extension.zip "$OUTPUT_ZIP"

@@ -2,6 +2,97 @@
 
 All notable changes to TalkType are documented here.
 
+## [0.6.0] - 2026-08-13
+
+The largest release so far: three months of reliability work across dictation,
+settings, and text handling. Several features that were advertised but quietly
+did nothing now actually work.
+
+**GNOME users should update the extension too.** Its version number was stuck at
+5 through five rewrites, so the app told everyone they were up to date and never
+offered the update. This release fixes that, and the newer extension is required
+for the Claude Desktop paste fix below to reach you.
+
+### Every dropdown in the app was unusable on Wayland
+- **Dropdowns closed the instant you released the mouse button** — so you could not pick a model on the first-run setup screen, or change the model, device, language or hotkeys in Preferences. Only click-and-drag selected anything, which is not how anyone expects a dropdown to work. TalkType forced itself onto XWayland for the whole app, and under XWayland a GTK dropdown never latches open on a plain click. XWayland is now used only by the part that needs it (the recording indicator, which cannot position itself without it), so the windows you actually click run natively on Wayland.
+- **Dropdown lists opened on top of the row above them** instead of below the button, which read as a rendering glitch. They now drop down as an ordinary list.
+
+### Recording indicator position, and other desktops
+- **The recording indicator's position could not be changed on Wayland.** The position dropdown and both offset boxes were greyed out with a note saying positioning "requires the GNOME extension". That was never true — positioning has nothing to do with the extension, and it works on any desktop that has XWayland, including KDE Plasma. The controls are now enabled whenever positioning genuinely works, and the warning only appears when it genuinely cannot.
+- **"Restart Info" stayed clickable on desktops that are not GNOME**, where it explained how to press Alt+F2 and restart GNOME Shell — advice for software that isn't running. It is now greyed out alongside Install and Uninstall.
+- **TalkType no longer refuses to dictate on systems without XWayland.** The dictation service asks for XWayland so the indicator can position itself, but now falls back to native Wayland instead of failing to start, giving a centred indicator rather than no dictation at all.
+
+### Model and preset choices
+- **The first-run setup screen offered fewer models than Preferences.** "Base" was missing from setup entirely, so new users picked from four models and later found five, with nothing indicating one had been hidden. Both screens now build from one list, and the models are ordered by size in both.
+- **"Battery Saver" could never show as the selected preset in the GNOME menu.** It and "Fastest" are both tiny/CPU, and the extension compared only the model and device, so the first match always won. The setting applied correctly; only the dot was wrong. The extension now distinguishes them the same way the tray does.
+
+### Onboarding
+- **Added an "Open Preferences" button to the final setup screen**, so the settings are one click away instead of only being described in text.
+
+### Dictation reliability
+- **Hotkey silently stopped working after a USB blip, wireless-receiver glitch, or resume from suspend** — keyboards were detected once at startup and never again, so a device that dropped and came back was gone for the life of the process. TalkType now rescans every 3 seconds while idle. It never rescans mid-recording, which would let the hotkey leak into the app you're typing into.
+- **System-wide keyboard and mouse lockups during recording** — TalkType takes an exclusive grab on input devices while recording. Several error paths lost the handle needed to release them, leaving the keyboard dead everywhere until the app was killed. Every exit path now releases, including when the microphone is busy, unplugged, or was changed over USB.
+- **A keyboard unplugged mid-sentence left recording stuck on**, which also disabled the auto-timeout and the stranded-grab safety net.
+- **The hotkey test in Preferences detected nothing** and pegged a CPU core while open.
+- **The hotkey test could permanently disable GNOME's Alt+F8 / Alt+F7** window resize and move shortcuts — as a saved setting that survived reboots, with nothing pointing back at TalkType as the cause.
+- **The hotkey dropdown showed F8 while the saved hotkey was actually blank**, so clicking OK saved a blank hotkey. The one screen you'd use to fix dead dictation couldn't fix it.
+
+### Your settings stay put
+A whole class of "TalkType reset itself and dictation stopped working" faults:
+- **A microphone with a quote mark in its name wiped every setting**, hotkey included. A blank hotkey means dictation is silently dead.
+- **An unreadable config file (wrong permissions) was mistaken for a damaged one and overwritten** — turning a working setup into a fresh install with nothing to recover from. An unreadable file is no longer treated as a damaged one.
+- **Repairing a damaged config destroyed the backup it had just recovered from.**
+- **A single transient read error could cache defaults and write them over a perfectly good settings file** five seconds after launch.
+- **Custom commands were deleted** on any Apply in Preferences if the commands file was damaged.
+- **TalkType's three processes could truncate each other's settings file** when writing at the same time.
+- **Tray changes made while Preferences was open** are no longer discarded on Apply/OK.
+
+### Text corrections
+- `report.pdf` no longer becomes "report. Pdf" — filenames are protected.
+- "meet at 9 a.m. tomorrow" no longer becomes "9 AM Tomorrow".
+- "8 a.m. Tuesday" is no longer split into two sentences before a proper noun.
+- "use it, i.e. the new one" no longer becomes "I.e.".
+- "2024 was a good year" no longer becomes "2024 Was a good year" — same for prices, and email addresses are no longer capitalized.
+- "here is the plan:" no longer collects a stray full stop.
+- Silence no longer produces a lone ".".
+- **"Ensure period at end of sentences" now works when unchecked** — it previously did nothing at all.
+- Any dictation ending in "subscribe" no longer loses the word.
+- Decimals, prices and abbreviations ("3.5", "$19.99", "U.S.") stay intact.
+- After "undo that", the next words keep their capitals — "NASA" no longer becomes "nASA".
+- **"Undo that" could delete an extra sentence** — often the whole dictation — when the previous sentence ended inside a quote or bracket. Those backspaces land in your live document, so this one mattered.
+
+### Voice commands
+- **A backslash in a custom command's replacement crashed every dictation**, even when that command's trigger phrase wasn't spoken.
+- **One custom command could rewrite another's output.** Replacements are now final.
+- **"delete everything" / "clear all"** wipes the whole input field.
+- **"delete last 3 words"** — counted undo, using digits or number words, for words, sentences and paragraphs.
+- "em dash" works again; "return" and "tab" no longer false-trigger mid-sentence.
+
+### Text injection
+- **Injection reported success even when it failed.** The two worst outcomes of that: the wrong text landing in your document, and the undo buffer recording text that never arrived — so a later "undo that" backspaced over writing you'd typed yourself.
+- **On an X11 login, paste could insert whatever you'd copied earlier** — a URL, a password, a whole document — while reporting success. It now falls back to typing.
+- **A failure partway through a long dictation** no longer leaves a partial copy followed by a complete second copy.
+- **Claude Desktop paste works again.** An Electron update started rejecting synthetic Ctrl+V; affected apps are now routed to a fast type path. Within it, "tab" no longer submits the chat mid-dictation.
+- Pasting no longer waits on two unbounded 25-second timeouts between releasing the hotkey and the text appearing.
+
+### Features that didn't actually work
+- **Changing the model from the tray or GNOME menu did nothing.** The change was written to a file the app has never read, and was gone by the restart it told you was required.
+- **Model downloads failed in full if any single file failed** — including `README.md`, which is never loaded. A flaky fetch of a text file discarded a finished multi-gigabyte download.
+- **"Battery Saver" could never show as the active preset** — the dot always jumped back to "Fastest".
+- **"Launch at login" wrote its autostart file the moment you ticked the box**, so Cancel left it behind and the checkbox disagreed with reality from then on. It now applies on save.
+- **Closing the download window left downloads running** with no window, no progress, and no way to stop them.
+- **A failed CUDA download deleted the CUDA you already had** — including failures that happened before anything was downloaded.
+- The tray no longer freezes for a second on Restart Service, or when switching presets.
+
+### Security and integrity
+- **The update check installed an AppImage whose checksum was missing** from a release that did publish checksums.
+- **The GNOME extension installed an unverifiable zip** the same way — and that extension is JavaScript running in your shell. A missing checksum file (true of every release through v0.5.16) is now distinguished from a failed lookup.
+
+### Under the hood
+- The release build now fails loudly instead of shipping an AppImage whose PyTorch crashes on every machine without an NVIDIA card.
+- Test suite grew from 223 to 361 tests.
+- Removed two dead, non-working build scripts; the release toolchain is now tracked in the repository.
+
 ## [0.5.16] - 2026-05-09
 
 ### Bug Fixes

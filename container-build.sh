@@ -303,8 +303,11 @@ export LD_LIBRARY_PATH="${HERE}/usr/lib:${LD_LIBRARY_PATH}"
 export PYTHONPATH="${HERE}/usr/src:${HERE}/usr/lib/python3.10/site-packages"
 export GI_TYPELIB_PATH="${HERE}/usr/lib/girepository-1.0"
 export PYTHONHOME="${HERE}/usr"
-# Force XWayland mode to enable recording indicator positioning on Wayland
-export GDK_BACKEND=x11
+# GDK_BACKEND is deliberately NOT exported here. The recording indicator needs
+# XWayland to position itself, but the tray sets that for the dictation service
+# alone (tray.py _launch_service). Setting it for the whole app breaks every GTK3
+# dropdown: under XWayland a combo popup does not latch open on a plain click, so
+# the first-run model picker and all Preferences combos become unusable.
 # Disable HuggingFace XET downloads - they bypass progress tracking
 export HF_HUB_DISABLE_XET=1
 cd "$HOME"

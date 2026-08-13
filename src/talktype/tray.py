@@ -392,13 +392,35 @@ class DictationTray:
         usr_dir = os.path.dirname(os.path.dirname(src_dir))
         dictate_script = os.path.join(usr_dir, "bin", "dictate")
 
+        env = os.environ.copy()
+
+        # Run ONLY the dictation service under XWayland. It owns the recording
+        # indicator, which positions itself with gtk_window_move() — honoured
+        # under XWayland, ignored under native Wayland (measured: top-left lands
+        # at 20,20 under x11 and is centred under wayland), so indicator_position
+        # would silently do nothing otherwise.
+        #
+        # This must NOT be exported globally, which is how it was shipped for
+        # several releases. Under XWayland a GTK3 combo popup does not latch open
+        # on a plain click — it only supports press-drag-release — so every
+        # dropdown in the tray, Preferences and the welcome dialog became
+        # unusable, including the model picker during first-run setup. The tray
+        # therefore stays on native Wayland; the service pays no price for x11
+        # because it shows no dropdowns, only progress and notice dialogs.
+        #
+        # The value is a preference LIST, not a single backend. Pinned to "x11"
+        # alone, GTK cannot initialise on a Wayland system with no XWayland
+        # installed and the service dies on launch — no dictation at all, to
+        # protect a cosmetic indicator position. With the fallback it degrades
+        # to a centred indicator instead.
+        env["GDK_BACKEND"] = "x11,wayland"
+
         if os.path.exists(dictate_script):
-            proc = subprocess.Popen([dictate_script], env=os.environ.copy())
+            proc = subprocess.Popen([dictate_script], env=env)
             self._service_pid = proc.pid
             logger.info(f"Started dictation service via {dictate_script} (PID {proc.pid})")
         else:
             # Dev mode fallback
-            env = os.environ.copy()
             pythonpath = self._get_dev_pythonpath()
             if pythonpath:
                 env["PYTHONPATH"] = pythonpath

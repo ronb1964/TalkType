@@ -136,9 +136,20 @@ const PERFORMANCE_PRESETS = {
         label: 'Battery Saver',
         description: 'tiny model, CPU, short timeout',
         model: 'tiny',
-        device: 'cpu'
+        device: 'cpu',
+        // The short timeout is the ONLY thing separating this from "Fastest" —
+        // they are otherwise the same tiny/CPU pair. Declared here so
+        // _getCurrentPreset() can tell them apart; without it the earlier entry
+        // ('fastest') always won and Battery Saver could never show its dot.
+        // Must stay in step with PERFORMANCE_PRESETS in tray.py.
+        auto_timeout_enabled: true,
+        auto_timeout_minutes: 2
     }
 };
+
+// Preset keys that are settings to compare beyond model and device.
+// Mirrors _PRESET_EXTRA_KEYS in tray.py.
+const PRESET_EXTRA_KEYS = ['auto_timeout_enabled', 'auto_timeout_minutes'];
 
 const TalkTypeProxy = Gio.DBusProxy.makeProxyWrapper(TalkTypeIface);
 
@@ -160,6 +171,11 @@ class TalkTypeIndicator extends PanelMenu.Button {
         this._isServiceRunning = false;
         this._currentModel = 'unknown';
         this._currentDevice = 'unknown';
+        // Settings beyond model/device that presets may match on. Empty until
+        // the first GetStatus reply; an older TalkType that does not report
+        // them simply never matches a preset that declares extras, which is
+        // the previous behaviour rather than a wrong dot.
+        this._currentExtras = {};
         this._currentInjectionMode = 'auto';
         this._dbusAvailable = false;
 
@@ -504,6 +520,16 @@ class TalkTypeIndicator extends PanelMenu.Button {
             this._isServiceRunning = status.service_running ? status.service_running.deep_unpack() : false;
             this._currentModel = status.model ? status.model.deep_unpack() : 'unknown';
             this._currentDevice = status.device ? status.device.deep_unpack() : 'unknown';
+
+            // Extra settings used to tell same-model/device presets apart
+            // (Battery Saver vs Fastest). Absent when talking to a TalkType
+            // older than v0.6.0, so read defensively.
+            this._currentExtras = {};
+            for (const key of PRESET_EXTRA_KEYS) {
+                if (status[key]) {
+                    this._currentExtras[key] = status[key].deep_unpack();
+                }
+            }
             this._currentInjectionMode = status.injection_mode ? status.injection_mode.deep_unpack() : 'auto';
 
             this._updateIcon();
@@ -512,19 +538,40 @@ class TalkTypeIndicator extends PanelMenu.Button {
     }
 
     _getCurrentPreset() {
-        // Two-pass match, mirroring _get_current_preset() in tray.py.
-        // Exact match first...
+        // Three-pass match, mirroring _get_current_preset() in tray.py.
+        const declaresExtras = (preset) =>
+            PRESET_EXTRA_KEYS.some(k => k in preset);
+
+        const extrasMatch = (preset) =>
+            PRESET_EXTRA_KEYS.every(k =>
+                !(k in preset) || this._currentExtras[k] === preset[k]);
+
+        // Most specific first: presets that declare extra settings, and only
+        // when those match too. Checking the less specific presets first would
+        // let "Fastest" claim a "Battery Saver" config, since the two share
+        // their model and device — which is exactly what used to happen.
         for (let [key, preset] of Object.entries(PERFORMANCE_PRESETS)) {
-            if (preset.model === this._currentModel && preset.device === this._currentDevice) {
+            if (declaresExtras(preset)
+                    && preset.model === this._currentModel
+                    && preset.device === this._currentDevice
+                    && extrasMatch(preset)) {
                 return key;
             }
         }
-        // ...then model alone. The device gets downgraded from GPU to CPU on
+        // Then model + device, for presets that declare no extras.
+        for (let [key, preset] of Object.entries(PERFORMANCE_PRESETS)) {
+            if (!declaresExtras(preset)
+                    && preset.model === this._currentModel
+                    && preset.device === this._currentDevice) {
+                return key;
+            }
+        }
+        // Finally model alone. The device gets downgraded from GPU to CPU on
         // machines without CUDA, so requiring an exact match left the whole
         // submenu showing nothing selected on AMD and Intel systems while the
         // GTK tray showed the preset correctly.
         for (let [key, preset] of Object.entries(PERFORMANCE_PRESETS)) {
-            if (preset.model === this._currentModel) {
+            if (!declaresExtras(preset) && preset.model === this._currentModel) {
                 return key;
             }
         }

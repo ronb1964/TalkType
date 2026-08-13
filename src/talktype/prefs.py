@@ -278,6 +278,12 @@ class PreferencesWindow:
 
     def _load_css(self):
         """Load custom CSS stylesheet for preferences window ONLY (not globally)."""
+        # Dropdown list mode must be installed screen-wide: a provider on this
+        # window's context does not reach its child combos, so it cannot ride
+        # along with prefs_style.css below.
+        from .ui_style import apply_dropdown_list_style
+        apply_dropdown_list_style()
+
         try:
             css_provider = Gtk.CssProvider()
             css_file = os.path.join(os.path.dirname(__file__), 'prefs_style.css')
@@ -601,8 +607,10 @@ class PreferencesWindow:
             "medium":   "medium — better accuracy",
             "large-v3": "large-v3 — best accuracy",
         }
+        from .model_helper import OFFERED_MODELS
+
         self.model_store = Gtk.ListStore(str, str, bool)
-        for _mid in ["tiny", "base", "small", "medium", "large-v3"]:
+        for _mid in OFFERED_MODELS:
             if _mid == "large-v3":
                 if _has_cuda:
                     self.model_store.append([_mid, _MODEL_DISPLAY[_mid], True])
@@ -1076,18 +1084,6 @@ class PreferencesWindow:
         pos_label = Gtk.Label(label="  Indicator position:", xalign=0)
         grid.attach(pos_label, 0, row, 1, 1)
 
-        # Check if running on Wayland
-        is_wayland = os.environ.get('WAYLAND_DISPLAY') or os.environ.get('XDG_SESSION_TYPE') == 'wayland'
-
-        # Check if GNOME extension is available (enables positioning on Wayland)
-        has_extension = False
-        if is_wayland:
-            try:
-                from . import extension_helper
-                ext_status = extension_helper.get_extension_status()
-                has_extension = ext_status.get('installed', False) and ext_status.get('enabled', False)
-            except Exception:
-                pass
 
         positions = [
             ("center", "Center"),
@@ -1111,22 +1107,30 @@ class PreferencesWindow:
         position_combo.set_active_id(current_position)
         position_combo.connect("changed", lambda x: self.update_config("indicator_position", x.get_active_id()))
 
-        # Enable positioning if: X11 session OR (Wayland + GNOME extension installed)
-        if is_wayland and not has_extension:
-            position_combo.set_tooltip_text("Note: On Wayland, window positioning requires the GNOME extension.\nInstall the extension from the Advanced tab to enable positioning.")
-            position_combo.set_sensitive(False)  # Disable on Wayland without extension
+        # Positioning depends on the indicator getting XWayland, NOT on the
+        # session type and NOT on the GNOME extension. The tray launches the
+        # dictation service with GDK_BACKEND=x11,wayland, so this works on a
+        # Wayland desktop with no extension installed — which is why the old
+        # `is_wayland and not has_extension` test greyed the control out on
+        # machines where it demonstrably worked.
+        from .recording_indicator import positioning_available
+
+        if positioning_available():
+            position_combo.set_tooltip_text("Choose where the recording indicator appears on screen.")
         else:
-            if has_extension:
-                position_combo.set_tooltip_text("Choose where the recording indicator appears on screen.\n(Enabled via GNOME extension)")
-            else:
-                position_combo.set_tooltip_text("Choose where the recording indicator appears on screen.")
+            position_combo.set_tooltip_text(
+                "Position cannot be set on this system: it needs XWayland, which\n"
+                "is not available here. The indicator appears centred instead."
+            )
+            position_combo.set_sensitive(False)
 
         grid.attach(position_combo, 1, row, 1, 1)
         row += 1
 
-        # Add warning label for Wayland users without extension
-        if is_wayland and not has_extension:
-            warning_label = Gtk.Label(label="  ⚠️ Install GNOME extension (Advanced tab) to enable positioning on Wayland", xalign=0)
+        # Warn only when positioning genuinely cannot work. The old message sent
+        # users to install a GNOME extension that never affected positioning.
+        if not positioning_available():
+            warning_label = Gtk.Label(label="  ⚠️ XWayland is not available, so the indicator always appears centred", xalign=0)
             warning_label.set_line_wrap(True)
             warning_label.set_max_width_chars(60)
             warning_style = warning_label.get_style_context()
@@ -1144,7 +1148,7 @@ class PreferencesWindow:
         offset_x_spin.connect("value-changed", lambda x: self.update_config("indicator_offset_x", int(x.get_value())))
         offset_x_spin.connect("scroll-event", lambda *a: True)  # Disable scroll wheel to prevent accidental changes
         offset_x_spin.set_tooltip_text("Fine-tune horizontal position.\nPositive = right, Negative = left")
-        if is_wayland and not has_extension:
+        if not positioning_available():
             offset_x_spin.set_sensitive(False)
         grid.attach(offset_x_spin, 1, row, 1, 1)
         row += 1
@@ -1159,7 +1163,7 @@ class PreferencesWindow:
         offset_y_spin.connect("value-changed", lambda x: self.update_config("indicator_offset_y", int(x.get_value())))
         offset_y_spin.connect("scroll-event", lambda *a: True)  # Disable scroll wheel to prevent accidental changes
         offset_y_spin.set_tooltip_text("Fine-tune vertical position.\nPositive = down, Negative = up")
-        if is_wayland and not has_extension:
+        if not positioning_available():
             offset_y_spin.set_sensitive(False)
         grid.attach(offset_y_spin, 1, row, 1, 1)
         row += 1
@@ -3084,6 +3088,8 @@ Hidden=true
                 self.extension_status_label.set_text("Extension support not available")
                 self.install_extension_button.set_sensitive(False)
                 self.uninstall_extension_button.set_sensitive(False)
+                # Restart Info only ever explains how to restart GNOME Shell.
+                self._set_restart_info_sensitive(False)
                 return
 
             # Get extension status
@@ -3093,6 +3099,10 @@ Hidden=true
                 self.extension_status_label.set_markup('<span color="#9E9E9E">⊘ Not available (requires GNOME desktop)</span>')
                 self.install_extension_button.set_sensitive(False)
                 self.uninstall_extension_button.set_sensitive(False)
+                # Its dialog tells the user to press Alt+F2 and type 'r', which
+                # is meaningless off GNOME — on KDE or any other desktop it is
+                # advice for software that isn't running.
+                self._set_restart_info_sensitive(False)
             elif status['installed']:
                 if status['enabled']:
                     self.extension_status_label.set_markup('<span color="#4CAF50">✓ Extension installed and enabled</span>')
@@ -3101,14 +3111,33 @@ Hidden=true
                 self.install_extension_button.set_label("✓ Installed")
                 self.install_extension_button.set_sensitive(False)
                 self.uninstall_extension_button.set_sensitive(True)
+                self._set_restart_info_sensitive(True)
             else:
                 self.extension_status_label.set_markup('<span color="#FF9800">⊘ Extension not installed</span>')
                 self.install_extension_button.set_sensitive(True)
                 self.uninstall_extension_button.set_sensitive(False)
+                self._set_restart_info_sensitive(True)
 
         except Exception as e:
             self.extension_status_label.set_text(f"Error checking extension: {e}")
             print(f"Extension check error: {e}")
+
+    def _set_restart_info_sensitive(self, sensitive):
+        """Enable/disable the Restart Info button.
+
+        Separate helper because the button is created in a different tab from
+        the status check that governs it, and it was previously left enabled on
+        every desktop — including ones with no GNOME Shell to restart.
+        """
+        button = getattr(self, "restart_info_button", None)
+        if button is None:
+            return
+        button.set_sensitive(sensitive)
+        button.set_tooltip_text(
+            "How to restart GNOME Shell to activate extension"
+            if sensitive
+            else "Only applies to GNOME Shell, which this desktop is not running"
+        )
 
     def _on_install_extension_clicked(self, button):
         """Handle Install Extension button click."""

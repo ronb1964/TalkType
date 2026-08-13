@@ -72,7 +72,7 @@ Most voice dictation tools on Linux are either cloud-based (privacy concerns), c
 - **Smart Text Processing** - Auto-punctuation, smart quotes, auto-spacing
 - **Voice Commands** - Say "comma", "period", "new paragraph", "undo last word", and more
 - **Custom Commands** - Define your own phrase shortcuts (e.g., "my email" → your@email.com)
-- **Visual Feedback** - On-screen recording indicator with timer
+- **Visual Feedback** - On-screen recording indicator with timer, positionable anywhere on screen
 - **GNOME Integration** - Native shell extension for GNOME desktop
 - **Auto-Updates** - Built-in update checker with one-click downloads
 - **Wayland Native** - Works seamlessly on modern Linux desktops
@@ -158,9 +158,21 @@ The AppImage includes everything needed - just download and run!
 ### Editing
 | Say This | Result |
 |----------|--------|
-| "undo last word" | Deletes last word |
-| "undo last sentence" | Deletes to previous sentence |
-| "undo everything" | Clears all dictated text |
+| "undo last word" | Deletes the last word |
+| "undo last sentence" | Deletes to the previous sentence |
+| "undo last paragraph" | Deletes the last paragraph |
+| "delete last three words" | Deletes several at once — words, sentences or paragraphs |
+| "delete last 5 sentences" | Digits work too; counts above what you dictated are clamped |
+| "clear everything" | Clears the **entire** input field (see warning below) |
+
+**Undo, delete and remove are interchangeable** — say whichever comes naturally
+("delete last word", "remove last two sentences"). Counts accept digits or the
+words one through ten.
+
+> ⚠️ **"clear everything" empties the whole field, not just what you dictated.**
+> The phrases *undo/delete/clear* + *everything/all* — six in total — all do the
+> same thing: select all and delete. That includes text you typed yourself, so
+> it is not limited to the current dictation.
 
 ### Literal Words
 Say **"literal"** before any command to output the word instead:

@@ -112,6 +112,17 @@ class TalkTypeDBusService(dbus.service.Object):
             'injection_mode': self.GetInjectionMode(),
         }
 
+        # The auto-timeout is the ONLY thing separating the "Battery Saver" and
+        # "Fastest" presets — both are tiny/CPU. Without it here, the GNOME
+        # extension cannot tell which one is active and always reports Fastest.
+        # Adding keys to this dict is backward-compatible: older extensions
+        # ignore what they do not read.
+        if hasattr(self.app, 'config'):
+            status['auto_timeout_enabled'] = bool(
+                getattr(self.app.config, 'auto_timeout_enabled', False))
+            status['auto_timeout_minutes'] = int(
+                getattr(self.app.config, 'auto_timeout_minutes', 0))
+
         # Add statistics if available
         if hasattr(self.app, 'stats'):
             status['stats'] = {

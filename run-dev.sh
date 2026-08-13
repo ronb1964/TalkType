@@ -7,9 +7,11 @@ cd "$(dirname "$0")"
 # Enable dev mode to show both GTK and extension trays
 export DEV_MODE=1
 
-# Force X11 backend (via XWayland) to enable window positioning
-# Native Wayland doesn't allow apps to position their own windows
-export GDK_BACKEND=x11
+# NOTE: GDK_BACKEND is deliberately NOT set here. The recording indicator does
+# need XWayland to position itself, but the tray sets that for the dictation
+# service alone (see tray.py _launch_service). Exporting it here would reach the
+# tray, and under XWayland GTK3 dropdowns do not stay open on a plain click —
+# which made the model picker and every Preferences combo unusable.
 
 # Set PYTHONPATH to find talktype module AND system PyGObject
 export PYTHONPATH="./src:/usr/lib64/python3.14/site-packages:/usr/lib/python3.14/site-packages"

@@ -16,7 +16,24 @@ except (ValueError, ImportError):
 from gi.repository import Gtk, Gdk, GLib
 import cairo
 import math
+import os
 import time
+
+
+def positioning_available():
+    """Whether the indicator can actually honour indicator_position.
+
+    Positioning is done with gtk_window_move(), which XWayland honours and
+    native Wayland ignores (it centres the window instead). The tray launches
+    the dictation service with GDK_BACKEND=x11,wayland, so the indicator runs
+    under XWayland whenever an X display exists — on any desktop, and with no
+    GNOME extension involved.
+
+    Preferences uses this to decide whether to offer the position control, so
+    it must describe reality rather than the session type: a KDE Plasma Wayland
+    session with XWayland present positions the indicator correctly.
+    """
+    return bool(os.environ.get("DISPLAY"))
 
 
 class RecordingIndicator(Gtk.Window):

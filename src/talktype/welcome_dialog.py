@@ -12,6 +12,7 @@ Cross-desktop compatible - works on GNOME, KDE, XFCE, etc.
 
 import os
 import subprocess
+import sys
 import gi
 gi.require_version('Gtk', '3.0')
 gi.require_version('Gdk', '3.0')
@@ -1466,6 +1467,12 @@ def show_tips_and_features_dialog(extension_installed=False):
     Args:
         extension_installed: Whether GNOME extension was installed (requires logout reminder)
     """
+    # The starting-model picker below is the first dropdown a new user ever
+    # touches. Without this its popup opens in menu mode, on top of the button
+    # and the text above it, which looks broken on first run.
+    from .ui_style import apply_dropdown_list_style
+    apply_dropdown_list_style()
+
     dialog = Gtk.Dialog(title="TalkType - Setup Complete!")
     dialog.set_default_size(600, 650 if extension_installed else 600)
     dialog.set_border_width(0)
@@ -1642,25 +1649,38 @@ def show_tips_and_features_dialog(extension_installed=False):
 
     # Build model store — all models are always selectable (is_sensitive=True).
     # If the user picks large-v3 without CUDA, a popup explains what's needed.
+    #
+    # Built from OFFERED_MODELS so this screen cannot fall behind Preferences.
+    # It did: this list was maintained separately and omitted "base" entirely,
+    # so first-run users were shown four models and Preferences later showed
+    # five, with nothing to indicate one had been hidden from them.
+    from .model_helper import OFFERED_MODELS
+
+    _MODEL_LABELS = {
+        "tiny":     "Tiny (fastest) — 39MB",
+        "base":     "Base (fast, basic accuracy) — 74MB",
+        "small":    "Small (recommended) — 244MB",
+        "medium":   "Medium (better accuracy) — 769MB",
+        "large-v3": "Large (best quality) — 3GB",
+    }
+
     model_store = Gtk.ListStore(str, str, bool)
-    model_store.append(["small",    "Small (recommended) — 244MB", True])
-    model_store.append(["tiny",     "Tiny (fastest) — 39MB",       True])
-    model_store.append(["medium",   "Medium (better accuracy) — 769MB", True])
-    if _has_cuda:
-        model_store.append(["large-v3", "Large (best quality) — 3GB", True])
-    elif _has_nvidia:
-        model_store.append(["large-v3",
-            "Large (best quality) — 3GB · needs CUDA download", True])
-    else:
-        model_store.append(["large-v3",
-            "Large (best quality) — 3GB · NVIDIA GPU required", True])
+    for _mid in OFFERED_MODELS:
+        _label = _MODEL_LABELS[_mid]
+        if _mid == "large-v3" and not _has_cuda:
+            # Still selectable — choosing it explains what is needed.
+            _label += " · needs CUDA download" if _has_nvidia else " · NVIDIA GPU required"
+        model_store.append([_mid, _label, True])
 
     model_combo = Gtk.ComboBox.new_with_model(model_store)
     _renderer = Gtk.CellRendererText()
     model_combo.pack_start(_renderer, True)
     model_combo.add_attribute(_renderer, "text", 1)
     model_combo.add_attribute(_renderer, "sensitive", 2)
-    model_combo.set_active(0)  # Default to Small
+    # Default to Small by NAME, not position. The list is ordered by size now,
+    # so index 0 is Tiny — a positional default would quietly hand every new
+    # user the fastest, least accurate model.
+    model_combo.set_active(OFFERED_MODELS.index("small"))
     model_combo.set_size_request(320, -1)  # Fixed width — don't stretch to fill dialog
     model_combo.set_tooltip_text(
         "Choose which AI model to download. You can change this later in Preferences.")
@@ -2728,6 +2748,29 @@ def show_welcome_and_install():
     return result
 
 
+def _open_preferences():
+    """Launch the Preferences window as its own process.
+
+    Mirrors the AppImage/dev split in DictationTray.open_preferences. These
+    dialogs are module-level functions with no access to the tray instance, so
+    the resolution is repeated here rather than imported.
+
+    Never raises: failing to open Preferences must not prevent the user from
+    dismissing the final screen and getting on with dictating.
+    """
+    try:
+        # AppImage path: __file__ → usr/src/talktype/ → usr/bin/dictate-prefs
+        src_dir = os.path.dirname(__file__)
+        usr_dir = os.path.dirname(os.path.dirname(src_dir))
+        prefs_script = os.path.join(usr_dir, "bin", "dictate-prefs")
+        if os.path.exists(prefs_script):
+            subprocess.Popen([prefs_script], env=os.environ.copy())
+        else:
+            subprocess.Popen([sys.executable, "-m", "talktype.prefs"], env=os.environ.copy())
+    except Exception as e:
+        logger.warning(f"Could not open Preferences: {e}")
+
+
 def show_setup_complete_dialog(appimage_installed=False, launcher_created=False):
     """
     Show the final setup complete dialog after model download.
@@ -2837,10 +2880,27 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False)
     settings_label.set_opacity(0.8)
     vbox.pack_start(settings_label, False, False, 0)
 
-    # Start button - smaller
-    button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+    # Two ways out of the last screen: start dictating, or go and adjust
+    # settings. This is the right screen for it — setup is finished here, the
+    # model is downloaded, and the user is genuinely choosing what to do next.
+    # Offering it on the earlier model-picker screen sent them off mid-setup.
+    button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
     button_box.set_halign(Gtk.Align.CENTER)
     button_box.set_margin_top(12)
+
+    prefs_button = Gtk.Button(label="Open Preferences")
+    prefs_button.set_size_request(150, 35)
+    prefs_button.set_tooltip_text(
+        "Adjust models, hotkeys, punctuation, the recording indicator and more")
+
+    def on_open_prefs_clicked(_widget):
+        # Close this dialog too — leaving it floating above Preferences would
+        # sit on top of the window the user just asked for.
+        _open_preferences()
+        dialog.response(Gtk.ResponseType.OK)
+
+    prefs_button.connect("clicked", on_open_prefs_clicked)
+    button_box.pack_start(prefs_button, False, False, 0)
 
     start_button = Gtk.Button(label="Start Using TalkType!")
     start_button.set_size_request(180, 35)

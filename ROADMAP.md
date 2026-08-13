@@ -142,4 +142,4 @@ Status markers: `[x]` shipped · `[~]` partly done, see note · `[ ]` not starte
 
 ---
 
-*Last updated: 2026-08-03 — statuses verified against the source tree at v0.5.16 plus unreleased work on `main`.*
+*Last updated: 2026-08-13 — statuses verified against the source tree as released in v0.6.0.*

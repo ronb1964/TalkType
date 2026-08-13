@@ -43,6 +43,13 @@ MODEL_REPOS = {
     "large-v3": "Systran/faster-whisper-large-v3",
 }
 
+# The models offered in the UI, smallest first. Every screen with a model picker
+# must build from this rather than keeping its own list: Preferences and the
+# first-run setup screen each hardcoded one and drifted, leaving "base" off the
+# setup screen entirely. A model is only offerable if MODEL_REPOS can fetch it,
+# which tests/test_model_choices.py enforces.
+OFFERED_MODELS = ("tiny", "base", "small", "medium", "large-v3")
+
 # Model sizes for display (compressed size users will download)
 MODEL_DISPLAY_SIZES = {
     "tiny": "39 MB",
