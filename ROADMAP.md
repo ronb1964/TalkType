@@ -95,7 +95,7 @@ Status markers: `[x]` shipped · `[~]` partly done, see note · `[ ]` not starte
 
 ## Distribution & Packaging
 
-- [~] AUR — `aur/PKGBUILD` is in the repo and there is a publishing clone workflow.
+- [x] AUR — `talktype-appimage` is published and current. `aur/` holds the packaging sources; `aur-repo/` is the untracked publishing clone (`ssh://aur@aur.archlinux.org/talktype-appimage.git`). Updating a release means bumping `pkgver` and `sha256sums` in both, then committing and pushing `aur-repo`. Note there is no `makepkg` on this machine, so `.SRCINFO` is maintained by hand and must be kept in step with the PKGBUILD.
 - [ ] Flatpak packaging
 - [ ] Snap Store packaging
 - [ ] PyPI wheel
