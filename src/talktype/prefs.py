@@ -14,6 +14,11 @@ from .config import (CONFIG_PATH, ConfigNotLoadedError, Settings, merge_changed_
                      _toml_value)
 
 # D-Bus interface for communicating with the TalkType service
+# Set on the Preferences window so prefs_style.css — which must be installed
+# screen-wide to reach child widgets — matches only this window's widgets.
+# Every selector in that file is prefixed with it; keep the two in step.
+PREFS_STYLE_CLASS = "talktype-prefs"
+
 DBUS_SERVICE = "io.github.ronb1964.TalkType"
 DBUS_OBJECT = "/io/github/ronb1964/TalkType"
 DBUS_INTERFACE = "io.github.ronb1964.TalkType"
@@ -290,14 +295,26 @@ class PreferencesWindow:
 
             if os.path.exists(css_file):
                 css_provider.load_from_path(css_file)
-                # Apply CSS ONLY to preferences window, not the entire screen
-                # This prevents style conflicts with dialogs (help, etc.)
-                style_context = self.window.get_style_context()
-                style_context.add_provider(
+
+                # This provider MUST go on the screen, not on the window's own
+                # style context. A window-scoped provider does not reach that
+                # window's children — measured: a child button kept the theme
+                # default while a screen-wide provider styled it correctly. The
+                # stylesheet was attached to the window for years, so every rule
+                # in it except `window` silently did nothing.
+                #
+                # Screen scope alone would restyle every GTK window in this
+                # process, which is what the window scope was trying to avoid.
+                # Instead each selector in prefs_style.css is scoped to the
+                # .talktype-prefs class set below, so the stylesheet reaches the
+                # Preferences widgets and nothing else.
+                self.window.get_style_context().add_class(PREFS_STYLE_CLASS)
+                Gtk.StyleContext.add_provider_for_screen(
+                    Gdk.Screen.get_default(),
                     css_provider,
                     Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
                 )
-                print("✅ Loaded custom CSS styling (prefs window only)")
+                print("✅ Loaded custom CSS styling (scoped to prefs window)")
             else:
                 print(f"⚠️  CSS file not found: {css_file}")
         except Exception as e:

@@ -1,21 +1,31 @@
 /* TalkType Preferences Stylesheet
- * Professional dark theme with subtle accents
- * Color scheme: Muted slate blue with minimal effects
+ *
+ * Accent colours come from the desktop theme via @theme_selected_bg_color,
+ * so TalkType follows the user's system accent instead of imposing its own.
+ * They were hardcoded to a slate blue (#5a8fb8), which looked wrong on any
+ * desktop not using a blue accent — on KDE Breeze with a green accent, every
+ * highlight in this window disagreed with the rest of the system.
+ *
+ * Every selector below is scoped to .talktype-prefs. That is required, not
+ * cosmetic: this sheet must be installed screen-wide to reach child widgets
+ * at all (a window-scoped provider does not), so without the scope it would
+ * restyle every other GTK window in the process. See prefs.py::_load_css and
+ * tests/test_prefs_stylesheet.py.
  */
 
 /* Window background - clean dark */
-window {
+window.talktype-prefs {
     background: #1e1e1e;
 }
 
 /* Notebook tabs */
-notebook > header {
+.talktype-prefs notebook > header {
     background: #252525;
     border-bottom: 1px solid #3a3a3a;
     padding: 8px;
 }
 
-notebook > header > tabs > tab {
+.talktype-prefs notebook > header > tabs > tab {
     background: transparent;
     color: #ababab;
     border: none;
@@ -26,26 +36,26 @@ notebook > header > tabs > tab {
     font-weight: 500;
 }
 
-notebook > header > tabs > tab:hover {
+.talktype-prefs notebook > header > tabs > tab:hover {
     background: rgba(80, 140, 200, 0.15);
     color: #d4d4d4;
 }
 
-notebook > header > tabs > tab:checked {
+.talktype-prefs notebook > header > tabs > tab:checked {
     background: #2d2d2d;
-    color: #7eb7dd;
-    border-bottom: 2px solid #5a8fb8;
+    color: shade(@theme_selected_bg_color, 1.4);
+    border-bottom: 2px solid @theme_selected_bg_color;
     font-weight: 600;
 }
 
 /* Notebook content area */
-notebook > stack {
+.talktype-prefs notebook > stack {
     background: #1e1e1e;
     padding: 20px;
 }
 
 /* Section frames */
-frame {
+.talktype-prefs frame {
     border: 1px solid #3a3a3a;
     border-radius: 8px;
     background: #252525;
@@ -53,29 +63,29 @@ frame {
     margin: 8px 0;
 }
 
-frame > border {
+.talktype-prefs frame > border {
     border: none;
 }
 
 /* Frame labels (section headers) */
-frame > label {
-    color: #7eb7dd;
+.talktype-prefs frame > label {
+    color: shade(@theme_selected_bg_color, 1.4);
     font-weight: 600;
     font-size: 110%;
     padding: 0 8px;
 }
 
 /* Regular labels */
-label {
+.talktype-prefs label {
     color: #d4d4d4;
 }
 
-label:disabled {
+.talktype-prefs label:disabled {
     color: #6a6a6a;
 }
 
 /* Buttons - clean professional style */
-button {
+.talktype-prefs button {
     background: #3a3a3a;
     color: #d4d4d4;
     border: 1px solid #505050;
@@ -85,59 +95,61 @@ button {
     transition: all 150ms ease;
 }
 
-button:hover {
+.talktype-prefs button:hover {
     background: #454545;
-    border-color: #5a8fb8;
+    border-color: @theme_selected_bg_color;
 }
 
-button:active {
+.talktype-prefs button:active {
     background: #303030;
 }
 
-button:disabled {
+.talktype-prefs button:disabled {
     background: #2a2a2a;
     color: #5a5a5a;
     border-color: #353535;
 }
 
 /* Suggested action buttons (Continue, OK, etc.) */
-button.suggested-action {
-    background: #5a8fb8;
-    color: white;
-    border-color: #6a9fc8;
+.talktype-prefs button.suggested-action {
+    background: @theme_selected_bg_color;
+    color: @theme_selected_fg_color;
+    border-color: shade(@theme_selected_bg_color, 1.15);
 }
 
-button.suggested-action:hover {
-    background: #6a9fc8;
+.talktype-prefs button.suggested-action:hover {
+    background: shade(@theme_selected_bg_color, 1.15);
     border-color: #7aafd8;
 }
 
 /* Destructive action buttons (Delete, Remove, etc.) */
-button.destructive-action {
+.talktype-prefs button.destructive-action {
     background: #c24b4b;
     border-color: #d25b5b;
+    /* Deliberately white, not @theme_selected_fg_color: this sits on the
+       destructive red above, not on the theme accent. */
     color: white;
 }
 
-button.destructive-action:hover {
+.talktype-prefs button.destructive-action:hover {
     background: #d25b5b;
     border-color: #e26b6b;
 }
 
 /* Flat buttons (secondary actions) */
-button.flat {
+.talktype-prefs button.flat {
     background: transparent;
     border: 1px solid #505050;
-    color: #7eb7dd;
+    color: shade(@theme_selected_bg_color, 1.4);
 }
 
-button.flat:hover {
+.talktype-prefs button.flat:hover {
     background: rgba(90, 143, 184, 0.15);
-    border-color: #5a8fb8;
+    border-color: @theme_selected_bg_color;
 }
 
 /* Entry fields */
-entry {
+.talktype-prefs entry {
     background: #2a2a2a;
     color: #d4d4d4;
     border: 1px solid #454545;
@@ -146,30 +158,30 @@ entry {
     transition: all 150ms ease;
 }
 
-entry:focus {
+.talktype-prefs entry:focus {
     background: #303030;
-    border-color: #5a8fb8;
+    border-color: @theme_selected_bg_color;
 }
 
-entry:disabled {
+.talktype-prefs entry:disabled {
     background: #252525;
     color: #5a5a5a;
     border-color: #353535;
 }
 
 /* ComboBox / Dropdown */
-combobox button {
+.talktype-prefs combobox button {
     background: #2a2a2a;
     border: 1px solid #454545;
 }
 
-combobox button:hover {
+.talktype-prefs combobox button:hover {
     background: #303030;
-    border-color: #5a8fb8;
+    border-color: @theme_selected_bg_color;
 }
 
 /* Switches */
-switch {
+.talktype-prefs switch {
     background: #3a3a3a;
     border: 1px solid #505050;
     border-radius: 14px;
@@ -177,12 +189,12 @@ switch {
     min-height: 28px;
 }
 
-switch:checked {
-    background: #5a8fb8;
-    border-color: #6a9fc8;
+.talktype-prefs switch:checked {
+    background: @theme_selected_bg_color;
+    border-color: shade(@theme_selected_bg_color, 1.15);
 }
 
-switch slider {
+.talktype-prefs switch slider {
     background: white;
     border-radius: 50%;
     margin: 2px;
@@ -192,7 +204,7 @@ switch slider {
 }
 
 /* Checkboxes */
-checkbutton check {
+.talktype-prefs checkbutton check {
     background: #2a2a2a;
     border: 2px solid #505050;
     border-radius: 4px;
@@ -200,18 +212,18 @@ checkbutton check {
     min-height: 20px;
 }
 
-checkbutton check:checked {
-    background: #5a8fb8;
-    border-color: #6a9fc8;
+.talktype-prefs checkbutton check:checked {
+    background: @theme_selected_bg_color;
+    border-color: shade(@theme_selected_bg_color, 1.15);
     -gtk-icon-source: -gtk-icontheme("object-select-symbolic");
 }
 
-checkbutton check:hover {
-    border-color: #5a8fb8;
+.talktype-prefs checkbutton check:hover {
+    border-color: @theme_selected_bg_color;
 }
 
 /* Radio buttons */
-radiobutton radio {
+.talktype-prefs radiobutton radio {
     background: #2a2a2a;
     border: 2px solid #505050;
     border-radius: 50%;
@@ -219,102 +231,102 @@ radiobutton radio {
     min-height: 20px;
 }
 
-radiobutton radio:checked {
-    background: #5a8fb8;
-    border-color: #6a9fc8;
+.talktype-prefs radiobutton radio:checked {
+    background: @theme_selected_bg_color;
+    border-color: shade(@theme_selected_bg_color, 1.15);
     -gtk-icon-source: -gtk-icontheme("object-select-symbolic");
 }
 
-radiobutton radio:hover {
-    border-color: #5a8fb8;
+.talktype-prefs radiobutton radio:hover {
+    border-color: @theme_selected_bg_color;
 }
 
 /* Scale / Slider */
-scale trough {
+.talktype-prefs scale trough {
     background: #3a3a3a;
     border: 1px solid #454545;
     border-radius: 4px;
     min-height: 8px;
 }
 
-scale highlight {
-    background: #5a8fb8;
+.talktype-prefs scale highlight {
+    background: @theme_selected_bg_color;
     border-radius: 4px;
 }
 
-scale slider {
+.talktype-prefs scale slider {
     background: white;
-    border: 2px solid #5a8fb8;
+    border: 2px solid @theme_selected_bg_color;
     border-radius: 50%;
     min-width: 18px;
     min-height: 18px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
-scale slider:hover {
-    border-color: #6a9fc8;
+.talktype-prefs scale slider:hover {
+    border-color: shade(@theme_selected_bg_color, 1.15);
 }
 
 /* Spinbutton */
-spinbutton {
+.talktype-prefs spinbutton {
     background: #2a2a2a;
     border: 1px solid #454545;
     border-radius: 4px;
     color: #d4d4d4;
 }
 
-spinbutton:focus {
-    border-color: #5a8fb8;
+.talktype-prefs spinbutton:focus {
+    border-color: @theme_selected_bg_color;
 }
 
-spinbutton button {
+.talktype-prefs spinbutton button {
     background: transparent;
     border: none;
-    color: #7eb7dd;
+    color: shade(@theme_selected_bg_color, 1.4);
 }
 
-spinbutton button:hover {
+.talktype-prefs spinbutton button:hover {
     background: rgba(90, 143, 184, 0.2);
 }
 
 /* Progress bar */
-progressbar trough {
+.talktype-prefs progressbar trough {
     background: #3a3a3a;
     border: 1px solid #454545;
     border-radius: 4px;
     min-height: 8px;
 }
 
-progressbar progress {
-    background: #5a8fb8;
+.talktype-prefs progressbar progress {
+    background: @theme_selected_bg_color;
     border-radius: 4px;
 }
 
 /* Scrollbars */
-scrollbar {
+.talktype-prefs scrollbar {
     background: transparent;
 }
 
-scrollbar slider {
+.talktype-prefs scrollbar slider {
     background: rgba(90, 143, 184, 0.3);
     border-radius: 8px;
     min-width: 12px;
     min-height: 40px;
 }
 
-scrollbar slider:hover {
+.talktype-prefs scrollbar slider:hover {
     background: rgba(90, 143, 184, 0.5);
 }
 
 /* Separator */
-separator {
+.talktype-prefs separator {
     background: #3a3a3a;
     min-width: 1px;
     min-height: 1px;
 }
 
 /* Tooltips */
-tooltip {
+.talktype-prefs tooltip {
     background: #2a2a2a;
     color: #d4d4d4;
     border: 1px solid #505050;
@@ -323,118 +335,118 @@ tooltip {
     box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5);
 }
 
-tooltip * {
+.talktype-prefs tooltip * {
     background: transparent;
     color: inherit;
 }
 
 /* Info bars */
-infobar {
+.talktype-prefs infobar {
     border-radius: 6px;
     padding: 12px;
     margin: 8px;
 }
 
-infobar.info {
+.talktype-prefs infobar.info {
     background: rgba(90, 143, 184, 0.15);
     border: 1px solid rgba(90, 143, 184, 0.3);
 }
 
-infobar.warning {
+.talktype-prefs infobar.warning {
     background: rgba(230, 170, 60, 0.15);
     border: 1px solid rgba(230, 170, 60, 0.3);
 }
 
-infobar.error {
+.talktype-prefs infobar.error {
     background: rgba(194, 75, 75, 0.15);
     border: 1px solid rgba(194, 75, 75, 0.3);
 }
 
 /* List boxes */
-list {
+.talktype-prefs list {
     background: #2a2a2a;
     border: 1px solid #454545;
     border-radius: 6px;
 }
 
-list row {
+.talktype-prefs list row {
     padding: 8px;
     border-radius: 4px;
     color: #d4d4d4;
 }
 
-list row:hover {
+.talktype-prefs list row:hover {
     background: rgba(90, 143, 184, 0.15);
 }
 
-list row:selected {
-    background: #5a8fb8;
-    color: white;
+.talktype-prefs list row:selected {
+    background: @theme_selected_bg_color;
+    color: @theme_selected_fg_color;
 }
 
 /* Message dialogs */
-messagedialog {
+.talktype-prefs messagedialog {
     background: #1e1e1e;
 }
 
-messagedialog .dialog-action-area button {
+.talktype-prefs messagedialog .dialog-action-area button {
     margin: 4px;
 }
 
 /* Accent text (headers, important info) */
-.accent {
-    color: #7eb7dd;
+.talktype-prefs .accent {
+    color: shade(@theme_selected_bg_color, 1.4);
     font-weight: 600;
 }
 
 /* Success messages */
-.success {
+.talktype-prefs .success {
     color: #6db896;
 }
 
 /* Warning text */
-.warning {
+.talktype-prefs .warning {
     color: #e6aa3c;
 }
 
 /* Error text */
-.error {
+.talktype-prefs .error {
     color: #d25b5b;
 }
 
 /* Dim text */
-.dim-label {
+.talktype-prefs .dim-label {
     opacity: 0.7;
 }
 
 /* Section headers within tabs */
-label {
+.talktype-prefs label {
     color: #d4d4d4;
 }
 
 /* Style bold section headers */
-grid > label {
+.talktype-prefs grid > label {
     color: #d4d4d4;
 }
 
 /* Section headers should stand out more */
-notebook > stack > grid > label:first-child {
-    color: #7eb7dd;
+.talktype-prefs notebook > stack > grid > label:first-child {
+    color: shade(@theme_selected_bg_color, 1.4);
     font-weight: 600;
 }
 
 /* ===== RECORDING QUALITY GRADE LABELS ===== */
-.level-too-quiet {
+.talktype-prefs .level-too-quiet {
     color: #d25b5b;
     font-weight: 600;
 }
 
-.level-good {
+.talktype-prefs .level-good {
     color: #6db896;
     font-weight: 600;
 }
 
-.level-too-loud {
+.talktype-prefs .level-too-loud {
     color: #e6aa3c;
     font-weight: 600;
 }
