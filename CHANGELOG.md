@@ -2,6 +2,12 @@
 
 All notable changes to TalkType are documented here.
 
+## [0.6.1] - 2026-08-13
+
+### Preferences styling
+- **The Preferences window's stylesheet had never actually applied.** It was attached in a way that could not reach the widgets inside the window, so around 70 style rules covering buttons, tabs, text fields, switches, sliders and scrollbars did nothing at all — the window fell back to the plain system theme. Those styles now render.
+- **Accent colours follow your desktop.** They were fixed to a blue that clashed with any system not using a blue accent. Highlights — the selected tab, section headings, focused text fields, switches and checkboxes — now use whatever accent colour your desktop is set to.
+
 ## [0.6.0] - 2026-08-13
 
 The largest release so far: three months of reliability work across dictation,
