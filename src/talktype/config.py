@@ -78,6 +78,9 @@ VALID_INDICATOR_POSITIONS = {
 }
 
 VALID_INDICATOR_SIZES = {"small", "medium", "large"}
+VALID_INDICATOR_STYLES = {"orb", "waveform", "bars", "radial"}
+VALID_COLOR_MODES = {"system", "custom"}
+VALID_BACKINGS = {"off", "soft", "medium", "strong"}
 
 
 @dataclass
@@ -104,6 +107,12 @@ class Settings:
     indicator_offset_x: int = 0         # custom X offset from position anchor (pixels, can be negative)
     indicator_offset_y: int = 0         # custom Y offset from position anchor (pixels, can be negative)
     indicator_size: str = "medium"      # indicator size: small, medium, large
+    indicator_style: str = "orb"        # orb / waveform / bars / radial
+    indicator_color_mode: str = "system"  # system / custom (applies to the new styles)
+    indicator_color: str = "#48b7f5"    # custom color, used when indicator_color_mode == custom
+    indicator_backing: str = "medium"   # off / soft / medium / strong (soft dark backing)
+    indicator_sensitivity: float = 1.0  # scales how strongly audio drives the animation (0.5-2.0)
+    orb_follow_system_color: bool = False  # orb uses the system accent instead of its classic cyan
     voice_commands_hotkey: str = "Ctrl+Alt+V"  # hotkey combo to open voice commands quick reference
     auto_check_updates: bool = True      # automatically check for updates on startup (once per day)
     last_update_check: str = ""          # ISO timestamp of last update check
@@ -177,6 +186,18 @@ def _validation_problems(s: Settings) -> list[tuple[str, str]]:
 
     if s.indicator_size.lower() not in VALID_INDICATOR_SIZES:
         problems.append(("indicator_size", f"Invalid indicator_size '{s.indicator_size}'. Valid options: {', '.join(sorted(VALID_INDICATOR_SIZES))}"))
+
+    if s.indicator_style.lower() not in VALID_INDICATOR_STYLES:
+        problems.append(("indicator_style", f"Invalid indicator_style '{s.indicator_style}'. Valid options: {', '.join(sorted(VALID_INDICATOR_STYLES))}"))
+
+    if s.indicator_color_mode.lower() not in VALID_COLOR_MODES:
+        problems.append(("indicator_color_mode", f"Invalid indicator_color_mode '{s.indicator_color_mode}'. Valid options: {', '.join(sorted(VALID_COLOR_MODES))}"))
+
+    if s.indicator_backing.lower() not in VALID_BACKINGS:
+        problems.append(("indicator_backing", f"Invalid indicator_backing '{s.indicator_backing}'. Valid options: {', '.join(sorted(VALID_BACKINGS))}"))
+
+    if not (0.5 <= s.indicator_sensitivity <= 2.0):
+        problems.append(("indicator_sensitivity", f"Invalid indicator_sensitivity '{s.indicator_sensitivity}'. Must be between 0.5 and 2.0"))
 
     return problems
 
@@ -592,6 +613,12 @@ LIVE_APPLIED_KEYS = {
     "indicator_size",
     "indicator_offset_x",
     "indicator_offset_y",
+    "indicator_style",
+    "indicator_color_mode",
+    "indicator_color",
+    "indicator_backing",
+    "indicator_sensitivity",
+    "orb_follow_system_color",
 
     # The dictation service never reads these at all — they belong to
     # Preferences and the tray. Listing them stops a "Launch at login" toggle
