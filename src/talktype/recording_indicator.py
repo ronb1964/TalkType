@@ -20,6 +20,21 @@ import os
 import time
 
 
+# Unscaled window size. show_at_position() positions the window as
+# BASE_WIDTH * scale, so the window itself must be created at that size or
+# right- and bottom-anchored positions land off by the difference — they did,
+# by roughly 80px at "large", until this was made a single source of truth.
+BASE_WIDTH = 200
+BASE_HEIGHT = 180
+
+SIZE_SCALES = {"small": 0.6, "medium": 1.0, "large": 1.4}
+
+
+def _scale_for_size(size):
+    """Scale factor for a configured size name, defaulting to medium."""
+    return SIZE_SCALES.get(str(size).lower(), 1.0)
+
+
 def positioning_available():
     """Whether the indicator can actually honour indicator_position.
 
@@ -47,9 +62,7 @@ class RecordingIndicator(Gtk.Window):
         self.offset_x = offset_x
         self.offset_y = offset_y
 
-        # Size scaling: small=0.6, medium=1.0, large=1.4
-        size_scales = {"small": 0.6, "medium": 1.0, "large": 1.4}
-        self.scale = size_scales.get(size.lower(), 1.0)
+        self.scale = _scale_for_size(size)
 
         # Window setup - transparent, always on top, no decorations
         self.set_decorated(False)
@@ -64,7 +77,7 @@ class RecordingIndicator(Gtk.Window):
         # Need to accommodate: orb + satellites at max extension + padding
         # Large scale (1.4): satellites reach ~53px from center, need 120+ height
         # Adding safety margin for all sizes
-        self.set_default_size(200, 180)
+        self.set_default_size(int(BASE_WIDTH * self.scale), int(BASE_HEIGHT * self.scale))
 
         # Try to allow positioning (may not work on all compositors)
         self.set_position(Gtk.WindowPosition.NONE)
@@ -113,9 +126,10 @@ class RecordingIndicator(Gtk.Window):
                 screen_width = screen.get_width()
                 screen_height = screen.get_height()
 
-                # Window dimensions (scaled to match set_default_size)
-                window_width = int(200 * self.scale)
-                window_height = int(180 * self.scale)
+                # Window dimensions — same expression used to size the window,
+                # so the maths and the real window cannot disagree.
+                window_width = int(BASE_WIDTH * self.scale)
+                window_height = int(BASE_HEIGHT * self.scale)
 
                 # Calculate base position based on configured anchor
                 if self.position == "center":
@@ -209,6 +223,31 @@ class RecordingIndicator(Gtk.Window):
         """Stop recording mode"""
         self.is_recording = False
         self.audio_level = 0.0
+
+    def apply_settings(self, position, size, offset_x, offset_y):
+        """Adopt new appearance settings without rebuilding the indicator.
+
+        show_at_position() reads position, scale and the offsets at show time,
+        so updating them here is enough — the change takes effect the next time
+        the indicator is shown. Deliberately does NOT move a currently visible
+        indicator: the orb should never jump mid-dictation.
+
+        Called from the service's config watcher so Preferences can change
+        these without restarting the service, which would reload the Whisper
+        model and leave the hotkey dead for about ten seconds.
+        """
+        self.position = str(position).lower()
+        self.offset_x = offset_x
+        self.offset_y = offset_y
+
+        new_scale = _scale_for_size(size)
+        if new_scale != self.scale:
+            self.scale = new_scale
+            # The window must match the size the positioning maths assumes.
+            width = int(BASE_WIDTH * new_scale)
+            height = int(BASE_HEIGHT * new_scale)
+            self.set_default_size(width, height)
+            self.resize(width, height)
 
     def set_audio_level(self, level: float):
         """Update the audio level for satellite animation (0.0 - 1.0)"""

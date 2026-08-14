@@ -14,8 +14,13 @@ import sounddevice as sd
 from faster_whisper import WhisperModel
 from evdev import InputDevice, ecodes, list_devices
 
+from typing import NamedTuple
+
 from .normalize import normalize_text, append_auto_punct
 from .config import load_config, Settings, load_custom_commands
+# Imported as a module too, so the live-settings reload can read CONFIG_PATH and
+# LIVE_APPLIED_KEYS without pulling each name in separately.
+from . import config as config_module
 from .logger import setup_logger
 from .recording_indicator import RecordingIndicator
 from .undo import detect_undo_command, calculate_undo_length
@@ -694,6 +699,99 @@ _grabbed_devices = []
 # Frequent enough that a reconnected keyboard starts working on its own,
 # rare enough that it costs nothing in a loop running ~200 times a second.
 DEVICE_RESCAN_SECONDS = 3.0
+
+# How often to check whether the config file changed on disk. Preferences no
+# longer restarts the service for settings that can be applied live, so this
+# poll is what makes them take effect. One stat() per second.
+CONFIG_RECHECK_SECONDS = 1.0
+
+# mtime of the config file as of the last check. None means "not yet seen".
+_last_config_mtime = None
+
+
+class LiveSettings(NamedTuple):
+    """Values the main loop keeps in locals and must rebind after a reload."""
+    hold_key: int | None
+    toggle_key: int | None
+    vc_hotkey_str: str
+    voice_cmds_combo: tuple | None
+    voice_cmds_main_key: int | None
+    mode: str
+
+
+def _config_file_changed() -> bool:
+    """Whether config.toml's mtime has moved since the last check.
+
+    Returns True on the very first call once the file exists, so a service that
+    starts before the file is written still picks it up. A missing or unreadable
+    file is not a change — there is nothing new to apply.
+    """
+    global _last_config_mtime
+    try:
+        mtime = os.path.getmtime(config_module.CONFIG_PATH)
+    except OSError:
+        return False
+
+    if mtime == _last_config_mtime:
+        return False
+
+    _last_config_mtime = mtime
+    return True
+
+
+def _reload_live_settings(cfg, indicator):
+    """Refresh settings that can change without restarting the service.
+
+    Updates *cfg* IN PLACE — the whole service holds a reference to that one
+    object and reads most settings off it at the point of use, so refreshing
+    its fields is what makes them live.
+
+    Deliberately leaves model and device alone: those describe the WhisperModel
+    that is already loaded, and rewriting them would make the config disagree
+    with reality. Changing them still restarts the service.
+
+    Returns a LiveSettings for the caller to rebind its loop locals, or None if
+    the config could not be read — in which case the previous settings stay in
+    force. A damaged config must never degrade a running dictation session.
+    """
+    try:
+        fresh = load_config()
+    except Exception as e:
+        # Runs from a loop iterating ~200x a second; log once per change, and
+        # never let anything escape into the loop.
+        logger.warning(f"Could not reload settings, keeping current ones: {e}")
+        return None
+
+    try:
+        for key in config_module.LIVE_APPLIED_KEYS:
+            if hasattr(fresh, key) and hasattr(cfg, key):
+                setattr(cfg, key, getattr(fresh, key))
+
+        global _typing_delay
+        _typing_delay = getattr(cfg, "typing_delay", 12)
+
+        if indicator is not None:
+            indicator.apply_settings(
+                cfg.indicator_position,
+                cfg.indicator_size,
+                cfg.indicator_offset_x,
+                cfg.indicator_offset_y,
+            )
+
+        vc_hotkey_str = getattr(cfg, "voice_commands_hotkey", "")
+        voice_cmds_combo = _parse_hotkey_combo(vc_hotkey_str)
+
+        return LiveSettings(
+            hold_key=_keycode_from_name(cfg.hotkey),
+            toggle_key=_keycode_from_name(cfg.toggle_hotkey) if cfg.toggle_hotkey else None,
+            vc_hotkey_str=vc_hotkey_str,
+            voice_cmds_combo=voice_cmds_combo,
+            voice_cmds_main_key=voice_cmds_combo[1] if voice_cmds_combo else None,
+            mode=cfg.mode.lower().strip(),
+        )
+    except Exception as e:
+        logger.warning(f"Could not apply reloaded settings: {e}", exc_info=True)
+        return None
 
 # Letter keys, used to tell a real keyboard from a device that merely reports
 # key events (power buttons, lid switches, mouse buttons, consumer-control nodes).
@@ -2006,6 +2104,10 @@ def _loop_evdev(cfg: Settings, input_device_idx):
         try: dev.set_nonblocking(True)
         except Exception: pass
     last_device_scan = time.time()
+    last_config_check = time.time()
+    # Establish the config's current mtime so the first poll does not report a
+    # spurious change and re-apply settings the service just started with.
+    _config_file_changed()
 
     # First run check: exit early if onboarding not complete
     try:
@@ -2120,6 +2222,24 @@ def _loop_evdev(cfg: Settings, input_device_idx):
         if not state.is_recording and current_time - last_device_scan >= DEVICE_RESCAN_SECONDS:
             last_device_scan = current_time
             _rediscover_devices(devices)
+
+        # Pick up settings changed in Preferences without restarting. Only
+        # while idle: rebinding the hotkey mid-recording would leave the
+        # release of the old key unmatched, stranding a device grab. Settings
+        # that need the model rebuilt (model, device) still force a restart —
+        # see config.LIVE_APPLIED_KEYS.
+        if not state.is_recording and current_time - last_config_check >= CONFIG_RECHECK_SECONDS:
+            last_config_check = current_time
+            if _config_file_changed():
+                live = _reload_live_settings(cfg, recording_indicator)
+                if live is not None:
+                    hold_key = live.hold_key
+                    toggle_key = live.toggle_key
+                    vc_hotkey_str = live.vc_hotkey_str
+                    voice_cmds_combo = live.voice_cmds_combo
+                    voice_cmds_main_key = live.voice_cmds_main_key
+                    mode = live.mode
+                    logger.info("Applied settings change without restarting")
 
         # Backstop: we must never hold a keyboard grab while not recording.
         _release_grabs_if_not_recording()

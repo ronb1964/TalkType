@@ -3551,6 +3551,41 @@ Hidden=true
             _ok = is_model_cached_fast(model_name)
         return (_ok, _ok, cancelled)  # (success, was_downloaded, cancelled)
 
+    def _changed_since_open(self):
+        """Keys the user changed in this window since it opened.
+
+        Deliberately measures what THIS window changed, not what differs from
+        the file on disk: if the tray switched models while Preferences was
+        open, that change is already live in the running service and must not
+        drag a restart along with an unrelated Apply.
+
+        Must be called before save_config(), which resets the baseline.
+        """
+        from .config import changed_keys
+        return changed_keys(self._config_at_open, self.config)
+
+    def _apply_or_restart(self, changed):
+        """Restart the service only if the change requires it.
+
+        Returns True when the settings are in force — either because the
+        service restarted successfully, or because it will pick them up from
+        the config file on its own within about a second.
+
+        Restarting rebuilds the Whisper model, roughly ten seconds during which
+        the hotkey silently does nothing. Doing that for every settings change
+        meant toggling auto-punctuation reloaded a 3 GB model onto the GPU.
+        """
+        from .config import needs_service_restart
+
+        if not needs_service_restart(changed):
+            # prefs.py reports through print, not a logger — there is no logger
+            # in this module, and using one here raised NameError on the most
+            # common path until a test caught it.
+            print(f"✓ Applied without restart: {sorted(changed) or 'no changes'}")
+            return True
+
+        return self.restart_service()
+
     def restart_service(self):
         """Restart the dictation service."""
         try:
@@ -3635,10 +3670,14 @@ Hidden=true
         return (success, was_downloaded)
 
     def on_apply(self, button):
-        """Apply changes and restart service without closing."""
+        """Apply changes, restarting the service only if something needs it."""
         # Save custom commands first
         if hasattr(self, 'commands_store'):
             self._save_custom_commands()
+
+        # MUST be computed before save_config(), which resets _config_at_open
+        # to the merged result — after that there is nothing left to diff.
+        changed = self._changed_since_open()
 
         if self.save_config():
             # Check if model needs downloading
@@ -3646,8 +3685,11 @@ Hidden=true
             if not success:
                 return
 
-            # Restart the service
-            if self.restart_service():
+            # Restart only when the change actually requires it. The service
+            # picks up everything else from the config file within a second,
+            # which avoids a ~10s rebuild of the Whisper model during which
+            # the hotkey does nothing at all.
+            if self._apply_or_restart(changed):
                 # Show confirmation
                 dialog = Gtk.MessageDialog(
                     transient_for=self.window,
@@ -3662,7 +3704,15 @@ Hidden=true
                 if settings:
                     settings.set_property("gtk-application-prefer-dark-theme", True)
 
-                dialog.format_secondary_text("Dictation service has been restarted with new settings.")
+                # Tell the truth about what happened. Claiming a restart that
+                # did not occur is the same species of defect as a setting that
+                # says it applied when it did not.
+                from .config import needs_service_restart
+                dialog.format_secondary_text(
+                    "Dictation service has been restarted with new settings."
+                    if needs_service_restart(changed)
+                    else "Your changes are already in effect."
+                )
                 dialog.run()
                 dialog.destroy()
             else:
@@ -3690,19 +3740,21 @@ Hidden=true
         Gtk.main_quit()
     
     def on_ok(self, button):
-        """Save, restart service, and close."""
+        """Save, apply (restarting only if needed), and close."""
         # Save custom commands first
         if hasattr(self, 'commands_store'):
             self._save_custom_commands()
-        
+
+        # MUST be computed before save_config(), which resets _config_at_open.
+        changed = self._changed_since_open()
+
         if self.save_config():
             # Check if model needs downloading
             success, model_was_downloaded = self._download_selected_model()
             if not success:
                 return
 
-            # Restart the service
-            service_restarted = self.restart_service()
+            service_restarted = self._apply_or_restart(changed)
 
             # If model was just downloaded, keep preferences open so user can adjust other settings
             if model_was_downloaded:

@@ -513,6 +513,20 @@ def save_config(s: Settings) -> None:
     write_text_atomic(CONFIG_PATH, "\n".join(lines) + "\n")
 
 
+def changed_keys(original: dict, current: dict) -> set:
+    """Keys whose value differs between *original* and *current*.
+
+    A key missing from *original* counts as changed — it is a value the user
+    has now set. Shared with merge_changed_keys so there is exactly one
+    definition of "changed"; the Preferences restart decision and the config
+    merge must never disagree about what the user touched.
+    """
+    return {
+        key for key, value in current.items()
+        if key not in original or original[key] != value
+    }
+
+
 def merge_changed_keys(original: dict, current: dict, base: dict) -> dict:
     """Overlay only the keys that changed between *original* and *current*
     onto *base*, returning base.
@@ -523,10 +537,82 @@ def merge_changed_keys(original: dict, current: dict, base: dict) -> dict:
     save time, and *base* is a fresh read of the file on disk. Keys the
     user didn't touch keep their on-disk values; keys the user changed win.
     """
-    for key, value in current.items():
-        if key not in original or original[key] != value:
-            base[key] = value
+    for key in changed_keys(original, current):
+        base[key] = current[key]
     return base
+
+
+# ---------------------------------------------------------------------------
+# Which settings need the dictation service restarted
+# ---------------------------------------------------------------------------
+#
+# Restarting rebuilds the Whisper model — roughly ten seconds during which the
+# hotkey does nothing at all. Preferences used to do it for every change, so
+# toggling auto-punctuation reloaded a 3 GB model onto the GPU.
+#
+# Most settings are read off the long-lived cfg object at the point of use
+# (every dictation ends by passing cfg.beeps, cfg.auto_period and the rest into
+# stop_recording), so refreshing that object's fields makes them live. The rest
+# are re-applied explicitly by the service's config watcher.
+#
+# See docs/superpowers/specs/2026-08-13-live-settings-reload-design.md.
+
+# The model is constructed once at startup; changing either rebuilds it.
+RESTART_REQUIRED_KEYS = {
+    "model",
+    "device",
+    # Turning the indicator on would mean constructing a GTK window from the
+    # polling path mid-flight. Low value, real risk — restart instead.
+    "recording_indicator",
+    # Referenced nowhere outside this module; treated as restart-required
+    # rather than quietly assumed safe.
+    "paste_injection",
+}
+
+LIVE_APPLIED_KEYS = {
+    # Read off cfg at the moment they are used — live once cfg is refreshed.
+    "beeps",
+    "notify",
+    "smart_quotes",
+    "language",
+    "auto_space",
+    "auto_period",
+    "injection_mode",
+    "auto_timeout_enabled",
+    "auto_timeout_minutes",
+    "mic",  # already re-resolved by the service when a stream fails
+
+    # Copied into locals or module state at startup; the watcher re-applies them.
+    "hotkey",
+    "toggle_hotkey",
+    "voice_commands_hotkey",
+    "mode",
+    "typing_delay",
+    "indicator_position",
+    "indicator_size",
+    "indicator_offset_x",
+    "indicator_offset_y",
+
+    # The dictation service never reads these at all — they belong to
+    # Preferences and the tray. Listing them stops a "Launch at login" toggle
+    # costing a ten-second model reload.
+    "launch_at_login",
+    "auto_check_updates",
+    "last_update_check",
+    "language_mode",
+}
+
+
+def needs_service_restart(changed: set) -> bool:
+    """Whether a set of changed keys requires restarting the dictation service.
+
+    Anything not explicitly known to be live counts as requiring a restart.
+    That direction is deliberate: a setting added later then costs an
+    unnecessary restart, which is merely slow. Defaulting the other way would
+    make it silently fail to apply — a setting that lies about itself, which is
+    the class of bug v0.6.0 spent four commits removing.
+    """
+    return bool(set(changed) - LIVE_APPLIED_KEYS)
 
 
 def get_data_dir():
