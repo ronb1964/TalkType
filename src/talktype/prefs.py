@@ -3574,38 +3574,16 @@ Hidden=true
             # Wait a moment for processes to terminate
             time.sleep(1)
 
-            # Find the dictate script relative to this module (AppImage path)
-            # __file__ is in usr/src/talktype/prefs.py
-            # dictate is in usr/bin/dictate
-            src_dir = os.path.dirname(__file__)  # usr/src/talktype
-            usr_dir = os.path.dirname(os.path.dirname(src_dir))  # usr
-            dictate_script = os.path.join(usr_dir, "bin", "dictate")
+            # Start it the same way the tray does. This used to be a separate
+            # hand-rolled spawn that copied THIS process's environment, and
+            # Preferences runs on native Wayland — so the restarted service
+            # inherited Wayland, gtk_window_move() was ignored, and the
+            # recording indicator centred itself no matter what position was
+            # chosen. Only quitting and relaunching fixed it, because that put
+            # the tray back in charge of launching.
+            from .service_launcher import launch_dictation_service
 
-            if os.path.exists(dictate_script):
-                # Use the dictate script which has proper paths set up (AppImage)
-                subprocess.Popen([dictate_script], env=os.environ.copy())
-                print(f"Restarted dictation service via {dictate_script}")
-            else:
-                # Fallback: use sys.executable (dev environment)
-                env = os.environ.copy()
-
-                # Check if we're in dev mode (src/talktype structure exists relative to __file__)
-                project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-                src_dir_check = os.path.join(project_root, "src")
-                if os.path.exists(src_dir_check):
-                    # Dev mode - set PYTHONPATH to include src/ AND system PyGObject
-                    pythonpath_parts = [
-                        os.path.abspath(src_dir_check),
-                        "/usr/lib64/python3.14/site-packages",
-                        "/usr/lib/python3.14/site-packages",
-                        "/usr/lib64/python3.13/site-packages",
-                        "/usr/lib/python3.13/site-packages"
-                    ]
-                    env["PYTHONPATH"] = ":".join(pythonpath_parts)
-                    print(f"Dev mode detected - setting PYTHONPATH for service restart")
-
-                subprocess.Popen([sys.executable, "-m", "talktype.app"], env=env)
-                print("Restarted dictation service via Python module")
+            launch_dictation_service()
             return True
         except Exception as e:
             print(f"Failed to restart service: {e}")
