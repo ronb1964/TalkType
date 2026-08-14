@@ -12,13 +12,22 @@ import cairo
 # Core alpha of the soft dark backing, per level. Approved by Ron.
 BACKING_LEVELS = {"off": 0.0, "soft": 0.34, "medium": 0.50, "strong": 0.68}
 
+# The orb's signature cyan, reused as the "classic" color for the new styles.
+CLASSIC_CYAN = (0.30, 0.70, 1.0)
+
 
 def resolve_color(mode, custom_hex, accent_rgb):
-    """(r,g,b) in 0..1 for the active color mode."""
+    """(r,g,b) in 0..1 for the active color mode.
+
+    classic → the signature cyan, system → the desktop accent, custom → the
+    chosen hex. One control governs every style, including the orb.
+    """
     if mode == "custom":
         h = custom_hex.lstrip("#")
         return tuple(int(h[i:i + 2], 16) / 255.0 for i in (0, 2, 4))
-    return tuple(accent_rgb)
+    if mode == "system":
+        return tuple(accent_rgb)
+    return CLASSIC_CYAN
 
 
 def _fg(base, intensity, alpha=None):
@@ -26,6 +35,31 @@ def _fg(base, intensity, alpha=None):
     t = 0.35 * intensity
     rgb = tuple(base[i] + (1.0 - base[i]) * t for i in range(3))
     return (*rgb, alpha if alpha is not None else 0.82 + 0.18 * intensity)
+
+
+def _mix(a, b, t):
+    return tuple(a[i] + (b[i] - a[i]) * t for i in range(3))
+
+
+def orb_palette(color):
+    """Build the orb's gradient palette from a single base color.
+
+    Mirrors the original cyan orb's structure (white-hot core → color → dark
+    edge, particles color-graded near→far) so recoloring keeps its exact look,
+    only the hue changing. Used for the orb's system/custom color modes; the
+    classic mode keeps the orb's own hardcoded cyan draw path untouched.
+    """
+    white, black = (1.0, 1.0, 1.0), (0.0, 0.0, 0.0)
+    return {
+        "glow": color,
+        "core": [(0.0, white, 1.0),
+                 (0.4, _mix(color, white, 0.55), 0.9),
+                 (0.7, color, 0.6),
+                 (0.9, _mix(color, black, 0.15), 0.3),
+                 (1.0, _mix(color, black, 0.15), 0.0)],
+        "p_near": _mix(color, white, 0.5),
+        "p_far": color,
+    }
 
 
 def backing_alpha(r, core, plateau=0.42):

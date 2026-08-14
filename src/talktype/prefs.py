@@ -1118,9 +1118,10 @@ class PreferencesWindow:
         color_mode_combo = Gtk.ComboBoxText()
         color_mode_combo.connect("button-press-event", self._on_combo_button_press)
         self._block_combo_scroll(color_mode_combo)
+        color_mode_combo.append("classic", "Classic cyan")
         color_mode_combo.append("system", "Use system accent color")
         color_mode_combo.append("custom", "Custom color")
-        color_mode_combo.set_active_id(self.config.get("indicator_color_mode", "system"))
+        color_mode_combo.set_active_id(self.config.get("indicator_color_mode", "classic"))
         color_mode_combo.connect("changed", lambda x: self.update_config("indicator_color_mode", x.get_active_id()))
         grid.attach(color_mode_combo, 1, row, 1, 1)
         row += 1
@@ -1128,10 +1129,16 @@ class PreferencesWindow:
         # Custom color picker (used when color mode is Custom)
         color_pick_label = Gtk.Label(label="  Custom color:", xalign=0)
         grid.attach(color_pick_label, 0, row, 1, 1)
+        # A compact swatch plus a hint, in an hbox — a full-width ColorButton
+        # reads as a decorative stripe, not something you click.
+        color_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         color_btn = Gtk.ColorButton()
         _rgba = Gdk.RGBA()
         _rgba.parse(self.config.get("indicator_color", "#48b7f5"))
         color_btn.set_rgba(_rgba)
+        color_btn.set_halign(Gtk.Align.START)
+        color_btn.set_size_request(64, 30)
+        color_btn.set_tooltip_text("Click to choose a custom color")
 
         def _on_color_set(btn):
             c = btn.get_rgba()
@@ -1141,7 +1148,12 @@ class PreferencesWindow:
             self.update_config("indicator_color_mode", "custom")
             color_mode_combo.set_active_id("custom")
         color_btn.connect("color-set", _on_color_set)
-        grid.attach(color_btn, 1, row, 1, 1)
+        color_box.pack_start(color_btn, False, False, 0)
+
+        color_hint = Gtk.Label(label="← click to choose", xalign=0)
+        color_hint.get_style_context().add_class("dim-label")
+        color_box.pack_start(color_hint, False, False, 0)
+        grid.attach(color_box, 1, row, 1, 1)
         row += 1
 
         # Backing (soft dark background)
@@ -1168,13 +1180,6 @@ class PreferencesWindow:
         sens_scale.set_hexpand(True)
         sens_scale.connect("value-changed", lambda x: self.update_config("indicator_sensitivity", round(x.get_value(), 2)))
         grid.attach(sens_scale, 1, row, 1, 1)
-        row += 1
-
-        # Orb-only: follow the system accent instead of the classic cyan.
-        orb_follow = Gtk.CheckButton(label="Orb follows system accent color")
-        orb_follow.set_active(self.config.get("orb_follow_system_color", False))
-        orb_follow.connect("toggled", lambda x: self.update_config("orb_follow_system_color", x.get_active()))
-        grid.attach(orb_follow, 0, row, 2, 1)
         row += 1
 
         # Indicator position

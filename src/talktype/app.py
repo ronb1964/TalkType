@@ -797,7 +797,6 @@ def _reload_live_settings(cfg, indicator):
                 custom_color=cfg.indicator_color,
                 backing=cfg.indicator_backing,
                 sensitivity=cfg.indicator_sensitivity,
-                follow_system_color=cfg.orb_follow_system_color,
             )
 
         vc_hotkey_str = getattr(cfg, "voice_commands_hotkey", "")
@@ -2556,7 +2555,6 @@ def main():
                         custom_color=cfg.indicator_color,
                         backing=cfg.indicator_backing,
                         sensitivity=cfg.indicator_sensitivity,
-                        follow_system_color=cfg.orb_follow_system_color,
                     )
                     # Spectrum processor for the bars style; _feed_indicator uses it.
                     global _spectrum_processor

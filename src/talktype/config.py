@@ -79,7 +79,7 @@ VALID_INDICATOR_POSITIONS = {
 
 VALID_INDICATOR_SIZES = {"small", "medium", "large"}
 VALID_INDICATOR_STYLES = {"orb", "waveform", "bars", "radial"}
-VALID_COLOR_MODES = {"system", "custom"}
+VALID_COLOR_MODES = {"classic", "system", "custom"}
 VALID_BACKINGS = {"off", "soft", "medium", "strong"}
 
 
@@ -108,11 +108,10 @@ class Settings:
     indicator_offset_y: int = 0         # custom Y offset from position anchor (pixels, can be negative)
     indicator_size: str = "medium"      # indicator size: small, medium, large
     indicator_style: str = "orb"        # orb / waveform / bars / radial
-    indicator_color_mode: str = "system"  # system / custom (applies to the new styles)
+    indicator_color_mode: str = "classic"  # classic / system / custom (governs every style)
     indicator_color: str = "#48b7f5"    # custom color, used when indicator_color_mode == custom
     indicator_backing: str = "medium"   # off / soft / medium / strong (soft dark backing)
     indicator_sensitivity: float = 1.0  # scales how strongly audio drives the animation (0.5-2.0)
-    orb_follow_system_color: bool = False  # orb uses the system accent instead of its classic cyan
     voice_commands_hotkey: str = "Ctrl+Alt+V"  # hotkey combo to open voice commands quick reference
     auto_check_updates: bool = True      # automatically check for updates on startup (once per day)
     last_update_check: str = ""          # ISO timestamp of last update check
@@ -620,7 +619,6 @@ LIVE_APPLIED_KEYS = {
     "indicator_color",
     "indicator_backing",
     "indicator_sensitivity",
-    "orb_follow_system_color",
 
     # The dictation service never reads these at all — they belong to
     # Preferences and the tray. Listing them stops a "Launch at login" toggle

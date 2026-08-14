@@ -35,6 +35,20 @@ def test_resolve_color_custom_parses_hex():
     assert b == pytest.approx(0.0, abs=0.01)
 
 
+def test_resolve_color_classic_is_cyan():
+    assert S.resolve_color("classic", "#ff8000", (0.2, 0.4, 0.26)) == S.CLASSIC_CYAN
+
+
+def test_orb_palette_derives_from_the_base_color():
+    """The orb recolor keeps its structure, only the hue changing."""
+    pal = S.orb_palette((0.9, 0.2, 0.2))   # red
+    assert pal["glow"] == (0.9, 0.2, 0.2)
+    assert pal["p_far"] == (0.9, 0.2, 0.2)
+    # core runs white-hot center to a dark edge
+    assert pal["core"][0][1] == (1.0, 1.0, 1.0)
+    assert len(pal["core"]) == 5
+
+
 def _has_ink(draw):
     cairo = pytest.importorskip("cairo")
     surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, 200, 120)

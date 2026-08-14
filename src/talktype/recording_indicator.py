@@ -55,18 +55,18 @@ class RecordingIndicator(Gtk.Window):
     """Floating recording indicator window with configurable position"""
 
     def __init__(self, position="center", offset_x=0, offset_y=0, size="medium",
-                 style="orb", color_mode="system", custom_color="#48b7f5",
-                 backing="medium", sensitivity=1.0, follow_system_color=False):
+                 style="orb", color_mode="classic", custom_color="#48b7f5",
+                 backing="medium", sensitivity=1.0):
         super().__init__(title="TalkType Recording")
 
         # Style + appearance. The orb keeps its own draw path; the other styles
-        # are drawn by indicator_styles from the data fed below.
+        # are drawn by indicator_styles from the data fed below. color_mode
+        # (classic/system/custom) governs every style, including the orb.
         self.style = style
         self.color_mode = color_mode
         self.custom_color = custom_color
         self.backing = backing
         self.sensitivity = sensitivity
-        self.follow_system_color = follow_system_color
         self.waveform = None   # raw samples for waveform/radial
         self.spectrum = None   # band magnitudes for bars
 
@@ -239,7 +239,7 @@ class RecordingIndicator(Gtk.Window):
 
     def apply_settings(self, position, size, offset_x, offset_y,
                        style=None, color_mode=None, custom_color=None,
-                       backing=None, sensitivity=None, follow_system_color=None):
+                       backing=None, sensitivity=None):
         """Adopt new appearance settings without rebuilding the indicator.
 
         show_at_position() reads position, scale and the offsets at show time,
@@ -277,8 +277,6 @@ class RecordingIndicator(Gtk.Window):
             self.backing = backing
         if sensitivity is not None:
             self.sensitivity = sensitivity
-        if follow_system_color is not None:
-            self.follow_system_color = follow_system_color
 
     def set_audio_level(self, level: float):
         """Update the audio level for satellite animation (0.0 - 1.0)"""
@@ -358,8 +356,15 @@ class RecordingIndicator(Gtk.Window):
         # Draw pill-shaped background container
         self.draw_pill_background(cr, orb_x, orb_y)
 
-        # Draw the animated orb
-        self.draw_orb(cr, orb_x, orb_y)
+        # Draw the animated orb. classic mode keeps the original cyan gradient
+        # (palette=None); system/custom recolor it via a palette built from the
+        # resolved color, keeping the exact structure and only changing the hue.
+        if self.color_mode == "classic":
+            orb_palette = None
+        else:
+            from .indicator_styles import orb_palette as _mk_palette
+            orb_palette = _mk_palette(self._resolved_color())
+        self.draw_orb(cr, orb_x, orb_y, orb_palette)
 
         # Draw timer aligned with orb center (scaled position)
         elapsed = int(time.time() - self.start_time)
@@ -398,8 +403,13 @@ class RecordingIndicator(Gtk.Window):
             cr.set_line_width(2.5 * self.scale)
             cr.stroke()
 
-    def draw_orb(self, cr, x, y):
-        """Draw the glowing orb with pulsing animation"""
+    def draw_orb(self, cr, x, y, palette=None):
+        """Draw the glowing orb with pulsing animation.
+
+        palette=None keeps the original cyan gradient exactly (classic mode).
+        A palette (from indicator_styles.orb_palette) recolors the glow, core
+        and particles while keeping the same structure, for system/custom modes.
+        """
         # Calculate current size based on gentle pulse (only when not recording)
         if self.is_recording:
             # Freeze the pulse when recording - keep orb steady
@@ -410,7 +420,7 @@ class RecordingIndicator(Gtk.Window):
             current_size = self.base_size * pulse_scale
 
         # Outer glow layers (multiple for softer effect)
-        glow_color = (0.3, 0.7, 1.0)  # Cyan
+        glow_color = palette["glow"] if palette else (0.3, 0.7, 1.0)  # Cyan
 
         for i in range(3):
             glow_radius = current_size * (1.5 - i * 0.15)
@@ -426,21 +436,29 @@ class RecordingIndicator(Gtk.Window):
 
         # Core orb with soft, hazy edge
         core_gradient = cairo.RadialGradient(x, y, 0, x, y, current_size * 1.3)
-        core_gradient.add_color_stop_rgba(0, 1.0, 1.0, 1.0, 1.0)  # White center
-        core_gradient.add_color_stop_rgba(0.4, 0.5, 0.9, 1.0, 0.9)  # Light cyan
-        core_gradient.add_color_stop_rgba(0.7, 0.2, 0.6, 0.9, 0.6)  # Blue mid
-        core_gradient.add_color_stop_rgba(0.9, 0.2, 0.5, 0.8, 0.3)  # Soft edge
-        core_gradient.add_color_stop_rgba(1.0, 0.2, 0.5, 0.8, 0.0)  # Fade to transparent
+        if palette:
+            for stop, rgb, a in palette["core"]:
+                core_gradient.add_color_stop_rgba(stop, rgb[0], rgb[1], rgb[2], a)
+        else:
+            core_gradient.add_color_stop_rgba(0, 1.0, 1.0, 1.0, 1.0)  # White center
+            core_gradient.add_color_stop_rgba(0.4, 0.5, 0.9, 1.0, 0.9)  # Light cyan
+            core_gradient.add_color_stop_rgba(0.7, 0.2, 0.6, 0.9, 0.6)  # Blue mid
+            core_gradient.add_color_stop_rgba(0.9, 0.2, 0.5, 0.8, 0.3)  # Soft edge
+            core_gradient.add_color_stop_rgba(1.0, 0.2, 0.5, 0.8, 0.0)  # Fade to transparent
 
         cr.set_source(core_gradient)
         cr.arc(x, y, current_size * 1.3, 0, 2 * math.pi)
         cr.fill()
 
         # Particles around orb - use fixed base_size, not pulsing current_size
-        self.draw_particles(cr, x, y, self.base_size * 1.8)
+        self.draw_particles(cr, x, y, self.base_size * 1.8, palette)
 
-    def draw_particles(self, cr, center_x, center_y, base_radius):
-        """Draw small glowing particles that extend radially based on voice"""
+    def draw_particles(self, cr, center_x, center_y, base_radius, palette=None):
+        """Draw small glowing particles that extend radially based on voice.
+
+        palette=None keeps the original cyan→blue grading; a palette recolors
+        the near→far gradient to match a chosen orb color.
+        """
         num_particles = 16
 
         for i in range(num_particles):
@@ -476,19 +494,24 @@ class RecordingIndicator(Gtk.Window):
                 pulse = 1.0 + 0.15 * math.sin(self.particle_pulse_phase + individual_offset)
                 particle_size = 4 * pulse
 
-            # Color shifts based on distance from orb
-            # Close to orb: warm cyan/white (0.7, 0.95, 1.0)
-            # Far from orb: cooler blue/purple (0.4, 0.6, 1.0)
+            # Color shifts based on distance from orb: near→far grading.
             distance_factor = (radial_distance / base_radius - min_distance) / (max_distance - min_distance)
-            r = 0.7 - (distance_factor * 0.3)  # 0.7 -> 0.4
-            g = 0.95 - (distance_factor * 0.35)  # 0.95 -> 0.6
-            b = 1.0  # Always full blue
+            if palette:
+                near, far = palette["p_near"], palette["p_far"]
+                r = near[0] + (far[0] - near[0]) * distance_factor
+                g = near[1] + (far[1] - near[1]) * distance_factor
+                b = near[2] + (far[2] - near[2]) * distance_factor
+            else:
+                # Original: warm cyan/white (0.7,0.95,1.0) → cooler blue (0.4,0.6,1.0)
+                r = 0.7 - (distance_factor * 0.3)
+                g = 0.95 - (distance_factor * 0.35)
+                b = 1.0
 
             # Particle glow (brighter when more energetic)
             alpha = 0.6 + (self.audio_level * 0.3) if self.is_recording else 0.6
             particle_gradient = cairo.RadialGradient(px, py, 0, px, py, particle_size * 1.5)
             particle_gradient.add_color_stop_rgba(0, r, g, b, alpha)
-            particle_gradient.add_color_stop_rgba(1, r * 0.7, g * 0.7, b, 0)
+            particle_gradient.add_color_stop_rgba(1, r * 0.7, g * 0.7, b * 0.7, 0)
 
             cr.set_source(particle_gradient)
             cr.arc(px, py, particle_size * 1.5, 0, 2 * math.pi)
