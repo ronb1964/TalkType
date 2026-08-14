@@ -17,11 +17,47 @@ def test_no_redundant_orb_checkbox():
     assert "orb_follow_system_color" not in text
 
 
-def test_cyan_is_a_color_option():
-    """A plain color choice — not 'Classic', which only made sense for the orb."""
+def test_color_dropdown_has_only_two_modes():
+    """Two real choices remain: match the desktop accent, or pick a color.
+    'Cyan' was a redundant third option and is gone (it lives on as the classic
+    color you can pick from the swatch's preset palette)."""
     text = PREFS.read_text()
-    assert '"Cyan"' in text
+    assert '.append("system"' in text
+    assert '.append("custom"' in text
+    assert '.append("cyan"' not in text
+    assert '"Cyan"' not in text
     assert "Classic cyan" not in text
+
+
+def test_custom_color_selection_opens_the_picker():
+    """Choosing 'Custom color' opens the picker immediately — no second click on
+    a separate swatch. A guard stops the programmatic mode-flip from re-firing it."""
+    text = PREFS.read_text()
+    assert "_open_color_picker" in text
+    assert "_suppress_color_popup" in text
+
+
+def test_swatch_mirrors_the_desktop_accent_in_system_mode():
+    """In system mode the swatch shows the live accent color — a continuity cue."""
+    text = PREFS.read_text()
+    assert "_sync_color_swatch" in text
+    assert "theme_selected_bg_color" in text
+
+
+def test_color_picker_seeds_a_preset_palette_with_classic_cyan_first():
+    """The picker offers preset swatches so the classic cyan is one click away
+    without knowing a hex code; it must be the first preset."""
+    text = PREFS.read_text()
+    assert "add_palette" in text
+    assert "CLASSIC_CYAN_HEX" in text
+
+
+def test_reset_to_classic_cyan_control_exists():
+    """A plainly-labeled control snaps the color back to the classic cyan — the
+    one color whose identity matters — without needing to know a hex code."""
+    text = PREFS.read_text()
+    assert "Reset to classic cyan" in text
+    assert "_reset_color_to_classic" in text
 
 
 def test_uses_american_spelling_for_color():

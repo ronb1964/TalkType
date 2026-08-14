@@ -13,15 +13,41 @@ from talktype import config
 def test_new_indicator_fields_have_approved_defaults():
     s = config.Settings()
     assert s.indicator_style == "orb"
-    assert s.indicator_color_mode == "cyan"   # orb looks like today out of the box
+    # "Cyan" is no longer a standalone mode; the out-of-box look is the classic
+    # cyan expressed as a custom color, so the orb is byte-identical to before.
+    assert s.indicator_color_mode == "custom"
+    assert s.indicator_color == config.CLASSIC_CYAN_HEX
     assert s.indicator_backing == "medium"
     assert s.indicator_sensitivity == 1.0
 
 
 def test_valid_sets_exist():
     assert config.VALID_INDICATOR_STYLES == {"orb", "waveform", "bars", "radial"}
-    assert config.VALID_COLOR_MODES == {"cyan", "system", "custom"}
+    # Only two real choices remain: match the desktop accent, or pick a color.
+    assert config.VALID_COLOR_MODES == {"system", "custom"}
     assert config.VALID_BACKINGS == {"off", "soft", "medium", "strong"}
+
+
+def test_legacy_cyan_mode_migrates_to_custom_classic_cyan():
+    """Configs written before the two-mode redesign say color_mode='cyan'.
+    They must load as custom + the classic cyan color, so the orb these users
+    have always seen is preserved and the dropdown never shows a blank."""
+    s = config.Settings()
+    s.indicator_color_mode = "cyan"
+    s.indicator_color = "#48b7f5"   # the old ignored default
+    config._migrate_settings(s)
+    assert s.indicator_color_mode == "custom"
+    assert s.indicator_color == config.CLASSIC_CYAN_HEX
+
+
+def test_migration_leaves_a_real_custom_color_untouched():
+    """A user who chose their own custom color keeps it across the migration."""
+    s = config.Settings()
+    s.indicator_color_mode = "custom"
+    s.indicator_color = "#ff5522"
+    config._migrate_settings(s)
+    assert s.indicator_color_mode == "custom"
+    assert s.indicator_color == "#ff5522"
 
 
 def test_new_keys_are_live_applied_not_restart():

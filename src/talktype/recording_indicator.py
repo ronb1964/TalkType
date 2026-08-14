@@ -55,7 +55,7 @@ class RecordingIndicator(Gtk.Window):
     """Floating recording indicator window with configurable position"""
 
     def __init__(self, position="center", offset_x=0, offset_y=0, size="medium",
-                 style="orb", color_mode="cyan", custom_color="#48b7f5",
+                 style="orb", color_mode="custom", custom_color="#4db3ff",
                  backing="medium", sensitivity=1.0):
         super().__init__(title="TalkType Recording")
 
@@ -356,14 +356,13 @@ class RecordingIndicator(Gtk.Window):
         # Draw pill-shaped background container
         self.draw_pill_background(cr, orb_x, orb_y)
 
-        # Draw the animated orb. cyan mode keeps the original cyan gradient
-        # (palette=None); system/custom recolor it via a palette built from the
-        # resolved color, keeping the exact structure and only changing the hue.
-        if self.color_mode == "cyan":
-            orb_palette = None
-        else:
-            from .indicator_styles import orb_palette as _mk_palette
-            orb_palette = _mk_palette(self._resolved_color())
+        # Draw the animated orb. When the resolved color is the classic cyan the
+        # orb keeps its original hand-tuned gradient (palette=None), byte-identical
+        # to prior releases; any other color recolors it via a palette that keeps
+        # the exact structure and only changes the hue. Keying off the color (not
+        # a mode name) means the default custom-cyan looks exactly like before.
+        from .indicator_styles import orb_palette_for
+        orb_palette = orb_palette_for(self._resolved_color())
         self.draw_orb(cr, orb_x, orb_y, orb_palette)
 
         # Draw timer aligned with orb center (scaled position)

@@ -39,6 +39,26 @@ def test_resolve_color_cyan_mode():
     assert S.resolve_color("cyan", "#ff8000", (0.2, 0.4, 0.26)) == S.CYAN
 
 
+def test_is_cyan_matches_the_classic_color_and_its_hex():
+    """The orb's classic gradient is re-keyed to the color itself, not a mode
+    name. is_cyan must recognize the CYAN constant and the classic cyan hex
+    (which parses to a hair off CYAN) as cyan, and reject other colors."""
+    assert S.is_cyan(S.CYAN)
+    assert S.is_cyan(S.resolve_color("custom", "#4db3ff", (0, 0, 0)))
+    assert not S.is_cyan((1.0, 0.0, 0.0))
+    assert not S.is_cyan((0.2, 0.4, 0.26))   # a green accent
+
+
+def test_orb_palette_for_cyan_is_none_so_the_classic_path_runs():
+    """A cyan color returns None → the orb draws its original hand-tuned
+    gradient (byte-identical to prior releases). Any other color returns a
+    palette that recolors the orb."""
+    assert S.orb_palette_for(S.CYAN) is None
+    assert S.orb_palette_for(S.resolve_color("custom", "#4db3ff", (0, 0, 0))) is None
+    red = (0.9, 0.2, 0.2)
+    assert S.orb_palette_for(red) == S.orb_palette(red)
+
+
 def test_orb_palette_derives_from_the_base_color():
     """The orb recolor keeps its structure, only the hue changing."""
     pal = S.orb_palette((0.9, 0.2, 0.2))   # red

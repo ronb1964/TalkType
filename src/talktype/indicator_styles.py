@@ -62,6 +62,25 @@ def orb_palette(color):
     }
 
 
+def is_cyan(rgb, tol=0.03):
+    """True when a color is (within tolerance) the classic orb cyan.
+
+    The orb's original hand-tuned gradient is preserved by keying off the color
+    itself, not a mode name: whenever the resolved color is this cyan, the orb
+    draws its byte-identical classic path. A small tolerance is needed because
+    the classic cyan hex (#4db3ff) parses a hair off the CYAN constant.
+    """
+    return all(abs(rgb[i] - CYAN[i]) <= tol for i in range(3))
+
+
+def orb_palette_for(rgb):
+    """The orb palette for a resolved color, or None to draw the classic path.
+
+    None → the original cyan orb (unchanged). A dict → recolor the orb to `rgb`.
+    """
+    return None if is_cyan(rgb) else orb_palette(rgb)
+
+
 def backing_alpha(r, core, plateau=0.42):
     """Alpha of the backing at normalized radius r (0=center, 1=edge).
 

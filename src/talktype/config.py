@@ -79,8 +79,18 @@ VALID_INDICATOR_POSITIONS = {
 
 VALID_INDICATOR_SIZES = {"small", "medium", "large"}
 VALID_INDICATOR_STYLES = {"orb", "waveform", "bars", "radial"}
-VALID_COLOR_MODES = {"cyan", "system", "custom"}
+# Two real choices: match the desktop accent, or pick a color. "cyan" used to
+# be a third, redundant option; legacy configs holding it are migrated to
+# custom + CLASSIC_CYAN_HEX on load (see _migrate_settings).
+VALID_COLOR_MODES = {"system", "custom"}
 VALID_BACKINGS = {"off", "soft", "medium", "strong"}
+
+# The classic cyan the orb has always drawn, as a hex color. This is the exact
+# blue of the original hand-tuned orb gradient (0.30, 0.70, 1.0), so when it is
+# the chosen custom color the orb falls back to that original draw path and
+# looks byte-identical to every prior release. It also seeds the first swatch
+# in the color picker so the classic color is always one click away.
+CLASSIC_CYAN_HEX = "#4db3ff"
 
 
 @dataclass
@@ -108,8 +118,8 @@ class Settings:
     indicator_offset_y: int = 0         # custom Y offset from position anchor (pixels, can be negative)
     indicator_size: str = "medium"      # indicator size: small, medium, large
     indicator_style: str = "orb"        # orb / waveform / bars / radial
-    indicator_color_mode: str = "cyan"  # cyan / system / custom (governs every style)
-    indicator_color: str = "#48b7f5"    # custom color, used when indicator_color_mode == custom
+    indicator_color_mode: str = "custom"  # system / custom (governs every style)
+    indicator_color: str = CLASSIC_CYAN_HEX  # the chosen color; defaults to classic cyan
     indicator_backing: str = "medium"   # off / soft / medium / strong (soft dark backing)
     indicator_sensitivity: float = 1.0  # scales how strongly audio drives the animation (0.5-2.0)
     voice_commands_hotkey: str = "Ctrl+Alt+V"  # hotkey combo to open voice commands quick reference
@@ -215,6 +225,22 @@ def validate_config(s: Settings) -> None:
     if problems:
         raise ConfigError([msg for _, msg in problems],
                           fields=[name for name, _ in problems])
+
+
+def _migrate_settings(s: Settings) -> Settings:
+    """Bring an older config forward to the current schema, in place.
+
+    Runs before validation so retired-but-recognized values become their modern
+    equivalents silently, instead of tripping validation and being blanked.
+
+    - indicator_color_mode 'cyan' → 'custom' + CLASSIC_CYAN_HEX. "Cyan" stopped
+      being its own mode when the color control collapsed to system/custom;
+      mapping it to the classic cyan color preserves exactly what these users saw.
+    """
+    if s.indicator_color_mode == "cyan":
+        s.indicator_color_mode = "custom"
+        s.indicator_color = CLASSIC_CYAN_HEX
+    return s
 
 
 def _repair_invalid_fields(s: Settings, error: ConfigError) -> Settings:
@@ -429,6 +455,11 @@ def load_config() -> Settings:
     timeout_minutes = os.getenv("DICTATE_AUTO_TIMEOUT_MINUTES")
     if timeout_minutes is not None:
         s.auto_timeout_minutes = int(timeout_minutes)
+
+    # Bring older schemas forward before validating, so retired values (e.g. the
+    # old 'cyan' color mode) become their modern equivalents instead of tripping
+    # validation and being reset.
+    _migrate_settings(s)
 
     try:
         validate_config(s)

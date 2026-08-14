@@ -11,7 +11,7 @@ import dbus.mainloop.glib
 from dataclasses import asdict
 from .config import (CONFIG_PATH, ConfigNotLoadedError, Settings, merge_changed_keys,
                      load_custom_commands, save_custom_commands, write_text_atomic,
-                     _toml_value)
+                     _toml_value, CLASSIC_CYAN_HEX)
 
 # D-Bus interface for communicating with the TalkType service
 # Set on the Preferences window so prefs_style.css — which must be installed
@@ -1112,49 +1112,88 @@ class PreferencesWindow:
         grid.attach(style_combo, 1, row, 1, 1)
         row += 1
 
-        # Color mode (the new styles; American spelling)
+        # Color mode — two real choices: match the desktop accent, or pick a
+        # color. Cyan is no longer its own mode; the classic cyan lives on as
+        # the first preset swatch in the picker below. American spelling throughout.
         color_mode_label = Gtk.Label(label="  Indicator color:", xalign=0)
         grid.attach(color_mode_label, 0, row, 1, 1)
         color_mode_combo = Gtk.ComboBoxText()
         color_mode_combo.connect("button-press-event", self._on_combo_button_press)
         self._block_combo_scroll(color_mode_combo)
-        color_mode_combo.append("cyan", "Cyan")
         color_mode_combo.append("system", "Use system accent color")
         color_mode_combo.append("custom", "Custom color")
-        color_mode_combo.set_active_id(self.config.get("indicator_color_mode", "cyan"))
-        color_mode_combo.connect("changed", lambda x: self.update_config("indicator_color_mode", x.get_active_id()))
+        # A pre-migration config could still hold 'cyan'; show it as Custom.
+        _mode = self.config.get("indicator_color_mode", "custom")
+        color_mode_combo.set_active_id(_mode if _mode in ("system", "custom") else "custom")
+        self._color_mode_combo = color_mode_combo
         grid.attach(color_mode_combo, 1, row, 1, 1)
         row += 1
 
-        # Custom color picker (used when color mode is Custom)
+        # Color swatch — always visible. In Custom mode it shows your chosen
+        # color; in System mode it mirrors the live desktop accent (a continuity
+        # cue). Clicking it always opens the picker and adopts the result as a
+        # custom color, so changing color is one click without the dropdown.
         color_pick_label = Gtk.Label(label="  Custom color:", xalign=0)
         grid.attach(color_pick_label, 0, row, 1, 1)
-        # A compact swatch plus a hint, in an hbox — a full-width ColorButton
-        # reads as a decorative stripe, not something you click.
         color_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         color_btn = Gtk.ColorButton()
-        _rgba = Gdk.RGBA()
-        _rgba.parse(self.config.get("indicator_color", "#48b7f5"))
-        color_btn.set_rgba(_rgba)
         color_btn.set_halign(Gtk.Align.START)
         color_btn.set_size_request(64, 30)
         color_btn.set_tooltip_text("Click to choose a custom color")
+        # Seed the picker with preset swatches so the classic cyan is one click
+        # away without knowing a hex code — it is deliberately the first preset.
+        _presets = [CLASSIC_CYAN_HEX, "#ffffff", "#ff5252", "#ffb300",
+                    "#4caf50", "#7c4dff", "#ff4081", "#00bcd4"]
+        _palette = []
+        for _hex in _presets:
+            _c = Gdk.RGBA()
+            _c.parse(_hex)
+            _palette.append(_c)
+        color_btn.add_palette(Gtk.Orientation.HORIZONTAL, len(_palette), _palette)
+        self._color_btn = color_btn
 
         def _on_color_set(btn):
             c = btn.get_rgba()
             hexval = "#%02x%02x%02x" % (int(c.red * 255), int(c.green * 255), int(c.blue * 255))
             self.update_config("indicator_color", hexval)
-            # Picking a color implies you want to use it.
+            # Picking a color implies you want to use it. Flip to Custom without
+            # re-triggering the auto-open picker (guarded below).
+            self._set_color_mode_silently("custom")
             self.update_config("indicator_color_mode", "custom")
-            color_mode_combo.set_active_id("custom")
         color_btn.connect("color-set", _on_color_set)
         color_box.pack_start(color_btn, False, False, 0)
 
         color_hint = Gtk.Label(label="← click to choose", xalign=0)
         color_hint.get_style_context().add_class("dim-label")
         color_box.pack_start(color_hint, False, False, 0)
+
+        # The classic cyan is the one color whose identity matters, and a grid of
+        # unlabeled swatches can't announce it. A plainly-worded link returns to
+        # it in one click, no hex knowledge needed.
+        reset_btn = Gtk.Button(label="Reset to classic cyan")
+        reset_btn.set_relief(Gtk.ReliefStyle.NONE)
+        reset_btn.get_style_context().add_class("dim-label")
+        reset_btn.set_tooltip_text("Set the color back to TalkType's original cyan")
+        reset_btn.connect("clicked", self._reset_color_to_classic)
+        color_box.pack_start(reset_btn, False, False, 0)
+
         grid.attach(color_box, 1, row, 1, 1)
         row += 1
+
+        # Wire the dropdown now that the swatch exists. Choosing "Custom color"
+        # opens the picker immediately (no hunting for the swatch); either mode
+        # keeps the swatch in sync. The guard flag stops the programmatic
+        # system→custom flip in _on_color_set from re-opening the picker.
+        self._suppress_color_popup = False
+
+        def _on_color_mode_changed(combo):
+            mode = combo.get_active_id()
+            self.update_config("indicator_color_mode", mode)
+            self._sync_color_swatch()
+            if mode == "custom" and not self._suppress_color_popup:
+                self._open_color_picker()
+        color_mode_combo.connect("changed", _on_color_mode_changed)
+        self._sync_color_swatch()
 
         # Backing (soft dark background)
         backing_label = Gtk.Label(label="  Indicator backing 💡:", xalign=0)
@@ -2185,6 +2224,73 @@ class PreferencesWindow:
             widget.grab_focus()
         # Let GTK handle the normal click event
         return False
+
+    def _desktop_accent_rgba(self):
+        """The desktop theme's accent color as a Gdk.RGBA (fallback: green).
+
+        Mirrors recording_indicator._accent_rgb so the swatch preview matches
+        what the indicator actually paints in system-accent mode.
+        """
+        try:
+            ok, rgba = Gtk.Label().get_style_context().lookup_color("theme_selected_bg_color")
+            if ok:
+                return rgba
+        except Exception:
+            pass
+        fallback = Gdk.RGBA()
+        fallback.parse("#4caf50")
+        return fallback
+
+    def _open_color_picker(self):
+        """Open the swatch's color chooser dialog immediately.
+
+        A Gtk.ColorButton is a Gtk.Button whose click opens its chooser, so
+        emitting clicked() is the same as the user pressing the swatch.
+        """
+        btn = getattr(self, "_color_btn", None)
+        if btn is not None:
+            btn.clicked()
+
+    def _set_color_mode_silently(self, mode):
+        """Set the color-mode dropdown without auto-opening the picker.
+
+        Used when a color pick implies Custom mode — flipping the dropdown must
+        not re-fire the 'selected Custom → open picker' behavior into a loop.
+        """
+        self._suppress_color_popup = True
+        try:
+            self._color_mode_combo.set_active_id(mode)
+        finally:
+            self._suppress_color_popup = False
+
+    def _reset_color_to_classic(self, _button=None):
+        """Return the indicator color to TalkType's classic cyan.
+
+        Because the resolved color is then the classic cyan, the orb falls back
+        to its original hand-tuned gradient — the out-of-box look — with no need
+        to hunt a hex code out of a grid of swatches.
+        """
+        self.update_config("indicator_color", CLASSIC_CYAN_HEX)
+        self._set_color_mode_silently("custom")
+        self.update_config("indicator_color_mode", "custom")
+        self._sync_color_swatch()
+
+    def _sync_color_swatch(self):
+        """Keep the swatch showing the right color for the current mode.
+
+        Custom mode → the chosen color; System mode → the live desktop accent,
+        a small continuity cue so the swatch reflects what the indicator paints.
+        """
+        btn = getattr(self, "_color_btn", None)
+        if btn is None:
+            return
+        mode = self._color_mode_combo.get_active_id()
+        if mode == "system":
+            btn.set_rgba(self._desktop_accent_rgba())
+        else:
+            rgba = Gdk.RGBA()
+            rgba.parse(self.config.get("indicator_color", CLASSIC_CYAN_HEX))
+            btn.set_rgba(rgba)
 
     def update_config(self, key, value):
         """Update config value."""
