@@ -154,8 +154,12 @@ VENV_TORCH="$VENV_PATH/lib/python${PYTHON_VERSION}/site-packages/torch"
 if [ -d "$VENV_TORCH" ]; then
     echo "   Found PyTorch at $VENV_TORCH"
     cp -r "$VENV_TORCH" "AppDir/usr/lib/python${PYTHON_VERSION}/site-packages/"
+    # dist-info is metadata only — torch imports without it — so a miss is not
+    # fatal. Say so rather than swallowing it: silence here is indistinguishable
+    # from success, which is how several other build faults stayed hidden.
     cp -r "$VENV_PATH/lib/python${PYTHON_VERSION}/site-packages/torch-"*.dist-info \
-          "AppDir/usr/lib/python${PYTHON_VERSION}/site-packages/" 2>/dev/null || true
+          "AppDir/usr/lib/python${PYTHON_VERSION}/site-packages/" 2>/dev/null \
+          || echo "   ⚠️  Warning: torch dist-info not copied (metadata only; importlib.metadata.version('torch') will fail)"
     # Report size to verify CPU-only (should be ~140MB, not ~1.7GB)
     TORCH_SIZE=$(du -sh "AppDir/usr/lib/python${PYTHON_VERSION}/site-packages/torch" | cut -f1)
     echo "   ✅ PyTorch size: $TORCH_SIZE (CPU-only)"
@@ -255,19 +259,42 @@ cp /usr/lib/x86_64-linux-gnu/libcairo-gobject.so.2 AppDir/usr/lib/ 2>/dev/null |
 echo "     ✓ Cairo libraries bundled"
 mkdir -p AppDir/usr/lib/girepository-1.0
 
-# Copy typelibs from both possible locations
+# Copy typelibs from both possible locations. The `|| true` is deliberate here:
+# only one of these paths exists on any given base image, so one copy is always
+# expected to fail. The outcome is asserted below instead of the attempt.
 cp /usr/lib/x86_64-linux-gnu/girepository-1.0/*.typelib AppDir/usr/lib/girepository-1.0/ 2>/dev/null || true
 cp /usr/lib/girepository-1.0/*.typelib AppDir/usr/lib/girepository-1.0/ 2>/dev/null || true
 
-# Verify AppIndicator3 typelib was copied
-if [ ! -f "AppDir/usr/lib/girepository-1.0/AppIndicator3-0.1.typelib" ]; then
-    echo "❌ ERROR: AppIndicator3 typelib not found after copy"
+# Verify every typelib the app imports UNGUARDED. Only AppIndicator3 used to be
+# checked, so a missing Gtk, Gdk or GdkPixbuf would sail through the build and
+# crash the app on launch with a GI error the user cannot act on.
+#
+# Typelibs behind a try/except are deliberately NOT listed: Notify (desktop
+# notifications) and Atspi (password-field detection) are optional, are not
+# bundled, and the code already degrades without them. Requiring them here
+# would fail every build for features that are meant to be absent.
+#
+# tests/test_bundled_typelibs.py derives the unguarded set from the source and
+# fails if this list drifts, so do not edit it by hand without running it.
+REQUIRED_TYPELIBS=(
+    "AppIndicator3-0.1.typelib"
+    "Gtk-3.0.typelib"
+    "Gdk-3.0.typelib"
+    "GdkPixbuf-2.0.typelib"
+)
+MISSING_TYPELIBS=()
+for _tl in "${REQUIRED_TYPELIBS[@]}"; do
+    [ -f "AppDir/usr/lib/girepository-1.0/${_tl}" ] || MISSING_TYPELIBS+=("$_tl")
+done
+if [ ${#MISSING_TYPELIBS[@]} -ne 0 ]; then
+    echo "❌ ERROR: required typelib(s) missing after copy: ${MISSING_TYPELIBS[*]}"
     echo "   Searched in:"
     echo "     /usr/lib/x86_64-linux-gnu/girepository-1.0/"
     echo "     /usr/lib/girepository-1.0/"
+    echo "   The AppImage would build fine and then fail on launch."
     exit 1
 fi
-echo "   ✅ AppIndicator3 typelib bundled successfully"
+echo "   ✅ All ${#REQUIRED_TYPELIBS[@]} required typelibs bundled successfully"
 
 # Copy TalkType source
 echo "   Copying TalkType source..."
@@ -334,7 +361,11 @@ ARCH=x86_64 ./appimagetool-extracted/AppRun --no-appstream AppDir "TalkType-v${V
 
 # Fix ownership of AppImage output
 if [ -n "$BUILD_USER" ]; then
-    chown $BUILD_USER:$BUILD_GROUP /build/TalkType-v${VERSION}-x86_64.AppImage 2>/dev/null || true
+    # Not fatal — the AppImage exists either way — but if this fails the file is
+    # left owned by root and the host build script cannot copy or delete it
+    # without sudo, which is worth saying out loud rather than hiding.
+    chown $BUILD_USER:$BUILD_GROUP /build/TalkType-v${VERSION}-x86_64.AppImage 2>/dev/null \
+        || echo "   ⚠️  Warning: could not chown the AppImage to $BUILD_USER:$BUILD_GROUP (it stays root-owned)"
 fi
 
 # Clean up build artifacts inside container
