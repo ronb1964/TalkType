@@ -54,8 +54,21 @@ def positioning_available():
 class RecordingIndicator(Gtk.Window):
     """Floating recording indicator window with configurable position"""
 
-    def __init__(self, position="center", offset_x=0, offset_y=0, size="medium"):
+    def __init__(self, position="center", offset_x=0, offset_y=0, size="medium",
+                 style="orb", color_mode="system", custom_color="#48b7f5",
+                 backing="medium", sensitivity=1.0, follow_system_color=False):
         super().__init__(title="TalkType Recording")
+
+        # Style + appearance. The orb keeps its own draw path; the other styles
+        # are drawn by indicator_styles from the data fed below.
+        self.style = style
+        self.color_mode = color_mode
+        self.custom_color = custom_color
+        self.backing = backing
+        self.sensitivity = sensitivity
+        self.follow_system_color = follow_system_color
+        self.waveform = None   # raw samples for waveform/radial
+        self.spectrum = None   # band magnitudes for bars
 
         # Position configuration
         self.position = position.lower()
@@ -224,13 +237,18 @@ class RecordingIndicator(Gtk.Window):
         self.is_recording = False
         self.audio_level = 0.0
 
-    def apply_settings(self, position, size, offset_x, offset_y):
+    def apply_settings(self, position, size, offset_x, offset_y,
+                       style=None, color_mode=None, custom_color=None,
+                       backing=None, sensitivity=None, follow_system_color=None):
         """Adopt new appearance settings without rebuilding the indicator.
 
         show_at_position() reads position, scale and the offsets at show time,
         so updating them here is enough — the change takes effect the next time
         the indicator is shown. Deliberately does NOT move a currently visible
         indicator: the orb should never jump mid-dictation.
+
+        The style/color/backing/sensitivity kwargs are optional and applied only
+        when given, so existing four-argument callers keep working unchanged.
 
         Called from the service's config watcher so Preferences can change
         these without restarting the service, which would reload the Whisper
@@ -249,9 +267,44 @@ class RecordingIndicator(Gtk.Window):
             self.set_default_size(width, height)
             self.resize(width, height)
 
+        if style is not None:
+            self.style = style
+        if color_mode is not None:
+            self.color_mode = color_mode
+        if custom_color is not None:
+            self.custom_color = custom_color
+        if backing is not None:
+            self.backing = backing
+        if sensitivity is not None:
+            self.sensitivity = sensitivity
+        if follow_system_color is not None:
+            self.follow_system_color = follow_system_color
+
     def set_audio_level(self, level: float):
         """Update the audio level for satellite animation (0.0 - 1.0)"""
         self.audio_level = max(0.0, min(1.0, level))
+
+    def set_waveform(self, samples):
+        """Latest raw samples, for the waveform and radial styles."""
+        self.waveform = samples
+
+    def set_spectrum(self, bands):
+        """Latest band magnitudes (0..1), for the bars style."""
+        self.spectrum = bands
+
+    def _accent_rgb(self):
+        """The desktop theme's accent color, or a green fallback."""
+        try:
+            ok, rgba = Gtk.Label().get_style_context().lookup_color("theme_selected_bg_color")
+            if ok:
+                return (rgba.red, rgba.green, rgba.blue)
+        except Exception:
+            pass
+        return (0.30, 0.72, 0.42)
+
+    def _resolved_color(self):
+        from .indicator_styles import resolve_color
+        return resolve_color(self.color_mode, self.custom_color, self._accent_rgb())
 
     def update_animation(self):
         """Update animation state"""
@@ -277,6 +330,26 @@ class RecordingIndicator(Gtk.Window):
         cr.set_operator(cairo.OPERATOR_SOURCE)
         cr.paint()
         cr.set_operator(cairo.OPERATOR_OVER)
+
+        # Non-orb styles are drawn by indicator_styles from the fed data. The
+        # orb keeps its own draw path below, unchanged.
+        if self.style != "orb":
+            from . import indicator_styles as st
+            core = st.BACKING_LEVELS.get(self.backing, 0.5)
+            color = self._resolved_color()
+            if self.style == "waveform":
+                st.draw_waveform(cr, width, height,
+                                 self.waveform if self.waveform is not None else [],
+                                 self.audio_level, color, core, self.sensitivity)
+            elif self.style == "bars":
+                st.draw_bars(cr, width, height,
+                             self.spectrum if self.spectrum is not None else [],
+                             color, core)
+            elif self.style == "radial":
+                st.draw_radial(cr, width, height,
+                               self.waveform if self.waveform is not None else [],
+                               self.audio_level, color, core, self.sensitivity)
+            return
 
         # Calculate orb position (center-left area)
         orb_x = width * 0.3
