@@ -35,8 +35,8 @@ def test_resolve_color_custom_parses_hex():
     assert b == pytest.approx(0.0, abs=0.01)
 
 
-def test_resolve_color_classic_is_cyan():
-    assert S.resolve_color("classic", "#ff8000", (0.2, 0.4, 0.26)) == S.CLASSIC_CYAN
+def test_resolve_color_cyan_mode():
+    assert S.resolve_color("cyan", "#ff8000", (0.2, 0.4, 0.26)) == S.CYAN
 
 
 def test_orb_palette_derives_from_the_base_color():

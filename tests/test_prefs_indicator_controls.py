@@ -17,9 +17,11 @@ def test_no_redundant_orb_checkbox():
     assert "orb_follow_system_color" not in text
 
 
-def test_classic_cyan_is_a_color_option():
+def test_cyan_is_a_color_option():
+    """A plain color choice — not 'Classic', which only made sense for the orb."""
     text = PREFS.read_text()
-    assert "Classic cyan" in text
+    assert '"Cyan"' in text
+    assert "Classic cyan" not in text
 
 
 def test_uses_american_spelling_for_color():

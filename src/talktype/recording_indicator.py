@@ -55,13 +55,13 @@ class RecordingIndicator(Gtk.Window):
     """Floating recording indicator window with configurable position"""
 
     def __init__(self, position="center", offset_x=0, offset_y=0, size="medium",
-                 style="orb", color_mode="classic", custom_color="#48b7f5",
+                 style="orb", color_mode="cyan", custom_color="#48b7f5",
                  backing="medium", sensitivity=1.0):
         super().__init__(title="TalkType Recording")
 
         # Style + appearance. The orb keeps its own draw path; the other styles
         # are drawn by indicator_styles from the data fed below. color_mode
-        # (classic/system/custom) governs every style, including the orb.
+        # (cyan/system/custom) governs every style, including the orb.
         self.style = style
         self.color_mode = color_mode
         self.custom_color = custom_color
@@ -356,10 +356,10 @@ class RecordingIndicator(Gtk.Window):
         # Draw pill-shaped background container
         self.draw_pill_background(cr, orb_x, orb_y)
 
-        # Draw the animated orb. classic mode keeps the original cyan gradient
+        # Draw the animated orb. cyan mode keeps the original cyan gradient
         # (palette=None); system/custom recolor it via a palette built from the
         # resolved color, keeping the exact structure and only changing the hue.
-        if self.color_mode == "classic":
+        if self.color_mode == "cyan":
             orb_palette = None
         else:
             from .indicator_styles import orb_palette as _mk_palette
@@ -406,7 +406,7 @@ class RecordingIndicator(Gtk.Window):
     def draw_orb(self, cr, x, y, palette=None):
         """Draw the glowing orb with pulsing animation.
 
-        palette=None keeps the original cyan gradient exactly (classic mode).
+        palette=None keeps the original cyan gradient exactly (cyan mode).
         A palette (from indicator_styles.orb_palette) recolors the glow, core
         and particles while keeping the same structure, for system/custom modes.
         """

@@ -79,7 +79,7 @@ VALID_INDICATOR_POSITIONS = {
 
 VALID_INDICATOR_SIZES = {"small", "medium", "large"}
 VALID_INDICATOR_STYLES = {"orb", "waveform", "bars", "radial"}
-VALID_COLOR_MODES = {"classic", "system", "custom"}
+VALID_COLOR_MODES = {"cyan", "system", "custom"}
 VALID_BACKINGS = {"off", "soft", "medium", "strong"}
 
 
@@ -108,7 +108,7 @@ class Settings:
     indicator_offset_y: int = 0         # custom Y offset from position anchor (pixels, can be negative)
     indicator_size: str = "medium"      # indicator size: small, medium, large
     indicator_style: str = "orb"        # orb / waveform / bars / radial
-    indicator_color_mode: str = "classic"  # classic / system / custom (governs every style)
+    indicator_color_mode: str = "cyan"  # cyan / system / custom (governs every style)
     indicator_color: str = "#48b7f5"    # custom color, used when indicator_color_mode == custom
     indicator_backing: str = "medium"   # off / soft / medium / strong (soft dark backing)
     indicator_sensitivity: float = 1.0  # scales how strongly audio drives the animation (0.5-2.0)

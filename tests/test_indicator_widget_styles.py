@@ -23,7 +23,7 @@ def test_style_is_stored(indicator):
 
 
 def test_new_attributes_default(indicator):
-    assert indicator.color_mode == "classic"   # default when not specified
+    assert indicator.color_mode == "cyan"   # default when not specified
     assert indicator.backing == "medium"
     assert indicator.sensitivity == 1.0
 

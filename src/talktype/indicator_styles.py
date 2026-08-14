@@ -12,22 +12,22 @@ import cairo
 # Core alpha of the soft dark backing, per level. Approved by Ron.
 BACKING_LEVELS = {"off": 0.0, "soft": 0.34, "medium": 0.50, "strong": 0.68}
 
-# The orb's signature cyan, reused as the "classic" color for the new styles.
-CLASSIC_CYAN = (0.30, 0.70, 1.0)
+# The cyan the orb has always used; also the "cyan" color option for every style.
+CYAN = (0.30, 0.70, 1.0)
 
 
 def resolve_color(mode, custom_hex, accent_rgb):
     """(r,g,b) in 0..1 for the active color mode.
 
-    classic → the signature cyan, system → the desktop accent, custom → the
-    chosen hex. One control governs every style, including the orb.
+    cyan → CYAN, system → the desktop accent, custom → the chosen hex. One
+    control governs every style, including the orb.
     """
     if mode == "custom":
         h = custom_hex.lstrip("#")
         return tuple(int(h[i:i + 2], 16) / 255.0 for i in (0, 2, 4))
     if mode == "system":
         return tuple(accent_rgb)
-    return CLASSIC_CYAN
+    return CYAN
 
 
 def _fg(base, intensity, alpha=None):
@@ -47,7 +47,7 @@ def orb_palette(color):
     Mirrors the original cyan orb's structure (white-hot core → color → dark
     edge, particles color-graded near→far) so recoloring keeps its exact look,
     only the hue changing. Used for the orb's system/custom color modes; the
-    classic mode keeps the orb's own hardcoded cyan draw path untouched.
+    cyan mode keeps the orb's own hardcoded cyan draw path untouched.
     """
     white, black = (1.0, 1.0, 1.0), (0.0, 0.0, 0.0)
     return {

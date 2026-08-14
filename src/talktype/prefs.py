@@ -1099,12 +1099,12 @@ class PreferencesWindow:
 
         # Indicator style
         style_label = Gtk.Label(label="  Indicator style 💡:", xalign=0)
-        style_label.set_tooltip_text("Choose how the recording indicator looks.\nOrb is the classic default.")
+        style_label.set_tooltip_text("Choose how the recording indicator looks.\nOrb is the default.")
         grid.attach(style_label, 0, row, 1, 1)
         style_combo = Gtk.ComboBoxText()
         style_combo.connect("button-press-event", self._on_combo_button_press)
         self._block_combo_scroll(style_combo)
-        for sid, slabel in (("orb", "Orb (classic)"), ("waveform", "Waveform"),
+        for sid, slabel in (("orb", "Orb"), ("waveform", "Waveform"),
                             ("bars", "Frequency bars"), ("radial", "Radial")):
             style_combo.append(sid, slabel)
         style_combo.set_active_id(self.config.get("indicator_style", "orb"))
@@ -1118,10 +1118,10 @@ class PreferencesWindow:
         color_mode_combo = Gtk.ComboBoxText()
         color_mode_combo.connect("button-press-event", self._on_combo_button_press)
         self._block_combo_scroll(color_mode_combo)
-        color_mode_combo.append("classic", "Classic cyan")
+        color_mode_combo.append("cyan", "Cyan")
         color_mode_combo.append("system", "Use system accent color")
         color_mode_combo.append("custom", "Custom color")
-        color_mode_combo.set_active_id(self.config.get("indicator_color_mode", "classic"))
+        color_mode_combo.set_active_id(self.config.get("indicator_color_mode", "cyan"))
         color_mode_combo.connect("changed", lambda x: self.update_config("indicator_color_mode", x.get_active_id()))
         grid.attach(color_mode_combo, 1, row, 1, 1)
         row += 1
