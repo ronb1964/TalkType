@@ -1108,7 +1108,14 @@ class PreferencesWindow:
                             ("bars", "Frequency bars"), ("radial", "Radial")):
             style_combo.append(sid, slabel)
         style_combo.set_active_id(self.config.get("indicator_style", "orb"))
-        style_combo.connect("changed", lambda x: self.update_config("indicator_style", x.get_active_id()))
+
+        def _on_style_changed(combo):
+            self.update_config("indicator_style", combo.get_active_id())
+            # The Orb ignores the backing; grey it out so that's visible at a
+            # glance, and re-enable it for the reactive styles.
+            self._sync_backing_sensitivity()
+        style_combo.connect("changed", _on_style_changed)
+        self._style_combo = style_combo
         grid.attach(style_combo, 1, row, 1, 1)
         row += 1
 
@@ -1208,6 +1215,10 @@ class PreferencesWindow:
         backing_combo.set_active_id(self.config.get("indicator_backing", "medium"))
         backing_combo.connect("changed", lambda x: self.update_config("indicator_backing", x.get_active_id()))
         grid.attach(backing_combo, 1, row, 1, 1)
+        self._backing_combo = backing_combo
+        self._backing_label = backing_label
+        # Reflect the current style now that both controls exist.
+        self._sync_backing_sensitivity()
         row += 1
 
         # Sensitivity slider
@@ -2262,6 +2273,22 @@ class PreferencesWindow:
             self._color_mode_combo.set_active_id(mode)
         finally:
             self._suppress_color_popup = False
+
+    def _sync_backing_sensitivity(self):
+        """Enable the backing control only for styles that actually use it.
+
+        The Orb has its own pill background and ignores the backing entirely, so
+        greying the control out on Orb makes that plain without a hover; the
+        reactive styles (waveform/bars/radial) re-enable it.
+        """
+        combo = getattr(self, "_backing_combo", None)
+        if combo is None:
+            return
+        applies = self._style_combo.get_active_id() != "orb"
+        combo.set_sensitive(applies)
+        label = getattr(self, "_backing_label", None)
+        if label is not None:
+            label.set_sensitive(applies)
 
     def _reset_color_to_classic(self, _button=None):
         """Return the indicator color to TalkType's classic cyan.

@@ -83,3 +83,11 @@ def test_backing_tooltip_notes_the_orb_ignores_it():
     backing setting to change the orb."""
     text = PREFS.read_text()
     assert "Doesn't apply to the Orb" in text
+
+
+def test_backing_control_greys_out_for_the_orb():
+    """Beyond the tooltip, the backing control is disabled while the style is
+    Orb (which ignores it) and re-enabled for the reactive styles, so the
+    irrelevance is visible at a glance without hovering."""
+    text = PREFS.read_text()
+    assert "_sync_backing_sensitivity" in text
