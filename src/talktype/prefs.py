@@ -1097,6 +1097,86 @@ class PreferencesWindow:
         grid.attach(size_combo, 1, row, 1, 1)
         row += 1
 
+        # Indicator style
+        style_label = Gtk.Label(label="  Indicator style 💡:", xalign=0)
+        style_label.set_tooltip_text("Choose how the recording indicator looks.\nOrb is the classic default.")
+        grid.attach(style_label, 0, row, 1, 1)
+        style_combo = Gtk.ComboBoxText()
+        style_combo.connect("button-press-event", self._on_combo_button_press)
+        self._block_combo_scroll(style_combo)
+        for sid, slabel in (("orb", "Orb (classic)"), ("waveform", "Waveform"),
+                            ("bars", "Frequency bars"), ("radial", "Radial")):
+            style_combo.append(sid, slabel)
+        style_combo.set_active_id(self.config.get("indicator_style", "orb"))
+        style_combo.connect("changed", lambda x: self.update_config("indicator_style", x.get_active_id()))
+        grid.attach(style_combo, 1, row, 1, 1)
+        row += 1
+
+        # Color mode (the new styles; American spelling)
+        color_mode_label = Gtk.Label(label="  Indicator color:", xalign=0)
+        grid.attach(color_mode_label, 0, row, 1, 1)
+        color_mode_combo = Gtk.ComboBoxText()
+        color_mode_combo.connect("button-press-event", self._on_combo_button_press)
+        self._block_combo_scroll(color_mode_combo)
+        color_mode_combo.append("system", "Use system accent color")
+        color_mode_combo.append("custom", "Custom color")
+        color_mode_combo.set_active_id(self.config.get("indicator_color_mode", "system"))
+        color_mode_combo.connect("changed", lambda x: self.update_config("indicator_color_mode", x.get_active_id()))
+        grid.attach(color_mode_combo, 1, row, 1, 1)
+        row += 1
+
+        # Custom color picker (used when color mode is Custom)
+        color_pick_label = Gtk.Label(label="  Custom color:", xalign=0)
+        grid.attach(color_pick_label, 0, row, 1, 1)
+        color_btn = Gtk.ColorButton()
+        _rgba = Gdk.RGBA()
+        _rgba.parse(self.config.get("indicator_color", "#48b7f5"))
+        color_btn.set_rgba(_rgba)
+
+        def _on_color_set(btn):
+            c = btn.get_rgba()
+            hexval = "#%02x%02x%02x" % (int(c.red * 255), int(c.green * 255), int(c.blue * 255))
+            self.update_config("indicator_color", hexval)
+            # Picking a color implies you want to use it.
+            self.update_config("indicator_color_mode", "custom")
+            color_mode_combo.set_active_id("custom")
+        color_btn.connect("color-set", _on_color_set)
+        grid.attach(color_btn, 1, row, 1, 1)
+        row += 1
+
+        # Backing (soft dark background)
+        backing_label = Gtk.Label(label="  Indicator backing 💡:", xalign=0)
+        backing_label.set_tooltip_text("A soft dark backing keeps the indicator visible over any wallpaper.\nOff makes it fully transparent.")
+        grid.attach(backing_label, 0, row, 1, 1)
+        backing_combo = Gtk.ComboBoxText()
+        backing_combo.connect("button-press-event", self._on_combo_button_press)
+        self._block_combo_scroll(backing_combo)
+        for bid, blabel in (("off", "Off (transparent)"), ("soft", "Soft"),
+                           ("medium", "Medium"), ("strong", "Strong")):
+            backing_combo.append(bid, blabel)
+        backing_combo.set_active_id(self.config.get("indicator_backing", "medium"))
+        backing_combo.connect("changed", lambda x: self.update_config("indicator_backing", x.get_active_id()))
+        grid.attach(backing_combo, 1, row, 1, 1)
+        row += 1
+
+        # Sensitivity slider
+        sens_label = Gtk.Label(label="  Sensitivity:", xalign=0)
+        sens_label.set_tooltip_text("How strongly the indicator reacts to your voice.")
+        grid.attach(sens_label, 0, row, 1, 1)
+        sens_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.5, 2.0, 0.1)
+        sens_scale.set_value(self.config.get("indicator_sensitivity", 1.0))
+        sens_scale.set_hexpand(True)
+        sens_scale.connect("value-changed", lambda x: self.update_config("indicator_sensitivity", round(x.get_value(), 2)))
+        grid.attach(sens_scale, 1, row, 1, 1)
+        row += 1
+
+        # Orb-only: follow the system accent instead of the classic cyan.
+        orb_follow = Gtk.CheckButton(label="Orb follows system accent color")
+        orb_follow.set_active(self.config.get("orb_follow_system_color", False))
+        orb_follow.connect("toggled", lambda x: self.update_config("orb_follow_system_color", x.get_active()))
+        grid.attach(orb_follow, 0, row, 2, 1)
+        row += 1
+
         # Indicator position
         pos_label = Gtk.Label(label="  Indicator position:", xalign=0)
         grid.attach(pos_label, 0, row, 1, 1)

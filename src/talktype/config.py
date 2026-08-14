@@ -245,7 +245,7 @@ def _repair_invalid_fields(s: Settings, error: ConfigError) -> Settings:
 
 # Type casters for dataclass fields — maps annotation strings to builtins.
 # Needed because `from __future__ import annotations` stores types as strings.
-_TYPE_CASTERS = {"str": str, "bool": bool, "int": int}
+_TYPE_CASTERS = {"str": str, "bool": bool, "int": int, "float": float}
 
 
 # Config cache — avoids re-reading TOML from disk when file hasn't changed.
@@ -458,6 +458,8 @@ def _toml_value(val) -> str:
         return str(val).lower()     # true / false
     if isinstance(val, int):
         return str(val)             # bare integer
+    if isinstance(val, float):
+        return repr(val)            # bare float — else it round-trips as a string
     return _toml_string(str(val))
 
 

@@ -51,3 +51,11 @@ def test_sensitivity_out_of_range_is_reported():
     s.indicator_sensitivity = 9.0
     problems = dict(config._validation_problems(s))
     assert "indicator_sensitivity" in problems
+
+
+def test_float_sensitivity_round_trips_as_a_float():
+    """A float field must survive save/reload as a float, not a string — the
+    TOML writer had no float branch and the loader had no float caster, so
+    indicator_sensitivity was the first float field to expose both."""
+    assert config._toml_value(1.3) == "1.3"          # bare, not quoted
+    assert config._TYPE_CASTERS["float"] is float     # loader casts it back
