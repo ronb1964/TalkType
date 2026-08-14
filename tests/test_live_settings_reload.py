@@ -33,7 +33,7 @@ class StubIndicator:
     def __init__(self):
         self.calls = []
 
-    def apply_settings(self, position, size, offset_x, offset_y):
+    def apply_settings(self, position, size, offset_x, offset_y, **kwargs):
         self.calls.append((position, size, offset_x, offset_y))
 
 

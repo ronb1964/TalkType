@@ -558,16 +558,32 @@ def _sd_callback(indata, frames_count, time_info, status):
     if state.is_recording:
         state.frames.append(indata.tobytes())
 
-        # Update recording indicator with audio level
+        # Feed the recording indicator whatever its active style needs.
         if recording_indicator:
-            # Calculate RMS (root mean square) for audio level
-            audio_data = np.frombuffer(indata, dtype=np.int16)
-            # Use float64 to avoid overflow in squaring
-            audio_float = audio_data.astype(np.float64)
-            rms = np.sqrt(np.mean(audio_float**2))
-            # Normalize to 0-1 range (adjust multiplier for sensitivity)
-            normalized = min(1.0, rms / 3000.0)
-            recording_indicator.set_audio_level(normalized)
+            _feed_indicator(recording_indicator, indata, _spectrum_processor)
+
+def _feed_indicator(indicator, indata, spectrum_processor):
+    """Feed the recording indicator the data its active style needs.
+
+    The RMS level is always cheap and drives the orb and the color brightness.
+    Raw samples (waveform, radial) and the FFT spectrum (bars) are computed
+    ONLY for the style that consumes them, so an orb user pays for no FFT.
+    """
+    audio = np.frombuffer(indata, dtype=np.int16).astype(np.float64)
+    rms = float(np.sqrt(np.mean(audio ** 2))) if len(audio) else 0.0
+    indicator.set_audio_level(min(1.0, rms / 3000.0))
+
+    style = getattr(indicator, "style", "orb")
+    if style in ("waveform", "radial"):
+        indicator.set_waveform(audio.astype(np.float32) / 32768.0)
+    elif style == "bars" and spectrum_processor is not None:
+        indicator.set_spectrum(spectrum_processor.process(audio.astype(np.float32) / 32768.0))
+
+
+# Built once when the recording indicator is created; used by _feed_indicator
+# to compute the bars spectrum. None until then (and for non-bars styles).
+_spectrum_processor = None
+
 
 def _keycode_from_name(name: str) -> int | None:
     """Convert key name to evdev keycode. Returns None if name is empty (no hotkey configured)."""
@@ -776,6 +792,12 @@ def _reload_live_settings(cfg, indicator):
                 cfg.indicator_size,
                 cfg.indicator_offset_x,
                 cfg.indicator_offset_y,
+                style=cfg.indicator_style,
+                color_mode=cfg.indicator_color_mode,
+                custom_color=cfg.indicator_color,
+                backing=cfg.indicator_backing,
+                sensitivity=cfg.indicator_sensitivity,
+                follow_system_color=cfg.orb_follow_system_color,
             )
 
         vc_hotkey_str = getattr(cfg, "voice_commands_hotkey", "")
@@ -2528,8 +2550,18 @@ def main():
                         position=cfg.indicator_position,
                         offset_x=cfg.indicator_offset_x,
                         offset_y=cfg.indicator_offset_y,
-                        size=cfg.indicator_size
+                        size=cfg.indicator_size,
+                        style=cfg.indicator_style,
+                        color_mode=cfg.indicator_color_mode,
+                        custom_color=cfg.indicator_color,
+                        backing=cfg.indicator_backing,
+                        sensitivity=cfg.indicator_sensitivity,
+                        follow_system_color=cfg.orb_follow_system_color,
                     )
+                    # Spectrum processor for the bars style; _feed_indicator uses it.
+                    global _spectrum_processor
+                    from .indicator_dsp import SpectrumProcessor
+                    _spectrum_processor = SpectrumProcessor(bins=20)
                     print(f"✓ Recording indicator initialized (position: {cfg.indicator_position}, size: {cfg.indicator_size})")
                     logger.info(f"Recording indicator initialized at position: {cfg.indicator_position}, size: {cfg.indicator_size}")
                 except Exception as e:
