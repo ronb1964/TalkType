@@ -75,3 +75,11 @@ def test_backing_options_present():
     text = PREFS.read_text()
     for level in ("off", "soft", "medium", "strong"):
         assert level in text
+
+
+def test_backing_tooltip_notes_the_orb_ignores_it():
+    """The backing only draws for waveform/bars/radial; the orb has its own pill
+    background and never uses it. The tooltip must say so, so nobody expects a
+    backing setting to change the orb."""
+    text = PREFS.read_text()
+    assert "Doesn't apply to the Orb" in text

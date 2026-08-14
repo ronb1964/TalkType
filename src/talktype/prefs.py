@@ -1197,7 +1197,7 @@ class PreferencesWindow:
 
         # Backing (soft dark background)
         backing_label = Gtk.Label(label="  Indicator backing 💡:", xalign=0)
-        backing_label.set_tooltip_text("A soft dark backing keeps the indicator visible over any wallpaper.\nOff makes it fully transparent.")
+        backing_label.set_tooltip_text("A soft dark backing keeps the indicator visible over any wallpaper.\nOff makes it fully transparent.\nDoesn't apply to the Orb, which has its own background.")
         grid.attach(backing_label, 0, row, 1, 1)
         backing_combo = Gtk.ComboBoxText()
         backing_combo.connect("button-press-event", self._on_combo_button_press)
