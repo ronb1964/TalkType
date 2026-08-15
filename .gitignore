@@ -62,8 +62,10 @@ coverage.xml
 *.AppImage
 *.AppImage.zsync
 SHA256SUMS.txt
-# .deb packages built by build-deb.sh (attached to GitHub releases, not tracked)
+# .deb / .rpm packages built by build-deb.sh / build-rpm.sh
+# (attached to GitHub releases, not tracked)
 *.deb
+*.rpm
 appimage-builder
 appimagetool
 appimagetool-extracted/
