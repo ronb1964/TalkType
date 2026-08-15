@@ -19,7 +19,6 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 REQUIRED_IN_GIT = [
     "build-release.sh",        # step 3
     "container-build.sh",      # called by build-release.sh
-    "patch_pytorch.py",        # called by container-build.sh
     "package-extension.sh",    # step 10
     "fresh-start-for-testing.sh",  # step 6
 ]
@@ -58,66 +57,3 @@ def test_build_script_calls_nothing_that_is_missing_from_git():
         "the build calls files that exist locally but are not in git:\n  "
         + "\n  ".join(missing)
     )
-
-
-# --- patch_pytorch must not claim success when it patched nothing -----------
-
-def test_patch_pytorch_fails_loudly_when_the_target_line_is_gone(tmp_path):
-    """The script looks for the exact line "_load_global_deps()" and wraps it
-    in a try/except so PyTorch tolerates missing CUDA libraries.
-
-    If a PyTorch upgrade changes that line, the loop simply finds nothing, the
-    file is rewritten byte-identical, and the script still prints its success
-    tick and exits 0. container-build.sh carries on and ships an AppImage
-    whose PyTorch crashes on any machine without CUDA — with nothing in the
-    build log to suggest the patch had silently become a no-op.
-    """
-    target = tmp_path / "__init__.py"
-    original = "import os\n\n# nothing to patch here\n_load_global_deps_renamed()\n"
-    target.write_text(original)
-
-    result = subprocess.run(
-        ["python3", str(ROOT / "patch_pytorch.py"), str(target)],
-        capture_output=True, text=True,
-    )
-
-    assert result.returncode != 0, (
-        f"reported success without patching anything: {result.stdout!r}"
-    )
-    assert target.read_text() == original, "rewrote the file despite patching nothing"
-
-
-def test_patch_pytorch_succeeds_on_a_normal_pytorch_init(tmp_path):
-    target = tmp_path / "__init__.py"
-    target.write_text("import os\n\nif True:\n    _load_global_deps()\n")
-
-    result = subprocess.run(
-        ["python3", str(ROOT / "patch_pytorch.py"), str(target)],
-        capture_output=True, text=True,
-    )
-
-    assert result.returncode == 0, result.stderr
-    patched = target.read_text()
-    assert "try:" in patched
-    assert "except Exception:" in patched
-    assert "_load_global_deps()" in patched
-
-
-def test_patch_pytorch_is_idempotent(tmp_path):
-    """container-build.sh may run it more than once; a second run must not
-    double-wrap or start failing."""
-    target = tmp_path / "__init__.py"
-    target.write_text("import os\n\nif True:\n    _load_global_deps()\n")
-
-    first = subprocess.run(["python3", str(ROOT / "patch_pytorch.py"), str(target)],
-                           capture_output=True, text=True)
-    assert first.returncode == 0
-    after_first = target.read_text()
-
-    second = subprocess.run(["python3", str(ROOT / "patch_pytorch.py"), str(target)],
-                            capture_output=True, text=True)
-
-    assert second.returncode == 0, (
-        f"a second run failed, which would break a rebuild: {second.stderr!r}"
-    )
-    assert target.read_text() == after_first, "double-patched on the second run"

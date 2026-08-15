@@ -148,26 +148,11 @@ rsync -a \
     "$VENV_PATH/lib/python${PYTHON_VERSION}/site-packages/" \
     "AppDir/usr/lib/python${PYTHON_VERSION}/site-packages/"
 
-# Copy PyTorch (CPU-only - GPU acceleration uses CTranslate2's separate CUDA support)
-echo "   Copying PyTorch (CPU-only)..."
-VENV_TORCH="$VENV_PATH/lib/python${PYTHON_VERSION}/site-packages/torch"
-if [ -d "$VENV_TORCH" ]; then
-    echo "   Found PyTorch at $VENV_TORCH"
-    cp -r "$VENV_TORCH" "AppDir/usr/lib/python${PYTHON_VERSION}/site-packages/"
-    # dist-info is metadata only — torch imports without it — so a miss is not
-    # fatal. Say so rather than swallowing it: silence here is indistinguishable
-    # from success, which is how several other build faults stayed hidden.
-    cp -r "$VENV_PATH/lib/python${PYTHON_VERSION}/site-packages/torch-"*.dist-info \
-          "AppDir/usr/lib/python${PYTHON_VERSION}/site-packages/" 2>/dev/null \
-          || echo "   ⚠️  Warning: torch dist-info not copied (metadata only; importlib.metadata.version('torch') will fail)"
-    # Report size to verify CPU-only (should be ~140MB, not ~1.7GB)
-    TORCH_SIZE=$(du -sh "AppDir/usr/lib/python${PYTHON_VERSION}/site-packages/torch" | cut -f1)
-    echo "   ✅ PyTorch size: $TORCH_SIZE (CPU-only)"
-else
-    echo "❌ ERROR: Could not find PyTorch installation at $VENV_TORCH"
-    ls -la "$VENV_PATH/lib/python${PYTHON_VERSION}/site-packages/" | head -20
-    exit 1
-fi
+# PyTorch is intentionally NOT bundled (removed 2026-08-15). It was never used:
+# inference is faster-whisper/CTranslate2, GPU uses cuda_helper's CUDA libs, and model
+# downloads use huggingface_hub — all verified torch-free on CPU and GPU. The rsync
+# excludes above still drop torch/torchvision/nvidia* defensively in case a dev venv
+# happens to have them installed.
 
 # Copy system gi, cairo, and dbus Python packages (not available via pip on Ubuntu 22.04)
 echo "   Copying system gi, cairo, and dbus packages..."
@@ -225,10 +210,6 @@ install -Dm755 /usr/lib/x86_64-linux-gnu/libcairo.so.2 AppDir/usr/lib/libcairo.s
 install -Dm755 /usr/lib/x86_64-linux-gnu/libcairo-gobject.so.2 AppDir/usr/lib/libcairo-gobject.so.2
 install -Dm755 /usr/lib/x86_64-linux-gnu/libpangocairo-1.0.so.0 AppDir/usr/lib/libpangocairo-1.0.so.0
 echo "     ✓ Copied Cairo C libraries"
-
-# Patch PyTorch for graceful handling (safety measure - CPU-only torch shouldn't need this)
-echo "   Patching PyTorch (safety measure)..."
-python3 /build/patch_pytorch.py "AppDir/usr/lib/python${PYTHON_VERSION}/site-packages/torch/__init__.py"
 
 # Build ydotool
 echo "   Building ydotool..."
@@ -299,6 +280,10 @@ echo "   ✅ All ${#REQUIRED_TYPELIBS[@]} required typelibs bundled successfully
 # Copy TalkType source
 echo "   Copying TalkType source..."
 cp -r src/talktype AppDir/usr/src/
+# Normalize source permissions so no owner-only file (e.g. a 0600 .py) rides into the
+# bundle unreadable. The AppImage's FUSE mount hides this, but a .deb/.rpm built from the
+# same tree installs real files and a 0600 module then fails to import for the user.
+chmod -R a+rX AppDir/usr/src/talktype
 
 # NOTE: GNOME extension is NOT bundled - it's downloaded from GitHub releases during onboarding
 # This allows users to update the extension independently of the AppImage
