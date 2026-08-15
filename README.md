@@ -72,7 +72,8 @@ Most voice dictation tools on Linux are either cloud-based (privacy concerns), c
 - **Smart Text Processing** - Auto-punctuation, smart quotes, auto-spacing
 - **Voice Commands** - Say "comma", "period", "new paragraph", "undo last word", and more
 - **Custom Commands** - Define your own phrase shortcuts (e.g., "my email" → your@email.com)
-- **Visual Feedback** - On-screen recording indicator with timer, positionable anywhere on screen
+- **Visual Feedback** - On-screen recording indicator that reacts to your voice, with four styles (orb, waveform, frequency bars, radial), custom colors, and positioning anywhere on screen
+- **Private by Default** - Fully offline transcription, and your dictated text is never written to the log (opt-in only, for troubleshooting)
 - **GNOME Integration** - Native shell extension for GNOME desktop
 - **Auto-Updates** - Built-in update checker with one-click downloads
 - **Wayland Native** - Works seamlessly on modern Linux desktops

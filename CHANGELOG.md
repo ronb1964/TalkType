@@ -2,6 +2,27 @@
 
 All notable changes to TalkType are documented here.
 
+## [0.6.2] - 2026-08-14
+
+### The recording indicator can now look four different ways
+- **Alongside the original glowing orb, there are three new styles that react to your voice as you speak**: a Waveform, Frequency bars, and a Radial burst. Choose one under Preferences → Audio.
+- **One colour control governs every style.** Match your desktop's accent colour, or pick your own from a colour picker that opens the moment you choose "Custom colour". The classic cyan is the first preset swatch, and a "Reset to classic cyan" link puts the original colour back in one click.
+- **A soft dark backing** (Off / Soft / Medium / Strong) keeps the waveform, bars and radial styles readable over any wallpaper. The orb has its own background and ignores this — the setting greys out while the orb is selected, so that's clear at a glance.
+- **A sensitivity slider** tunes how strongly the indicator reacts to your voice.
+- All of these apply instantly, with no need to restart dictation.
+
+### Your dictation stays private in the log
+- **TalkType no longer writes what you dictate to its log file.** Previously every transcription was saved to the log in plain text, quietly building up a record on disk of everything you had said. The log now records only that a transcription happened and how long it was — never the words themselves.
+- If you are troubleshooting a dictation problem, full logging can be turned back on under Preferences → Advanced → Privacy. It asks you to confirm in a warning first, so switching it on is always a deliberate, informed choice.
+- A **"Clear log now"** button wipes the existing log whenever you want.
+- The Text Injection help text no longer claims the app can avoid typing into password fields — no Linux app can reliably detect them on Wayland, so the honest guidance is simply to avoid dictating into them.
+
+### Settings apply without restarting the service
+- **Changing settings in Preferences no longer restarts dictation.** Almost any change used to trigger a ten-second model reload; now only changing the model or device does. Everything else — the indicator, punctuation, timeouts and the rest — takes effect on your very next dictation.
+
+### Fixed
+- **The recording indicator ignored its position setting.** The dictation service was being started from two different places that did not agree on settings, so where the indicator appeared depended on which one launched it. It now launches from a single place and honours the position you chose.
+
 ## [0.6.1] - 2026-08-13
 
 ### Preferences styling
