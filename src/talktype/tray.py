@@ -218,6 +218,12 @@ class DictationTray:
                     """Open preferences via tray."""
                     GLib.idle_add(self.tray.open_preferences, None)
 
+                def show_update_result(self, result):
+                    """Show the persistent update-result dialog via the tray (called from
+                    the GNOME extension's D-Bus CheckForUpdates so the manual check gives a
+                    real 'click OK' window, not just the fleeting GNOME notification)."""
+                    GLib.idle_add(self.tray._show_update_result_dialog, result)
+
                 def show_help(self):
                     """Show help via tray."""
                     GLib.idle_add(self.tray.show_help, None)
@@ -1220,11 +1226,20 @@ class DictationTray:
 
         def do_check():
             """Background thread to check for updates."""
-            result_holder[0] = update_checker.check_for_updates()
+            try:
+                result_holder[0] = update_checker.check_for_updates()
+            except Exception as e:
+                logger.error(f"Update check raised: {e}", exc_info=True)
+                result_holder[0] = {"success": False, "error": str(e)}
+            r = result_holder[0] or {}
+            print(f"Update check done: success={r.get('success')}, "
+                  f"update_available={r.get('update_available')}, error={r.get('error')}",
+                  flush=True)
             GLib.idle_add(show_result)
 
         def show_result():
             """Show the result in the main thread."""
+            print("Update check: presenting result window", flush=True)
             progress_dialog.destroy()
 
             result = result_holder[0]
@@ -1239,8 +1254,9 @@ class DictationTray:
                 error_dialog.format_secondary_text(error_msg)
                 error_dialog.set_position(Gtk.WindowPosition.CENTER)
                 error_dialog.set_keep_above(True)
-                error_dialog.run()
-                error_dialog.destroy()
+                error_dialog.connect("response", lambda d, _r: d.destroy())
+                error_dialog.show_all()
+                error_dialog.present()
                 return
 
             # Show result dialog
@@ -1276,8 +1292,12 @@ class DictationTray:
             dialog.format_secondary_markup(message)
             dialog.set_position(Gtk.WindowPosition.CENTER)
             dialog.set_keep_above(True)
-            dialog.run()
-            dialog.destroy()
+            # Show non-blocking (destroy on response) instead of run(): the tray's GTK
+            # loop is in a background thread, and a nested run() loop there can fail to
+            # map the dialog on Wayland — the cause of "no result window appears".
+            dialog.connect("response", lambda d, _r: d.destroy())
+            dialog.show_all()
+            dialog.present()
             return
 
         # Updates available - show detailed dialog
@@ -1342,19 +1362,20 @@ class DictationTray:
             download_btn = dialog.add_button("Download Update", Gtk.ResponseType.YES)
             download_btn.get_style_context().add_class("suggested-action")
 
+        # Non-blocking (no nested run() loop from the background GTK thread — that can
+        # fail to map the window on Wayland). Handle the button response in a callback.
+        def _on_update_response(dlg, response):
+            if response == Gtk.ResponseType.ACCEPT:
+                update_checker.open_release_page(release.get("html_url", ""))
+                dlg.destroy()
+            elif response == Gtk.ResponseType.YES:
+                dlg.destroy()
+                self._download_update(release)
+            else:
+                dlg.destroy()
+        dialog.connect("response", _on_update_response)
         dialog.show_all()
-        response = dialog.run()
-
-        if response == Gtk.ResponseType.ACCEPT:
-            # Open GitHub release page
-            update_checker.open_release_page(release.get("html_url", ""))
-        elif response == Gtk.ResponseType.YES:
-            # Download update
-            dialog.destroy()
-            self._download_update(release)
-            return
-
-        dialog.destroy()
+        dialog.present()
 
     def _download_update(self, release):
         """Download the update with progress dialog."""

@@ -244,6 +244,13 @@ class SplashScreen:
             os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "icons", "OFFICIAL_ICON_DO_NOT_CHANGE.svg"),
             os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "icons", "TT_retro_square_light_transparent.png"),
             "/app/share/icons/hicolor/scalable/apps/io.github.ronb1964.TalkType.svg",
+            # System install locations (.deb / .rpm) — crisp hicolor SVG first, then the
+            # pixmaps PNG fallback. Without these the splash finds no icon on a packaged
+            # install ($APPDIR is unset and the project icons/ dir isn't bundled) and
+            # falls back to plain "TalkType" text.
+            "/usr/share/icons/hicolor/scalable/apps/io.github.ronb1964.TalkType.svg",
+            "/usr/share/icons/hicolor/256x256/apps/io.github.ronb1964.TalkType.png",
+            "/usr/share/pixmaps/io.github.ronb1964.TalkType.png",
             "../icons/OFFICIAL_ICON_DO_NOT_CHANGE.svg",
             "../icons/TT_retro_square_light_transparent.png",
             "icons/OFFICIAL_ICON_DO_NOT_CHANGE.svg",
@@ -440,8 +447,11 @@ class WelcomeDialog:
     def _build_dialog(self):
         """Build the GTK dialog with appropriate content."""
         self.dialog = Gtk.Dialog(title="Welcome to TalkType!")
-        self.dialog.set_default_size(580, self.height)
-        self.dialog.set_resizable(False)
+        # Cap height to the screen and allow resizing so the footer (Get Started
+        # button) is always reachable. The content below is in a ScrolledWindow, so
+        # overflow scrolls instead of being cut off. See fit_dialog_to_screen.
+        from .ui_style import fit_dialog_to_screen
+        fit_dialog_to_screen(self.dialog, 580, self.height)
         self.dialog.set_modal(True)
         self.dialog.set_position(Gtk.WindowPosition.CENTER)
         self.dialog.set_keep_above(True)
@@ -1474,9 +1484,11 @@ def show_tips_and_features_dialog(extension_installed=False):
     apply_dropdown_list_style()
 
     dialog = Gtk.Dialog(title="TalkType - Setup Complete!")
-    dialog.set_default_size(600, 650 if extension_installed else 600)
     dialog.set_border_width(0)
-    dialog.set_resizable(False)
+    # Cap height to the screen + allow resizing so the "Get Started" button is always
+    # reachable; the content is wrapped in a ScrolledWindow below for overflow.
+    from .ui_style import fit_dialog_to_screen
+    fit_dialog_to_screen(dialog, 600, 650 if extension_installed else 600)
 
     # Add CSS for pulsing logout reminder
     if extension_installed:
@@ -1521,13 +1533,18 @@ def show_tips_and_features_dialog(extension_installed=False):
     content = dialog.get_content_area()
     content.set_spacing(0)
 
+    # Scroll the content so the footer (Get Started) stays reachable on short screens.
+    scrolled = Gtk.ScrolledWindow()
+    scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+    content.pack_start(scrolled, True, True, 0)
+
     # Main container with padding
     vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=15)
     vbox.set_margin_start(30)
     vbox.set_margin_end(30)
     vbox.set_margin_top(25)
     vbox.set_margin_bottom(25)
-    content.pack_start(vbox, True, True, 0)
+    scrolled.add(vbox)
 
     # Success header
     header_label = Gtk.Label()
@@ -2781,9 +2798,9 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False)
         launcher_created: True if desktop launcher was created
     """
     dialog = Gtk.Dialog(title="TalkType - Ready!")
-    dialog.set_default_size(450, -1)  # Auto-height to fit content
     dialog.set_border_width(0)
-    dialog.set_resizable(False)
+    from .ui_style import fit_dialog_to_screen
+    fit_dialog_to_screen(dialog, 450, -1)  # auto-height, resizable, screen-capped
     dialog.set_position(Gtk.WindowPosition.CENTER)
     dialog.set_keep_above(True)
 

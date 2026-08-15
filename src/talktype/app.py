@@ -1984,8 +1984,8 @@ def _show_welcome_after_change(cfg, mode):
         from gi.repository import Gtk
 
         ready_dialog = Gtk.Dialog(title="Hotkeys Updated!")
-        ready_dialog.set_default_size(500, 300)
-        ready_dialog.set_resizable(False)
+        from .ui_style import fit_dialog_to_screen
+        fit_dialog_to_screen(ready_dialog, 500, 300)
         ready_dialog.set_modal(True)
         ready_dialog.set_position(Gtk.WindowPosition.CENTER)
 

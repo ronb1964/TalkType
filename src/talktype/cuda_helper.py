@@ -753,8 +753,8 @@ def show_initial_help_dialog():
     """Show initial help dialog for first-time users who skip CUDA download."""
     try:
         dialog = Gtk.Dialog(title="Welcome to TalkType")
-        dialog.set_default_size(520, 320)
-        dialog.set_resizable(False)
+        from .ui_style import fit_dialog_to_screen
+        fit_dialog_to_screen(dialog, 520, 320)
         dialog.set_modal(True)
         dialog.set_position(Gtk.WindowPosition.CENTER)
 

@@ -274,7 +274,14 @@ class TalkTypeDBusService(dbus.service.Object):
                 from . import update_checker
                 result = update_checker.check_for_updates()
 
-                # Send signal with results
+                # Show a PERSISTENT result window via the app — a dialog the user
+                # dismisses with OK — instead of relying on the extension's fleeting
+                # GNOME notification (easy to miss). Only the manual, extension-triggered
+                # check reaches this D-Bus method; the background auto-check does not.
+                if result.get("success") and hasattr(self.app, "show_update_result"):
+                    self.app.show_update_result(result)
+
+                # Also emit the signal so the extension can update its own state/icon.
                 GLib.idle_add(
                     self.UpdateCheckComplete,
                     result.get("success", False),

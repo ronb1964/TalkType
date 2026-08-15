@@ -474,11 +474,11 @@ class PreferencesWindow:
     def create_ui(self):
         main_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
 
-        # Scrolled window for main content (allows scrolling on small screens)
-        scrolled = Gtk.ScrolledWindow()
-        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        scrolled.set_min_content_height(300)  # Minimum before scrolling kicks in
-
+        # Main content column. Each notebook tab is individually wrapped in a
+        # ScrolledWindow (see _scrollable_tab) so a tab taller than the window scrolls
+        # instead of running off the bottom. NOTE: a notebook inside ONE outer
+        # ScrolledWindow does not scroll — the notebook clips its page rather than
+        # overflowing — which is why the scroll must be per-tab.
         vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         # Use newer margin methods to avoid deprecation warnings
         vbox.set_margin_start(20)
@@ -493,7 +493,6 @@ class PreferencesWindow:
 
         # Notebook for tabs
         self.notebook = Gtk.Notebook()
-        self.main_scrolled = scrolled  # Store reference for scroll-to-top on tab switch
         notebook = self.notebook  # Local alias for compatibility
 
         # Connect to tab switch signal to scroll to top
@@ -501,23 +500,23 @@ class PreferencesWindow:
 
         # General tab
         general_tab = self.create_general_tab()
-        notebook.append_page(general_tab, Gtk.Label(label="General"))
+        notebook.append_page(self._scrollable_tab(general_tab), Gtk.Label(label="General"))
 
         # Audio tab
         audio_tab = self.create_audio_tab()
-        notebook.append_page(audio_tab, Gtk.Label(label="Audio"))
+        notebook.append_page(self._scrollable_tab(audio_tab), Gtk.Label(label="Audio"))
 
         # Advanced tab
         advanced_tab = self.create_advanced_tab()
-        notebook.append_page(advanced_tab, Gtk.Label(label="Advanced"))
+        notebook.append_page(self._scrollable_tab(advanced_tab), Gtk.Label(label="Advanced"))
 
-        # Commands tab (custom voice commands)
+        # Commands tab (custom voice commands) — keeps its own internal list scroll
         commands_tab = self.create_commands_tab()
         notebook.append_page(commands_tab, Gtk.Label(label="Commands"))
 
         # Updates tab
         updates_tab = self.create_updates_tab()
-        notebook.append_page(updates_tab, Gtk.Label(label="Updates"))
+        notebook.append_page(self._scrollable_tab(updates_tab), Gtk.Label(label="Updates"))
 
         vbox.pack_start(notebook, True, True, 0)
 
@@ -530,9 +529,7 @@ class PreferencesWindow:
         version_label.set_margin_end(5)
         vbox.pack_start(version_label, False, False, 0)
 
-        # Add content to scrolled window
-        scrolled.add(vbox)
-        main_vbox.pack_start(scrolled, True, True, 0)
+        main_vbox.pack_start(vbox, True, True, 0)
 
         # Buttons (outside scrolled area so always visible)
         button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
@@ -568,7 +565,53 @@ class PreferencesWindow:
 
         main_vbox.pack_start(button_box, False, False, 0)
         self.window.add(main_vbox)
-    
+        # Wheel scrolling over combos/sliders is handled by the per-tab capture-phase
+        # scroll controller installed in _scrollable_tab (compositor-independent).
+
+    def _scrollable_tab(self, widget):
+        """Wrap a notebook tab's content in a vertical ScrolledWindow.
+
+        A notebook inside one outer ScrolledWindow does not scroll (it clips its page
+        rather than overflowing), so each tall tab needs its own scroll to stay usable
+        on a screen shorter than the tab's content.
+        """
+        sw = Gtk.ScrolledWindow()
+        sw.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        sw.add(widget)
+        self._install_capture_scroll(sw)
+        return sw
+
+    def _install_capture_scroll(self, scrolled):
+        """Scroll the tab in the CAPTURE phase — intercepting the wheel *before* it
+        reaches child widgets like ComboBox/Scale, which otherwise consume it (a combo
+        changes selection, a slider changes value) and stop the page from scrolling.
+
+        This works at the GTK widget level via EventControllerScroll, NOT via GdkWindow
+        event masks — masks are honoured inconsistently across Wayland compositors
+        (kwin respects them, mutter does not), which is why the mask approach worked on
+        KDE but not GNOME. Capture-phase interception is compositor-independent.
+        """
+        try:
+            ctrl = Gtk.EventControllerScroll.new(
+                scrolled, Gtk.EventControllerScrollFlags.VERTICAL)
+        except Exception as e:
+            logger.warning(f"Could not install capture scroll controller: {e}")
+            return
+        ctrl.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        ctrl.connect("scroll", self._on_capture_scroll, scrolled)
+        # Keep a reference so the controller is not garbage-collected.
+        if not hasattr(self, "_scroll_controllers"):
+            self._scroll_controllers = []
+        self._scroll_controllers.append(ctrl)
+
+    def _on_capture_scroll(self, controller, dx, dy, scrolled):
+        vadj = scrolled.get_vadjustment()
+        if vadj is not None:
+            step = vadj.get_step_increment() or 40
+            hi = vadj.get_upper() - vadj.get_page_size()
+            vadj.set_value(max(vadj.get_lower(), min(vadj.get_value() + dy * step, hi)))
+        return True  # consume so child widgets never act on the scroll
+
     def create_general_tab(self):
         grid = Gtk.Grid()
         grid.set_column_spacing(10)
@@ -3952,12 +3995,16 @@ Hidden=true
             return False
     
     def on_tab_switched(self, notebook, page, page_num):
-        """Scroll to top when switching tabs."""
-        if hasattr(self, 'main_scrolled') and self.main_scrolled:
-            # Get the vertical adjustment and scroll to top
-            vadj = self.main_scrolled.get_vadjustment()
+        """Scroll the newly-shown tab back to the top on switch, and strip scroll masks
+        from that tab's inputs once it has laid out (combos in not-yet-shown tabs only
+        create their internal windows when the tab is first displayed)."""
+        # Each tab page is now a ScrolledWindow (see _scrollable_tab); scroll it to top.
+        try:
+            vadj = page.get_vadjustment()
             if vadj:
                 vadj.set_value(0)
+        except Exception:
+            pass
 
     def _download_selected_model(self):
         """Download the model selected in the dropdown, if it needs it.

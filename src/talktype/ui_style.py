@@ -61,3 +61,47 @@ def apply_dropdown_list_style():
         _installed = True
     except Exception as e:
         logger.warning(f"Could not apply dropdown list style: {e}")
+
+
+def fit_dialog_to_screen(dialog, width, desired_height, min_height=320, margin=96):
+    """Size a dialog to (width, desired_height) but never taller than the monitor's
+    work area, and always make it resizable.
+
+    First-run / onboarding dialogs are tall. On a screen shorter than the dialog — a
+    1080p VM, a laptop, a scaled/HiDPI display — a fixed height with resizable=False
+    runs the footer buttons off the bottom edge with no way to reach them: GNOME on
+    Wayland won't reliably let the user move, resize, or maximize such a window, so
+    they get stuck (this is exactly what happened on the Ubuntu 26.04 VM test).
+    Capping the height to the work area guarantees the whole window — action buttons
+    included — stays on-screen, and resizable=True lets the user fine-tune it.
+
+    Pass desired_height < 0 to keep GTK's content-based auto-height (still resizable).
+    For content that can exceed the cap, wrap it in a Gtk.ScrolledWindow so the
+    overflow scrolls instead of being clipped.
+
+    Never raises — a sizing failure must not stop a window from opening.
+    """
+    try:
+        dialog.set_resizable(True)
+        if desired_height is None or desired_height < 0:
+            dialog.set_default_size(width, -1)
+            return dialog
+
+        avail = None
+        display = Gdk.Display.get_default()
+        if display is not None:
+            monitor = display.get_primary_monitor()
+            if monitor is None and display.get_n_monitors() > 0:
+                monitor = display.get_monitor(0)
+            if monitor is not None:
+                avail = monitor.get_workarea().height
+        if avail is not None:
+            desired_height = min(desired_height, max(min_height, avail - margin))
+        dialog.set_default_size(width, desired_height)
+    except Exception as e:
+        logger.warning(f"fit_dialog_to_screen failed: {e}")
+        try:
+            dialog.set_default_size(width, desired_height if (desired_height or 0) > 0 else -1)
+        except Exception:
+            pass
+    return dialog

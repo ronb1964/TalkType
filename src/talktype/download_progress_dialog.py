@@ -76,10 +76,10 @@ class UnifiedDownloadDialog:
         self.dialog = Gtk.Dialog(title=self._title or "Setting up TalkType")
         # Height: base 200px + 120px per task + 100px extra if we have a long description
         _extra = 100 if self._description else 0
-        self.dialog.set_default_size(620, 200 + _extra + (len(self.tasks) * 120))
         self.dialog.set_modal(True)
         self.dialog.set_position(Gtk.WindowPosition.CENTER)
-        self.dialog.set_resizable(False)
+        from .ui_style import fit_dialog_to_screen
+        fit_dialog_to_screen(self.dialog, 620, 200 + _extra + (len(self.tasks) * 120))
 
         if self.parent:
             self.dialog.set_transient_for(self.parent)
