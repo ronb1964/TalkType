@@ -1367,7 +1367,7 @@ class PreferencesWindow:
         
         # Injection mode
         inject_label = Gtk.Label(label="Text Injection 💡:", xalign=0)
-        inject_label.set_tooltip_text("How to insert transcribed text:\n• Auto (Smart Detection): Automatically chooses the best method based on the focused app\n• Keystroke Typing: simulates typing character-by-character (most reliable)\n• Clipboard Paste: uses clipboard + Ctrl+V / Shift+Ctrl+V (much faster for long text)\n\nAuto mode intelligently selects:\n✓ Paste for terminals and normal text fields\n✓ Typing for password fields and address bars\n✓ AT-SPI when available and reliable\n\nClipboard Paste works in most applications:\n✓ Text editors, word processors, terminals\n✓ Web browsers, email clients\n✓ Most standard text input fields\n\nUse Keystroke Typing if paste doesn't work in specialized applications.")
+        inject_label.set_tooltip_text("How to insert transcribed text:\n• Auto (Smart Detection): chooses paste or typing based on the focused app\n• Keystroke Typing: simulates typing character-by-character (most reliable)\n• Clipboard Paste: uses clipboard + Ctrl+V / Shift+Ctrl+V (much faster for long text)\n\nAuto mode uses paste for terminals and normal text fields, and falls back to\ntyping where paste is unreliable.\n\nNote: TalkType types wherever your cursor is — it cannot detect password fields\n(no Linux app reliably can on Wayland), so avoid dictating into them.\n\nClipboard Paste works in most applications:\n✓ Text editors, word processors, terminals\n✓ Web browsers, email clients\n✓ Most standard text input fields\n\nUse Keystroke Typing if paste doesn't work in specialized applications.")
         grid.attach(inject_label, 0, row, 1, 1)
         inject_combo = Gtk.ComboBoxText()
         inject_combo.set_can_focus(True)
@@ -1381,6 +1381,44 @@ class PreferencesWindow:
         inject_combo.connect("changed", lambda x: self.update_config("injection_mode", x.get_active_id()))
         # Tooltip moved to label to avoid interference with dropdown popup
         grid.attach(inject_combo, 1, row, 1, 1)
+        row += 1
+
+        # ===== PRIVACY SECTION =====
+        privacy_sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        privacy_sep.set_margin_top(20)
+        privacy_sep.set_margin_bottom(15)
+        grid.attach(privacy_sep, 0, row, 2, 1)
+        row += 1
+
+        privacy_header = Gtk.Label()
+        privacy_header.set_markup('<b>Privacy</b>')
+        privacy_header.set_xalign(0)
+        privacy_header.set_margin_bottom(10)
+        grid.attach(privacy_header, 0, row, 2, 1)
+        row += 1
+
+        # Transcript logging is OFF by default so nothing you dictate is written
+        # to disk. Enabling it is gated by a warning (see _on_log_transcripts_toggled).
+        self.log_transcripts_check = Gtk.CheckButton(label="Log transcribed text (for troubleshooting)")
+        self.log_transcripts_check.set_active(bool(self.config.get("log_transcripts", False)))
+        self.log_transcripts_check.set_tooltip_text(
+            "Off by default for your privacy — TalkType does not write what you dictate to its log.\n"
+            "Turn this on only when troubleshooting a dictation problem: it saves the full text of\n"
+            "everything you dictate to TalkType's log file on disk, in plain text, until you turn it off."
+        )
+        self.log_transcripts_check.connect("toggled", self._on_log_transcripts_toggled)
+        grid.attach(self.log_transcripts_check, 0, row, 2, 1)
+        row += 1
+
+        # Clear whatever is already on disk — the log holds past transcriptions
+        # until it rolls over, so give the user a one-click wipe.
+        clear_log_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        clear_log_btn = Gtk.Button(label="Clear log now")
+        clear_log_btn.set_halign(Gtk.Align.START)
+        clear_log_btn.set_tooltip_text("Erase the current TalkType log file (and its backup) from disk.")
+        clear_log_btn.connect("clicked", self._on_clear_log_clicked)
+        clear_log_box.pack_start(clear_log_btn, False, False, 0)
+        grid.attach(clear_log_box, 0, row, 2, 1)
         row += 1
 
         # ===== POWER MANAGEMENT SECTION =====
@@ -3042,6 +3080,77 @@ Hidden=true
     def _on_auto_timeout_toggled(self, checkbox):
         """Handle auto-timeout checkbox toggle."""
         self._update_timeout_ui_state()
+
+    def _on_log_transcripts_toggled(self, check):
+        """Toggle transcript logging. Turning it OFF is safe and silent; turning
+        it ON writes every dictation to disk, so it must be confirmed via a
+        warning dialog before the config is written. Cancelling reverts the box.
+        """
+        if not check.get_active():
+            self.update_config("log_transcripts", False)
+            return
+
+        dialog = Gtk.MessageDialog(
+            transient_for=self.window,
+            modal=True,
+            message_type=Gtk.MessageType.WARNING,
+            buttons=Gtk.ButtonsType.NONE,
+            text="Log all transcribed text?",
+        )
+        dialog.format_secondary_text(
+            "This saves the full text of EVERYTHING you dictate to TalkType's log "
+            "file on disk, in plain text, and keeps it there until you turn this "
+            "setting back off.\n\n"
+            "Only enable it if you are troubleshooting a dictation problem."
+        )
+        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        enable_btn = dialog.add_button("Yes, log everything I dictate", Gtk.ResponseType.OK)
+        enable_btn.get_style_context().add_class("destructive-action")
+        dialog.set_default_response(Gtk.ResponseType.CANCEL)
+        response = dialog.run()
+        dialog.destroy()
+
+        if response == Gtk.ResponseType.OK:
+            self.update_config("log_transcripts", True)
+        else:
+            # Revert without re-entering this handler.
+            check.handler_block_by_func(self._on_log_transcripts_toggled)
+            check.set_active(False)
+            check.handler_unblock_by_func(self._on_log_transcripts_toggled)
+
+    def _on_clear_log_clicked(self, _button):
+        """Erase the on-disk log after confirming — it can hold past dictation."""
+        dialog = Gtk.MessageDialog(
+            transient_for=self.window,
+            modal=True,
+            message_type=Gtk.MessageType.WARNING,
+            buttons=Gtk.ButtonsType.NONE,
+            text="Clear the TalkType log?",
+        )
+        dialog.format_secondary_text(
+            "This permanently deletes the current log file and its backup from "
+            "disk, including any past transcriptions recorded there. This cannot "
+            "be undone."
+        )
+        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        clear_btn = dialog.add_button("Clear log", Gtk.ResponseType.OK)
+        clear_btn.get_style_context().add_class("destructive-action")
+        dialog.set_default_response(Gtk.ResponseType.CANCEL)
+        response = dialog.run()
+        dialog.destroy()
+
+        if response == Gtk.ResponseType.OK:
+            from .logger import clear_log
+            clear_log()
+            done = Gtk.MessageDialog(
+                transient_for=self.window,
+                modal=True,
+                message_type=Gtk.MessageType.INFO,
+                buttons=Gtk.ButtonsType.OK,
+                text="Log cleared.",
+            )
+            done.run()
+            done.destroy()
 
     def _update_timeout_ui_state(self):
         """Update timeout UI visibility based on checkbox state."""

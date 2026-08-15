@@ -127,6 +127,7 @@ class Settings:
     last_update_check: str = ""          # ISO timestamp of last update check
     language_mode: str = "auto"          # "auto" (detect language) or "manual" (use `language`); UI state for prefs
     launch_at_login: bool = False        # start TalkType automatically at login (prefs manages the autostart file)
+    log_transcripts: bool = False        # write full transcribed text to the log (off = redacted); opt-in for troubleshooting only
 
 
 # ---------------------------------------------------------------------------
@@ -658,6 +659,9 @@ LIVE_APPLIED_KEYS = {
     "auto_check_updates",
     "last_update_check",
     "language_mode",
+    # Read into a module global by the service so toggling transcript logging in
+    # Preferences takes effect on the next utterance, no restart.
+    "log_transcripts",
 }
 
 

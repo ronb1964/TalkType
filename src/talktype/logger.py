@@ -6,6 +6,62 @@ from pathlib import Path
 # Roll the log over once it passes this size (checked at process startup).
 _MAX_LOG_BYTES = 5 * 1024 * 1024
 
+
+def _log_dir() -> Path:
+    """The dev or production config directory that holds the log.
+
+    DEV_MODE=1 (Ron's daily dev build) logs to ~/.config/talktype-dev/, the
+    AppImage to ~/.config/talktype/ — matching config.py's split so the two
+    never interleave.
+    """
+    config_dir = "talktype-dev" if os.environ.get("DEV_MODE") == "1" else "talktype"
+    return Path.home() / ".config" / config_dir
+
+
+def log_file_path() -> Path:
+    """Absolute path of the active log file."""
+    return _log_dir() / "talktype.log"
+
+
+def clear_log(log_dir: Path = None) -> None:
+    """Empty the log: truncate talktype.log to zero and remove its .old backup.
+
+    Truncation rather than deletion is deliberate — the dictation service holds
+    the file open in append mode, and on Linux O_APPEND writes always land at the
+    real end of file, so after a truncate-to-zero the service simply continues
+    at offset 0 instead of leaving a sparse, null-padded file behind.
+    """
+    d = log_dir or _log_dir()
+    try:
+        main = d / "talktype.log"
+        if main.exists():
+            open(main, "w").close()  # truncate in place
+    except OSError:
+        pass
+    try:
+        old = d / "talktype.log.old"
+        if old.exists():
+            old.unlink()
+    except OSError:
+        pass
+
+
+def redact_text(text, reveal: bool = False) -> str:
+    """Render transcribed text for a log line without leaking it by default.
+
+    The service logs raw and normalized transcriptions to diagnose dictation
+    issues, but that means everything the user says would otherwise be written
+    to disk in plain text. Redact by default — keep the length as a breadcrumb
+    so the log still shows a transcription happened — and only reveal the full
+    text (as `repr`, matching the old `{text!r}` output) when the user has
+    explicitly opted in via the log_transcripts setting.
+    """
+    if reveal:
+        return repr(text)
+    if isinstance(text, str):
+        return f"[hidden, {len(text)} chars]"
+    return "[hidden]"
+
 def setup_logger(name: str, level: int = logging.INFO) -> logging.Logger:
     """Create a logger writing to the dev or production log file.
 
@@ -28,8 +84,7 @@ def setup_logger(name: str, level: int = logging.INFO) -> logging.Logger:
     logger.setLevel(level)
 
     # Match config.py's dev/prod directory split
-    config_dir = "talktype-dev" if os.environ.get("DEV_MODE") == "1" else "talktype"
-    log_dir = Path.home() / ".config" / config_dir
+    log_dir = _log_dir()
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / "talktype.log"
 

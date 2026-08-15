@@ -21,12 +21,23 @@ from .config import load_config, Settings, load_custom_commands
 # Imported as a module too, so the live-settings reload can read CONFIG_PATH and
 # LIVE_APPLIED_KEYS without pulling each name in separately.
 from . import config as config_module
-from .logger import setup_logger
+from .logger import setup_logger, redact_text
 from .recording_indicator import RecordingIndicator
 from .undo import detect_undo_command, calculate_undo_length
 import threading
 
 logger = setup_logger(__name__)
+
+# Whether the full text of transcriptions may be written to the on-disk log.
+# Off by default so dictation never persists in plain text; refreshed from
+# config at startup and by the live-settings reload, so the Preferences toggle
+# takes effect on the next utterance without a restart.
+_log_transcripts = False
+
+
+def _loggable(text):
+    """Render transcribed text for a log line, redacted unless the user opted in."""
+    return redact_text(text, reveal=_log_transcripts)
 
 # Cached tool path lookups — avoids searching PATH on every text injection
 _tool_cache = {}
@@ -359,7 +370,7 @@ def _apply_custom_commands(text: str) -> tuple[str, dict[str, str]]:
     result = re.sub(combined, substitute, text, flags=re.IGNORECASE)
 
     if result != text:
-        logger.info(f"Custom commands applied: {text!r} -> {result!r}")
+        logger.info(f"Custom commands applied: {_loggable(text)} -> {_loggable(result)}")
 
     return result, protected
 
@@ -475,7 +486,7 @@ def _strip_hallucinations(text: str, no_speech_prob: float = 0.0) -> str:
     # Whisper thinks there was no real speech, discard it.
     # This catches silence -> "Thank you." while preserving real "Thank you."
     if lower_clean in _WHOLE_TEXT_HALLUCINATION_PHRASES and no_speech_prob > 0.6:
-        logger.info(f"Stripped whole-text hallucination (no_speech_prob={no_speech_prob:.2f}): {original!r}")
+        logger.info(f"Stripped whole-text hallucination (no_speech_prob={no_speech_prob:.2f}): {_loggable(original)}")
         return ""
 
     # Tier 2: Strip YouTube-specific phrases from the end of text.
@@ -517,7 +528,7 @@ def _strip_hallucinations(text: str, no_speech_prob: float = 0.0) -> str:
                     break
 
     if text != original:
-        logger.info(f"Stripped hallucination: {original!r} -> {text!r}")
+        logger.info(f"Stripped hallucination: {_loggable(original)} -> {_loggable(text)}")
 
     return text
 
@@ -785,6 +796,9 @@ def _reload_live_settings(cfg, indicator):
 
         global _typing_delay
         _typing_delay = getattr(cfg, "typing_delay", 12)
+
+        global _log_transcripts
+        _log_transcripts = getattr(cfg, "log_transcripts", False)
 
         if indicator is not None:
             indicator.apply_settings(
@@ -1545,14 +1559,14 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
 
     raw = " ".join(seg.text for seg in seg_list).strip()
     max_no_speech_prob = max((seg.no_speech_prob for seg in seg_list), default=0.0)
-    print(f"\U0001f4dd Raw (before filter): {raw!r}  [no_speech_prob={max_no_speech_prob:.2f}]")
-    logger.info(f"Raw transcription (before hallucination filter): {raw!r}  [no_speech_prob={max_no_speech_prob:.2f}]")
+    print(f"\U0001f4dd Raw (before filter): {_loggable(raw)}  [no_speech_prob={max_no_speech_prob:.2f}]")
+    logger.info(f"Raw transcription (before hallucination filter): {_loggable(raw)}  [no_speech_prob={max_no_speech_prob:.2f}]")
 
     # Strip common Whisper hallucinations like "thank you" from the end
     raw = _strip_hallucinations(raw, no_speech_prob=max_no_speech_prob)
     if raw:
-        print(f"\U0001f4dd Raw (after filter): {raw!r}")
-        logger.info(f"Raw transcription (after hallucination filter): {raw!r}")
+        print(f"\U0001f4dd Raw (after filter): {_loggable(raw)}")
+        logger.info(f"Raw transcription (after hallucination filter): {_loggable(raw)}")
     return raw or None
 
 
@@ -1695,7 +1709,7 @@ def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: b
     # command, the period lands BEFORE the break and no trailing space is
     # added (previously "hello new line" left an orphan ". " on the next line).
     text = append_auto_punct(text, auto_period, auto_space)
-    logger.info(f"Normalized text: {text!r}")
+    logger.info(f"Normalized text: {_loggable(text)}")
     return text
 
 
@@ -2384,6 +2398,10 @@ def main():
     global _typing_delay
     _typing_delay = getattr(cfg, 'typing_delay', 12)
     logger.debug(f"Typing delay set to {_typing_delay}ms")
+
+    # Whether transcribed text may be written to the log (off = redacted).
+    global _log_transcripts
+    _log_transcripts = getattr(cfg, 'log_transcripts', False)
 
     # Load custom voice commands
     global _custom_commands
