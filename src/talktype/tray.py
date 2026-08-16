@@ -1332,14 +1332,14 @@ class DictationTray:
             dialog.present()
             return
 
-        # Updates available - show detailed dialog
-        dialog = Gtk.Dialog(
-            title="Update Available",
-            flags=Gtk.DialogFlags.MODAL
-        )
+        # Updates available - show detailed dialog.
+        # NON-modal and NOT keep-above on purpose: the auto-check pops this on
+        # launch, and a modal, always-on-top dialog grabs input and floats over
+        # the About/Help/Voice windows so they open hidden behind it. The
+        # Preferences window works precisely because it is neither.
+        dialog = Gtk.Dialog(title="Update Available")
         dialog.set_default_size(450, 350)
         dialog.set_position(Gtk.WindowPosition.CENTER)
-        dialog.set_keep_above(True)
 
         content = dialog.get_content_area()
         content.set_spacing(10)
