@@ -1209,7 +1209,14 @@ class DictationTray:
         # Close button
         dialog.add_button("Close", Gtk.ResponseType.CLOSE)
 
+        # Show non-blocking. dialog.run() spins a nested main loop, and the tray's
+        # GTK loop runs in a background thread, where a nested run() can fail to
+        # map the window on Wayland — that is why About showed nothing on GNOME.
+        # Use a response callback + present() instead (same fix the update dialogs
+        # got in 0.7.0).
+        dialog.connect("response", lambda d, _r: d.destroy())
         dialog.show_all()
+        dialog.present()
 
         # Fetch release notes in background
         def fetch_notes():
@@ -1222,9 +1229,6 @@ class DictationTray:
 
         thread = threading.Thread(target=fetch_notes, daemon=True)
         thread.start()
-
-        dialog.run()
-        dialog.destroy()
 
     def check_for_updates_clicked(self, _):
         """Check for updates and show results dialog."""
