@@ -85,6 +85,12 @@ def _acquire_single_instance():
         # Open lock file (create if doesn't exist)
         lockfile = open(lockfile_path, "w")
 
+        # Close-on-exec so an in-place restart (os.execv) releases the lock
+        # instead of inheriting the still-locked FD and exiting as "already
+        # running". (Same fix as the tray's singleton lock.)
+        _flags = fcntl.fcntl(lockfile.fileno(), fcntl.F_GETFD)
+        fcntl.fcntl(lockfile.fileno(), fcntl.F_SETFD, _flags | fcntl.FD_CLOEXEC)
+
         # Try to acquire exclusive lock (non-blocking)
         # LOCK_EX = exclusive lock, LOCK_NB = non-blocking
         fcntl.flock(lockfile.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)

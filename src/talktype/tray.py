@@ -74,6 +74,14 @@ def _acquire_tray_singleton():
         # Open lock file (create if doesn't exist)
         lockfile = open(lockfile_path, "w")
 
+        # Mark the lock FD close-on-exec. The updater's "Restart Now" restarts
+        # in place with os.execv, which keeps FDs open by default — so without
+        # this the restarted tray would inherit THIS still-locked FD, fail to
+        # re-acquire the lock, and exit as "already running" (the app silently
+        # not coming back after an update). CLOEXEC releases the lock on exec.
+        _flags = fcntl.fcntl(lockfile.fileno(), fcntl.F_GETFD)
+        fcntl.fcntl(lockfile.fileno(), fcntl.F_SETFD, _flags | fcntl.FD_CLOEXEC)
+
         # Try to acquire exclusive lock (non-blocking)
         # LOCK_EX = exclusive lock, LOCK_NB = non-blocking
         fcntl.flock(lockfile.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -1569,7 +1577,8 @@ class DictationTray:
         """Download the correct .rpm/.deb and install it as root via pkexec,
         then offer to restart. Delegates to the shared update_ui flow."""
         from . import update_ui
-        update_ui.run_package_update(release, install_type)
+        update_ui.run_package_update(release, install_type,
+                                     restart_callback=self.restart_app)
 
     def auto_check_for_updates(self):
         """
@@ -1659,6 +1668,19 @@ class DictationTray:
 
         except Exception as e:
             logger.error(f"Could not show update notification: {e}")
+
+    def restart_app(self, _=None):
+        """Cleanly restart the whole app after an update: launch a detached
+        instance that waits for us to exit, then quit this one via quit_app
+        (which stops the dictation service and releases the D-Bus name + lock),
+        so the new instance starts on a clean slate."""
+        from . import update_checker
+        ok, msg = update_checker.restart_via_launcher()
+        if not ok:
+            logger.error(f"Restart failed: {msg}")
+            return
+        logger.info("Restart scheduled; quitting this instance to hand off.")
+        self.quit_app(None)
 
     def quit_app(self, _):
         """Quit the tray and stop the dictation service."""

@@ -749,15 +749,29 @@ def install_package_update(package_path: str, install_type: str) -> Tuple[bool, 
 
 
 def restart_via_launcher() -> Tuple[bool, str]:
-    """Re-exec the packaged /usr/bin/talktype launcher to run the new version.
-    Only meaningful for package installs. Replaces the current process on success."""
+    """Spawn a fresh, DETACHED TalkType that waits for THIS process to fully
+    exit before starting. That clean-slate start is essential: an in-place
+    os.execv restart brought the new tray up while the old process's
+    dictation-service child, D-Bus name and single-instance lock were still
+    held, and the new instance wedged. The caller MUST quit cleanly afterwards
+    (the tray's quit_app, which stops the service + releases the name/lock);
+    this function does NOT exit the current process itself.
+    Only meaningful for package installs (/usr/bin/talktype present)."""
+    import shlex
+    import subprocess
     launcher = "/usr/bin/talktype"
     if not os.path.exists(launcher):
         return (False, f"Launcher not found at {launcher}; please restart TalkType manually.")
+    oldpid = os.getpid()
+    # Poll (up to ~10s) until the old PID is gone, then exec the launcher.
+    # start_new_session detaches it so it survives this process exiting.
+    script = (f"for _ in $(seq 1 50); do kill -0 {oldpid} 2>/dev/null || break; "
+              f"sleep 0.2; done; exec {shlex.quote(launcher)} tray")
     try:
-        os.execv(launcher, [launcher, "tray"])
-    except Exception as e:  # pragma: no cover - execv normally never returns
-        return (False, f"Could not restart automatically: {e}")
+        subprocess.Popen(["/bin/sh", "-c", script],
+                         start_new_session=True, close_fds=True)
+    except Exception as e:
+        return (False, f"Could not start the new instance: {e}")
     return (True, "restarting")
 
 

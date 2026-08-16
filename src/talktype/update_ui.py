@@ -25,9 +25,14 @@ def _set_margins(widget, value):
     widget.set_margin_bottom(value)
 
 
-def run_package_update(release, install_type):
+def run_package_update(release, install_type, restart_callback=None):
     """Download + pkexec-install the .rpm/.deb for `install_type`, then offer to
-    restart. Shows its own progress and result dialogs. Call from the GTK thread."""
+    restart. Shows its own progress and result dialogs. Call from the GTK thread.
+
+    restart_callback: called when the user clicks "Restart Now". The tray passes
+    its restart_app (clean detached relaunch + quit_app). If None (e.g. the
+    separate Preferences process, which can't cleanly restart the tray), the
+    dialog tells the user to reopen TalkType instead."""
     url, filename = update_checker.get_package_asset(release, install_type)
     if not url:
         _error("This release has no package for your install type.\n"
@@ -57,7 +62,7 @@ def run_package_update(release, install_type):
     def finish(success, message):
         progress.destroy()
         if success:
-            _installed_restart_prompt()
+            _installed_restart_prompt(restart_callback)
         else:
             _error(message)
 
@@ -78,10 +83,9 @@ def run_package_update(release, install_type):
     threading.Thread(target=worker, daemon=True).start()
 
 
-def _installed_restart_prompt():
-    done = Gtk.Dialog(title="Update Installed", flags=Gtk.DialogFlags.MODAL)
+def _installed_restart_prompt(restart_callback=None):
+    done = Gtk.Dialog(title="Update Installed")
     done.set_position(Gtk.WindowPosition.CENTER)
-    done.set_keep_above(True)
     dc = done.get_content_area()
     _set_margins(dc, 20)
     lbl = Gtk.Label()
@@ -97,12 +101,27 @@ def _installed_restart_prompt():
     def _resp(d, r):
         d.destroy()
         if r == Gtk.ResponseType.OK:
-            ok, msg = update_checker.restart_via_launcher()
-            if not ok:  # execv normally never returns on success
-                logger.error(f"Auto-restart failed: {msg}")
+            if restart_callback is not None:
+                restart_callback()
+            else:
+                # No clean-restart path here (e.g. the separate Preferences
+                # process can't restart the tray). Ask the user to reopen.
+                _info("Update installed",
+                      "Please quit TalkType from the tray icon and open it "
+                      "again to finish updating.")
     done.connect("response", _resp)
     done.show_all()
     done.present()
+
+
+def _info(title, message):
+    dlg = Gtk.MessageDialog(message_type=Gtk.MessageType.INFO,
+                            buttons=Gtk.ButtonsType.OK, text=title)
+    dlg.format_secondary_text(message)
+    dlg.set_position(Gtk.WindowPosition.CENTER)
+    dlg.connect("response", lambda d, _r: d.destroy())
+    dlg.show_all()
+    dlg.present()
 
 
 def _error(message):
