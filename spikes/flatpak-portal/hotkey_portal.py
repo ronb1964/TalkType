@@ -36,11 +36,12 @@ def main():
         bind()
 
     def bind():
-        # one shortcut "dictate", suggest F8; desktop draws its own dialog
-        shortcuts = GLib.Variant("a(sa{sv})", [
+        # one shortcut "dictate"; desktop draws its own bind dialog. Pass the
+        # shortcuts as a RAW python list (not a pre-built Variant) so the outer
+        # GLib.Variant builds the a(sa{sv}) itself — double-wrapping fails.
+        shortcuts = [
             ("dictate", {
-                "description": GLib.Variant("s", "TalkType: hold to dictate"),
-                "preferred_trigger": GLib.Variant("s", "F8")})])
+                "description": GLib.Variant("s", "TalkType: hold to dictate")})]
 
         def builder(token):
             opts = {"handle_token": GLib.Variant("s", token)}
@@ -61,9 +62,11 @@ def main():
     def on_deactivated(conn, s, p, i, sig, params):
         print(f"  >>> Deactivated {params.unpack()[1]}")
 
-    bus.signal_subscribe(pc.BUS_NAME, IFACE, "Activated", None, None,
+    # sender=None: inside a Flatpak the portal signal may be proxied, so don't
+    # filter on the bus name or we can silently miss Activated/Deactivated.
+    bus.signal_subscribe(None, IFACE, "Activated", None, None,
                          Gio.DBusSignalFlags.NONE, on_activated)
-    bus.signal_subscribe(pc.BUS_NAME, IFACE, "Deactivated", None, None,
+    bus.signal_subscribe(None, IFACE, "Deactivated", None, None,
                          Gio.DBusSignalFlags.NONE, on_deactivated)
     pc.register_app_id(bus)   # portal >=1.21 needs this before CreateSession
     create_session()
