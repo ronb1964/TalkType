@@ -262,6 +262,7 @@ REQUIRED_TYPELIBS=(
     "Gtk-3.0.typelib"
     "Gdk-3.0.typelib"
     "GdkPixbuf-2.0.typelib"
+    "Gio-2.0.typelib"
 )
 MISSING_TYPELIBS=()
 for _tl in "${REQUIRED_TYPELIBS[@]}"; do
