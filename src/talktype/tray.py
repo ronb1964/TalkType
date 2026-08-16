@@ -1419,7 +1419,7 @@ class DictationTray:
         #  manual         -> just point to the GitHub release page
         method = guidance["update_method"]
         if has_update and method == "appimage_swap" and release.get("appimage_url"):
-            btn = dialog.add_button("Download Update", Gtk.ResponseType.YES)
+            btn = dialog.add_button("Download & Install", Gtk.ResponseType.YES)
             btn.get_style_context().add_class("suggested-action")
         elif has_update and method == "pkexec_package":
             btn = dialog.add_button("Download & Install", Gtk.ResponseType.APPLY)
