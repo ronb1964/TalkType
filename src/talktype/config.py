@@ -665,6 +665,23 @@ LIVE_APPLIED_KEYS = {
 }
 
 
+HOTKEY_KEYS = ("hotkey", "toggle_hotkey")
+
+
+def unapplied_hotkeys(shown: dict, saved: dict) -> list:
+    """Hotkey settings the user has changed but not yet applied.
+
+    The hotkey test reports which ROLE the service matched (hold or toggle) and
+    the dialog prints that against the key names currently shown in Preferences.
+    Those agree only while the shown config matches the saved one the service
+    reads. Change the hold key from F4 to F5 without applying, press F5, and the
+    service — still on F4/F5 — matches its TOGGLE key, so the dialog ticks the
+    row labelled F6. Nothing is wrong with the detection; the labels simply
+    describe a config that is not in force yet.
+    """
+    return [k for k in HOTKEY_KEYS if shown.get(k) != saved.get(k)]
+
+
 def needs_service_restart(changed: set) -> bool:
     """Whether a set of changed keys requires restarting the dictation service.
 

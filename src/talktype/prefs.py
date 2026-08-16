@@ -2593,166 +2593,21 @@ class PreferencesWindow:
             self.device_combo.set_active_id("cuda")
 
     def _handle_autostart(self, enable):
-        """Create or remove autostart desktop file."""
-        from . import config
-
-        autostart_dir = os.path.expanduser("~/.config/autostart")
-        # Use different filename for dev mode vs production
-        filename = "talktype-dev.desktop" if config.DEV_MODE else "talktype.desktop"
-        desktop_file = os.path.join(autostart_dir, filename)
-
-        if enable:
-            # Create autostart directory if it doesn't exist
-            os.makedirs(autostart_dir, exist_ok=True)
-
-            # Determine the best way to launch TalkType
-            # Priority: 1. Use dictate-tray if available, 2. Use current Python
-            exec_cmd = self._get_launch_command()
-            icon_path = self._get_icon_path()
-
-            # Create desktop file content
-            app_name = "TalkType (Dev)" if config.DEV_MODE else "TalkType"
-            comment = "AI-powered dictation - Development Version" if config.DEV_MODE else "AI-powered dictation for Wayland using Faster-Whisper"
-
-            # For dev mode, add Path directive so run-dev.sh works correctly
-            path_line = ""
-            if config.DEV_MODE:
-                project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-                path_line = f"Path={project_root}\n"
-
-            desktop_content = f"""[Desktop Entry]
-Type=Application
-Name={app_name}
-GenericName=Voice Dictation
-Comment={comment}
-Exec={exec_cmd}
-Icon={icon_path}
-Terminal=false
-Categories=Utility;
-Keywords=dictation;voice;speech;whisper;ai;transcription;
-StartupNotify=true
-StartupWMClass=TalkType
-X-GNOME-Autostart-enabled=true
-{path_line}"""
-
-            try:
-                with open(desktop_file, "w") as f:
-                    f.write(desktop_content)
-                print(f"✅ Created autostart file: {desktop_file}")
-                print(f"   Launch command: {exec_cmd}")
-            except Exception as e:
-                print(f"❌ Failed to create autostart file: {e}")
-        else:
-            # Disable autostart using XDG standard Hidden=true
-            # This is more reliable than deleting, especially on KDE which caches entries
-            try:
-                os.makedirs(autostart_dir, exist_ok=True)
-
-                # Write a minimal desktop file with Hidden=true to disable autostart
-                # This overrides any existing entry and tells the DE to ignore it
-                disabled_content = f"""[Desktop Entry]
-Type=Application
-Name=TalkType
-Hidden=true
-"""
-                with open(desktop_file, "w") as f:
-                    f.write(disabled_content)
-                print(f"✅ Disabled autostart: {desktop_file}")
-            except Exception as e:
-                print(f"❌ Failed to disable autostart file: {e}")
+        """Create or remove the autostart desktop file. Delegates to
+        talktype.autostart so onboarding and Preferences stay in lock-step."""
+        from . import autostart
+        autostart.set_autostart(enable)
 
     def _get_launch_command(self):
-        """
-        Get the appropriate launch command for TalkType.
-
-        Returns the most portable way to launch the tray icon:
-        1. If running in DEV_MODE, use the run-dev.sh script
-        2. If running from AppImage, use the AppImage path
-        3. If dictate-tray is in PATH, use it (works for installed versions)
-        4. Otherwise, use the current Python interpreter with the module path
-        """
-        # Check if we're in DEV_MODE - use run-dev.sh script
-        from . import config
-        if config.DEV_MODE:
-            # Find the run-dev.sh script relative to this file
-            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-            run_dev_script = os.path.join(project_root, 'run-dev.sh')
-            if os.path.isfile(run_dev_script) and os.access(run_dev_script, os.X_OK):
-                return run_dev_script
-            else:
-                # Fallback for dev mode - use bash with env vars
-                return f'/bin/bash -c "cd {project_root} && DEV_MODE=1 PYTHONPATH=./src:/usr/lib64/python3.13/site-packages:/usr/lib/python3.13/site-packages {sys.executable} -m talktype.tray"'
-
-        # Check if we're running from an AppImage
-        appimage_path = os.environ.get('APPIMAGE')
-        if appimage_path and os.path.isfile(appimage_path) and os.access(appimage_path, os.X_OK):
-            # Return the AppImage path - it defaults to starting the tray
-            return appimage_path
-
-        # Check if sys.executable is inside an AppImage mount point
-        # (handles cases where APPIMAGE env var might not be set but we're still in an AppImage)
-        if '/tmp/.mount_' in sys.executable or 'squashfs-root' in sys.executable:
-            # Try to find the AppImage in common locations
-            possible_appimages = [
-                os.path.expanduser('~/AppImages/TalkType-*.AppImage'),
-                os.path.expanduser('~/Downloads/TalkType-*.AppImage'),
-            ]
-            import glob
-            for pattern in possible_appimages:
-                matches = glob.glob(pattern)
-                if matches:
-                    # Use the most recent one
-                    latest = max(matches, key=os.path.getmtime)
-                    if os.access(latest, os.X_OK):
-                        return latest
-
-        # Check if dictate-tray command is available in PATH
-        try:
-            result = subprocess.run(
-                ['which', 'dictate-tray'],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-            if result.returncode == 0:
-                dictate_tray_path = result.stdout.strip()
-                # Verify it's executable
-                if os.path.isfile(dictate_tray_path) and os.access(dictate_tray_path, os.X_OK):
-                    return dictate_tray_path
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            pass
-
-        # Fallback: use current Python interpreter
-        python_path = sys.executable
-        # Use -m to run as module, which is more reliable
-        return f'{python_path} -m talktype.tray'
+        """Launch command for the autostart file. Delegates to talktype.autostart
+        so onboarding and Preferences write the exact same command."""
+        from . import autostart
+        return autostart.get_launch_command()
 
     def _get_icon_path(self):
-        """
-        Get the path to the TalkType icon.
-
-        Returns:
-            str: Path to icon file, or fallback to system icon name
-        """
-        # Try common locations
-        possible_paths = [
-            # Official icon in development location (Dropbox)
-            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'icons', 'OFFICIAL_ICON_DO_NOT_CHANGE.svg'),
-            # AppImage location
-            os.path.join(os.path.dirname(sys.executable), '..', 'io.github.ronb1964.TalkType.svg'),
-            # Old development location (AppDir)
-            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'AppDir', 'io.github.ronb1964.TalkType.svg'),
-            # Installed location
-            '/usr/share/icons/hicolor/scalable/apps/io.github.ronb1964.TalkType.svg',
-            '/usr/local/share/icons/hicolor/scalable/apps/io.github.ronb1964.TalkType.svg',
-        ]
-
-        for path in possible_paths:
-            if os.path.isfile(path):
-                return os.path.abspath(path)
-
-        # Fallback to system icon name
-        return 'audio-input-microphone'
+        """Icon path for the autostart file. Delegates to talktype.autostart."""
+        from . import autostart
+        return autostart.get_icon_path()
 
     def _get_device_samplerate(self, device_idx):
         """Get the native sample rate for a device, falling back to 16000.
@@ -3347,7 +3202,11 @@ Hidden=true
         try:
             from . import uinput_helper
             
-            has_access, reason = uinput_helper.check_uinput_permission()
+            # Both halves, not just uinput: on Fedora a logind ACL grants
+            # /dev/uinput while /dev/input stays unreadable, which reported
+            # "configured correctly" and disabled the fix button for a user
+            # whose hotkeys could not work at all.
+            has_access, reason = uinput_helper.check_all_device_permissions()
             
             if has_access:
                 self.typing_status_label.set_markup(
@@ -3356,10 +3215,20 @@ Hidden=true
                 self.fix_typing_button.set_label("✓ Ready")
                 self.fix_typing_button.set_sensitive(False)
             else:
-                # Check if udev rule exists (might need reboot)
-                if uinput_helper.check_udev_rule_exists():
+                # Access is missing. "Configured, just needs a restart" is only
+                # true when BOTH halves of setup have actually been performed:
+                # the udev rule (uinput/typing) AND 'input' group membership in
+                # the system database (hotkey reading). Keying this on the udev
+                # rule alone hid the exact Fedora case this changeset fixes — the
+                # rule present but the user never added to 'input', which showed
+                # "please restart" and DISABLED the fix button that runs usermod.
+                setup_done = (
+                    uinput_helper.check_udev_rule_exists()
+                    and uinput_helper.check_user_in_input_group()
+                )
+                if setup_done:
                     self.typing_status_label.set_markup(
-                        '<span color="#FF9800">⚠ Permissions configured - please log out and back in</span>'
+                        '<span color="#FF9800">⚠ Permissions configured - please restart your computer</span>'
                     )
                     self.fix_typing_button.set_label("✓ Configured")
                     self.fix_typing_button.set_sensitive(False)
@@ -3367,6 +3236,7 @@ Hidden=true
                     self.typing_status_label.set_markup(
                         '<span color="#FF9800">⚠ Typing permissions not configured (using Clipboard mode as fallback)</span>'
                     )
+                    self.fix_typing_button.set_label("Fix Typing Permissions")
                     self.fix_typing_button.set_sensitive(True)
                     
         except ImportError:
@@ -3398,8 +3268,9 @@ Hidden=true
                 "• Adds a udev rule for /dev/uinput access\n"
                 "• Adds your user to the 'input' group\n\n"
                 "You will be prompted for your admin password.\n\n"
-                "After setup, you'll need to log out and log back in for "
-                "the changes to take effect.\n\n"
+                "After setup, restart your computer for the changes to take "
+                "effect. Logging out and back in is often not enough — a "
+                "background session can keep the old permissions alive.\n\n"
                 "Continue?"
             )
             
@@ -3427,7 +3298,8 @@ Hidden=true
                 )
                 msg.format_secondary_text(
                     "The system has been configured for keystroke injection.\n\n"
-                    "IMPORTANT: Log out and back in to apply the changes.\n"
+                    "IMPORTANT: Restart your computer to apply the changes.\n"
+                    "(Logging out and back in is often not enough.)\n"
                     "(Some systems may require a full reboot instead.)\n\n"
                     "After that, TalkType will be able to type "
                     "directly into your applications."
@@ -4169,6 +4041,27 @@ Hidden=true
         HotkeyPressed signals instead of starting/stopping recording.
         """
         import subprocess as _sp
+
+        # The service tests against the SAVED hotkeys, but this dialog labels its
+        # rows from the pending dropdown selections. If the user changed a hotkey
+        # without applying, those disagree and the wrong row lights up. Make them
+        # apply first rather than testing against a config the service isn't using.
+        from .config import unapplied_hotkeys, load_config
+        pending = unapplied_hotkeys(self.config, load_config().__dict__)
+        if pending:
+            warn = Gtk.MessageDialog(
+                transient_for=self.window, modal=True,
+                message_type=Gtk.MessageType.INFO, buttons=Gtk.ButtonsType.OK,
+                text="Apply your hotkey change first",
+            )
+            warn.format_secondary_text(
+                "You changed a hotkey but haven't applied it yet. Click Apply, "
+                "then test — otherwise the test checks your previous hotkeys and "
+                "the wrong row will light up."
+            )
+            warn.run()
+            warn.destroy()
+            return
 
         # Find the app.py process PID
         app_pid = None

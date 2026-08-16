@@ -360,6 +360,16 @@ and punctuation — wrap the replacement text in double quotes:
 • Try a different key in Preferences
 • Ensure service is running
 
+<b>No hotkey works at all (dictation never starts):</b>
+• TalkType has to read your keyboard directly, which requires your user account
+  to be in the system's "input" group. Without it, no key can ever be detected
+• Go to Preferences → Advanced → Typing Setup and click
+  "Fix Typing Permissions". You'll be asked for your admin password
+• <b>Then restart your computer.</b> Logging out and back in is often not
+  enough — a background session keeps the old permissions alive
+• This is most common on Fedora, where the setting that lets TalkType type is
+  granted separately from the one that lets it read your keys
+
 <b>Text not inserting:</b>
 • Make sure cursor is in a text field
 • Try switching injection mode in tray menu (Auto/Type/Paste)

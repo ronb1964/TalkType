@@ -73,8 +73,12 @@ def detect_uinput_access():
         tuple: (has_access: bool, reason: str)
     """
     try:
-        from talktype.uinput_helper import check_uinput_permission
-        return check_uinput_permission()
+        # Checks BOTH halves: writing keystrokes (/dev/uinput) and reading
+        # hotkeys (/dev/input). Checking uinput alone skipped setup entirely on
+        # Fedora, where logind's per-user ACL already grants uinput but nothing
+        # grants 'input' group membership — so hotkeys could never be read.
+        from talktype.uinput_helper import check_all_device_permissions
+        return check_all_device_permissions()
     except ImportError as e:
         logger.warning(f"Could not import uinput_helper: {e}")
         # Fallback: basic check
@@ -850,7 +854,7 @@ class WelcomeDialog:
         explain_text = (
             '<span><b>This step is required for TalkType to work.</b>\n'
             'Without this setup, dictated text cannot be typed into your applications.\n'
-            'Click "Fix Typing" below, then log out and back in.</span>'
+            'Click "Fix Typing" below, then restart your computer.</span>'
         )
         explain_label = Gtk.Label()
         explain_label.set_markup(explain_text)
@@ -907,7 +911,7 @@ class WelcomeDialog:
             details.append("🔧 Adds a system rule to allow input device access")
             details.append("👤 Adds your user to the 'input' group")
         if self.needs_uinput_fix or self.needs_ydotoold_setup:
-            details.append("🔄 Log out and back in to apply (some systems require reboot)")
+            details.append("🔄 Restart your computer to apply (logging out is often not enough)")
 
         details_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         details_box.set_margin_start(25)
@@ -1042,7 +1046,7 @@ class WelcomeDialog:
                 button.set_label("✅ Fixed!")
                 button.set_sensitive(False)  # Disable - no more action needed
 
-                logout_note = " Log out/in to complete." if needs_logout else ""
+                logout_note = " Restart your computer to complete." if needs_logout else ""
                 self.typing_status_label.set_markup(
                     f'<span color="#4CAF50"><b>✓ Ready!</b> ydotoold running, permissions set.{logout_note}</span>'
                 )
@@ -1057,7 +1061,9 @@ class WelcomeDialog:
                 )
                 msg.format_secondary_text(
                     "TalkType is configured for keystroke injection.\n\n"
-                    + ("Log out and back in to apply permission changes.\n\n" if needs_logout else "")
+                    + ("A restart will be needed to activate this — but finish "
+                       "setup first. You'll be reminded at the end.\n\n"
+                       if needs_logout else "")
                     + "TalkType can now type directly into your applications!"
                 )
                 msg.run()
@@ -1071,7 +1077,7 @@ class WelcomeDialog:
 
                 self.typing_status_label.set_markup(
                     '<span color="#4CAF50"><b>✓ Device permissions configured</b></span>\n'
-                    '<span color="#FF9800">Note: Log out and back in to complete setup.</span>'
+                    '<span color="#FF9800">A restart will be needed — you\'ll be reminded when setup finishes.</span>'
                 )
 
                 # Show partial success dialog
@@ -1084,9 +1090,8 @@ class WelcomeDialog:
                 )
                 msg.format_secondary_text(
                     "Device permissions have been configured.\n\n"
-                    "IMPORTANT: Log out and back in to complete the setup.\n"
-                    "(Some systems may require a full reboot.)\n\n"
-                    "After logging back in, TalkType will be ready to use."
+                    "A restart will be needed to activate them — but finish setup "
+                    "first. You'll be reminded at the end, once everything is ready."
                 )
                 msg.run()
                 msg.destroy()
@@ -1701,12 +1706,21 @@ def show_tips_and_features_dialog(extension_installed=False):
     model_combo.set_size_request(320, -1)  # Fixed width — don't stretch to fill dialog
     model_combo.set_tooltip_text(
         "Choose which AI model to download. You can change this later in Preferences.")
+    # Block the scroll wheel from changing the selection. Without this, scrolling
+    # the dialog with the cursor over this dropdown silently switches the model —
+    # and landing on "Large" pops an "NVIDIA GPU Required" error the user never
+    # asked for. Returning True stops the combo consuming the scroll (same fix
+    # prefs.py applies to all its combos).
+    model_combo.connect("scroll-event", lambda w, e: True)
     model_box.pack_start(model_combo, False, False, 0)
 
     model_section.pack_start(model_box, False, False, 0)
 
-    # Track last valid selection to revert if large-v3 is blocked
-    _last_model_index = [0]  # Default to Small (index 0)
+    # Track last valid selection to revert if large-v3 is blocked. Must match the
+    # initial set_active below (small), by NAME not a hard-coded number — the
+    # offered list has grown before (base was added) and left stale indices that
+    # reverted CPU users to the wrong model.
+    _last_model_index = [OFFERED_MODELS.index("small")]
     _updating_combo = [False]  # Prevent recursive "changed" signals
 
     def _update_button_text(model_id):
@@ -1793,9 +1807,10 @@ def show_tips_and_features_dialog(extension_installed=False):
                                 row[1] = "Large (best quality) — 3GB"
                                 break
                         _updating_combo[0] = True
-                        combo.set_active(3)  # large-v3 is index 3
+                        _lv3 = OFFERED_MODELS.index("large-v3")  # by name — indices have drifted before
+                        combo.set_active(_lv3)
                         _updating_combo[0] = False
-                        _last_model_index[0] = 3
+                        _last_model_index[0] = _lv3
                         # Update button text — model is already downloaded
                         get_started_button.set_label("Get Started!")
                         # Set device to cuda in config
@@ -2757,8 +2772,39 @@ def show_welcome_and_install():
     except Exception as e:
         logger.warning(f"Could not set up AppImage/launcher: {e}")
 
-    # Show final "Ready to Go!" screen after successful model download
-    show_setup_complete_dialog(appimage_installed=appimage_installed, launcher_created=launcher_created)
+    # Show final "Ready to Go!" screen after successful model download.
+    # needs_restart carries the deferred restart reminder here: if the user fixed
+    # device permissions during setup (uinput_fixed), typing/hotkeys won't work
+    # until a reboot, so the final screen offers "Restart Now" instead of an
+    # interrupting popup earlier in the flow.
+    needs_restart = bool(result.get('uinput_fixed')) if isinstance(result, dict) else False
+
+    # Turn on launch-at-login by default for new users. A dictation tool is only
+    # useful when it's already running, and a fresh install almost always reboots
+    # once (for the input-group permission), so this is what makes TalkType simply
+    # "be there" afterwards instead of the user hunting for it in the app menu.
+    # The Ready screen tells them it's on and that it's toggleable in Preferences.
+    try:
+        from talktype import autostart
+        from talktype.config import load_config, save_config
+        # Only record autostart as enabled in config if the .desktop file was
+        # actually written — otherwise config and reality disagree, and the Ready
+        # screen would promise a startup that never happens.
+        if autostart.set_autostart(True):
+            cfg = load_config()
+            if not getattr(cfg, 'launch_at_login', False):
+                cfg.launch_at_login = True
+                save_config(cfg)
+        else:
+            logger.warning("Autostart file could not be written; leaving launch-at-login off")
+    except Exception as e:
+        logger.warning(f"Could not enable launch-at-login during onboarding: {e}")
+
+    show_setup_complete_dialog(
+        appimage_installed=appimage_installed,
+        launcher_created=launcher_created,
+        needs_restart=needs_restart,
+    )
 
     logger.info("First-run setup completed")
 
@@ -2788,7 +2834,8 @@ def _open_preferences():
         logger.warning(f"Could not open Preferences: {e}")
 
 
-def show_setup_complete_dialog(appimage_installed=False, launcher_created=False):
+def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
+                               needs_restart=False):
     """
     Show the final setup complete dialog after model download.
     Tells the user they're ready to start dictating.
@@ -2796,6 +2843,10 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False)
     Args:
         appimage_installed: True if AppImage was copied to ~/AppImages/
         launcher_created: True if desktop launcher was created
+        needs_restart: True if permissions were changed this run and a restart is
+            required before typing/hotkeys work. Only then is the restart reminder
+            and "Restart Now" button shown — this is the deferred, end-of-setup
+            reminder that replaces the old mid-onboarding "restart now" popup.
     """
     dialog = Gtk.Dialog(title="TalkType - Ready!")
     dialog.set_border_width(0)
@@ -2897,33 +2948,144 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False)
     settings_label.set_opacity(0.8)
     vbox.pack_start(settings_label, False, False, 0)
 
-    # Two ways out of the last screen: start dictating, or go and adjust
-    # settings. This is the right screen for it — setup is finished here, the
-    # model is downloaded, and the user is genuinely choosing what to do next.
-    # Offering it on the earlier model-picker screen sent them off mid-setup.
+    # Onboarding turns on launch-at-login by default (see show_welcome_and_install).
+    # Say so plainly, and point to where it can be turned off — quietly changing a
+    # startup setting without telling the user is exactly the kind of surprise to avoid.
+    autostart_label = Gtk.Label()
+    autostart_label.set_markup(
+        '<span size="small"><i>🔁 TalkType will start automatically when you log in '
+        '(turn this off in Preferences → General)</i></span>'
+    )
+    autostart_label.set_halign(Gtk.Align.START)
+    autostart_label.set_margin_top(2)
+    autostart_label.set_opacity(0.8)
+    autostart_label.set_line_wrap(True)
+    vbox.pack_start(autostart_label, False, False, 0)
+
+    # Restart reminder — only when permissions were changed this run and won't
+    # take effect until a reboot. This is the deferred reminder: it appears here,
+    # at the true end of setup (model downloaded, everything installed), instead
+    # of interrupting mid-onboarding where the user might reboot too early.
+    if needs_restart:
+        restart_sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        restart_sep.set_margin_top(12)
+        restart_sep.set_margin_bottom(8)
+        vbox.pack_start(restart_sep, False, False, 0)
+
+        restart_reminder = Gtk.Label()
+        restart_reminder.set_markup(
+            '<span size="medium"><b>⚠️ One last step: restart your computer</b></span>\n'
+            '<span size="small">Typing and hotkeys need a restart to activate. '
+            'Logging out is often not enough.</span>'
+        )
+        restart_reminder.set_line_wrap(True)
+        restart_reminder.set_justify(Gtk.Justification.CENTER)
+        restart_reminder.set_halign(Gtk.Align.CENTER)
+        restart_reminder.set_max_width_chars(50)
+        vbox.pack_start(restart_reminder, False, False, 0)
+
+    # Bottom actions. When a restart is owed, the choice IS restart-now vs later
+    # (dictation won't work until the reboot, so "Start Using TalkType!" would
+    # mislead). Otherwise, the normal start/settings choice.
     button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
     button_box.set_halign(Gtk.Align.CENTER)
     button_box.set_margin_top(12)
 
-    prefs_button = Gtk.Button(label="Open Preferences")
-    prefs_button.set_size_request(150, 35)
-    prefs_button.set_tooltip_text(
-        "Adjust models, hotkeys, punctuation, the recording indicator and more")
+    if needs_restart:
+        def on_restart_now(_widget):
+            # A reboot closes everything, so confirm first.
+            confirm = Gtk.MessageDialog(
+                transient_for=dialog, modal=True,
+                message_type=Gtk.MessageType.QUESTION,
+                buttons=Gtk.ButtonsType.NONE,
+                text="Restart now?",
+            )
+            confirm.format_secondary_text(
+                "Save any work in your other apps first — this will close everything."
+            )
+            confirm.add_button("Cancel", Gtk.ResponseType.CANCEL)
+            go = confirm.add_button("Restart Now", Gtk.ResponseType.OK)
+            go.get_style_context().add_class("destructive-action")
+            resp = confirm.run()
+            confirm.destroy()
+            if resp != Gtk.ResponseType.OK:
+                return
+            # Mark onboarding complete BEFORE rebooting. The reboot happens here,
+            # inside the dialog, so the normal completion path in tray.py (which
+            # calls mark_first_run_complete after this dialog returns) never runs
+            # — without this the machine reboots mid-completion and the next
+            # launch starts onboarding all over again.
+            try:
+                from talktype.cuda_helper import mark_first_run_complete
+                mark_first_run_complete()
+            except Exception as e:
+                # If we can't mark completion, DON'T reboot — a reboot now would
+                # re-run the whole wizard on next launch. Keep the working session
+                # and let the user restart manually once things are healthy.
+                logger.error(f"Could not mark first run complete; aborting reboot: {e}")
+                warn = Gtk.MessageDialog(
+                    transient_for=dialog, modal=True,
+                    message_type=Gtk.MessageType.WARNING,
+                    buttons=Gtk.ButtonsType.OK,
+                    text="Couldn't finish setup",
+                )
+                warn.format_secondary_text(
+                    "TalkType couldn't save its setup state, so it won't restart "
+                    "automatically. Please restart your computer yourself in a "
+                    "moment to finish."
+                )
+                warn.run()
+                warn.destroy()
+                return
+            from talktype.uinput_helper import reboot_system
+            if not reboot_system():
+                warn = Gtk.MessageDialog(
+                    transient_for=dialog, modal=True,
+                    message_type=Gtk.MessageType.WARNING,
+                    buttons=Gtk.ButtonsType.OK,
+                    text="Couldn't restart automatically",
+                )
+                warn.format_secondary_text(
+                    "Please restart your computer yourself to finish setup."
+                )
+                warn.run()
+                warn.destroy()
+            # On success the machine is going down; nothing more to do here.
 
-    def on_open_prefs_clicked(_widget):
-        # Close this dialog too — leaving it floating above Preferences would
-        # sit on top of the window the user just asked for.
-        _open_preferences()
-        dialog.response(Gtk.ResponseType.OK)
+        later_button = Gtk.Button(label="I'll restart later")
+        later_button.set_size_request(150, 35)
+        later_button.connect("clicked", lambda w: dialog.response(Gtk.ResponseType.OK))
+        button_box.pack_start(later_button, False, False, 0)
 
-    prefs_button.connect("clicked", on_open_prefs_clicked)
-    button_box.pack_start(prefs_button, False, False, 0)
+        restart_button = Gtk.Button(label="Restart Now")
+        restart_button.set_size_request(150, 35)
+        restart_button.get_style_context().add_class("suggested-action")
+        restart_button.connect("clicked", on_restart_now)
+        button_box.pack_start(restart_button, False, False, 0)
+    else:
+        # Two ways out: start dictating, or go and adjust settings. Setup is
+        # finished here and the model is downloaded, so this is the right screen
+        # for it — the earlier model-picker screen would have sent them off
+        # mid-setup.
+        prefs_button = Gtk.Button(label="Open Preferences")
+        prefs_button.set_size_request(150, 35)
+        prefs_button.set_tooltip_text(
+            "Adjust models, hotkeys, punctuation, the recording indicator and more")
 
-    start_button = Gtk.Button(label="Start Using TalkType!")
-    start_button.set_size_request(180, 35)
-    start_button.get_style_context().add_class("suggested-action")
-    start_button.connect("clicked", lambda w: dialog.response(Gtk.ResponseType.OK))
-    button_box.pack_start(start_button, False, False, 0)
+        def on_open_prefs_clicked(_widget):
+            # Close this dialog too — leaving it floating above Preferences would
+            # sit on top of the window the user just asked for.
+            _open_preferences()
+            dialog.response(Gtk.ResponseType.OK)
+
+        prefs_button.connect("clicked", on_open_prefs_clicked)
+        button_box.pack_start(prefs_button, False, False, 0)
+
+        start_button = Gtk.Button(label="Start Using TalkType!")
+        start_button.set_size_request(180, 35)
+        start_button.get_style_context().add_class("suggested-action")
+        start_button.connect("clicked", lambda w: dialog.response(Gtk.ResponseType.OK))
+        button_box.pack_start(start_button, False, False, 0)
 
     vbox.pack_start(button_box, False, False, 0)
 
