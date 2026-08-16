@@ -571,6 +571,114 @@ def get_running_appimage_path() -> Optional[str]:
     return os.environ.get("APPIMAGE")
 
 
+def _detect_system_package_manager() -> Optional[str]:
+    """Return 'rpm', 'deb', or None by asking the system package DB about
+    talktype, falling back to the distro family from /etc/os-release."""
+    import shutil
+    import subprocess
+    try:
+        if shutil.which("rpm"):
+            r = subprocess.run(["rpm", "-q", "talktype"],
+                               capture_output=True, timeout=5)
+            if r.returncode == 0:
+                return "rpm"
+    except Exception:
+        pass
+    try:
+        if shutil.which("dpkg-query"):
+            r = subprocess.run(["dpkg-query", "-W", "talktype"],
+                               capture_output=True, timeout=5)
+            if r.returncode == 0:
+                return "deb"
+    except Exception:
+        pass
+    try:
+        with open("/etc/os-release") as f:
+            osr = f.read().lower()
+        if any(k in osr for k in ("fedora", "rhel", "centos", "suse",
+                                  "rocky", "alma", "nobara")):
+            return "rpm"
+        if any(k in osr for k in ("debian", "ubuntu", "mint", "pop")):
+            return "deb"
+    except Exception:
+        pass
+    return None
+
+
+def get_install_type(*, appimage_env=None, flatpak_env=None,
+                     module_path=None, pkg_query=None) -> str:
+    """How TalkType is installed. One of:
+      'flatpak'  — running inside a Flatpak sandbox
+      'aur'      — pacman-managed AppImage at a system path (/opt, /usr)
+      'appimage' — self-managed AppImage the app may swap in place
+      'rpm'/'deb'/'package' — extracted package tree under /opt/talktype
+      'dev'      — running from a source checkout
+    All inputs are injectable for testing; by default they read the real env.
+    """
+    appimage_env = os.environ.get("APPIMAGE", "") if appimage_env is None else appimage_env
+    flatpak_env = os.environ.get("FLATPAK_ID", "") if flatpak_env is None else flatpak_env
+    if module_path is None:
+        module_path = os.path.realpath(__file__)
+    if pkg_query is None:
+        pkg_query = _detect_system_package_manager
+
+    if flatpak_env:
+        return "flatpak"
+    if appimage_env:
+        # A real, running AppImage. A system path means it is package-managed
+        # (AUR ships /opt/talktype/TalkType.AppImage); a home path means the
+        # user manages it themselves and the app may swap it in place.
+        if appimage_env.startswith("/opt/") or appimage_env.startswith("/usr/"):
+            return "aur"
+        return "appimage"
+    if "/.mount_" in module_path:
+        # Mounted AppImage without the APPIMAGE env — treat as self-managed.
+        return "appimage"
+    if module_path.startswith("/opt/"):
+        # .deb/.rpm ship the extracted tree under /opt/talktype.
+        return pkg_query() or "package"
+    return "dev"
+
+
+def get_update_guidance(install_type: str, latest_version: str,
+                        release_url: str = "") -> dict:
+    """Human guidance for updating a given install type. Self-managed AppImages
+    can auto-update; everything else returns the correct manual command so the
+    updater never tries to download and run an AppImage on a package install.
+    Returns a dict: can_auto_update, title, message, command, release_url.
+    """
+    v = latest_version
+    if install_type == "appimage":
+        return {"can_auto_update": True, "title": "Update Available",
+                "message": f"TalkType {v} is available.",
+                "command": None, "release_url": release_url}
+    if install_type == "rpm":
+        cmd = f"sudo dnf install ./talktype-{v}-1.x86_64.rpm"
+        msg = (f"TalkType {v} is available. You installed the RPM package — "
+               f"download the new .rpm from the release page, then install it:")
+    elif install_type == "deb":
+        cmd = f"sudo apt install ./talktype_{v}_amd64.deb"
+        msg = (f"TalkType {v} is available. You installed the DEB package — "
+               f"download the new .deb from the release page, then install it:")
+    elif install_type == "aur":
+        cmd = "yay -S talktype-appimage   # or: paru -S talktype-appimage"
+        msg = (f"TalkType {v} is available. You installed from the AUR — "
+               f"update with your AUR helper:")
+    elif install_type == "flatpak":
+        cmd = "flatpak update io.github.ronb1964.TalkType"
+        msg = f"TalkType {v} is available. Update through Flatpak:"
+    elif install_type == "dev":
+        cmd = "git pull   # in your TalkType project folder"
+        msg = (f"TalkType {v} is available. You're running the development "
+               f"version — update with git:")
+    else:  # 'package' / unknown
+        cmd = None
+        msg = (f"TalkType {v} is available. Please update using your system's "
+               f"package manager, or download it from the release page.")
+    return {"can_auto_update": False, "title": "Update Available",
+            "message": msg, "command": cmd, "release_url": release_url}
+
+
 def install_update_and_restart(
     downloaded_path: str,
     progress_callback: Optional[Callable[[str, int], None]] = None
