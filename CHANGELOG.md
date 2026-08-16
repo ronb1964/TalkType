@@ -2,6 +2,43 @@
 
 All notable changes to TalkType are documented here.
 
+## [0.7.1] - 2026-08-16
+
+This release fixes how TalkType updates itself, so that updating works correctly
+no matter how you installed it — and makes the whole update experience
+consistent across every desktop.
+
+### Updating now matches how you installed
+- **`.deb` / `.rpm` installs update through your package manager, in one click.**
+  Before, "Check for Updates" on a Fedora or Debian install tried to download and
+  run an AppImage — which failed with a confusing `libfuse.so.2` error and left
+  you stuck. Now TalkType knows it was installed as a package: it downloads the
+  new package, asks for your password once, and installs it properly with your
+  system's own tools, so dependencies stay correct.
+- **Arch (AUR) installs are pointed to the AUR helper** (`yay -S talktype-appimage`)
+  instead of trying to update the wrong way.
+- **AppImage installs keep updating in place**, exactly as before.
+- TalkType picks the right method automatically based on how you installed — you
+  don't have to think about it.
+
+### One clear, consistent update window
+- **"Check for Updates" goes straight to a single window** with your choices —
+  Download & Install, or View on GitHub — instead of *also* opening the
+  Preferences window on top of it.
+- **The GNOME panel menu and the system-tray menu now behave identically.** Both
+  open the same window; neither detours through Preferences.
+- **The automatic daily check shows that same window** when an update is found,
+  instead of a notification that was easy to miss.
+
+### Fixed
+- **TalkType now reliably restarts after an update.** The old restart could leave
+  the app half-started and unresponsive — menus and windows would stop opening.
+  It now shuts down cleanly and launches a fresh copy.
+- **About, Help and Voice Commands windows now always open.** On some Wayland
+  setups they could silently fail to appear.
+- **The update window no longer hides the About / Help / Voice Commands windows**
+  behind it.
+
 ## [0.7.0] - 2026-08-15
 
 This release is about getting TalkType onto your computer the normal way and

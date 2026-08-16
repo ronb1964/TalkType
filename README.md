@@ -75,7 +75,7 @@ Most voice dictation tools on Linux are either cloud-based (privacy concerns), c
 - **Visual Feedback** - On-screen recording indicator that reacts to your voice, with four styles (orb, waveform, frequency bars, radial), custom colors, and positioning anywhere on screen
 - **Private by Default** - Fully offline transcription, and your dictated text is never written to the log (opt-in only, for troubleshooting)
 - **GNOME Integration** - Native shell extension for GNOME desktop
-- **Auto-Updates** - Built-in update checker with one-click downloads
+- **Smart Updates** - Built-in update checker that updates the right way for how you installed: through your package manager on `.deb`/`.rpm` (one click, one password prompt), in place for the AppImage, or via your AUR helper on Arch
 - **Wayland Native** - Works seamlessly on modern Linux desktops
 
 ---

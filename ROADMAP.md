@@ -87,7 +87,9 @@ Status markers: `[x]` shipped · `[~]` partly done, see note · `[ ]` not starte
 
 ## Update System
 
-- [x] Periodic auto-check for updates (daily/weekly schedule) — once per day, via `should_check_today()` five seconds after tray launch.
+- [x] Auto-check for updates — once per day, via `should_check_today()`, five seconds after tray launch. Note: this is a one-shot at startup, so an always-on machine that never restarts TalkType won't re-check on its own until the next launch. Making the timer recurring (hourly, still date-gated to daily) would close that gap — deferred until someone asks.
+- [x] Install-type-aware updates (0.7.1) — `get_install_type()` picks the right update method: `.deb`/`.rpm` install the new package via `pkexec` (password prompt, through the system package manager), AppImage swaps in place, AUR points to the AUR helper, Flatpak/dev show instructions. Never downloads+runs an AppImage on a package install (the old `libfuse.so.2` failure). Clean detached restart after a package update.
+- [x] Update UX unified across the GTK tray and GNOME extension — both route to the same in-app result dialog; the extension no longer opens Preferences on top of it.
 
 ## Security
 

@@ -345,11 +345,15 @@ and punctuation — wrap the replacement text in double quotes:
 • Audio beeps indicate recording start/stop (can be disabled)
 
 <b>Installation &amp; Updates:</b>
-• <b>AppImage location:</b> ~/AppImages/TalkType.AppImage
 • <b>Desktop launcher:</b> TalkType appears in your Applications menu
-• <b>Check for updates:</b> Preferences → Updates tab
-• <b>Auto-update:</b> Click "Download &amp; Install" to update automatically
-• Updates are downloaded, installed, and TalkType restarts seamlessly
+• <b>Check for updates:</b> the tray/panel menu, or Preferences → Updates tab
+• <b>Updating matches how you installed TalkType:</b>
+   – <b>.deb / .rpm:</b> click "Download &amp; Install" — it downloads the new
+     package and installs it through your system (you'll be asked for your
+     password once), then offers to restart.
+   – <b>AppImage:</b> click "Download &amp; Install" — it swaps in the new
+     version and restarts automatically.
+   – <b>Arch (AUR):</b> update with your AUR helper, e.g. <tt>yay -S talktype-appimage</tt>.
 • <b>Config files:</b> ~/.config/talktype/
 • <b>AI Models:</b> ~/.cache/huggingface/
 
