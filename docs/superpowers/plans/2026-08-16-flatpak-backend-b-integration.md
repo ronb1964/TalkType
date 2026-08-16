@@ -494,6 +494,15 @@ git commit -m "flatpak(backend-b): service entry runs the FLATPAK_ID-selected in
 
 ## Task 9: End-to-end integration in the throwaway Flatpak
 
+> **DEFERRED (2026-08-16) → real Flatpak manifest project.** Sizing showed the
+> runtime (`org.gnome.Platform//48`, Python 3.12) lacks numpy/sounddevice/
+> faster-whisper/evdev — all top-level `app.py` imports — so even a stubbed
+> throwaway must bundle ~most of the real manifest's deps for a build we'd
+> discard. The core risk (hotkey + typing inside a Flatpak) is already retired by
+> the KDE spike. This validation moves into a dedicated manifest project (deps +
+> NVIDIA GPU + onboarding parity + KDE/GNOME e2e). See
+> `spikes/flatpak-portal/FINDINGS.md` → "BB-9 outcome".
+
 Proves the whole thing: the real app, inside a Flatpak, dictates via portals on KDE, then GNOME. This is where Backend B is actually exercised.
 
 **Files:**

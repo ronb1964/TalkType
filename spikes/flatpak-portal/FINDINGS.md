@@ -89,3 +89,40 @@ deferred per the parent plan. Remaining validation: repeat on GNOME (Task 4).
 - **Open risks carried into the manifest sub-project:** (a) confirm all of the above
   on GNOME (Task 4); (b) GPU/NVIDIA add-on is a separate later effort; (c) verify the
   recording-indicator positioning under the sandbox; (d) decide restore_token storage.
+
+## BB-9 outcome — real-app throwaway test folded into the manifest project (2026-08-16)
+
+BB-1..BB-8 of the Backend B branch (`flatpak-backend-b`) are complete and
+committed, plus the `python -m` dual-module boot fix (commit `bef09b7`, verified
+live: dictation types again). **589 tests pass.**
+
+BB-9 was to wrap the *real* app in a throwaway `build-init` Flatpak and dictate
+end-to-end. On sizing it we found the throwaway is not worth building:
+
+- `org.gnome.Platform//48` ships **Python 3.12** + PyGObject + libei, but **not**
+  numpy, sounddevice, faster-whisper/ctranslate2, or evdev — all imported at the
+  top of `app.py`. So even a "stubbed transcription" throwaway must bundle those
+  five deps (plus native PortAudio) built for 3.12. The dev venv is Python 3.14,
+  so it can't be copied.
+- That bundling is ~most of the *real* manifest's dependency work. Doing it in a
+  disposable `build-init` script we then discard means paying for the hard part
+  twice — not "done right".
+- The core risk BB-9 existed to retire (global hotkey + typing into other apps
+  from inside a Flatpak sandbox) is **already retired by this spike on KDE**, and
+  the shipping Backend B classes carry 589 unit tests.
+
+**Decision:** the real-app-in-a-Flatpak validation moves into a dedicated Flatpak
+**manifest project** (its own spec + plan), done properly with `flatpak-builder`.
+That project must own, as first-class UX-parity requirements (so the Flatpak is
+not "a different product"):
+
+1. **Dependency bundling** for the runtime's Python (numpy, sounddevice+PortAudio,
+   faster-whisper+ctranslate2, evdev) — the shared modules for BOTH backends.
+2. **NVIDIA/CUDA GPU support** so the Flatpak is not CPU-slow vs the AppImage.
+3. **Onboarding parity** — the desktop (not the app) assigns the hotkey; KDE uses
+   System Settings, GNOME a picker. First-run must explain this.
+4. **Recording-indicator, model download, preferences, About/updater** parity with
+   the AppImage look-and-feel.
+5. Validate the shipping `PortalInputBackend`/`LibeiOutputBackend` end-to-end on
+   KDE **and** GNOME as part of that build (this is where the deferred GNOME
+   cross-check from the spike table finally happens).
