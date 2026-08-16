@@ -2,6 +2,39 @@
 
 All notable changes to TalkType are documented here.
 
+## [0.7.0] - 2026-08-15
+
+This release is about getting TalkType onto your computer the normal way and
+making the very first run work reliably — whichever Linux you use.
+
+### Install it the way your distribution expects
+- **New `.deb` package** for Debian, Ubuntu and Linux Mint: `sudo apt install ./talktype_*_amd64.deb`
+- **New `.rpm` package** for Fedora, RHEL and openSUSE: `sudo dnf install ./talktype-*.x86_64.rpm`
+- **The Arch (AUR) package now pulls in the library it needs** so it no longer fails to start on a clean install.
+- Each package adds a `talktype` command and an Applications menu entry and brings its own copies of the helper tools — nothing to install by hand first.
+
+### Less than half the size it was
+- **The download dropped from 306 MB to 135 MB.** TalkType was shipping PyTorch, an enormous library it never actually used — transcription runs on faster-whisper, and GPU acceleration uses its own CUDA libraries. Removing it cut ~170 MB with no change to how anything works, on CPU or GPU.
+
+### A first run that just works, then gets out of your way
+- **TalkType now starts itself when you log in.** After setup it's simply there in your system tray, ready — no launching it by hand. You can turn this off in Preferences → General, and the final setup screen tells you so.
+- **The restart reminder waits until the end.** Some permissions only take effect after a restart, but you're now reminded once at the very end of setup — with a **"Restart Now"** button — instead of being nudged to reboot in the middle, before setup is finished.
+- **On GNOME, the panel icon now appears on its own** after you install the extension and restart. Previously the extension was installed but never actually switched on, so there was no icon and no clue why.
+- **If setup can't finish cleanly, it tells you** and doesn't leave you stuck part-way through.
+
+### Fixed
+- **TalkType would not start at all on Fedora.** The tray was built against an old system library Fedora doesn't ship, so the app quit the moment it launched. It now uses the current, maintained library every supported distribution provides.
+- **Hotkeys did nothing on Fedora, with no error to explain why.** First-run setup checked only whether TalkType could *type*. On Fedora that permission is granted automatically while permission to *read your keyboard* is not, so setup was skipped and no key could ever be detected — while the app looked healthy. Setup now checks both, and says so plainly if it can't read the keyboard instead of failing silently.
+- **Setup told you to log out when that often isn't enough.** A background session can keep old permissions alive, so hotkeys would still do nothing. It now tells you to restart, everywhere it asks.
+- **Setup could run all over again after a restart.** Rebooting from the last setup screen could leave onboarding un-finished, so the next launch started the whole wizard over. It now records that setup is done before restarting.
+- **Scrolling the mouse wheel over the model dropdown changed your model** — and could land on a GPU-only model and pop an error you never asked for. The dropdown now ignores the wheel, and the model you pick is always the one you get.
+- **About and "Check for Updates" windows ignored your dark theme**, showing up light while the rest of the app was dark. They now match.
+- **The setup window was taller than some screens**, leaving its buttons unreachable. It now fits the screen and scrolls when it has to.
+- **Preferences could not be scrolled with the mouse wheel** over dropdowns and sliders.
+- **The splash icon was missing** on installed (non-AppImage) versions.
+- **"Check for Updates" flashed its result and vanished** before it could be read. The result window now stays until dismissed.
+- **Some installed files had the wrong permissions**, so TalkType could fail to start for anyone but the user who installed it.
+
 ## [0.6.2] - 2026-08-14
 
 ### The recording indicator can now look four different ways

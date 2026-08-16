@@ -90,6 +90,25 @@ yay -S talktype-appimage
 paru -S talktype-appimage
 ```
 
+### Debian / Ubuntu / Linux Mint (.deb)
+
+Download `talktype_*_amd64.deb` from [Releases](https://github.com/ronb1964/TalkType/releases):
+
+```bash
+sudo apt install ./talktype_*_amd64.deb
+```
+
+### Fedora / RHEL / openSUSE (.rpm)
+
+Download `talktype-*.x86_64.rpm` from [Releases](https://github.com/ronb1964/TalkType/releases):
+
+```bash
+sudo dnf install ./talktype-*.x86_64.rpm
+```
+
+Both packages install to `/opt/talktype`, add a `talktype` command and an
+Applications menu entry, and pull in the few system libraries they need.
+
 ### AppImage (All Distros)
 
 Download the latest AppImage from [Releases](https://github.com/ronb1964/TalkType/releases):
@@ -112,7 +131,8 @@ The AppImage includes everything needed - just download and run!
 | Requirement | Details |
 |------------|---------|
 | **OS** | Linux with Wayland |
-| **Dependencies** | ydotool, wl-clipboard (must be installed on your system; ydotoold daemon is started automatically on first run) |
+| **Dependencies** | None to install by hand — ydotool, ydotoold and wl-clipboard ship inside TalkType, and the ydotoold daemon starts automatically on first run |
+| **Permissions** | First run asks for your admin password once, to let TalkType read your keyboard and type into other apps. **Restart afterwards** for it to take effect |
 | **Audio** | Working microphone |
 | **GPU (optional)** | NVIDIA GPU for CUDA acceleration |
 
@@ -236,7 +256,7 @@ auto_period = true        # Add period at end of sentences
 ```bash
 # Prerequisites (Fedora/Nobara)
 sudo dnf install -y portaudio-devel ffmpeg ydotool wl-clipboard \
-                    python3-gobject libappindicator-gtk3 libnotify
+                    python3-gobject libayatana-appindicator-gtk3 libnotify
 
 # Clone and install
 git clone https://github.com/ronb1964/TalkType.git
@@ -284,6 +304,19 @@ systemctl --user enable --now ydotoold.service
 ### Hotkey not working?
 - Another app may be using F8/F9 - try different keys in Preferences
 - Ensure TalkType service is running (check tray icon)
+
+### No hotkey works at all?
+TalkType reads your keyboard directly, which requires your account to be in the
+system's `input` group. Without it no key can be detected, even though the app
+looks like it started fine.
+
+- Preferences → Advanced → Typing Setup → **Fix Typing Permissions**
+- **Then restart your computer.** Logging out and back in is often not enough —
+  a lingering user session keeps the old group list alive
+- Check it worked with `groups`; the list should include `input`
+
+Most common on Fedora, where permission to *type* is granted separately from
+permission to *read keys*, so typing can work while hotkeys do not.
 
 ### Transcription slow?
 - Enable GPU acceleration if you have NVIDIA GPU

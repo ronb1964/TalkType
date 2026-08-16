@@ -5,7 +5,7 @@
 ## Current Status
 
 ✅ `.venv` created with Python 3.13
-✅ All dependencies installed (torch, faster-whisper, sounddevice, etc.)
+✅ All dependencies installed (faster-whisper, sounddevice, evdev, etc.)
 ✅ Uses system PyGObject (can't be installed in venv without python3-devel)
 ✅ Run script created: `run-dev.sh`
 
@@ -36,7 +36,7 @@ This script does the same thing as the desktop launcher but from command line
 
 ## How It Works
 
-- **Dependencies**: `.venv/` (PyTorch, faster-whisper, sounddevice, etc.)
+- **Dependencies**: `.venv/` (faster-whisper, sounddevice, evdev, etc. — PyTorch was removed in 0.7.0; it was never used)
 - **PyGObject**: System package from `/usr/lib64/python3.13/site-packages`
 - **TalkType code**: `src/talktype/`
 - **Runner**: `run-dev.sh` sets up environment correctly

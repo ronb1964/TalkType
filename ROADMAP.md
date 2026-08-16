@@ -96,10 +96,11 @@ Status markers: `[x]` shipped · `[~]` partly done, see note · `[ ]` not starte
 ## Distribution & Packaging
 
 - [x] AUR — `talktype-appimage` is published and current. `aur/` holds the packaging sources; `aur-repo/` is the untracked publishing clone (`ssh://aur@aur.archlinux.org/talktype-appimage.git`). Updating a release means bumping `pkgver` and `sha256sums` in both, then committing and pushing `aur-repo`. Note there is no `makepkg` on this machine, so `.SRCINFO` is maintained by hand and must be kept in step with the PKGBUILD.
+- [x] `.deb` packaging — `build-deb.sh`, validated on real Ubuntu 22.04 and 26.04 (GNOME).
+- [x] `.rpm` packaging — `build-rpm.sh`, validated on Fedora GNOME and Fedora KDE VMs. Both are built from the same AppDir the AppImage uses, so a fix in `container-build.sh` reaches all three.
 - [ ] Flatpak packaging
 - [ ] Snap Store packaging
 - [ ] PyPI wheel
-- [ ] RPM spec
 - [~] Submit to AlternativeTo, Awesome Lists — AlternativeTo is live (2026-03-30); Awesome Lists not submitted.
 
 ## Platform Expansion
