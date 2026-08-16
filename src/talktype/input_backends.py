@@ -29,7 +29,8 @@ class EvdevInputBackend(InputBackend):
         self.input_device_idx = input_device_idx
 
     def start(self):
-        raise NotImplementedError("implemented in BB-6")
+        from . import app
+        app._loop_evdev(self.cfg, self.input_device_idx)
 
 
 class PortalInputBackend(InputBackend):

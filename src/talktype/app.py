@@ -2193,6 +2193,45 @@ def _handle_key_event(event, mode, hold_key, toggle_key,
         _release_all_grabs()
 
 
+class _ServiceState:
+    """Backend-agnostic per-service state (auto-timeout tracking), shared by the
+    evdev loop (Backend A) and the portal loop (Backend B) via _service_tick."""
+
+    def __init__(self, cfg):
+        self.last_activity = time.time()
+        self.timeout_enabled = getattr(cfg, "auto_timeout_enabled", False)
+        self.timeout_minutes = getattr(cfg, "auto_timeout_minutes", 5)
+        self.timeout_seconds = self.timeout_minutes * 60
+
+
+def _service_tick(cfg, input_device_idx, svc: "_ServiceState") -> None:
+    """One iteration of backend-agnostic service work: consume the thread-safe
+    start/stop commands (set by the evdev loop OR the portal signal handlers) and
+    enforce the auto-timeout. Safe from either backend — _release_all_grabs() is
+    a no-op when nothing is grabbed (the portal case)."""
+    now = time.time()
+    if _cmd_start_recording.is_set():
+        _cmd_start_recording.clear()
+        if not state.is_recording:
+            start_recording(cfg.beeps, cfg.notify, input_device_idx)
+            svc.last_activity = now
+    if _cmd_stop_recording.is_set():
+        _cmd_stop_recording.clear()
+        if state.is_recording:
+            _release_all_grabs()
+            stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
+                           cfg.auto_space, cfg.auto_period, cfg.injection_mode)
+            svc.last_activity = now
+    if svc.timeout_enabled and not state.is_recording:
+        if now - svc.last_activity > svc.timeout_seconds:
+            print(f"⏰ Auto-timeout: No activity for {svc.timeout_minutes} "
+                  f"minutes, shutting down...")
+            if cfg.notify:
+                _notify("TalkType Auto-Timeout",
+                        f"Service stopped after {svc.timeout_minutes} minutes of inactivity")
+            sys.exit(0)
+
+
 def _loop_evdev(cfg: Settings, input_device_idx):
     """Main event loop: monitor keyboard for hotkey presses and dispatch to recording."""
     session = os.environ.get("XDG_SESSION_TYPE", "").lower()
@@ -2203,12 +2242,9 @@ def _loop_evdev(cfg: Settings, input_device_idx):
     logger.info(f"Input mode: {mode}, Hold key: {cfg.hotkey}, Toggle key: {cfg.toggle_hotkey if mode=='toggle' else 'N/A'}")
 
     # Auto-timeout setup
-    timeout_enabled = getattr(cfg, 'auto_timeout_enabled', False)
-    timeout_minutes = getattr(cfg, 'auto_timeout_minutes', 5)
-    timeout_seconds = timeout_minutes * 60
-    last_activity_time = time.time()
-    print(f"Auto-timeout: {timeout_enabled} | Timeout: {timeout_minutes} minutes")
-    logger.info(f"Auto-timeout: enabled={timeout_enabled}, minutes={timeout_minutes}")
+    svc = _ServiceState(cfg)
+    print(f"Auto-timeout: {svc.timeout_enabled} | Timeout: {svc.timeout_minutes} minutes")
+    logger.info(f"Auto-timeout: enabled={svc.timeout_enabled}, minutes={svc.timeout_minutes}")
 
     devices = [InputDevice(p) for p in list_devices()]
     for dev in devices:
@@ -2276,30 +2312,9 @@ def _loop_evdev(cfg: Settings, input_device_idx):
     while True:
         current_time = time.time()
 
-        # Check for D-Bus-triggered recording commands (thread-safe via threading.Events).
-        # The GLib thread sets these flags; we consume them here on the main thread.
-        if _cmd_start_recording.is_set():
-            _cmd_start_recording.clear()
-            if not state.is_recording:
-                start_recording(cfg.beeps, cfg.notify, input_device_idx)
-                last_activity_time = current_time  # Reset auto-timeout
-
-        if _cmd_stop_recording.is_set():
-            _cmd_stop_recording.clear()
-            if state.is_recording:
-                # Must ungrab keyboard devices before stopping (same as hold-mode release)
-                _release_all_grabs()
-                stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
-                               cfg.auto_space, cfg.auto_period, cfg.injection_mode)
-                last_activity_time = current_time  # Reset auto-timeout
-
-        # Auto-timeout: shut down if no activity for configured minutes
-        if timeout_enabled and not state.is_recording:
-            if current_time - last_activity_time > timeout_seconds:
-                print(f"\u23f0 Auto-timeout: No activity for {timeout_minutes} minutes, shutting down...")
-                if cfg.notify:
-                    _notify("TalkType Auto-Timeout", f"Service stopped after {timeout_minutes} minutes of inactivity")
-                sys.exit(0)
+        # Backend-agnostic work: consume D-Bus/portal start/stop commands and
+        # enforce the auto-timeout (shared with the portal loop).
+        _service_tick(cfg, input_device_idx, svc)
 
         # Poll all input devices for key events
         for dev in devices:
@@ -2314,8 +2329,8 @@ def _loop_evdev(cfg: Settings, input_device_idx):
                                 held_modifiers.discard(event.code)
 
                         # Reset timeout on any hotkey activity
-                        if timeout_enabled and event.code in (hold_key, toggle_key, ecodes.KEY_ESC, voice_cmds_main_key):
-                            last_activity_time = current_time
+                        if svc.timeout_enabled and event.code in (hold_key, toggle_key, ecodes.KEY_ESC, voice_cmds_main_key):
+                            svc.last_activity = current_time
                         _handle_key_event(
                             event, mode, hold_key, toggle_key,
                             voice_cmds_combo, held_modifiers,
