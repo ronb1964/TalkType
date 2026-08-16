@@ -6,9 +6,16 @@ os.environ["HF_HUB_DISABLE_XET"] = "1"
 
 import gi
 gi.require_version("Gtk", "3.0")
-gi.require_version("AppIndicator3", "0.1")
+# Ayatana is the maintained successor to the dead libappindicator project, and
+# it is what build-deb.sh and build-rpm.sh actually declare as a dependency.
+# The old "AppIndicator3" typelib references libappindicator3.so.1, a library
+# Debian/Ubuntu still provide as a compat shim but Fedora does not ship at all —
+# so bundling the old typelib crashed the tray on launch on Fedora. Imported
+# under the historical name to keep the call sites below unchanged.
+gi.require_version("AyatanaAppIndicator3", "0.1")
 gi.require_version("Gdk", "3.0")
-from gi.repository import Gtk, Gdk, AppIndicator3, GLib
+from gi.repository import Gtk, Gdk, GLib
+from gi.repository import AyatanaAppIndicator3 as AppIndicator3
 import subprocess
 import time
 import sys
@@ -96,6 +103,19 @@ _tray_lockfile_handle = None
 
 class DictationTray:
     def __init__(self):
+        # TalkType is a dark-themed app: Preferences and the onboarding windows
+        # each set gtk-application-prefer-dark-theme individually. The dialogs the
+        # TRAY spawns (About, "Check for Updates" result) did not, so they rendered
+        # in the light system GTK theme on a dark desktop. This is a global Gtk
+        # setting, so setting it once here — before any tray dialog is built —
+        # makes every tray window match the rest of the app.
+        try:
+            _settings = Gtk.Settings.get_default()
+            if _settings is not None:
+                _settings.set_property("gtk-application-prefer-dark-theme", True)
+        except Exception as e:
+            logger.debug(f"Could not set dark theme preference: {e}")
+
         self.indicator = AppIndicator3.Indicator.new(
             "talktype",
             "microphone-sensitivity-muted",  # start with muted icon

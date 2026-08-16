@@ -22,7 +22,7 @@ apt-get install -y -qq \
     libgirepository1.0-dev \
     gobject-introspection \
     gir1.2-glib-2.0 \
-    gir1.2-appindicator3-0.1 \
+    gir1.2-ayatanaappindicator3-0.1 \
     python3-gi \
     python3-gi-cairo \
     python3-cairo \
@@ -258,7 +258,7 @@ cp /usr/lib/girepository-1.0/*.typelib AppDir/usr/lib/girepository-1.0/ 2>/dev/n
 # tests/test_bundled_typelibs.py derives the unguarded set from the source and
 # fails if this list drifts, so do not edit it by hand without running it.
 REQUIRED_TYPELIBS=(
-    "AppIndicator3-0.1.typelib"
+    "AyatanaAppIndicator3-0.1.typelib"
     "Gtk-3.0.typelib"
     "Gdk-3.0.typelib"
     "GdkPixbuf-2.0.typelib"
