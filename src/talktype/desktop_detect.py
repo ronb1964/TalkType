@@ -132,45 +132,98 @@ def is_extension_enabled(uuid: str) -> bool:
     return False
 
 
-def enable_extension(uuid: str) -> bool:
-    """
-    Enable a GNOME extension
+def _read_enabled_extensions():
+    """Return org.gnome.shell enabled-extensions as a list of UUIDs, or None.
 
-    This adds the extension to org.gnome.shell enabled-extensions gsettings key,
-    which persists across logout/login cycles.
+    gsettings prints a GVariant array — either an empty typed array `@as []`
+    or a populated `['a@x', 'b@y']`. Both parse cleanly once the `@as` prefix
+    is stripped, because GVariant string syntax matches Python literals.
 
-    Args:
-        uuid: Extension UUID
-
-    Returns:
-        bool: True if successful
+    Returns None (NOT []) when the value can't be read or parsed. That distinction
+    matters: the caller read-modify-writes this list, so treating a transient read
+    failure as "empty" would overwrite the user's entire enabled-extensions list
+    with only TalkType — silently disabling every other GNOME extension they have.
+    None means "don't touch it".
     """
     try:
         result = subprocess.run(
-            ['gnome-extensions', 'enable', uuid],
-            capture_output=True,
-            text=True,
-            timeout=10
+            ['gsettings', 'get', 'org.gnome.shell', 'enabled-extensions'],
+            capture_output=True, text=True, timeout=10,
         )
-
         if result.returncode != 0:
-            # Log error for debugging
-            if result.stderr:
-                print(f"⚠️  gnome-extensions enable error: {result.stderr.strip()}")
-            return False
+            return None
+        raw = result.stdout.strip()
+        if raw.startswith('@as'):
+            raw = raw[len('@as'):].strip()
+        import ast
+        value = ast.literal_eval(raw)
+        return list(value) if isinstance(value, (list, tuple)) else None
+    except (subprocess.TimeoutExpired, FileNotFoundError, ValueError, SyntaxError):
+        return None
 
-        # Verify it was actually enabled
-        if is_extension_enabled(uuid):
-            return True
-        else:
-            print(f"⚠️  Extension '{uuid}' was enabled but verification failed")
-            print(f"    This may require a logout/login to take effect")
-            # Still return True since the command succeeded
-            return True
 
-    except (subprocess.TimeoutExpired, FileNotFoundError) as e:
-        print(f"⚠️  Failed to enable extension: {e}")
+def _write_enabled_extensions(uuids: list) -> bool:
+    """Overwrite org.gnome.shell enabled-extensions with *uuids*.
+
+    repr() of a list of UUIDs is a valid GVariant array literal (single-quoted),
+    and UUIDs never contain quotes, so no escaping is needed.
+    """
+    try:
+        result = subprocess.run(
+            ['gsettings', 'set', 'org.gnome.shell', 'enabled-extensions', repr(uuids)],
+            capture_output=True, text=True, timeout=10,
+        )
+        return result.returncode == 0
+    except (subprocess.TimeoutExpired, FileNotFoundError):
         return False
+
+
+def enable_extension(uuid: str) -> bool:
+    """
+    Enable a GNOME extension so it activates on the next shell start.
+
+    Two mechanisms, because neither alone is reliable on a fresh install:
+
+      1. `gnome-extensions enable` activates it live — but ONLY if the running
+         shell already knows the extension. On Wayland a just-installed
+         extension is unknown to the running shell, so this fails until a
+         restart. (This was the whole bug: the old code stopped here and
+         returned False, so the extension was never actually enabled — a fresh
+         GNOME install rebooted to no tray icon.)
+
+      2. Writing the UUID directly into org.gnome.shell enabled-extensions
+         persists regardless. The shell reads that key on its next start — the
+         reboot onboarding already prescribes — and activates the extension.
+
+    The gsettings write is what makes a first-run install work; the CLI call is
+    the fast path that lights the icon up immediately when the shell can.
+    """
+    live_enabled = False
+    try:
+        result = subprocess.run(
+            ['gnome-extensions', 'enable', uuid],
+            capture_output=True, text=True, timeout=10,
+        )
+        live_enabled = result.returncode == 0
+        if not live_enabled and result.stderr:
+            # Expected on Wayland for a freshly-installed extension.
+            print(f"gnome-extensions enable deferred to gsettings: {result.stderr.strip()}")
+    except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+        print(f"gnome-extensions enable unavailable, using gsettings: {e}")
+
+    # Persist into the enabled list so it survives to the next shell start even
+    # when the live enable above could not take effect. Only touch the setting if
+    # we could actually READ it — a None means the read failed, and writing then
+    # would clobber the user's other enabled extensions with just TalkType.
+    enabled = _read_enabled_extensions()
+    if enabled is not None and uuid not in enabled:
+        enabled.append(uuid)
+        if _write_enabled_extensions(enabled):
+            print(f"Added {uuid} to enabled-extensions (activates on next login)")
+
+    # Success if it is enabled now, or will be on the next shell start.
+    final = _read_enabled_extensions()
+    return live_enabled or (final is not None and uuid in final)
 
 
 if __name__ == '__main__':

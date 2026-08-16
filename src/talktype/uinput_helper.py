@@ -106,6 +106,87 @@ def check_uinput_permission():
     return (True, "You have full access to /dev/uinput. Typing should work.")
 
 
+def _readable_input_devices():
+    """Input device nodes this user can actually open, asked evdev's way.
+
+    evdev's list_devices() keeps only nodes passing os.access(R_OK | W_OK) and
+    returns an empty list rather than raising, so posing the question exactly as
+    evdev poses it is the only answer that predicts whether hotkeys will work.
+
+    Group membership is deliberately not used as a proxy here: a user can be in
+    'input' while the nodes carry the wrong mode, and an ACL can grant access
+    with no group at all. Ask about the capability, not about the mechanism.
+    """
+    try:
+        from evdev import list_devices
+        return list(list_devices())
+    except Exception:
+        import glob
+        return [p for p in glob.glob("/dev/input/event*")
+                if os.access(p, os.R_OK | os.W_OK)]
+
+
+def check_input_read_permission():
+    """
+    Check whether TalkType can read hotkeys from /dev/input.
+
+    Returns:
+        tuple: (has_access: bool, reason: str)
+    """
+    if _readable_input_devices():
+        return (True, "You can read input devices. Hotkeys should work.")
+    return (False, "Cannot read any keyboard under /dev/input, so hotkeys "
+                   "cannot work. This usually means you are not in the "
+                   "'input' group.")
+
+
+def check_all_device_permissions():
+    """
+    Check BOTH device permissions TalkType needs, not just one.
+
+    Typing keystrokes needs /dev/uinput; reading hotkeys needs /dev/input.
+    They are granted by different mechanisms — logind hands out a per-user ACL
+    on /dev/uinput, while /dev/input relies on 'input' group membership — so on
+    some distributions (Fedora) one works while the other does not.
+
+    Gating setup on the uinput check alone meant Fedora users had setup skipped
+    entirely, and with it the `usermod -a -G input` that grants hotkey access.
+    They could type, but no hotkey could ever be read.
+
+    Returns:
+        tuple: (has_access: bool, reason: str)
+    """
+    ok_uinput, uinput_reason = check_uinput_permission()
+    ok_input, input_reason = check_input_read_permission()
+
+    if ok_uinput and ok_input:
+        return (True, "Typing and hotkeys both have the access they need.")
+    if not ok_uinput and not ok_input:
+        return (False, f"{uinput_reason} Also: {input_reason}")
+    return (False, uinput_reason if not ok_uinput else input_reason)
+
+
+def reboot_system() -> bool:
+    """Reboot the machine via systemd-logind.
+
+    `systemctl reboot` asks logind, which lets an active local desktop session
+    reboot without a password. Returns False rather than raising if the command
+    is missing or refused, so the caller can fall back to telling the user to
+    restart manually.
+    """
+    try:
+        result = subprocess.run(
+            ['systemctl', 'reboot'],
+            capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode != 0 and result.stderr:
+            logger.warning(f"systemctl reboot refused: {result.stderr.strip()}")
+        return result.returncode == 0
+    except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+        logger.warning(f"Could not reboot: {e}")
+        return False
+
+
 def check_user_in_input_group():
     """
     Check if current user is in the 'input' group.
@@ -781,8 +862,9 @@ udevadm trigger
 echo ""
 echo "Success! Uinput permissions configured."
 echo ""
-echo "IMPORTANT: Log out and back in to apply the group changes."
-echo "(Some systems may require a full reboot instead.)"
+echo "IMPORTANT: Restart the computer to apply the group changes."
+echo "(Logging out and back in is often not enough — a lingering user"
+echo " session keeps the old group list alive.)"
 '''
 
 
@@ -825,7 +907,7 @@ def install_udev_rule_with_pkexec(parent_window=None):
         if result.returncode == 0:
             logger.info("Udev rule installed successfully")
             return (True, "Permissions configured successfully!\n\n"
-                         "Log out and back in to apply (some systems require reboot).")
+                         "Restart your computer to apply (logging out is often not enough).")
         elif result.returncode == 126:
             # User cancelled the authentication dialog
             logger.info("User cancelled pkexec authentication")
@@ -899,7 +981,7 @@ def show_uinput_fix_dialog(parent=None):
             "We'll add a system rule that grants your user account access to the "
             "input device. This is a one-time setup that requires your admin password.\n\n"
             "<b>After the fix:</b>\n"
-            "Log out and back in to apply (some systems may require a reboot)."
+            "Restart your computer to apply (logging out is often not enough)."
         )
         
         dialog.add_button("Use Clipboard Instead", Gtk.ResponseType.CANCEL)

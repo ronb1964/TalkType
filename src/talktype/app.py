@@ -940,6 +940,62 @@ def _rediscover_devices(devices) -> int:
     return added
 
 
+def _input_access_diagnosis() -> str:
+    """Explain, in terms the user can act on, why no keyboards are readable.
+
+    evdev's list_devices() filters nodes with os.access(R_OK | W_OK) and returns
+    an empty list — never an exception — when the user can open none of them.
+    Without this message the service starts, prints its hotkey and looks
+    perfectly healthy while ignoring every keypress, which is indistinguishable
+    from a broken hotkey and effectively undiagnosable from the outside.
+
+    The two cases need opposite advice, so they are reported separately:
+    not in the 'input' group (fixable with usermod + a re-login) versus in the
+    group already (so the device node permissions are what is wrong).
+    """
+    import grp
+    import pwd
+
+    head = ("No readable keyboard devices found - hotkeys cannot work. "
+            "TalkType reads keys from /dev/input, which needs the 'input' group. ")
+    try:
+        group = grp.getgrnam("input")
+    except KeyError:
+        return head + "This system has no 'input' group at all."
+
+    # os.getgroups() is this SESSION's group list, fixed at login. The group's
+    # member list is the SYSTEM's, updated the moment usermod runs. They
+    # disagree in exactly one situation — setup has already granted the group
+    # but the session predates it — and that case needs completely different
+    # advice from "you were never added", so report it separately rather than
+    # telling someone to re-run a step that already succeeded.
+    in_session = group.gr_gid in os.getgroups()
+    try:
+        username = pwd.getpwuid(os.getuid()).pw_name
+    except Exception:
+        username = os.environ.get("USER", "")
+    in_system = username in group.gr_mem
+
+    if in_session:
+        return head + (
+            "This user IS in the 'input' group, so the device nodes themselves "
+            "are wrong: /dev/input/event* should be 'crw-rw---- root input'."
+        )
+    if in_system:
+        return head + (
+            f"Setup already added '{username}' to the 'input' group, but this "
+            "session started before that and is still using the old "
+            "permissions. RESTART the computer - logging out is often not "
+            "enough, because a lingering user session keeps the old group list."
+        )
+    return head + (
+        "This user is NOT in the 'input' group. Fix it with:\n"
+        "    sudo usermod -a -G input $USER\n"
+        "then RESTART the computer. Logging out and back in is often not "
+        "enough - a lingering user session keeps the old group list alive."
+    )
+
+
 def _drop_dead_devices(dead_devices, devices, mode, cfg) -> None:
     """Remove input devices that failed mid-read, ending a recording we could
     no longer end any other way.
@@ -2168,6 +2224,14 @@ def _loop_evdev(cfg: Settings, input_device_idx):
         logger.info("No hotkey configured - service will not monitor any keys")
         print("No hotkey configured. Complete onboarding to activate dictation.")
         return
+
+    # A hotkey is configured and onboarding is done, so from here on every
+    # keypress is supposed to reach us. If no device could be opened, say so
+    # now rather than running a poll loop over an empty device list forever.
+    if not devices:
+        diagnosis = _input_access_diagnosis()
+        logger.error(diagnosis)
+        print(f"❌ {diagnosis}", file=sys.stderr)
 
     if voice_cmds_combo:
         print(f"Voice Commands hotkey: {vc_hotkey_str}")
