@@ -118,5 +118,19 @@ offline using faster-whisper; optional NVIDIA GPU acceleration." \
 echo ""
 echo "📦 .rpm Details:"
 ls -lh "$PROJECT_DIR"/talktype-"${VERSION}"-1.x86_64.rpm
+
+# Add this .rpm to SHA256SUMS.txt so the in-app updater can verify the download
+# before installing it with pkexec. build-release.sh created the file first, so
+# we append here (dropping any stale entry from a previous build). fail-closed:
+# the updater aborts a package download whose hash is missing from this file.
+RPM_BASENAME="talktype-${VERSION}-1.x86_64.rpm"
+if [ -f "$PROJECT_DIR/SHA256SUMS.txt" ]; then
+    grep -v " ${RPM_BASENAME}\$" "$PROJECT_DIR/SHA256SUMS.txt" \
+        > "$PROJECT_DIR/SHA256SUMS.txt.tmp" 2>/dev/null || true
+    mv "$PROJECT_DIR/SHA256SUMS.txt.tmp" "$PROJECT_DIR/SHA256SUMS.txt"
+fi
+( cd "$PROJECT_DIR" && sha256sum "$RPM_BASENAME" >> SHA256SUMS.txt )
+echo "🔐 Added ${RPM_BASENAME} to SHA256SUMS.txt"
+
 echo ""
 echo "🚀 To test on Fedora:  sudo dnf install ./talktype-${VERSION}-1.x86_64.rpm"

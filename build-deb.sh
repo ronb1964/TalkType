@@ -128,5 +128,19 @@ fpm -s dir -t deb \
 echo ""
 echo "📦 .deb Details:"
 ls -lh "$PROJECT_DIR/talktype_${VERSION}_amd64.deb"
+
+# Add this .deb to SHA256SUMS.txt so the in-app updater can verify the download
+# before installing it with pkexec. build-release.sh created the file first, so
+# we append here (dropping any stale entry from a previous build). fail-closed:
+# the updater aborts a package download whose hash is missing from this file.
+DEB_BASENAME="talktype_${VERSION}_amd64.deb"
+if [ -f "$PROJECT_DIR/SHA256SUMS.txt" ]; then
+    grep -v " ${DEB_BASENAME}\$" "$PROJECT_DIR/SHA256SUMS.txt" \
+        > "$PROJECT_DIR/SHA256SUMS.txt.tmp" 2>/dev/null || true
+    mv "$PROJECT_DIR/SHA256SUMS.txt.tmp" "$PROJECT_DIR/SHA256SUMS.txt"
+fi
+( cd "$PROJECT_DIR" && sha256sum "$DEB_BASENAME" >> SHA256SUMS.txt )
+echo "🔐 Added ${DEB_BASENAME} to SHA256SUMS.txt"
+
 echo ""
 echo "🚀 To test on Debian/Ubuntu:  sudo apt install ./talktype_${VERSION}_amd64.deb"

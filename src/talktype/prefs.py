@@ -1976,13 +1976,18 @@ class PreferencesWindow:
         guidance = update_checker.get_update_guidance(
             install_type, latest, release.get("html_url", ""))
 
-        # Show/hide buttons based on available updates
+        # Show/hide buttons based on the update method for this install type.
         if has_update:
-            if guidance["can_auto_update"] and release.get("appimage_url"):
+            method = guidance["update_method"]
+            show_download = (
+                (method == "appimage_swap" and release.get("appimage_url")) or
+                (method == "pkexec_package" and
+                 update_checker.get_package_asset(release, install_type)[0]))
+            if show_download:
                 self.download_btn.show()
             else:
                 self.download_btn.hide()
-                if not guidance["can_auto_update"]:
+                if method == "manual":
                     extra = guidance["message"]
                     if guidance.get("command"):
                         cmd = GLib.markup_escape_text(guidance["command"])
@@ -2009,11 +2014,17 @@ class PreferencesWindow:
         if not self._current_release:
             return
 
-        # Never download+run an AppImage on a package/AUR/Flatpak install — open
-        # the release page instead so the user updates via their package manager.
+        # Route by how TalkType was installed. Package installs go through the
+        # shared pkexec flow; AUR/Flatpak/dev open the release page; only a
+        # self-managed AppImage falls through to the AppImage download below.
         install_type = update_checker.get_install_type()
-        if not update_checker.get_update_guidance(install_type, "")["can_auto_update"]:
+        method = update_checker.get_update_guidance(install_type, "")["update_method"]
+        if method == "manual":
             update_checker.open_release_page(self._current_release.get("html_url", ""))
+            return
+        if method == "pkexec_package":
+            from . import update_ui
+            update_ui.run_package_update(self._current_release, install_type)
             return
 
         url = self._current_release.get("appimage_url")

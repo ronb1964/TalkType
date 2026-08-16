@@ -5,7 +5,10 @@ and run an AppImage on a .deb/.rpm/AUR/Flatpak install (that fails, e.g. missing
 libfuse.so.2 on Fedora). get_install_type() is fully injectable so these tests
 never touch the real environment.
 """
-from talktype.update_checker import get_install_type, get_update_guidance
+from talktype.update_checker import (
+    get_install_type, get_update_guidance, get_package_asset,
+    package_install_argv,
+)
 
 
 def test_flatpak_detected_from_env():
@@ -49,31 +52,73 @@ def test_dev_checkout():
                             pkg_query=lambda: None) == "dev"
 
 
-def test_guidance_appimage_can_auto_update():
+def test_guidance_appimage_swaps_in_place():
     g = get_update_guidance("appimage", "0.8.0")
+    assert g["update_method"] == "appimage_swap"
     assert g["can_auto_update"] is True
 
 
-def test_guidance_rpm_gives_dnf_command_no_auto():
+def test_guidance_rpm_uses_pkexec_package():
     g = get_update_guidance("rpm", "0.8.0")
-    assert g["can_auto_update"] is False
-    assert "dnf" in g["command"]
+    assert g["update_method"] == "pkexec_package"
+    assert g["can_auto_update"] is True
     assert "0.8.0" in g["message"]
 
 
-def test_guidance_deb_gives_apt_command():
+def test_guidance_deb_uses_pkexec_package():
     g = get_update_guidance("deb", "0.8.0")
-    assert g["can_auto_update"] is False
-    assert "apt" in g["command"]
+    assert g["update_method"] == "pkexec_package"
+    assert g["can_auto_update"] is True
 
 
-def test_guidance_aur_gives_helper_command():
+def test_guidance_aur_is_manual_with_helper_command():
     g = get_update_guidance("aur", "0.8.0")
+    assert g["update_method"] == "manual"
     assert g["can_auto_update"] is False
     assert "talktype-appimage" in g["command"]
 
 
-def test_guidance_flatpak_gives_flatpak_command():
+def test_guidance_flatpak_is_manual_with_flatpak_command():
     g = get_update_guidance("flatpak", "0.8.0")
-    assert g["can_auto_update"] is False
+    assert g["update_method"] == "manual"
     assert "flatpak update" in g["command"]
+
+
+def test_package_asset_picks_rpm():
+    rel = {"rpm_url": "http://x/talktype-0.8.0-1.x86_64.rpm", "rpm_name": "talktype.rpm",
+           "deb_url": "http://x/t.deb"}
+    url, name = get_package_asset(rel, "rpm")
+    assert url.endswith(".rpm") and name == "talktype.rpm"
+
+
+def test_package_asset_picks_deb():
+    rel = {"rpm_url": "http://x/t.rpm", "deb_url": "http://x/talktype_0.8.0_amd64.deb"}
+    url, _ = get_package_asset(rel, "deb")
+    assert url.endswith(".deb")
+
+
+def test_install_argv_rpm_prefers_dnf():
+    argv = package_install_argv("rpm", "/tmp/t.rpm", which=lambda c: "/usr/bin/" + c)
+    assert argv == ["pkexec", "dnf", "install", "-y", "/tmp/t.rpm"]
+
+
+def test_install_argv_rpm_falls_back_to_zypper():
+    which = lambda c: "/usr/bin/zypper" if c == "zypper" else None
+    argv = package_install_argv("rpm", "/tmp/t.rpm", which=which)
+    assert argv[:3] == ["pkexec", "zypper", "--non-interactive"]
+
+
+def test_install_argv_deb_prefers_apt():
+    argv = package_install_argv("deb", "/tmp/t.deb", which=lambda c: "/usr/bin/" + c)
+    assert argv == ["pkexec", "apt", "install", "-y", "/tmp/t.deb"]
+
+
+def test_install_argv_deb_falls_back_to_dpkg():
+    which = lambda c: "/usr/bin/dpkg" if c == "dpkg" else None
+    argv = package_install_argv("deb", "/tmp/t.deb", which=which)
+    assert argv == ["pkexec", "dpkg", "-i", "/tmp/t.deb"]
+
+
+def test_install_argv_unsupported_returns_none():
+    assert package_install_argv("aur", "/tmp/x", which=lambda c: None) is None
+    assert package_install_argv("rpm", "/tmp/x", which=lambda c: None) is None

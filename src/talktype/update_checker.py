@@ -259,9 +259,11 @@ def fetch_latest_release() -> Optional[dict]:
                 "appimage_url": None,
                 "extension_url": None,
                 "checksums_url": None,
+                "rpm_url": None,
+                "deb_url": None,
             }
 
-            # Find AppImage, extension, and checksums URLs in assets
+            # Find AppImage, package, extension, and checksums URLs in assets
             for asset in result["assets"]:
                 name = asset.get("name", "").lower()
                 url = asset.get("browser_download_url", "")
@@ -271,6 +273,12 @@ def fetch_latest_release() -> Optional[dict]:
                 elif name.endswith(".appimage"):
                     result["appimage_url"] = url
                     result["appimage_name"] = asset.get("name", "")
+                elif name.endswith(".rpm"):
+                    result["rpm_url"] = url
+                    result["rpm_name"] = asset.get("name", "")
+                elif name.endswith(".deb"):
+                    result["deb_url"] = url
+                    result["deb_name"] = asset.get("name", "")
                 elif "extension" in name and name.endswith(".zip"):
                     result["extension_url"] = url
 
@@ -642,31 +650,35 @@ def get_install_type(*, appimage_env=None, flatpak_env=None,
 
 def get_update_guidance(install_type: str, latest_version: str,
                         release_url: str = "") -> dict:
-    """Human guidance for updating a given install type. Self-managed AppImages
-    can auto-update; everything else returns the correct manual command so the
-    updater never tries to download and run an AppImage on a package install.
-    Returns a dict: can_auto_update, title, message, command, release_url.
+    """How to update a given install type. Returns a dict with:
+      update_method: 'appimage_swap' (download+swap the AppImage in place),
+                     'pkexec_package' (download the .rpm/.deb, install as root
+                     via a PolicyKit password prompt), or 'manual' (show the
+                     command; the app can't do it safely).
+      can_auto_update: True for appimage_swap and pkexec_package.
+      title, message: user-facing text. command: copy-paste command for manual.
     """
     v = latest_version
     if install_type == "appimage":
-        return {"can_auto_update": True, "title": "Update Available",
+        return {"update_method": "appimage_swap", "can_auto_update": True,
+                "title": "Update Available",
                 "message": f"TalkType {v} is available.",
                 "command": None, "release_url": release_url}
-    if install_type == "rpm":
-        cmd = f"sudo dnf install ./talktype-{v}-1.x86_64.rpm"
-        msg = (f"TalkType {v} is available. You installed the RPM package — "
-               f"download the new .rpm from the release page, then install it:")
-    elif install_type == "deb":
-        cmd = f"sudo apt install ./talktype_{v}_amd64.deb"
-        msg = (f"TalkType {v} is available. You installed the DEB package — "
-               f"download the new .deb from the release page, then install it:")
-    elif install_type == "aur":
+    if install_type in ("rpm", "deb"):
+        return {"update_method": "pkexec_package", "can_auto_update": True,
+                "title": "Update Available",
+                "message": (f"TalkType {v} is available. TalkType can download and "
+                            f"install it for you — your system will ask for your "
+                            f"password to complete the install."),
+                "command": None, "release_url": release_url}
+    if install_type == "aur":
         cmd = "yay -S talktype-appimage   # or: paru -S talktype-appimage"
         msg = (f"TalkType {v} is available. You installed from the AUR — "
                f"update with your AUR helper:")
     elif install_type == "flatpak":
         cmd = "flatpak update io.github.ronb1964.TalkType"
-        msg = f"TalkType {v} is available. Update through Flatpak:"
+        msg = (f"TalkType {v} is available. Update through Flatpak (your software "
+               f"center may also update it automatically):")
     elif install_type == "dev":
         cmd = "git pull   # in your TalkType project folder"
         msg = (f"TalkType {v} is available. You're running the development "
@@ -675,8 +687,78 @@ def get_update_guidance(install_type: str, latest_version: str,
         cmd = None
         msg = (f"TalkType {v} is available. Please update using your system's "
                f"package manager, or download it from the release page.")
-    return {"can_auto_update": False, "title": "Update Available",
+    return {"update_method": "manual", "can_auto_update": False,
+            "title": "Update Available",
             "message": msg, "command": cmd, "release_url": release_url}
+
+
+def get_package_asset(release: dict, install_type: str) -> Tuple[Optional[str], Optional[str]]:
+    """(download_url, filename) of the .rpm/.deb asset for this install type."""
+    if install_type == "rpm":
+        return (release.get("rpm_url"), release.get("rpm_name", "talktype-update.rpm"))
+    if install_type == "deb":
+        return (release.get("deb_url"), release.get("deb_name", "talktype-update.deb"))
+    return (None, None)
+
+
+def package_install_argv(install_type: str, package_path: str,
+                         which: Optional[Callable[[str], Optional[str]]] = None):
+    """The argv to install a downloaded package as root via pkexec, choosing the
+    system package manager (so dependencies resolve). None if unsupported.
+    `which` is injectable for testing."""
+    if which is None:
+        import shutil
+        which = shutil.which
+    if install_type == "rpm":
+        if which("dnf"):
+            return ["pkexec", "dnf", "install", "-y", package_path]
+        if which("zypper"):
+            return ["pkexec", "zypper", "--non-interactive", "install", package_path]
+        if which("rpm"):
+            return ["pkexec", "rpm", "-U", package_path]
+    elif install_type == "deb":
+        if which("apt"):
+            return ["pkexec", "apt", "install", "-y", package_path]
+        if which("apt-get"):
+            return ["pkexec", "apt-get", "install", "-y", package_path]
+        if which("dpkg"):
+            return ["pkexec", "dpkg", "-i", package_path]
+    return None
+
+
+def install_package_update(package_path: str, install_type: str) -> Tuple[bool, str]:
+    """Install a downloaded .rpm/.deb as root via pkexec (PolicyKit prompts for
+    the password). Returns (success, message). Does NOT restart TalkType."""
+    import subprocess
+    argv = package_install_argv(install_type, package_path)
+    if not argv:
+        return (False, "No supported package manager was found to install the update.")
+    try:
+        proc = subprocess.run(argv, capture_output=True, text=True)
+    except FileNotFoundError:
+        return (False, "pkexec (PolicyKit) is not available. Please install the "
+                       "update through your package manager.")
+    if proc.returncode == 0:
+        return (True, "Update installed. Restart TalkType to use the new version.")
+    if proc.returncode == 126:
+        return (False, "Authorization was cancelled — the update was not installed.")
+    if proc.returncode == 127:
+        return (False, "Could not start the installer (authorization failed).")
+    detail = (proc.stderr or proc.stdout or "").strip()
+    return (False, f"Install failed: {detail or ('exit code ' + str(proc.returncode))}")
+
+
+def restart_via_launcher() -> Tuple[bool, str]:
+    """Re-exec the packaged /usr/bin/talktype launcher to run the new version.
+    Only meaningful for package installs. Replaces the current process on success."""
+    launcher = "/usr/bin/talktype"
+    if not os.path.exists(launcher):
+        return (False, f"Launcher not found at {launcher}; please restart TalkType manually.")
+    try:
+        os.execv(launcher, [launcher, "tray"])
+    except Exception as e:  # pragma: no cover - execv normally never returns
+        return (False, f"Could not restart automatically: {e}")
+    return (True, "restarting")
 
 
 def install_update_and_restart(

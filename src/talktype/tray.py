@@ -1401,11 +1401,17 @@ class DictationTray:
         if release.get("html_url"):
             view_btn = dialog.add_button("View on GitHub", Gtk.ResponseType.ACCEPT)
 
-        # Only a self-managed AppImage can be swapped in place. For package/AUR/
-        # Flatpak installs, "View on GitHub" (the release page) is the action.
-        if has_update and release.get("appimage_url") and guidance["can_auto_update"]:
-            download_btn = dialog.add_button("Download Update", Gtk.ResponseType.YES)
-            download_btn.get_style_context().add_class("suggested-action")
+        # Route each install type to the right update action:
+        #  appimage_swap  -> download the AppImage and swap it in place
+        #  pkexec_package -> download the .rpm/.deb and install it as root
+        #  manual         -> just point to the GitHub release page
+        method = guidance["update_method"]
+        if has_update and method == "appimage_swap" and release.get("appimage_url"):
+            btn = dialog.add_button("Download Update", Gtk.ResponseType.YES)
+            btn.get_style_context().add_class("suggested-action")
+        elif has_update and method == "pkexec_package":
+            btn = dialog.add_button("Download & Install", Gtk.ResponseType.APPLY)
+            btn.get_style_context().add_class("suggested-action")
         elif has_update and release.get("html_url"):
             view_btn.get_style_context().add_class("suggested-action")
 
@@ -1418,6 +1424,9 @@ class DictationTray:
             elif response == Gtk.ResponseType.YES:
                 dlg.destroy()
                 self._download_update(release)
+            elif response == Gtk.ResponseType.APPLY:
+                dlg.destroy()
+                self._download_and_install_package(release, install_type)
             else:
                 dlg.destroy()
         dialog.connect("response", _on_update_response)
@@ -1551,6 +1560,12 @@ class DictationTray:
         # Start download
         thread = threading.Thread(target=do_download, daemon=True)
         thread.start()
+
+    def _download_and_install_package(self, release, install_type):
+        """Download the correct .rpm/.deb and install it as root via pkexec,
+        then offer to restart. Delegates to the shared update_ui flow."""
+        from . import update_ui
+        update_ui.run_package_update(release, install_type)
 
     def auto_check_for_updates(self):
         """
