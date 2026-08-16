@@ -29,11 +29,11 @@ modules:
         url: https://github.com/PortAudio/portaudio.git
         tag: v19.7.0
 
-  # Tray icon library: classic libappindicator (flathub shared-modules) — provides
-  # the AppIndicator3 typelib + libappindicator3.so.1 the runtime lacks (also
-  # builds libdbusmenu/libindicator/intltool/dbus-glib). tray.py prefers
-  # AyatanaAppIndicator3 and falls back to this inside the sandbox.
-  - shared-modules/libappindicator/libappindicator-gtk3-introspection-12.10.json
+  # Tray icon library: libayatana-appindicator (flathub shared-modules) — provides
+  # the AyatanaAppIndicator3 typelib the runtime lacks (also builds
+  # libdbusmenu/ayatana-ido/libayatana-indicator/intltool). This is exactly what
+  # tray.py requires unguarded, matching the AppImage/.deb/.rpm dependency.
+  - shared-modules/libayatana-appindicator/libayatana-appindicator-gtk3.json
 
   # Python ML/audio stack for the runtime's Python 3.13 (mechanism proven in the
   # GPU spike). Self-hosted build: network pip is acceptable here; pin to a
@@ -44,8 +44,11 @@ modules:
       build-args:
         - --share=network
     build-commands:
+      # dbus-python provides the `dbus` module used by dbus_service.py (tray <->
+      # service <-> GNOME extension). It is a system package on host installs but
+      # must be bundled here (builds against the SDK's libdbus + glib).
       - pip3 install --prefix=/app --no-warn-script-location
-          faster-whisper sounddevice evdev pyperclip toml
+          faster-whisper sounddevice evdev pyperclip toml dbus-python
 
   # The app itself: source + launcher + AppStream metadata.
   - name: talktype

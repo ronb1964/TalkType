@@ -6,23 +6,17 @@ os.environ["HF_HUB_DISABLE_XET"] = "1"
 
 import gi
 gi.require_version("Gtk", "3.0")
+# Ayatana is the maintained successor to the dead libappindicator project, and
+# it is what build-deb.sh and build-rpm.sh actually declare as a dependency.
+# The old "AppIndicator3" typelib references libappindicator3.so.1, a library
+# Debian/Ubuntu still provide as a compat shim but Fedora does not ship at all —
+# so bundling the old typelib crashed the tray on launch on Fedora. Imported
+# under the historical name to keep the call sites below unchanged. The Flatpak
+# bundles libayatana-appindicator too, so this require_version holds everywhere.
+gi.require_version("AyatanaAppIndicator3", "0.1")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gtk, Gdk, GLib
-# Ayatana is the maintained successor to the dead libappindicator project, and
-# it is what build-deb.sh and build-rpm.sh declare as a dependency, so it is
-# preferred on host installs. The old "AppIndicator3" typelib references
-# libappindicator3.so.1, which Fedora hosts do not ship — hence Ayatana on host.
-# Inside the Flatpak we bundle the classic libappindicator (flathub
-# shared-modules), where libappindicator3.so.1 IS present in the sandbox, so that
-# host crash reason does not apply. Both expose an identical Indicator API; alias
-# whichever the environment provides so the call sites below are unchanged. This
-# is graceful degradation — host behavior (Ayatana) is byte-for-byte unchanged.
-try:
-    gi.require_version("AyatanaAppIndicator3", "0.1")
-    from gi.repository import AyatanaAppIndicator3 as AppIndicator3
-except (ValueError, ImportError):
-    gi.require_version("AppIndicator3", "0.1")
-    from gi.repository import AppIndicator3
+from gi.repository import AyatanaAppIndicator3 as AppIndicator3
 import subprocess
 import time
 import sys
