@@ -72,7 +72,19 @@ def _notify(title: str, body: str):
 
 # --- Single instance lock (user runtime dir) ---
 def _runtime_dir():
-    return os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+    base = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+    # Inside a Flatpak, XDG_RUNTIME_DIR (/run/user/N) is shared with the host, so
+    # a host/AppImage service's singleton lock is visible in the sandbox and the
+    # Flatpak service exits as "already running" — dictation never starts. Flatpak
+    # provides a private, per-app tmpfs dir at $XDG_RUNTIME_DIR/app/$FLATPAK_ID;
+    # use it there so the Flatpak's lock never collides with a host instance. On
+    # the host (no FLATPAK_ID) the location is unchanged. Mirrors tray._runtime_dir.
+    fid = os.environ.get("FLATPAK_ID")
+    if fid:
+        app_dir = os.path.join(base, "app", fid)
+        if os.path.isdir(app_dir):
+            return app_dir
+    return base
 
 def _acquire_single_instance():
     """
