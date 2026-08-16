@@ -1605,8 +1605,14 @@ class DictationTray:
                     has_update = result.get("update_available", False)
                     has_ext_update = result.get("extension_update", False)
 
-                    if has_update or has_ext_update:
-                        # Update available - show notification
+                    if has_update:
+                        # Show the SAME actionable dialog the manual check uses
+                        # (Download & Install / View on GitHub) — persistent, and
+                        # identical across the GTK tray and the GNOME extension.
+                        # No surprise Preferences window.
+                        GLib.idle_add(lambda: self._show_update_result_dialog(result))
+                    elif has_ext_update:
+                        # Extension-only update: a quiet notification, no windows.
                         latest = result.get("latest_version", "unknown")
                         GLib.idle_add(lambda: self._show_update_notification(latest, has_update, has_ext_update))
                     else:
@@ -1646,9 +1652,6 @@ class DictationTray:
             ], capture_output=True)
 
             logger.info(f"Showed update notification: {title}")
-
-            # Also open preferences to Updates tab automatically
-            self.open_preferences_updates(None)
 
         except Exception as e:
             logger.error(f"Could not show update notification: {e}")

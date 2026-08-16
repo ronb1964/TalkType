@@ -477,16 +477,20 @@ class TalkTypeIndicator extends PanelMenu.Button {
             return;
         }
 
-        if (updateAvailable || extUpdate) {
-            // Updates available - open Preferences to Updates tab for full experience
-            // This gives users download buttons and progress bars
-            Main.notify('TalkType', 'Update available! Opening Updates...');
+        // The app itself pops the result window for us via the D-Bus
+        // CheckForUpdates handler: either "You're up to date" or the actionable
+        // update dialog (Download & Install / View on GitHub). Opening
+        // Preferences on top of that — the old behaviour — was a redundant,
+        // clunky extra step, so we no longer do it for an app update.
+        if (updateAvailable) {
+            // App dialog handles it; nothing to add here.
+        } else if (extUpdate) {
+            // App is up to date but the GNOME extension has an update — the app
+            // dialog can't offer that, so send the user to the Updates tab.
+            Main.notify('TalkType', 'Extension update available — opening Updates…');
             this._proxy.OpenPreferencesUpdatesRemote();
-        } else {
-            // No updates
-            let extInfo = extCurrent >= 0 ? ` | Extension: v${extCurrent}` : '';
-            Main.notify('TalkType', `You're up to date! (v${currentVersion}${extInfo})`);
         }
+        // else: nothing — the app already showed the "up to date" window.
     }
 
     _updatePresetSelection(activePreset) {
