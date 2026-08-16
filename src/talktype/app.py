@@ -2705,7 +2705,11 @@ def main():
     # SIGUSR2: toggle hotkey test mode (sent by prefs dialog for Test Hotkeys)
     signal.signal(signal.SIGUSR1, _handle_sigusr1)
     signal.signal(signal.SIGUSR2, _handle_sigusr2)
-    _loop_evdev(cfg, input_device_idx)
+
+    # Run the input backend chosen by FLATPAK_ID: evdev+ydotool everywhere
+    # (EvdevInputBackend -> _loop_evdev, unchanged), portals inside a Flatpak.
+    from .input_backends import get_input_backend
+    get_input_backend(cfg=cfg, input_device_idx=input_device_idx).start()
 
 if __name__ == "__main__":
     main()
