@@ -1867,12 +1867,31 @@ class PreferencesWindow:
 
         vbox.pack_start(auto_check_box, False, False, 5)
 
-        # Info text
+        # Info text — reflects how TalkType was installed.
+        install_type = update_checker.get_install_type()
+        if install_type == "appimage":
+            info_markup = (
+                '<span size="small"><b>AppImage location:</b> ~/AppImages/TalkType.AppImage\n'
+                'Updates are downloaded, installed, and TalkType restarts automatically.</span>')
+        elif install_type in ("rpm", "deb", "package"):
+            info_markup = (
+                '<span size="small">Installed from a system package. Updates are '
+                'installed through your package manager — checking here tells you '
+                'when a new version is available.</span>')
+        elif install_type == "aur":
+            info_markup = (
+                '<span size="small">Installed from the AUR. Update with your AUR '
+                'helper (e.g. <tt>yay -S talktype-appimage</tt>).</span>')
+        elif install_type == "flatpak":
+            info_markup = (
+                '<span size="small">Installed as a Flatpak. Update through Flatpak '
+                '(<tt>flatpak update</tt>) or your software center.</span>')
+        else:
+            info_markup = (
+                '<span size="small">Running the development version — update with '
+                '<tt>git pull</tt> in your project folder.</span>')
         info_label = Gtk.Label()
-        info_label.set_markup(
-            '<span size="small"><b>AppImage location:</b> ~/AppImages/TalkType.AppImage\n'
-            'Updates are downloaded, installed, and TalkType restarts automatically.</span>'
-        )
+        info_label.set_markup(info_markup)
         info_label.set_xalign(0)
         info_label.set_line_wrap(True)
         vbox.pack_start(info_label, False, False, 10)
@@ -1948,10 +1967,28 @@ class PreferencesWindow:
 
         self.update_status_label.set_markup("\n".join(status_lines))
 
+        # How TalkType was installed decides whether it can auto-update. Only a
+        # self-managed AppImage can be swapped in place; package/AUR/Flatpak
+        # users get instructions + the release link, never an AppImage download
+        # (which fails on package installs, e.g. missing libfuse.so.2).
+        from . import update_checker
+        install_type = update_checker.get_install_type()
+        guidance = update_checker.get_update_guidance(
+            install_type, latest, release.get("html_url", ""))
+
         # Show/hide buttons based on available updates
         if has_update:
-            if release.get("appimage_url"):
+            if guidance["can_auto_update"] and release.get("appimage_url"):
                 self.download_btn.show()
+            else:
+                self.download_btn.hide()
+                if not guidance["can_auto_update"]:
+                    extra = guidance["message"]
+                    if guidance.get("command"):
+                        cmd = GLib.markup_escape_text(guidance["command"])
+                        extra += f"\n<tt>{cmd}</tt>"
+                    self.update_status_label.set_markup(
+                        "\n".join(status_lines) + "\n\n" + extra)
             if release.get("html_url"):
                 self.view_release_btn.show()
         else:
@@ -1970,6 +2007,13 @@ class PreferencesWindow:
         from . import update_checker
 
         if not self._current_release:
+            return
+
+        # Never download+run an AppImage on a package/AUR/Flatpak install — open
+        # the release page instead so the user updates via their package manager.
+        install_type = update_checker.get_install_type()
+        if not update_checker.get_update_guidance(install_type, "")["can_auto_update"]:
+            update_checker.open_release_page(self._current_release.get("html_url", ""))
             return
 
         url = self._current_release.get("appimage_url")

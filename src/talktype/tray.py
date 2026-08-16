@@ -1301,6 +1301,14 @@ class DictationTray:
         latest = result.get("latest_version", "unknown")
         release = result.get("release", {})
 
+        # How TalkType was installed decides HOW to update. Only a self-managed
+        # AppImage can be swapped in place; .deb/.rpm/AUR/Flatpak users must use
+        # their package manager, so we show instructions instead of downloading
+        # and running an AppImage (which fails, e.g. missing libfuse.so.2).
+        install_type = update_checker.get_install_type()
+        guidance = update_checker.get_update_guidance(
+            install_type, latest, release.get("html_url", ""))
+
         if not has_update:
             # No AppImage update available
             dialog = Gtk.MessageDialog(
@@ -1350,6 +1358,21 @@ class DictationTray:
         version_label.set_halign(Gtk.Align.START)
         content.pack_start(version_label, False, False, 5)
 
+        # For package/AUR/Flatpak installs, explain how to update and show the
+        # exact command (selectable so the user can copy it). No auto-download.
+        if not guidance["can_auto_update"]:
+            how_label = Gtk.Label()
+            how_label.set_line_wrap(True)
+            how_label.set_halign(Gtk.Align.START)
+            how_label.set_markup(guidance["message"])
+            content.pack_start(how_label, False, False, 5)
+            if guidance.get("command"):
+                cmd_entry = Gtk.Entry()
+                cmd_entry.set_text(guidance["command"])
+                cmd_entry.set_editable(False)
+                cmd_entry.get_style_context().add_class("monospace")
+                content.pack_start(cmd_entry, False, False, 0)
+
         # Release notes in scrolled window
         if release.get("body"):
             notes_label = Gtk.Label(label="Release Notes:")
@@ -1378,9 +1401,13 @@ class DictationTray:
         if release.get("html_url"):
             view_btn = dialog.add_button("View on GitHub", Gtk.ResponseType.ACCEPT)
 
-        if has_update and release.get("appimage_url"):
+        # Only a self-managed AppImage can be swapped in place. For package/AUR/
+        # Flatpak installs, "View on GitHub" (the release page) is the action.
+        if has_update and release.get("appimage_url") and guidance["can_auto_update"]:
             download_btn = dialog.add_button("Download Update", Gtk.ResponseType.YES)
             download_btn.get_style_context().add_class("suggested-action")
+        elif has_update and release.get("html_url"):
+            view_btn.get_style_context().add_class("suggested-action")
 
         # Non-blocking (no nested run() loop from the background GTK thread — that can
         # fail to map the window on Wayland). Handle the button response in a callback.
