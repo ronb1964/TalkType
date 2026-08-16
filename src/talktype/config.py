@@ -21,7 +21,26 @@ DEV_MODE = os.environ.get("DEV_MODE") == "1"
 CONFIG_DIR = "talktype-dev" if DEV_MODE else "talktype"
 DATA_DIR = "TalkType-dev" if DEV_MODE else "TalkType"
 
-CONFIG_PATH = os.path.expanduser(f"~/.config/{CONFIG_DIR}/config.toml")
+
+def _config_home():
+    """Base config dir. Inside a Flatpak use the private per-app XDG_CONFIG_HOME
+    so the app never adopts a HOST install's config when the user has granted
+    --filesystem=home (e.g. a global override for GTK theming). On host, keep the
+    historical ~/.config exactly — the FLATPAK_ID gate means zero host change."""
+    if os.environ.get("FLATPAK_ID"):
+        return os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+    return os.path.expanduser("~/.config")
+
+
+def _data_home():
+    """Base data dir. Private per-app XDG_DATA_HOME inside a Flatpak (same reason
+    as _config_home); historical ~/.local/share on host."""
+    if os.environ.get("FLATPAK_ID"):
+        return os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    return os.path.expanduser("~/.local/share")
+
+
+CONFIG_PATH = os.path.join(_config_home(), CONFIG_DIR, "config.toml")
 
 
 class ConfigNotLoadedError(Exception):
@@ -699,9 +718,10 @@ def get_data_dir():
     Get the data directory path based on dev mode.
 
     Returns:
-        str: Path to ~/.local/share/TalkType (production) or ~/.local/share/TalkType-dev (dev mode)
+        str: Path to ~/.local/share/TalkType (production) or ~/.local/share/TalkType-dev (dev mode).
+             Inside a Flatpak this is the private per-app XDG_DATA_HOME/<DATA_DIR>.
     """
-    return os.path.expanduser(f"~/.local/share/{DATA_DIR}")
+    return os.path.join(_data_home(), DATA_DIR)
 
 
 # ---------------------------------------------------------------------------
@@ -798,7 +818,7 @@ def find_input_device(mic_substring: str | None) -> int | None:
 
 
 # Custom voice commands configuration
-CUSTOM_COMMANDS_PATH = os.path.expanduser(f"~/.config/{CONFIG_DIR}/custom_commands.toml")
+CUSTOM_COMMANDS_PATH = os.path.join(_config_home(), CONFIG_DIR, "custom_commands.toml")
 
 # True when the last load_custom_commands() could not read an existing file.
 # Same guard as _config_read_failed: an empty dict produced by a read failure

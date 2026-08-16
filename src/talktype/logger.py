@@ -15,7 +15,14 @@ def _log_dir() -> Path:
     never interleave.
     """
     config_dir = "talktype-dev" if os.environ.get("DEV_MODE") == "1" else "talktype"
-    return Path.home() / ".config" / config_dir
+    # Inside a Flatpak use the private per-app XDG_CONFIG_HOME so logs don't land
+    # in (or read from) a HOST install when --filesystem=home is granted. Host
+    # behavior is unchanged (FLATPAK_ID gate). Mirrors config._config_home().
+    if os.environ.get("FLATPAK_ID"):
+        base = Path(os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"))
+    else:
+        base = Path.home() / ".config"
+    return base / config_dir
 
 
 def log_file_path() -> Path:
