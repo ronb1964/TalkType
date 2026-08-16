@@ -1205,6 +1205,20 @@ def _send_select_all_delete():
     time.sleep(0.05)
     return _ydotool_key(["14:1", "14:0"], what="delete")
 
+_OUTPUT_BACKEND = None
+
+
+def _output_backend():
+    """Process-wide OutputBackend, chosen once by FLATPAK_ID. Backend A
+    (ydotool) delegates to _type_text below, so the non-Flatpak path is
+    unchanged; Backend B (libei) is used only inside a Flatpak."""
+    global _OUTPUT_BACKEND
+    if _OUTPUT_BACKEND is None:
+        from .output_backends import get_output_backend
+        _OUTPUT_BACKEND = get_output_backend()
+    return _OUTPUT_BACKEND
+
+
 def _type_text(text: str) -> bool:
     """Type text (handling line-break markers). Returns True if it was
     actually typed into the focused app, False if injection failed."""
@@ -1878,11 +1892,11 @@ def _inject_text(text: str, injection_mode: str, t0: float):
             else:
                 print("\u26a0\ufe0f  AT-SPI insertion failed, falling back to typing")
                 logger.warning("AT-SPI insertion failed, using typing fallback")
-                inject_ok = _type_text(text)
+                inject_ok = _output_backend().type_text(text)
         except Exception as e:
             logger.error(f"AT-SPI insertion error: {e}")
             print("\u26a0\ufe0f  AT-SPI error, falling back to typing")
-            inject_ok = _type_text(text)
+            inject_ok = _output_backend().type_text(text)
 
     # --- Smart hybrid paste (text with line-break markers) ---
     elif use_paste and ("\xa7SHIFT_ENTER\xa7" in text or "\n" in text):
@@ -1920,7 +1934,7 @@ def _inject_text(text: str, injection_mode: str, t0: float):
         else:
             remainder = (marker if needs_break else "") + marker.join(parts[resume_at:])
             print(f"\u2328\ufe0f  Inject (type) remainder len={len(remainder)} [paste failed partway]")
-            if _type_text(remainder):
+            if _output_backend().type_text(remainder):
                 inject_ok = True  # delivered chunks + typed remainder == full text
             else:
                 # Only the chunks before the failure reached the document. Record
@@ -1944,7 +1958,7 @@ def _inject_text(text: str, injection_mode: str, t0: float):
 
     # --- Typing fallback ---
     else:
-        inject_ok = _type_text(text)
+        inject_ok = _output_backend().type_text(text)
         injection_time = time.time() - injection_start
         logger.info(f"TIMING: Typing injection completed in {injection_time:.2f}s")
         logger.info(f"Text injected via typing: {len(text)} chars in {injection_time:.2f}s")
