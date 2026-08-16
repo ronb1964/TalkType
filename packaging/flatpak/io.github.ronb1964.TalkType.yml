@@ -29,8 +29,15 @@ modules:
         url: https://github.com/PortAudio/portaudio.git
         tag: v19.7.0
 
-  # Python ML/audio stack for the runtime's Python 3.12 (proven in the GPU spike).
-  # Self-hosted build: network pip is acceptable here; pin to a requirements lock later.
+  # Tray icon library: classic libappindicator (flathub shared-modules) — provides
+  # the AppIndicator3 typelib + libappindicator3.so.1 the runtime lacks (also
+  # builds libdbusmenu/libindicator/intltool/dbus-glib). tray.py prefers
+  # AyatanaAppIndicator3 and falls back to this inside the sandbox.
+  - shared-modules/libappindicator/libappindicator-gtk3-introspection-12.10.json
+
+  # Python ML/audio stack for the runtime's Python 3.13 (mechanism proven in the
+  # GPU spike). Self-hosted build: network pip is acceptable here; pin to a
+  # requirements lock later for reproducibility.
   - name: python-deps
     buildsystem: simple
     build-options:
