@@ -2711,5 +2711,25 @@ def main():
     from .input_backends import get_input_backend
     get_input_backend(cfg=cfg, input_device_idx=input_device_idx).start()
 
-if __name__ == "__main__":
+def _run_service_entry():
+    """Entry for `python -m talktype.app` (the dictation service).
+
+    `-m talktype.app` executes this file as the module "__main__", but the input
+    backends reach the app via `from . import app` — module "talktype.app", a
+    DIFFERENT object with its own globals. If main() ran here in "__main__"
+    while the recording loop ran over in "talktype.app", every global main()
+    sets (model, _custom_commands, dbus_service, _typing_delay, ...) would be
+    invisible there and transcription would crash with
+    `NameError: name 'model'`.
+
+    Delegate to the package module's main() so the whole service shares ONE
+    namespace — exactly what the AppImage's bin/dictate console script already
+    does with `from talktype.app import main`. This also keeps BB-9's Flatpak
+    (`python3 -m talktype.app`) on the same single-module path.
+    """
+    from talktype.app import main
     main()
+
+
+if __name__ == "__main__":
+    _run_service_entry()
