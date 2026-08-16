@@ -22,6 +22,11 @@ EI_DEVICE_CAP_KEYBOARD = 1 << 2  # = 4
 # --- evdev keycodes (linux/input-event-codes.h) ---
 KEY_LEFTSHIFT = 42
 KEY_SPACE = 57
+KEY_ENTER = 28
+
+# Soft-line-break marker used across TalkType (§SHIFT_ENTER§): type Shift+Enter,
+# not plain Enter, so it doesn't submit in chat apps.
+SHIFT_ENTER_MARKER = "\xa7SHIFT_ENTER\xa7"
 
 _LETTERS = {
     "a": 30, "b": 48, "c": 46, "d": 32, "e": 18, "f": 33, "g": 34, "h": 35,
@@ -144,27 +149,44 @@ class LibeiSession:
                 return True
         return False
 
+    def _emit_key(self, keycode: int, shift: bool):
+        """Press (and release) one key, optionally with Shift held."""
+        ei, ctx, dev = self.ei, self.ctx, self.device
+        if shift:
+            ei.ei_device_keyboard_key(dev, KEY_LEFTSHIFT, True)
+            ei.ei_device_frame(dev, ei.ei_now(ctx))
+        ei.ei_device_keyboard_key(dev, keycode, True)
+        ei.ei_device_frame(dev, ei.ei_now(ctx))
+        ei.ei_device_keyboard_key(dev, keycode, False)
+        ei.ei_device_frame(dev, ei.ei_now(ctx))
+        if shift:
+            ei.ei_device_keyboard_key(dev, KEY_LEFTSHIFT, False)
+            ei.ei_device_frame(dev, ei.ei_now(ctx))
+
     def type_string(self, text: str) -> bool:
-        """Type `text` via libei. Returns False if no device became ready."""
+        """Type `text` via libei. Handles the §SHIFT_ENTER§ soft-break marker
+        (Shift+Enter) and plain newlines (Enter). Returns False if no device
+        became ready."""
         if self.device is None and not self.pump_until_ready():
             return False
         ei, ctx, dev = self.ei, self.ctx, self.device
         ei.ei_device_start_emulating(dev, 1)
-        for ch in text:
-            kc = CHAR_TO_KEYCODE.get(ch)
-            if kc is None:
-                continue  # unsupported character; skip it
-            shift = ch in SHIFT_CHARS
-            if shift:
-                ei.ei_device_keyboard_key(dev, KEY_LEFTSHIFT, True)
-                ei.ei_device_frame(dev, ei.ei_now(ctx))
-            ei.ei_device_keyboard_key(dev, kc, True)
-            ei.ei_device_frame(dev, ei.ei_now(ctx))
-            ei.ei_device_keyboard_key(dev, kc, False)
-            ei.ei_device_frame(dev, ei.ei_now(ctx))
-            if shift:
-                ei.ei_device_keyboard_key(dev, KEY_LEFTSHIFT, False)
-                ei.ei_device_frame(dev, ei.ei_now(ctx))
+        i = 0
+        n = len(text)
+        marker = SHIFT_ENTER_MARKER
+        while i < n:
+            if text.startswith(marker, i):
+                self._emit_key(KEY_ENTER, shift=True)   # soft line break
+                i += len(marker)
+                continue
+            ch = text[i]
+            if ch == "\n":
+                self._emit_key(KEY_ENTER, shift=False)  # hard newline
+            else:
+                kc = CHAR_TO_KEYCODE.get(ch)
+                if kc is not None:  # skip unsupported characters
+                    self._emit_key(kc, ch in SHIFT_CHARS)
+            i += 1
         ei.ei_device_stop_emulating(dev)
         # Keep dispatching briefly so the outgoing frames flush to the socket.
         for _ in range(6):
