@@ -164,3 +164,8 @@ archive/
 
 # Playwright MCP automation logs
 .playwright-mcp/
+
+# Flatpak build artifacts
+.flatpak-build/
+.flatpak-builder/
+.flatpak-repo/

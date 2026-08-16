@@ -1,0 +1,58 @@
+app-id: io.github.ronb1964.TalkType
+runtime: org.gnome.Platform
+runtime-version: '50'
+sdk: org.gnome.Sdk
+command: talktype-launcher
+
+finish-args:
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  - --socket=pulseaudio
+  - --device=dri
+  - --share=network
+  - --talk-name=org.freedesktop.portal.Desktop
+
+modules:
+  # PortAudio — sounddevice dlopens libportaudio.so.2 at import; not in the runtime.
+  - name: portaudio
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DPA_BUILD_SHARED=ON
+      - -DPA_BUILD_STATIC=OFF
+      # PortAudio 19.7's CMakeLists predates CMake 4.x's minimum-policy floor;
+      # the GNOME 50 SDK ships CMake 4.x, which refuses cmake_minimum_required < 3.5.
+      - -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+    sources:
+      - type: git
+        url: https://github.com/PortAudio/portaudio.git
+        tag: v19.7.0
+
+  # Python ML/audio stack for the runtime's Python 3.12 (proven in the GPU spike).
+  # Self-hosted build: network pip is acceptable here; pin to a requirements lock later.
+  - name: python-deps
+    buildsystem: simple
+    build-options:
+      build-args:
+        - --share=network
+    build-commands:
+      - pip3 install --prefix=/app --no-warn-script-location
+          faster-whisper sounddevice evdev pyperclip toml
+
+  # The app itself: source + launcher + AppStream metadata.
+  - name: talktype
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 talktype-launcher /app/bin/talktype-launcher
+      - mkdir -p /app/lib && cp -r talktype /app/lib/talktype
+      - install -Dm644 io.github.ronb1964.TalkType.appdata.xml
+          /app/share/metainfo/io.github.ronb1964.TalkType.appdata.xml
+    sources:
+      - type: dir
+        path: ../../src
+        dest: .
+      - type: file
+        path: ../../io.github.ronb1964.TalkType.appdata.xml
+      - type: file
+        path: talktype-launcher
