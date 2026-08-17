@@ -12,6 +12,13 @@ finish-args:
   - --device=dri
   - --share=network
   - --talk-name=org.freedesktop.portal.Desktop
+  # Tray icon (StatusNotifier/AppIndicator), its menu, and notifications. The
+  # sandbox D-Bus proxy blocks these host services unless named, so without them
+  # the AppIndicator never registers and the tray icon is silently invisible.
+  - --talk-name=org.kde.StatusNotifierWatcher
+  - --talk-name=com.canonical.AppMenu.Registrar
+  - --talk-name=org.freedesktop.Notifications
+  - --filesystem=xdg-run/tray-icon:create
 
 modules:
   # PortAudio — sounddevice dlopens libportaudio.so.2 at import; not in the runtime.
