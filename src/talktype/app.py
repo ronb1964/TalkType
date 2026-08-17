@@ -1546,6 +1546,11 @@ def _determine_injection_method(injection_mode: str) -> tuple[str, str, str]:
     (which works universally in terminals and regular apps), we default to paste
     mode and skip slow AT-SPI detection.
     """
+    # Inside a Flatpak, clipboard-paste needs wl-copy (not bundled) and the libei
+    # output backend types directly — always type, never attempt paste.
+    if os.environ.get("FLATPAK_ID"):
+        return ("type", False, "Flatpak: libei typing")
+
     # If not auto mode, use user's choice directly
     if injection_mode.lower() != "auto":
         if injection_mode.lower() == "paste":
