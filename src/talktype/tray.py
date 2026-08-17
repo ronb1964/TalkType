@@ -1865,6 +1865,11 @@ class DictationTray:
 
 def _ensure_ydotoold_running():
     """Ensure ydotoold daemon is running for text injection."""
+    # In a Flatpak, typing goes through the libei output backend (Backend B), not
+    # ydotool — the daemon isn't bundled, so don't try to start it (or log a scary
+    # "ydotoold not found" warning).
+    if os.environ.get("FLATPAK_ID"):
+        return
     try:
         # Check if ydotoold is already running
         result = subprocess.run(["pgrep", "-x", "ydotoold"],
