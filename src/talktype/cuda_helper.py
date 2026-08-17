@@ -23,7 +23,16 @@ SUCCESS_DIALOG_DELAY_MS = 1000
 ERROR_DIALOG_DELAY_MS = 2000
 
 def detect_nvidia_gpu():
-    """Check if NVIDIA GPU is present using nvidia-smi."""
+    """Check if an NVIDIA GPU is present.
+
+    Inside a Flatpak nvidia-smi is not in the sandbox, so detect the driver by
+    its device node instead — /dev/nvidiactl (and /dev/nvidia0) are exposed by
+    the manifest's --device=dri. This is also independent of CUDA_VISIBLE_DEVICES
+    (which torch_init clears on first run before any CUDA libs exist). On the host
+    the nvidia-smi check is unchanged.
+    """
+    if os.environ.get("FLATPAK_ID"):
+        return os.path.exists("/dev/nvidiactl") or os.path.exists("/dev/nvidia0")
     try:
         result = subprocess.run(['nvidia-smi', '--query-gpu=name', '--format=csv,noheader'],
                               capture_output=True, text=True, timeout=NVIDIA_SMI_TIMEOUT)
