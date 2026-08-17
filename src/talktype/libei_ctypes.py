@@ -13,9 +13,14 @@ import ctypes as C
 import select
 import time
 
+from .logger import setup_logger
+
+_log = setup_logger(__name__)
+
 # --- libei enums (from upstream libei.h) ---
 EI_EVENT_SEAT_ADDED = 3
 EI_EVENT_DEVICE_ADDED = 5
+EI_EVENT_DEVICE_PAUSED = 7
 EI_EVENT_DEVICE_RESUMED = 8
 EI_DEVICE_CAP_KEYBOARD = 1 << 2  # = 4
 
@@ -118,36 +123,52 @@ class LibeiSession:
             raise RuntimeError(f"ei_setup_backend_fd failed rc={rc}")
         self.fd_ei = self.ei.ei_get_fd(self.ctx)
         self.device = None
+        # start_emulating takes a sequence number that must be unique/increasing
+        # per call, or the compositor ignores every emulation after the first.
+        self._seq = 0
+
+    def _handle_event(self, ev):
+        """Process one libei event: bind the keyboard on SEAT_ADDED, track the
+        device on RESUMED/PAUSED."""
+        etype = self.ei.ei_event_get_type(ev)
+        if etype == EI_EVENT_SEAT_ADDED:
+            seat = self.ei.ei_event_get_seat(ev)
+            # variadic call: explicit ctypes objects or the 64-bit seat pointer
+            # truncates to 32 bits -> SIGSEGV.
+            self.ei.ei_seat_bind_capabilities(
+                C.c_void_p(seat), C.c_uint(EI_DEVICE_CAP_KEYBOARD), C.c_void_p(0))
+        elif etype == EI_EVENT_DEVICE_RESUMED:
+            dev = self.ei.ei_event_get_device(ev)
+            if hasattr(self.ei, "ei_device_ref"):
+                self.ei.ei_device_ref(dev)  # keep it alive
+            self.device = dev
+        elif etype == EI_EVENT_DEVICE_PAUSED:
+            self.device = None
+
+    def _drain(self):
+        """Dispatch pending traffic and process every queued event. Servicing the
+        connection like this — continuously, not only when typing — is what keeps
+        a persistent libei sender alive; an idle, undispatched sender has its
+        keystrokes silently dropped by the compositor (the bug this fixes)."""
+        self.ei.ei_dispatch(self.ctx)
+        while True:
+            ev = self.ei.ei_get_event(self.ctx)
+            if not ev:
+                break
+            self._handle_event(ev)
+            self.ei.ei_event_unref(ev)
 
     def pump_until_ready(self, timeout: float = 10.0) -> bool:
-        """Run the ei event loop until the keyboard device is ready to emulate.
-        Binds the keyboard capability on SEAT_ADDED and captures the device on
-        DEVICE_RESUMED. Returns True once a device is available."""
+        """Block (via select) until the keyboard device is ready to emulate.
+        Used for the initial handshake before the GLib pump takes over."""
         deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
+        while time.monotonic() < deadline and self.device is None:
             select.select([self.fd_ei], [], [], 0.5)
-            self.ei.ei_dispatch(self.ctx)
-            while True:
-                ev = self.ei.ei_get_event(self.ctx)
-                if not ev:
-                    break
-                etype = self.ei.ei_event_get_type(ev)
-                if etype == EI_EVENT_SEAT_ADDED:
-                    seat = self.ei.ei_event_get_seat(ev)
-                    # variadic call: explicit ctypes objects or the seat pointer
-                    # truncates to 32 bits -> SIGSEGV.
-                    self.ei.ei_seat_bind_capabilities(
-                        C.c_void_p(seat), C.c_uint(EI_DEVICE_CAP_KEYBOARD),
-                        C.c_void_p(0))
-                elif etype == EI_EVENT_DEVICE_RESUMED:
-                    dev = self.ei.ei_event_get_device(ev)
-                    if hasattr(self.ei, "ei_device_ref"):
-                        self.ei.ei_device_ref(dev)  # keep it alive
-                    self.device = dev
-                self.ei.ei_event_unref(ev)
-            if self.device:
-                return True
-        return False
+            self._drain()
+        if self.device is None:
+            _log.warning("libei device did not become ready within %.0fs", timeout)
+            return False
+        return True
 
     def _emit_key(self, keycode: int, shift: bool):
         """Press (and release) one key, optionally with Shift held."""
@@ -167,10 +188,14 @@ class LibeiSession:
         """Type `text` via libei. Handles the §SHIFT_ENTER§ soft-break marker
         (Shift+Enter) and plain newlines (Enter). Returns False if no device
         became ready."""
-        if self.device is None and not self.pump_until_ready():
+        # Service the connection and refresh device state right before emitting.
+        self._drain()
+        if self.device is None and not self.pump_until_ready(timeout=2.0):
+            _log.warning("[libei] type_string: no device after drain")
             return False
         ei, ctx, dev = self.ei, self.ctx, self.device
-        ei.ei_device_start_emulating(dev, 1)
+        self._seq += 1
+        ei.ei_device_start_emulating(dev, self._seq)
         i = 0
         n = len(text)
         marker = SHIFT_ENTER_MARKER

@@ -37,9 +37,6 @@ class LibeiOutputBackend(OutputBackend):
     IFACE = "org.freedesktop.portal.RemoteDesktop"
     KEYBOARD = 1  # RemoteDesktop DeviceType bitmask: KEYBOARD=1, POINTER=2
 
-    def __init__(self):
-        self._session = None  # libei_ctypes.LibeiSession once established
-
     def _token_path(self) -> str:
         import os
         from .config import get_data_dir
@@ -60,38 +57,23 @@ class LibeiOutputBackend(OutputBackend):
         except OSError as e:
             logging.getLogger(__name__).debug("could not save restore token: %s", e)
 
-    def ensure_session(self) -> bool:
-        """Establish the RemoteDesktop/EIS session + libei context if needed.
-        Returns True when a typing device is ready. Never raises."""
-        import logging
-        logger = logging.getLogger(__name__)
-        if self._session is not None:
-            return True
+    def _close_session(self, session_path):
+        """Close a RemoteDesktop portal session (one is created per dictation)."""
+        import gi
+        gi.require_version("Gio", "2.0")
+        from gi.repository import Gio
+        from . import portal_common as pc
         try:
-            fd = self._run_handshake()
-        except Exception as e:
-            logger.error("RemoteDesktop portal handshake failed: %s", e)
-            return False
-        if fd is None:
-            logger.warning("RemoteDesktop portal did not yield an EIS fd "
-                           "(permission denied?)")
-            return False
-        try:
-            from . import libei_ctypes
-            session = libei_ctypes.LibeiSession(fd)
-            if not session.pump_until_ready():
-                logger.warning("libei device did not become ready")
-                return False
-            self._session = session
-            return True
-        except Exception as e:
-            logger.error("libei session setup failed: %s", e)
-            return False
+            pc.session_bus().call_sync(
+                pc.BUS_NAME, session_path, "org.freedesktop.portal.Session",
+                "Close", None, None, Gio.DBusCallFlags.NONE, 2000, None)
+        except Exception:
+            pass
 
     def _run_handshake(self):
         """Drive CreateSession -> SelectDevices -> Start -> ConnectToEIS on a
-        GLib loop; returns the EIS fd (int) or None. Uses a saved restore_token
-        to skip the approval dialog on later launches."""
+        GLib loop; returns (EIS fd or None, session handle path). Uses a saved
+        restore_token to skip the approval dialog after the first time."""
         import gi
         gi.require_version("Gio", "2.0")
         from gi.repository import Gio, GLib
@@ -154,17 +136,42 @@ class LibeiOutputBackend(OutputBackend):
 
         create_session()
         loop.run()
-        return st["fd"]
+        return st["fd"], st["session"]
 
     def type_text(self, text: str) -> bool:
+        """Type via a FRESH RemoteDesktop/EIS session per call. A persistent
+        session only ever types once — KDE's EIS delivers keystrokes on a fresh
+        DEVICE_RESUMED, so re-establishing per dictation is what types reliably
+        (proven by the portal spike). The saved restore_token means the approval
+        dialog appears only the first time. Never raises."""
         import logging
+        import os
+        logger = logging.getLogger(__name__)
+        fd = None
+        session_path = None
         try:
-            if not self.ensure_session():
+            fd, session_path = self._run_handshake()
+            if fd is None:
+                logger.warning("RemoteDesktop portal did not yield an EIS fd "
+                               "(permission denied?)")
                 return False
-            return bool(self._session.type_string(text))
+            from . import libei_ctypes
+            session = libei_ctypes.LibeiSession(fd)
+            if not session.pump_until_ready():
+                logger.warning("libei device did not become ready")
+                return False
+            return bool(session.type_string(text))
         except Exception as e:
-            logging.getLogger(__name__).error("libei type_text failed: %s", e)
+            logger.error("libei type_text failed: %s", e)
             return False
+        finally:
+            if session_path:
+                self._close_session(session_path)
+            if fd is not None:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
 
 
 def get_output_backend(flatpak_id=None) -> OutputBackend:
