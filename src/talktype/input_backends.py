@@ -56,23 +56,23 @@ class PortalInputBackend(InputBackend):
             return None
 
     def _on_activated(self, conn, sender, path, iface, signal, params):
-        if self._shortcut_id(params) != "dictate":
-            return
+        # Two shortcuts are always live, mirroring Backend A where the hold key
+        # (F8) and the toggle key (F9) both work at once — not a single mode-gated
+        # key. "dictate_hold" = press-and-hold; "dictate_toggle" = tap on/off.
+        sid = self._shortcut_id(params)
         from . import app
-        if getattr(self.cfg, "mode", "hold") == "hold":
+        if sid == "dictate_hold":
             app._cmd_start_recording.set()
-        else:  # tap-to-toggle: flip on each press, ignore release
+        elif sid == "dictate_toggle":
             self._recording = not self._recording
             (app._cmd_start_recording if self._recording
              else app._cmd_stop_recording).set()
 
     def _on_deactivated(self, conn, sender, path, iface, signal, params):
-        if self._shortcut_id(params) != "dictate":
-            return
-        from . import app
-        if getattr(self.cfg, "mode", "hold") == "hold":
+        # Only the hold shortcut stops on release; toggle ignores key release.
+        if self._shortcut_id(params) == "dictate_hold":
+            from . import app
             app._cmd_stop_recording.set()
-        # toggle mode ignores key release
 
     def _tick(self):
         from . import app
@@ -107,8 +107,16 @@ class PortalInputBackend(InputBackend):
             bind()
 
         def bind():
-            shortcuts = [("dictate",
-                          {"description": GLib.Variant("s", "TalkType: dictate")})]
+            # Register BOTH keys, always live (Backend A parity): hold-to-talk and
+            # tap-to-toggle. The desktop lets the user assign a key to each.
+            # Descriptions are short: desktops group these under the app name
+            # ("TalkType"), so a "TalkType:" prefix would read redundantly.
+            shortcuts = [
+                ("dictate_hold",
+                 {"description": GLib.Variant("s", "Hold to talk (push-to-talk)")}),
+                ("dictate_toggle",
+                 {"description": GLib.Variant("s", "Toggle dictation (tap on / tap off)")}),
+            ]
 
             def builder(token):
                 opts = {"handle_token": GLib.Variant("s", token)}

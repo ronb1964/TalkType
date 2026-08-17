@@ -42,37 +42,51 @@ class _Params:
 
 
 class _Cfg:
-    def __init__(self, mode):
+    def __init__(self, mode="hold"):
         self.mode = mode
 
 
-def test_portal_hold_mode_maps_press_and_release():
+def test_portal_hold_shortcut_maps_press_and_release():
+    """dictate_hold = push-to-talk: press starts, release stops (like Backend A F8)."""
     from talktype import app
-    b = PortalInputBackend(_Cfg("hold"))
+    b = PortalInputBackend(_Cfg())
     app._cmd_start_recording.clear()
     app._cmd_stop_recording.clear()
-    b._on_activated(None, None, None, None, None, _Params("dictate"))
+    b._on_activated(None, None, None, None, None, _Params("dictate_hold"))
     assert app._cmd_start_recording.is_set()
-    b._on_deactivated(None, None, None, None, None, _Params("dictate"))
+    b._on_deactivated(None, None, None, None, None, _Params("dictate_hold"))
     assert app._cmd_stop_recording.is_set()
 
 
-def test_portal_toggle_mode_flips_on_press():
+def test_portal_toggle_shortcut_flips_on_press_and_ignores_release():
+    """dictate_toggle = tap on/off (like Backend A F9): each press flips, release ignored."""
     from talktype import app
-    b = PortalInputBackend(_Cfg("toggle"))
+    b = PortalInputBackend(_Cfg())
     app._cmd_start_recording.clear()
     app._cmd_stop_recording.clear()
     b._recording = False
-    b._on_activated(None, None, None, None, None, _Params("dictate"))  # first press starts
+    b._on_activated(None, None, None, None, None, _Params("dictate_toggle"))  # start
     assert app._cmd_start_recording.is_set()
     app._cmd_start_recording.clear()
-    b._on_activated(None, None, None, None, None, _Params("dictate"))  # second press stops
+    b._on_deactivated(None, None, None, None, None, _Params("dictate_toggle"))  # ignored
+    assert not app._cmd_stop_recording.is_set()
+    b._on_activated(None, None, None, None, None, _Params("dictate_toggle"))  # stop
     assert app._cmd_stop_recording.is_set()
+
+
+def test_portal_hold_and_toggle_are_both_live():
+    """Both shortcuts work regardless of cfg.mode — parity with Backend A, where
+    F8 (hold) and F9 (toggle) are always active at the same time."""
+    from talktype import app
+    b = PortalInputBackend(_Cfg("toggle"))  # mode must not gate either key
+    app._cmd_start_recording.clear()
+    b._on_activated(None, None, None, None, None, _Params("dictate_hold"))
+    assert app._cmd_start_recording.is_set()
 
 
 def test_portal_ignores_other_shortcut_ids():
     from talktype import app
-    b = PortalInputBackend(_Cfg("hold"))
+    b = PortalInputBackend(_Cfg())
     app._cmd_start_recording.clear()
     b._on_activated(None, None, None, None, None, _Params("something-else"))
     assert not app._cmd_start_recording.is_set()
