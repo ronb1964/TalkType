@@ -1946,6 +1946,15 @@ def main():
                 # Show unified welcome dialog with all setup options
                 result = show_welcome_and_install()
 
+                # Unsupported desktop (no GlobalShortcuts portal): the user can only
+                # quit — the app cannot function here, so exit instead of starting a
+                # dead service. First run is left unmarked so a later install on a
+                # supported desktop still onboards.
+                if result and result.get('quit'):
+                    logger.info("Onboarding: dictation hotkey unsupported on this desktop - quitting")
+                    tray.quit_app(None)
+                    return False
+
                 # Only mark first run complete if user completed the wizard
                 if result and result.get('continue'):
                     try:

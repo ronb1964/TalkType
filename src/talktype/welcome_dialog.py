@@ -412,24 +412,45 @@ class WelcomeDialog:
         logger.info(f"PortAudio status: installed={self.portaudio_status.get('installed')}, "
                    f"needs_install={self.needs_portaudio_install}")
 
+        # Inside a Flatpak, typing uses the portal + libei path (Backend B): there
+        # is no ydotool/uinput/input-group setup and no reboot. Showing the host
+        # "Typing Setup Required" step there is wrong (and its fixes can't run in
+        # the sandbox). Instead we show a short "Shortcut Setup" step explaining
+        # that the DESKTOP assigns the dictation key.
+        self.is_flatpak = bool(os.environ.get("FLATPAK_ID"))
+
+        # In a Flatpak on a desktop without the GlobalShortcuts portal, the hotkey
+        # can never work — a hard stop. Decide this up front so the dialog can be a
+        # lean "use another package" screen instead of the full welcome.
+        if self.is_flatpak:
+            _supported, self.unsupported_desktop_name = self._shortcut_support()
+            self.hotkey_unsupported = not _supported
+        else:
+            self.hotkey_unsupported = False
+            self.unsupported_desktop_name = ""
+
         # Calculate height based on what sections we'll show
-        # Base height for core content
-        base_height = 700
-        additional_height = 0
-
-        # Add height for each optional section
-        if self.has_gnome:
-            additional_height += 160  # GNOME extension section
-        if self.has_nvidia:
-            additional_height += 180  # CUDA section
-        # Typing setup section shows if either uinput OR ydotoold needs fixing
-        if self.needs_uinput_fix or self.needs_ydotoold_setup:
-            additional_height += 250  # Typing setup section (increased for ydotoold info)
-        # PortAudio setup section
-        if self.needs_portaudio_install:
-            additional_height += 180  # PortAudio section
-
-        self.height = base_height + additional_height
+        if self.hotkey_unsupported:
+            # Lean stop screen: header + the red stop box + quit. No features,
+            # quick-start, CUDA or extension sections — the app can't run here.
+            # Sized to fit the content (Quit visible) without dead space below.
+            self.height = 700
+        else:
+            base_height = 700
+            additional_height = 0
+            if self.has_gnome:
+                additional_height += 160  # GNOME extension section
+            if self.has_nvidia:
+                additional_height += 180  # CUDA section
+            if self.is_flatpak:
+                additional_height += 190  # Shortcut setup section (Flatpak)
+            # Typing setup section shows if either uinput OR ydotoold needs fixing
+            elif self.needs_uinput_fix or self.needs_ydotoold_setup:
+                additional_height += 250  # Typing setup section
+            # PortAudio setup section
+            if self.needs_portaudio_install:
+                additional_height += 180  # PortAudio section
+            self.height = base_height + additional_height
 
         logger.info(f"Welcome dialog: GNOME={self.has_gnome}, NVIDIA={self.has_nvidia}, "
                    f"needs_uinput_fix={self.needs_uinput_fix}, needs_portaudio={self.needs_portaudio_install}")
@@ -438,6 +459,7 @@ class WelcomeDialog:
         self.dialog = None
         self.extension_check = None
         self.cuda_check = None
+        self.required_pulse_box = None  # Flatpak: the red pulsing "Required" warning box
         self.fix_typing_button = None
         self.install_ydotool_button = None
         self.typing_status_label = None
@@ -508,6 +530,33 @@ class WelcomeDialog:
                 background-color: rgba(66, 133, 244, 0.12);
                 box-shadow: 0 0 14px rgba(66, 133, 244, 0.5);
             }
+            /* Required-step (Flatpak shortcut setup): the SAME pulse-N levels, but
+               red, so the "will NOT work until you do this" line pulses hard. */
+            .tt-required {
+                padding: 10px;
+                border-radius: 8px;
+            }
+            .tt-required.pulse-0 { background-color: rgba(255, 80, 80, 0.10); box-shadow: 0 0 8px rgba(255, 80, 80, 0.20); }
+            .tt-required.pulse-1 { background-color: rgba(255, 80, 80, 0.14); box-shadow: 0 0 10px rgba(255, 80, 80, 0.28); }
+            .tt-required.pulse-2 { background-color: rgba(255, 80, 80, 0.18); box-shadow: 0 0 12px rgba(255, 80, 80, 0.36); }
+            .tt-required.pulse-3 { background-color: rgba(255, 80, 80, 0.22); box-shadow: 0 0 14px rgba(255, 80, 80, 0.44); }
+            .tt-required.pulse-4 { background-color: rgba(255, 80, 80, 0.28); box-shadow: 0 0 16px rgba(255, 80, 80, 0.55); }
+            /* Neutral secondary button (Quit on the stop screen): a real button,
+               but understated so it complements the red warning and blue primary
+               instead of adding a third loud colour. */
+            .tt-quit {
+                background-image: none;
+                background-color: rgba(255, 255, 255, 0.10);
+                border: 1px solid rgba(255, 255, 255, 0.14);
+                border-radius: 6px;
+                padding: 6px 14px;
+            }
+            .tt-quit:hover {
+                background-color: rgba(255, 255, 255, 0.17);
+            }
+            .tt-quit:active {
+                background-color: rgba(255, 255, 255, 0.22);
+            }
         """)
         # Apply CSS globally but with specific class names to avoid affecting other dialogs
         Gtk.StyleContext.add_provider_for_screen(
@@ -533,11 +582,19 @@ class WelcomeDialog:
 
         # Build content sections
         self._build_header(vbox)
-        self._build_base_content(vbox)
 
-        # Add optional features if applicable
-        if self.has_gnome or self.has_nvidia or self.needs_uinput_fix or self.needs_ydotoold_setup or self.needs_portaudio_install:
-            self._build_optional_features(vbox)
+        if self.hotkey_unsupported:
+            # Hard stop: skip the welcome blurb, features, quick-start and all the
+            # setup sections — the app can't run here. Go straight to the red stop
+            # box and "get a package that works on your desktop".
+            self._build_unsupported_desktop_section(vbox, self.unsupported_desktop_name)
+        else:
+            self._build_base_content(vbox)
+            # Add optional features if applicable
+            if (self.has_gnome or self.has_nvidia or self.needs_uinput_fix
+                    or self.needs_ydotoold_setup or self.needs_portaudio_install
+                    or self.is_flatpak):
+                self._build_optional_features(vbox)
 
         self._build_footer(vbox)
 
@@ -578,8 +635,9 @@ class WelcomeDialog:
         features_box.set_margin_start(20)
         features_box.set_margin_top(5)
 
+        hotkey_hint = "your desktop assigns the key" if getattr(self, "is_flatpak", False) else "default: F8 key"
         features = [
-            "🎤 <b>Press-and-hold dictation</b> (default: F8 key)",
+            f"🎤 <b>Press-and-hold dictation</b> ({hotkey_hint})",
             "🗣️ <b>Voice commands:</b> \"period\", \"comma\", \"new paragraph\"",
             "🤖 <b>Powered by OpenAI's Whisper AI</b>",
             "🔒 <b>100% local</b> - your voice never leaves your computer",
@@ -648,9 +706,19 @@ class WelcomeDialog:
                 sep_portaudio.set_margin_bottom(10)
                 vbox.pack_start(sep_portaudio, False, False, 0)
 
+        # Flatpak: typing works out of the box (libei). The only setup is letting
+        # the desktop assign the dictation shortcut. Host: the ydotool/uinput step.
+        if self.is_flatpak:
+            self._build_shortcut_setup_section(vbox)
+
+            if self.has_gnome or self.has_nvidia:
+                sep_sc = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+                sep_sc.set_margin_top(15)
+                sep_sc.set_margin_bottom(10)
+                vbox.pack_start(sep_sc, False, False, 0)
         # Typing setup section (shown if needed - this is critical for typing to work)
         # Shows if either uinput permissions OR ydotoold daemon needs fixing
-        if self.needs_uinput_fix or self.needs_ydotoold_setup:
+        elif self.needs_uinput_fix or self.needs_ydotoold_setup:
             self._build_typing_setup_section(vbox)
 
             # Separator after typing setup section
@@ -835,6 +903,288 @@ class WelcomeDialog:
             self.portaudio_status_label.set_markup(
                 f'<span color="#f44336">Error: {str(e)}</span>'
             )
+
+    # Desktops whose portal backend (xdg-desktop-portal-xapp) does NOT implement
+    # GlobalShortcuts, so the Flatpak dictation hotkey can never register there.
+    _NO_GLOBALSHORTCUTS = {"XFCE", "CINNAMON", "X-CINNAMON", "MATE"}
+    _DESKTOP_NAMES = {
+        "KDE": "KDE Plasma", "GNOME": "GNOME", "HYPRLAND": "Hyprland",
+        "XFCE": "XFCE", "CINNAMON": "Cinnamon", "X-CINNAMON": "Cinnamon",
+        "MATE": "MATE",
+    }
+
+    def _globalshortcuts_available(self):
+        """True/False whether the GlobalShortcuts portal is implemented on this
+        system, or None if the check itself was inconclusive. The Flatpak hotkey
+        needs this portal (KDE/GNOME/Hyprland have it; the xapp backend used by
+        XFCE/Cinnamon/MATE does not)."""
+        try:
+            import gi
+            gi.require_version("Gio", "2.0")
+            from gi.repository import Gio, GLib
+            bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+            res = bus.call_sync(
+                "org.freedesktop.portal.Desktop",
+                "/org/freedesktop/portal/desktop",
+                "org.freedesktop.DBus.Introspectable", "Introspect",
+                None, GLib.VariantType("(s)"),
+                Gio.DBusCallFlags.NONE, 1500, None)
+            return "org.freedesktop.portal.GlobalShortcuts" in res.unpack()[0]
+        except Exception as e:
+            logger.info(f"GlobalShortcuts portal check inconclusive: {e}")
+            return None
+
+    def _shortcut_support(self):
+        """Return (supported: bool, friendly_desktop_name: str) for the hotkey."""
+        raw = os.environ.get("XDG_CURRENT_DESKTOP", "")
+        base = raw.split(":")[0].upper() if raw else ""
+        name = self._DESKTOP_NAMES.get(base, (raw.split(":")[0] or "your desktop"))
+        # Known-unsupported by name (also lets us preview the message via env).
+        if base in self._NO_GLOBALSHORTCUTS:
+            return (False, name)
+        # Otherwise trust a real portal check when it is conclusive.
+        if self._globalshortcuts_available() is False:
+            return (False, name)
+        return (True, name)
+
+    def _build_unsupported_desktop_section(self, vbox, desktop_name):
+        """Shown when the desktop lacks the GlobalShortcuts portal: the Flatpak
+        hotkey cannot work, so point the user to the AppImage (Backend A/evdev)."""
+        from gi.repository import GLib
+        esc = GLib.markup_escape_text
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        box.set_margin_start(12)
+        box.set_margin_end(12)
+        box.set_margin_top(10)
+        box.set_margin_bottom(10)
+
+        # This is a hard stop: the app cannot function here. Flag it so the footer
+        # disables "Let's Go!", and pulse the warning red so it can't be skipped.
+        self.hotkey_unsupported = True
+
+        pulse = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        pulse.get_style_context().add_class('tt-required')
+        self.required_pulse_box = pulse  # picked up by the red pulse animation
+
+        header = Gtk.Label()
+        header.set_markup(
+            f'<span size="large" foreground="#ffffff"><b>🛑 The dictation hotkey '
+            f'won’t work on {esc(desktop_name)}</b></span>'
+        )
+        header.set_halign(Gtk.Align.START)
+        header.set_line_wrap(True)
+        header.set_max_width_chars(54)
+        pulse.pack_start(header, False, False, 0)
+
+        msg = Gtk.Label()
+        msg.set_markup(
+            '<span size="medium" foreground="#ffffff">TalkType’s hotkey relies on '
+            f'your desktop’s <b>global-shortcut</b> system, and <b>{esc(desktop_name)}'
+            '</b> doesn’t provide it. The Flatpak will open, but the Hold-to-talk and '
+            'Toggle keys can’t be registered — so there is no key to press.</span>'
+        )
+        msg.set_halign(Gtk.Align.START)
+        msg.set_line_wrap(True)
+        msg.set_max_width_chars(54)
+        msg.set_margin_top(6)
+        pulse.pack_start(msg, False, False, 0)
+
+        box.pack_start(pulse, False, False, 0)
+
+        fix = Gtk.Label()
+        fix.set_markup(
+            '<span size="medium" foreground="#ffffff"><b>Good news — another '
+            'TalkType package works on your desktop.</b></span> '
+            '<span size="medium">Pick the one for your system; they all use a '
+            'method that works everywhere:</span>'
+        )
+        fix.set_halign(Gtk.Align.START)
+        fix.set_line_wrap(True)
+        fix.set_max_width_chars(56)
+        fix.set_margin_start(10)
+        fix.set_margin_top(12)
+        box.pack_start(fix, False, False, 0)
+
+        pkgs = Gtk.Label()
+        pkgs.set_markup(
+            '<span size="medium">'
+            '• <b>AppImage</b> — runs on any Linux, nothing to install\n'
+            '• <b>.deb</b> — Debian, Ubuntu, Linux Mint\n'
+            '• <b>.rpm</b> — Fedora, openSUSE\n'
+            '• <b>AUR</b> — Arch, CachyOS, EndeavourOS'
+            '</span>'
+        )
+        pkgs.set_halign(Gtk.Align.START)
+        pkgs.set_line_wrap(True)
+        pkgs.set_max_width_chars(56)
+        pkgs.set_margin_start(20)
+        pkgs.set_margin_top(6)
+        box.pack_start(pkgs, False, False, 0)
+
+        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        btn_box.set_margin_start(10)
+        btn_box.set_margin_top(14)
+        download_btn = Gtk.Button(label="⬇  Open the Downloads Page")
+        download_btn.get_style_context().add_class("suggested-action")
+        download_btn.connect("clicked", self._on_download_appimage)
+        btn_box.pack_start(download_btn, False, False, 0)
+        box.pack_start(btn_box, False, False, 0)
+
+        frame = Gtk.Frame()
+        frame.set_shadow_type(Gtk.ShadowType.ETCHED_IN)
+        frame.set_margin_top(6)
+        frame.set_margin_bottom(6)
+        frame.add(box)
+        vbox.pack_start(frame, False, False, 0)
+
+    def _on_download_appimage(self, button):
+        """Open the TalkType releases page. Opening a URL from a Flatpak goes
+        through the OpenURI portal — no special sandbox permission needed."""
+        url = "https://github.com/ronb1964/TalkType/releases"
+        try:
+            Gtk.show_uri_on_window(self.dialog, url, Gdk.CURRENT_TIME)
+        except Exception as e:
+            logger.warning(f"Could not open releases page ({e}); URL: {url}")
+
+    def _build_shortcut_setup_section(self, vbox):
+        """Flatpak-only setup step: the desktop assigns the dictation shortcut.
+
+        Inside the sandbox typing works via the portal + libei path with no
+        ydotool/uinput/input-group setup, so the host "Typing Setup Required"
+        step does not apply. The one thing the user must do is let their desktop
+        bind a key to the TalkType dictate shortcuts. Desktops without the
+        GlobalShortcuts portal never reach here — _build_dialog shows them the
+        unsupported screen instead.
+        """
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        box.set_margin_start(12)
+        box.set_margin_end(12)
+        box.set_margin_top(10)
+        box.set_margin_bottom(10)
+
+        header = Gtk.Label()
+        header.set_markup('<span size="large"><b>🔴 Required: Set Your Dictation Key</b></span>')
+        header.set_halign(Gtk.Align.START)
+        box.pack_start(header, False, False, 0)
+
+        must_do = Gtk.Label()
+        # The emoji triangle (⚠️, with the VS16 selector) renders in full colour like
+        # the other icons; keep it OUTSIDE the white span or the colour override flattens it.
+        must_do.set_markup(
+            '<span size="x-large">⚠️</span>  '
+            '<span size="medium" foreground="#ffffff"><b>TalkType will NOT work '
+            'until you do this — it takes about 30 seconds.</b></span>'
+        )
+        must_do.set_halign(Gtk.Align.START)
+        must_do.set_line_wrap(True)
+        must_do.set_max_width_chars(56)
+        # Wrap in a box so the red pulse animation has a surface to paint (a bare
+        # GtkLabel does not reliably render background-color in GTK3).
+        self.required_pulse_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        self.required_pulse_box.get_style_context().add_class('tt-required')
+        self.required_pulse_box.pack_start(must_do, False, False, 0)
+        self.required_pulse_box.set_margin_top(4)
+        box.pack_start(self.required_pulse_box, False, False, 0)
+
+        explain = Gtk.Label()
+        explain.set_markup(
+            '<span size="medium">Typing into your apps then works automatically — no '
+            'drivers, groups, or reboot needed. You just pick which key(s) start '
+            'dictation. TalkType offers <b>two</b>, and you can set either or both:</span>'
+        )
+        explain.set_halign(Gtk.Align.START)
+        explain.set_line_wrap(True)
+        explain.set_max_width_chars(58)
+        explain.set_margin_start(10)
+        explain.set_margin_top(5)
+        box.pack_start(explain, False, False, 0)
+
+        keys_label = Gtk.Label()
+        keys_label.set_markup(
+            '<span size="medium">'
+            '🎤 <b>“Hold to talk”</b> — hold it while you speak (push-to-talk)\n'
+            '🔁 <b>“Toggle dictation”</b> — tap once to start, tap again to stop'
+            '</span>'
+        )
+        keys_label.set_halign(Gtk.Align.START)
+        keys_label.set_line_wrap(True)
+        keys_label.set_max_width_chars(58)
+        keys_label.set_margin_start(20)
+        keys_label.set_margin_top(8)
+        box.pack_start(keys_label, False, False, 0)
+
+        # Desktop-specific, step-by-step instructions. The portal hotkey is only
+        # implemented on KDE and GNOME today; be precise there and honest elsewhere.
+        desktop = os.environ.get("XDG_CURRENT_DESKTOP", "").upper()
+        if "KDE" in desktop:
+            how_title = "To set your keys on KDE Plasma:"
+            steps = (
+                "1. Open <b>System Settings</b>.\n"
+                "2. In the left sidebar click <b>Keyboard</b>, then <b>Shortcuts</b>.\n"
+                "3. In the middle list, under <b>Applications</b>, click <b>TalkType</b>.\n"
+                "4. On the right, click the button next to <b>Hold to talk</b> "
+                "(and/or <b>Toggle dictation</b>) and press the key you want "
+                "(for example F8, then F9).\n"
+                "5. Click <b>Apply</b>."
+            )
+        elif self.has_gnome or "GNOME" in desktop:
+            how_title = "To set your keys on GNOME:"
+            steps = (
+                "1. Open <b>Settings</b>.\n"
+                "2. Click <b>Keyboard</b> in the sidebar.\n"
+                "3. Under <b>Keyboard Shortcuts</b>, click "
+                "<b>View and Customize Shortcuts</b>.\n"
+                "4. Find the <b>TalkType</b> shortcuts (<b>Hold to talk</b> / "
+                "<b>Toggle dictation</b>) and click each to press the key you want "
+                "(for example F8, then F9).\n"
+                "<i>GNOME may also pop up a chooser the first time — if it does, "
+                "just press your key.</i>"
+            )
+        else:
+            how_title = "To set your keys:"
+            steps = (
+                "Your desktop supports global shortcuts. Open its shortcut settings "
+                "(usually <b>Settings → Keyboard → Shortcuts</b>, or your "
+                "compositor’s config) and assign a key to the two <b>TalkType</b> "
+                "entries — <b>Hold to talk</b> and <b>Toggle dictation</b>."
+            )
+
+        how_label = Gtk.Label()
+        how_label.set_markup(f'<span size="medium"><b>{how_title}</b></span>')
+        how_label.set_halign(Gtk.Align.START)
+        how_label.set_margin_start(10)
+        how_label.set_margin_top(12)
+        box.pack_start(how_label, False, False, 0)
+
+        steps_label = Gtk.Label()
+        steps_label.set_markup(f'<span size="medium">{steps}</span>')
+        steps_label.set_halign(Gtk.Align.START)
+        steps_label.set_line_wrap(True)
+        steps_label.set_max_width_chars(58)
+        steps_label.set_margin_start(20)
+        steps_label.set_margin_top(4)
+        box.pack_start(steps_label, False, False, 0)
+
+        note = Gtk.Label()
+        note.set_markup(
+            '<span size="medium"><i>💡 The first time you dictate, your desktop will '
+            'ask permission to type into other apps — approve it once.</i></span>'
+        )
+        note.set_halign(Gtk.Align.START)
+        note.set_line_wrap(True)
+        note.set_max_width_chars(58)
+        note.set_margin_start(10)
+        note.set_margin_top(10)
+        box.pack_start(note, False, False, 0)
+
+        # A bordered frame makes this read as a distinct, mandatory step rather
+        # than one of the optional sections below it.
+        frame = Gtk.Frame()
+        frame.set_shadow_type(Gtk.ShadowType.ETCHED_IN)
+        frame.set_margin_top(6)
+        frame.set_margin_bottom(6)
+        frame.add(box)
+        vbox.pack_start(frame, False, False, 0)
 
     def _build_typing_setup_section(self, vbox):
         """Build the typing setup section (uinput permissions + ydotoold daemon)."""
@@ -1324,6 +1674,33 @@ class WelcomeDialog:
 
     def _build_footer(self, vbox):
         """Build the footer section."""
+        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        button_box.set_halign(Gtk.Align.CENTER)
+        button_box.set_margin_top(15)
+
+        if self.hotkey_unsupported:
+            # Hard stop: the app can't function on this desktop, so there is no
+            # "continue" — only quit. The AppImage download button sits above.
+            next_label = Gtk.Label()
+            next_label.set_markup(
+                '<span foreground="#ff6b6b"><b>This Flatpak can’t run on your '
+                'desktop — get one of the packages above, then quit.</b></span>'
+            )
+            next_label.set_halign(Gtk.Align.CENTER)
+            next_label.set_line_wrap(True)
+            next_label.set_margin_top(10)
+            vbox.pack_start(next_label, False, False, 0)
+
+            quit_btn = Gtk.Button(label="Quit TalkType")
+            quit_btn.set_size_request(200, 40)
+            # Neutral secondary style: a clear button, but understated so it
+            # doesn't fight the red warning or the blue primary download button.
+            quit_btn.get_style_context().add_class("tt-quit")
+            quit_btn.connect("clicked", lambda w: self.dialog.response(Gtk.ResponseType.CLOSE))
+            button_box.pack_start(quit_btn, False, False, 0)
+            vbox.pack_start(button_box, False, False, 0)
+            return
+
         # Next steps note
         next_label = Gtk.Label()
         next_label.set_markup('<span><b>Next:</b> You\'ll test your hotkeys to ensure they work correctly</span>')
@@ -1334,10 +1711,6 @@ class WelcomeDialog:
         vbox.pack_start(next_label, False, False, 0)
 
         # Centered "Let's Go!" button
-        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-        button_box.set_halign(Gtk.Align.CENTER)
-        button_box.set_margin_top(15)
-
         continue_btn = Gtk.Button(label="Let's Go!")
         continue_btn.set_size_request(200, 40)
         continue_btn.get_style_context().add_class("suggested-action")
@@ -1350,14 +1723,17 @@ class WelcomeDialog:
         """Animate checkboxes with smooth continuous pulsating glow."""
         import math
 
-        checkboxes = []
+        targets = []
         if self.extension_check:
-            checkboxes.append(self.extension_check)
+            targets.append(self.extension_check)
         if self.cuda_check:
-            checkboxes.append(self.cuda_check)
+            targets.append(self.cuda_check)
+        # The Flatpak "Required" warning box pulses too — red, via .tt-required.
+        if self.required_pulse_box:
+            targets.append(self.required_pulse_box)
 
-        if not checkboxes:
-            return False  # Stop animation if no checkboxes
+        if not targets:
+            return False  # Nothing to animate
 
         # Smooth continuous pulse using sin wave
         phase = getattr(self, '_pulse_phase', 0)
@@ -1370,16 +1746,18 @@ class WelcomeDialog:
         # Map to one of 5 pulse states (0=dimmest, 4=brightest)
         pulse_level = int(round(intensity))
 
-        for checkbox in checkboxes:
-            if not checkbox.get_active():  # Only pulse unchecked boxes
-                style_context = checkbox.get_style_context()
+        for widget in targets:
+            # Checkboxes stop pulsing once checked; the required box always pulses.
+            if hasattr(widget, 'get_active') and widget.get_active():
+                continue
+            style_context = widget.get_style_context()
 
-                # Remove all pulse classes
-                for i in range(5):
-                    style_context.remove_class(f'pulse-{i}')
+            # Remove all pulse classes
+            for i in range(5):
+                style_context.remove_class(f'pulse-{i}')
 
-                # Add the current pulse level class
-                style_context.add_class(f'pulse-{pulse_level}')
+            # Add the current pulse level class
+            style_context.add_class(f'pulse-{pulse_level}')
 
         return True  # Continue animation
 
@@ -1416,6 +1794,9 @@ class WelcomeDialog:
         GLib.source_remove(pulse_timer)
 
         result = {'continue': response == Gtk.ResponseType.OK}
+        # On an unsupported desktop the only footer action is "Quit TalkType"
+        # (ResponseType.CLOSE): the app cannot function, so signal a real quit.
+        result['quit'] = (response == Gtk.ResponseType.CLOSE) or self.hotkey_unsupported
 
         if self.extension_check:
             result['install_extension'] = self.extension_check.get_active()
