@@ -67,7 +67,9 @@ class RecordingIndicator(Gtk.Window):
         self.custom_color = custom_color
         self.backing = backing
         self.sensitivity = sensitivity
-        self.waveform = None   # raw samples for waveform/radial
+        self.waveform = None   # rolling recent samples for waveform/radial
+        self._wave_history = []          # accumulated rolling window (see set_waveform)
+        self._wave_history_max = 1024    # ~23 ms at 44.1 kHz; spans the display
         self.spectrum = None   # band magnitudes for bars
 
         # Position configuration
@@ -236,6 +238,12 @@ class RecordingIndicator(Gtk.Window):
         """Stop recording mode"""
         self.is_recording = False
         self.audio_level = 0.0
+        # Clear the reactive buffers so nothing lingers on screen after the key
+        # is released — draw_waveform/draw_bars early-out on empty data. Without
+        # this a bright dash of the last block stayed visible for seconds.
+        self._wave_history = []
+        self.waveform = None
+        self.spectrum = None
 
     def apply_settings(self, position, size, offset_x, offset_y,
                        style=None, color_mode=None, custom_color=None,
@@ -283,8 +291,18 @@ class RecordingIndicator(Gtk.Window):
         self.audio_level = max(0.0, min(1.0, level))
 
     def set_waveform(self, samples):
-        """Latest raw samples, for the waveform and radial styles."""
-        self.waveform = samples
+        """Append the latest audio block to a rolling window and expose that as
+        the waveform, so the display is independent of the driver's block size.
+
+        The Flatpak's bundled PortAudio hands uniform 384-frame blocks ~115x/sec
+        while the system PortAudio hands smaller varied blocks ~193x/sec (measured).
+        Drawing only the latest block made the same code render a lively wave on
+        one and a stretched sine on the other. A rolling window normalizes both."""
+        self._wave_history.extend(samples)
+        excess = len(self._wave_history) - self._wave_history_max
+        if excess > 0:
+            del self._wave_history[:excess]
+        self.waveform = self._wave_history
 
     def set_spectrum(self, bands):
         """Latest band magnitudes (0..1), for the bars style."""
