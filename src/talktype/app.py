@@ -2219,6 +2219,8 @@ class _ServiceState:
         self.timeout_enabled = getattr(cfg, "auto_timeout_enabled", False)
         self.timeout_minutes = getattr(cfg, "auto_timeout_minutes", 5)
         self.timeout_seconds = self.timeout_minutes * 60
+        # 0.0 == "never checked", so the first idle tick reloads immediately.
+        self.last_config_check = 0.0
 
 
 def _service_tick(cfg, input_device_idx, svc: "_ServiceState") -> None:
@@ -2247,6 +2249,18 @@ def _service_tick(cfg, input_device_idx, svc: "_ServiceState") -> None:
                 _notify("TalkType Auto-Timeout",
                         f"Service stopped after {svc.timeout_minutes} minutes of inactivity")
             sys.exit(0)
+
+    # Pick up Preferences changes without a restart — indicator style/position,
+    # typing delay, etc. The evdev loop (Backend A) does this inline; Backend B
+    # (the portal path used by the Flatpak) runs ONLY this tick, so without the
+    # same recheck live settings never apply there — the recording indicator
+    # stays on whatever it was built with. Idle-only and throttled, mirroring the
+    # evdev path. _reload_live_settings updates cfg in place and pushes the new
+    # values into the running recording indicator.
+    if not state.is_recording and now - svc.last_config_check >= CONFIG_RECHECK_SECONDS:
+        svc.last_config_check = now
+        if _config_file_changed():
+            _reload_live_settings(cfg, recording_indicator)
 
 
 def _loop_evdev(cfg: Settings, input_device_idx):

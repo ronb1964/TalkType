@@ -169,3 +169,6 @@ archive/
 .flatpak-build/
 .flatpak-builder/
 .flatpak-repo/
+
+# Flatpak build bundles (built by packaging/flatpak/build-flatpak.sh)
+*.flatpak

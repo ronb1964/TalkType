@@ -51,8 +51,17 @@ class LibeiOutputBackend(OutputBackend):
 
     def _save_token(self, token: str) -> None:
         import logging
+        import os
+        path = self._token_path()
         try:
-            with open(self._token_path(), "w") as f:
+            # Create data/TalkType/ if it doesn't exist yet. On a fresh CPU-only
+            # Flatpak install nothing else has written there (no CUDA libs, and
+            # the first-run flag may land elsewhere), so without this the write
+            # fails silently, the restore token never persists, and GNOME
+            # re-prompts "Allow remote interaction?" on every dictation. Mirrors
+            # mark_first_run_complete() and save_config().
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w") as f:
                 f.write(token or "")
         except OSError as e:
             logging.getLogger(__name__).debug("could not save restore token: %s", e)
@@ -75,10 +84,12 @@ class LibeiOutputBackend(OutputBackend):
         GLib loop; returns (EIS fd or None, session handle path). Uses a saved
         restore_token to skip the approval dialog after the first time."""
         import gi
+        import logging
         gi.require_version("Gio", "2.0")
         from gi.repository import Gio, GLib
         from . import portal_common as pc
 
+        logger = logging.getLogger(__name__)
         bus = pc.session_bus()
         loop = GLib.MainLoop()
         st = {"session": None, "fd": None}
@@ -124,6 +135,13 @@ class LibeiOutputBackend(OutputBackend):
             token = results.get("restore_token")
             if token:
                 self._save_token(token)
+                logger.info("RemoteDesktop session persisted (restore token saved)")
+            else:
+                # No token means the desktop won't restore this grant, so the
+                # approval dialog reappears next dictation. Surface it plainly so
+                # a re-prompt loop is diagnosable from the log alone.
+                logger.warning("RemoteDesktop Start returned no restore_token; "
+                               "the desktop will re-prompt on the next dictation")
             connect_eis()
 
         def connect_eis():

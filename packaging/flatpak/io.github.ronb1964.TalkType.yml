@@ -6,7 +6,13 @@ command: talktype-launcher
 
 finish-args:
   - --socket=wayland
-  - --socket=fallback-x11
+  # x11, NOT fallback-x11: the recording indicator positions itself with
+  # gtk_window_move(), which only XWayland honours, and the service runs with
+  # GDK_BACKEND=x11,wayland to use it. fallback-x11 hands out the X socket ONLY
+  # when there's no Wayland, so on a Wayland session (GNOME/KDE) the indicator
+  # got native Wayland instead — uncentered, unmovable, and mis-rendering styles.
+  # Plain x11 always exposes XWayland, matching the AppImage/.deb/.rpm.
+  - --socket=x11
   - --share=ipc
   - --socket=pulseaudio
   - --device=dri
@@ -19,6 +25,12 @@ finish-args:
   - --talk-name=com.canonical.AppMenu.Registrar
   - --talk-name=org.freedesktop.Notifications
   - --filesystem=xdg-run/tray-icon:create
+  # Query GNOME Shell (org.gnome.Shell.Extensions.GetExtensionInfo) to detect
+  # whether the TalkType extension is enabled. Inside the sandbox the
+  # gnome-extensions CLI and org.gnome.shell gsettings schema are both absent, so
+  # this D-Bus call is the only way to know — without it the GTK tray shows
+  # alongside the extension's indicator (a duplicate tray icon on GNOME).
+  - --talk-name=org.gnome.Shell
 
 modules:
   # PortAudio — sounddevice dlopens libportaudio.so.2 at import; not in the runtime.
@@ -57,7 +69,7 @@ modules:
       - pip3 install --prefix=/app --no-warn-script-location
           faster-whisper sounddevice evdev pyperclip toml dbus-python
 
-  # The app itself: source + launcher + AppStream metadata.
+  # The app itself: source + launcher + AppStream metadata + icon + desktop file.
   - name: talktype
     buildsystem: simple
     build-commands:
@@ -65,6 +77,23 @@ modules:
       - mkdir -p /app/lib && cp -r talktype /app/lib/talktype
       - install -Dm644 io.github.ronb1964.TalkType.appdata.xml
           /app/share/metainfo/io.github.ronb1964.TalkType.appdata.xml
+      # App icon. The welcome splash searches for this exact path and falls back
+      # to plain "TalkType" text (no blue logo) if it's absent — which is what
+      # happened before this was added. It is also the icon GNOME/KDE show in the
+      # app grid and dock. Scalable SVG covers every size; the runtime ships
+      # librsvg so GdkPixbuf can render it. This is a square-canvas copy of
+      # icons/OFFICIAL_ICON_DO_NOT_CHANGE.svg — Flatpak rejects non-square icons
+      # on export ("Expected a square icon"), and the original is 782x769.
+      - install -Dm644 io.github.ronb1964.TalkType.svg
+          /app/share/icons/hicolor/scalable/apps/io.github.ronb1964.TalkType.svg
+      # Desktop entry so the app appears in the launcher with its name and icon.
+      # Exec is normalized to the in-sandbox launcher (the repo copy carries the
+      # AppImage's "AppRun tray"); Flatpak rewrites the exported copy to
+      # "flatpak run" regardless, but keep the in-sandbox file honest.
+      - install -Dm644 io.github.ronb1964.TalkType.desktop
+          /app/share/applications/io.github.ronb1964.TalkType.desktop
+      - sed -i 's|^Exec=.*|Exec=talktype-launcher|'
+          /app/share/applications/io.github.ronb1964.TalkType.desktop
     sources:
       - type: dir
         path: ../../src
@@ -73,3 +102,7 @@ modules:
         path: ../../io.github.ronb1964.TalkType.appdata.xml
       - type: file
         path: talktype-launcher
+      - type: file
+        path: io.github.ronb1964.TalkType.svg
+      - type: file
+        path: ../../io.github.ronb1964.TalkType.desktop

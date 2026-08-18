@@ -129,7 +129,38 @@ def is_extension_enabled(uuid: str) -> bool:
     except (subprocess.TimeoutExpired, FileNotFoundError):
         pass
 
-    return False
+    # Inside a Flatpak the gnome-extensions CLI isn't on PATH and the
+    # org.gnome.shell gsettings schema isn't in the runtime, so both the CLI and
+    # a gsettings read fail. Ask GNOME Shell directly over D-Bus instead —
+    # without this the tray can't tell the extension is active and shows the GTK
+    # icon alongside it (a duplicate tray menu).
+    return _is_extension_enabled_via_dbus(uuid)
+
+
+def _is_extension_enabled_via_dbus(uuid: str) -> bool:
+    """Ask GNOME Shell whether an extension is enabled via its D-Bus interface.
+
+    org.gnome.Shell.Extensions.GetExtensionInfo returns a dict whose 'state' is
+    1.0 when ENABLED (GNOME's ExtensionState enum) plus, on newer shells, an
+    explicit 'enabled' boolean. Returns False on any error (not GNOME, shell not
+    running, name not reachable), which is the correct "don't hide the tray"
+    default. Needs --talk-name=org.gnome.Shell in the Flatpak manifest.
+    """
+    try:
+        import gi
+        gi.require_version("Gio", "2.0")
+        from gi.repository import Gio, GLib
+        bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+        ret = bus.call_sync(
+            "org.gnome.Shell", "/org/gnome/Shell",
+            "org.gnome.Shell.Extensions", "GetExtensionInfo",
+            GLib.Variant("(s)", (uuid,)),
+            GLib.VariantType("(a{sv})"),
+            Gio.DBusCallFlags.NONE, 2000, None)
+        info = ret.unpack()[0]
+        return bool(info.get("enabled")) or info.get("state") == 1.0
+    except Exception:
+        return False
 
 
 def _read_enabled_extensions():

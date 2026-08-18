@@ -48,6 +48,24 @@ def test_libei_backend_types_via_fresh_session(monkeypatch):
     assert closed == ["/org/session/1"]  # session cleaned up
 
 
+def test_save_token_creates_missing_data_dir(tmp_path, monkeypatch):
+    # On a fresh CPU-only Flatpak install the data dir (data/TalkType/) doesn't
+    # exist yet — nothing has written CUDA libs or the first-run flag there. If
+    # _save_token can't create it, the RemoteDesktop restore token never
+    # persists and GNOME re-prompts "Allow remote interaction?" on every single
+    # dictation. It must create its parent dir like every other data-dir writer.
+    from talktype.output_backends import LibeiOutputBackend
+    b = LibeiOutputBackend()
+    token_path = tmp_path / "TalkType" / "remote_desktop_token"  # parent missing
+    monkeypatch.setattr(b, "_token_path", lambda: str(token_path))
+
+    b._save_token("restore-token-abc")
+
+    assert token_path.exists(), "token must be written even when data dir was absent"
+    assert token_path.read_text() == "restore-token-abc"
+    assert b._load_token() == "restore-token-abc"
+
+
 def test_output_backend_accessor_returns_ydotool_on_host(monkeypatch):
     # No FLATPAK_ID on the host -> ydotool backend.
     monkeypatch.delenv("FLATPAK_ID", raising=False)

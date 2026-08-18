@@ -94,3 +94,28 @@ def test_enable_fails_when_neither_mechanism_works(monkeypatch):
     run, _ = _fake_run(enable_rc=1, get_out="@as []", set_rc=1)
     monkeypatch.setattr(dd.subprocess, "run", run)
     assert dd.enable_extension(UUID) is False
+
+
+def test_is_enabled_falls_back_to_dbus_when_cli_absent(monkeypatch):
+    # Inside the Flatpak the gnome-extensions CLI and the org.gnome.shell schema
+    # are both absent (subprocess raises FileNotFoundError). Detection must then
+    # ask GNOME Shell directly over D-Bus rather than give up and return False —
+    # otherwise the GTK tray shows alongside the extension (the double tray icon).
+    def no_cli(argv, **k):
+        raise FileNotFoundError("gnome-extensions")
+    monkeypatch.setattr(dd.subprocess, "run", no_cli)
+    monkeypatch.setattr(dd, "_is_extension_enabled_via_dbus",
+                        lambda uuid: True, raising=False)
+    assert dd.is_extension_enabled(UUID) is True
+
+
+def test_is_enabled_uses_cli_result_without_dbus_on_host(monkeypatch):
+    # On a normal host the CLI answers, so detection must NOT fall through to
+    # D-Bus (host behavior unchanged).
+    def cli_enabled(argv, **k):
+        return types.SimpleNamespace(returncode=0, stdout="State: ENABLED\n", stderr="")
+    monkeypatch.setattr(dd.subprocess, "run", cli_enabled)
+    monkeypatch.setattr(dd, "_is_extension_enabled_via_dbus",
+                        lambda uuid: (_ for _ in ()).throw(AssertionError("D-Bus must not be used when the CLI answers")),
+                        raising=False)
+    assert dd.is_extension_enabled(UUID) is True

@@ -1130,15 +1130,16 @@ class WelcomeDialog:
         elif self.has_gnome or "GNOME" in desktop:
             how_title = "To set your keys on GNOME:"
             steps = (
-                "1. Open <b>Settings</b>.\n"
-                "2. Click <b>Keyboard</b> in the sidebar.\n"
-                "3. Under <b>Keyboard Shortcuts</b>, click "
-                "<b>View and Customize Shortcuts</b>.\n"
-                "4. Find the <b>TalkType</b> shortcuts (<b>Hold to talk</b> / "
-                "<b>Toggle dictation</b>) and click each to press the key you want "
-                "(for example F8, then F9).\n"
-                "<i>GNOME may also pop up a chooser the first time — if it does, "
-                "just press your key.</i>"
+                "When TalkType starts, GNOME pops up an <b>Add Keyboard "
+                "Shortcuts</b> window listing <b>Hold to talk</b> and "
+                "<b>Toggle dictation</b>. For each one you want to use:\n"
+                "1. Click the <b>pencil</b> icon on that row.\n"
+                "2. Click <b>Allow</b> on the “inhibit shortcuts” prompt "
+                "(that’s just GNOME letting it capture your key).\n"
+                "3. Press the key you want (for example F8, then F9).\n"
+                "4. Click <b>Add</b> to save.\n"
+                "<i>You can change these any time later in "
+                "Settings → Keyboard → Keyboard Shortcuts.</i>"
             )
         else:
             how_title = "To set your keys:"
@@ -1165,11 +1166,24 @@ class WelcomeDialog:
         steps_label.set_margin_top(4)
         box.pack_start(steps_label, False, False, 0)
 
+        # GNOME's "type into other apps" consent (the RemoteDesktop portal)
+        # defaults its "Allow Remote Interaction" switch to OFF — click Share
+        # without flipping it and dictation types nothing while the beeps still
+        # play, which reads as broken. Call the switch out explicitly on GNOME.
+        if self.has_gnome or "GNOME" in desktop:
+            perm_note = (
+                "💡 The first time you dictate, GNOME asks to allow typing into "
+                "other apps. Turn <b>on</b> the <b>Allow Remote Interaction</b> "
+                "switch, keep <b>Remember This Selection</b> checked, and click "
+                "<b>Share</b> — just once."
+            )
+        else:
+            perm_note = (
+                "💡 The first time you dictate, your desktop will ask permission "
+                "to type into other apps — approve it once."
+            )
         note = Gtk.Label()
-        note.set_markup(
-            '<span size="medium"><i>💡 The first time you dictate, your desktop will '
-            'ask permission to type into other apps — approve it once.</i></span>'
-        )
+        note.set_markup(f'<span size="medium"><i>{perm_note}</i></span>')
         note.set_halign(Gtk.Align.START)
         note.set_line_wrap(True)
         note.set_max_width_chars(58)
