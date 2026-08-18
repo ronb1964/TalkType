@@ -172,3 +172,4 @@ archive/
 
 # Flatpak build bundles (built by packaging/flatpak/build-flatpak.sh)
 *.flatpak
+*.flatpak.sha256

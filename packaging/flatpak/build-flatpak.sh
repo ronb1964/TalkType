@@ -26,4 +26,9 @@ if [ "$1" = "bundle" ]; then
     OUT="$ROOT/TalkType-flatpak-$(cat "$ROOT/VERSION" 2>/dev/null || echo dev).flatpak"
     flatpak build-bundle "$REPO" "$OUT" "$APPID"
     echo "wrote bundle: $OUT"
+    # SHA256 sidecar so users can verify the download (mirrors build-release.sh).
+    # Record just the basename so `sha256sum -c <file>.sha256` works from the
+    # directory the .flatpak sits in.
+    ( cd "$(dirname "$OUT")" && sha256sum "$(basename "$OUT")" > "$(basename "$OUT").sha256" )
+    echo "wrote checksum: $OUT.sha256"
 fi
