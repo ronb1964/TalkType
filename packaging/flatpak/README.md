@@ -41,8 +41,18 @@ install if it isn't already present.
   - **GNOME** — a native **"Add Keyboard Shortcuts"** dialog pops up; click the pencil
     on each shortcut, allow it, press your key, and click **Add**.
 - The **first time you dictate**, the desktop asks permission to type into other apps
-  (the Remote Desktop portal). Approve it once. On GNOME, turn **on** the
-  **"Allow Remote Interaction"** switch before clicking **Share**.
+  (the Remote Desktop portal). Approve it once.
+  - **GNOME** — turn **on** the **"Allow Remote Interaction"** switch before clicking **Share**.
+  - **KDE** — in the **Remote Control** window, check **"Allow restoring on future
+    sessions"** before Approving so it won't ask again.
+- **Quieting KDE's per-dictation notification:** TalkType opens a fresh remote-control
+  session for each dictation, so KDE shows a **"Remote control session started"** popup
+  every time. Checking "Allow restoring" does **not** silence it (that only stops the
+  approval dialog). To turn the popup off: click the **sliders icon** on the notification
+  (or go to **System Settings → Notifications → Application Settings → KDE Portal
+  Integration → Started Remote Desktop**) and uncheck **"Show a message in a pop-up"**,
+  then **Apply**. (Plasma 6 has no single toggle for this; a permissions page is coming
+  in 6.5.)
 - **NVIDIA GPU** acceleration is optional and downloaded on demand into the app's data
   dir the first time you enable it — nothing GPU-related ships in the bundle.
 

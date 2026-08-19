@@ -322,13 +322,13 @@ class PreferencesWindow:
 
     def _block_combo_scroll(self, combo):
         """
-        Prevent scroll wheel from changing ComboBox value.
-
-        By default, GTK ComboBoxes capture scroll events and change their value,
-        which is annoying when trying to scroll the preferences window and your
-        cursor happens to be over a dropdown.
+        Stop the scroll wheel from changing a ComboBox value, while still letting
+        the page scroll when the pointer is over the dropdown (see
+        ui_style.forward_combo_scroll for why swallowing the event stalled the
+        window).
         """
-        combo.connect("scroll-event", lambda w, e: True)  # Return True to block
+        from .ui_style import forward_combo_scroll
+        forward_combo_scroll(combo)
 
     def load_config(self):
         """Load config from TOML file.
@@ -883,6 +883,51 @@ class PreferencesWindow:
         grid.attach(test_hotkeys_btn, 0, row, 2, 1)
         row += 1
 
+        # On the Flatpak the dictation keys are owned by the desktop's
+        # global-shortcuts portal, not this config: the combos above show the
+        # (irrelevant) config keys, editing them does nothing, and Test Hotkeys
+        # uses evdev, which the sandbox blocks. Hide the editable controls and
+        # point the user to where the keys actually live. self.hotkey_combo /
+        # self.toggle_combo still exist (hidden) so the save/apply paths that
+        # read them keep working — their values are simply inert under Backend B.
+        if os.environ.get("FLATPAK_ID"):
+            from .desktop_detect import flatpak_hotkey_hint
+            for w in (self.hotkey_label, self.hotkey_combo,
+                      self.toggle_label, self.toggle_combo, test_hotkeys_btn):
+                w.set_no_show_all(True)
+                w.hide()
+            flatpak_note = Gtk.Label()
+            flatpak_note.set_markup(
+                "🔒 <b>Dictation keys are set by your desktop, not here.</b>\n"
+                + flatpak_hotkey_hint()
+            )
+            flatpak_note.set_xalign(0)
+            flatpak_note.set_line_wrap(True)
+            flatpak_note.set_margin_top(4)
+            grid.attach(flatpak_note, 0, row, 2, 1)
+            row += 1
+
+            # On KDE, typing via the remote-control portal makes a "Remote control
+            # session started" popup fire after every dictation. Give the user a
+            # button that reopens the persistent, always-on-top steps for turning
+            # it off — the same window shown once after onboarding, available here
+            # whenever they decide to deal with it.
+            from .desktop_detect import get_desktop_environment
+            if get_desktop_environment() == "kde":
+                from .notification_help import show_notification_help_window
+                notif_btn = Gtk.Button(
+                    label="🔔 Turn off the “remote control” notification…")
+                notif_btn.get_child().set_xalign(0.0)
+                notif_btn.set_halign(Gtk.Align.START)
+                notif_btn.set_margin_top(8)
+                notif_btn.set_tooltip_text(
+                    "KDE shows a popup after every dictation. Opens step-by-step "
+                    "instructions in a window that stays on top while you do it.")
+                notif_btn.connect(
+                    "clicked", lambda _b: show_notification_help_window())
+                grid.attach(notif_btn, 0, row, 2, 1)
+                row += 1
+
         # Both hotkeys are always shown (no mode-based hiding)
 
         # Voice Commands hotkey (optional combo shortcut to open quick reference)
@@ -1411,7 +1456,6 @@ class PreferencesWindow:
         # Injection mode
         inject_label = Gtk.Label(label="Text Injection 💡:", xalign=0)
         inject_label.set_tooltip_text("How to insert transcribed text:\n• Auto (Smart Detection): chooses paste or typing based on the focused app\n• Keystroke Typing: simulates typing character-by-character (most reliable)\n• Clipboard Paste: uses clipboard + Ctrl+V / Shift+Ctrl+V (much faster for long text)\n\nAuto mode uses paste for terminals and normal text fields, and falls back to\ntyping where paste is unreliable.\n\nNote: TalkType types wherever your cursor is — it cannot detect password fields\n(no Linux app reliably can on Wayland), so avoid dictating into them.\n\nClipboard Paste works in most applications:\n✓ Text editors, word processors, terminals\n✓ Web browsers, email clients\n✓ Most standard text input fields\n\nUse Keystroke Typing if paste doesn't work in specialized applications.")
-        grid.attach(inject_label, 0, row, 1, 1)
         inject_combo = Gtk.ComboBoxText()
         inject_combo.set_can_focus(True)
         inject_combo.connect("button-press-event", self._on_combo_button_press)
@@ -1423,8 +1467,12 @@ class PreferencesWindow:
         inject_combo.set_active_id(self.config["injection_mode"])
         inject_combo.connect("changed", lambda x: self.update_config("injection_mode", x.get_active_id()))
         # Tooltip moved to label to avoid interference with dropdown popup
-        grid.attach(inject_combo, 1, row, 1, 1)
-        row += 1
+        # Host only: the Flatpak always types through the libei portal, so
+        # Auto/Type/Paste don't apply — don't show the selector there.
+        if not os.environ.get("FLATPAK_ID"):
+            grid.attach(inject_label, 0, row, 1, 1)
+            grid.attach(inject_combo, 1, row, 1, 1)
+            row += 1
 
         # ===== PRIVACY SECTION =====
         privacy_sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
@@ -1572,34 +1620,50 @@ class PreferencesWindow:
         grid.attach(typing_header, 0, row, 2, 1)
         row += 1
 
-        # Typing Status Label
-        self.typing_status_label = Gtk.Label(label="Checking...", xalign=0)
-        self.typing_status_label.set_margin_start(10)
-        self.typing_status_label.set_margin_bottom(10)
-        grid.attach(self.typing_status_label, 0, row, 2, 1)
-        row += 1
+        # The Typing Setup body is host (Backend A) only — it configures
+        # /dev/uinput permissions for ydotool. The Flatpak types through the
+        # libei portal (nothing to configure), so show a one-line note instead of
+        # a "Fix Typing Permissions" button that can't do anything.
+        if os.environ.get("FLATPAK_ID"):
+            typing_note = Gtk.Label()
+            typing_note.set_markup(
+                "<span size='small'>Typing works automatically through your "
+                "desktop's secure input portal — nothing to set up.</span>")
+            typing_note.set_xalign(0)
+            typing_note.set_line_wrap(True)
+            typing_note.set_margin_start(10)
+            typing_note.set_margin_bottom(10)
+            grid.attach(typing_note, 0, row, 2, 1)
+            row += 1
+        else:
+            # Typing Status Label
+            self.typing_status_label = Gtk.Label(label="Checking...", xalign=0)
+            self.typing_status_label.set_margin_start(10)
+            self.typing_status_label.set_margin_bottom(10)
+            grid.attach(self.typing_status_label, 0, row, 2, 1)
+            row += 1
 
-        # Button box for Typing actions
-        typing_button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        typing_button_box.set_margin_start(10)
+            # Button box for Typing actions
+            typing_button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+            typing_button_box.set_margin_start(10)
 
-        # Fix Typing button
-        self.fix_typing_button = Gtk.Button(label="Fix Typing Permissions")
-        self.fix_typing_button.connect("clicked", self._on_fix_typing_clicked)
-        self.fix_typing_button.get_child().set_xalign(0.5)
-        self.fix_typing_button.set_tooltip_text(
-            "Configure system permissions for keystroke injection.\n"
-            "Required for typing mode to work. Uses /dev/uinput.\n"
-            "Will prompt for admin password."
-        )
-        self.fix_typing_button.set_sensitive(False)
-        typing_button_box.pack_start(self.fix_typing_button, False, False, 0)
+            # Fix Typing button
+            self.fix_typing_button = Gtk.Button(label="Fix Typing Permissions")
+            self.fix_typing_button.connect("clicked", self._on_fix_typing_clicked)
+            self.fix_typing_button.get_child().set_xalign(0.5)
+            self.fix_typing_button.set_tooltip_text(
+                "Configure system permissions for keystroke injection.\n"
+                "Required for typing mode to work. Uses /dev/uinput.\n"
+                "Will prompt for admin password."
+            )
+            self.fix_typing_button.set_sensitive(False)
+            typing_button_box.pack_start(self.fix_typing_button, False, False, 0)
 
-        grid.attach(typing_button_box, 0, row, 2, 1)
-        row += 1
+            grid.attach(typing_button_box, 0, row, 2, 1)
+            row += 1
 
-        # Initial typing check
-        GLib.timeout_add(600, self._initial_typing_check)
+            # Initial typing check
+            GLib.timeout_add(600, self._initial_typing_check)
 
         # Add horizontal separator before Extensions section
         separator3 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
@@ -1875,9 +1939,11 @@ class PreferencesWindow:
                 'Updates are downloaded, installed, and TalkType restarts automatically.</span>')
         elif install_type in ("rpm", "deb", "package"):
             info_markup = (
-                '<span size="small">Installed from a system package. Updates are '
-                'installed through your package manager — checking here tells you '
-                'when a new version is available.</span>')
+                '<span size="small">Installed from a .deb/.rpm. TalkType downloads '
+                'and installs updates for you: <b>Check for Updates</b> fetches the '
+                'new package and installs it with your password — through your '
+                'system package manager, so dependencies resolve. (It is not on a '
+                'distro repository; TalkType checks GitHub itself.)</span>')
         elif install_type == "aur":
             info_markup = (
                 '<span size="small">Installed from the AUR. Update with your AUR '

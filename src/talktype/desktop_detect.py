@@ -42,6 +42,22 @@ def get_desktop_environment() -> str:
     return 'unknown'
 
 
+def flatpak_hotkey_hint() -> str:
+    """One-line, desktop-aware instruction for changing the dictation keys on the
+    Flatpak, where they're owned by the global-shortcuts portal rather than
+    TalkType's own config. Preferences shows this instead of an editable combo so
+    the user is sent to the place the keys actually live."""
+    de = get_desktop_environment()
+    if de == 'kde':
+        return ("Open System Settings → Keyboard → Shortcuts, find TalkType under "
+                "Applications, and set “Hold to talk” and “Toggle dictation”.")
+    if de == 'gnome':
+        return ("Open Settings → Keyboard → View and Customize Shortcuts, find "
+                "TalkType, and set “Hold to talk” and “Toggle dictation”.")
+    return ("Open your desktop's global keyboard shortcut settings, find TalkType, "
+            "and set “Hold to talk” and “Toggle dictation”.")
+
+
 def is_gnome() -> bool:
     """Check if running GNOME desktop"""
     return get_desktop_environment() == 'gnome'

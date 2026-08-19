@@ -126,6 +126,17 @@ The AppImage includes everything needed - just download and run!
 > - **Arch/Manjaro**: `sudo pacman -S fuse2`
 > - **openSUSE**: `sudo zypper install libfuse2`
 
+### Flatpak (coming to Flathub)
+
+Prefer a **sandboxed Flatpak** that updates automatically through your software
+center? TalkType is on its way to **Flathub**:
+
+👉 **[flathub.org/apps/io.github.ronb1964.TalkType](https://flathub.org/apps/io.github.ronb1964.TalkType)**
+
+> The Flathub link goes live once the submission is approved. On the Flatpak,
+> your dictation keys are assigned through your desktop's own keyboard-shortcut
+> settings (System Settings → Keyboard → Shortcuts) rather than the F8/F9 defaults.
+
 ### System Requirements
 
 | Requirement | Details |

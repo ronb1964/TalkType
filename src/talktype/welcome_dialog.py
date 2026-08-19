@@ -1072,8 +1072,10 @@ class WelcomeDialog:
         # the other icons; keep it OUTSIDE the white span or the colour override flattens it.
         must_do.set_markup(
             '<span size="x-large">⚠️</span>  '
-            '<span size="medium" foreground="#ffffff"><b>TalkType will NOT work '
-            'until you do this — it takes about 30 seconds.</b></span>'
+            '<span size="medium" foreground="#ffffff"><b>You’ll set your key at '
+            'the end: once you finish these setup screens, TalkType starts and '
+            'your desktop pops up a window to bind it (about 30 seconds). It '
+            'won’t dictate until you do.</b></span>'
         )
         must_do.set_halign(Gtk.Align.START)
         must_do.set_line_wrap(True)
@@ -1119,13 +1121,12 @@ class WelcomeDialog:
         if "KDE" in desktop:
             how_title = "To set your keys on KDE Plasma:"
             steps = (
-                "1. Open <b>System Settings</b>.\n"
-                "2. In the left sidebar click <b>Keyboard</b>, then <b>Shortcuts</b>.\n"
-                "3. In the middle list, under <b>Applications</b>, click <b>TalkType</b>.\n"
-                "4. On the right, click the button next to <b>Hold to talk</b> "
-                "(and/or <b>Toggle dictation</b>) and press the key you want "
-                "(for example F8, then F9).\n"
-                "5. Click <b>Apply</b>."
+                "When TalkType starts, KDE pops up a <b>“Global Shortcuts "
+                "Requested”</b> window for <b>Hold to talk</b> and "
+                "<b>Toggle dictation</b>. Click the button next to each, press "
+                "the key you want (for example F8, then F9), and confirm.\n"
+                "<i>You can change these any time later in "
+                "System Settings → Keyboard → Shortcuts (under Applications).</i>"
             )
         elif self.has_gnome or "GNOME" in desktop:
             how_title = "To set your keys on GNOME:"
@@ -1144,10 +1145,12 @@ class WelcomeDialog:
         else:
             how_title = "To set your keys:"
             steps = (
-                "Your desktop supports global shortcuts. Open its shortcut settings "
-                "(usually <b>Settings → Keyboard → Shortcuts</b>, or your "
-                "compositor’s config) and assign a key to the two <b>TalkType</b> "
-                "entries — <b>Hold to talk</b> and <b>Toggle dictation</b>."
+                "When TalkType starts (after you finish these screens), your "
+                "desktop’s global-shortcuts prompt lets you bind <b>Hold to "
+                "talk</b> and <b>Toggle dictation</b> — press the key you want "
+                "for each when it appears.\n"
+                "<i>If no prompt shows, you can assign them later in your "
+                "desktop’s keyboard-shortcut settings, under <b>TalkType</b>.</i>"
             )
 
         how_label = Gtk.Label()
@@ -1166,11 +1169,24 @@ class WelcomeDialog:
         steps_label.set_margin_top(4)
         box.pack_start(steps_label, False, False, 0)
 
-        # GNOME's "type into other apps" consent (the RemoteDesktop portal)
-        # defaults its "Allow Remote Interaction" switch to OFF — click Share
-        # without flipping it and dictation types nothing while the beeps still
-        # play, which reads as broken. Call the switch out explicitly on GNOME.
-        if self.has_gnome or "GNOME" in desktop:
+        # The "type into other apps" consent (the RemoteDesktop portal) differs
+        # by desktop, and each has a gotcha worth calling out:
+        #  - GNOME defaults its "Allow Remote Interaction" switch to OFF; click
+        #    Share without it and dictation types nothing while beeps still play.
+        #  - KDE opens a fresh remote-control session per dictation, so it shows a
+        #    "Started Remote Desktop" popup EVERY time. "Allow restoring" only
+        #    stops the APPROVAL dialog re-asking — the popup is a separate KDE
+        #    notification, turned off in System Settings (there's no toggle in the
+        #    approval dialog itself; Plasma 6.5 will add a permissions page).
+        if "KDE" in desktop:
+            perm_note = (
+                "💡 The first time you dictate, KDE's <b>Remote Control</b> window "
+                "asks to allow controlling input — check <b>Allow restoring on "
+                "future sessions</b>, then <b>Approve</b> (a one-time OK). KDE also "
+                "shows a small notification after each dictation; the <b>last setup "
+                "screen</b> shows how to turn it off."
+            )
+        elif self.has_gnome or "GNOME" in desktop:
             perm_note = (
                 "💡 The first time you dictate, GNOME asks to allow typing into "
                 "other apps. Turn <b>on</b> the <b>Allow Remote Interaction</b> "
@@ -1715,9 +1731,16 @@ class WelcomeDialog:
             vbox.pack_start(button_box, False, False, 0)
             return
 
-        # Next steps note
+        # Next steps note. On the Flatpak there is no evdev hotkey test; instead,
+        # finishing here starts TalkType and the desktop pops up its own window to
+        # bind the key — so tell the user that's what's coming, not a test.
         next_label = Gtk.Label()
-        next_label.set_markup('<span><b>Next:</b> You\'ll test your hotkeys to ensure they work correctly</span>')
+        if self.is_flatpak:
+            next_label.set_markup(
+                '<span><b>Next:</b> choose your speech model, then TalkType '
+                'starts and prompts you to set your dictation key.</span>')
+        else:
+            next_label.set_markup('<span><b>Next:</b> You\'ll test your hotkeys to ensure they work correctly</span>')
         next_label.set_halign(Gtk.Align.START)
         next_label.set_line_wrap(True)
         next_label.set_margin_top(10)
@@ -1971,7 +1994,24 @@ def show_tips_and_features_dialog(extension_installed=False):
     # Tips section
     tips_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
 
-    tips = [
+    tips = []
+
+    # On the KDE Flatpak a "Remote control session started" popup fires after
+    # EVERY dictation. The multi-step way to silence it belongs HERE — the last
+    # screen before the user starts dictating — not on an early onboarding screen
+    # they'll have long forgotten by the time the popup actually appears.
+    import os
+    from .desktop_detect import get_desktop_environment
+    if os.environ.get("FLATPAK_ID") and get_desktop_environment() == "kde":
+        tips.append((
+            "🔔 <b>Turn off KDE's per-dictation popup</b>",
+            "KDE shows a \"Remote control session started\" popup every time you "
+            "dictate. To stop it: click the <b>sliders icon</b> on that popup, then "
+            "under <b>Started Remote Desktop</b> uncheck <b>Show a message in a "
+            "pop-up</b> and click <b>Apply</b>.",
+        ))
+
+    tips += [
         ("🎤 <b>Voice Commands</b>", "Say \"period\", \"comma\", \"new paragraph\" and more to punctuate naturally"),
         ("⚙️ <b>Smart Features</b>", "Auto-punctuation and auto-spacing are enabled by default for smooth dictation"),
         ("🔧 <b>Customize Settings</b>", "Right-click the tray icon to access Preferences - adjust models, hotkeys, and more"),
@@ -2101,12 +2141,13 @@ def show_tips_and_features_dialog(extension_installed=False):
     model_combo.set_size_request(320, -1)  # Fixed width — don't stretch to fill dialog
     model_combo.set_tooltip_text(
         "Choose which AI model to download. You can change this later in Preferences.")
-    # Block the scroll wheel from changing the selection. Without this, scrolling
-    # the dialog with the cursor over this dropdown silently switches the model —
-    # and landing on "Large" pops an "NVIDIA GPU Required" error the user never
-    # asked for. Returning True stops the combo consuming the scroll (same fix
-    # prefs.py applies to all its combos).
-    model_combo.connect("scroll-event", lambda w, e: True)
+    # Forward the scroll wheel to the page instead of changing the selection.
+    # Without this, scrolling the dialog with the cursor over this dropdown
+    # silently switches the model — and landing on "Large" pops an "NVIDIA GPU
+    # Required" error the user never asked for. forward_combo_scroll also keeps
+    # the page scrolling under the cursor (same fix prefs.py applies to its combos).
+    from .ui_style import forward_combo_scroll
+    forward_combo_scroll(model_combo)
     model_box.pack_start(model_combo, False, False, 0)
 
     model_section.pack_start(model_box, False, False, 0)
@@ -2998,9 +3039,16 @@ def show_welcome_and_install():
         except Exception as e:
             logger.error(f"Error during installations: {e}", exc_info=True)
 
-    # Show hotkey testing dialog
-    logger.info("Showing hotkey test dialog")
-    show_hotkey_test_dialog()
+    # Show hotkey testing dialog — but NOT on the Flatpak. That dialog detects
+    # key presses via evdev (raw /dev/input), which the sandbox blocks ("No
+    # keyboards found for evdev"), and the F8/F9 it shows are the evdev defaults,
+    # not the portal shortcuts the desktop actually assigns. So it can't test
+    # anything useful in the Flatpak — skip it entirely.
+    if os.environ.get("FLATPAK_ID"):
+        logger.info("Flatpak: skipping evdev hotkey test (portal shortcuts in use)")
+    else:
+        logger.info("Showing hotkey test dialog")
+        show_hotkey_test_dialog()
 
     # Show tips and features dialog (with extension logout reminder if needed)
     # This now includes model selection and returns the selected model
@@ -3201,6 +3249,30 @@ def show_welcome_and_install():
         needs_restart=needs_restart,
     )
 
+    # On the KDE Flatpak the "Remote control session started" popup starts firing
+    # after every dictation. Onboarding text is gone the moment the user clicks
+    # through, and they need the steps ON SCREEN while they're in System Settings
+    # — so raise the persistent, always-on-top help window now (deferred to the
+    # tray's main loop so it's interactive). It's reopenable from Preferences too.
+    try:
+        # NOTE: no `import os` here — os is imported at module scope and used
+        # earlier in this function (the hotkey-test skip). A local import would
+        # make os function-local and crash that earlier use with UnboundLocalError.
+        from .desktop_detect import get_desktop_environment
+        if os.environ.get("FLATPAK_ID") and get_desktop_environment() == "kde":
+            from gi.repository import GLib
+            from .notification_help import show_notification_help_window
+
+            # One-shot, briefly delayed so the shortcut picker appears first
+            # (it must return False to run once — returning the truthy window
+            # would make the timeout re-fire and keep re-presenting the window).
+            def _show_help_once():
+                show_notification_help_window()
+                return False
+            GLib.timeout_add(3000, _show_help_once)
+    except Exception as e:
+        logger.warning(f"Could not show KDE notification help window: {e}")
+
     logger.info("First-run setup completed")
 
     return result
@@ -3310,8 +3382,11 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
     steps_box.set_margin_start(5)
     steps_box.set_margin_top(5)
 
+    _hold_step = ("1. Press your <b>Hold-to-talk</b> key"
+                  if os.environ.get("FLATPAK_ID")
+                  else "1. Press and hold <b>F8</b> (or your hotkey)")
     steps = [
-        "1. Press and hold <b>F8</b> (or your hotkey)",
+        _hold_step,
         "2. Speak clearly into your microphone",
         "3. Release — text appears instantly!",
     ]
