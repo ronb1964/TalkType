@@ -198,6 +198,7 @@ _TRAY_DBUS_TIMEOUT = 1.5
 # Using two separate Events (rather than one flag) so start and stop can't overwrite each other.
 _cmd_start_recording = threading.Event()
 _cmd_stop_recording = threading.Event()
+_inject_lock = threading.Lock()  # serialise Backend B transcribe/inject workers
 
 # Hotkey test mode: when set, hotkey presses are reported via D-Bus HotkeyPressed
 # signal instead of starting/stopping recording. This keeps the evdev grab alive
@@ -1681,13 +1682,13 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
     # No tracked dictation required \u2014 wipes whatever is in the textarea,
     # including text that wasn't typed by TalkType.
     if undo_type == 'everything':
-        if _send_select_all_delete():
+        if _output_backend().select_all_delete():
             state.last_inserted_text = ""
             state.continue_mid_sentence = False
             _beep(beeps_on, *READY_BEEP)
             if notify_on: _notify("TalkType", "Cleared input field")
         else:
-            print("\u26a0\ufe0f  Could not clear input field (ydotool unavailable)")
+            print("\u26a0\ufe0f  Could not clear input field (text injection unavailable)")
             _beep(beeps_on, *CANCEL_BEEP)
             if notify_on: _notify("TalkType", "Could not clear field")
         return True
@@ -1709,12 +1710,12 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
         # worked meant TalkType played the success beep while nothing had been
         # deleted, leaving the buffer out of step with the document — so the
         # next undo backspaced over text the user had typed themselves.
-        if not _send_backspaces(delete_count):
+        if not _output_backend().backspaces(delete_count):
             print("⚠️  Undo failed — nothing was deleted")
             logger.error("Undo failed: backspaces were not delivered; buffer left unchanged")
             _beep(beeps_on, *CANCEL_BEEP)
             if notify_on:
-                _notify("TalkType", "Undo failed — check that ydotool is running")
+                _notify("TalkType", "Undo failed — text couldn't be deleted")
             return True
 
         # Update last_inserted_text to reflect what remains
@@ -1829,7 +1830,7 @@ def _inject_text(text: str, injection_mode: str, t0: float):
     if injection_mode != "type":
         focused_class = _query_focused_window_class()
         logger.info(f"Electron-broken check: focused_class={focused_class!r}")
-        if focused_class in _ELECTRON_PASTE_BROKEN_CLASSES:
+        if focused_class in _ELECTRON_PASTE_BROKEN_CLASSES and not os.environ.get("FLATPAK_ID"):
             logger.info(f"Electron-paste-broken override: class={focused_class!r}, using fast-type")
             print(f"⌨️  Electron app ({focused_class}): using fast-type fallback")
 
@@ -1886,6 +1887,15 @@ def _inject_text(text: str, injection_mode: str, t0: float):
                 return
             # Nothing landed, so the normal injection path can safely try again.
             logger.warning("Fast-type failed, falling through to normal injection")
+        elif focused_class in _ELECTRON_PASTE_BROKEN_CLASSES:
+            # Flatpak: the libei backend types real key events, which are immune
+            # to the broken synthetic Ctrl+V that fast-type exists to work around
+            # — and ydotool isn't in the sandbox anyway. So there's nothing to
+            # fast-type around: keep only the Claude-Desktop tab safety (a real
+            # Tab jumps focus to the Send button) and fall through to libei typing.
+            logger.info(f"Flatpak + Electron app ({focused_class!r}): libei typing, "
+                        f"tab→spaces (skipping ydotool fast-type)")
+            text = text.replace("\t", "    ")
 
     use_paste = (actual_mode == "paste")
     logger.info(f"Injection mode: configured={injection_mode!r}, actual={actual_mode!r}, atspi={use_atspi}, reason={reason}")
@@ -1994,52 +2004,57 @@ def _inject_text(text: str, injection_mode: str, t0: float):
         logger.warning("Injection failed — undo buffer left unchanged")
 
 
-def stop_recording(
-    beeps_on: bool,
-    smart_quotes: bool,
-    notify_on: bool,
-    language: str | None = None,
-    auto_space: bool = True,
-    auto_period: bool = True,
-    injection_mode: str = "type",
-):
-    """Stop recording, transcribe audio, and inject text into the active app.
+def _finish_capture(beeps_on: bool, notify_on: bool):
+    """End a recording quickly and hand back its audio (the fast half of stop).
 
-    Pipeline: validate \u2192 convert audio \u2192 transcribe \u2192 check undo \u2192 prepare \u2192 beep \u2192 inject
-    """
+    Validates the hold time, stops the stream, hides the indicator, and SNAPSHOTS
+    the captured frames. Returns (frames, rec_sr) or None if the recording was
+    cancelled or too short. start_recording() reassigns state.frames to a fresh
+    list, so the returned reference stays valid even if a new recording begins
+    immediately â which is what lets Backend B run the slow transcription/typing
+    on a worker thread without dropping or mixing audio."""
     held_ms = int((time.time() - (state.press_t0 or time.time())) * 1000)
     if held_ms < MIN_HOLD_MS:
-        cancel_recording(beeps_on, notify_on, f"Cancelled (held {held_ms} ms)"); return
+        cancel_recording(beeps_on, notify_on, f"Cancelled (held {held_ms} ms)")
+        return None
+    frames = state.frames  # snapshot the reference before it can be reassigned
+    rec_sr = getattr(state, 'recording_samplerate', SAMPLE_RATE)
     state.is_recording = False
     _stop_stream_safely()
     _notify_tray_recording_state(False)  # Tell GNOME extension recording stopped
-    if state.was_cancelled: return
-
+    if state.was_cancelled:
+        return None
     # Hide recording indicator before text injection
     if recording_indicator:
         recording_indicator.hide_indicator()
+    return frames, rec_sr
 
+
+def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
+                           language=None, auto_space=True, auto_period=True,
+                           injection_mode="type"):
+    """The slow half of stopping: transcribe the captured audio and inject the
+    text. It touches no GTK (the indicator was already hidden in _finish_capture)
+    and uses only CPU + audio + D-Bus + the output backend, so it is safe on a
+    worker thread â which Backend B uses so the hotkey loop stays live."""
     print("🛑 Recording stopped. Transcribing…")
     t0 = time.time()
     logger.info("Recording stopped, starting transcription")
-
     try:
-        # Convert captured bytes \u2192 float32 mono PCM in [-1, 1]
-        pcm_int16 = np.frombuffer(b''.join(state.frames), dtype=np.int16)
+        # Convert captured bytes → float32 mono PCM in [-1, 1]
+        pcm_int16 = np.frombuffer(b''.join(frames), dtype=np.int16)
         if pcm_int16.size == 0:
-            print("\u2139\ufe0f  (No audio captured)")
+            print("ℹ️  (No audio captured)")
             return
         audio_f32 = pcm_int16.astype(np.float32) / 32768.0
-        rec_sr = getattr(state, 'recording_samplerate', SAMPLE_RATE)
         if rec_sr != SAMPLE_RATE:
             audio_f32 = _resample_audio(audio_f32, rec_sr, SAMPLE_RATE)
 
-        # Stage 1: Transcribe audio \u2192 raw text
+        # Stage 1: Transcribe audio → raw text
         raw = _transcribe_audio(audio_f32, language)
-        post_transcribe = time.time() - t0
-        logger.info(f"TIMING: Transcription pipeline took {post_transcribe:.2f}s")
+        logger.info(f"TIMING: Transcription pipeline took {time.time() - t0:.2f}s")
         if not raw:
-            print("\u2139\ufe0f  (No speech recognized)")
+            print("ℹ️  (No speech recognized)")
             return
 
         # Stage 2: Check for undo commands ("undo that", "undo word", etc.)
@@ -2051,7 +2066,7 @@ def stop_recording(
 
         # Beep to confirm transcription is done
         _beep(beeps_on, *READY_BEEP)
-        _ellipsis = "\u2026"  # Must be outside f-string for Python 3.10 compat
+        _ellipsis = "…"  # Must be outside f-string for Python 3.10 compat
         if notify_on: _notify("TalkType", f"Transcribed: {text[:80]}{_ellipsis if len(text)>80 else ''}")
 
         # Stage 4: Inject text into the active application
@@ -2060,10 +2075,34 @@ def stop_recording(
 
     except Exception as e:
         logger.error(f"Transcription error: {e}", exc_info=True)
-        print(f"\u274c Transcription error: {e}")
+        print(f"❌ Transcription error: {e}")
         _beep(beeps_on, *READY_BEEP)
-        _ellipsis = "\u2026"  # Must be outside f-string for Python 3.10 compat
+        _ellipsis = "…"  # Must be outside f-string for Python 3.10 compat
         if notify_on: _notify("TalkType", f"Transcription failed: {str(e)[:60]}{_ellipsis if len(str(e))>60 else ''}")
+
+
+def stop_recording(
+    beeps_on: bool,
+    smart_quotes: bool,
+    notify_on: bool,
+    language: str | None = None,
+    auto_space: bool = True,
+    auto_period: bool = True,
+    injection_mode: str = "type",
+):
+    """Stop recording, transcribe audio, and inject text — synchronously.
+
+    Backend A (evdev) path, behaviour unchanged: the whole pipeline runs on the
+    caller's thread. Backend B splits the two halves (see _service_tick) so the
+    slow transcription/typing runs off the hotkey loop.
+    """
+    cap = _finish_capture(beeps_on, notify_on)
+    if cap is None:
+        return
+    frames, rec_sr = cap
+    _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
+                           language, auto_space, auto_period, injection_mode)
+
 
 def _show_welcome_after_change(cfg, mode):
     """Show 'Hotkeys Updated!' dialog after user changed keys via Preferences.
@@ -2238,8 +2277,27 @@ def _service_tick(cfg, input_device_idx, svc: "_ServiceState") -> None:
         _cmd_stop_recording.clear()
         if state.is_recording:
             _release_all_grabs()
-            stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
-                           cfg.auto_space, cfg.auto_period, cfg.injection_mode)
+            if os.environ.get("FLATPAK_ID"):
+                # Backend B (Flatpak): transcription + portal typing are slow
+                # and would freeze THIS GLib loop — and F3/F4 with it — for as
+                # long as they run (10–20s on a CPU-only box). Snapshot the
+                # recording here (fast) and run the slow half on a worker
+                # thread so the hotkey stays responsive. _inject_lock serialises
+                # workers so two dictations never transcribe/type at once.
+                cap = _finish_capture(cfg.beeps, cfg.notify)
+                if cap is not None:
+                    frames, rec_sr = cap
+                    def _worker(frames=frames, rec_sr=rec_sr, cfg=cfg):
+                        with _inject_lock:
+                            _transcribe_and_inject(
+                                frames, rec_sr, cfg.beeps, cfg.smart_quotes,
+                                cfg.notify, cfg.language, cfg.auto_space,
+                                cfg.auto_period, cfg.injection_mode)
+                    threading.Thread(target=_worker, daemon=True,
+                                     name="tt-inject").start()
+            else:
+                stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
+                               cfg.auto_space, cfg.auto_period, cfg.injection_mode)
             svc.last_activity = now
     if svc.timeout_enabled and not state.is_recording:
         if now - svc.last_activity > svc.timeout_seconds:

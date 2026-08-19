@@ -12,9 +12,23 @@ import os
 class OutputBackend:
     """Types text into the focused application. Returns True if the text was
     actually delivered, False if injection failed (never raises — the caller
-    surfaces a plain-language notice on False)."""
+    surfaces a plain-language notice on False).
+
+    Beyond plain text, editing voice commands need to press key combos —
+    'delete everything' (Ctrl+A + Backspace) and character-undo (Backspace ×N).
+    Those go through the backend too, so the Flatpak (libei) and host (ydotool)
+    paths stay in lockstep instead of the commands hardcoding ydotool and
+    silently doing nothing inside the sandbox."""
 
     def type_text(self, text: str) -> bool:
+        raise NotImplementedError
+
+    def select_all_delete(self) -> bool:
+        """Clear the focused field (Ctrl+A + Backspace)."""
+        raise NotImplementedError
+
+    def backspaces(self, count: int) -> bool:
+        """Send `count` Backspace presses (character-level undo)."""
         raise NotImplementedError
 
 
@@ -24,6 +38,14 @@ class YdotoolOutputBackend(OutputBackend):
     def type_text(self, text: str) -> bool:
         from . import app
         return app._type_text(text)
+
+    def select_all_delete(self) -> bool:
+        from . import app
+        return app._send_select_all_delete()
+
+    def backspaces(self, count: int) -> bool:
+        from . import app
+        return app._send_backspaces(count)
 
 
 class LibeiOutputBackend(OutputBackend):
@@ -90,8 +112,14 @@ class LibeiOutputBackend(OutputBackend):
         from . import portal_common as pc
 
         logger = logging.getLogger(__name__)
+        # Own GMainContext: the per-dictation handshake now runs on a worker
+        # thread (Backend B moved transcription + typing off the hotkey loop).
+        # Two threads may not iterate the same (default) context, so push a
+        # private one — the portal's async callbacks are then delivered on it.
+        ctx = GLib.MainContext.new()
+        ctx.push_thread_default()
         bus = pc.session_bus()
-        loop = GLib.MainLoop()
+        loop = GLib.MainLoop.new(ctx, False)
         st = {"session": None, "fd": None}
 
         def fail(code):
@@ -152,16 +180,20 @@ class LibeiOutputBackend(OutputBackend):
             st["fd"] = fd_list.get(ret.unpack()[0])
             loop.quit()
 
-        create_session()
-        loop.run()
-        return st["fd"], st["session"]
+        try:
+            create_session()
+            loop.run()
+            return st["fd"], st["session"]
+        finally:
+            ctx.pop_thread_default()
 
-    def type_text(self, text: str) -> bool:
-        """Type via a FRESH RemoteDesktop/EIS session per call. A persistent
-        session only ever types once — KDE's EIS delivers keystrokes on a fresh
-        DEVICE_RESUMED, so re-establishing per dictation is what types reliably
-        (proven by the portal spike). The saved restore_token means the approval
-        dialog appears only the first time. Never raises."""
+    def _with_session(self, action) -> bool:
+        """Run `action(session)` inside a FRESH RemoteDesktop/EIS session. A
+        persistent session only ever types once — KDE's EIS delivers keystrokes
+        on a fresh DEVICE_RESUMED, so re-establishing per call is what emits
+        reliably (proven by the portal spike). The saved restore_token means the
+        approval dialog appears only the first time. Returns action's bool result,
+        or False if the handshake/device wasn't ready. Never raises."""
         import logging
         import os
         logger = logging.getLogger(__name__)
@@ -178,9 +210,9 @@ class LibeiOutputBackend(OutputBackend):
             if not session.pump_until_ready():
                 logger.warning("libei device did not become ready")
                 return False
-            return bool(session.type_string(text))
+            return bool(action(session))
         except Exception as e:
-            logger.error("libei type_text failed: %s", e)
+            logger.error("libei session action failed: %s", e)
             return False
         finally:
             if session_path:
@@ -190,6 +222,15 @@ class LibeiOutputBackend(OutputBackend):
                     os.close(fd)
                 except OSError:
                     pass
+
+    def type_text(self, text: str) -> bool:
+        return self._with_session(lambda s: s.type_string(text))
+
+    def select_all_delete(self) -> bool:
+        return self._with_session(lambda s: s.select_all_delete())
+
+    def backspaces(self, count: int) -> bool:
+        return self._with_session(lambda s: s.backspaces(count))
 
 
 def get_output_backend(flatpak_id=None) -> OutputBackend:

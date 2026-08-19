@@ -26,6 +26,9 @@ EI_DEVICE_CAP_KEYBOARD = 1 << 2  # = 4
 
 # --- evdev keycodes (linux/input-event-codes.h) ---
 KEY_LEFTSHIFT = 42
+KEY_LEFTCTRL = 29
+KEY_BACKSPACE = 14
+KEY_A = 30
 KEY_SPACE = 57
 KEY_ENTER = 28
 
@@ -184,37 +187,79 @@ class LibeiSession:
             ei.ei_device_keyboard_key(dev, KEY_LEFTSHIFT, False)
             ei.ei_device_frame(dev, ei.ei_now(ctx))
 
-    def type_string(self, text: str) -> bool:
-        """Type `text` via libei. Handles the §SHIFT_ENTER§ soft-break marker
-        (Shift+Enter) and plain newlines (Enter). Returns False if no device
-        became ready."""
+    def _emit_modified(self, modifier_kc: int, keycode: int):
+        """Press `keycode` with a modifier (e.g. Ctrl) held, then release both.
+        Used for editing combos like Ctrl+A that plain typing can't express."""
+        ei, ctx, dev = self.ei, self.ctx, self.device
+        ei.ei_device_keyboard_key(dev, modifier_kc, True)
+        ei.ei_device_frame(dev, ei.ei_now(ctx))
+        ei.ei_device_keyboard_key(dev, keycode, True)
+        ei.ei_device_frame(dev, ei.ei_now(ctx))
+        ei.ei_device_keyboard_key(dev, keycode, False)
+        ei.ei_device_frame(dev, ei.ei_now(ctx))
+        ei.ei_device_keyboard_key(dev, modifier_kc, False)
+        ei.ei_device_frame(dev, ei.ei_now(ctx))
+
+    def _run_emitting(self, emit) -> bool:
+        """Shared wrapper for every emission: service the connection, ensure a
+        device is ready, then run `emit()` inside one start/stop-emulating frame
+        and flush the socket. Returns False if no device became ready (never
+        raises). type_string and the editing key-combos all go through here so
+        the device-readiness and flush handling live in exactly one place."""
         # Service the connection and refresh device state right before emitting.
         self._drain()
         if self.device is None and not self.pump_until_ready(timeout=2.0):
-            _log.warning("[libei] type_string: no device after drain")
+            _log.warning("[libei] no device ready after drain")
             return False
         ei, ctx, dev = self.ei, self.ctx, self.device
         self._seq += 1
         ei.ei_device_start_emulating(dev, self._seq)
-        i = 0
-        n = len(text)
-        marker = SHIFT_ENTER_MARKER
-        while i < n:
-            if text.startswith(marker, i):
-                self._emit_key(KEY_ENTER, shift=True)   # soft line break
-                i += len(marker)
-                continue
-            ch = text[i]
-            if ch == "\n":
-                self._emit_key(KEY_ENTER, shift=False)  # hard newline
-            else:
-                kc = CHAR_TO_KEYCODE.get(ch)
-                if kc is not None:  # skip unsupported characters
-                    self._emit_key(kc, ch in SHIFT_CHARS)
-            i += 1
+        emit()
         ei.ei_device_stop_emulating(dev)
         # Keep dispatching briefly so the outgoing frames flush to the socket.
         for _ in range(6):
             ei.ei_dispatch(ctx)
             time.sleep(0.05)
         return True
+
+    def type_string(self, text: str) -> bool:
+        """Type `text` via libei. Handles the §SHIFT_ENTER§ soft-break marker
+        (Shift+Enter) and plain newlines (Enter). Returns False if no device
+        became ready."""
+        marker = SHIFT_ENTER_MARKER
+
+        def emit():
+            i, n = 0, len(text)
+            while i < n:
+                if text.startswith(marker, i):
+                    self._emit_key(KEY_ENTER, shift=True)   # soft line break
+                    i += len(marker)
+                    continue
+                ch = text[i]
+                if ch == "\n":
+                    self._emit_key(KEY_ENTER, shift=False)  # hard newline
+                else:
+                    kc = CHAR_TO_KEYCODE.get(ch)
+                    if kc is not None:  # skip unsupported characters
+                        self._emit_key(kc, ch in SHIFT_CHARS)
+                i += 1
+
+        return self._run_emitting(emit)
+
+    def select_all_delete(self) -> bool:
+        """Ctrl+A then Backspace — wipe the focused field. The libei counterpart
+        of the ydotool path used off-Flatpak (app._send_select_all_delete), so
+        the 'delete everything' voice command works inside the sandbox too."""
+        def emit():
+            self._emit_modified(KEY_LEFTCTRL, KEY_A)
+            self._emit_key(KEY_BACKSPACE, shift=False)
+
+        return self._run_emitting(emit)
+
+    def backspaces(self, count: int) -> bool:
+        """Send `count` Backspace presses — character-level undo over libei."""
+        def emit():
+            for _ in range(max(0, count)):
+                self._emit_key(KEY_BACKSPACE, shift=False)
+
+        return self._run_emitting(emit)

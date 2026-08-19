@@ -1,0 +1,59 @@
+"""stop_recording was split so Backend B (Flatpak) can run the slow half
+(transcribe + portal typing) on a worker thread, keeping the F3/F4 hotkey loop
+responsive instead of freezing it for 10-20s per dictation on a CPU-only box.
+
+The correctness hinge is that _finish_capture SNAPSHOTS the audio frames on the
+loop before the worker starts, so a new recording (which reassigns state.frames)
+can't clobber the audio being transcribed.
+"""
+import time
+
+from talktype import app
+
+
+def test_finish_capture_snapshots_frames_surviving_next_recording(monkeypatch):
+    monkeypatch.setattr(app, "_stop_stream_safely", lambda: None)
+    monkeypatch.setattr(app, "_notify_tray_recording_state", lambda *_a: None)
+    monkeypatch.setattr(app, "recording_indicator", None)
+
+    app.state.frames = [b"hello-audio"]
+    app.state.press_t0 = time.time() - 1.0  # held well past MIN_HOLD_MS
+    app.state.is_recording = True
+    app.state.was_cancelled = False
+
+    cap = app._finish_capture(beeps_on=False, notify_on=False)
+    assert cap is not None
+    frames, _rec_sr = cap
+    assert frames == [b"hello-audio"]
+    assert app.state.is_recording is False
+
+    # A new recording reassigns state.frames to a fresh list — the snapshot the
+    # worker will transcribe must NOT be affected.
+    app.state.frames = []
+    assert frames == [b"hello-audio"], "snapshot must survive a new recording"
+
+
+def test_finish_capture_returns_none_when_too_short(monkeypatch):
+    monkeypatch.setattr(app, "cancel_recording", lambda *a, **k: None)
+    app.state.press_t0 = time.time()  # ~0 ms held -> below MIN_HOLD_MS
+    app.state.is_recording = True
+    assert app._finish_capture(beeps_on=False, notify_on=False) is None
+
+
+def test_stop_recording_composes_finish_then_inject(monkeypatch):
+    # Backend A path: stop_recording = _finish_capture + _transcribe_and_inject.
+    got = []
+    monkeypatch.setattr(app, "_finish_capture", lambda b, n: ([b"aud"], 16000))
+    monkeypatch.setattr(app, "_transcribe_and_inject",
+                        lambda frames, rec_sr, *a, **k: got.append((frames, rec_sr)))
+    app.stop_recording(beeps_on=False, smart_quotes=True, notify_on=False)
+    assert got == [([b"aud"], 16000)]
+
+
+def test_stop_recording_skips_inject_when_capture_none(monkeypatch):
+    # Cancelled / too-short recording: no transcription or injection at all.
+    got = []
+    monkeypatch.setattr(app, "_finish_capture", lambda b, n: None)
+    monkeypatch.setattr(app, "_transcribe_and_inject", lambda *a, **k: got.append(1))
+    app.stop_recording(beeps_on=False, smart_quotes=True, notify_on=False)
+    assert got == []

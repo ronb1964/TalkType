@@ -36,3 +36,73 @@ def test_load_libei_sets_signatures_or_skips():
         pytest.skip("libei.so.1 not present on this host")
     assert ei.ei_new_sender.restype == ctypes.c_void_p
     assert ei.ei_setup_backend_fd.restype == ctypes.c_int
+
+
+class _FakeEi:
+    """Records the (keycode, pressed) sequence emitted through libei, so the key
+    combos can be asserted without a live EIS connection."""
+
+    def __init__(self):
+        self.events = []
+
+    def ei_device_keyboard_key(self, dev, keycode, pressed):
+        self.events.append((keycode, bool(pressed)))
+
+    def ei_device_frame(self, dev, when):
+        pass
+
+    def ei_now(self, ctx):
+        return 0
+
+    def ei_device_start_emulating(self, dev, seq):
+        pass
+
+    def ei_device_stop_emulating(self, dev):
+        pass
+
+    def ei_dispatch(self, ctx):
+        pass
+
+    def ei_get_event(self, ctx):
+        return None  # nothing queued -> _drain loop exits immediately
+
+
+def _fake_ready_session(monkeypatch):
+    """A LibeiSession with a fake ei and a live device, bypassing __init__ (which
+    needs a real EIS fd). time.sleep is neutralised so the flush loop is instant."""
+    monkeypatch.setattr(L.time, "sleep", lambda *a, **k: None)
+    s = L.LibeiSession.__new__(L.LibeiSession)
+    s.ei = _FakeEi()
+    s.ctx = object()
+    s.device = object()
+    s._seq = 0
+    return s
+
+
+def test_libei_select_all_delete_emits_ctrl_a_then_backspace(monkeypatch):
+    s = _fake_ready_session(monkeypatch)
+    assert s.select_all_delete() is True
+    assert s.ei.events == [
+        (L.KEY_LEFTCTRL, True),
+        (L.KEY_A, True),
+        (L.KEY_A, False),
+        (L.KEY_LEFTCTRL, False),
+        (L.KEY_BACKSPACE, True),
+        (L.KEY_BACKSPACE, False),
+    ]
+
+
+def test_libei_backspaces_emits_n_backspaces(monkeypatch):
+    s = _fake_ready_session(monkeypatch)
+    assert s.backspaces(3) is True
+    assert s.ei.events == [
+        (L.KEY_BACKSPACE, True), (L.KEY_BACKSPACE, False),
+        (L.KEY_BACKSPACE, True), (L.KEY_BACKSPACE, False),
+        (L.KEY_BACKSPACE, True), (L.KEY_BACKSPACE, False),
+    ]
+
+
+def test_libei_backspaces_zero_is_noop(monkeypatch):
+    s = _fake_ready_session(monkeypatch)
+    assert s.backspaces(0) is True
+    assert s.ei.events == []
