@@ -192,7 +192,7 @@ modules:
     sources:
       - type: git
         url: https://github.com/ronb1964/TalkType.git
-        # Pinned to the commit that carries the 0.7.2 <release> in the appdata.
-        # (filled in after the appdata-fix commit is pushed)
-        tag: v0.7.2
-        commit: REPLACE_WITH_APPDATA_FIX_COMMIT
+        # Pinned commit that carries the 0.7.2 <release> in the appdata (a child
+        # of the v0.7.2 tag, which predates the appdata entry). Flathub requires a
+        # pinned commit, not a floating branch.
+        commit: 76e6cbe3e48407487c89aac8109b2a37d834f9cd
