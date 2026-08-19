@@ -104,13 +104,69 @@ def _autostart_desktop_path() -> str:
     return os.path.join(autostart_dir, filename)
 
 
-def set_autostart(enable: bool) -> bool:
-    """Create or disable the autostart .desktop file. Returns True on success.
+def _set_autostart_flatpak(enable: bool) -> bool:
+    """Enable/disable launch-at-login on the Flatpak via the Background portal.
 
-    Disabling writes a `Hidden=true` stub rather than deleting the file — more
-    reliable across desktops (KDE caches entries), and it overrides any existing
-    entry.
+    A sandboxed app CANNOT make itself autostart by writing ~/.config/autostart:
+    inside the sandbox that path is the app's PRIVATE config, which the host
+    desktop never reads (verified — this is why "start at login" silently did
+    nothing on the Flatpak). RequestBackground(autostart=…) is the sanctioned
+    path: the portal writes a HOST autostart entry whose Exec is
+    `flatpak run … talktype-launcher` — the only command that launches with the
+    bundled environment. The desktop may prompt the user the first time.
+
+    Returns True if the portal request completed. Never raises.
     """
+    try:
+        import gi
+        gi.require_version("Gio", "2.0")
+        from gi.repository import GLib
+        from . import portal_common as pc
+
+        bus = pc.session_bus()
+        loop = GLib.MainLoop()
+        st = {"ok": False}
+
+        def builder(token):
+            opts = {
+                "handle_token": GLib.Variant("s", token),
+                "reason": GLib.Variant(
+                    "s", "Start TalkType automatically when you log in"),
+                "autostart": GLib.Variant("b", enable),
+                "background": GLib.Variant("b", False),
+                # Command to run inside the sandbox at login; the portal wraps it
+                # as `flatpak run --command=talktype-launcher <app-id>`.
+                "commandline": GLib.Variant("as", ["talktype-launcher"]),
+            }
+            return GLib.Variant("(sa{sv})", ("", opts))  # parent_window="", options
+
+        def on_response(code, results):
+            st["ok"] = (code == 0)
+            loop.quit()
+
+        pc.call_portal(bus, "org.freedesktop.portal.Background",
+                       "RequestBackground", builder, on_response)
+        loop.run()
+        logger.info("Flatpak autostart %s via Background portal (ok=%s)",
+                    "enabled" if enable else "disabled", st["ok"])
+        return st["ok"]
+    except Exception as e:
+        logger.error(f"Flatpak autostart via Background portal failed: {e}")
+        return False
+
+
+def set_autostart(enable: bool) -> bool:
+    """Create or disable the autostart entry. Returns True on success.
+
+    On the Flatpak this goes through the Background portal (the sandbox can't
+    write the host autostart file). Off Flatpak it writes the XDG autostart
+    .desktop directly; disabling writes a `Hidden=true` stub rather than deleting
+    the file — more reliable across desktops (KDE caches entries), and it
+    overrides any existing entry.
+    """
+    if os.environ.get("FLATPAK_ID"):
+        return _set_autostart_flatpak(enable)
+
     from . import config
     desktop_file = _autostart_desktop_path()
     autostart_dir = os.path.dirname(desktop_file)
