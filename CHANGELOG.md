@@ -2,6 +2,23 @@
 
 All notable changes to TalkType are documented here.
 
+## [0.7.2] - 2026-08-19
+
+A small polish release for the AppImage, `.deb`, and `.rpm` builds. (A sandboxed
+Flatpak edition is on its way to **Flathub** — see the README.)
+
+### Fixed
+- **The recording-indicator color picker now shows a visible checkmark** on the
+  white and other light-colored swatches, so you can tell which color is selected.
+- **Scrolling a Preferences or setup window no longer stalls** when the pointer is
+  over a dropdown — the page scrolls as expected and the dropdown value is left
+  alone (instead of you having to move the mouse off the dropdown first).
+
+### Changed
+- **Clearer update wording on `.deb`/`.rpm` installs:** the Updates tab now says
+  plainly that TalkType downloads *and* installs updates for you (with your
+  password), rather than implying you have to update through your distro yourself.
+
 ## [0.7.1] - 2026-08-16
 
 This release fixes how TalkType updates itself, so that updating works correctly
