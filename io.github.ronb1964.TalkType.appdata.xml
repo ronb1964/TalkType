@@ -77,6 +77,16 @@
   </screenshots>
 
   <releases>
+    <release version="0.7.2" date="2026-08-19">
+      <description>
+        <p>Preferences polish</p>
+        <ul>
+          <li>The recording-indicator color picker now shows a visible checkmark on white and other light-colored swatches</li>
+          <li>Scrolling a Preferences or setup window no longer stalls when the pointer is over a dropdown</li>
+          <li>Clearer wording for how .deb/.rpm installs update themselves</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.7.1" date="2026-08-16">
       <description>
         <p>Fixes how TalkType updates itself, so updating works correctly however you installed it</p>
