@@ -20,7 +20,7 @@
 Most voice dictation tools on Linux are either cloud-based (privacy concerns), command-line only (not user-friendly), or broken on Wayland. TalkType is different:
 
 - **100% offline** — All processing happens locally using Whisper AI. Nothing is sent to the cloud.
-- **Works on Wayland** — Built from the ground up for modern Linux desktops (also supports X11).
+- **Global hotkeys that actually work on Wayland** — many Linux dictation tools rely on X11 key grabs (or `pynput`), which Wayland blocks by design. TalkType reads the key at the kernel level via `/dev/input`, below the compositor, so push-to-talk works the same on GNOME, KDE, Sway and Hyprland (X11 too).
 - **Zero configuration** — Download the AppImage, run it, start talking. First-run wizard handles the rest.
 - **Any desktop environment** — GNOME (with native shell extension), KDE, XFCE, Sway, Hyprland, and more.
 - **GPU accelerated** — Optional NVIDIA CUDA support for 3-5x faster transcription.
