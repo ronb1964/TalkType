@@ -7,13 +7,18 @@ keystroke injection via ydotool on Wayland.
 
 The problem:
 - ydotool uses the Linux uinput subsystem to inject keystrokes
-- /dev/uinput requires special permissions (usually root or uinput group)
+- /dev/uinput requires special permissions (usually root, or a group such
+  as 'input')
 - Without access, typing injection silently fails
 
 The solution:
 - Detect if user can access /dev/uinput
-- If not, offer to install a udev rule that grants access
-- The udev rule adds the user to the appropriate group or sets ACLs
+- If not, offer an opt-in setup step (via pkexec) that does TWO separate
+  things -- the udev rule alone is not enough:
+    1. installs a udev rule giving the 'input' group access to /dev/uinput
+    2. runs `usermod -a -G input` to actually put the user in that group
+- The group change only takes effect after a re-login, which is why setup
+  asks the user to log out and back in
 """
 
 import os
@@ -25,8 +30,10 @@ from .logger import setup_logger
 
 logger = setup_logger(__name__)
 
-# The udev rule content that grants access to /dev/uinput
-# This creates a new 'uinput' group and gives it read/write access
+# The udev rule content that grants access to /dev/uinput.
+# It reuses the EXISTING 'input' group rather than creating a new one. That is
+# deliberate: /dev/input/event* is already owned by 'input', so a single
+# `usermod -a -G input` grants both keystroke injection and hotkey reading.
 UDEV_RULE_CONTENT = '''# TalkType: Allow users in the 'input' group to access uinput
 # This enables ydotool keystroke injection on Wayland
 KERNEL=="uinput", GROUP="input", MODE="0660", OPTIONS+="static_node=uinput"
@@ -403,12 +410,27 @@ def check_ydotoold_service_exists():
     return os.path.exists(service_path)
 
 
-def check_system_ydotool_installed():
+def check_ydotool_available():
     """
-    Check if ydotool is installed system-wide.
+    Check whether a usable ydotool binary is on PATH -- bundled copies COUNT.
+
+    Deliberately NOT the same lookup as find_ydotoold_path(). This one searches
+    the inherited PATH, so inside the AppImage it finds the bundled
+    usr/bin/ydotool (AppRun puts that directory first) and correctly reports it
+    as available. That is the answer every caller here wants: "can we type?"
+
+    find_ydotoold_path() sanitises PATH and rejects AppImage paths instead,
+    because it feeds a systemd user unit that cannot reference a mount point
+    which disappears when the app exits.
+
+    Do NOT "fix" this to match find_ydotoold_path(). Doing so would show
+    "ydotool not installed (required)" on the welcome screen to every AppImage
+    user who already has a working bundled copy, and would make
+    install_ydotool_with_pkexec() prompt to install a package that is already
+    present. tests/test_ydotool_discovery.py guards both halves.
 
     Returns:
-        tuple: (installed: bool, path: str or None)
+        tuple: (available: bool, path: str or None)
     """
     try:
         result = subprocess.run(['which', 'ydotool'],
@@ -430,7 +452,7 @@ def setup_ydotoold_service():
     """
     try:
         # Check if ydotool is installed system-wide
-        ydotool_installed, ydotool_path = check_system_ydotool_installed()
+        ydotool_installed, ydotool_path = check_ydotool_available()
 
         if not ydotool_installed:
             return (False, "ydotool is not installed. Please install it first:\n"
@@ -521,7 +543,7 @@ def get_ydotoold_status():
     """
     running = check_ydotoold_running()
     service_exists = check_ydotoold_service_exists()
-    ydotool_installed, _ = check_system_ydotool_installed()
+    ydotool_installed, _ = check_ydotool_available()
 
     if running:
         return {
@@ -760,7 +782,7 @@ def install_ydotool_with_pkexec(parent_window=None):
     import subprocess
 
     # Check if already installed
-    installed, _ = check_system_ydotool_installed()
+    installed, _ = check_ydotool_available()
     if installed:
         return (True, "ydotool is already installed!")
 
@@ -785,7 +807,7 @@ def install_ydotool_with_pkexec(parent_window=None):
 
         if result.returncode == 0:
             # Verify installation
-            installed, path = check_system_ydotool_installed()
+            installed, path = check_ydotool_available()
             if installed:
                 logger.info(f"ydotool installed successfully at {path}")
                 return (True, "ydotool installed successfully!")

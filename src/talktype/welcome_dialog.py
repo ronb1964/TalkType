@@ -1498,7 +1498,7 @@ class WelcomeDialog:
     def _on_install_ydotool_clicked(self, button):
         """Handle the Install ydotool button click."""
         try:
-            from talktype.uinput_helper import install_ydotool_with_pkexec, check_system_ydotool_installed
+            from talktype.uinput_helper import install_ydotool_with_pkexec, check_ydotool_available
 
             # Disable button while processing
             button.set_sensitive(False)
