@@ -90,6 +90,10 @@ yay -S talktype-appimage
 paru -S talktype-appimage
 ```
 
+Installed it and it works? A
+[vote on the AUR page](https://aur.archlinux.org/packages/talktype-appimage)
+helps other Arch users find it — one click if you're logged in.
+
 ### Debian / Ubuntu / Linux Mint (.deb)
 
 Download `talktype_*_amd64.deb` from [Releases](https://github.com/ronb1964/TalkType/releases):
