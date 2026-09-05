@@ -1356,6 +1356,11 @@ _TERMINAL_WM_CLASSES = frozenset({
 # (plain character keystrokes still work, per OpenWhispr #240 and others).
 _ELECTRON_PASTE_BROKEN_CLASSES = frozenset({
     "Claude", "claude", "claude-desktop", "Claude Desktop", "anthropic-claude",
+    # Claude Desktop started reporting this reverse-DNS id on 2026-07-21.
+    # Until it was added here the override simply stopped firing — a paste
+    # that silently does nothing, with no error to explain it. Both spellings
+    # are live in the wild depending on how the app was packaged.
+    "com.anthropic.Claude",
 })
 
 
