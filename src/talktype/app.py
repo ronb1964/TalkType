@@ -2259,19 +2259,41 @@ class _ServiceState:
     evdev loop (Backend A) and the portal loop (Backend B) via _service_tick."""
 
     def __init__(self, cfg):
+        # Held, not copied. _reload_live_settings updates cfg IN PLACE, so
+        # reading through it is what makes the auto-timeout live. Snapshotting
+        # these at construction meant unticking "auto-timeout" in Preferences
+        # left the service still exiting on the old value — while Preferences
+        # reported the change as already in effect.
+        self._cfg = cfg
         self.last_activity = time.time()
-        self.timeout_enabled = getattr(cfg, "auto_timeout_enabled", False)
-        self.timeout_minutes = getattr(cfg, "auto_timeout_minutes", 5)
-        self.timeout_seconds = self.timeout_minutes * 60
         # 0.0 == "never checked", so the first idle tick reloads immediately.
         self.last_config_check = 0.0
 
+    @property
+    def timeout_enabled(self) -> bool:
+        return getattr(self._cfg, "auto_timeout_enabled", False)
 
-def _service_tick(cfg, input_device_idx, svc: "_ServiceState") -> None:
+    @property
+    def timeout_minutes(self):
+        return getattr(self._cfg, "auto_timeout_minutes", 5)
+
+    @property
+    def timeout_seconds(self):
+        return self.timeout_minutes * 60
+
+
+def _service_tick(cfg, input_device_idx, svc: "_ServiceState") -> "LiveSettings | None":
     """One iteration of backend-agnostic service work: consume the thread-safe
-    start/stop commands (set by the evdev loop OR the portal signal handlers) and
-    enforce the auto-timeout. Safe from either backend — _release_all_grabs() is
-    a no-op when nothing is grabbed (the portal case)."""
+    start/stop commands (set by the evdev loop OR the portal signal handlers),
+    enforce the auto-timeout, and pick up settings changed in Preferences. Safe
+    from either backend — _release_all_grabs() is a no-op when nothing is
+    grabbed (the portal case).
+
+    Returns the reloaded LiveSettings when the config changed, so a caller that
+    keeps loop locals (the evdev loop's hold_key/mode) can rebind them; None
+    otherwise. The return value matters because _config_file_changed() is
+    edge-triggered: it reports a given change exactly once, so the caller cannot
+    simply ask again."""
     now = time.time()
     if _cmd_start_recording.is_set():
         _cmd_start_recording.clear()
@@ -2323,7 +2345,8 @@ def _service_tick(cfg, input_device_idx, svc: "_ServiceState") -> None:
     if not state.is_recording and now - svc.last_config_check >= CONFIG_RECHECK_SECONDS:
         svc.last_config_check = now
         if _config_file_changed():
-            _reload_live_settings(cfg, recording_indicator)
+            return _reload_live_settings(cfg, recording_indicator)
+    return None
 
 
 def _loop_evdev(cfg: Settings, input_device_idx):
@@ -2345,9 +2368,10 @@ def _loop_evdev(cfg: Settings, input_device_idx):
         try: dev.set_nonblocking(True)
         except Exception: pass
     last_device_scan = time.time()
-    last_config_check = time.time()
     # Establish the config's current mtime so the first poll does not report a
     # spurious change and re-apply settings the service just started with.
+    # The recheck timer itself lives on _ServiceState — _service_tick owns it
+    # for both backends.
     _config_file_changed()
 
     # First run check: exit early if onboarding not complete
@@ -2406,9 +2430,25 @@ def _loop_evdev(cfg: Settings, input_device_idx):
     while True:
         current_time = time.time()
 
-        # Backend-agnostic work: consume D-Bus/portal start/stop commands and
-        # enforce the auto-timeout (shared with the portal loop).
-        _service_tick(cfg, input_device_idx, svc)
+        # Backend-agnostic work: consume D-Bus/portal start/stop commands,
+        # enforce the auto-timeout, and pick up Preferences changes (all shared
+        # with the portal loop).
+        #
+        # This loop keeps the hotkeys and mode in locals, so it has to rebind
+        # them from what the tick reloaded. It used to repeat the
+        # _config_file_changed() check itself instead — but that check is
+        # edge-triggered, and the tick had already consumed the change, so the
+        # rebinding never ran and a new hotkey did nothing until a restart.
+        # One detector, one reload, handed back to whoever needs it.
+        live = _service_tick(cfg, input_device_idx, svc)
+        if live is not None:
+            hold_key = live.hold_key
+            toggle_key = live.toggle_key
+            vc_hotkey_str = live.vc_hotkey_str
+            voice_cmds_combo = live.voice_cmds_combo
+            voice_cmds_main_key = live.voice_cmds_main_key
+            mode = live.mode
+            logger.info("Applied settings change without restarting")
 
         # Poll all input devices for key events
         for dev in devices:
@@ -2450,24 +2490,6 @@ def _loop_evdev(cfg: Settings, input_device_idx):
         if not state.is_recording and current_time - last_device_scan >= DEVICE_RESCAN_SECONDS:
             last_device_scan = current_time
             _rediscover_devices(devices)
-
-        # Pick up settings changed in Preferences without restarting. Only
-        # while idle: rebinding the hotkey mid-recording would leave the
-        # release of the old key unmatched, stranding a device grab. Settings
-        # that need the model rebuilt (model, device) still force a restart —
-        # see config.LIVE_APPLIED_KEYS.
-        if not state.is_recording and current_time - last_config_check >= CONFIG_RECHECK_SECONDS:
-            last_config_check = current_time
-            if _config_file_changed():
-                live = _reload_live_settings(cfg, recording_indicator)
-                if live is not None:
-                    hold_key = live.hold_key
-                    toggle_key = live.toggle_key
-                    vc_hotkey_str = live.vc_hotkey_str
-                    voice_cmds_combo = live.voice_cmds_combo
-                    voice_cmds_main_key = live.voice_cmds_main_key
-                    mode = live.mode
-                    logger.info("Applied settings change without restarting")
 
         # Backstop: we must never hold a keyboard grab while not recording.
         _release_grabs_if_not_recording()
