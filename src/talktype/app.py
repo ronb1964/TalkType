@@ -2306,7 +2306,7 @@ class _ServiceState:
     """Backend-agnostic per-service state (auto-timeout tracking), shared by the
     evdev loop (Backend A) and the portal loop (Backend B) via _service_tick."""
 
-    def __init__(self, cfg):
+    def __init__(self, cfg, input_device_idx=None):
         # Held, not copied. _reload_live_settings updates cfg IN PLACE, so
         # reading through it is what makes the auto-timeout live. Snapshotting
         # these at construction meant unticking "auto-timeout" in Preferences
@@ -2316,6 +2316,31 @@ class _ServiceState:
         self.last_activity = time.time()
         # 0.0 == "never checked", so the first idle tick reloads immediately.
         self.last_config_check = 0.0
+        # The mic is configured by name but recorded from by device number, so
+        # the number has to be re-resolved whenever the name changes. Owning it
+        # here keeps one copy: it used to be resolved at startup and passed
+        # around as a parameter, which no reload could reach.
+        self.input_device_idx = input_device_idx
+        self._resolved_mic = getattr(cfg, "mic", "")
+
+    def refresh_input_device(self) -> None:
+        """Re-resolve the mic if its configured name changed.
+
+        Called after a live reload. Resolving enumerates audio devices, so this
+        is gated on the name actually changing rather than run every tick. A
+        failure keeps the device currently in use — a mic that cannot be
+        resolved must not take down the one that works.
+        """
+        mic = getattr(self._cfg, "mic", "")
+        if mic == self._resolved_mic:
+            return
+        try:
+            self.input_device_idx = _pick_input_device(mic)
+            logger.info(f"Microphone changed to {mic!r} (device {self.input_device_idx})")
+        except Exception as e:
+            logger.warning(f"Could not resolve microphone {mic!r}, keeping current: {e}")
+        # Either way, do not retry the same name every second.
+        self._resolved_mic = mic
 
     @property
     def timeout_enabled(self) -> bool:
@@ -2330,7 +2355,7 @@ class _ServiceState:
         return self.timeout_minutes * 60
 
 
-def _service_tick(cfg, input_device_idx, svc: "_ServiceState") -> "LiveSettings | None":
+def _service_tick(cfg, svc: "_ServiceState") -> "LiveSettings | None":
     """One iteration of backend-agnostic service work: consume the thread-safe
     start/stop commands (set by the evdev loop OR the portal signal handlers),
     enforce the auto-timeout, and pick up settings changed in Preferences. Safe
@@ -2341,12 +2366,15 @@ def _service_tick(cfg, input_device_idx, svc: "_ServiceState") -> "LiveSettings 
     keeps loop locals (the evdev loop's hold_key/mode) can rebind them; None
     otherwise. The return value matters because _config_file_changed() is
     edge-triggered: it reports a given change exactly once, so the caller cannot
-    simply ask again."""
+    simply ask again.
+
+    The microphone comes off *svc*, not a parameter: it is re-resolved on a
+    live reload, and a caller holding its own copy would keep the startup one."""
     now = time.time()
     if _cmd_start_recording.is_set():
         _cmd_start_recording.clear()
         if not state.is_recording:
-            start_recording(cfg.beeps, cfg.notify, input_device_idx)
+            start_recording(cfg.beeps, cfg.notify, svc.input_device_idx)
             svc.last_activity = now
     if _cmd_stop_recording.is_set():
         _cmd_stop_recording.clear()
@@ -2399,7 +2427,10 @@ def _service_tick(cfg, input_device_idx, svc: "_ServiceState") -> "LiveSettings 
         if _commands_file_changed():
             _reload_custom_commands()
         if _config_file_changed():
-            return _reload_live_settings(cfg, recording_indicator)
+            live = _reload_live_settings(cfg, recording_indicator)
+            # cfg.mic is fresh now; the device number behind it may not be.
+            svc.refresh_input_device()
+            return live
     return None
 
 
@@ -2413,7 +2444,7 @@ def _loop_evdev(cfg: Settings, input_device_idx):
     logger.info(f"Input mode: {mode}, Hold key: {cfg.hotkey}, Toggle key: {cfg.toggle_hotkey if mode=='toggle' else 'N/A'}")
 
     # Auto-timeout setup
-    svc = _ServiceState(cfg)
+    svc = _ServiceState(cfg, input_device_idx)
     print(f"Auto-timeout: {svc.timeout_enabled} | Timeout: {svc.timeout_minutes} minutes")
     logger.info(f"Auto-timeout: enabled={svc.timeout_enabled}, minutes={svc.timeout_minutes}")
 
@@ -2495,7 +2526,7 @@ def _loop_evdev(cfg: Settings, input_device_idx):
         # edge-triggered, and the tick had already consumed the change, so the
         # rebinding never ran and a new hotkey did nothing until a restart.
         # One detector, one reload, handed back to whoever needs it.
-        live = _service_tick(cfg, input_device_idx, svc)
+        live = _service_tick(cfg, svc)
         if live is not None:
             hold_key = live.hold_key
             toggle_key = live.toggle_key
@@ -2523,7 +2554,7 @@ def _loop_evdev(cfg: Settings, input_device_idx):
                         _handle_key_event(
                             event, mode, hold_key, toggle_key,
                             voice_cmds_combo, held_modifiers,
-                            devices, cfg, input_device_idx)
+                            devices, cfg, svc.input_device_idx)
             except BlockingIOError:
                 pass
             except OSError as e:

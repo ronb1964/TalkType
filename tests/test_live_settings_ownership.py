@@ -56,14 +56,14 @@ class TestChangeSignalHasOneOwner:
         monkeypatch.setattr(app, "_reload_live_settings", lambda cfg, ind: live)
 
         cfg = _cfg()
-        assert app._service_tick(cfg, None, app._ServiceState(cfg)) is live
+        assert app._service_tick(cfg, app._ServiceState(cfg)) is live
 
     def test_tick_hands_back_nothing_when_the_config_is_unchanged(self, monkeypatch):
         _idle(monkeypatch)
         monkeypatch.setattr(app, "_config_file_changed", lambda: False)
 
         cfg = _cfg()
-        assert app._service_tick(cfg, None, app._ServiceState(cfg)) is None
+        assert app._service_tick(cfg, app._ServiceState(cfg)) is None
 
     def test_a_new_hotkey_survives_the_tick(self, monkeypatch):
         """End to end: the change is detected once and the new key comes back.
@@ -81,7 +81,7 @@ class TestChangeSignalHasOneOwner:
 
         cfg = _cfg(hotkey="F8", toggle_hotkey="", voice_commands_hotkey="",
                    mode="hold", typing_delay=12, log_transcripts=False)
-        live = app._service_tick(cfg, None, app._ServiceState(cfg))
+        live = app._service_tick(cfg, app._ServiceState(cfg))
 
         assert live is not None, "the tick must return what it reloaded"
         assert live.hold_key == app._keycode_from_name("F9")
@@ -129,4 +129,4 @@ class TestAutoTimeoutIsLive:
 
         cfg.auto_timeout_enabled = False
 
-        app._service_tick(cfg, None, svc)  # must not raise SystemExit
+        app._service_tick(cfg, svc)  # must not raise SystemExit

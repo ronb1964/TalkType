@@ -76,7 +76,7 @@ class PortalInputBackend(InputBackend):
 
     def _tick(self):
         from . import app
-        app._service_tick(self.cfg, self.input_device_idx, self._svc)
+        app._service_tick(self.cfg, self._svc)
         return True  # keep the GLib timer running
 
     def start(self):
@@ -139,7 +139,7 @@ class PortalInputBackend(InputBackend):
         if not os.environ.get("FLATPAK_ID"):
             pc.register_app_id(bus)
 
-        self._svc = app._ServiceState(self.cfg)
+        self._svc = app._ServiceState(self.cfg, self.input_device_idx)
         GLib.timeout_add(50, self._tick)
         create_session()
         loop.run()

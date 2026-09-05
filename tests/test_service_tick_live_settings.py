@@ -24,7 +24,7 @@ def test_service_tick_reloads_live_settings_when_config_changed(monkeypatch):
     cfg = types.SimpleNamespace(auto_timeout_enabled=False, auto_timeout_minutes=5)
     svc = app._ServiceState(cfg)
 
-    app._service_tick(cfg, None, svc)
+    app._service_tick(cfg, svc)
 
     assert calls, "a config change must trigger a live-settings reload in _service_tick"
     assert calls[0][0] is cfg
@@ -43,6 +43,6 @@ def test_service_tick_skips_reload_when_config_unchanged(monkeypatch):
     cfg = types.SimpleNamespace(auto_timeout_enabled=False, auto_timeout_minutes=5)
     svc = app._ServiceState(cfg)
 
-    app._service_tick(cfg, None, svc)
+    app._service_tick(cfg, svc)
 
     assert not calls, "no reload when the config file is unchanged"

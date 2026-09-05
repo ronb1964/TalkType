@@ -100,6 +100,6 @@ class TestTheServiceTickPicksItUp:
         svc = app._ServiceState(cfg)
 
         _write(commands_file, {"btw": "by the way"})
-        app._service_tick(cfg, None, svc)
+        app._service_tick(cfg, svc)
 
         assert app._custom_commands == {"btw": "by the way"}
