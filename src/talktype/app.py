@@ -754,6 +754,10 @@ CONFIG_RECHECK_SECONDS = 1.0
 # mtime of the config file as of the last check. None means "not yet seen".
 _last_config_mtime = None
 
+# Same, for custom_commands.toml. It is a separate file, so it needs its own
+# mtime — config.toml's says nothing about whether the commands changed.
+_last_commands_mtime = None
+
 
 class LiveSettings(NamedTuple):
     """Values the main loop keeps in locals and must rebind after a reload."""
@@ -783,6 +787,50 @@ def _config_file_changed() -> bool:
 
     _last_config_mtime = mtime
     return True
+
+
+def _commands_file_changed() -> bool:
+    """Whether custom_commands.toml's mtime has moved since the last check.
+
+    Custom commands live in their own file, so config.toml's mtime says nothing
+    about them. Without this the service kept whatever commands it loaded at
+    startup, and an edit in the Commands tab never took effect — while the Apply
+    dialog reported the change as already in force.
+
+    Same contract as _config_file_changed(): True once per change, and a missing
+    or unreadable file is not a change.
+    """
+    global _last_commands_mtime
+    try:
+        mtime = os.path.getmtime(config_module.CUSTOM_COMMANDS_PATH)
+    except OSError:
+        return False
+
+    if mtime == _last_commands_mtime:
+        return False
+
+    _last_commands_mtime = mtime
+    return True
+
+
+def _reload_custom_commands() -> None:
+    """Re-read custom_commands.toml into the running service.
+
+    A damaged file leaves the commands already in force untouched. load_config's
+    reload follows the same rule: a bad file must never degrade a live dictation
+    session, and load_custom_commands() returns {} on a read failure, which would
+    otherwise silently disable every command mid-session.
+    """
+    global _custom_commands
+    try:
+        fresh = load_custom_commands()
+        if config_module._commands_read_failed:
+            logger.warning("Custom commands unreadable, keeping the current ones")
+            return
+        _custom_commands = fresh
+        logger.info(f"Reloaded {len(_custom_commands)} custom voice command(s)")
+    except Exception as e:
+        logger.warning(f"Could not reload custom commands, keeping current: {e}")
 
 
 def _reload_live_settings(cfg, indicator):
@@ -2344,6 +2392,12 @@ def _service_tick(cfg, input_device_idx, svc: "_ServiceState") -> "LiveSettings 
     # values into the running recording indicator.
     if not state.is_recording and now - svc.last_config_check >= CONFIG_RECHECK_SECONDS:
         svc.last_config_check = now
+        # Custom commands live in their own file and are checked on the same
+        # tick. Unconditionally, and before the early return below: an edit to
+        # the Commands tab alone leaves config.toml untouched, so gating this on
+        # a config change would be gating it on the thing that did not happen.
+        if _commands_file_changed():
+            _reload_custom_commands()
         if _config_file_changed():
             return _reload_live_settings(cfg, recording_indicator)
     return None
@@ -2368,11 +2422,12 @@ def _loop_evdev(cfg: Settings, input_device_idx):
         try: dev.set_nonblocking(True)
         except Exception: pass
     last_device_scan = time.time()
-    # Establish the config's current mtime so the first poll does not report a
-    # spurious change and re-apply settings the service just started with.
+    # Establish both files' current mtimes so the first poll does not report a
+    # spurious change and re-apply what the service just started with.
     # The recheck timer itself lives on _ServiceState — _service_tick owns it
     # for both backends.
     _config_file_changed()
+    _commands_file_changed()
 
     # First run check: exit early if onboarding not complete
     try:

@@ -1818,7 +1818,7 @@ class PreferencesWindow:
             '• Use \\n in replacement for line breaks\n'
             '• Wrap replacement in "quotes" to inject it exactly as typed (no auto-capitalization or punctuation changes)\n'
             '• Changes are saved when you click Apply or OK\n'
-            '• Restart the dictation service for changes to take effect</span>'
+            '• Changes take effect on your next dictation — no restart needed</span>'
         )
         tips.set_xalign(0)
         tips.set_line_wrap(True)
