@@ -4036,6 +4036,28 @@ class PreferencesWindow:
             dialog.destroy()
         return (success, was_downloaded)
 
+    def _rollback_model(self, previous_model):
+        """Undo a model change whose download never completed.
+
+        The config is saved *before* the download because the downloader reads
+        the model out of the merged config. Left alone, a cancelled or failed
+        download therefore leaves config.toml naming a model the service was
+        never given — and model changes are deliberately excluded from the
+        live-settings reload, so nothing corrects it.
+
+        The second write also repairs the baseline. save_config() resets
+        _config_at_open to whatever it just wrote, so without this the retry
+        diffs the new model against itself, finds no change, and reports
+        "your changes are already in effect" while skipping the restart that
+        would actually load the model.
+
+        Only the model is undone; the user's other edits saved fine and stay.
+        """
+        if previous_model is None or self.config.get("model") == previous_model:
+            return
+        self.config["model"] = previous_model
+        self.save_config()
+
     def on_apply(self, button):
         """Apply changes, restarting the service only if something needs it."""
         # Save custom commands first
@@ -4045,11 +4067,14 @@ class PreferencesWindow:
         # MUST be computed before save_config(), which resets _config_at_open
         # to the merged result — after that there is nothing left to diff.
         changed = self._changed_since_open()
+        # Same reason: after the save this no longer names the live model.
+        previous_model = self._config_at_open.get("model")
 
         if self.save_config():
             # Check if model needs downloading
             success, _was_downloaded = self._download_selected_model()
             if not success:
+                self._rollback_model(previous_model)
                 return
 
             # Restart only when the change actually requires it. The service
@@ -4114,11 +4139,14 @@ class PreferencesWindow:
 
         # MUST be computed before save_config(), which resets _config_at_open.
         changed = self._changed_since_open()
+        # Same reason: after the save this no longer names the live model.
+        previous_model = self._config_at_open.get("model")
 
         if self.save_config():
             # Check if model needs downloading
             success, model_was_downloaded = self._download_selected_model()
             if not success:
+                self._rollback_model(previous_model)
                 return
 
             service_restarted = self._apply_or_restart(changed)
