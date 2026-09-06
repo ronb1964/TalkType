@@ -18,6 +18,13 @@ logger = setup_logger(__name__)
 # plain Ctrl+V (regular apps) and Ctrl+Shift+V (terminals).
 _focused_window_class: str | None = None
 
+# The bus identifiers, at module level so providers that fill the focused-window
+# cache (the GNOME extension's Python side, and kwin_focus on KDE) can name the
+# same service without a second copy of these strings.
+DBUS_NAME = "io.github.ronb1964.TalkType"
+DBUS_PATH = "/io/github/ronb1964/TalkType"
+DBUS_INTERFACE = "io.github.ronb1964.TalkType"
+
 
 def get_focused_window_class() -> str | None:
     """Return the wm_class of the currently focused window, or None if unknown.
@@ -39,9 +46,11 @@ class TalkTypeDBusService(dbus.service.Object):
     Interface: io.github.ronb1964.TalkType
     """
 
-    DBUS_NAME = "io.github.ronb1964.TalkType"
-    DBUS_PATH = "/io/github/ronb1964/TalkType"
-    DBUS_INTERFACE = "io.github.ronb1964.TalkType"
+    # Module-level constants above are the single definition; these keep the
+    # long-standing TalkTypeDBusService.DBUS_* attribute names working.
+    DBUS_NAME = DBUS_NAME
+    DBUS_PATH = DBUS_PATH
+    DBUS_INTERFACE = DBUS_INTERFACE
 
     def __init__(self, app_instance):
         """Initialize D-Bus service with reference to app instance"""

@@ -321,6 +321,34 @@ class DictationTray:
             logger.warning(f"Failed to initialize D-Bus service: {e}")
             self.dbus_service = None
 
+        # On KDE, nothing fills the focused-window cache the way the GNOME
+        # extension does, so paste never learned it was aiming at a terminal.
+        # Load the KWin reporter now that the service exists to receive it.
+        self._start_kwin_focus_provider()
+
+    def _start_kwin_focus_provider(self):
+        """Load the KWin focus reporter on KDE. Never fatal."""
+        self._kwin_focus_started = False
+        try:
+            from . import kwin_focus
+
+            if not kwin_focus.should_provide():
+                return
+            self._kwin_focus_started = kwin_focus.start(kwin_focus.session_bus())
+        except Exception as e:
+            logger.warning(f"Could not start the KWin focus reporter: {e}")
+
+    def _stop_kwin_focus_provider(self):
+        """Unload the KWin focus reporter. Never fatal — runs on the quit path."""
+        if not getattr(self, "_kwin_focus_started", False):
+            return
+        try:
+            from . import kwin_focus
+
+            kwin_focus.stop(kwin_focus.session_bus())
+        except Exception as e:
+            logger.debug(f"Could not stop the KWin focus reporter: {e}")
+
     def is_service_running(self):
         """Check if the dictation service is active via /proc (no subprocess spawn).
 
@@ -1700,6 +1728,10 @@ class DictationTray:
 
     def quit_app(self, _):
         """Quit the tray and stop the dictation service."""
+        # Before anything else: take our script back out of KWin. Leaving it
+        # loaded means it keeps calling a D-Bus name that no longer exists.
+        self._stop_kwin_focus_provider()
+
         try:
             self._kill_service()
             logger.info("Stopped dictation service")

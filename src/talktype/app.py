@@ -1481,6 +1481,27 @@ _TERMINAL_WM_CLASSES = frozenset({
     "rxvt", "URxvt",
 })
 
+# Lower-cased once, because the class now arrives from two independent sources —
+# the GNOME Shell extension and the KWin script on KDE — which are under no
+# obligation to agree on capitalisation.
+_TERMINAL_WM_CLASSES_LOWER = frozenset(c.lower() for c in _TERMINAL_WM_CLASSES)
+
+
+def is_terminal_class(wm_class: str | None) -> bool:
+    """Whether the focused window is a terminal, so paste uses Ctrl+Shift+V.
+
+    A terminal treats plain Ctrl+V as readline's quoted-insert and shows
+    nothing, so getting this wrong is silent. None means nobody reported focus
+    (no provider on this desktop) and must not be read as a terminal.
+
+    Matching is exact-but-case-insensitive: substring matching would make
+    "kitty-photo-viewer" a terminal.
+    """
+    if not wm_class:
+        return False
+    return wm_class.lower() in _TERMINAL_WM_CLASSES_LOWER
+
+
 # Electron/Chromium apps where synthetic paste (Ctrl+V via ydotool) is broken
 # on Wayland — modifier-key chords from /dev/uinput are silently dropped and
 # the focused input blurs. For these apps, route to a fast Type path instead
@@ -1619,7 +1640,7 @@ def _paste_text(text: str, send_trailing_keys: bool = False):
                 # None when the extension hasn't pushed yet or the service is down.
                 focused_class = _query_focused_window_class()
 
-                is_terminal = focused_class in _TERMINAL_WM_CLASSES if focused_class else False
+                is_terminal = is_terminal_class(focused_class)
 
                 # KEY_LEFTSHIFT=42, KEY_LEFTCTRL=29, KEY_V=47
                 if is_terminal:
