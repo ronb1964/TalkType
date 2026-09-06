@@ -85,6 +85,19 @@
   </screenshots>
 
   <releases>
+    <release version="0.7.3" date="2026-09-05">
+      <description>
+        <p>Settings that said they were applied now actually are</p>
+        <ul>
+          <li>Changing your hotkey takes effect immediately again</li>
+          <li>Custom voice commands apply on the next dictation, with no restart</li>
+          <li>Switching microphone actually switches microphone</li>
+          <li>Commands containing a number match either spelling ("one" or "1")</li>
+          <li>Cancelling a model download no longer leaves the wrong model saved</li>
+          <li>Ready for GNOME 51</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.7.2" date="2026-08-19">
       <description>
         <p>Preferences polish</p>

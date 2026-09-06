@@ -2,6 +2,61 @@
 
 All notable changes to TalkType are documented here.
 
+## [0.7.3] - 2026-09-05
+
+This release is about settings that said they had been applied when they hadn't.
+Several things you change in Preferences were never reaching the running
+dictation service, and TalkType told you they had.
+
+### Settings you change now actually take effect
+- **Changing your hotkey works immediately again.** Picking a new record key (or
+  switching between hold and toggle) saved correctly but the running service
+  kept listening on the old key, with no hint anything was wrong. It now takes
+  effect right away, and the old key stops working — as it always should have.
+- **Custom voice commands take effect on your next dictation.** Adding or editing
+  a command used to need a service restart; the Commands tab said so, while the
+  Apply dialog claimed the opposite. No restart is needed now, and the tab says
+  what is true.
+- **Switching microphone actually switches microphone.** Choosing a different mic
+  applied to the settings file but not to the running service, so dictation kept
+  recording from the old device until the next restart.
+- **Turning the auto-timeout on or off is respected immediately.** Unticking it
+  used to leave the service still shutting itself down after the old interval.
+
+### Custom commands are easier to get right
+- **A command with a number in it now works either way it is heard.** Speech
+  recognition decides on its own whether you said "one" or "1", and it is not
+  consistent — so a command typed as "test phrase one" would quietly fail
+  whenever it came through as "test phrase 1". Both spellings now match.
+
+### Fixed
+- **Cancelling a model download no longer leaves the wrong model saved.** If you
+  picked a new model and cancelled or lost the download, Preferences kept the new
+  name while the service went on using the old one — and trying again reported
+  "your changes are already in effect" without switching.
+- **Quitting no longer risks closing other TalkType windows.** The quit action
+  matched too broadly and could take down the tray and Preferences along with the
+  dictation service.
+- **Dictating into Claude Desktop works again.** The app changed its identifier,
+  so the workaround that makes text appear reliably in it had stopped running.
+  (GNOME only — see below.)
+- **Text typing can no longer hang forever** on setups that use `wtype`, and a
+  package update that gets stuck waiting on your package manager now reports back
+  instead of leaving the window frozen.
+- **The update check no longer reverts settings.** Its once-a-day check could
+  quietly undo anything you changed in Preferences while it was running.
+
+### GNOME
+- **Ready for GNOME 51.** The panel extension now declares support for GNOME 51,
+  which ships on 16 September. Without this the extension would be disabled and,
+  because stock GNOME has nowhere to show the fallback icon, you would have been
+  left with no TalkType icon at all.
+
+### Known limitation
+- Terminal paste and the Claude Desktop fix rely on knowing which window has
+  focus, which only the GNOME extension currently reports. On KDE and other
+  desktops they stay inactive; support for those desktops is in progress.
+
 ## [0.7.2] - 2026-08-19
 
 A small polish release for the AppImage, `.deb`, and `.rpm` builds. (A sandboxed
