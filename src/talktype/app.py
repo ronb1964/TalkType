@@ -315,6 +315,48 @@ def _expand_escapes(replacement: str) -> str:
     return replacement.replace("\\n", "\n").replace("\\t", "\t")
 
 
+# Whisper decides for itself whether a spoken number lands as a word or a digit,
+# and it is not consistent: across 1,073 real dictations a number before a unit
+# came out as a digit 20 times against 3 spelled out, yet the same spoken phrase
+# produced both forms on different days. Commands match the raw transcription, so
+# a trigger containing a number used to fire only when Whisper happened to pick
+# the spelling the user typed.
+#
+# Single tokens only, deliberately: compounds like "twenty one" are ambiguous
+# (21? 20 then 1?) and pull in a whole number parser for no real benefit.
+_NUMBER_WORDS = {
+    "zero": "0", "one": "1", "two": "2", "three": "3", "four": "4",
+    "five": "5", "six": "6", "seven": "7", "eight": "8", "nine": "9",
+    "ten": "10", "eleven": "11", "twelve": "12", "thirteen": "13",
+    "fourteen": "14", "fifteen": "15", "sixteen": "16", "seventeen": "17",
+    "eighteen": "18", "nineteen": "19", "twenty": "20", "thirty": "30",
+    "forty": "40", "fifty": "50", "sixty": "60", "seventy": "70",
+    "eighty": "80", "ninety": "90",
+}
+_DIGIT_WORDS = {digit: word for word, digit in _NUMBER_WORDS.items()}
+
+# Split into whole words, whole numbers, runs of whitespace, and single other
+# characters. Tokenising is what keeps this narrow: "money" is one token and
+# never sees the "one" inside it.
+_TOKEN_RE = re.compile(r"\d+|[^\W\d]+|\s+|.")
+
+
+def _canonical_command_key(text: str) -> str:
+    """Fold a phrase to the form used for command lookup.
+
+    Case is flattened, whitespace runs collapse, and every number becomes its
+    digit form, so "Test Phrase One" and "test phrase 1" arrive at one key.
+    Only lookup uses this — dictated text is never rewritten by it.
+    """
+    out = []
+    for token in _TOKEN_RE.findall(text.lower()):
+        if token.isspace():
+            out.append(" ")
+        else:
+            out.append(_NUMBER_WORDS.get(token, token))
+    return "".join(out)
+
+
 def _command_pattern(phrase: str) -> str:
     """Build the match pattern for one trigger phrase.
 
@@ -322,10 +364,28 @@ def _command_pattern(phrase: str) -> str:
     a word character. A blanket \\b meant a trigger like "c++" or "#tag" could
     never match — \\b after "+" requires a following word character, so the
     phrase silently never fired despite looking configured in Preferences.
+
+    Number tokens match either spelling, so the trigger fires whichever one
+    Whisper produced.
     """
     prefix = r"\b" if phrase[:1].isalnum() or phrase[:1] == "_" else ""
     suffix = r"\b" if phrase[-1:].isalnum() or phrase[-1:] == "_" else ""
-    return prefix + re.escape(phrase) + suffix
+
+    parts = []
+    for token in _TOKEN_RE.findall(phrase):
+        lowered = token.lower()
+        if lowered in _NUMBER_WORDS:
+            alt = _NUMBER_WORDS[lowered]
+        elif token in _DIGIT_WORDS:
+            alt = _DIGIT_WORDS[token]
+        else:
+            # Whitespace is matched loosely so a double space in either the
+            # trigger or the transcription still lines up.
+            parts.append(r"\s+" if token.isspace() else re.escape(token))
+            continue
+        parts.append(f"(?:{re.escape(token)}|{re.escape(alt)})")
+
+    return prefix + "".join(parts) + suffix
 
 def _apply_custom_commands(text: str) -> tuple[str, dict[str, str]]:
     """
@@ -355,7 +415,13 @@ def _apply_custom_commands(text: str) -> tuple[str, dict[str, str]]:
     if not phrases:
         return text, {}
 
-    lookup = {p.lower(): _custom_commands[p] for p in phrases}
+    # Keyed on the canonical form so a match found via the other number
+    # spelling still resolves. Phrases are longest-first and the first claim on
+    # a key wins, so if two triggers fold together ("test 1" and "test one")
+    # the longer one keeps it — the same rule the match order follows.
+    lookup: dict[str, str] = {}
+    for p in phrases:
+        lookup.setdefault(_canonical_command_key(p), _custom_commands[p])
     combined = "|".join(f"(?:{_command_pattern(p)})" for p in phrases)
 
     protected: dict[str, str] = {}  # placeholder → literal replacement text
@@ -370,7 +436,7 @@ def _apply_custom_commands(text: str) -> tuple[str, dict[str, str]]:
         \\N in a user's command can no longer raise and kill every dictation.
         """
         nonlocal counter
-        replacement = lookup.get(match.group(0).lower())
+        replacement = lookup.get(_canonical_command_key(match.group(0)))
         if replacement is None:  # pragma: no cover — every branch is in lookup
             return match.group(0)
 
