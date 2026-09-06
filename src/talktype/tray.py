@@ -448,8 +448,8 @@ class DictationTray:
 
     def _kill_service(self):
         """Kill all running dictation service processes."""
-        subprocess.run(["pkill", "-f", "talktype.app"], capture_output=True)
-        subprocess.run(["pkill", "-f", "bin/dictate"], capture_output=True)
+        from .service_launcher import stop_dictation_service
+        stop_dictation_service()
 
     def start_service(self, _):
         """Start the dictation service directly."""
@@ -1602,7 +1602,7 @@ class DictationTray:
         """
         import threading
         from . import update_checker
-        from .config import load_config, save_config
+        from .config import load_config, record_update_check
 
         config = load_config()
 
@@ -1623,9 +1623,12 @@ class DictationTray:
             try:
                 result = update_checker.check_for_updates()
 
-                # Update last check timestamp
-                config.last_update_check = update_checker.get_current_timestamp()
-                save_config(config)
+                # Record the timestamp against a FRESH read. `config` was
+                # snapshotted before the network call above, which can take
+                # ~30s; saving it back wrote all 36 fields and silently
+                # reverted anything the user changed in Preferences meanwhile.
+                record_update_check(
+                    update_checker.get_current_timestamp(), _stale=config)
 
                 if result and result.get("success"):
                     has_update = result.get("update_available", False)
@@ -1940,10 +1943,12 @@ def main():
             # Set flag BEFORE scheduling to prevent any auto-start during onboarding
             tray.onboarding_in_progress = True
 
-            # Kill any existing service that might be running - use SIGKILL for immediate termination
-            subprocess.run(["pkill", "-9", "-f", "talktype.app"], capture_output=True)
-            subprocess.run(["pkill", "-9", "-f", "bin/dictate"], capture_output=True)
-            subprocess.run(["pkill", "-9", "-f", "-m talktype"], capture_output=True)
+            # Kill any existing service that might be running - use SIGKILL for
+            # immediate termination. The patterns live in service_launcher so
+            # this can never again include one ("-m talktype") that matches the
+            # tray's own command line.
+            from talktype.service_launcher import stop_dictation_service
+            stop_dictation_service(force=True)
             time.sleep(0.5)  # Give processes time to die
 
             # Schedule the welcome dialog after tray is initialized

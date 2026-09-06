@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import re
+import subprocess
 import urllib.request
 import urllib.error
 from pathlib import Path
@@ -726,25 +727,48 @@ def package_install_argv(install_type: str, package_path: str,
     return None
 
 
+# Installing a package can legitimately take minutes: the package manager may be
+# waiting on another transaction's lock. This bounds only how long TalkType WAITS
+# — it never interrupts the installer. See install_package_update().
+PACKAGE_INSTALL_TIMEOUT_S = 300.0
+
+
 def install_package_update(package_path: str, install_type: str) -> Tuple[bool, str]:
     """Install a downloaded .rpm/.deb as root via pkexec (PolicyKit prompts for
     the password). Returns (success, message). Does NOT restart TalkType."""
-    import subprocess
     argv = package_install_argv(install_type, package_path)
     if not argv:
         return (False, "No supported package manager was found to install the update.")
     try:
-        proc = subprocess.run(argv, capture_output=True, text=True)
+        proc = subprocess.Popen(argv, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, text=True)
     except FileNotFoundError:
         return (False, "pkexec (PolicyKit) is not available. Please install the "
                        "update through your package manager.")
+
+    try:
+        out, err = proc.communicate(timeout=PACKAGE_INSTALL_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        # Deliberately NOT killed. The child runs as root, so a user process
+        # could not reap it anyway — and interrupting dpkg or rpm mid-transaction
+        # can leave the package database broken, which is far worse than an
+        # update that takes a long time. A package lock (unattended-upgrades on
+        # Ubuntu, dnf-makecache on Fedora) is the usual cause and clears itself.
+        # Let it finish in the background and give the dialog something to say.
+        logger.warning(
+            f"Package install still running after {PACKAGE_INSTALL_TIMEOUT_S}s; "
+            f"leaving it to finish")
+        return (False, "The installer is taking longer than expected — your system "
+                       "may be waiting on another package operation. It will keep "
+                       "running in the background; check again in a few minutes.")
+    proc.stdout_text, proc.stderr_text = out, err
     if proc.returncode == 0:
         return (True, "Update installed. Restart TalkType to use the new version.")
     if proc.returncode == 126:
         return (False, "Authorization was cancelled — the update was not installed.")
     if proc.returncode == 127:
         return (False, "Could not start the installer (authorization failed).")
-    detail = (proc.stderr or proc.stdout or "").strip()
+    detail = (proc.stderr_text or proc.stdout_text or "").strip()
     return (False, f"Install failed: {detail or ('exit code ' + str(proc.returncode))}")
 
 

@@ -1278,6 +1278,10 @@ def _is_wayland_session() -> bool:
 # dictation responding at all, with the tray still showing the service as up.
 YDOTOOL_TIMEOUT_S = 5.0
 
+# The wtype fallback gets the same 20s ceiling the ydotool *typing* path uses:
+# it types a whole utterance, so it needs far longer than a single keystroke.
+WTYPE_TIMEOUT_S = 20.0
+
 
 def _ydotool_key(keys, timeout: float = YDOTOOL_TIMEOUT_S, what: str = "keystroke") -> bool:
     """Send raw key codes via ydotool. True only if they were actually delivered.
@@ -1429,9 +1433,22 @@ def _type_text_raw(text: str):
             logger.debug(f"ydotool failed: {e}")
     if _which("wtype"):
         # Report wtype's real exit code so the undo buffer only tracks text
-        # that was actually typed (consistent with the ydotool branch above).
-        wt = subprocess.run(["wtype", "--", text], check=False)
-        return wt.returncode == 0
+        # that was actually typed, and bound the wait the same way the ydotool
+        # branch above does. Without the timeout a stalled compositor froze
+        # dictation outright: no text, no error, and the service had to be
+        # killed by hand. The comment used to claim consistency with that
+        # branch while matching only its return-value handling.
+        proc = subprocess.Popen(["wtype", "--", text])
+        try:
+            proc.communicate(timeout=WTYPE_TIMEOUT_S)
+        except subprocess.TimeoutExpired:
+            # Kill and reap, so it cannot come back to life and type into
+            # whatever the user has focused by then.
+            proc.kill()
+            proc.communicate()
+            logger.error(f"wtype timed out after {WTYPE_TIMEOUT_S}s; killed the process")
+            return False
+        return proc.returncode == 0
     if _which("wl-copy"):
         try:
             import pyperclip
@@ -2861,9 +2878,9 @@ def main():
 
                     def stop_service(self):
                         """Stop the dictation service"""
-                        import subprocess
+                        from .service_launcher import stop_dictation_service
                         try:
-                            subprocess.run(["pkill", "-f", "talktype.app"], capture_output=True)
+                            stop_dictation_service()
                             logger.info("Stopped dictation service")
                             self.service_running = False
                             if self.dbus_service:
@@ -2906,9 +2923,12 @@ def main():
 
                     def quit(self):
                         """Quit the application"""
-                        import subprocess
+                        # This used to pkill "talktype" — a substring match that
+                        # also took out the tray, Preferences, and any shell
+                        # command mentioning the project path.
+                        from .service_launcher import stop_dictation_service
                         try:
-                            subprocess.run(["pkill", "-f", "talktype"], capture_output=True)
+                            stop_dictation_service()
                         except Exception:
                             pass
                         sys.exit(0)

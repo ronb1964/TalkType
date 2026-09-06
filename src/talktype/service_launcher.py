@@ -1,4 +1,4 @@
-"""The one place that knows how to start the dictation service.
+"""The one place that knows how to start and stop the dictation service.
 
 The service is launched from two places — the tray (at startup and on "Restart
 Service") and Preferences (on Apply/OK). They used to hand-roll the spawn
@@ -38,6 +38,55 @@ _DEV_SITE_PACKAGES = (
     "/usr/lib64/python3.13/site-packages",
     "/usr/lib/python3.13/site-packages",
 )
+
+
+# Extended regular expressions matched by `pkill -f` against a whole command
+# line. They must hit the dictation service and nothing else — above all not the
+# tray, which is the parent process and the user's only route to Quit.
+#
+# Each escape earns its place:
+#   talktype\.app       — the module the service runs as. A bare "talktype"
+#                         (once used by the D-Bus quit handler) also matches the
+#                         tray, Preferences, and any shell command mentioning
+#                         the project directory; six live processes when measured.
+#   bin/dictate(...)    — the AppImage launcher, anchored so it cannot match
+#                         bin/dictate-tray, which is the only launcher the
+#                         shipped AppImage actually contains.
+#
+# Deliberately absent: "-m talktype". It matches "-m talktype.tray", so the tray
+# would SIGKILL itself. It survived in two files only because pkill reads a
+# leading dash as an option and refused to run at all.
+# "[^-]" rather than a whitespace class: POSIX bracket expressions and GNU \s
+# behave differently across pkill builds and Python's re, and the tests match
+# these against sample command lines. Excluding the dash is what rules out
+# bin/dictate-tray, which is the whole point of anchoring it.
+SERVICE_KILL_PATTERNS = (
+    r"talktype\.app",
+    r"bin/dictate([^-]|$)",
+)
+
+# A pkill that cannot be reaped must not hang the GTK thread that called it —
+# quit and first-run onboarding both run this on the main loop.
+_PKILL_TIMEOUT_S = 5.0
+
+
+def stop_dictation_service(force: bool = False) -> None:
+    """Terminate the dictation service, and only the dictation service.
+
+    *force* sends SIGKILL instead of SIGTERM; first-run onboarding uses it to
+    guarantee a stale service is gone before the welcome flow starts.
+
+    Never raises. Both callers are cleanup paths where failing to kill a service
+    is a far better outcome than propagating an exception — one of them is the
+    quit handler, and the other is the first thing a new user ever sees.
+    """
+    signal_flag = ["-9"] if force else []
+    for pattern in SERVICE_KILL_PATTERNS:
+        argv = ["pkill", *signal_flag, "-f", pattern]
+        try:
+            subprocess.run(argv, capture_output=True, timeout=_PKILL_TIMEOUT_S)
+        except Exception as e:
+            logger.warning(f"Could not run {' '.join(argv)}: {e}")
 
 
 def build_service_env(base_env=None, dev_pythonpath=None):

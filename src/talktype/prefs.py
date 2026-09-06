@@ -3967,8 +3967,9 @@ class PreferencesWindow:
             else:
                 print(f"   ⚠️  Config file does not exist!")
 
-            # Kill existing talktype.app processes
-            subprocess.run(["pkill", "-f", "talktype.app"], capture_output=True)
+            # Kill existing dictation-service processes
+            from .service_launcher import stop_dictation_service
+            stop_dictation_service()
             # Wait a moment for processes to terminate
             time.sleep(1)
 

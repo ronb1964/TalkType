@@ -600,6 +600,36 @@ def changed_keys(original: dict, current: dict) -> set:
     }
 
 
+def record_update_check(timestamp: str, _stale=None) -> None:
+    """Persist the update-check timestamp without dragging other settings back.
+
+    The tray's daily check used to snapshot the whole Settings object, spend up
+    to ~30s on a network call, then save all 36 fields to record this one. Any
+    setting the user changed in Preferences during that window was silently
+    reverted — no error, no log line.
+
+    Re-reading immediately before the write is the fix: the only state carried
+    across the slow call is the timestamp itself. save_config already refuses to
+    write when the preceding read failed, so a damaged config still cannot be
+    overwritten with defaults; losing a timestamp is much cheaper than losing a
+    hotkey.
+
+    *_stale* is accepted and ignored on purpose — it documents at the call site
+    that the caller's snapshot must NOT be what gets written, and lets the
+    regression test pass one in.
+    """
+    try:
+        fresh = load_config()
+    except Exception as e:
+        logger.warning(f"Could not record the update-check time: {e}")
+        return
+    fresh.last_update_check = timestamp
+    try:
+        save_config(fresh)
+    except Exception as e:
+        logger.warning(f"Could not save the update-check time: {e}")
+
+
 def merge_changed_keys(original: dict, current: dict, base: dict) -> dict:
     """Overlay only the keys that changed between *original* and *current*
     onto *base*, returning base.

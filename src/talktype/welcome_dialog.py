@@ -2484,15 +2484,12 @@ def show_hotkey_test_dialog():
     def kill_dictation_service():
         """Kill any running dictation service processes with extreme prejudice."""
         try:
-            # Use SIGKILL (-9) for immediate termination - no chance to respawn
-            # Try multiple patterns to catch all possible process names
-            patterns = [
-                "talktype.app",      # Dev mode: python -m talktype.app
-                "talktype/app",      # Path-based match
-                "-m talktype",       # Module execution
-            ]
-            for pattern in patterns:
-                subprocess.run(["pkill", "-9", "-f", pattern], capture_output=True)
+            # SIGKILL for immediate termination - no chance to respawn.
+            # The pattern list used to live here and included "-m talktype",
+            # which matches "-m talktype.tray": had pkill ever accepted it, the
+            # tray would have killed itself in front of a first-run user.
+            from talktype.service_launcher import stop_dictation_service
+            stop_dictation_service(force=True)
 
             # Give processes time to die
             time.sleep(0.3)
@@ -2502,7 +2499,7 @@ def show_hotkey_test_dialog():
             if result.returncode == 0:
                 # Still running! Try again
                 print("⚠️ Service still running, killing again...")
-                subprocess.run(["pkill", "-9", "-f", "talktype.app"], capture_output=True)
+                stop_dictation_service(force=True)
                 time.sleep(0.2)
         except Exception as e:
             logger.warning(f"Error killing service: {e}")
