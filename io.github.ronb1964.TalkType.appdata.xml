@@ -85,6 +85,17 @@
   </screenshots>
 
   <releases>
+    <release version="0.7.4" date="2026-09-05">
+      <description>
+        <p>Dictation into a terminal now works on KDE</p>
+        <ul>
+          <li>Text dictated into a terminal actually appears - it previously did nothing at all</li>
+          <li>"new line" and "new paragraph" work inside a terminal</li>
+          <li>Dictating into Claude Desktop is more reliable on KDE</li>
+          <li>Terminal recognition no longer depends on exact capitalisation</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.7.3" date="2026-09-05">
       <description>
         <p>Settings that said they were applied now actually are</p>

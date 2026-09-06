@@ -2,6 +2,39 @@
 
 All notable changes to TalkType are documented here.
 
+## [0.7.4] - 2026-09-05
+
+Dictation into a terminal now works on KDE. It previously did nothing at all —
+no text, no error, and TalkType played its usual "finished" beep as though it had
+worked.
+
+### Dictating into a terminal
+- **Text now actually appears.** Terminals need Ctrl+Shift+V; plain Ctrl+V means
+  something else entirely at a shell prompt, so nothing was inserted. TalkType
+  knew this and had always sent the right keys — but only on GNOME, because the
+  GNOME extension was the only thing that ever told it which window you were
+  typing into. On KDE it never knew, so it always guessed "not a terminal".
+  TalkType now asks KWin directly, so KDE gets the same treatment GNOME always
+  had.
+- **"new line" and "new paragraph" work in a terminal too.** Terminals have no
+  "soft" Enter — Enter runs the command — so the keystroke TalkType sends for a
+  line break was simply ignored and everything ran together on one line. In a
+  terminal the line break is now part of the pasted text instead, which terminals
+  insert normally. Everywhere else is unchanged: in a chat box a real line break
+  would send your message, so those still get the keystroke.
+- **Dictating into Claude Desktop is more reliable on KDE**, for the same reason —
+  TalkType can now recognise it and use the input method that works with it.
+
+### Note for terminal users
+The line break relies on your shell's "bracketed paste" setting, which is on by
+default in current versions of bash and zsh. If you have deliberately turned it
+off, a dictated line break will run the command at that point instead of breaking
+the line. Only affects dictation containing "new line" aimed at a terminal.
+
+### Also
+- Terminal recognition no longer depends on exact capitalisation, so terminals
+  are identified consistently however your desktop reports them.
+
 ## [0.7.3] - 2026-09-05
 
 This release is about settings that said they had been applied when they hadn't.
