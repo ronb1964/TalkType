@@ -1751,6 +1751,28 @@ def _determine_injection_method(injection_mode: str) -> tuple[str, str, str]:
     # Default: use paste (Ctrl+Shift+V works universally)
     return ("paste", False, "Auto: defaulting to paste")
 
+def plan_line_breaks(text: str, is_terminal: bool) -> list[str]:
+    """How to deliver *text*'s line breaks: the chunks to paste, in order.
+
+    One chunk means one paste with real newlines in it. More than one means
+    paste each and send Shift+Enter between them.
+
+    Terminals bind no soft-newline key — Enter runs the command — so the
+    keystroke is simply ignored there and everything lands on one line. What a
+    terminal does accept is a newline inside pasted text: bracketed paste (on by
+    default in modern bash and zsh) inserts it literally instead of executing at
+    it. So a terminal gets one paste carrying real newlines.
+
+    Everywhere else keeps the keystroke, because in a chat input like Claude
+    Desktop a literal newline SUBMITS the message instead of breaking the line.
+    """
+    marker = "\xa7SHIFT_ENTER\xa7"
+    normalised = text.replace("\n", marker)
+    if is_terminal:
+        return [normalised.replace(marker, "\n")]
+    return normalised.split(marker)
+
+
 def _send_backspaces(count: int) -> bool:
     """Send *count* backspace keypresses. True only if they were delivered.
 
@@ -2085,9 +2107,10 @@ def _inject_text(text: str, injection_mode: str, t0: float):
     # --- Smart hybrid paste (text with line-break markers) ---
     elif use_paste and ("\xa7SHIFT_ENTER\xa7" in text or "\n" in text):
         marker = "\xa7SHIFT_ENTER\xa7"
-        logger.info("Smart hybrid mode: splitting text on markers")
-        parts = text.split(marker)
-        logger.info(f"Split into {len(parts)} parts")
+        # A terminal ignores Shift+Enter but honours a newline inside a paste,
+        # so it gets one chunk carrying real newlines and no keystrokes at all.
+        parts = plan_line_breaks(text, is_terminal_class(_query_focused_window_class()))
+        logger.info(f"Smart hybrid mode: {len(parts)} part(s)")
 
         # Track where delivery stopped. Falling back by re-injecting the whole
         # text left the document with the chunks that already landed followed by
