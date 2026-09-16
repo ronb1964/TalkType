@@ -159,7 +159,12 @@ archive/
 # ============================================
 # Claude Code
 # ============================================
-.claude/
+.claude/*
+# Shared skills are part of the project, not local session state, so they
+# stay tracked. Note this has to be `.claude/*` and not `.claude/` — git
+# never descends into an excluded directory, so a negation inside one is
+# silently ignored.
+!.claude/skills/
 
 # Playwright MCP automation logs
 .playwright-mcp/
