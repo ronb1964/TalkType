@@ -100,10 +100,10 @@ Status markers: `[x]` shipped · `[~]` partly done, see note · `[ ]` not starte
 - [x] AUR — `talktype-appimage` is published and current. `aur/` holds the packaging sources; `aur-repo/` is the untracked publishing clone (`ssh://aur@aur.archlinux.org/talktype-appimage.git`). Updating a release means bumping `pkgver` and `sha256sums` in both, then committing and pushing `aur-repo`. Note there is no `makepkg` on this machine, so `.SRCINFO` is maintained by hand and must be kept in step with the PKGBUILD.
 - [x] `.deb` packaging — `build-deb.sh`, validated on real Ubuntu 22.04 and 26.04 (GNOME).
 - [x] `.rpm` packaging — `build-rpm.sh`, validated on Fedora GNOME and Fedora KDE VMs. Both are built from the same AppDir the AppImage uses, so a fix in `container-build.sh` reaches all three.
-- [ ] Flatpak packaging
+- [~] Flatpak packaging — builds and runs. A self-hosted manifest (`packaging/flatpak/io.github.ronb1964.TalkType.yml`) and a fully offline Flathub manifest (`packaging/flatpak/flathub/`) both exist, but nothing is published. The Flathub submission (flathub/flathub#9825) was closed and labeled "AI Slop", and no PR carrying that label has ever been merged there, so the realistic routes are a `.flatpak` bundle on GitHub Releases or a self-hosted Flatpak repo.
 - [ ] Snap Store packaging
 - [ ] PyPI wheel
-- [~] Submit to AlternativeTo, Awesome Lists — AlternativeTo is live (2026-03-30); Awesome Lists not submitted.
+- [~] Submit to AlternativeTo, Awesome Lists — AlternativeTo is live (2026-03-30). Submitted to awesome-voice-typing (primaprashant/awesome-voice-typing#27, opened 2026-08-27, awaiting review). Checked and ruled out: `rcalixte/awesome-wayland` (closed a Linux dictation tool as out of scope), `luong-komorebi/Awesome-Linux-Software` and `natpen/awesome-wayland` (both archived), `sindresorhus/awesome-whisper` (macOS-centric, weak fit).
 
 ## Platform Expansion
 
@@ -118,7 +118,7 @@ Status markers: `[x]` shipped · `[~]` partly done, see note · `[ ]` not starte
 - [ ] Automated screenshot comparison suite
 - [ ] Visual regression testing in CI/CD
 - [ ] GTK theme testing across Adwaita, Breeze, Arc-Dark, etc.
-- [ ] **Continuous integration** — there is no `.github/workflows/`, so nothing runs the 361 tests except by hand. Compounded by the fact that a bare `pytest` *appears* to fail: the venv has no PyGObject, so six test modules error on import. The working invocation is:
+- [ ] **Continuous integration** — there is no `.github/workflows/`, so nothing runs the 754 tests (as of 2026-09-17) except by hand. Compounded by the fact that a bare `pytest` *appears* to fail: the venv has no PyGObject, so six test modules error on import. The working invocation is:
 
   ```
   PYTHONPATH=<repo>/src:/usr/lib64/python3.14/site-packages:/usr/lib/python3.14/site-packages .venv/bin/python -m pytest tests/ -q
@@ -145,4 +145,4 @@ Status markers: `[x]` shipped · `[~]` partly done, see note · `[ ]` not starte
 
 ---
 
-*Last updated: 2026-08-13 — statuses verified against the source tree as released in v0.6.0.*
+*Last updated: 2026-09-17 — Flatpak, Awesome Lists and CI entries refreshed. Every other status was last verified on 2026-08-13 against v0.6.0 and may have drifted since.*
