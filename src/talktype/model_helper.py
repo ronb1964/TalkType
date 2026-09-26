@@ -174,7 +174,7 @@ def is_model_cached_fast(model_name):
         return False
 
 
-def make_model_download_func(model_name):
+def make_model_download_func(model_name, repo_id=None, only_files=None):
     """
     Create a DownloadTask-compatible function that downloads model files to the
     HuggingFace cache without loading them into memory.
@@ -183,7 +183,11 @@ def make_model_download_func(model_name):
     alongside a CUDA libraries download in the same progress window.
 
     Args:
-        model_name: Model size (e.g., "large-v3")
+        model_name: Model size (e.g., "large-v3"), or a label for logs when
+            *repo_id* is given.
+        repo_id: Download from this Hugging Face repo instead of MODEL_REPOS
+            (used for the AI cleanup model, which is not a speech model).
+        only_files: With *repo_id*, fetch just these files from the repo.
 
     Returns:
         Callable: Function with signature (progress_callback, cancel_event) -> bool
@@ -199,8 +203,8 @@ def make_model_download_func(model_name):
             # Disable huggingface_hub's own console progress bars
             disable_progress_bars()
 
-            repo_id = MODEL_REPOS.get(model_name)
-            if not repo_id:
+            repo = repo_id or MODEL_REPOS.get(model_name)
+            if not repo:
                 logger.error(f"Unknown model: {model_name}")
                 return False
 
@@ -208,7 +212,9 @@ def make_model_download_func(model_name):
 
             # Get all file names + sizes from the HuggingFace repo
             try:
-                files_with_sizes = _files_to_download(model_name, repo_id)
+                files_with_sizes = _files_to_download(model_name, repo)
+                if only_files:
+                    files_with_sizes = [(p, s) for p, s in files_with_sizes if p in only_files]
                 total_bytes = sum(size for _, size in files_with_sizes)
                 logger.info(
                     f"Model {model_name}: {len(files_with_sizes)} files, "
@@ -219,9 +225,9 @@ def make_model_download_func(model_name):
                 files_with_sizes = []
                 total_bytes = 0
 
-            if not files_with_sizes and is_parakeet(model_name):
+            if not files_with_sizes and (only_files or is_parakeet(model_name)):
                 # No file list: fetch the known files without byte progress.
-                files_with_sizes = [(name, 0) for name in PARAKEET_FILES]
+                files_with_sizes = [(name, 0) for name in (only_files or PARAKEET_FILES)]
 
             if not files_with_sizes:
                 # Fallback: load via WhisperModel (triggers its own download)
@@ -286,7 +292,7 @@ def make_model_download_func(model_name):
                 bytes_before = downloaded_bytes[0]
                 try:
                     hf_hub_download(
-                        repo_id=repo_id,
+                        repo_id=repo,
                         filename=filename,
                         tqdm_class=ProgressTqdm,
                     )

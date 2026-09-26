@@ -209,6 +209,7 @@ Quick one-click optimization via tray menu:
 • <b>Fastest:</b> Tiny model, CPU - instant results
 • <b>Balanced:</b> Small model, GPU - good accuracy with speed
 • <b>Most Accurate:</b> Large-v3 model, GPU - best quality
+• <b>Fast &amp; Accurate:</b> Parakeet model - large-v3 class accuracy, no GPU needed
 • <b>Battery Saver:</b> Tiny model, CPU, short timeout
 
 <b>Smart Text Processing</b>
@@ -217,6 +218,18 @@ Quick one-click optimization via tray menu:
 • Auto-spacing before new text
 • Optional auto-period at end of sentences
 • Voice-activated undo (word, sentence, paragraph, or everything)
+
+<b>Dictation Cleanup</b> (optional, Preferences → Advanced)
+• Remove "um", "uh" and accidentally repeated words. Instant, nothing to download
+• Fix self-corrections with AI: "meet at 3, no wait, 4" becomes "meet at 4"
+• The AI runs on your computer (one-time 1.1 GB download) and only sees
+  sentences with a correction phrase. If its answer changes anything besides
+  the correction, your words are typed exactly as you said them
+
+<b>Recent Dictations</b>
+• Tray menu → Recent Dictations: your last 20 dictations
+• Hover over one to read it, click to copy it, then paste with Ctrl+V
+• Kept in memory only, never saved to disk, gone when you log out
 
 <b>Language Support</b>
 • Auto-detect language from speech

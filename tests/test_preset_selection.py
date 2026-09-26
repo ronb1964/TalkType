@@ -85,3 +85,45 @@ def test_tray_and_gnome_extension_offer_the_same_presets():
     tray_presets = [(k, p["label"], p["description"], p["model"], p["device"])
                     for k, p in DictationTray.PERFORMANCE_PRESETS.items()]
     assert js_presets == tray_presets
+
+
+def test_one_click_applies_one_preset_once():
+    """GTK fires "activate" on the radio being unselected too. Acting on that
+    re-applied the previous preset (restarting the service) before the new one."""
+    import gi
+    gi.require_version("Gtk", "3.0")
+
+    applied = []
+
+    class Tray:
+        PERFORMANCE_PRESETS = DictationTray.PERFORMANCE_PRESETS
+
+        def set_performance_preset(self, preset_id):
+            applied.append(preset_id)
+
+    tray = Tray()
+    # Keep the returned menu: once it is garbage-collected GTK destroys its
+    # items, taking their radio group and handlers with them.
+    menu = DictationTray._build_performance_submenu(tray)  # noqa: F841
+    tray.preset_radios["accurate"].activate()
+    applied.clear()
+    tray.preset_radios["parakeet"].activate()
+    assert applied == ["parakeet"]
+
+
+def test_one_click_applies_one_injection_mode_once():
+    import gi
+    gi.require_version("Gtk", "3.0")
+
+    applied = []
+
+    class Tray:
+        def set_injection_mode(self, mode):
+            applied.append(mode)
+
+    tray = Tray()
+    menu = DictationTray._build_injection_submenu(tray)  # noqa: F841  (see above)
+    tray.injection_mode_type.activate()
+    applied.clear()
+    tray.injection_mode_paste.activate()
+    assert applied == ["paste"]

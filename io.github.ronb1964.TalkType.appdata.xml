@@ -85,6 +85,18 @@
   </screenshots>
 
   <releases>
+    <release version="0.9.0" date="2026-09-26">
+      <description>
+        <p>Optional dictation cleanup and startup download fixes</p>
+        <ul>
+          <li>Remove "um", "uh" and accidentally repeated words, with nothing to download</li>
+          <li>Optional local AI fixes self-corrections, with every edit checked before it is typed</li>
+          <li>Cancelling a model download at startup is respected and falls back to a model you already have</li>
+          <li>Fixed a crash after downloading a model at startup</li>
+          <li>Tray presets and injection modes no longer restart dictation twice</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.8.0" date="2026-09-26">
       <description>
         <p>New optional Parakeet speech model and a Recent Dictations menu</p>

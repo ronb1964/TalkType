@@ -2,6 +2,43 @@
 
 All notable changes to TalkType are documented here.
 
+## [0.9.0] - 2026-09-26
+
+New Dictation Cleanup options, and a handful of fixes for things that could go
+wrong when a speech model wasn't downloaded yet.
+
+### Dictation Cleanup
+Both of these are off until you turn them on, in Preferences under Advanced.
+
+- **Remove "um", "uh" and repeated words.** "Um, so the the van is ready"
+  comes out as "So the van is ready". It's instant and there's nothing to
+  download. It leaves alone the doubles people actually mean, like "that
+  that" or "no, no, no".
+- **Fix self-corrections with AI.** Say "order two boxes of screws, no wait,
+  three boxes" and you get "Order three boxes of screws." A small AI model
+  runs on your own computer to do it. It's a one-time 1.1 GB download when
+  you turn it on, and it uses your graphics card if you have one (NVIDIA, AMD
+  or Intel) or your processor if you don't.
+- The AI only ever sees sentences where you corrected yourself, and TalkType
+  doesn't just trust what it sends back. If the answer changes anything
+  besides the correction, like rewording something or answering a question
+  you dictated, it gets thrown out and your words go in exactly as you said
+  them.
+
+### Fixes
+- **Cancel now means cancel.** If TalkType starts up and your speech model
+  isn't downloaded, it asks first. On computers with an NVIDIA card, clicking
+  Cancel was ignored and it downloaded anyway.
+- **No more crash after that download.** When the model had to be downloaded
+  at startup, the dictation service crashed right after the download
+  finished.
+- **Cancelling no longer leaves you without dictation.** TalkType switches to
+  a model you already have, tells you which one, and keeps going. It only
+  stops if you have no model downloaded at all.
+- **Picking a preset or a text injection mode from the tray restarted
+  dictation twice**, and briefly switched back to what you had before. It's
+  once now.
+
 ## [0.8.0] - 2026-09-26
 
 TalkType can now use NVIDIA's Parakeet model instead of Whisper. If you don't

@@ -1475,6 +1475,58 @@ class PreferencesWindow:
             grid.attach(inject_combo, 1, row, 1, 1)
             row += 1
 
+        # ===== DICTATION CLEANUP SECTION =====
+        cleanup_sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        cleanup_sep.set_margin_top(20)
+        cleanup_sep.set_margin_bottom(15)
+        grid.attach(cleanup_sep, 0, row, 2, 1)
+        row += 1
+
+        cleanup_header = Gtk.Label()
+        cleanup_header.set_markup('<b>Dictation Cleanup</b>')
+        cleanup_header.set_xalign(0)
+        cleanup_header.set_margin_bottom(10)
+        grid.attach(cleanup_header, 0, row, 2, 1)
+        row += 1
+
+        fillers_check = Gtk.CheckButton(label="Remove \u201cum\u201d, \u201cuh\u201d and accidentally repeated words")
+        fillers_check.set_active(bool(self.config.get("remove_fillers", False)))
+        fillers_check.connect("toggled", lambda x: self.update_config("remove_fillers", x.get_active()))
+        fillers_check.set_tooltip_text(
+            "\u201cUm, so the the van is ready\u201d becomes \u201cSo the van is ready\u201d.\n\n"
+            "Instant, and nothing to download. It only ever removes um/uh and words\n"
+            "repeated right next to each other; doubles people mean, like\n"
+            "\u201cthat that\u201d or \u201chad had\u201d, are left alone.")
+        grid.attach(fillers_check, 0, row, 2, 1)
+        row += 1
+
+        self.ai_corrections_check = Gtk.CheckButton(
+            label="Fix self-corrections with AI (\u201cat 3, no wait, 4\u201d \u2192 \u201cat 4\u201d)")
+        # Shown ticked only if its download is actually present. If the files
+        # went missing, an unticked box is the truth, and ticking it downloads
+        # them again (see _on_ai_corrections_toggled).
+        from talktype import ai_cleanup
+        self.ai_corrections_check.set_active(
+            bool(self.config.get("ai_corrections", False)) and ai_cleanup.is_installed())
+        self.ai_corrections_check.set_tooltip_text(
+            "When you correct yourself mid-sentence (\u201cno wait\u201d, \u201cI mean\u201d, \u201cscratch that\u201d),\n"
+            "a small AI model keeps only what you meant.\n\n"
+            "Runs entirely on this computer, using your graphics card if you have one.\n"
+            "Only sentences with a correction phrase are sent to it, and its answer is\n"
+            "checked: if it changed anything besides the correction, your words are\n"
+            "typed exactly as spoken instead.\n\n"
+            "Needs a one-time download of about 1.1 GB and roughly 1.5 GB of memory while on.")
+        self.ai_corrections_check.connect("toggled", self._on_ai_corrections_toggled)
+        grid.attach(self.ai_corrections_check, 0, row, 2, 1)
+        row += 1
+
+        ai_note = Gtk.Label(xalign=0)
+        ai_note.set_markup('<span size="small">    Runs on your computer, nothing is sent online. '
+                           'One-time download of about 1.1 GB.</span>')
+        ai_note.set_opacity(0.7)
+        grid.attach(ai_note, 0, row, 2, 1)
+        row += 1
+
         # ===== PRIVACY SECTION =====
         privacy_sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
         privacy_sep.set_margin_top(20)
@@ -3100,6 +3152,76 @@ class PreferencesWindow:
     def _on_auto_timeout_toggled(self, checkbox):
         """Handle auto-timeout checkbox toggle."""
         self._update_timeout_ui_state()
+
+    def _on_ai_corrections_toggled(self, check):
+        """Turn AI self-corrections on or off.
+
+        Turning it on the first time downloads the engine and model, after the
+        user agrees to the size. If they decline, or the download fails or is
+        cancelled, the box goes back to unticked so the setting never claims to
+        be on while it cannot work.
+        """
+        if not check.get_active():
+            self.update_config("ai_corrections", False)
+            return
+
+        from talktype import ai_cleanup
+        if ai_cleanup.is_installed():
+            self.update_config("ai_corrections", True)
+            return
+
+        confirm = Gtk.MessageDialog(
+            transient_for=self.window, modal=True,
+            message_type=Gtk.MessageType.QUESTION,
+            buttons=Gtk.ButtonsType.NONE,
+            text="Download the AI for self-corrections?",
+        )
+        confirm.format_secondary_text(
+            f"This downloads a small AI model ({ai_cleanup.MODEL_SIZE_TEXT}) and the "
+            f"llama.cpp engine that runs it ({ai_cleanup.LLAMA_SIZE_TEXT}). It is a "
+            "one-time download.\n\n"
+            "Everything runs on this computer. Your dictation is never sent anywhere.")
+        confirm.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        confirm.add_button("Download", Gtk.ResponseType.OK)
+        confirm.set_default_response(Gtk.ResponseType.OK)
+        response = confirm.run()
+        confirm.destroy()
+        if response != Gtk.ResponseType.OK:
+            self._untick_ai_corrections()
+            return
+
+        from talktype.download_progress_dialog import DownloadTask, UnifiedDownloadDialog
+        dialog = UnifiedDownloadDialog(
+            parent=self.window, title="Downloading AI Cleanup",
+            description="One-time download. Everything runs on this computer.")
+        dialog.add_task(DownloadTask("AI engine", "llama.cpp", ai_cleanup.LLAMA_SIZE_TEXT,
+                                     ai_cleanup.make_engine_download_func()))
+        dialog.add_task(DownloadTask("AI model", "Qwen2.5 1.5B", ai_cleanup.MODEL_SIZE_TEXT,
+                                     ai_cleanup.make_model_download_func()))
+        results = dialog.run()
+
+        if all(r.get("success") for r in results.values()) and ai_cleanup.is_installed():
+            self.update_config("ai_corrections", True)
+            return
+
+        self._untick_ai_corrections()
+        if not any(r.get("cancelled") for r in results.values()):
+            err = Gtk.MessageDialog(
+                transient_for=self.window, modal=True,
+                message_type=Gtk.MessageType.ERROR, buttons=Gtk.ButtonsType.OK,
+                text="The AI download did not finish")
+            err.format_secondary_text(
+                "Check your internet connection and try turning the option on again.")
+            err.run()
+            err.destroy()
+
+    def _untick_ai_corrections(self):
+        """Put the AI box back to unticked without re-running its handler."""
+        check = self.ai_corrections_check
+        check.handler_block_by_func(self._on_ai_corrections_toggled)
+        check.set_active(False)
+        check.handler_unblock_by_func(self._on_ai_corrections_toggled)
+        self.update_config("ai_corrections", False)
 
     def _on_log_transcripts_toggled(self, check):
         """Toggle transcript logging. Turning it OFF is safe and silent; turning

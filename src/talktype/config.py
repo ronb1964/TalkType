@@ -149,6 +149,8 @@ class Settings:
     language_mode: str = "auto"          # "auto" (detect language) or "manual" (use `language`); UI state for prefs
     launch_at_login: bool = False        # start TalkType automatically at login (prefs manages the autostart file)
     log_transcripts: bool = False        # write full transcribed text to the log (off = redacted); opt-in for troubleshooting only
+    remove_fillers: bool = False         # drop "um"/"uh" and accidental repeated words (cleanup.py; rules, no download)
+    ai_corrections: bool = False         # fix "3, no wait, 4" with a local AI model (ai_cleanup.py; downloads ~1.1 GB)
 
 
 # ---------------------------------------------------------------------------
@@ -713,6 +715,10 @@ LIVE_APPLIED_KEYS = {
     # Read into a module global by the service so toggling transcript logging in
     # Preferences takes effect on the next utterance, no restart.
     "log_transcripts",
+    # Dictation cleanup. Read on each utterance; turning AI corrections on or
+    # off starts or stops its engine from the same reload (_apply_cleanup_settings).
+    "remove_fillers",
+    "ai_corrections",
 }
 
 

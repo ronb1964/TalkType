@@ -1221,10 +1221,15 @@ class DictationTray:
         copyright_label.set_markup('<span size="small">© 2024-2025 Ron B. • MIT License</span>')
         content.pack_start(copyright_label, False, False, 0)
 
-        # CC-BY-4.0 requires crediting NVIDIA for the Parakeet model.
+        # CC-BY-4.0 requires crediting NVIDIA for the Parakeet model. The AI
+        # cleanup engine and model are downloaded from their own projects, not
+        # shipped, but credit them here too.
         from .parakeet_engine import PARAKEET_ATTRIBUTION
         credit_label = Gtk.Label()
-        credit_label.set_markup(f'<span size="small">{PARAKEET_ATTRIBUTION}</span>')
+        credit_label.set_markup(
+            f'<span size="small">{PARAKEET_ATTRIBUTION}\n'
+            'AI cleanup uses llama.cpp (MIT) and Qwen2.5 by Alibaba Cloud (Apache 2.0).</span>')
+        credit_label.set_justify(Gtk.Justification.CENTER)
         credit_label.set_line_wrap(True)
         credit_label.set_opacity(0.7)
         content.pack_start(credit_label, False, False, 0)
@@ -1794,17 +1799,20 @@ class DictationTray:
         submenu = Gtk.Menu()
         self.injection_mode_group = None
 
+        # Each handler checks get_active(): GTK also fires "activate" on the
+        # radio being unselected, which re-applied the old mode (and restarted
+        # the service) before the new one.
         self.injection_mode_auto = Gtk.RadioMenuItem(label="Auto (Smart Detection)")
-        self.injection_mode_auto.connect("activate", lambda w: self.set_injection_mode("auto"))
+        self.injection_mode_auto.connect("activate", lambda w: w.get_active() and self.set_injection_mode("auto"))
         submenu.append(self.injection_mode_auto)
         self.injection_mode_group = self.injection_mode_auto
 
         self.injection_mode_type = Gtk.RadioMenuItem(label="Keyboard Typing", group=self.injection_mode_group)
-        self.injection_mode_type.connect("activate", lambda w: self.set_injection_mode("type"))
+        self.injection_mode_type.connect("activate", lambda w: w.get_active() and self.set_injection_mode("type"))
         submenu.append(self.injection_mode_type)
 
         self.injection_mode_paste = Gtk.RadioMenuItem(label="Clipboard Paste", group=self.injection_mode_group)
-        self.injection_mode_paste.connect("activate", lambda w: self.set_injection_mode("paste"))
+        self.injection_mode_paste.connect("activate", lambda w: w.get_active() and self.set_injection_mode("paste"))
         submenu.append(self.injection_mode_paste)
 
         item = Gtk.MenuItem(label="Text Injection Mode")
@@ -1831,7 +1839,10 @@ class DictationTray:
                 preset_group = radio
             else:
                 radio = Gtk.RadioMenuItem(label=label, group=preset_group)
-            radio.connect("activate", lambda w, pid=preset_id: self.set_performance_preset(pid))
+            # GTK fires "activate" on the radio being UNselected as well as the
+            # one clicked. Acting on both re-applied the old preset first (a
+            # needless service restart) before applying the new one.
+            radio.connect("activate", lambda w, pid=preset_id: w.get_active() and self.set_performance_preset(pid))
             submenu.append(radio)
             self.preset_radios[preset_id] = radio
 

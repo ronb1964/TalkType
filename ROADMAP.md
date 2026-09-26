@@ -28,7 +28,7 @@ Status markers: `[x]` shipped · `[~]` partly done, see note · `[ ]` not starte
   - Why: GPU acceleration is NVIDIA-only today. Vulkan reports up to 12x on integrated AMD/Intel graphics, and Voxtype, Vocalinux and hyprwhspr already advertise it.
   - Not ROCm: CTranslate2's ROCm build needs several GB of system ROCm, which is not realistic for AppImage users.
   - Cost: models use the GGML format, a separate download path.
-- [ ] **(2026-09 research) Optional offline AI cleanup.** Priority 3.
+- [x] **(2026-09 research) Optional offline AI cleanup.** Priority 3. **Shipped in 0.9.0** as Dictation Cleanup: plain rules for um/uh and stutters (`cleanup.py`), plus optional AI for self-corrections only (`ai_cleanup.py`: llama.cpp + Qwen2.5-1.5B, downloaded on enable). Every AI answer passes a strict edit check. The original plan below (whole-dictation cleanup) proved too slow on CPU and too eager to reword.
   - What: removes filler words ("um", "uh") and resolves self-corrections ("at 3, no wait, 4" → "at 4"). Every paid app has this, and Windows Fluid Dictation and Gboard now give it away free.
   - How: a 0.6–1.7B GGUF model (e.g. Qwen3) through llama.cpp. Expect about 0.5–2 s per sentence on a modern CPU.
   - Off by default. Show the download size, keep a raw-vs-cleaned toggle, and keep the original text in history. Optionally allow the user's own Ollama.
@@ -183,4 +183,4 @@ Status markers: `[x]` shipped · `[~]` partly done, see note · `[ ]` not starte
 
 ---
 
-*Last updated: 2026-09-25 — added the 2026-09 competitive research items (engines, AI cleanup, marketing). 2026-09-17: Flatpak, Awesome Lists and CI entries refreshed. Every other status was last verified on 2026-08-13 against v0.6.0 and may have drifted since.*
+*Last updated: 2026-09-26 — Dictation Cleanup shipped in 0.9.0. 2026-09-25: added the 2026-09 competitive research items (engines, AI cleanup, marketing). 2026-09-17: Flatpak, Awesome Lists and CI entries refreshed. Every other status was last verified on 2026-08-13 against v0.6.0 and may have drifted since.*

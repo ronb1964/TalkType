@@ -39,6 +39,31 @@ def _loggable(text):
     """Render transcribed text for a log line, redacted unless the user opted in."""
     return redact_text(text, reveal=_log_transcripts)
 
+
+# Dictation cleanup (Preferences). _remove_fillers enables the "um"/"uh" and
+# repeated-word rules; _ai_engine is the running self-correction engine, or
+# None while that option is off. Both follow config through
+# _apply_cleanup_settings(), at startup and on every live-settings reload.
+_remove_fillers = False
+_ai_engine = None
+
+
+def _apply_cleanup_settings(cfg):
+    """Bring the cleanup options in line with *cfg*; start or stop the AI engine."""
+    global _remove_fillers, _ai_engine
+    _remove_fillers = bool(getattr(cfg, "remove_fillers", False))
+    want_ai = bool(getattr(cfg, "ai_corrections", False))
+    if want_ai and _ai_engine is None:
+        from .ai_cleanup import CorrectionEngine, is_installed
+        if is_installed():
+            _ai_engine = CorrectionEngine()
+            _ai_engine.start()
+        else:
+            logger.warning("AI corrections are on but not downloaded; turn the option off and on in Preferences")
+    elif not want_ai and _ai_engine is not None:
+        engine, _ai_engine = _ai_engine, None
+        engine.stop()
+
 # Cached tool path lookups — avoids searching PATH on every text injection
 _tool_cache = {}
 def _which(name):
@@ -932,6 +957,8 @@ def _reload_live_settings(cfg, indicator):
 
         global _log_transcripts
         _log_transcripts = getattr(cfg, "log_transcripts", False)
+
+        _apply_cleanup_settings(cfg)
 
         if indicator is not None:
             indicator.apply_settings(
@@ -1979,6 +2006,16 @@ def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: b
         auto_period=auto_period,
     )
 
+    # Optional cleanup, while quoted custom-command replacements are still
+    # placeholders, so a literal replacement is never "cleaned". Rules first
+    # ("um", "the the"), then the AI for sentences with a self-correction.
+    if _remove_fillers:
+        from .cleanup import clean_fillers_and_repeats
+        text = clean_fillers_and_repeats(text)
+    if _ai_engine is not None:
+        from .ai_cleanup import fix_self_corrections
+        text = fix_self_corrections(text, _ai_engine)
+
     # Restore quoted (literal) custom command replacements before any further
     # processing so that auto-period/space checks see the real final text.
     text = _restore_protected(text, protected)
@@ -2726,8 +2763,81 @@ def _loop_evdev(cfg: Settings, input_device_idx):
 
         time.sleep(0.005)
 
+class ModelUnavailable(Exception):
+    """The speech model is not downloaded and the user cancelled the download,
+    or it failed. Nothing to retry: the service cannot run without a model."""
+
+
+# Speech models from best quality to fastest. When the chosen model is not
+# downloaded, the service falls back to the downloaded model nearest to it here.
+_QUALITY_ORDER = ("large-v3", "parakeet-v3", "medium", "small", "base", "tiny")
+
+
+def _pick_fallback_model(wanted, downloaded, has_cuda):
+    """The downloaded model closest in quality to *wanted*, or None.
+
+    Ties go to the faster model. large-v3 is skipped without CUDA, where it
+    is too slow to use (main() refuses it there for the same reason).
+    """
+    rank = {m: i for i, m in enumerate(_QUALITY_ORDER)}
+    target = rank.get(wanted, rank["small"])
+    options = [m for m in downloaded
+               if m in rank and m != wanted and (m != "large-v3" or has_cuda)]
+    if not options:
+        return None
+    return min(options, key=lambda m: (abs(rank[m] - target), -rank[m]))
+
+
+def _build_model_or_exit(settings: Settings):
+    """build_model, falling back to an already-downloaded model when the chosen
+    one is not downloaded (the user cancelled, or the download failed).
+
+    Cancelling usually means "not now", not "turn dictation off", so dictation
+    carries on with the nearest model already on disk. The switch is saved, so
+    every menu shows the model actually running, and the user is told. Only
+    with no model downloaded at all does the service stop.
+    """
+    try:
+        return build_model(settings)
+    except ModelUnavailable as e:
+        from .model_helper import OFFERED_MODELS, is_model_cached_fast, model_display_name
+        try:
+            from .cuda_helper import has_talktype_cuda_libraries
+            has_cuda = has_talktype_cuda_libraries()
+        except Exception:
+            has_cuda = False
+        wanted = settings.model
+        downloaded = [m for m in OFFERED_MODELS if is_model_cached_fast(m)]
+        fallback = _pick_fallback_model(wanted, downloaded, has_cuda)
+        if fallback is None:
+            logger.warning(f"Dictation service stopping: {e}, and no other model is downloaded")
+            print(f"⚠️  {e}. Choose a model in Preferences to start dictating.")
+            sys.exit(1)
+
+        logger.warning(f"{e}; falling back to the downloaded {fallback} model")
+        settings.model = fallback      # the D-Bus menus read this same object
+        try:
+            model = build_model(settings)
+        except ModelUnavailable:
+            logger.warning(f"Dictation service stopping: fallback {fallback} could not load either")
+            sys.exit(1)
+        try:
+            from .config import load_config, save_config
+            saved = load_config()
+            saved.model = fallback
+            save_config(saved)
+        except Exception as save_error:
+            logger.warning(f"Could not save the fallback model to settings: {save_error}")
+        _notify("TalkType",
+                f"{model_display_name(wanted)} wasn't downloaded, so TalkType is using "
+                f"{model_display_name(fallback)} for now. You can choose "
+                f"{model_display_name(wanted)} again in Preferences.")
+        return model
+
+
 def build_model(settings: Settings):
     from .model_helper import download_model_with_progress
+    from .parakeet_engine import is_parakeet
 
     compute_type = "float16" if settings.device.lower() == "cuda" else "int8"
     try:
@@ -2739,17 +2849,20 @@ def build_model(settings: Settings):
         )
 
         if model is None:
-            # User cancelled download
-            raise Exception("Model download cancelled by user")
+            raise ModelUnavailable(f"The {settings.model} model was not downloaded (cancelled or failed)")
 
         # Parakeet ignores the device setting and always runs on the CPU.
-        from .parakeet_engine import is_parakeet
         where = "cpu" if is_parakeet(settings.model) else settings.device
         print(f"✅ Model loaded successfully on {where.upper()}")
         logger.info(f"Model loaded: {settings.model} on {where}")
         return model
+    except ModelUnavailable:
+        # Never "fall back to CPU" here. That fallback exists for a CUDA load
+        # failure; treating a cancel as one re-ran the download without asking
+        # and ignored the user's Cancel.
+        raise
     except Exception as e:
-        if settings.device.lower() == "cuda":
+        if settings.device.lower() == "cuda" and not is_parakeet(settings.model):
             print(f"❌ CUDA failed: {e}")
             logger.error(f"CUDA error: {type(e).__name__}: {str(e)}")
             import traceback
@@ -2809,6 +2922,10 @@ def parse_args():
     return ap.parse_args()
 
 def main():
+    # The loaded speech model. Usually built after the GTK loop starts; built
+    # earlier when it must first be downloaded (see the GTK section below).
+    global model
+    model = None
     _acquire_single_instance()
 
     cfg = load_config()
@@ -2850,6 +2967,9 @@ def main():
     # Whether transcribed text may be written to the log (off = redacted).
     global _log_transcripts
     _log_transcripts = getattr(cfg, 'log_transcripts', False)
+
+    # Dictation cleanup; the AI engine (if on) loads in the background.
+    _apply_cleanup_settings(cfg)
 
     # Load custom voice commands
     global _custom_commands
@@ -3035,6 +3155,16 @@ def main():
                     print(f"⚠️  Failed to initialize recording indicator: {e}")
                     logger.error(f"Recording indicator initialization failed: {e}", exc_info=True)
 
+            # If the model still has to be downloaded, do it NOW, before the GTK
+            # loop thread starts. The download shows GTK dialogs and runs them on
+            # this thread; with Gtk.main() already running on the thread below,
+            # two threads drove GTK at once and the service segfaulted the moment
+            # a startup download finished. An already-downloaded model (the
+            # normal case) loads later, after the loop is up, as before.
+            from .model_helper import is_model_cached_fast
+            if not is_model_cached_fast(cfg.model):
+                model = _build_model_or_exit(cfg)
+
             # Start single GTK main loop in a background thread for both D-Bus and recording indicator
             def run_gtk_loop():
                 print("🔄 Starting GTK main loop...")
@@ -3048,8 +3178,8 @@ def main():
             print(f"⚠️  Failed to initialize GTK components: {e}")
             logger.error(f"GTK initialization failed: {e}", exc_info=True)
 
-    global model
-    model = build_model(cfg)
+    if model is None:
+        model = _build_model_or_exit(cfg)
     print(f"Config: model={cfg.model} device={cfg.device} lang={cfg.language or 'auto'} auto_space={cfg.auto_space} auto_period={cfg.auto_period}")
     logger.info(f"Configuration: model={cfg.model}, device={cfg.device}, language={cfg.language or 'auto'}, auto_space={cfg.auto_space}, auto_period={cfg.auto_period}")
     # Register signal handlers:
