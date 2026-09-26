@@ -24,6 +24,8 @@ apt-get install -y -qq \
     gir1.2-glib-2.0 \
     gir1.2-ayatanaappindicator3-0.1 \
     libayatana-appindicator3-1 \
+    libportaudio2 \
+    patchelf \
     python3-gi \
     python3-gi-cairo \
     python3-cairo \
@@ -303,6 +305,30 @@ if LD_LIBRARY_PATH=AppDir/usr/lib ldd AppDir/usr/lib/libayatana-appindicator3.so
     exit 1
 fi
 echo "   ✅ Tray icon library bundled"
+
+# Bundle PortAudio (the microphone library) as a fallback. sounddevice looks it
+# up with find_library(), which ignores LD_LIBRARY_PATH, so without a system
+# libportaudio TalkType had no microphone (AppImageHub's test, 2026-09-26).
+# talktype/__init__.py points find_library here only when the system has none.
+#
+# It lives in its own folder, NOT usr/lib: that folder is on LD_LIBRARY_PATH,
+# and a bundled libjack there would override the system's (e.g. PipeWire's
+# JACK) for a system PortAudio too. libjack and its libdb dependency are
+# bundled because many desktops lack them; RUNPATH=$ORIGIN makes the bundled
+# PortAudio find them. libasound stays the system's, as ALSA needs its config.
+echo "   Bundling PortAudio fallback..."
+PA_DIR=AppDir/usr/lib/portaudio
+mkdir -p "$PA_DIR"
+for _lib in libportaudio.so.2 libjack.so.0 libdb-5.3.so; do
+    cp -L "/usr/lib/x86_64-linux-gnu/$_lib" "$PA_DIR/"
+done
+patchelf --set-rpath '$ORIGIN' "$PA_DIR/libportaudio.so.2" "$PA_DIR/libjack.so.0"
+if ldd "$PA_DIR/libportaudio.so.2" | grep -E 'libjack|libdb' | grep -qv "$PA_DIR"; then
+    echo "❌ ERROR: bundled PortAudio does not resolve its own libjack/libdb:"
+    ldd "$PA_DIR/libportaudio.so.2"
+    exit 1
+fi
+echo "   ✅ PortAudio fallback bundled"
 
 # Copy TalkType source
 echo "   Copying TalkType source..."

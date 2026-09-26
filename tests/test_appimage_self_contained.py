@@ -31,3 +31,10 @@ def test_tray_library_itself_is_bundled():
     assert "cp -L \"$APPINDICATOR_LIB\" AppDir/usr/lib/" in BUILD, (
         "the tray library .so must be copied into the AppImage, not just its typelib"
     )
+
+
+def test_portaudio_fallback_is_bundled_off_the_library_path():
+    # talktype/__init__.py expects it at usr/lib/portaudio/, and it must not
+    # sit in usr/lib, which is on LD_LIBRARY_PATH (see container-build.sh).
+    assert "PA_DIR=AppDir/usr/lib/portaudio" in BUILD
+    assert "libportaudio.so.2 libjack.so.0 libdb-5.3.so" in BUILD

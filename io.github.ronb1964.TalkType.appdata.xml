@@ -85,6 +85,14 @@
   </screenshots>
 
   <releases>
+    <release version="0.10.3" date="2026-09-26">
+      <description>
+        <p>Works without PortAudio installed</p>
+        <ul>
+          <li>Bundles PortAudio as a fallback, so the microphone works on systems without it</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.10.2" date="2026-09-26">
       <description>
         <p>The AppImage starts on more systems</p>

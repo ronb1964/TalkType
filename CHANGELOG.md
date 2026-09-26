@@ -2,6 +2,17 @@
 
 All notable changes to TalkType are documented here.
 
+## [0.10.3] - 2026-09-26
+
+One more fix for systems that were missing a library.
+
+### Fixes
+- If your system didn't have PortAudio installed, the library TalkType uses to
+  hear your microphone, TalkType popped up a window asking you to install it.
+  A copy of PortAudio comes inside the AppImage now, along with the JACK
+  library it needs, so it just works. If your system does have PortAudio,
+  TalkType keeps using that one like it always has.
+
 ## [0.10.2] - 2026-09-26
 
 The AppImage should now start on more systems.
