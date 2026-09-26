@@ -160,15 +160,15 @@ Status markers: `[x]` shipped · `[~]` partly done, see note · `[ ]` not starte
 
 *2026-09 research findings (see the Obsidian note). The problem is visibility, not quality: TalkType's Show HN (2026-04-03) got 2 points, and more than a dozen Linux dictation Show HNs in 2026 got 2–7 points each. Show HN is saturated for this category.*
 
-- [ ] **Lead with the Wayland hotkey.** Make it the first line of the README and the release notes. The competition can't do it reliably:
+- [x] **Lead with the Wayland hotkey.** README rewritten 2026-09-26 (commit 9ca7fc1); release notes still to follow the same lead. Make it the first line of the README and the release notes. The competition can't do it reliably:
   - Handy makes Linux users bind a desktop shortcut themselves, and its typing tool (wtype) fails on GNOME.
   - Voxtype says hold-to-talk is impossible on KDE.
   - Murmure dropped Wayland push-to-talk entirely.
   - Suggested pitch: "Hold a key, talk, release. It works on GNOME and KDE Wayland out of the box."
 - [ ] **Target KDE, Fedora and Arch users.** Canonical's Myna ships built-in offline dictation in Ubuntu 26.10 (October 2026), covering GNOME/Ubuntu only. It has no voice commands in v1.
-- [ ] Post in KDE Discuss → Community. Dictee, another offline dictation app, got a good reception there.
-- [ ] Post regular "what's new in vX" updates on r/linux, plus r/kde and r/Fedora. This is how Vocalinux built its following.
-- [ ] Reply in the Ubuntu Myna thread (discourse.ubuntu.com/t/84251) and the GNOME "desktop-wide offline speech-to-text" proposal (discourse.gnome.org/t/35858). Both explicitly ask dictation users for input.
+- [x] Post in KDE Discuss → Community. Posted 2026-09-26 as Ron_Brand, tagged plasma and wayland; held for moderator approval (first post). Dictee, another offline dictation app, got a good reception there.
+- [ ] Post regular "what's new in vX" updates on r/linux, plus r/kde and r/Fedora. **Blocked for now (2026-09-26):** u/ronb1964 has 4 posts, all TalkType, and both r/linux posts (Aug 2025, Feb 2026) plus r/opensource were removed by moderators; r/linux rule 6 caps self-promotion at 10% of posts. Build normal history first, e.g. helpful answers in "Wayland dictation?" threads, before posting again. This is how Vocalinux built its following.
+- [~] Reply in the Ubuntu Myna thread (discourse.ubuntu.com/t/84251) and the GNOME "desktop-wide offline speech-to-text" proposal (discourse.gnome.org/t/35858). Myna reply posted 2026-09-26 as ronb1964, awaiting moderator approval. GNOME thread skipped (quiet since June). Both explicitly ask dictation users for input.
 - [ ] Pitch Phoronix, Hackaday "Linux Fu", It's FOSS and The Register (Liam Proven).
 - [ ] Get into the "best Linux dictation 2026" roundups (blabby.ai, spokenly.app, airtypes.com). TalkType is missing from most of them.
 - [ ] Name collision: search results for "TalkType" split with talk-type.com, talktype.app, an iOS app and two other GitHub projects. Consider always writing "TalkType for Linux" in posts.
