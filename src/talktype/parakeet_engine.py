@@ -54,6 +54,12 @@ def is_parakeet(model_name) -> bool:
     return model_name == PARAKEET_MODEL
 
 
+def effective_device(model_name, device) -> str:
+    """The device a model really runs on. Parakeet always uses the CPU, so a
+    leftover "cuda" setting must not make the menus claim it is on the GPU."""
+    return "cpu" if is_parakeet(model_name) else (device or "cpu")
+
+
 def cached_model_dir():
     """Folder holding a complete Parakeet download, or None if anything is missing.
 

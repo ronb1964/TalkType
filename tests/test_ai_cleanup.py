@@ -157,3 +157,21 @@ def test_settings_start_and_stop_the_engine(monkeypatch):
 def test_cleanup_settings_apply_without_a_restart():
     from talktype.config import LIVE_APPLIED_KEYS
     assert {"remove_fillers", "ai_corrections"} <= LIVE_APPLIED_KEYS
+
+
+def test_orphaned_engines_are_killed_but_live_ones_are_left_alone(monkeypatch):
+    """Engines left by an earlier run (parent gone, adopted by systemd) are
+    killed when a new engine starts; ones owned by a live TalkType are not."""
+    import signal as _signal
+    killed = []
+    monkeypatch.setattr(ai, "_engine_processes", lambda: [(100, 1), (200, 50), (300, ai.os.getpid())])
+    monkeypatch.setattr(ai, "_is_talktype_process", lambda pid: pid == 50)
+    monkeypatch.setattr(ai.os, "kill", lambda pid, sig: killed.append((pid, sig)))
+    assert ai.kill_orphaned_engines() == 1
+    assert killed == [(100, _signal.SIGKILL)]
+
+
+def test_parent_death_uses_sigkill():
+    """llama-server can stall in graceful shutdown and ignore SIGTERM."""
+    import inspect
+    assert "signal.SIGKILL" in inspect.getsource(ai._set_parent_death_signal)

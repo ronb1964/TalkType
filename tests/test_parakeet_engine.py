@@ -127,3 +127,17 @@ def test_display_name_is_friendly():
     from talktype.model_helper import model_display_name
     assert model_display_name("parakeet-v3") == "Parakeet"
     assert model_display_name("small") == "Small"
+
+
+def test_menus_show_the_device_parakeet_really_uses():
+    """Picking Parakeet in Preferences can leave device = "cuda" in the config;
+    both the tray and the GNOME extension (via GetDeviceType) must say CPU."""
+    from talktype.parakeet_engine import effective_device
+    assert effective_device("parakeet-v3", "cuda") == "cpu"
+    assert effective_device("large-v3", "cuda") == "cuda"
+    assert effective_device("small", "cpu") == "cpu"
+
+    from talktype.dbus_service import TalkTypeDBusService
+    svc = TalkTypeDBusService.__new__(TalkTypeDBusService)
+    svc.app = SimpleNamespace(config=SimpleNamespace(model="parakeet-v3", device="cuda"))
+    assert TalkTypeDBusService.GetDeviceType(svc) == "cpu"

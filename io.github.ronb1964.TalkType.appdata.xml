@@ -85,6 +85,17 @@
   </screenshots>
 
   <releases>
+    <release version="0.10.1" date="2026-09-26">
+      <description>
+        <p>Bug fixes</p>
+        <ul>
+          <li>Fixed the dictation key sometimes staying stuck down in VM windows, remote desktops and games</li>
+          <li>Launch at login now uses the installed AppImage, not the copy in Downloads</li>
+          <li>The Device line shows CPU when using Parakeet</li>
+          <li>The AI cleanup engine no longer keeps running after TalkType closes</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.10.0" date="2026-09-26">
       <description>
         <p>Optional hands-free dictation</p>

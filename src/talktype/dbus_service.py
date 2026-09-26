@@ -105,9 +105,12 @@ class TalkTypeDBusService(dbus.service.Object):
 
     @dbus.service.method(DBUS_INTERFACE, out_signature='s')
     def GetDeviceType(self):
-        """Get current device type (cpu/cuda)"""
+        """Get the device the model really runs on (cpu/cuda). This is what
+        the GNOME extension's Device line shows, so it matches the tray."""
         if hasattr(self.app, 'config'):
-            return str(getattr(self.app.config, 'device', 'cpu'))
+            from .parakeet_engine import effective_device
+            cfg = self.app.config
+            return str(effective_device(getattr(cfg, 'model', ''), getattr(cfg, 'device', 'cpu')))
         return 'cpu'
 
     @dbus.service.method(DBUS_INTERFACE, out_signature='a{sv}')

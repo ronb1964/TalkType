@@ -25,7 +25,7 @@ def test_set_autostart_writes_desktop_file_off_flatpak(tmp_path, monkeypatch):
     monkeypatch.delenv("FLATPAK_ID", raising=False)
     df = tmp_path / "autostart" / "talktype.desktop"
     monkeypatch.setattr(autostart, "_autostart_desktop_path", lambda: str(df))
-    monkeypatch.setattr(autostart, "get_launch_command", lambda: "/usr/bin/talktype")
+    monkeypatch.setattr(autostart, "get_launch_command", lambda *a, **k: "/usr/bin/talktype")
     monkeypatch.setattr(autostart, "get_icon_path", lambda: "icon")
 
     assert autostart.set_autostart(True) is True

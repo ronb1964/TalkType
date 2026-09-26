@@ -639,7 +639,7 @@ class WelcomeDialog:
         features = [
             f"🎤 <b>Press-and-hold dictation</b> ({hotkey_hint})",
             "🗣️ <b>Voice commands:</b> \"period\", \"comma\", \"new paragraph\"",
-            "🤖 <b>Powered by OpenAI's Whisper AI</b>",
+            "🤖 <b>Powered by OpenAI's Whisper or NVIDIA's Parakeet</b>",
             "🔒 <b>100% local</b> - your voice never leaves your computer",
             "⚙️ <b>Configurable</b> hotkeys and preferences"
         ]
@@ -3231,7 +3231,10 @@ def show_welcome_and_install():
         # Only record autostart as enabled in config if the .desktop file was
         # actually written — otherwise config and reality disagree, and the Ready
         # screen would promise a startup that never happens.
-        if autostart.set_autostart(True):
+        # Point autostart at the installed copy setup is copying into
+        # ~/AppImages, not at the file that happens to be running (usually the
+        # one in Downloads).
+        if autostart.set_autostart(True, prefer_installed_appimage=appimage_installed):
             cfg = load_config()
             if not getattr(cfg, 'launch_at_login', False):
                 cfg.launch_at_login = True

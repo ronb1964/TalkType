@@ -27,12 +27,24 @@ def _project_root() -> str:
     return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-def get_launch_command() -> str:
+# Where setup installs the AppImage; the Applications-menu launcher points here
+# too (update_checker.create_desktop_launcher).
+INSTALLED_APPIMAGE = os.path.expanduser("~/AppImages/TalkType.AppImage")
+
+
+def get_launch_command(prefer_installed_appimage: bool = False) -> str:
     """Return the most portable command to launch the tray.
 
     Order: dev script → AppImage path → packaged launcher (absolute) → PATH
     lookup → bare interpreter (last resort). See the module docstring for why the
     packaged launcher must win over a bare-Python invocation.
+
+    From an AppImage, the installed copy (~/AppImages/TalkType.AppImage) wins
+    over the file actually running, which on first run is usually the one in
+    ~/Downloads. Pointing autostart at the download meant cleaning up Downloads
+    silently stopped TalkType starting at login. Setup copies the AppImage in
+    the background, so it passes *prefer_installed_appimage* rather than
+    relying on the copy having finished.
     """
     from . import config
     if config.DEV_MODE:
@@ -47,6 +59,8 @@ def get_launch_command() -> str:
     # Running from an AppImage: relaunch the AppImage itself (defaults to tray).
     appimage_path = os.environ.get('APPIMAGE')
     if appimage_path and os.path.isfile(appimage_path) and os.access(appimage_path, os.X_OK):
+        if prefer_installed_appimage or os.path.isfile(INSTALLED_APPIMAGE):
+            return INSTALLED_APPIMAGE
         return appimage_path
 
     # Inside an AppImage mount but APPIMAGE unset: find the AppImage on disk.
@@ -155,7 +169,7 @@ def _set_autostart_flatpak(enable: bool) -> bool:
         return False
 
 
-def set_autostart(enable: bool) -> bool:
+def set_autostart(enable: bool, prefer_installed_appimage: bool = False) -> bool:
     """Create or disable the autostart entry. Returns True on success.
 
     On the Flatpak this goes through the Background portal (the sandbox can't
@@ -178,7 +192,7 @@ def set_autostart(enable: bool) -> bool:
         return False
 
     if enable:
-        exec_cmd = get_launch_command()
+        exec_cmd = get_launch_command(prefer_installed_appimage)
         icon_path = get_icon_path()
         app_name = "TalkType (Dev)" if config.DEV_MODE else "TalkType"
         comment = ("AI-powered dictation - Development Version" if config.DEV_MODE

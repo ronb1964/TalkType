@@ -116,3 +116,32 @@ def test_raw_python_only_as_last_resort(monkeypatch):
     """No launcher anywhere — the bare interpreter is the last resort."""
     mod = _make_prefs(monkeypatch, exists=set())
     assert mod.get_launch_command() == "/opt/talktype/usr/bin/python3 -m talktype.tray"
+
+
+DOWNLOAD = "/home/ron/Downloads/TalkType-v0.10.0-x86_64.AppImage"
+
+
+def test_autostart_uses_the_installed_appimage_not_the_download(monkeypatch):
+    """Found in a fresh Ubuntu GNOME VM: setup said "Installed to
+    ~/AppImages/TalkType.AppImage" but autostart pointed at ~/Downloads, so
+    tidying Downloads silently stopped TalkType starting at login."""
+    mod = _make_prefs(monkeypatch, exists={DOWNLOAD}, appimage=DOWNLOAD)
+    installed = mod.INSTALLED_APPIMAGE
+    mod = _make_prefs(monkeypatch, exists={DOWNLOAD, installed}, appimage=DOWNLOAD)
+    assert mod.get_launch_command() == installed
+
+
+def test_setup_can_point_at_the_installed_copy_before_it_finishes_copying(monkeypatch):
+    mod = _make_prefs(monkeypatch, exists={DOWNLOAD}, appimage=DOWNLOAD)
+    assert mod.get_launch_command(prefer_installed_appimage=True) == mod.INSTALLED_APPIMAGE
+
+
+def test_without_an_installed_copy_the_running_appimage_is_used(monkeypatch):
+    mod = _make_prefs(monkeypatch, exists={DOWNLOAD}, appimage=DOWNLOAD)
+    assert mod.get_launch_command() == DOWNLOAD
+
+
+def test_onboarding_asks_for_the_installed_copy():
+    from pathlib import Path
+    src = (Path(__file__).resolve().parent.parent / "src/talktype/welcome_dialog.py").read_text()
+    assert "set_autostart(True, prefer_installed_appimage=appimage_installed)" in src

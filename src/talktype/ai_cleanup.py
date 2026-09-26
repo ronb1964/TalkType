@@ -316,13 +316,63 @@ def make_model_download_func():
 
 def _set_parent_death_signal():
     """Runs in the child before exec: if the dictation service dies, even by
-    SIGKILL, the kernel stops llama-server too, so it cannot sit orphaned on
-    a gigabyte of memory."""
+    SIGKILL, the kernel kills llama-server too, so it cannot sit orphaned on
+    a gigabyte of memory.
+
+    SIGKILL, not SIGTERM: llama-server sometimes stalls in its graceful
+    shutdown and then ignores SIGTERM. That left orphaned engines running for
+    hours on a real machine (2026-09-26). It holds no state worth saving."""
     try:
         import ctypes
-        ctypes.CDLL("libc.so.6", use_errno=True).prctl(1, signal.SIGTERM)  # PR_SET_PDEATHSIG
+        ctypes.CDLL("libc.so.6", use_errno=True).prctl(1, signal.SIGKILL)  # PR_SET_PDEATHSIG
     except Exception:
         pass
+
+
+def _engine_processes():
+    """(pid, parent pid) of every running llama-server from our engine folder."""
+    binary = _server_binary()
+    found = []
+    for entry in os.listdir("/proc"):
+        if not entry.isdigit():
+            continue
+        try:
+            with open(f"/proc/{entry}/cmdline", "rb") as f:
+                argv0 = f.read().split(b"\0", 1)[0].decode(errors="replace")
+            if argv0 != binary:
+                continue
+            with open(f"/proc/{entry}/stat") as f:
+                ppid = int(f.read().rsplit(")", 1)[1].split()[1])
+            found.append((int(entry), ppid))
+        except (OSError, ValueError, IndexError):
+            continue
+    return found
+
+
+def _is_talktype_process(pid) -> bool:
+    try:
+        with open(f"/proc/{pid}/cmdline", "rb") as f:
+            return b"talktype" in f.read().lower()
+    except OSError:
+        return False
+
+
+def kill_orphaned_engines() -> int:
+    """Kill engines whose TalkType service is gone. Returns how many.
+
+    A self-healing backstop for the parent-death signal: an engine whose parent
+    is no longer a TalkType process was left behind by an earlier run."""
+    killed = 0
+    for pid, ppid in _engine_processes():
+        if ppid == os.getpid() or _is_talktype_process(ppid):
+            continue
+        try:
+            os.kill(pid, signal.SIGKILL)
+            killed += 1
+            logger.warning(f"Killed an orphaned AI cleanup engine left by an earlier run (pid {pid})")
+        except OSError:
+            pass
+    return killed
 
 
 class CorrectionEngine:
@@ -343,6 +393,7 @@ class CorrectionEngine:
             if not is_installed():
                 logger.warning("AI cleanup is on but its download is missing; skipping")
                 return
+            kill_orphaned_engines()
             self._ready.clear()
             with socket.socket() as s:
                 s.bind(("127.0.0.1", 0))

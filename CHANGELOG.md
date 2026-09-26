@@ -2,6 +2,32 @@
 
 All notable changes to TalkType are documented here.
 
+## [0.10.1] - 2026-09-26
+
+Mostly a fix for a stuck key I ran into while testing in a VM.
+
+### Fixes
+- Holding the dictation key could leave your desktop thinking that key was
+  still held down, and it got worse by one every time you dictated. Most apps
+  never notice. But a virtual machine window, a remote desktop session or a
+  game does notice, and it starts repeating the key by itself. With F8 that
+  meant a VM terminal filling up with tildes. TalkType now tells the desktop
+  the key came back up before it takes over the keyboard, so it never gets
+  out of step. If you already have a stuck key from an older version, logging
+  out and back in clears it.
+- Launch at login was pointing at whatever AppImage you ran setup from, which
+  is usually the one sitting in Downloads. Clean out Downloads and TalkType
+  quietly stopped starting at login. It points at the installed copy in
+  ~/AppImages now.
+- If you use Parakeet, the Device line in the menu says CPU now. Parakeet
+  always runs on the CPU, so it was wrong for it to say cuda.
+- The AI cleanup engine could get left running in the background after
+  TalkType closed, sometimes for hours, holding on to about a gigabyte of
+  memory. It gets shut down properly now, and anything left over from before
+  gets cleaned up the next time TalkType starts.
+- The welcome screen and the model tooltip in Preferences mention Parakeet
+  now, not just Whisper.
+
 ## [0.10.0] - 2026-09-26
 
 A hands-free option for the toggle key.

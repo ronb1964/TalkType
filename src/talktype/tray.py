@@ -1025,7 +1025,9 @@ class DictationTray:
                     'cpu': 'CPU',
                     'cuda': 'GPU (CUDA)'
                 }
-                device_display = device_names.get(cfg.device, cfg.device.upper())
+                from .parakeet_engine import effective_device
+                device = effective_device(cfg.model, cfg.device)
+                device_display = device_names.get(device, device.upper())
                 self.device_display_item.set_label(f"Device: {device_display}")
 
                 # Update injection mode radio buttons

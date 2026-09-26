@@ -634,14 +634,16 @@ class PreferencesWindow:
         # Model selection
         model_label = Gtk.Label(label="Model 💡:", xalign=0)
         model_label.set_tooltip_text(
-            "Whisper AI model size - choose based on your needs:\n\n"
+            "Speech model - choose based on your needs:\n\n"
             "• tiny (39 MB): Fastest, basic accuracy - quick notes\n"
             "• base (74 MB): Fast, good accuracy - casual use\n"
             "• small (244 MB): Balanced - recommended for most users\n"
             "• medium (769 MB): Slower, very accurate - professional use\n"
             "• large-v3 (~3 GB): Best accuracy - technical/professional work\n"
-            "  ⚠️ Takes 30-60 seconds to load initially\n\n"
-            "Larger models provide:\n"
+            "  ⚠️ Takes 30-60 seconds to load initially\n"
+            "• Parakeet (670 MB): large-v3 class accuracy, fast with no GPU;\n"
+            "  English + 24 European languages (NVIDIA model, not Whisper)\n\n"
+            "Larger Whisper models provide:\n"
             "• Better word recognition (technical terms, proper nouns)\n"
             "• Improved punctuation and context awareness\n"
             "• Better handling of accents and background noise"

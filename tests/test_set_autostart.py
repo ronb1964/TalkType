@@ -15,7 +15,7 @@ from talktype import autostart
 def desktop(tmp_path, monkeypatch):
     path = tmp_path / "autostart" / "talktype.desktop"
     monkeypatch.setattr(autostart, "_autostart_desktop_path", lambda: str(path))
-    monkeypatch.setattr(autostart, "get_launch_command", lambda: "/usr/bin/talktype")
+    monkeypatch.setattr(autostart, "get_launch_command", lambda *a, **k: "/usr/bin/talktype")
     monkeypatch.setattr(autostart, "get_icon_path", lambda: "/icons/talktype.svg")
     return path
 

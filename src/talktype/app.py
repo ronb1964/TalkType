@@ -1059,6 +1059,75 @@ def _is_keyboard_device(dev) -> bool:
     return not is_pointer
 
 
+# --- Keeping the desktop's key state honest across a grab --------------------
+#
+# The desktop (libinput, in KWin or GNOME Shell) sees a hotkey go DOWN before we
+# can grab the keyboard, but the grab hides the key going UP. libinput counts
+# presses minus releases per key, so the key stays "held" for the rest of the
+# session and each dictation adds another. Most apps never notice; anything
+# that asks which keys are held (VM viewers, remote desktop, games) sees F8
+# stuck and auto-repeats it. See freedesktop bug 101796.
+#
+# The fix: before grabbing, send the release the desktop is owed, through the
+# same keyboard device, so it sees a balanced press/release. After grabbing,
+# send the press back, which only we see, so we still get the real release
+# when the key comes up. Our own read loop hears both injected events and must
+# skip them, or the injected release would end the recording it just started.
+
+_INJECTED_TTL_S = 2.0
+_injected_pending: list = []   # [(device path, code, value, expiry time)]
+
+
+def _inject_key(dev, code: int, value: int) -> bool:
+    """Send a key event through *dev* and remember to skip it when it comes back."""
+    try:
+        dev.write(ecodes.EV_KEY, code, value)
+        dev.write(ecodes.EV_SYN, ecodes.SYN_REPORT, 0)
+    except Exception as e:
+        logger.warning(f"Could not inject key {code}={value} on {getattr(dev, 'name', dev)}: {e}")
+        return False
+    _injected_pending.append((getattr(dev, "path", None), code, value, time.time() + _INJECTED_TTL_S))
+    return True
+
+
+def _is_own_injected_event(dev, event) -> bool:
+    """True (once) if *event* is one we injected. Stale entries expire, so a
+    lost injection can never swallow a real key event later."""
+    now = time.time()
+    _injected_pending[:] = [p for p in _injected_pending if p[3] > now]
+    path = getattr(dev, "path", None)
+    for i, (p, code, value, _) in enumerate(_injected_pending):
+        if p == path and code == event.code and value == event.value:
+            del _injected_pending[i]
+            return True
+    return False
+
+
+def _grab_keyboards_hiding(devices, codes) -> None:
+    """Grab the keyboards without leaving the desktop believing *codes* are held.
+
+    Only keys the kernel still reports as down are balanced: if one was already
+    released (a very fast tap), the desktop saw that release and nothing is owed.
+    """
+    keyboards = [d for d in devices if _is_keyboard_device(d)]
+    held = []
+    for dev in keyboards:
+        try:
+            down = set(dev.active_keys())
+        except Exception:
+            continue
+        for code in codes:
+            if code in down and _inject_key(dev, code, 0):
+                held.append((dev, code))
+    _grab_all_devices(keyboards)
+    # Mark the keys down again. With the grab in place only we see this, and it
+    # lets the kernel pass us the real release when the key comes up. On a
+    # device the grab failed on, the desktop sees it too, but then it also sees
+    # the real release, so it stays balanced either way.
+    for dev, code in held:
+        _inject_key(dev, code, 1)
+
+
 def _grab_all_devices(devices) -> None:
     """Take an exclusive grab on each device, tracking the ones that succeed.
 
@@ -2519,7 +2588,9 @@ def _handle_key_event(event, mode, hold_key, toggle_key,
             #   - an exception from the tray call skipped the ungrab entirely,
             #     stranding the grabs with no way to recover them.
             # Same helpers as recording, and a finally that always releases.
-            _grab_all_devices([d for d in devices if _is_keyboard_device(d)])
+            # The modifiers are balanced too: a stuck Ctrl in the desktop would
+            # be far worse than a stuck F8.
+            _grab_keyboards_hiding(devices, {main_key, *held_modifiers})
             try:
                 _show_voice_commands_via_dbus()
             finally:
@@ -2529,9 +2600,11 @@ def _handle_key_event(event, mode, hold_key, toggle_key,
     # --- Hold-to-talk: hold key down to record, release to stop ---
     if event.code == hold_key:
         if event.value == 1 and not state.is_recording:
-            # Grab the keyboards so the hotkey doesn't reach the focused app.
-            # start_recording releases them itself if the mic fails to open.
-            _grab_all_devices([d for d in devices if _is_keyboard_device(d)])
+            # Grab the keyboards so the hotkey doesn't reach the focused app,
+            # without leaving the desktop thinking the key is still held (see
+            # _grab_keyboards_hiding). start_recording releases the grabs itself
+            # if the mic fails to open.
+            _grab_keyboards_hiding(devices, {hold_key})
             start_recording(cfg.beeps, cfg.notify, input_device_idx)
         elif event.value == 0 and state.is_recording:
             # Ungrab BEFORE text injection so ydotool can work
@@ -2801,6 +2874,10 @@ def _loop_evdev(cfg: Settings, input_device_idx):
             try:
                 for event in dev.read():
                     if event.type == ecodes.EV_KEY:
+                        # Our own injected key events (see _grab_keyboards_hiding)
+                        # come back through this same read; they are not input.
+                        if _is_own_injected_event(dev, event):
+                            continue
                         # Track modifier key state for combo detection
                         if event.code in _MODIFIER_CODES:
                             if event.value in (1, 2):  # press or repeat
