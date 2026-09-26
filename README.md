@@ -1,6 +1,6 @@
 # TalkType — Speech-to-Text for Linux
 
-**Free, offline voice dictation for Linux** — works on Wayland and X11 with any desktop environment. Powered by OpenAI's Whisper AI for accurate, private speech recognition. No cloud, no subscription, no data leaves your machine.
+**Free, offline voice dictation for Linux** — works on Wayland and X11 with any desktop environment. Powered by OpenAI's Whisper or NVIDIA's Parakeet for accurate, private speech recognition. No cloud, no subscription, no data leaves your machine.
 
 [![AUR version](https://img.shields.io/aur/version/talktype-appimage)](https://aur.archlinux.org/packages/talktype-appimage)
 [![GitHub release](https://img.shields.io/github/v/release/ronb1964/TalkType)](https://github.com/ronb1964/TalkType/releases)
@@ -19,11 +19,12 @@
 
 Most voice dictation tools on Linux are either cloud-based (privacy concerns), command-line only (not user-friendly), or broken on Wayland. TalkType is different:
 
-- **100% offline** — All processing happens locally using Whisper AI. Nothing is sent to the cloud.
+- **100% offline** — All processing happens locally, using Whisper or Parakeet. Nothing is sent to the cloud.
 - **Global hotkeys that actually work on Wayland** — many Linux dictation tools rely on X11 key grabs (or `pynput`), which Wayland blocks by design. TalkType reads the key at the kernel level via `/dev/input`, below the compositor, so push-to-talk works the same on GNOME, KDE, Sway and Hyprland (X11 too).
 - **Zero configuration** — Download the AppImage, run it, start talking. First-run wizard handles the rest.
 - **Any desktop environment** — GNOME (with native shell extension), KDE, XFCE, Sway, Hyprland, and more.
-- **GPU accelerated** — Optional NVIDIA CUDA support for 3-5x faster transcription.
+- **Fast without a graphics card** — the Parakeet model gives large-v3 class accuracy in well under a second on an ordinary processor (English and 24 European languages).
+- **GPU accelerated** — Optional NVIDIA CUDA support for 3-5x faster Whisper transcription.
 
 ---
 
@@ -67,12 +68,13 @@ Most voice dictation tools on Linux are either cloud-based (privacy concerns), c
 ## Features
 
 - **Dual Hotkeys Always Active** - F8 (hold-to-talk) AND F9 (tap-to-toggle) simultaneously - fully customizable
-- **AI-Powered Transcription** - Uses OpenAI's Whisper models (tiny to large-v3)
+- **AI-Powered Transcription** - OpenAI's Whisper models (tiny to large-v3), or NVIDIA's Parakeet for fast, accurate dictation with no GPU
 - **GPU Acceleration** - Optional NVIDIA CUDA support for 3-5x faster transcription
 - **Smart Text Processing** - Auto-punctuation, smart quotes, auto-spacing
 - **Voice Commands** - Say "comma", "period", "new paragraph", "undo last word", and more
 - **Custom Commands** - Define your own phrase shortcuts (e.g., "my email" → your@email.com)
 - **Visual Feedback** - On-screen recording indicator that reacts to your voice, with four styles (orb, waveform, frequency bars, radial), custom colors, and positioning anywhere on screen
+- **Recent Dictations** - Your last 20 dictations in the tray menu. Hover to read one, click to copy it again, handy when text lands in the wrong window. Kept in memory only and wiped at logout
 - **Private by Default** - Fully offline transcription, and your dictated text is never written to the log (opt-in only, for troubleshooting)
 - **GNOME Integration** - Native shell extension for GNOME desktop
 - **Smart Updates** - Built-in update checker that updates the right way for how you installed: through your package manager on `.deb`/`.rpm` (one click, one password prompt), in place for the AppImage, or via your AUR helper on Arch
@@ -224,8 +226,10 @@ Choose the right model for your needs in Preferences → General:
 | **small** | 244 MB | Balanced | Very Good | **Recommended** |
 | **medium** | 769 MB | Slower | Excellent | Professional |
 | **large-v3** | ~3 GB | Slowest | Best | Technical work |
+| **Parakeet** | 670 MB | Fast, even without a GPU | Best | English + 24 European languages |
 
 > **Tip:** Start with "small" for everyday use. Enable GPU acceleration for larger models.
+> No NVIDIA card? Try **Parakeet** (Preferences, or tray → Performance → Fast & Accurate). It is a different engine from NVIDIA and runs on your processor, but it does not cover Chinese, Japanese, Korean, Arabic and other non-European languages. Use a Whisper model for those.
 
 ---
 

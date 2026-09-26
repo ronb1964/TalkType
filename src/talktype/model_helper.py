@@ -1,6 +1,6 @@
 """
 Model Download Helper for TalkType
-Handles WhisperModel downloads with progress UI
+Handles Whisper and Parakeet model downloads with progress UI
 """
 import os
 
@@ -13,6 +13,11 @@ import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, GLib
 from .logger import setup_logger
+from .parakeet_engine import (
+    PARAKEET_FILES, PARAKEET_MODEL, PARAKEET_REPO,
+    cached_model_dir as _parakeet_cached_dir,
+    is_parakeet, load_parakeet_model,
+)
 
 logger = setup_logger(__name__)
 
@@ -23,7 +28,14 @@ logger = setup_logger(__name__)
 ESSENTIAL_MODEL_FILES = ("model.bin", "config.json", "tokenizer.json")
 
 
-def _download_is_usable(failed_files) -> bool:
+def _essential_files(model_name):
+    """The files a model cannot load without."""
+    if is_parakeet(model_name):
+        return PARAKEET_FILES
+    return ESSENTIAL_MODEL_FILES
+
+
+def _download_is_usable(failed_files, model_name=None) -> bool:
     """True if the model can still be loaded despite *failed_files*.
 
     Paths may be nested (list_repo_tree is recursive), so match on the file
@@ -31,7 +43,47 @@ def _download_is_usable(failed_files) -> bool:
     """
     import os as _os
     failed_names = {_os.path.basename(p) for p in failed_files}
-    return not (failed_names & set(ESSENTIAL_MODEL_FILES))
+    return not (failed_names & set(_essential_files(model_name)))
+
+
+def _files_to_download(model_name, repo_id):
+    """(path, size) pairs to fetch for *model_name*.
+
+    Whisper repos are fetched whole. For Parakeet only the int8 files are
+    wanted: its repo also holds a 2.4 GB full-precision copy we never load.
+    Raises if the file list cannot be fetched (callers fall back).
+    """
+    from huggingface_hub import list_repo_tree
+    files_info = list(list_repo_tree(repo_id, recursive=True))
+    files = [(f.path, f.size) for f in files_info
+             if getattr(f, 'size', None) is not None]
+    if is_parakeet(model_name):
+        files = [(path, size) for path, size in files if path in PARAKEET_FILES]
+    return files
+
+
+def load_model(model_name, device="cpu", compute_type="int8"):
+    """Load an already-downloaded model, Whisper or Parakeet.
+
+    Parakeet always runs on the CPU (see parakeet_engine), so *device* and
+    *compute_type* only apply to Whisper.
+    """
+    if is_parakeet(model_name):
+        return load_parakeet_model()
+    from faster_whisper import WhisperModel
+    return WhisperModel(
+        model_name,
+        device=device,
+        compute_type=compute_type,
+        cpu_threads=os.cpu_count() or 4,
+    )
+
+
+def model_display_name(model_name):
+    """Human-friendly model name for dialog titles and messages."""
+    if is_parakeet(model_name):
+        return "Parakeet"
+    return model_name.title()
 
 
 # Model repository names on HuggingFace
@@ -41,6 +93,7 @@ MODEL_REPOS = {
     "small": "Systran/faster-whisper-small",
     "medium": "Systran/faster-whisper-medium",
     "large-v3": "Systran/faster-whisper-large-v3",
+    PARAKEET_MODEL: PARAKEET_REPO,
 }
 
 # The models offered in the UI, smallest first. Every screen with a model picker
@@ -48,7 +101,10 @@ MODEL_REPOS = {
 # first-run setup screen each hardcoded one and drifted, leaving "base" off the
 # setup screen entirely. A model is only offerable if MODEL_REPOS can fetch it,
 # which tests/test_model_choices.py enforces.
-OFFERED_MODELS = ("tiny", "base", "small", "medium", "large-v3")
+#
+# Parakeet comes last: it is not part of Whisper's size ladder, it is a
+# different engine (see parakeet_engine.py).
+OFFERED_MODELS = ("tiny", "base", "small", "medium", "large-v3", PARAKEET_MODEL)
 
 # Model sizes for display (compressed size users will download)
 MODEL_DISPLAY_SIZES = {
@@ -56,7 +112,8 @@ MODEL_DISPLAY_SIZES = {
     "base": "74 MB",
     "small": "244 MB",
     "medium": "769 MB",
-    "large-v3": "~3 GB"
+    "large-v3": "~3 GB",
+    PARAKEET_MODEL: "670 MB",
 }
 
 
@@ -70,6 +127,9 @@ def is_model_cached(model_name):
     Returns:
         bool: True if model is cached, False otherwise
     """
+    if is_parakeet(model_name):
+        # Loading Parakeet would take seconds; its files are enough to tell.
+        return _parakeet_cached_dir() is not None
     try:
         from faster_whisper import WhisperModel
         # Try to load with local_files_only=True
@@ -95,6 +155,8 @@ def is_model_cached_fast(model_name):
     and raises if any is missing — so a partial cache from a cancelled
     download correctly reports False. Safe to call on every Apply/OK click.
     """
+    if is_parakeet(model_name):
+        return _parakeet_cached_dir() is not None
     try:
         from huggingface_hub import snapshot_download
         repo_id = MODEL_REPOS.get(model_name)
@@ -130,7 +192,7 @@ def make_model_download_func(model_name):
     def download_func(progress_callback, cancel_event):
         """Download model files to HF cache only. Returns True on success."""
         try:
-            from huggingface_hub import hf_hub_download, list_repo_tree
+            from huggingface_hub import hf_hub_download
             from huggingface_hub.utils import disable_progress_bars
             import tqdm as tqdm_lib
 
@@ -146,12 +208,7 @@ def make_model_download_func(model_name):
 
             # Get all file names + sizes from the HuggingFace repo
             try:
-                files_info = list(list_repo_tree(repo_id, recursive=True))
-                files_with_sizes = [
-                    (f.path, f.size)
-                    for f in files_info
-                    if hasattr(f, 'size') and f.size is not None
-                ]
+                files_with_sizes = _files_to_download(model_name, repo_id)
                 total_bytes = sum(size for _, size in files_with_sizes)
                 logger.info(
                     f"Model {model_name}: {len(files_with_sizes)} files, "
@@ -161,6 +218,10 @@ def make_model_download_func(model_name):
                 logger.warning(f"Could not list model files: {e}")
                 files_with_sizes = []
                 total_bytes = 0
+
+            if not files_with_sizes and is_parakeet(model_name):
+                # No file list: fetch the known files without byte progress.
+                files_with_sizes = [(name, 0) for name in PARAKEET_FILES]
 
             if not files_with_sizes:
                 # Fallback: load via WhisperModel (triggers its own download)
@@ -245,7 +306,7 @@ def make_model_download_func(model_name):
                     failed_files.append(filename)
                     downloaded_bytes[0] += file_size
 
-            if failed_files and not _download_is_usable(failed_files):
+            if failed_files and not _download_is_usable(failed_files, model_name):
                 logger.error(
                     f"Model {model_name} download incomplete: "
                     f"{len(failed_files)} file(s) failed: {failed_files[:3]}"
@@ -287,10 +348,8 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
         show_confirmation: Whether to show confirmation dialog before download (default True)
 
     Returns:
-        WhisperModel instance or None if cancelled/failed
+        WhisperModel (or ParakeetModel) instance, or None if cancelled/failed
     """
-    from faster_whisper import WhisperModel
-
     # Check if already cached
     cached = is_model_cached(model_name)
     logger.info(f"Model cache check: {model_name} cached={cached}")
@@ -299,7 +358,7 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
     if cached:
         logger.info(f"Model {model_name} already cached, loading directly (no download window)")
         print(f"✅ Model {model_name} already cached - loading without download")
-        return WhisperModel(model_name, device=device, compute_type=compute_type)
+        return load_model(model_name, device=device, compute_type=compute_type)
 
     logger.info(f"Model {model_name} NOT cached - showing download progress dialog")
     print(f"📥 Model {model_name} NOT cached - will download and show progress")
@@ -312,7 +371,7 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
             parent=parent,
             message_type=Gtk.MessageType.QUESTION,
             buttons=Gtk.ButtonsType.OK_CANCEL,
-            text=f"Download {model_name.title()} Model?"
+            text=f"Download {model_display_name(model_name)} Model?"
         )
 
         # Apply dark theme to dialog
@@ -321,7 +380,7 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
             settings.set_property("gtk-application-prefer-dark-theme", True)
 
         confirm_dialog.format_secondary_text(
-            f"TalkType needs to download the {model_name} AI model ({size_str}) for speech recognition.\n\n"
+            f"TalkType needs to download the {model_display_name(model_name)} AI model ({size_str}) for speech recognition.\n\n"
             f"This is a one-time download that will be cached for future use.\n\n"
             "Continue with download?"
         )
@@ -334,7 +393,7 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
             return None
 
     # Show progress dialog with dark theme
-    progress_dialog = Gtk.Dialog(title=f"Downloading Model: {model_name}")
+    progress_dialog = Gtk.Dialog(title=f"Downloading Model: {model_display_name(model_name)}")
     progress_dialog.set_default_size(500, 150)
     progress_dialog.set_modal(True)
     progress_dialog.set_position(Gtk.WindowPosition.CENTER)
@@ -356,7 +415,7 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
 
     # Title
     title_label = Gtk.Label()
-    title_label.set_markup(f'<span size="large"><b>Downloading {model_name} Model</b></span>')
+    title_label.set_markup(f'<span size="large"><b>Downloading {model_display_name(model_name)} Model</b></span>')
     content.pack_start(title_label, False, False, 0)
 
     # Status label
@@ -424,7 +483,7 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
             logger.info(f"Downloading model {model_name} using huggingface_hub")
 
             # Import huggingface_hub
-            from huggingface_hub import hf_hub_download, list_repo_tree
+            from huggingface_hub import hf_hub_download
             from huggingface_hub.utils import disable_progress_bars
             import tqdm
 
@@ -437,9 +496,7 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
 
             # Get list of files with sizes
             try:
-                files_info = list(list_repo_tree(repo_id, recursive=True))
-                # Filter to only files (not directories)
-                files_with_sizes = [(f.path, f.size) for f in files_info if hasattr(f, 'size') and f.size is not None]
+                files_with_sizes = _files_to_download(model_name, repo_id)
                 total_bytes = sum(size for _, size in files_with_sizes)
                 progress_state['total_bytes'] = total_bytes
                 logger.info(f"Model {model_name}: {len(files_with_sizes)} files, {total_bytes / 1024 / 1024:.1f} MB total")
@@ -448,8 +505,13 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
                 files_with_sizes = []
                 total_bytes = 0
 
+            if not files_with_sizes and is_parakeet(model_name):
+                # No file list: fetch the known files without byte progress.
+                files_with_sizes = [(name, 0) for name in PARAKEET_FILES]
+
             if not files_with_sizes:
                 # Fallback - just load the model directly
+                from faster_whisper import WhisperModel
                 update_ui_progress(50, "Downloading model...")
                 model = WhisperModel(
                     model_name,
@@ -530,12 +592,7 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
             logger.info(f"All files downloaded, loading model {model_name}")
 
             # Now load the model from cache
-            model = WhisperModel(
-                model_name,
-                device=device,
-                compute_type=compute_type,
-                cpu_threads=os.cpu_count() or 4
-            )
+            model = load_model(model_name, device=device, compute_type=compute_type)
 
             if not cancel_event.is_set():
                 download_result[0] = model
@@ -591,7 +648,7 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
             settings.set_property("gtk-application-prefer-dark-theme", True)
 
         msg.format_secondary_text(
-            f"Could not download {model_name} model.\n\n"
+            f"Could not download {model_display_name(model_name)} model.\n\n"
             f"Error: {str(download_error[0])}\n\n"
             "Check your internet connection and try again."
         )

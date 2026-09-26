@@ -712,6 +712,14 @@ class DictationTray:
             "model": "large-v3",
             "device": "cuda"
         },
+        "parakeet": {
+            "label": "Fast & Accurate",
+            "description": "Parakeet, no GPU needed, English + European languages",
+            "model": "parakeet-v3",
+            # Parakeet always runs on the CPU (parakeet_engine.py), so the
+            # device is recorded honestly rather than claiming "cuda".
+            "device": "cpu"
+        },
         "battery": {
             "label": "Battery Saver",
             "description": "tiny model, CPU, short timeout",
@@ -1006,7 +1014,8 @@ class DictationTray:
                     'small': 'Small',
                     'medium': 'Medium',
                     'large-v3': 'Large (best quality)',
-                    'large': 'Large (best quality)'
+                    'large': 'Large (best quality)',
+                    'parakeet-v3': 'Parakeet'
                 }
                 display_name = model_names.get(cfg.model, cfg.model)
                 self.model_display_item.set_label(f"Active Model: {display_name}")
@@ -1211,6 +1220,14 @@ class DictationTray:
         copyright_label = Gtk.Label()
         copyright_label.set_markup('<span size="small">© 2024-2025 Ron B. • MIT License</span>')
         content.pack_start(copyright_label, False, False, 0)
+
+        # CC-BY-4.0 requires crediting NVIDIA for the Parakeet model.
+        from .parakeet_engine import PARAKEET_ATTRIBUTION
+        credit_label = Gtk.Label()
+        credit_label.set_markup(f'<span size="small">{PARAKEET_ATTRIBUTION}</span>')
+        credit_label.set_line_wrap(True)
+        credit_label.set_opacity(0.7)
+        content.pack_start(credit_label, False, False, 0)
 
         # What's New section
         whats_new_label = Gtk.Label()
@@ -1795,7 +1812,7 @@ class DictationTray:
         return item
 
     def _build_performance_submenu(self):
-        """Build the Performance preset submenu (6 presets + Custom fallback).
+        """Build the Performance preset submenu (7 presets + Custom fallback).
 
         Stores radio button references on self for later state updates.
         Returns the parent MenuItem that contains the submenu.
@@ -1805,7 +1822,7 @@ class DictationTray:
         preset_group = None
 
         # Add preset options in order (smallest to largest model, then battery saver)
-        preset_order = ["fastest", "light", "balanced", "quality", "accurate", "battery"]
+        preset_order = ["fastest", "light", "balanced", "quality", "accurate", "parakeet", "battery"]
         for preset_id in preset_order:
             preset = self.PERFORMANCE_PRESETS[preset_id]
             label = f"{preset['label']} ({preset['description']})"
@@ -1827,6 +1844,108 @@ class DictationTray:
         item = Gtk.MenuItem(label="Performance")
         item.set_submenu(submenu)
         return item
+
+    def _build_history_submenu(self):
+        """Build the Recent Dictations submenu and keep it current.
+
+        The tray menu is built once, so the submenu is refilled whenever the
+        dictation service updates the history file, watched with a GIO file
+        monitor (inotify; the file lives on tmpfs, see history.py).
+        """
+        from gi.repository import Gio
+        from .history import _history_path
+
+        self.history_menu = Gtk.Menu()
+        item = Gtk.MenuItem(label="Recent Dictations")
+        item.set_submenu(self.history_menu)
+        self._refresh_history_menu()
+
+        if not getattr(self, "_history_monitor", None):
+            try:
+                self._history_monitor = Gio.File.new_for_path(
+                    _history_path()).monitor_file(Gio.FileMonitorFlags.NONE, None)
+                self._history_monitor.connect(
+                    "changed", lambda *_: GLib.idle_add(self._refresh_history_menu))
+            except Exception as e:
+                logger.warning(f"Could not watch dictation history: {e}")
+        return item
+
+    def _refresh_history_menu(self):
+        """Refill the Recent Dictations submenu from history.py."""
+        from .history import get_entries, preview
+
+        for child in self.history_menu.get_children():
+            self.history_menu.remove(child)
+
+        entries = get_entries()
+        if not entries:
+            empty = Gtk.MenuItem(label="No dictations yet")
+            empty.set_sensitive(False)
+            self.history_menu.append(empty)
+        else:
+            hint = Gtk.MenuItem(label="Hover to read one, click it to copy, then press Ctrl+V")
+            hint.set_sensitive(False)
+            self.history_menu.append(hint)
+            for text in entries:
+                # Each entry opens a submenu with the full text on hover. A
+                # tooltip would be simpler, but KDE draws this menu itself from
+                # a D-Bus description that has no tooltips, so it would never
+                # show. Submenus work on every desktop.
+                entry = Gtk.MenuItem(label=preview(text))
+                entry.set_submenu(self._build_history_entry_submenu(text))
+                self.history_menu.append(entry)
+            self.history_menu.append(Gtk.SeparatorMenuItem())
+            clear_item = Gtk.MenuItem(label="Clear History")
+            clear_item.connect("activate", lambda _w: self._clear_history())
+            self.history_menu.append(clear_item)
+
+        self.history_menu.show_all()
+        return False  # one-shot when scheduled through GLib.idle_add
+
+    def _build_history_entry_submenu(self, text):
+        """The hover view of one recent dictation: its full text, then Copy.
+
+        The text lines are left clickable (copying too) rather than greyed
+        out, because disabled items are drawn dimmed and are hard to read.
+        """
+        from .history import full_text_lines
+
+        submenu = Gtk.Menu()
+        for line in full_text_lines(text):
+            line_item = Gtk.MenuItem(label=line)
+            line_item.connect("activate", lambda _w, t=text: self._copy_history_entry(t))
+            submenu.append(line_item)
+        submenu.append(Gtk.SeparatorMenuItem())
+        copy_item = Gtk.MenuItem(label="Copy")
+        copy_item.connect("activate", lambda _w, t=text: self._copy_history_entry(t))
+        submenu.append(copy_item)
+        return submenu
+
+    def _copy_history_entry(self, text):
+        """Put a recent dictation on the clipboard.
+
+        wl-copy first: a click in a KDE/GNOME tray menu is handled by the
+        desktop's menu, not a GTK window of ours, and Wayland only lets a
+        focused window set the clipboard through GTK. wl-copy has its own way
+        in. GTK's clipboard covers X11.
+        """
+        import shutil
+        try:
+            if os.environ.get("WAYLAND_DISPLAY") and shutil.which("wl-copy"):
+                subprocess.run(["wl-copy"], input=text.encode("utf-8"),
+                               timeout=5, check=True)
+            else:
+                clipboard = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
+                clipboard.set_text(text, -1)
+                clipboard.store()
+            logger.info(f"Copied a recent dictation to the clipboard ({len(text)} chars)")
+        except Exception as e:
+            logger.error(f"Could not copy recent dictation: {e}")
+
+    def _clear_history(self):
+        from .history import clear
+        clear()
+        self._refresh_history_menu()
 
     def build_menu(self):
         """Build the complete GTK tray menu.
@@ -1855,6 +1974,7 @@ class DictationTray:
         # Submenus
         self.injection_mode_menu_item = self._build_injection_submenu()
         self.performance_menu_item = self._build_performance_submenu()
+        history_menu_item = self._build_history_submenu()
 
         # Service management items
         restart_item = Gtk.MenuItem(label="Restart Service")
@@ -1878,6 +1998,7 @@ class DictationTray:
         for item in [
             self.service_toggle,
             restart_item,
+            history_menu_item,
             Gtk.SeparatorMenuItem(),
             self.model_display_item,
             self.device_display_item,

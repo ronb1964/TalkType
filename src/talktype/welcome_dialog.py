@@ -2119,6 +2119,7 @@ def show_tips_and_features_dialog(extension_installed=False):
         "small":    "Small (recommended) — 244MB",
         "medium":   "Medium (better accuracy) — 769MB",
         "large-v3": "Large (best quality) — 3GB",
+        "parakeet-v3": "Parakeet (fast, accurate, no GPU needed; English + 24 European languages) — 670MB",
     }
 
     model_store = Gtk.ListStore(str, str, bool)
@@ -3428,6 +3429,23 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
     autostart_label.set_opacity(0.8)
     autostart_label.set_line_wrap(True)
     vbox.pack_start(autostart_label, False, False, 0)
+
+    # A single, passive feedback invitation. It lives here on purpose: this
+    # screen is seen once and dismissed, so the ask never interrupts dictation
+    # later. GTK opens the link in the user's default browser when clicked.
+    feedback_label = Gtk.Label()
+    feedback_label.set_markup(
+        '<span size="small">Once you\'ve tried it out, I\'d love to hear how it\'s '
+        'working for you, good or bad. Leave a note on the '
+        '<a href="https://github.com/ronb1964/TalkType/discussions">'
+        'TalkType Discussions page</a>.</span>'
+    )
+    feedback_label.set_halign(Gtk.Align.START)
+    feedback_label.set_xalign(0)
+    feedback_label.set_margin_top(10)
+    feedback_label.set_line_wrap(True)
+    feedback_label.set_max_width_chars(55)
+    vbox.pack_start(feedback_label, False, False, 0)
 
     # Restart reminder — only when permissions were changed this run and won't
     # take effect until a reboot. This is the deferred reminder: it appears here,

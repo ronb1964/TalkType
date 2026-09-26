@@ -14,6 +14,31 @@ Status markers: `[x]` shipped · `[~]` partly done, see note · `[ ]` not starte
 
 ## Transcription & AI
 
+*The items marked (2026-09 research) come from a competitive and speech-engine survey done on 2026-09-25. The full write-up is in Obsidian: "TalkType/2026-09-25 - Competitive landscape and direction research". They are listed in priority order.*
+
+- [x] **(2026-09 research) Parakeet as an optional engine.** Priority 1. **Shipped in 0.8.0.** It is `parakeet-v3` in the model list; see `parakeet_engine.py`. Also a "Fast & Accurate" Performance preset in both the tray and the GNOME extension (extension version bumped to 10).
+  - What: NVIDIA Parakeet TDT 0.6B v3, run through `onnx-asr`. Keep faster-whisper as the default.
+  - Why: it is more accurate than Whisper large-v3 (6.3% vs ~7.4% WER) and several times faster on CPU. CPU users are capped at "medium" today, so they gain the most. Handy, Voxtype, OpenWhispr, hyprwhspr and Vocalinux already offer it.
+  - Limits: 25 European languages only, so it can't replace Whisper. The license is CC-BY-4.0, so add an attribution line in About.
+  - Size: `onnxruntime` 1.23.2 is already in the AppImage (faster-whisper depends on it), so the AppImage grows by only a few MB. onnx-asr supports Python 3.10 with onnxruntime < 1.24, which matches what we bundle.
+  - Model: ~670 MB int8 (`istupakov/parakeet-tdt-0.6b-v3-onnx`), downloaded at runtime like the Whisper models.
+  - Nothing is lost: TalkType doesn't use Whisper's `initial_prompt`, which Parakeet lacks.
+- [ ] **(2026-09 research) AMD/Intel GPU acceleration via Vulkan.** Priority 2.
+  - What: whisper.cpp's Vulkan backend through `pywhispercpp`, built with `GGML_VULKAN=1`. The PyPI wheel is CPU-only, so we would ship our own build.
+  - Why: GPU acceleration is NVIDIA-only today. Vulkan reports up to 12x on integrated AMD/Intel graphics, and Voxtype, Vocalinux and hyprwhspr already advertise it.
+  - Not ROCm: CTranslate2's ROCm build needs several GB of system ROCm, which is not realistic for AppImage users.
+  - Cost: models use the GGML format, a separate download path.
+- [ ] **(2026-09 research) Optional offline AI cleanup.** Priority 3.
+  - What: removes filler words ("um", "uh") and resolves self-corrections ("at 3, no wait, 4" → "at 4"). Every paid app has this, and Windows Fluid Dictation and Gboard now give it away free.
+  - How: a 0.6–1.7B GGUF model (e.g. Qwen3) through llama.cpp. Expect about 0.5–2 s per sentence on a modern CPU.
+  - Off by default. Show the download size, keep a raw-vs-cleaned toggle, and keep the original text in history. Optionally allow the user's own Ollama.
+  - Superwhisper's S1-mini has a custom license; check it before using it.
+- [x] Optional transcription history (2026-09 research, priority 4). **Shipped in 0.8.0:** "Recent Dictations ▸" in the tray and the GNOME extension, stored in RAM only (`history.py`, XDG_RUNTIME_DIR). Originally planned as the last 10-20 dictations, click to copy or re-paste from the tray. Handy, hyprwhspr and OpenWhispr have it.
+- [ ] (2026-09 research) Personal dictionary: words Whisper keeps getting wrong. For Whisper, pass them as `hotwords`/`initial_prompt` and add a fuzzy-replacement table. Parakeet only gets the replacement table.
+- [ ] (2026-09 research) Auto-stop on silence in toggle mode, plus pause/resume. See the VAD caveat in the next item.
+- [ ] (2026-09 research) Per-app profiles keyed on the window class only (cleanup on/off, paste mode). **No screen reading or screenshots**: Wispr Flow's screenshot-upload scandal made "nothing leaves your machine" a selling point.
+- [ ] (2026-09 research) Later: streaming live preview (Moonshine v2 streaming or Nemotron streaming via sherpa-onnx), and a voice "command mode" that rewrites selected text (needs a 3–4B model).
+
 - [ ] Silence auto-stop (VAD) with configurable end-of-speech timeout — note: Silero VAD pre-filtering was deliberately **disabled** (`vad_filter=False`) in v0.5.16 because it trimmed speech onsets after pauses. Any auto-stop feature must be built on a separate timer, not by re-enabling that filter.
 - [x] Language auto-detect / multilingual models — `language_mode` (auto/manual) in config and Preferences; empty `language` means auto-detect.
 - [ ] Language quick switch in tray menu for multilingual users — the setting exists, but only in Preferences. Not in the tray or GNOME menus.
@@ -21,7 +46,6 @@ Status markers: `[x]` shipped · `[~]` partly done, see note · `[ ]` not starte
 - [ ] Dictation templates — voice-activated templates (e.g., "compose email" inserts email structure)
 - [x] Time format normalization — post-process transcribed times like "5 p. m." or "5. 30 p. m." into clean formats like "5 PM" or "5:30 PM". Implemented as `_RE_TIME_FORMAT` / `_fix_time_ampm`. Reordered on 2026-08-03: it used to run *after* capitalization, so "meet at 9 a. m. tomorrow" came out "9 AM Tomorrow".
 - [ ] Empty transcription indicator — visual/audio feedback when no speech detected
-- [ ] Optional transcription history — last 10-20 transcriptions, click to copy from tray
 
 ## Audio
 
@@ -103,7 +127,7 @@ Status markers: `[x]` shipped · `[~]` partly done, see note · `[ ]` not starte
 - [~] Flatpak packaging — builds and runs. A self-hosted manifest (`packaging/flatpak/io.github.ronb1964.TalkType.yml`) and a fully offline Flathub manifest (`packaging/flatpak/flathub/`) both exist, but nothing is published. The Flathub submission (flathub/flathub#9825) was closed and labeled "AI Slop", and no PR carrying that label has ever been merged there, so the realistic routes are a `.flatpak` bundle on GitHub Releases or a self-hosted Flatpak repo.
 - [ ] Snap Store packaging
 - [ ] PyPI wheel
-- [~] Submit to AlternativeTo, Awesome Lists — AlternativeTo is live (2026-03-30). Submitted to awesome-voice-typing (primaprashant/awesome-voice-typing#27, opened 2026-08-27, awaiting review). Checked and ruled out: `rcalixte/awesome-wayland` (closed a Linux dictation tool as out of scope), `luong-komorebi/Awesome-Linux-Software` and `natpen/awesome-wayland` (both archived), `sindresorhus/awesome-whisper` (macOS-centric, weak fit).
+- [~] Submit to AlternativeTo, Awesome Lists — AlternativeTo is live (2026-03-30). Submitted to awesome-voice-typing (primaprashant/awesome-voice-typing#27, opened 2026-08-27). The maintainer merged #15, #19, #21 and #22 on 2026-09-08 but skipped ours, which had a merge conflict because the "Browse by platform" section was removed. On 2026-09-25 the branch was rebased (now a single table row, mergeable) and a follow-up comment posted. Checked and ruled out: `rcalixte/awesome-wayland` (closed a Linux dictation tool as out of scope), `luong-komorebi/Awesome-Linux-Software` and `natpen/awesome-wayland` (both archived), `sindresorhus/awesome-whisper` (macOS-centric, weak fit).
 
 ## Platform Expansion
 
@@ -134,6 +158,20 @@ Status markers: `[x]` shipped · `[~]` partly done, see note · `[ ]` not starte
 
 ## Marketing & Promotion
 
+*2026-09 research findings (see the Obsidian note). The problem is visibility, not quality: TalkType's Show HN (2026-04-03) got 2 points, and more than a dozen Linux dictation Show HNs in 2026 got 2–7 points each. Show HN is saturated for this category.*
+
+- [ ] **Lead with the Wayland hotkey.** Make it the first line of the README and the release notes. The competition can't do it reliably:
+  - Handy makes Linux users bind a desktop shortcut themselves, and its typing tool (wtype) fails on GNOME.
+  - Voxtype says hold-to-talk is impossible on KDE.
+  - Murmure dropped Wayland push-to-talk entirely.
+  - Suggested pitch: "Hold a key, talk, release. It works on GNOME and KDE Wayland out of the box."
+- [ ] **Target KDE, Fedora and Arch users.** Canonical's Myna ships built-in offline dictation in Ubuntu 26.10 (October 2026), covering GNOME/Ubuntu only. It has no voice commands in v1.
+- [ ] Post in KDE Discuss → Community. Dictee, another offline dictation app, got a good reception there.
+- [ ] Post regular "what's new in vX" updates on r/linux, plus r/kde and r/Fedora. This is how Vocalinux built its following.
+- [ ] Reply in the Ubuntu Myna thread (discourse.ubuntu.com/t/84251) and the GNOME "desktop-wide offline speech-to-text" proposal (discourse.gnome.org/t/35858). Both explicitly ask dictation users for input.
+- [ ] Pitch Phoronix, Hackaday "Linux Fu", It's FOSS and The Register (Liam Proven).
+- [ ] Get into the "best Linux dictation 2026" roundups (blabby.ai, spokenly.app, airtypes.com). TalkType is missing from most of them.
+- [ ] Name collision: search results for "TalkType" split with talk-type.com, talktype.app, an iOS app and two other GitHub projects. Consider always writing "TalkType for Linux" in posts.
 - [ ] Demo GIF/video creation
 - [ ] Reddit launch (r/linux, r/wayland, r/gnome, r/fedora, r/opensource)
 - [ ] Hacker News "Show HN" post
@@ -145,4 +183,4 @@ Status markers: `[x]` shipped · `[~]` partly done, see note · `[ ]` not starte
 
 ---
 
-*Last updated: 2026-09-17 — Flatpak, Awesome Lists and CI entries refreshed. Every other status was last verified on 2026-08-13 against v0.6.0 and may have drifted since.*
+*Last updated: 2026-09-25 — added the 2026-09 competitive research items (engines, AI cleanup, marketing). 2026-09-17: Flatpak, Awesome Lists and CI entries refreshed. Every other status was last verified on 2026-08-13 against v0.6.0 and may have drifted since.*

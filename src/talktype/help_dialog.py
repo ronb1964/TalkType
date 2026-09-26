@@ -267,6 +267,13 @@ Configure in: Preferences → General → Model
   Best for: Technical/professional work
   ⚠️ Takes 30-60 seconds to load initially, 10-20 seconds after
 
+<b>• Parakeet (670 MB)</b> — a different engine from NVIDIA, not Whisper
+  Speed: ⚡⚡⚡⚡ Fast, even without a graphics card
+  Accuracy: ⭐⭐⭐⭐⭐⭐ On par with large-v3
+  Best for: English and 24 European languages on any computer
+  ⚠️ Does not support Chinese, Japanese, Korean, Arabic and other
+  non-European languages. Use a Whisper model for those.
+
 <b>Benefits of Larger Models:</b>
 • Better recognition of uncommon words and technical terms
 • More accurate with proper nouns and acronyms
@@ -277,7 +284,9 @@ Configure in: Preferences → General → Model
 
 <b>Recommendation:</b>
 Start with "small" for everyday use. Upgrade to "medium" or "large-v3"
-if you need better accuracy for professional or technical dictation.''')
+if you need better accuracy for professional or technical dictation.
+No NVIDIA graphics card? Try Parakeet: it gives large-v3 class accuracy
+at small-model speed, as long as you dictate in a supported language.''')
 
     # Tab 4: Advanced
     create_tab("⚙️ Advanced", f'''<span size="large"><b>Advanced Features</b></span>

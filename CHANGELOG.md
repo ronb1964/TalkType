@@ -2,6 +2,41 @@
 
 All notable changes to TalkType are documented here.
 
+## [0.8.0] - 2026-09-26
+
+TalkType can now use NVIDIA's Parakeet model instead of Whisper. If you don't
+have an NVIDIA graphics card this is the one to try. It's about as accurate as
+Whisper large-v3, which was never usable without a GPU, and it runs on a plain
+processor in well under a second.
+
+### Parakeet
+- New model choice in Preferences and on the first-run setup screen, and a new
+  "Fast & Accurate" preset under Performance in the tray and the GNOME menu.
+- It's a 670 MB download, same progress bar as the Whisper models. Nothing
+  downloads unless you pick it.
+- It handles English and 24 European languages and figures out which one you're
+  speaking. It doesn't do Chinese, Japanese, Korean, Arabic and so on, so stick
+  with a Whisper model for those.
+- It always runs on the processor, even if you have an NVIDIA card, because it's
+  already fast there.
+- Spoken punctuation, custom commands and undo all work the same as with Whisper.
+
+### Recent Dictations
+- New "Recent Dictations" submenu right under Restart Service. It holds your last
+  20 dictations. Hover over one to read the whole thing and click it to copy it,
+  then paste wherever you want. Handy when a dictation lands in the wrong window
+  or nowhere at all.
+- The list is kept in memory only. It never touches the disk and it's gone when
+  you log out. There's a Clear History item at the bottom if you want it gone
+  sooner.
+- In the GNOME panel menu each entry shows the first couple of lines and one
+  click copies it.
+
+### Also
+- The last setup screen now has a link to the Discussions page. I'd like to hear
+  how TalkType is working for people, good or bad.
+- The GNOME extension is now version 10.
+
 ## [0.7.4] - 2026-09-05
 
 Dictation into a terminal now works on KDE. It previously did nothing at all —

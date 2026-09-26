@@ -666,6 +666,7 @@ class PreferencesWindow:
             "small":    "small — recommended balance",
             "medium":   "medium — better accuracy",
             "large-v3": "large-v3 — best accuracy",
+            "parakeet-v3": "Parakeet — fast and accurate on CPU, English + 24 European languages",
         }
         from .model_helper import OFFERED_MODELS
 

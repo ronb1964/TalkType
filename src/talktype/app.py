@@ -1791,11 +1791,24 @@ def _send_backspaces(count: int) -> bool:
     return _ydotool_key(key_sequence, timeout=timeout, what=f"{count} backspaces")
 
 def _transcribe_audio(audio_f32, language: str | None) -> str | None:
-    """Run Whisper transcription on audio and filter hallucinations.
+    """Transcribe audio with the loaded engine (Whisper or Parakeet) and filter hallucinations.
 
     Returns the raw transcribed text, or None if no speech was detected.
     """
     transcribe_start = time.time()
+
+    from .parakeet_engine import ParakeetModel
+    if isinstance(model, ParakeetModel):
+        # Parakeet detects the language itself and has no Whisper-style
+        # decoding options. It also does not invent "thank you" in silence,
+        # but the hallucination filter is still run: its YouTube-phrase tier
+        # is harmless, and it keeps both engines on one path from here on.
+        raw = model.recognize(audio_f32)
+        logger.info(f"TIMING: Transcription completed in {time.time() - transcribe_start:.2f}s (Parakeet)")
+        print(f"\U0001f4dd Raw (Parakeet): {_loggable(raw)}")
+        logger.info(f"Raw transcription (Parakeet): {_loggable(raw)}")
+        return _strip_hallucinations(raw) or None
+
     segments, _ = model.transcribe(
         audio_f32,
         vad_filter=False,
@@ -2249,8 +2262,12 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         _ellipsis = "…"  # Must be outside f-string for Python 3.10 compat
         if notify_on: _notify("TalkType", f"Transcribed: {text[:80]}{_ellipsis if len(text)>80 else ''}")
 
-        # Stage 4: Inject text into the active application
+        # Stage 4: Inject text into the active application. It goes into the
+        # Recent Dictations list first, so it can be recovered even if the
+        # injection lands in the wrong window or fails outright.
         if text:
+            from .history import add_entry
+            add_entry(text)
             _inject_text(text, injection_mode, t0)
 
     except Exception as e:
@@ -2725,8 +2742,11 @@ def build_model(settings: Settings):
             # User cancelled download
             raise Exception("Model download cancelled by user")
 
-        print(f"✅ Model loaded successfully on {settings.device.upper()}")
-        logger.info(f"Model loaded: {settings.model} on {settings.device}")
+        # Parakeet ignores the device setting and always runs on the CPU.
+        from .parakeet_engine import is_parakeet
+        where = "cpu" if is_parakeet(settings.model) else settings.device
+        print(f"✅ Model loaded successfully on {where.upper()}")
+        logger.info(f"Model loaded: {settings.model} on {where}")
         return model
     except Exception as e:
         if settings.device.lower() == "cuda":

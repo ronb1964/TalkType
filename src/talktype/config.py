@@ -84,6 +84,8 @@ VALID_MODELS = {
     "small", "small.en",
     "medium", "medium.en",
     "large", "large-v1", "large-v2", "large-v3",
+    # NVIDIA Parakeet, a different engine (see parakeet_engine.py).
+    "parakeet-v3",
 }
 
 VALID_DEVICES = {"cpu", "cuda"}

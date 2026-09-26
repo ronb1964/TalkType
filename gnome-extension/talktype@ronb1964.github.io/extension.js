@@ -9,6 +9,7 @@ import GObject from 'gi://GObject';
 import St from 'gi://St';
 import Gio from 'gi://Gio';
 import Clutter from 'gi://Clutter';
+import Pango from 'gi://Pango';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
@@ -57,6 +58,10 @@ const TalkTypeIface = `
     <method name="ApplyPerformancePreset">
       <arg type="s" direction="in" name="preset"/>
     </method>
+    <method name="GetRecentDictations">
+      <arg type="as" direction="out" name="entries"/>
+    </method>
+    <method name="ClearRecentDictations"/>
     <method name="OpenPreferences"/>
     <method name="OpenPreferencesUpdates"/>
     <method name="ShowHelp"/>
@@ -131,6 +136,12 @@ const PERFORMANCE_PRESETS = {
         description: 'large-v3 model, GPU',
         model: 'large-v3',
         device: 'cuda'
+    },
+    'parakeet': {
+        label: 'Fast & Accurate',
+        description: 'Parakeet, no GPU needed, English + European languages',
+        model: 'parakeet-v3',
+        device: 'cpu'
     },
     'battery': {
         label: 'Battery Saver',
@@ -322,6 +333,15 @@ class TalkTypeIndicator extends PanelMenu.Button {
         });
         this.menu.addMenuItem(restartItem);
 
+        // Recent dictations. Refilled each time the panel menu opens, since
+        // the list changes after every dictation. Mirrors the tray submenu.
+        this._historySubMenu = new PopupMenu.PopupSubMenuMenuItem('Recent Dictations');
+        this.menu.addMenuItem(this._historySubMenu);
+        this.menu.connect('open-state-changed', (_menu, open) => {
+            if (open)
+                this._refreshHistoryMenu();
+        });
+
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
         // Active model display (read-only)
@@ -508,6 +528,40 @@ class TalkTypeIndicator extends PanelMenu.Button {
         }
     }
 
+    _refreshHistoryMenu() {
+        const menu = this._historySubMenu.menu;
+        menu.removeAll();
+        this._proxy.GetRecentDictationsRemote((result, error) => {
+            // On error `result` is null, so it cannot be destructured.
+            const entries = result ? result[0] : null;
+            if (error || !entries || entries.length === 0) {
+                menu.addMenuItem(new PopupMenu.PopupMenuItem(
+                    error ? 'TalkType Not Running' : 'No dictations yet', {reactive: false}));
+                return;
+            }
+            menu.addMenuItem(new PopupMenu.PopupMenuItem(
+                'Click one to copy it, then press Ctrl+V', {reactive: false}));
+            for (const text of entries) {
+                // GNOME cannot nest a submenu inside this one (it unfolds in
+                // place), so instead of the tray's hover view each entry shows
+                // up to ~100 characters wrapped onto two lines.
+                const flat = text.split(/\s+/).join(' ');
+                const label = flat.length <= 100 ? flat : `${flat.slice(0, 99).trimEnd()}\u2026`;
+                const item = new PopupMenu.PopupMenuItem(label);
+                item.label.style = 'max-width: 24em;';
+                item.label.clutter_text.line_wrap = true;
+                item.label.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
+                item.connect('activate', () => {
+                    St.Clipboard.get_default().set_text(St.ClipboardType.CLIPBOARD, text);
+                });
+                menu.addMenuItem(item);
+            }
+            menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+            const clearItem = new PopupMenu.PopupMenuItem('Clear History');
+            clearItem.connect('activate', () => this._proxy.ClearRecentDictationsRemote());
+            menu.addMenuItem(clearItem);
+        });
+    }
     _updateStatus() {
         if (!this._proxy)
             return;
@@ -629,7 +683,8 @@ class TalkTypeIndicator extends PanelMenu.Button {
                 'small': 'Small',
                 'medium': 'Medium',
                 'large-v3': 'Large (best quality)',
-                'large': 'Large (best quality)'
+                'large': 'Large (best quality)',
+                'parakeet-v3': 'Parakeet'
             };
             const displayName = modelNames[this._currentModel] || this._currentModel;
             this._modelDisplayItem.label.text = `Active Model: ${displayName}`;

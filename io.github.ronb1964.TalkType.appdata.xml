@@ -85,6 +85,16 @@
   </screenshots>
 
   <releases>
+    <release version="0.8.0" date="2026-09-26">
+      <description>
+        <p>New optional Parakeet speech model and a Recent Dictations menu</p>
+        <ul>
+          <li>NVIDIA Parakeet: accuracy close to Whisper large-v3, fast on an ordinary processor, English and 24 European languages</li>
+          <li>New "Fast and Accurate" performance preset</li>
+          <li>Recent Dictations menu: re-copy your last 20 dictations, kept in memory only</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.7.4" date="2026-09-05">
       <description>
         <p>Dictation into a terminal now works on KDE</p>

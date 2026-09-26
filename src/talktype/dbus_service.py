@@ -218,6 +218,22 @@ class TalkTypeDBusService(dbus.service.Object):
         """Apply a performance preset (fastest/balanced/accurate/battery)"""
         self._dispatch('set_performance_preset', preset)
 
+    @dbus.service.method(DBUS_INTERFACE, out_signature='as')
+    def GetRecentDictations(self):
+        """Recent dictations, newest first (see history.py).
+
+        Read straight from the history file rather than dispatched to the app:
+        it is a quick file read, and the caller needs the answer back.
+        """
+        from .history import get_entries
+        return get_entries()
+
+    @dbus.service.method(DBUS_INTERFACE)
+    def ClearRecentDictations(self):
+        """Forget every recent dictation."""
+        from .history import clear
+        clear()
+
     @dbus.service.method(DBUS_INTERFACE)
     def OpenPreferences(self):
         """Open the preferences window"""

@@ -62,3 +62,26 @@ def test_the_other_presets_are_unaffected(settings):
 def test_an_unmatched_combination_is_custom(settings):
     assert _current(settings, model="large-v3", device="cpu",
                     auto_timeout_minutes=99) in ("accurate", "custom")
+
+
+def test_parakeet_preset_is_recognised(settings):
+    assert _current(settings, model="parakeet-v3", device="cpu") == "parakeet"
+    # Picked in Preferences with device left on "cuda": Parakeet ignores the
+    # device, so the menu should still show it rather than "Custom".
+    assert _current(settings, model="parakeet-v3", device="cuda") == "parakeet"
+
+
+def test_tray_and_gnome_extension_offer_the_same_presets():
+    """CLAUDE.md: both menus must list the same presets in the same order."""
+    import re
+    from pathlib import Path
+
+    js = (Path(__file__).resolve().parent.parent
+          / "gnome-extension/talktype@ronb1964.github.io/extension.js").read_text()
+    block = re.search(r"const PERFORMANCE_PRESETS = \{(.*?)\n\};", js, re.S).group(1)
+    js_presets = re.findall(
+        r"'(\w+)': \{\s*label: '([^']*)',\s*description: '([^']*)',\s*model: '([^']*)',\s*device: '([^']*)'",
+        block)
+    tray_presets = [(k, p["label"], p["description"], p["model"], p["device"])
+                    for k, p in DictationTray.PERFORMANCE_PRESETS.items()]
+    assert js_presets == tray_presets
