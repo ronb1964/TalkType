@@ -1,13 +1,15 @@
-# TalkType — Speech-to-Text for Linux
+# TalkType: voice dictation for Linux
 
-**Free, offline voice dictation for Linux** — works on Wayland and X11 with any desktop environment. Powered by OpenAI's Whisper or NVIDIA's Parakeet for accurate, private speech recognition. No cloud, no subscription, no data leaves your machine.
+**Hold a key, talk, let go. Your words show up wherever your cursor is.**
+
+That works on GNOME, KDE, Sway, Hyprland and X11 with no setup, because TalkType reads the key straight from the keyboard instead of asking the desktop for it. Most Linux dictation tools can't do hold-to-talk on Wayland at all.
+
+It's free, it runs completely offline, and nothing you say ever leaves your computer.
 
 [![AUR version](https://img.shields.io/aur/version/talktype-appimage)](https://aur.archlinux.org/packages/talktype-appimage)
 [![GitHub release](https://img.shields.io/github/v/release/ronb1964/TalkType)](https://github.com/ronb1964/TalkType/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Linux](https://img.shields.io/badge/platform-Linux-lightgrey)](https://github.com/ronb1964/TalkType)
-
-> **TL;DR:** Download the AppImage, run it, press F8 to talk. Text appears where your cursor is. Works in any app — browsers, editors, terminals, chat apps, everywhere.
 
 <p align="center">
   <img src="screenshots/demo.gif" alt="TalkType in action — press F8, speak, text appears" width="720">
@@ -19,8 +21,8 @@
 
 Most voice dictation tools on Linux are either cloud-based (privacy concerns), command-line only (not user-friendly), or broken on Wayland. TalkType is different:
 
-- **100% offline** — All processing happens locally, using Whisper or Parakeet. Nothing is sent to the cloud.
 - **Global hotkeys that actually work on Wayland** — many Linux dictation tools rely on X11 key grabs (or `pynput`), which Wayland blocks by design. TalkType reads the key at the kernel level via `/dev/input`, below the compositor, so push-to-talk works the same on GNOME, KDE, Sway and Hyprland (X11 too).
+- **100% offline** — All processing happens locally, using Whisper or Parakeet. Nothing is sent to the cloud.
 - **Zero configuration** — Download the AppImage, run it, start talking. First-run wizard handles the rest.
 - **Any desktop environment** — GNOME (with native shell extension), KDE, XFCE, Sway, Hyprland, and more.
 - **Fast without a graphics card** — the Parakeet model gives large-v3 class accuracy in well under a second on an ordinary processor (English and 24 European languages).
