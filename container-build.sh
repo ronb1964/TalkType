@@ -23,6 +23,7 @@ apt-get install -y -qq \
     gobject-introspection \
     gir1.2-glib-2.0 \
     gir1.2-ayatanaappindicator3-0.1 \
+    libayatana-appindicator3-1 \
     python3-gi \
     python3-gi-cairo \
     python3-cairo \
@@ -278,6 +279,31 @@ if [ ${#MISSING_TYPELIBS[@]} -ne 0 ]; then
 fi
 echo "   ✅ All ${#REQUIRED_TYPELIBS[@]} required typelibs bundled successfully"
 
+# Bundle the tray icon library itself, not just its typelib. A typelib only
+# describes a library; GI still dlopen()s the real .so from the system. On any
+# system without libayatana-appindicator3 installed the tray crashed on launch
+# with "Could not locate app_indicator_new" (AppImageHub's test, 2026-09-26).
+# Its Ayatana/dbusmenu dependencies come along; GTK itself stays the system's.
+echo "   Bundling tray icon library (libayatana-appindicator3)..."
+APPINDICATOR_LIB=/usr/lib/x86_64-linux-gnu/libayatana-appindicator3.so.1
+if [ ! -f "$APPINDICATOR_LIB" ]; then
+    echo "❌ ERROR: $APPINDICATOR_LIB not found - the tray would crash wherever it isn't installed"
+    exit 1
+fi
+cp -L "$APPINDICATOR_LIB" AppDir/usr/lib/
+for _dep in $(ldd "$APPINDICATOR_LIB" | awk '/libayatana|libdbusmenu/ {print $3}'); do
+    cp -L "$_dep" AppDir/usr/lib/
+    echo "     ✓ $(basename "$_dep")"
+done
+# Every Ayatana/dbusmenu library the tray needs must now resolve from AppDir.
+if LD_LIBRARY_PATH=AppDir/usr/lib ldd AppDir/usr/lib/libayatana-appindicator3.so.1 \
+        | grep -E 'libayatana|libdbusmenu' | grep -qv 'AppDir/usr/lib'; then
+    echo "❌ ERROR: some tray icon dependencies were not bundled:"
+    LD_LIBRARY_PATH=AppDir/usr/lib ldd AppDir/usr/lib/libayatana-appindicator3.so.1 | grep -E 'libayatana|libdbusmenu'
+    exit 1
+fi
+echo "   ✅ Tray icon library bundled"
+
 # Copy TalkType source
 echo "   Copying TalkType source..."
 cp -r src/talktype AppDir/usr/src/
@@ -332,18 +358,29 @@ fi
 EOF
 chmod +x AppDir/AppRun
 
-# Download and extract appimagetool - FUSE does not work in containers
+# Download and extract appimagetool - FUSE does not work in containers.
+# This is the current tool from github.com/AppImage/appimagetool, NOT the
+# retired AppImageKit one. The old tool embedded a runtime that needs libfuse2
+# on the user's system; Ubuntu 26.04 no longer ships it, so the AppImage (and
+# the menu/autostart entries pointing at it) silently failed to start there.
+# The new tool fetches the static type2 runtime, which needs no libfuse2.
+# The cache folder has a new name so an old extracted AppImageKit tool left in
+# the project directory can never be picked up by mistake.
 echo "   Downloading appimagetool..."
-if [ ! -d appimagetool-extracted ]; then
-    wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
-    chmod +x appimagetool-x86_64.AppImage
-    ./appimagetool-x86_64.AppImage --appimage-extract > /dev/null 2>&1
-    mv squashfs-root appimagetool-extracted
+if [ ! -d appimagetool-type2-extracted ]; then
+    rm -rf squashfs-root
+    wget -q -O appimagetool-type2-x86_64.AppImage \
+        https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+    chmod +x appimagetool-type2-x86_64.AppImage
+    ./appimagetool-type2-x86_64.AppImage --appimage-extract > /dev/null 2>&1
+    mv squashfs-root appimagetool-type2-extracted
+    rm -f appimagetool-type2-x86_64.AppImage
 fi
 
-# Build AppImage using extracted appimagetool
+# Build AppImage using extracted appimagetool (it downloads the runtime itself)
 echo "   Creating AppImage..."
-ARCH=x86_64 ./appimagetool-extracted/AppRun --no-appstream AppDir "TalkType-v${VERSION}-x86_64.AppImage" > /dev/null 2>&1
+ARCH=x86_64 ./appimagetool-type2-extracted/AppRun --no-appstream AppDir "TalkType-v${VERSION}-x86_64.AppImage" > /tmp/appimagetool.log 2>&1 \
+    || { echo "❌ ERROR: appimagetool failed:"; cat /tmp/appimagetool.log; exit 1; }
 
 # Fix ownership of AppImage output
 if [ -n "$BUILD_USER" ]; then

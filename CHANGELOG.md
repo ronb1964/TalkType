@@ -2,6 +2,21 @@
 
 All notable changes to TalkType are documented here.
 
+## [0.10.2] - 2026-09-26
+
+The AppImage should now start on more systems.
+
+### Fixes
+- On Ubuntu 26.04 the AppImage wouldn't start at all unless you ran it with a
+  special flag, and the menu entry and launch at login just silently did
+  nothing. It was built with an old tool that needs a library called libfuse2,
+  and 26.04 doesn't ship it anymore. It's built with the current tool now,
+  which doesn't need libfuse2. I tested it on a clean 26.04 and it starts
+  normally. It's also a bit smaller, 124 MB instead of 139.
+- If your system didn't have the tray icon library (libayatana-appindicator3)
+  installed, TalkType crashed as soon as it started. That library comes inside
+  the AppImage now, and in the .deb and .rpm too.
+
 ## [0.10.1] - 2026-09-26
 
 Mostly a fix for a stuck key I ran into while testing in a VM.
