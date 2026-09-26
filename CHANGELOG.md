@@ -2,6 +2,30 @@
 
 All notable changes to TalkType are documented here.
 
+## [0.10.0] - 2026-09-26
+
+A hands-free option for the toggle key.
+
+### Hands-free
+- **Double-tap F9 (or whatever your toggle key is), talk, and just stop
+  talking.** After a couple of seconds of quiet the recording ends and your
+  text gets typed. No second key press needed. A short high beep lets you
+  know the double-tap took.
+- **A single tap works exactly like before.** It keeps recording until you
+  tap again, however long you pause to think. So if you dictate long stuff,
+  nothing changes for you unless you double-tap.
+- It waits until you've actually started talking, a cough or a click doesn't
+  count, and it learns how noisy your room is as it goes.
+- It never cuts anything off the start or middle of what you said. The only
+  audio it drops is the quiet bit at the end after you stopped.
+- Off until you turn it on in Preferences under General, right below the
+  toggle key. You can set the quiet time anywhere from half a second to ten
+  seconds. Hold-to-talk isn't affected at all.
+
+### Also
+- On the Flatpak, if a toggle recording ended some other way (like pressing
+  Esc), the next press of the toggle shortcut could do nothing. Fixed.
+
 ## [0.9.0] - 2026-09-26
 
 New Dictation Cleanup options, and a handful of fixes for things that could go

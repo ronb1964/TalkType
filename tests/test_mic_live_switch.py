@@ -87,7 +87,7 @@ class TestTheNextDictationUsesIt:
 
         started = []
         monkeypatch.setattr(app, "start_recording",
-                            lambda beeps, notify, idx: started.append(idx))
+                            lambda beeps, notify, idx, **kw: started.append(idx))
 
         cfg.mic = "Sennheiser"
         svc.refresh_input_device()

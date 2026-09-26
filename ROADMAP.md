@@ -35,11 +35,11 @@ Status markers: `[x]` shipped · `[~]` partly done, see note · `[ ]` not starte
   - Superwhisper's S1-mini has a custom license; check it before using it.
 - [x] Optional transcription history (2026-09 research, priority 4). **Shipped in 0.8.0:** "Recent Dictations ▸" in the tray and the GNOME extension, stored in RAM only (`history.py`, XDG_RUNTIME_DIR). Originally planned as the last 10-20 dictations, click to copy or re-paste from the tray. Handy, hyprwhspr and OpenWhispr have it.
 - [ ] (2026-09 research) Personal dictionary: words Whisper keeps getting wrong. For Whisper, pass them as `hotwords`/`initial_prompt` and add a fuzzy-replacement table. Parakeet only gets the replacement table.
-- [ ] (2026-09 research) Auto-stop on silence in toggle mode, plus pause/resume. See the VAD caveat in the next item.
+- [x] (2026-09 research) Auto-stop on silence in toggle mode. **Shipped in 0.10.0**: `silence.py`, an RMS-vs-learned-noise-floor detector that only decides when to stop and trims only the measured silent tail (it never re-enables vad_filter). Off by default; Preferences → General, under the Toggle Hotkey. It is armed per recording by a **double-tap** of the toggle key (a second tap within 0.4 s, with a high confirmation beep), so a single tap stays a plain toggle for long dictation with thinking pauses. Pause/resume is not done.
 - [ ] (2026-09 research) Per-app profiles keyed on the window class only (cleanup on/off, paste mode). **No screen reading or screenshots**: Wispr Flow's screenshot-upload scandal made "nothing leaves your machine" a selling point.
 - [ ] (2026-09 research) Later: streaming live preview (Moonshine v2 streaming or Nemotron streaming via sherpa-onnx), and a voice "command mode" that rewrites selected text (needs a 3–4B model).
 
-- [ ] Silence auto-stop (VAD) with configurable end-of-speech timeout — note: Silero VAD pre-filtering was deliberately **disabled** (`vad_filter=False`) in v0.5.16 because it trimmed speech onsets after pauses. Any auto-stop feature must be built on a separate timer, not by re-enabling that filter.
+- [x] Silence auto-stop (VAD) with configurable end-of-speech timeout (shipped in 0.10.0, see above) — note: Silero VAD pre-filtering was deliberately **disabled** (`vad_filter=False`) in v0.5.16 because it trimmed speech onsets after pauses. Any auto-stop feature must be built on a separate timer, not by re-enabling that filter.
 - [x] Language auto-detect / multilingual models — `language_mode` (auto/manual) in config and Preferences; empty `language` means auto-detect.
 - [ ] Language quick switch in tray menu for multilingual users — the setting exists, but only in Preferences. Not in the tray or GNOME menus.
 - [ ] Confidence threshold control — filter low-quality transcriptions from background noise
@@ -183,4 +183,4 @@ Status markers: `[x]` shipped · `[~]` partly done, see note · `[ ]` not starte
 
 ---
 
-*Last updated: 2026-09-26 — Dictation Cleanup shipped in 0.9.0. 2026-09-25: added the 2026-09 competitive research items (engines, AI cleanup, marketing). 2026-09-17: Flatpak, Awesome Lists and CI entries refreshed. Every other status was last verified on 2026-08-13 against v0.6.0 and may have drifted since.*
+*Last updated: 2026-09-26 — hands-free auto-stop shipped in 0.10.0, Dictation Cleanup in 0.9.0. 2026-09-25: added the 2026-09 competitive research items (engines, AI cleanup, marketing). 2026-09-17: Flatpak, Awesome Lists and CI entries refreshed. Every other status was last verified on 2026-08-13 against v0.6.0 and may have drifted since.*

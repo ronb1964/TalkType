@@ -151,6 +151,8 @@ class Settings:
     log_transcripts: bool = False        # write full transcribed text to the log (off = redacted); opt-in for troubleshooting only
     remove_fillers: bool = False         # drop "um"/"uh" and accidental repeated words (cleanup.py; rules, no download)
     ai_corrections: bool = False         # fix "3, no wait, 4" with a local AI model (ai_cleanup.py; downloads ~1.1 GB)
+    auto_stop_silence: bool = False      # toggle recordings stop by themselves when you stop talking (silence.py)
+    auto_stop_seconds: float = 2.0       # seconds of silence before an auto-stop (0.5-10)
 
 
 # ---------------------------------------------------------------------------
@@ -229,6 +231,8 @@ def _validation_problems(s: Settings) -> list[tuple[str, str]]:
     if s.indicator_backing.lower() not in VALID_BACKINGS:
         problems.append(("indicator_backing", f"Invalid indicator_backing '{s.indicator_backing}'. Valid options: {', '.join(sorted(VALID_BACKINGS))}"))
 
+    if not (0.5 <= s.auto_stop_seconds <= 10.0):
+        problems.append(("auto_stop_seconds", f"Invalid auto_stop_seconds '{s.auto_stop_seconds}'. Must be between 0.5 and 10"))
     if not (0.5 <= s.indicator_sensitivity <= 2.0):
         problems.append(("indicator_sensitivity", f"Invalid indicator_sensitivity '{s.indicator_sensitivity}'. Must be between 0.5 and 2.0"))
 
@@ -719,6 +723,9 @@ LIVE_APPLIED_KEYS = {
     # off starts or stops its engine from the same reload (_apply_cleanup_settings).
     "remove_fillers",
     "ai_corrections",
+    # Hands-free auto-stop; read when each toggle recording starts.
+    "auto_stop_silence",
+    "auto_stop_seconds",
 }
 
 

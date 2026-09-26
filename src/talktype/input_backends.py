@@ -47,7 +47,6 @@ class PortalInputBackend(InputBackend):
     def __init__(self, cfg, input_device_idx=None):
         self.cfg = cfg
         self.input_device_idx = input_device_idx
-        self._recording = False  # toggle-mode state
 
     def _shortcut_id(self, params):
         try:
@@ -64,9 +63,14 @@ class PortalInputBackend(InputBackend):
         if sid == "dictate_hold":
             app._cmd_start_recording.set()
         elif sid == "dictate_toggle":
-            self._recording = not self._recording
-            (app._cmd_start_recording if self._recording
-             else app._cmd_stop_recording).set()
+            # Ask the recording itself rather than keeping a private on/off
+            # flag: a recording can end without this key (auto-stop, Esc), and
+            # a stale flag made the next press do nothing.
+            if not app.state.is_recording:
+                app._cmd_start_from_toggle_key.set()
+                app._cmd_start_recording.set()
+            elif not app._toggle_pressed_while_recording(getattr(self.cfg, "beeps", True)):
+                app._cmd_stop_recording.set()
 
     def _on_deactivated(self, conn, sender, path, iface, signal, params):
         # Only the hold shortcut stops on release; toggle ignores key release.

@@ -68,6 +68,7 @@ Most voice dictation tools on Linux are either cloud-based (privacy concerns), c
 ## Features
 
 - **Dual Hotkeys Always Active** - F8 (hold-to-talk) AND F9 (tap-to-toggle) simultaneously - fully customizable
+- **Hands-free** (optional) - Double-tap F9, talk, and the recording stops by itself when you go quiet. A single tap is still a normal on/off toggle, so long dictation with thinking pauses is never cut off
 - **AI-Powered Transcription** - OpenAI's Whisper models (tiny to large-v3), or NVIDIA's Parakeet for fast, accurate dictation with no GPU
 - **GPU Acceleration** - Optional NVIDIA CUDA support for 3-5x faster transcription
 - **Smart Text Processing** - Auto-punctuation, smart quotes, auto-spacing

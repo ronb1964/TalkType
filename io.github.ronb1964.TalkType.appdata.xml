@@ -85,6 +85,16 @@
   </screenshots>
 
   <releases>
+    <release version="0.10.0" date="2026-09-26">
+      <description>
+        <p>Optional hands-free dictation</p>
+        <ul>
+          <li>Double-tap the toggle key and the recording stops by itself when you stop talking</li>
+          <li>A single tap is still a normal on/off toggle</li>
+          <li>Fixed the Flatpak toggle shortcut sometimes needing two presses after a recording ended</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.9.0" date="2026-09-26">
       <description>
         <p>Optional dictation cleanup and startup download fixes</p>

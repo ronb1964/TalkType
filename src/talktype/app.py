@@ -47,10 +47,16 @@ def _loggable(text):
 _remove_fillers = False
 _ai_engine = None
 
+# Seconds of silence that end a toggle recording (0 = auto-stop off).
+_auto_stop_seconds = 0.0
+
 
 def _apply_cleanup_settings(cfg):
-    """Bring the cleanup options in line with *cfg*; start or stop the AI engine."""
-    global _remove_fillers, _ai_engine
+    """Bring the cleanup and auto-stop options in line with *cfg*; start or
+    stop the AI engine."""
+    global _remove_fillers, _ai_engine, _auto_stop_seconds
+    _auto_stop_seconds = (float(getattr(cfg, "auto_stop_seconds", 2.0))
+                          if getattr(cfg, "auto_stop_silence", False) else 0.0)
     _remove_fillers = bool(getattr(cfg, "remove_fillers", False))
     want_ai = bool(getattr(cfg, "ai_corrections", False))
     if want_ai and _ai_engine is None:
@@ -160,6 +166,10 @@ SAMPLE_RATE = 16000
 CHANNELS = 1
 MIN_HOLD_MS = 200
 START_BEEP = (1200, 0.12)
+HANDS_FREE_BEEP = (1600, 0.07)  # confirms a double-tap switched the recording to hands-free
+# Two taps of the toggle key closer together than this switch the recording
+# that the first tap started to hands-free, instead of stopping it.
+DOUBLE_TAP_S = 0.4
 CANCEL_BEEP = (500, 0.12)
 READY_BEEP  = (1000, 0.09)
 
@@ -175,6 +185,12 @@ class RecordingState:
     last_inserted_text: str = ""
     # Mid-sentence continuation - if True, lowercase the first letter of next dictation
     continue_mid_sentence: bool = False
+    # Hands-free auto-stop for this recording (a silence.SilenceDetector), or
+    # None unless a double-tap of the toggle key armed it.
+    silence: object = None
+    # When the toggle key started this recording (None for any other start),
+    # so a quick second tap can be told apart from a stop.
+    toggle_started_at: float = None
 
     def __post_init__(self):
         if self.frames is None:
@@ -223,6 +239,9 @@ _TRAY_DBUS_TIMEOUT = 1.5
 # Using two separate Events (rather than one flag) so start and stop can't overwrite each other.
 _cmd_start_recording = threading.Event()
 _cmd_stop_recording = threading.Event()
+# Set alongside _cmd_start_recording when the Flatpak's toggle SHORTCUT (not a
+# menu) started it, so a quick second press can switch it to hands-free.
+_cmd_start_from_toggle_key = threading.Event()
 _inject_lock = threading.Lock()  # serialise Backend B transcribe/inject workers
 
 # Hotkey test mode: when set, hotkey presses are reported via D-Bus HotkeyPressed
@@ -678,6 +697,13 @@ def _beep(enabled: bool, freq=1000, duration=0.15):
 def _sd_callback(indata, frames_count, time_info, status):
     if state.is_recording:
         state.frames.append(indata.tobytes())
+
+        # Hands-free auto-stop: when the speaker has finished, ask the service
+        # loop to stop, exactly as a second press of the toggle key would.
+        detector = state.silence
+        if detector is not None and detector.feed(indata):
+            logger.info("Auto-stop: speaker went quiet, stopping the recording")
+            _cmd_stop_recording.set()
 
         # Feed the recording indicator whatever its active style needs.
         if recording_indicator:
@@ -1214,8 +1240,12 @@ def _open_input_stream(device_idx) -> None:
     state.stream.start()
 
 
-def start_recording(beeps_on: bool, notify_on: bool, input_device_idx) -> bool:
+def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
+                    from_toggle: bool = False) -> bool:
     """Begin capturing audio. Returns True only if recording actually started.
+
+    *from_toggle* marks a start by the toggle key, so a quick second tap can
+    switch it to hands-free (see _toggle_pressed_while_recording).
 
     On failure this releases any input-device grabs before returning. The
     keyboard is grabbed just before this is called, so without that release a
@@ -1223,7 +1253,9 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx) -> bool:
     """
     state.frames = []
     state.was_cancelled = False
+    state.silence = None
     state.press_t0 = time.time()
+    state.toggle_started_at = state.press_t0 if from_toggle else None
     # Set before the stream starts — _sd_callback drops frames unless it's set.
     state.is_recording = True
     try:
@@ -2234,6 +2266,46 @@ def _inject_text(text: str, injection_mode: str, t0: float):
         logger.warning("Injection failed — undo buffer left unchanged")
 
 
+def _toggle_pressed_while_recording(beeps_on: bool) -> bool:
+    """A toggle-key press arrived during a recording. Returns True if it was
+    the second tap of a double-tap and switched the recording to hands-free
+    (the caller must then NOT stop it); False means a normal stop.
+
+    A single tap keeps the toggle a plain on/off switch, however long the
+    speaker pauses. Only a double-tap, with the option on, arms auto-stop. A
+    double-tap used to start and cancel a too-short recording, so no existing
+    behaviour is lost.
+    """
+    started = state.toggle_started_at
+    if (_auto_stop_seconds <= 0 or started is None or state.silence is not None
+            or time.time() - started > DOUBLE_TAP_S):
+        return False
+    from .silence import SilenceDetector
+    state.silence = SilenceDetector(
+        _auto_stop_seconds, getattr(state, "recording_samplerate", SAMPLE_RATE))
+    logger.info("Double-tap: this recording will stop by itself when you go quiet")
+    print("🤚 Hands-free: stops when you stop talking")
+    _beep(beeps_on, *HANDS_FREE_BEEP)
+    return True
+
+
+def _trim_auto_stop_tail(frames):
+    """After an auto-stop, drop the silence the detector measured at the end.
+
+    Only whole trailing blocks are removed, and only up to what was measured
+    as silent (less a small margin kept for the last word), so speech is never
+    touched. Runs after the stream stops, so no block is still being added.
+    """
+    detector, state.silence = state.silence, None
+    to_trim = detector.tail_to_trim() if detector is not None else 0
+    while frames and to_trim > 0:
+        block_samples = len(frames[-1]) // 2          # int16 mono
+        if block_samples > to_trim:
+            break
+        frames.pop()
+        to_trim -= block_samples
+
+
 def _finish_capture(beeps_on: bool, notify_on: bool):
     """End a recording quickly and hand back its audio (the fast half of stop).
 
@@ -2252,6 +2324,7 @@ def _finish_capture(beeps_on: bool, notify_on: bool):
     state.is_recording = False
     _stop_stream_safely()
     _notify_tray_recording_state(False)  # Tell GNOME extension recording stopped
+    _trim_auto_stop_tail(frames)
     if state.was_cancelled:
         return None
     # Hide recording indicator before text injection
@@ -2469,7 +2542,9 @@ def _handle_key_event(event, mode, hold_key, toggle_key,
     # --- Tap-to-toggle: press once to start, press again to stop ---
     if toggle_key and event.code == toggle_key and event.value == 1:
         if not state.is_recording:
-            start_recording(cfg.beeps, cfg.notify, input_device_idx)
+            start_recording(cfg.beeps, cfg.notify, input_device_idx, from_toggle=True)
+        elif _toggle_pressed_while_recording(cfg.beeps):
+            pass  # second tap of a double-tap: now hands-free, keep recording
         else:
             # Also reached by brushing the toggle key mid-hold. Release first,
             # or the hold key's release branch is skipped and the grab is stranded.
@@ -2554,8 +2629,12 @@ def _service_tick(cfg, svc: "_ServiceState") -> "LiveSettings | None":
     now = time.time()
     if _cmd_start_recording.is_set():
         _cmd_start_recording.clear()
+        # Only the Flatpak's toggle SHORTCUT can double-tap; it says so. The
+        # tray and GNOME menu toggles and the hold shortcut are plain starts.
+        from_toggle = _cmd_start_from_toggle_key.is_set()
+        _cmd_start_from_toggle_key.clear()
         if not state.is_recording:
-            start_recording(cfg.beeps, cfg.notify, svc.input_device_idx)
+            start_recording(cfg.beeps, cfg.notify, svc.input_device_idx, from_toggle=from_toggle)
             svc.last_activity = now
     if _cmd_stop_recording.is_set():
         _cmd_stop_recording.clear()

@@ -874,6 +874,36 @@ class PreferencesWindow:
         grid.attach(self.toggle_combo, 1, row, 1, 1)
         row += 1
 
+        # Hands-free: double-tap the toggle key and the recording stops itself
+        # when you go quiet (silence.py). A single tap stays a plain toggle.
+        # Shown on the Flatpak too: its toggle shortcut double-taps the same way.
+        auto_stop_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        auto_stop_check = Gtk.CheckButton(label="Double-tap the toggle key for hands-free: stop after")
+        auto_stop_check.set_active(bool(self.config.get("auto_stop_silence", False)))
+        auto_stop_adj = Gtk.Adjustment(value=float(self.config.get("auto_stop_seconds", 2.0)),
+                                       lower=0.5, upper=10.0, step_increment=0.5)
+        auto_stop_spin = Gtk.SpinButton(adjustment=auto_stop_adj, digits=1)
+        auto_stop_spin.connect("scroll-event", lambda *a: True)  # no accidental scroll changes
+        auto_stop_spin.set_sensitive(auto_stop_check.get_active())
+        auto_stop_check.connect("toggled", lambda x: (
+            self.update_config("auto_stop_silence", x.get_active()),
+            auto_stop_spin.set_sensitive(x.get_active())))
+        auto_stop_spin.connect("value-changed",
+                               lambda x: self.update_config("auto_stop_seconds", round(x.get_value(), 1)))
+        auto_stop_box.pack_start(auto_stop_check, False, False, 0)
+        auto_stop_box.pack_start(auto_stop_spin, False, False, 0)
+        auto_stop_box.pack_start(Gtk.Label(label="seconds of silence"), False, False, 0)
+        auto_stop_box.set_tooltip_text(
+            "Double-tap your toggle key (two quick taps), talk, and when you stop\n"
+            "talking the recording ends and your text is typed by itself. A short\n"
+            "high beep confirms the double-tap.\n\n"
+            "A single tap is still a plain on/off toggle that runs until you tap\n"
+            "again, however long you pause. Hands-free waits until you have actually\n"
+            "started talking, and a pause shorter than this setting does not stop it.\n"
+            "Hold-to-talk is not affected.")
+        grid.attach(auto_stop_box, 0, row, 2, 1)
+        row += 1
+
         # Test Hotkeys button
         test_hotkeys_btn = Gtk.Button(label="Test Hotkeys")
         test_hotkeys_btn.connect("clicked", self._on_test_hotkeys)
