@@ -2,6 +2,37 @@
 
 All notable changes to TalkType are documented here.
 
+## [0.11.0] - 2026-09-29
+
+You can teach TalkType words it keeps getting wrong now.
+
+### Fix a Word
+- If TalkType keeps writing "bamboo studio" when you mean BambuStudio, open
+  Fix a Word from the tray menu. Pick the dictation, click the wrong word (or
+  drag across a few), type the right spelling and click Always fix this. From
+  then on it gets it right in every dictation.
+- It works with every speech model, Parakeet included, because it fixes the
+  words after they're heard.
+- Your fixes show up in Preferences under Commands, where you can edit or
+  remove them. There's a Fix a Word button there too.
+- It warns you before you "fix" an everyday word like "four", since that
+  would change it every single time you say it.
+- If you want to paste the corrected sentence over the one that came out
+  wrong, it can copy that for you too.
+
+### Also
+- If Preferences was already open behind another window, picking it from the
+  tray again did nothing, and it looked like it wasn't opening at all. It
+  comes to the front now. Same for Voice Commands and Fix a Word.
+- Saving in Preferences could wipe out a voice command that was added while
+  Preferences was open. Fixed.
+- The text in Preferences was small in a few places and hard to read. It's
+  normal size now.
+- The smart quotes option in Preferences was missing the quotes it's supposed
+  to show as an example.
+- Preferences no longer shows GNOME extension settings on desktops that
+  aren't GNOME.
+
 ## [0.10.3] - 2026-09-26
 
 One more fix for systems that were missing a library.

@@ -121,6 +121,15 @@ def test_save_config_roundtrips_through_config_loader(tmp_path, monkeypatch):
 
 # --- a damaged commands file must not wedge Apply/OK -----------------------
 
+def _commands_window(rows, loaded=None):
+    """A stand-in PreferencesWindow with just the Voice Commands list."""
+    import types
+    d = SimpleNamespace(commands_store=rows, _commands_loaded=loaded or {})
+    for name in ("_commands_from_store", "_fill_commands_store", "_save_custom_commands"):
+        setattr(d, name, types.MethodType(getattr(PreferencesWindow, name), d))
+    return d
+
+
 def test_saving_commands_over_a_damaged_file_does_not_raise(tmp_path, monkeypatch):
     """save_custom_commands now refuses to overwrite a file it could not
     read. _save_custom_commands runs FIRST in both on_apply and on_ok, so
@@ -137,8 +146,8 @@ def test_saving_commands_over_a_damaged_file_does_not_raise(tmp_path, monkeypatc
     C.load_custom_commands()                     # fails -> flag set
     damaged = path.read_text()
 
-    d = SimpleNamespace(commands_store=[["talk type", "TalkType"]])
-    assert PreferencesWindow._save_custom_commands(d) is False
+    d = _commands_window([["talk type", "TalkType"]])
+    assert d._save_custom_commands() is False
 
     assert path.read_text() == damaged, "damaged commands file was overwritten"
 
@@ -150,9 +159,30 @@ def test_saving_commands_normally_reports_success(tmp_path, monkeypatch):
     monkeypatch.setattr(C, "CUSTOM_COMMANDS_PATH", str(path))
     monkeypatch.setattr(C, "_commands_read_failed", False, raising=False)
 
-    d = SimpleNamespace(commands_store=[["talk type", "TalkType"]])
-    assert PreferencesWindow._save_custom_commands(d) is True
+    d = _commands_window([["talk type", "TalkType"]])
+    assert d._save_custom_commands() is True
     assert C.load_custom_commands() == {"talk type": "TalkType"}
+
+
+def test_apply_keeps_a_word_fixed_from_the_tray_while_prefs_was_open(tmp_path, monkeypatch):
+    """Preferences used to write back the list it loaded at open, deleting a
+    Fix a Word fix saved from the tray in the meantime."""
+    from talktype import config as C
+
+    path = tmp_path / "custom_commands.toml"
+    monkeypatch.setattr(C, "CUSTOM_COMMANDS_PATH", str(path))
+    monkeypatch.setattr(C, "_commands_read_failed", False, raising=False)
+    C.save_custom_commands({"talk type": "TalkType"})
+
+    # Preferences opens and shows the one command...
+    d = _commands_window([["talk type", "TalkType"]], loaded={"talk type": "TalkType"})
+    # ...then Fix a Word saves a new one from the tray...
+    C.save_custom_commands({"talk type": "TalkType", "bamboo studio": "BambuStudio"})
+    # ...and the user clicks Apply without touching the list.
+    assert d._save_custom_commands() is True
+
+    assert C.load_custom_commands() == {"talk type": "TalkType", "bamboo studio": "BambuStudio"}
+    assert ["bamboo studio", "BambuStudio"] in d.commands_store   # and it now shows
 
 
 # --- Preferences must not write over a config it could not read ------------

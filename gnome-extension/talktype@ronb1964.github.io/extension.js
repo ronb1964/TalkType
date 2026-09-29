@@ -62,6 +62,7 @@ const TalkTypeIface = `
       <arg type="as" direction="out" name="entries"/>
     </method>
     <method name="ClearRecentDictations"/>
+    <method name="FixWordInDictation"/>
     <method name="OpenPreferences"/>
     <method name="OpenPreferencesUpdates"/>
     <method name="ShowHelp"/>
@@ -341,6 +342,12 @@ class TalkTypeIndicator extends PanelMenu.Button {
             if (open)
                 this._refreshHistoryMenu();
         });
+
+        // Fix a Word, top level right under Recent Dictations as in the tray.
+        // The window has its own dictation picker and opens on the newest.
+        const fixWordItem = new PopupMenu.PopupMenuItem('Fix a Word...');
+        fixWordItem.connect('activate', () => this._proxy.FixWordInDictationRemote());
+        this.menu.addMenuItem(fixWordItem);
 
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 

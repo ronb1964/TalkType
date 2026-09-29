@@ -895,6 +895,25 @@ def load_custom_commands() -> dict[str, str]:
             _commands_read_failed = True
     return commands
 
+def merge_custom_command_edits(loaded: dict[str, str], edited: dict[str, str],
+                               on_disk: dict[str, str]) -> dict[str, str]:
+    """Apply the user's edits (from *loaded* to *edited*) on top of *on_disk*.
+
+    Preferences holds the commands it loaded when it opened. Writing that list
+    back as-is deleted anything saved in the meantime, such as a word fixed
+    from the tray with Fix a Word. Only what the user added, changed or
+    removed in Preferences is applied; everything else comes from the file.
+    """
+    merged = dict(on_disk)
+    for phrase in loaded:
+        if phrase not in edited:
+            merged.pop(phrase, None)                 # removed in Preferences
+    for phrase, replacement in edited.items():
+        if loaded.get(phrase) != replacement:
+            merged[phrase] = replacement             # added or changed there
+    return merged
+
+
 def save_custom_commands(commands: dict[str, str]) -> None:
     """
     Save custom voice commands to TOML file.

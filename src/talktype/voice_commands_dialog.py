@@ -17,7 +17,8 @@ def show_voice_commands_dialog():
     """Show a compact, quick-reference popup of all voice commands."""
     global _active_dialog
     if _active_dialog is not None:
-        _active_dialog.present()
+        from .raise_window import raise_window
+        raise_window(_active_dialog)
         return
 
     dialog = Gtk.Dialog(title="Voice Commands — Quick Reference")

@@ -234,6 +234,14 @@ Quick one-click optimization via tray menu:
 • Hover over one to read it, click to copy it, then paste with Ctrl+V
 • Kept in memory only, never saved to disk, gone when you log out
 
+<b>Fix a Word</b> (teach TalkType a word it keeps getting wrong)
+• Tray menu → Fix a Word..., or Preferences → Voice Commands → Fix a Word...
+• Pick a recent dictation, click the wrong word (or drag across a few),
+  type the right spelling, then click Always fix this
+• From then on it's fixed in every dictation, with any speech model
+• Your fixes live in Preferences → Voice Commands, where you can edit or remove them
+• Handy for names, brands and technical terms, like "bamboo studio" → BambuStudio
+
 <b>Language Support</b>
 • Auto-detect language from speech
 • Manually select from 50+ supported languages

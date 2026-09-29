@@ -95,15 +95,17 @@ def test_dictation_is_recorded_before_it_is_typed(monkeypatch):
 
 
 def test_tray_and_gnome_extension_place_recent_dictations_after_restart():
-    """CLAUDE.md menu order: Recent Dictations follows Restart Service in both."""
+    """CLAUDE.md menu order: Restart Service, Recent Dictations, Fix a Word, in both."""
     tray = (ROOT / "src/talktype/tray.py").read_text()
-    assert re.search(r"restart_item,\s*history_menu_item,\s*Gtk\.SeparatorMenuItem\(\)", tray)
+    assert re.search(
+        r"restart_item,\s*history_menu_item,\s*fix_word_item,\s*Gtk\.SeparatorMenuItem\(\)", tray)
 
     js = (ROOT / "gnome-extension/talktype@ronb1964.github.io/extension.js").read_text()
     restart = js.index("new PopupMenu.PopupMenuItem('Restart Service')")
     recent = js.index("new PopupMenu.PopupSubMenuMenuItem('Recent Dictations')")
-    separator = js.index("new PopupMenu.PopupSeparatorMenuItem()", restart)
-    assert restart < recent < separator
+    fix_word = js.index("new PopupMenu.PopupMenuItem('Fix a Word...')")
+    separator = js.index("new PopupMenu.PopupSeparatorMenuItem()", recent)
+    assert restart < recent < fix_word < separator
 
 
 def test_full_text_lines_wraps_keeps_breaks_and_caps():
@@ -125,11 +127,15 @@ def test_each_tray_entry_opens_a_hover_view_with_copy():
 
     tray = types.SimpleNamespace()
     tray._copy_history_entry = lambda text: copied.append(text)
-    copied = []
+    tray.show_fix_word_dialog = lambda index: fixing.append(index)
+    copied, fixing = [], []
     text = "One.\nTwo " + "word " * 30
-    submenu = DictationTray._build_history_entry_submenu(tray, text)
+    submenu = DictationTray._build_history_entry_submenu(tray, text, 3)
 
+    items = {c.get_label(): c for c in submenu.get_children()}
     labels = [c.get_label() for c in submenu.get_children()]
-    assert labels[0] == "One." and labels[-1] == "Copy"
-    submenu.get_children()[-1].activate()
+    assert labels[0] == "One." and labels[-2:] == ["Copy", "Fix a Word..."]
+    items["Copy"].activate()
     assert copied == [text]   # the whole dictation, not the wrapped display
+    items["Fix a Word..."].activate()
+    assert fixing == [3]      # opens the Fix a Word window on this dictation

@@ -11,6 +11,7 @@ import dbus.mainloop.glib
 from dataclasses import asdict
 from .config import (CONFIG_PATH, ConfigNotLoadedError, Settings, merge_changed_keys,
                      load_custom_commands, save_custom_commands, write_text_atomic,
+                     merge_custom_command_edits, CUSTOM_COMMANDS_PATH,
                      _toml_value, CLASSIC_CYAN_HEX)
 
 # D-Bus interface for communicating with the TalkType service
@@ -96,11 +97,9 @@ def _coerce_config_types(config: dict) -> dict:
     return config
 
 
-# Single instance management
-def _runtime_dir():
-    return os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
-
-_PREFS_PIDFILE = os.path.join(_runtime_dir(), "talktype-prefs.pid")
+# Single instance management (see prefs_ipc.py)
+from . import prefs_ipc
+_PREFS_PIDFILE = prefs_ipc.pidfile_path()
 
 def _pid_running(pid: int) -> bool:
     if pid <= 0: return False
@@ -113,7 +112,7 @@ def _pid_running(pid: int) -> bool:
     except Exception:
         return True
 
-def _acquire_prefs_singleton():
+def _acquire_prefs_singleton(tab=None):
     try:
         if os.path.exists(_PREFS_PIDFILE):
             try:
@@ -122,7 +121,10 @@ def _acquire_prefs_singleton():
             except Exception:
                 old = 0
             if _pid_running(old):
-                print("Another preferences window is already open. Exiting.")
+                # Bring the open one forward rather than silently doing
+                # nothing, which looked like Preferences failed to open.
+                prefs_ipc.bring_to_front(old, tab)
+                print("Preferences is already open; brought it to the front. Exiting.")
                 sys.exit(0)
         with open(_PREFS_PIDFILE, "w") as f:
             f.write(str(os.getpid()))
@@ -232,6 +234,22 @@ class SegmentedVUMeter(Gtk.DrawingArea):
             cr.stroke()
 
         return False
+
+
+def _on_gnome():
+    """Whether the GNOME Shell extension can apply on this desktop at all."""
+    try:
+        from .desktop_detect import is_gnome
+        return is_gnome()
+    except Exception:
+        return True   # unsure: show the GNOME options rather than hide them
+
+
+def _hide_widgets(*widgets):
+    """Hide widgets and keep them hidden through the window's show_all()."""
+    for w in widgets:
+        w.set_no_show_all(True)
+        w.hide()
 
 
 class PreferencesWindow:
@@ -1463,7 +1481,7 @@ class PreferencesWindow:
         row += 1
 
         # Smart quotes
-        quotes_check = Gtk.CheckButton(label="Use smart quotes (" ")")
+        quotes_check = Gtk.CheckButton(label="Use smart quotes (\u201c \u201d)")
         quotes_check.set_active(self.config["smart_quotes"])
         quotes_check.connect("toggled", lambda x: self.update_config("smart_quotes", x.get_active()))
         quotes_check.set_tooltip_text("Convert spoken quotes to curved 'smart quotes' instead of straight \"quotes\".\nSay 'open quote' and 'close quote' when dictating.")
@@ -1553,7 +1571,7 @@ class PreferencesWindow:
         row += 1
 
         ai_note = Gtk.Label(xalign=0)
-        ai_note.set_markup('<span size="small">    Runs on your computer, nothing is sent online. '
+        ai_note.set_markup('<span>    Runs on your computer, nothing is sent online. '
                            'One-time download of about 1.1 GB.</span>')
         ai_note.set_opacity(0.7)
         grid.attach(ai_note, 0, row, 2, 1)
@@ -1750,6 +1768,11 @@ class PreferencesWindow:
             # Initial typing check
             GLib.timeout_add(600, self._initial_typing_check)
 
+        # Everything from here down is about the GNOME Shell extension. On KDE
+        # and other desktops it could only ever say "not available" above
+        # three greyed-out buttons, so it is hidden there (see end of method).
+        # Hidden rather than skipped: install/uninstall code still updates
+        # these widgets, and must not trip over missing attributes.
         # Add horizontal separator before Extensions section
         separator3 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
         separator3.set_margin_top(20)
@@ -1805,8 +1828,12 @@ class PreferencesWindow:
         grid.attach(ext_button_box, 0, row, 2, 1)
         row += 1
 
-        # Initial extension check
-        GLib.timeout_add(500, self._initial_extension_check)
+        if _on_gnome():
+            # Initial extension check
+            GLib.timeout_add(500, self._initial_extension_check)
+        else:
+            _hide_widgets(separator3, extension_header,
+                          self.extension_status_label, ext_button_box)
 
         return grid
     
@@ -1827,12 +1854,30 @@ class PreferencesWindow:
         # Description
         desc = Gtk.Label()
         desc.set_markup(
-            '<span size="small">Define custom phrases that will be replaced during dictation.\n'
+            '<span>Define custom phrases that will be replaced during dictation.\n'
             'For example: say "my email" → inserts "user@example.com"</span>'
         )
         desc.set_xalign(0)
         desc.set_line_wrap(True)
         vbox.pack_start(desc, False, False, 5)
+
+        # Fix a Word saves into this same list, so it gets a home here as well
+        # as in the tray menu.
+        fix_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        fix_label = Gtk.Label()
+        fix_label.set_markup(
+            '<span>Does TalkType keep getting a word wrong? Pick it out of a '
+            'recent dictation and type the right spelling. The fix shows up in this list, '
+            'where you can edit or remove it.</span>')
+        fix_label.set_xalign(0)
+        fix_label.set_line_wrap(True)
+        fix_row.pack_start(fix_label, True, True, 0)
+        fix_btn = Gtk.Button(label="Fix a Word...")
+        fix_btn.set_valign(Gtk.Align.CENTER)
+        fix_btn.set_tooltip_text("Teach TalkType a word from one of your recent dictations")
+        fix_btn.connect("clicked", self._on_fix_word)
+        fix_row.pack_start(fix_btn, False, False, 0)
+        vbox.pack_start(fix_row, False, False, 5)
 
         # Buttons for add/remove (at the top for easy access)
         button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
@@ -1856,10 +1901,10 @@ class PreferencesWindow:
         # Create list store for commands: phrase, replacement
         self.commands_store = Gtk.ListStore(str, str)
 
-        # Load existing commands
-        commands = load_custom_commands()
-        for phrase, replacement in commands.items():
-            self.commands_store.append([phrase, replacement])
+        # Load existing commands, and follow the file while this window is
+        # open: Fix a Word (tray or the button above) writes to it directly.
+        self._fill_commands_store(load_custom_commands())
+        self._watch_custom_commands_file()
 
         # Create tree view
         scrolled = Gtk.ScrolledWindow()
@@ -1897,7 +1942,7 @@ class PreferencesWindow:
         # Tips section
         tips = Gtk.Label()
         tips.set_markup(
-            '<span size="small"><b>Tips:</b>\n'
+            '<span><b>Tips:</b>\n'
             '• Click on a cell to edit it directly\n'
             '• Phrases are matched case-insensitively\n'
             '• Use \\n in replacement for line breaks\n'
@@ -1950,6 +1995,8 @@ class PreferencesWindow:
         self.ext_version_label.set_markup(f"<b>GNOME Extension:</b> {ext_text}")
         self.ext_version_label.set_xalign(0)
         version_box.pack_start(self.ext_version_label, False, False, 0)
+        if not _on_gnome():
+            _hide_widgets(self.ext_version_label)   # GNOME-only, see advanced tab
 
         version_frame.add(version_box)
         vbox.pack_start(version_frame, False, False, 10)
@@ -2020,26 +2067,26 @@ class PreferencesWindow:
         install_type = update_checker.get_install_type()
         if install_type == "appimage":
             info_markup = (
-                '<span size="small"><b>AppImage location:</b> ~/AppImages/TalkType.AppImage\n'
+                '<span><b>AppImage location:</b> ~/AppImages/TalkType.AppImage\n'
                 'Updates are downloaded, installed, and TalkType restarts automatically.</span>')
         elif install_type in ("rpm", "deb", "package"):
             info_markup = (
-                '<span size="small">Installed from a .deb/.rpm. TalkType downloads '
+                '<span>Installed from a .deb/.rpm. TalkType downloads '
                 'and installs updates for you: <b>Check for Updates</b> fetches the '
                 'new package and installs it with your password — through your '
                 'system package manager, so dependencies resolve. (It is not on a '
                 'distro repository; TalkType checks GitHub itself.)</span>')
         elif install_type == "aur":
             info_markup = (
-                '<span size="small">Installed from the AUR. Update with your AUR '
+                '<span>Installed from the AUR. Update with your AUR '
                 'helper (e.g. <tt>yay -S talktype-appimage</tt>).</span>')
         elif install_type == "flatpak":
             info_markup = (
-                '<span size="small">Installed as a Flatpak. Update through Flatpak '
+                '<span>Installed as a Flatpak. Update through Flatpak '
                 '(<tt>flatpak update</tt>) or your software center.</span>')
         else:
             info_markup = (
-                '<span size="small">Running the development version — update with '
+                '<span>Running the development version — update with '
                 '<tt>git pull</tt> in your project folder.</span>')
         info_label = Gtk.Label()
         info_label.set_markup(info_markup)
@@ -2470,22 +2517,75 @@ class PreferencesWindow:
         if iter:
             model.remove(iter)
     
+    def _commands_from_store(self):
+        """The commands as shown in the list, in the form they are saved."""
+        commands = {}
+        for row in self.commands_store:
+            phrase = row[0].strip().lower()
+            if phrase:  # Only save non-empty phrases
+                commands[phrase] = row[1]
+        return commands
+
+    def _fill_commands_store(self, commands):
+        """Show *commands* in the list and remember them as the saved state,
+        so that later only the user's own edits count as changes."""
+        self.commands_store.clear()
+        for phrase, replacement in commands.items():
+            self.commands_store.append([phrase, replacement])
+        self._commands_loaded = self._commands_from_store()
+
+    def _watch_custom_commands_file(self):
+        from gi.repository import Gio
+        try:
+            self._commands_monitor = Gio.File.new_for_path(
+                CUSTOM_COMMANDS_PATH).monitor_file(Gio.FileMonitorFlags.NONE, None)
+            self._commands_monitor.connect(
+                "changed", lambda *_: GLib.idle_add(self._on_commands_file_changed))
+        except Exception as e:
+            print(f"Not watching custom commands for outside changes: {e}")
+
+    def _on_commands_file_changed(self):
+        """Show a fix saved from outside this window (Fix a Word).
+
+        Left alone while the user has unsaved edits in the list: refilling it
+        would throw those away. Saving merges instead (_save_custom_commands),
+        so nothing on disk is lost either way.
+        """
+        on_disk = load_custom_commands()
+        if on_disk == self._commands_loaded:
+            return False
+        if self._commands_from_store() == self._commands_loaded:
+            self._fill_commands_store(on_disk)
+        return False  # one-shot idle callback
+
+    def bring_to_front(self, tab=None):
+        """Show this window in front of the others (another "open" happened)."""
+        if tab == "updates":
+            self.notebook.set_current_page(4)
+        from .raise_window import raise_window
+        raise_window(self.window)
+
+    def _on_fix_word(self, _button):
+        from .fix_word_dialog import show_fix_word_dialog
+        show_fix_word_dialog(0)
+
     def _save_custom_commands(self):
         """Save custom commands from the list store.
+
+        Only the user's edits are applied, on top of what is on disk right
+        now: writing back the list loaded when this window opened deleted any
+        word fixed from the tray in the meantime.
 
         Returns True if they were written, False if the existing file could
         not be read — in which case the list on screen is empty because of
         that failure, not because the user cleared it, and writing it would
         delete every command they have.
         """
-        commands = {}
-        for row in self.commands_store:
-            phrase = row[0].strip().lower()
-            replacement = row[1]
-            if phrase:  # Only save non-empty phrases
-                commands[phrase] = replacement
+        commands = merge_custom_command_edits(
+            self._commands_loaded, self._commands_from_store(), load_custom_commands())
         try:
             save_custom_commands(commands)
+            self._fill_commands_store(commands)
             return True
         except ConfigNotLoadedError as e:
             # Runs first in both on_apply and on_ok — letting this propagate
@@ -4502,8 +4602,24 @@ def main():
                         help="Tab to open initially")
     args = parser.parse_args()
 
-    _acquire_prefs_singleton()
+    # Handlers go in BEFORE the pidfile is written (_acquire_prefs_singleton):
+    # anyone who finds our pid there may signal us, and an unhandled SIGUSR1
+    # would terminate this process. Until the window exists they do nothing.
+    import signal as _signal
+    window_holder = []
+
+    def _on_front_request(tab):
+        if window_holder:
+            window_holder[0].bring_to_front(tab)
+        return True  # keep the handler installed
+
+    GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, prefs_ipc.FRONT, _on_front_request, None)
+    GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, prefs_ipc.FRONT_UPDATES,
+                         _on_front_request, "updates")
+
+    _acquire_prefs_singleton(args.tab)
     app = PreferencesWindow()
+    window_holder.append(app)
 
     # Switch to specified tab if requested
     if args.tab:

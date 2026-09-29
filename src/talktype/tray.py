@@ -273,6 +273,10 @@ class DictationTray:
                     """Show voice commands quick reference via tray."""
                     GLib.idle_add(self.tray.show_voice_commands, None)
 
+                def show_fix_word(self):
+                    """Open Fix a Word on the newest dictation (GNOME extension D-Bus)."""
+                    GLib.idle_add(self.tray.show_fix_word_dialog, 0)
+
                 def show_about(self):
                     """Show about dialog via tray."""
                     GLib.idle_add(self.tray.show_about_dialog, None)
@@ -1062,9 +1066,17 @@ class DictationTray:
         Args:
             tab: Optional tab name to open directly (e.g. "updates").
         """
-        # Don't open a second window
+        # Already open: bring it forward instead of opening a second one.
+        # Doing nothing here looked like Preferences failed to open when the
+        # window was hidden behind others.
         if self.preferences_process and self.preferences_process.poll() is None:
-            logger.info("Preferences window already open")
+            from . import prefs_ipc
+            pid = prefs_ipc.running_pid()
+            if pid and prefs_ipc.bring_to_front(pid, tab):
+                logger.info("Preferences already open; brought it to the front")
+            else:
+                # No pidfile yet: it is still starting and about to appear.
+                logger.info("Preferences is still opening")
             return
 
         tab_desc = f" ({tab} tab)" if tab else ""
@@ -1899,13 +1911,13 @@ class DictationTray:
             hint = Gtk.MenuItem(label="Hover to read one, click it to copy, then press Ctrl+V")
             hint.set_sensitive(False)
             self.history_menu.append(hint)
-            for text in entries:
+            for index, text in enumerate(entries):
                 # Each entry opens a submenu with the full text on hover. A
                 # tooltip would be simpler, but KDE draws this menu itself from
                 # a D-Bus description that has no tooltips, so it would never
                 # show. Submenus work on every desktop.
                 entry = Gtk.MenuItem(label=preview(text))
-                entry.set_submenu(self._build_history_entry_submenu(text))
+                entry.set_submenu(self._build_history_entry_submenu(text, index))
                 self.history_menu.append(entry)
             self.history_menu.append(Gtk.SeparatorMenuItem())
             clear_item = Gtk.MenuItem(label="Clear History")
@@ -1915,8 +1927,9 @@ class DictationTray:
         self.history_menu.show_all()
         return False  # one-shot when scheduled through GLib.idle_add
 
-    def _build_history_entry_submenu(self, text):
-        """The hover view of one recent dictation: its full text, then Copy.
+    def _build_history_entry_submenu(self, text, index):
+        """The hover view of one recent dictation: its full text, then Copy
+        and Fix a Word (which opens on this dictation, *index* in history).
 
         The text lines are left clickable (copying too) rather than greyed
         out, because disabled items are drawn dimmed and are hard to read.
@@ -1932,28 +1945,26 @@ class DictationTray:
         copy_item = Gtk.MenuItem(label="Copy")
         copy_item.connect("activate", lambda _w, t=text: self._copy_history_entry(t))
         submenu.append(copy_item)
+        fix_item = Gtk.MenuItem(label="Fix a Word...")
+        fix_item.connect("activate", lambda _w, i=index: self.show_fix_word_dialog(i))
+        submenu.append(fix_item)
         return submenu
 
-    def _copy_history_entry(self, text):
-        """Put a recent dictation on the clipboard.
+    def show_fix_word_dialog(self, index=0):
+        """Open Fix a Word on recent dictation *index* (0 = newest).
 
-        wl-copy first: a click in a KDE/GNOME tray menu is handled by the
-        desktop's menu, not a GTK window of ours, and Wayland only lets a
-        focused window set the clipboard through GTK. wl-copy has its own way
-        in. GTK's clipboard covers X11.
+        Also reached from the GNOME extension over D-Bus (FixWordInDictation).
+        The fix is saved as a custom voice command; see vocabulary.py.
         """
-        import shutil
-        try:
-            if os.environ.get("WAYLAND_DISPLAY") and shutil.which("wl-copy"):
-                subprocess.run(["wl-copy"], input=text.encode("utf-8"),
-                               timeout=5, check=True)
-            else:
-                clipboard = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
-                clipboard.set_text(text, -1)
-                clipboard.store()
+        from .fix_word_dialog import show_fix_word_dialog
+        show_fix_word_dialog(index, copy_text=self._copy_history_entry)
+        return False  # one-shot when scheduled through GLib.idle_add
+
+    def _copy_history_entry(self, text):
+        """Put a recent dictation on the clipboard (see clipboard.py)."""
+        from .clipboard import copy_text
+        if copy_text(text):
             logger.info(f"Copied a recent dictation to the clipboard ({len(text)} chars)")
-        except Exception as e:
-            logger.error(f"Could not copy recent dictation: {e}")
 
     def _clear_history(self):
         from .history import clear
@@ -1988,6 +1999,9 @@ class DictationTray:
         self.injection_mode_menu_item = self._build_injection_submenu()
         self.performance_menu_item = self._build_performance_submenu()
         history_menu_item = self._build_history_submenu()
+        # Top level, right under Recent Dictations, so it is easy to find.
+        fix_word_item = Gtk.MenuItem(label="Fix a Word...")
+        fix_word_item.connect("activate", lambda _w: self.show_fix_word_dialog(0))
 
         # Service management items
         restart_item = Gtk.MenuItem(label="Restart Service")
@@ -2012,6 +2026,7 @@ class DictationTray:
             self.service_toggle,
             restart_item,
             history_menu_item,
+            fix_word_item,
             Gtk.SeparatorMenuItem(),
             self.model_display_item,
             self.device_display_item,

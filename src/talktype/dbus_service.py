@@ -238,6 +238,11 @@ class TalkTypeDBusService(dbus.service.Object):
         clear()
 
     @dbus.service.method(DBUS_INTERFACE)
+    def FixWordInDictation(self):
+        """Open the Fix a Word window on the newest recent dictation."""
+        self._dispatch('show_fix_word')
+
+    @dbus.service.method(DBUS_INTERFACE)
     def OpenPreferences(self):
         """Open the preferences window"""
         self._dispatch('show_preferences')

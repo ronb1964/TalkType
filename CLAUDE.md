@@ -217,6 +217,7 @@ TalkType has TWO user interfaces that must stay synchronized:
 Dictation Service (toggle)
 Restart Service
 Recent Dictations ▸
+Fix a Word...
 ─────────────────────
 Active Model: [model]
 Device: [device]
