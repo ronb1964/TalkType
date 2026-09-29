@@ -99,6 +99,7 @@ git commit -m "..."
 git push
 gh release create vX.X.X \
   TalkType-vX.X.X-x86_64.AppImage \
+  TalkType-vX.X.X-x86_64.AppImage.zsync \
   talktype_X.X.X_amd64.deb \
   talktype-X.X.X-1.x86_64.rpm \
   talktype-gnome-extension.zip \
@@ -112,6 +113,11 @@ tag and AppImage use.
 **NEVER create a GitHub release without the .deb and .rpm.**
 They are how every Debian/Ubuntu/Mint and Fedora/RHEL user installs. Omitting
 them ships an AppImage-only release and silently strands those users.
+
+**NEVER create a GitHub release without the AppImage's `.zsync` file.**
+`./build-release.sh` writes it next to the AppImage. The AppImage carries
+update information pointing at the `.zsync` in the *latest* release, so a
+release without it breaks AppImageUpdate and similar tools for everyone.
 
 **NEVER create a GitHub release without the GNOME extension zip.**
 The extension is downloaded from GitHub by users — if you forget it, users get a 404 error on first run.

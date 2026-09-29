@@ -36,6 +36,7 @@ apt-get install -y -qq \
     fuse \
     libfuse2 \
     wl-clipboard \
+    zsync \
     > /dev/null 2>&1
 
 echo "✅ Python version: $(python3 --version)"
@@ -403,17 +404,36 @@ if [ ! -d appimagetool-type2-extracted ]; then
     rm -f appimagetool-type2-x86_64.AppImage
 fi
 
+# Update information, so AppImageUpdate and similar tools can update TalkType
+# by downloading only the changed parts. It points at the .zsync file in the
+# LATEST GitHub release, so every release must upload the .zsync that
+# appimagetool writes next to the AppImage (zsyncmake, from the zsync package).
+# AppImageHub's test warned about its absence (AppImage/appimage.github.io#4598).
+# TalkType's own "Check for Updates" doesn't use this; it is for outside tools.
+UPDATE_INFO="gh-releases-zsync|ronb1964|TalkType|latest|TalkType-*x86_64.AppImage.zsync"
+ZSYNC_FILE="TalkType-v${VERSION}-x86_64.AppImage.zsync"
+rm -f "$ZSYNC_FILE"
+
 # Build AppImage using extracted appimagetool (it downloads the runtime itself)
 echo "   Creating AppImage..."
-ARCH=x86_64 ./appimagetool-type2-extracted/AppRun --no-appstream AppDir "TalkType-v${VERSION}-x86_64.AppImage" > /tmp/appimagetool.log 2>&1 \
+ARCH=x86_64 ./appimagetool-type2-extracted/AppRun --no-appstream -u "$UPDATE_INFO" \
+    AppDir "TalkType-v${VERSION}-x86_64.AppImage" > /tmp/appimagetool.log 2>&1 \
     || { echo "❌ ERROR: appimagetool failed:"; cat /tmp/appimagetool.log; exit 1; }
+if [ ! -f "$ZSYNC_FILE" ]; then
+    echo "❌ ERROR: $ZSYNC_FILE was not created, so the embedded update information"
+    echo "   would point at a file the release doesn't have. appimagetool said:"
+    cat /tmp/appimagetool.log
+    exit 1
+fi
+echo "   ✅ Update information embedded, $ZSYNC_FILE written"
 
 # Fix ownership of AppImage output
 if [ -n "$BUILD_USER" ]; then
     # Not fatal — the AppImage exists either way — but if this fails the file is
     # left owned by root and the host build script cannot copy or delete it
     # without sudo, which is worth saying out loud rather than hiding.
-    chown $BUILD_USER:$BUILD_GROUP /build/TalkType-v${VERSION}-x86_64.AppImage 2>/dev/null \
+    chown $BUILD_USER:$BUILD_GROUP /build/TalkType-v${VERSION}-x86_64.AppImage \
+        "/build/$ZSYNC_FILE" 2>/dev/null \
         || echo "   ⚠️  Warning: could not chown the AppImage to $BUILD_USER:$BUILD_GROUP (it stays root-owned)"
 fi
 

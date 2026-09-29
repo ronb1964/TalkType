@@ -87,4 +87,13 @@ else
     echo ""
 fi
 
+# The AppImage's embedded update information points at this file in the
+# latest release, so it must be uploaded with every release.
+if [ -f "$PROJECT_DIR/$APPIMAGE_FILE.zsync" ]; then
+    echo "🔄 Update file: $APPIMAGE_FILE.zsync (upload it with the release)"
+else
+    echo "⚠️  $APPIMAGE_FILE.zsync is missing: AppImageUpdate can't update from this release."
+fi
+echo ""
+
 echo "🚀 To test: ./TalkType-v${PYPROJECT_VERSION}-x86_64.AppImage"

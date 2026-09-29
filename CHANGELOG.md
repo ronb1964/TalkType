@@ -2,6 +2,15 @@
 
 All notable changes to TalkType are documented here.
 
+## [0.11.1] - 2026-09-29
+
+A small one, nothing changes in how TalkType works.
+
+- The AppImage now has update information built in, so if you use
+  AppImageUpdate or a manager like Gear Lever or AppImageLauncher, it can
+  update TalkType for you and only downloads the parts that changed.
+  TalkType's own Check for Updates works the same as before.
+
 ## [0.11.0] - 2026-09-29
 
 You can teach TalkType words it keeps getting wrong now.

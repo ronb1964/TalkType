@@ -3,7 +3,7 @@
 import ctypes.util
 import os
 
-__version__ = "0.11.0"
+__version__ = "0.11.1"
 
 # Where the AppImage (and the .deb/.rpm made from it) keeps its own PortAudio:
 # <root>/usr/src/talktype/ -> <root>/usr/lib/portaudio/. In a dev checkout or

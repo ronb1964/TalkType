@@ -85,6 +85,11 @@
   </screenshots>
 
   <releases>
+    <release version="0.11.1" date="2026-09-29">
+      <description>
+        <p>The AppImage can now be updated by AppImageUpdate and similar tools</p>
+      </description>
+    </release>
     <release version="0.11.0" date="2026-09-29">
       <description>
         <p>Teach TalkType words it keeps getting wrong</p>
