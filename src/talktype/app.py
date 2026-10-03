@@ -3274,7 +3274,9 @@ def main():
                         sys.exit(0)
 
                 app_instance = AppInstance(cfg)
-                dbus_service = TalkTypeDBusService(app_instance)
+                # A stand-in only: the tray owns the bus name (see
+                # TalkTypeDBusService). This succeeds only with no tray running.
+                dbus_service = TalkTypeDBusService(app_instance, primary=False)
                 app_instance.dbus_service = dbus_service
 
                 # Emit initial state so extension syncs properly
@@ -3282,10 +3284,15 @@ def main():
                 dbus_service.emit_model_changed(cfg.model)
 
                 print("✓ D-Bus service initialized for GNOME extension")
-                logger.info("D-Bus service started successfully")
+                logger.info("D-Bus service started successfully (no tray running)")
             except Exception as e:
-                print(f"⚠️  Failed to initialize D-Bus service: {e}")
-                logger.error(f"D-Bus service initialization failed: {e}", exc_info=True)
+                dbus_service = None
+                if type(e).__name__ == "NameExistsException":
+                    # The normal case: the tray already owns the name.
+                    logger.info("The tray owns the D-Bus name; the service doesn't register its own")
+                else:
+                    print(f"⚠️  Failed to initialize D-Bus service: {e}")
+                    logger.error(f"D-Bus service initialization failed: {e}", exc_info=True)
 
             # Initialize recording indicator if enabled
             if cfg.recording_indicator:

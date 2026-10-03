@@ -85,6 +85,15 @@
   </screenshots>
 
   <releases>
+    <release version="0.11.2" date="2026-10-02">
+      <description>
+        <p>Bug fixes</p>
+        <ul>
+          <li>Launch at login is repaired if it still points at an old downloaded AppImage</li>
+          <li>The GNOME panel menu keeps working when TalkType's tray restarts</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.11.1" date="2026-09-29">
       <description>
         <p>The AppImage can now be updated by AppImageUpdate and similar tools</p>

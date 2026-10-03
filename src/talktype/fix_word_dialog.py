@@ -45,7 +45,7 @@ def show_fix_word_dialog(index=0, copy_text=None):
             text="No recent dictations to fix yet")
         msg.format_secondary_text(
             "Dictate something first. Then, if TalkType gets a word wrong, "
-            "open Fix a Word from Recent Dictations to teach it.")
+            "choose Fix a Word in the TalkType menu to teach it.")
         msg.set_keep_above(True)
         msg.run()
         msg.destroy()

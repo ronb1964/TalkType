@@ -2184,6 +2184,13 @@ def main():
         else:
             # Not first run, auto-start immediately
             logger.info("Not first run - auto-starting service")
+            # A login entry from setups before 0.10.1 may still launch an old
+            # AppImage from Downloads; point it at the installed copy.
+            try:
+                from .autostart import repair_stale_appimage_autostart
+                repair_stale_appimage_autostart()
+            except Exception as e:
+                logger.debug(f"Could not check the login entry: {e}")
             GLib.timeout_add(1000, tray._auto_start_service)
             # Check for updates after a delay (don't interfere with startup)
             GLib.timeout_add(5000, tray.auto_check_for_updates)

@@ -52,8 +52,25 @@ class TalkTypeDBusService(dbus.service.Object):
     DBUS_PATH = DBUS_PATH
     DBUS_INTERFACE = DBUS_INTERFACE
 
-    def __init__(self, app_instance):
-        """Initialize D-Bus service with reference to app instance"""
+    def __init__(self, app_instance, primary=True):
+        """Initialize D-Bus service with reference to app instance.
+
+        *primary* is True for the tray, which owns the bus name: the GNOME
+        extension talks to it, and the dictation service reports recording
+        state to it over D-Bus. The dictation service registers too
+        (primary=False), only as a stand-in for when no tray is running.
+
+        Both used to request the name the same way, so the second one queued
+        behind the first. When the tray restarted while the service kept
+        running, the queued service inherited the name: the extension's menu
+        actions reached a stub that didn't know newer methods
+        (FixWordInDictation failed as "unknown method"), and the service's
+        recording-state reports went to itself instead of the tray.
+
+        Now the tray always takes the name, from a stand-in service too, and
+        the service never queues for it, so it can't inherit it. If the tray
+        already has the name, the service gets NameExistsException.
+        """
         self.app = app_instance
 
         # Set up D-Bus main loop
@@ -62,13 +79,30 @@ class TalkTypeDBusService(dbus.service.Object):
         # Get session bus
         self.bus = dbus.SessionBus()
 
-        # Request bus name
-        self.bus_name = dbus.service.BusName(self.DBUS_NAME, bus=self.bus)
+        if primary:
+            self.bus_name = dbus.service.BusName(
+                self.DBUS_NAME, bus=self.bus, replace_existing=True)
+        else:
+            self.bus_name = dbus.service.BusName(
+                self.DBUS_NAME, bus=self.bus, allow_replacement=True, do_not_queue=True)
 
         # Initialize parent
         super().__init__(self.bus_name, self.DBUS_PATH)
 
-        logger.info(f"D-Bus service started: {self.DBUS_NAME}")
+        if self.owns_name():
+            logger.info(f"D-Bus service started: {self.DBUS_NAME}")
+        else:
+            # Only possible for the tray, behind something that won't let go
+            # of the name (a TalkType older than this fix).
+            logger.warning(f"D-Bus name {self.DBUS_NAME} is held by another process; "
+                           "waiting in line for it")
+
+    def owns_name(self):
+        """Whether this process currently owns the TalkType bus name."""
+        try:
+            return self.bus.get_name_owner(self.DBUS_NAME) == self.bus.get_unique_name()
+        except Exception:
+            return False
 
     # ==================== Internal Helpers ====================
 

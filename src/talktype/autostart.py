@@ -230,3 +230,45 @@ X-GNOME-Autostart-enabled=true
     except Exception as e:
         logger.error(f"Failed to disable autostart file: {e}")
         return False
+
+
+def repair_stale_appimage_autostart() -> bool:
+    """Point an existing launch-at-login entry at the installed AppImage.
+
+    Before 0.10.1, setup pointed the entry at whichever AppImage the user ran
+    it from, usually the one in ~/Downloads. 0.10.1 fixed that for new setups
+    only. Existing entries kept launching that copy: an old version, or one
+    that was deleted when Downloads got cleaned, and on Ubuntu 26.04 an old
+    one that needs libfuse2 and never starts. TalkType just silently stopped
+    starting at login.
+
+    Only the AppImage repairs, only when the installed copy exists, and only
+    an enabled entry that launches some other TalkType AppImage. Disabled
+    entries, the dev version, .deb/.rpm and Flatpak installs are never
+    touched. Returns True if the entry was rewritten.
+    """
+    if os.environ.get("FLATPAK_ID") or not os.environ.get("APPIMAGE"):
+        return False
+    from . import config
+    if config.DEV_MODE or not os.path.isfile(INSTALLED_APPIMAGE):
+        return False
+    try:
+        with open(_autostart_desktop_path()) as f:
+            lines = [line.strip() for line in f]
+    except OSError:
+        return False
+    if "Hidden=true" in lines or "X-GNOME-Autostart-enabled=false" in lines:
+        return False
+    exec_cmd = next((line[len("Exec="):] for line in lines if line.startswith("Exec=")), "")
+    target = exec_cmd.split()[0] if exec_cmd.split() else ""
+    name = os.path.basename(target).lower()
+    if not (name.endswith(".appimage") and "talktype" in name):
+        return False
+    if os.path.realpath(target) == os.path.realpath(INSTALLED_APPIMAGE):
+        return False
+    if set_autostart(True, prefer_installed_appimage=True):
+        logger.info(f"Repaired launch at login: it pointed at {target}, "
+                    f"now {INSTALLED_APPIMAGE}")
+        return True
+    return False
+

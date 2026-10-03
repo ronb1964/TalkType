@@ -2,6 +2,23 @@
 
 All notable changes to TalkType are documented here.
 
+## [0.11.2] - 2026-10-02
+
+A couple of fixes I found while testing Fix a Word on GNOME.
+
+- If you set TalkType up before 0.10.1, launch at login might still be
+  pointing at the AppImage you first downloaded, usually the one sitting in
+  your Downloads folder. That means it started an old version at login, or
+  nothing at all if you'd cleaned out Downloads, and on Ubuntu 26.04 that old
+  version doesn't start at all. TalkType now notices this when it starts and
+  points launch at login at the installed copy in ~/AppImages instead. If
+  you turned launch at login off, it leaves it off.
+- GNOME users: if TalkType's tray restarted while dictation kept running, the
+  panel menu could stop working properly, Fix a Word included, and the panel
+  icon could stop showing when you're recording. Fixed.
+- The message you get when there's nothing to fix yet now points you to the
+  right place in the menu.
+
 ## [0.11.1] - 2026-09-29
 
 A small one, nothing changes in how TalkType works.
