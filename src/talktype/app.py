@@ -1613,6 +1613,13 @@ _TERMINAL_WM_CLASSES = frozenset({
     "Terminator",
     "xterm", "XTerm", "UXTerm",
     "rxvt", "URxvt",
+    # Common on Sway / Hyprland setups, and missing until 2026-10-03.
+    "com.mitchellh.ghostty", "ghostty",
+    "org.gnome.Console", "kgx",
+    "xfce4-terminal", "Xfce4-terminal",
+    "com.system76.CosmicTerm",
+    "mate-terminal", "lxterminal", "qterminal", "terminology",
+    "st", "st-256color", "sakura", "Termite", "contour",
 })
 
 # Lower-cased once, because the class now arrives from two independent sources —
@@ -1651,6 +1658,21 @@ _ELECTRON_PASTE_BROKEN_CLASSES = frozenset({
 
 
 def _query_focused_window_class() -> str | None:
+    """The focused window's wm_class (or Wayland app_id), or None if unknown.
+
+    The GNOME extension and the KWin script (kwin_focus.py) push it to the
+    tray, which we ask over D-Bus. Sway, i3, Hyprland and niri have nothing
+    to push it, so when the tray doesn't know, the compositor is asked
+    directly (compositor_focus.py).
+    """
+    reported = _query_reported_window_class()
+    if reported:
+        return reported
+    from .compositor_focus import focused_class
+    return focused_class()
+
+
+def _query_reported_window_class() -> str | None:
     """Query the tray's D-Bus service for the currently focused window's wm_class.
 
     The dictation engine (this process) is a *subprocess* of the tray, so its
