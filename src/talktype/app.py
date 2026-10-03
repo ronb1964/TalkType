@@ -33,6 +33,9 @@ logger = setup_logger(__name__)
 # config at startup and by the live-settings reload, so the Preferences toggle
 # takes effect on the next utterance without a restart.
 _log_transcripts = False
+# Whether each dictation is counted in the usage stats (stats.py, Preferences >
+# Stats). Numbers only; the text itself is never stored.
+_usage_stats = True
 
 
 def _loggable(text):
@@ -984,6 +987,9 @@ def _reload_live_settings(cfg, indicator):
         global _log_transcripts
         _log_transcripts = getattr(cfg, "log_transcripts", False)
 
+        global _usage_stats
+        _usage_stats = getattr(cfg, "usage_stats", True)
+
         _apply_cleanup_settings(cfg)
 
         if indicator is not None:
@@ -1925,6 +1931,17 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
     """
     transcribe_start = time.time()
 
+    from .whisper_vulkan import VulkanWhisperModel
+    if isinstance(model, VulkanWhisperModel):
+        raw, _no_speech = model.transcribe(audio_f32, language)
+        logger.info(f"TIMING: Transcription completed in {time.time() - transcribe_start:.2f}s (AMD / Intel graphics)")
+        print(f"\U0001f4dd Raw (graphics): {_loggable(raw)}")
+        logger.info(f"Raw transcription (AMD / Intel graphics): {_loggable(raw)}")
+        # whisper.cpp's no-speech score isn't reliable (0.90 on clear speech,
+        # 0.00 on silence, see whisper_vulkan.parse_result), so it isn't passed
+        # on: the filter then only strips what it can recognise on its own.
+        return _strip_hallucinations(raw) or None
+
     from .parakeet_engine import ParakeetModel
     if isinstance(model, ParakeetModel):
         # Parakeet detects the language itself and has no Whisper-style
@@ -2448,6 +2465,11 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
             from .history import add_entry
             add_entry(text)
             _inject_text(text, injection_mode, t0)
+            if _usage_stats:
+                # After typing, so saving the counts never delays the text.
+                # Counts only (words, seconds dictating); see stats.py.
+                from .stats import count_words, record
+                record(count_words(text), len(audio_f32) / SAMPLE_RATE)
 
     except Exception as e:
         logger.error(f"Transcription error: {e}", exc_info=True)
@@ -2991,9 +3013,44 @@ def _build_model_or_exit(settings: Settings):
         return model
 
 
+def _build_vulkan_model(settings: Settings):
+    """The AMD / Intel graphics engine for settings.model, or None to use the
+    processor instead (with the reason logged and the user told). Never stops
+    dictation: anything missing or broken falls back to the CPU."""
+    from . import whisper_vulkan
+    reason = None
+    if not whisper_vulkan.is_installed(settings.model):
+        reason = "its download isn't there"
+    else:
+        try:
+            device_index = whisper_vulkan.find_device()
+            if device_index is None:
+                reason = "no AMD or Intel graphics chip was found"
+            else:
+                model = whisper_vulkan.VulkanWhisperModel(settings.model, device_index)
+                print(f"✅ Model loaded successfully on AMD / Intel graphics (device {device_index})")
+                logger.info(f"Model loaded: {settings.model} on vulkan device {device_index}")
+                return model
+        except Exception as e:
+            reason = f"the graphics engine failed to start ({e})"
+    logger.warning(f"AMD / Intel graphics not used for {settings.model}: {reason}; using the processor")
+    _notify("TalkType", "Couldn't use your AMD / Intel graphics, so TalkType is using the "
+                        "processor for now. Choose the device again in Preferences to set it up.")
+    return None
+
+
 def build_model(settings: Settings):
     from .model_helper import download_model_with_progress
     from .parakeet_engine import is_parakeet
+
+    if settings.device.lower() == "vulkan" and not is_parakeet(settings.model):
+        vulkan_model = _build_vulkan_model(settings)
+        if vulkan_model is not None:
+            return vulkan_model
+        # Fall through to the processor for this run only. settings.device is
+        # left alone: a missing download or a driver hiccup is fixed from
+        # Preferences, and saving "cpu" would quietly undo the user's choice.
+        settings = Settings(**{**vars(settings), "device": "cpu"})
 
     compute_type = "float16" if settings.device.lower() == "cuda" else "int8"
     try:
@@ -3123,6 +3180,9 @@ def main():
     # Whether transcribed text may be written to the log (off = redacted).
     global _log_transcripts
     _log_transcripts = getattr(cfg, 'log_transcripts', False)
+
+    global _usage_stats
+    _usage_stats = getattr(cfg, 'usage_stats', True)
 
     # Dictation cleanup; the AI engine (if on) loads in the background.
     _apply_cleanup_settings(cfg)

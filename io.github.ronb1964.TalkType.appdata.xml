@@ -85,6 +85,17 @@
   </screenshots>
 
   <releases>
+    <release version="0.12.0" date="2026-10-03">
+      <description>
+        <p>Usage stats, and Whisper on AMD and Intel graphics</p>
+        <ul>
+          <li>Whisper models can now use AMD and Intel graphics, after a quick check that it's actually faster</li>
+          <li>See how many words you have dictated today, this week and all time, and how much typing time it saved</li>
+          <li>A chart of the last two weeks, and how your dictation speed compares with your typing speed</li>
+          <li>Only the numbers are kept, on your computer, never what you said</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.11.2" date="2026-10-02">
       <description>
         <p>Bug fixes</p>

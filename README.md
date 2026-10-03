@@ -72,13 +72,14 @@ Most voice dictation tools on Linux are either cloud-based (privacy concerns), c
 - **Dual Hotkeys Always Active** - F8 (hold-to-talk) AND F9 (tap-to-toggle) simultaneously - fully customizable
 - **Hands-free** (optional) - Double-tap F9, talk, and the recording stops by itself when you go quiet. A single tap is still a normal on/off toggle, so long dictation with thinking pauses is never cut off
 - **AI-Powered Transcription** - OpenAI's Whisper models (tiny to large-v3), or NVIDIA's Parakeet for fast, accurate dictation with no GPU
-- **GPU Acceleration** - Optional NVIDIA CUDA support for 3-5x faster transcription
+- **GPU Acceleration** - Optional NVIDIA CUDA support for 3-5x faster transcription, and AMD / Intel graphics support through Vulkan. TalkType times your graphics chip against your processor first and only uses it if it's faster
 - **Smart Text Processing** - Auto-punctuation, smart quotes, auto-spacing
 - **Voice Commands** - Say "comma", "period", "new paragraph", "undo last word", and more
 - **Custom Commands** - Define your own phrase shortcuts (e.g., "my email" → your@email.com)
 - **Visual Feedback** - On-screen recording indicator that reacts to your voice, with four styles (orb, waveform, frequency bars, radial), custom colors, and positioning anywhere on screen
 - **Dictation Cleanup** (optional) - Remove "um", "uh" and accidentally repeated words instantly, and optionally let a small AI model that runs on your own computer fix self-corrections ("meet at 3, no wait, 4" becomes "meet at 4"). Every AI edit is checked, and if it changed anything besides the correction your words are typed exactly as spoken. The AI uses your graphics card if you have one (NVIDIA, AMD or Intel) and your processor otherwise
 - **Fix a Word** - Teach TalkType a word it keeps getting wrong. Pick it out of a recent dictation, type the right spelling, and it's fixed in every dictation from then on. Great for names, brands and technical terms, and it works with every speech model
+- **Your Stats** - Pick Your Stats from the tray menu to see how many words you've dictated today, this week and all time, how much typing time it saved (at your own typing speed), and a chart of the last two weeks. Only the numbers are kept, on your computer, never what you said
 - **Recent Dictations** - Your last 20 dictations in the tray menu. Hover to read one, click to copy it again, handy when text lands in the wrong window. Kept in memory only and wiped at logout
 - **Private by Default** - Fully offline transcription, and your dictated text is never written to the log (opt-in only, for troubleshooting)
 - **GNOME Integration** - Native shell extension for GNOME desktop

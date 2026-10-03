@@ -2,6 +2,38 @@
 
 All notable changes to TalkType are documented here.
 
+## [0.12.0] - 2026-10-03
+
+TalkType keeps score now, if you want it to, and Whisper can use AMD and
+Intel graphics.
+
+### AMD and Intel graphics
+- Until now only NVIDIA graphics cards could speed up the Whisper models. If
+  your computer has AMD or Intel graphics, there's a new choice under Device
+  in Preferences: AMD / Intel graphics.
+- Picking it downloads a small graphics engine (24 MB) and the model in the
+  format that engine uses, then times your graphics chip against your
+  processor. TalkType only switches if the graphics chip is clearly faster,
+  and tells you the numbers either way. The graphics built into some desktop
+  processors is too small to help, and in that case it says so and keeps
+  using the processor.
+- Laptops with recent AMD or Intel graphics, and separate AMD or Intel
+  graphics cards, are where this helps most.
+- Parakeet isn't affected. It already runs fast on the processor.
+
+### Your Stats
+- Pick Your Stats from the tray menu (or Preferences, Stats tab) to see how
+  many words you've dictated today, in the last 7 days and all time, how many
+  dictations that was, how long you spent dictating, and about how much time
+  it saved you over typing.
+- There's a chart of the last two weeks, and it tells you how much faster you
+  dictate than you type. Most people talk a lot faster than they type.
+- Type in your own typing speed if you know it. Time saved goes by that
+  instead of the usual 40 words a minute, so a fast typist doesn't get told
+  they saved more time than they did.
+- It only keeps the numbers, on your computer. It never saves what you said.
+- You can turn it off or reset it from the same tab.
+
 ## [0.11.2] - 2026-10-02
 
 A couple of fixes I found while testing Fix a Word on GNOME.

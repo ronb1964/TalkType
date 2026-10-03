@@ -282,6 +282,11 @@ class TalkTypeDBusService(dbus.service.Object):
         self._dispatch('show_preferences')
 
     @dbus.service.method(DBUS_INTERFACE)
+    def OpenPreferencesStats(self):
+        """Open the preferences window on the Stats tab ("Your Stats...")"""
+        self._dispatch('show_preferences_stats')
+
+    @dbus.service.method(DBUS_INTERFACE)
     def OpenPreferencesUpdates(self):
         """Open the preferences window directly to the Updates tab"""
         self._dispatch('show_preferences_updates')

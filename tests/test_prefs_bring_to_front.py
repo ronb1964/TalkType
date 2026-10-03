@@ -21,13 +21,19 @@ def test_running_pid_reads_a_live_pid(tmp_path, monkeypatch):
     assert prefs_ipc.running_pid() is None
 
 
-def test_bring_to_front_picks_the_signal_for_the_tab(monkeypatch):
+def test_bring_to_front_passes_the_tab_through_a_request_file(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
     sent = []
     monkeypatch.setattr(prefs_ipc.os, "kill", lambda pid, sig: sent.append((pid, sig)))
 
-    assert prefs_ipc.bring_to_front(42) is True
-    assert prefs_ipc.bring_to_front(42, "updates") is True
-    assert sent == [(42, signal.SIGUSR1), (42, signal.SIGUSR2)]
+    assert prefs_ipc.bring_to_front(42, "stats") is True
+    assert sent == [(42, signal.SIGUSR1)]
+    assert prefs_ipc.take_tab_request() == "stats"
+    assert prefs_ipc.take_tab_request() is None          # read once
+
+    prefs_ipc.bring_to_front(42, "updates")
+    prefs_ipc.bring_to_front(42)                         # plain "front" clears it
+    assert prefs_ipc.take_tab_request() is None
 
 
 def test_bring_to_front_reports_a_vanished_window(monkeypatch):

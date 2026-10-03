@@ -281,6 +281,10 @@ class DictationTray:
                     """Show about dialog via tray."""
                     GLib.idle_add(self.tray.show_about_dialog, None)
 
+                def show_preferences_stats(self):
+                    """Open preferences to the Stats tab via tray."""
+                    GLib.idle_add(self.tray.open_preferences_stats, None)
+
                 def show_preferences_updates(self):
                     """Open preferences to Updates tab via tray."""
                     GLib.idle_add(self.tray.open_preferences_updates, None)
@@ -1027,7 +1031,8 @@ class DictationTray:
                 # Update device display
                 device_names = {
                     'cpu': 'CPU',
-                    'cuda': 'GPU (CUDA)'
+                    'cuda': 'GPU (CUDA)',
+                    'vulkan': 'AMD / Intel graphics',
                 }
                 from .parakeet_engine import effective_device
                 device = effective_device(cfg.model, cfg.device)
@@ -1112,6 +1117,13 @@ class DictationTray:
             self._launch_preferences()
         except Exception as e:
             logger.error(f"Failed to open preferences: {e}")
+
+    def open_preferences_stats(self, _):
+        """Open Preferences on the Stats tab (tray menu "Your Stats...")."""
+        try:
+            self._launch_preferences(tab="stats")
+        except Exception as e:
+            logger.error(f"Failed to open preferences stats tab: {e}")
 
     def open_preferences_updates(self, _):
         """Launch preferences window directly to Updates tab."""
@@ -2010,12 +2022,14 @@ class DictationTray:
         # Action items
         prefs_item = Gtk.MenuItem(label="Preferences...")
         voice_cmds_item = Gtk.MenuItem(label="Voice Commands...")
+        stats_item = Gtk.MenuItem(label="Your Stats...")
         help_item = Gtk.MenuItem(label="Help...")
         about_item = Gtk.MenuItem(label="About TalkType...")
         updates_item = Gtk.MenuItem(label="Check for Updates...")
         quit_item = Gtk.MenuItem(label="Quit TalkType")
         prefs_item.connect("activate", self.open_preferences)
         voice_cmds_item.connect("activate", self.show_voice_commands)
+        stats_item.connect("activate", self.open_preferences_stats)
         help_item.connect("activate", self.show_help)
         about_item.connect("activate", self.show_about_dialog)
         updates_item.connect("activate", self.check_for_updates_clicked)
@@ -2033,7 +2047,7 @@ class DictationTray:
             self.performance_menu_item,
             self.injection_mode_menu_item,
             Gtk.SeparatorMenuItem(),
-            prefs_item, voice_cmds_item, help_item, about_item, updates_item,
+            prefs_item, voice_cmds_item, stats_item, help_item, about_item, updates_item,
             Gtk.SeparatorMenuItem(),
             quit_item,
         ]:

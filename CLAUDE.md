@@ -142,6 +142,26 @@ AUR votes only move when asked for — the package sat at zero from December
 
 ---
 
+## AMD / INTEL GRAPHICS ENGINE — BUILT AND HOSTED SEPARATELY
+
+The "AMD / Intel graphics" device runs whisper.cpp's whisper-server with its
+Vulkan backend (`src/talktype/whisper_vulkan.py`). whisper.cpp publishes no
+Linux Vulkan build, so TalkType builds one. It is NOT part of the AppImage
+and is NOT rebuilt for each release. It only changes when whisper.cpp does.
+
+To update it:
+1. `./build-vulkan-engine.sh 1.9.4` (the whisper.cpp version). It builds in
+   Ubuntu 22.04 and writes `talktype-whisper-vulkan-<ver>-x64.tar.gz` + `.sha256`.
+2. Upload it to a GitHub release tagged `whisper-vulkan-<ver>`, marked
+   **pre-release** (`gh release create ... --prerelease`). A normal release
+   would become "latest", and the in-app updater and the AppImage's update
+   information would treat it as a TalkType version.
+3. Put the version and SHA256 into `ENGINE_VERSION` / `ENGINE_SHA256` in
+   `whisper_vulkan.py`.
+4. Ask Ron before uploading. It is public.
+
+---
+
 ## DESTRUCTIVE COMMANDS — ALWAYS ASK FIRST
 
 **BEFORE running ANY of these, ASK and WAIT for permission:**
@@ -232,6 +252,7 @@ Text Injection Mode ▸
 ─────────────────────
 Preferences...
 Voice Commands...
+Your Stats...
 Help...
 About TalkType...
 Check for Updates...

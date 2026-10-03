@@ -65,6 +65,7 @@ const TalkTypeIface = `
     <method name="FixWordInDictation"/>
     <method name="OpenPreferences"/>
     <method name="OpenPreferencesUpdates"/>
+    <method name="OpenPreferencesStats"/>
     <method name="ShowHelp"/>
     <method name="ShowVoiceCommands"/>
     <method name="ShowAbout"/>
@@ -423,6 +424,13 @@ class TalkTypeIndicator extends PanelMenu.Button {
         });
         this.menu.addMenuItem(voiceCmdsItem);
 
+        // Usage stats: opens Preferences on its Stats tab
+        let statsItem = new PopupMenu.PopupMenuItem('Your Stats...');
+        statsItem.connect('activate', () => {
+            this._proxy.OpenPreferencesStatsRemote();
+        });
+        this.menu.addMenuItem(statsItem);
+
         // Help
         let helpItem = new PopupMenu.PopupMenuItem('Help...');
         helpItem.connect('activate', () => {
@@ -699,7 +707,8 @@ class TalkTypeIndicator extends PanelMenu.Button {
             // Update device display
             const deviceNames = {
                 'cpu': 'CPU',
-                'cuda': 'GPU (CUDA)'
+                'cuda': 'GPU (CUDA)',
+                'vulkan': 'AMD / Intel graphics'
             };
             const deviceDisplay = deviceNames[this._currentDevice] || this._currentDevice.toUpperCase();
             this._deviceDisplayItem.label.text = `Device: ${deviceDisplay}`;

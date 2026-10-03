@@ -88,7 +88,7 @@ VALID_MODELS = {
     "parakeet-v3",
 }
 
-VALID_DEVICES = {"cpu", "cuda"}
+VALID_DEVICES = {"cpu", "cuda", "vulkan"}   # vulkan: AMD / Intel graphics (whisper_vulkan.py)
 VALID_MODES = {"hold", "toggle"}
 VALID_INJECTION_MODES = {"type", "paste", "auto"}
 
@@ -117,7 +117,7 @@ CLASSIC_CYAN_HEX = "#4db3ff"
 @dataclass
 class Settings:
     model: str = "small"        # tiny/base/small/medium/large-v3 …
-    device: str = "cpu"         # "cpu" or "cuda"
+    device: str = "cpu"         # "cpu", "cuda" (NVIDIA) or "vulkan" (AMD / Intel graphics)
     hotkey: str = ""            # hold-to-talk hotkey (empty until user picks during onboarding)
     beeps: bool = True          # beeps on/off
     smart_quotes: bool = True   # "smart quotes"
@@ -153,6 +153,8 @@ class Settings:
     ai_corrections: bool = False         # fix "3, no wait, 4" with a local AI model (ai_cleanup.py; downloads ~1.1 GB)
     auto_stop_silence: bool = False      # toggle recordings stop by themselves when you stop talking (silence.py)
     auto_stop_seconds: float = 2.0       # seconds of silence before an auto-stop (0.5-10)
+    usage_stats: bool = True             # count words/dictations/speaking time per day (stats.py; numbers only, never text)
+    typing_wpm: int = 40                 # the user's typing speed, for "time saved" on the Stats tab (10-200)
 
 
 # ---------------------------------------------------------------------------
@@ -205,7 +207,7 @@ def _validation_problems(s: Settings) -> list[tuple[str, str]]:
         problems.append(("model", f"Invalid model '{s.model}'. Valid options: {', '.join(sorted(VALID_MODELS))}"))
 
     if s.device.lower() not in VALID_DEVICES:
-        problems.append(("device", f"Invalid device '{s.device}'. Must be 'cpu' or 'cuda'"))
+        problems.append(("device", f"Invalid device '{s.device}'. Must be 'cpu', 'cuda' or 'vulkan'"))
 
     if s.mode.lower() not in VALID_MODES:
         problems.append(("mode", f"Invalid mode '{s.mode}'. Must be 'hold' or 'toggle'"))
@@ -713,6 +715,7 @@ LIVE_APPLIED_KEYS = {
     # Preferences and the tray. Listing them stops a "Launch at login" toggle
     # costing a ten-second model reload.
     "launch_at_login",
+    "typing_wpm",          # only the Stats tab uses it
     "auto_check_updates",
     "last_update_check",
     "language_mode",
@@ -726,6 +729,8 @@ LIVE_APPLIED_KEYS = {
     # Hands-free auto-stop; read when each toggle recording starts.
     "auto_stop_silence",
     "auto_stop_seconds",
+    # Usage stats; read into a module global on each reload, checked per dictation.
+    "usage_stats",
 }
 
 

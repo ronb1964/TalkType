@@ -408,6 +408,17 @@ class PreferencesWindow:
             # If config has CUDA but it's not available, reset to CPU
             if self.config["device"] == "cuda":
                 self.config["device"] = "cpu"
+
+        # AMD / Intel graphics through Vulkan (whisper_vulkan.py). Offered when
+        # such a chip is present, and kept if it is already the setting.
+        try:
+            from . import whisper_vulkan
+            if whisper_vulkan.is_offered() or self.config["device"] == "vulkan":
+                self.device_combo.append("vulkan", whisper_vulkan.DEVICE_LABEL)
+                tooltip_text += ("\n• AMD / Intel graphics: faster Whisper on AMD and Intel "
+                                 "graphics chips (one-time download, with a speed check)")
+        except Exception as e:
+            print(f"Could not check for AMD / Intel graphics: {e}")
         
         # Set active selection and tooltip
         self.device_combo.set_active_id(self.config["device"])
@@ -531,6 +542,10 @@ class PreferencesWindow:
         # Commands tab (custom voice commands) — keeps its own internal list scroll
         commands_tab = self.create_commands_tab()
         notebook.append_page(commands_tab, Gtk.Label(label="Commands"))
+
+        # Stats tab (usage stats: words dictated, time saved)
+        stats_tab = self.create_stats_tab()
+        notebook.append_page(self._scrollable_tab(stats_tab), Gtk.Label(label="Stats"))
 
         # Updates tab
         updates_tab = self.create_updates_tab()
@@ -747,7 +762,8 @@ class PreferencesWindow:
         # Populate device options
         self._refresh_device_options()
         
-        device_combo.connect("changed", lambda x: self.update_config("device", x.get_active_id()))
+        self._device_before = self.config.get("device", "cpu")
+        device_combo.connect("changed", self._on_device_changed)
         grid.attach(device_combo, 1, row, 1, 1)
         row += 1
         
@@ -1956,6 +1972,244 @@ class PreferencesWindow:
         
         return vbox
 
+    def select_tab(self, name):
+        """Show the tab whose label is *name* (case-insensitive). Looked up by
+        label so adding a tab can't make --tab or bring_to_front open the wrong one."""
+        for i in range(self.notebook.get_n_pages()):
+            label = self.notebook.get_tab_label_text(self.notebook.get_nth_page(i)) or ""
+            if label.lower() == name.lower():
+                self.notebook.set_current_page(i)
+                return True
+        return False
+
+    def create_stats_tab(self):
+        """Usage stats: how much has been dictated and the typing time saved.
+        Numbers only; see stats.py for what is (and isn't) stored."""
+        from . import stats as stats_module
+
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        vbox.set_margin_start(20)
+        vbox.set_margin_end(20)
+        vbox.set_margin_top(15)
+        vbox.set_margin_bottom(15)
+
+        header = Gtk.Label(xalign=0)
+        header.set_markup('<span size="large"><b>Your Dictation Stats</b></span>')
+        vbox.pack_start(header, False, False, 0)
+
+        self.stats_subtitle = Gtk.Label(xalign=0)
+        self.stats_subtitle.set_line_wrap(True)
+        vbox.pack_start(self.stats_subtitle, False, False, 0)
+
+        # Today / Last 7 days / All time
+        self.stats_table = Gtk.Grid(column_spacing=28, row_spacing=6)
+        self.stats_table.set_margin_top(6)
+        self.stats_cells = {}
+        periods = [("today", "Today"), ("week", "Last 7 days"), ("all", "All time")]
+        for col, (_key, title) in enumerate(periods, start=1):
+            head = Gtk.Label(xalign=1)
+            head.set_markup(f"<b>{title}</b>")
+            self.stats_table.attach(head, col, 0, 1, 1)
+        rows = [("words", "Words"), ("dictations", "Dictations"),
+                ("seconds", "Time dictating"), ("saved", "Time saved *")]
+        for r, (field, title) in enumerate(rows, start=1):
+            self.stats_table.attach(Gtk.Label(label=title, xalign=0), 0, r, 1, 1)
+            for col, (key, _title) in enumerate(periods, start=1):
+                cell = Gtk.Label(xalign=1)
+                self.stats_table.attach(cell, col, r, 1, 1)
+                self.stats_cells[(key, field)] = cell
+        vbox.pack_start(self.stats_table, False, False, 0)
+
+        # Words per day, last two weeks
+        chart_title = Gtk.Label(xalign=0)
+        chart_title.set_markup("<b>Words per day, last 2 weeks</b>")
+        chart_title.set_margin_top(12)
+        vbox.pack_start(chart_title, False, False, 0)
+        self.stats_chart = Gtk.DrawingArea()
+        self.stats_chart.set_size_request(-1, 130)
+        self.stats_chart.connect("draw", self._draw_stats_chart)
+        self._stats_daily = []
+        vbox.pack_start(self.stats_chart, False, False, 0)
+
+        self.stats_speed = Gtk.Label(xalign=0)
+        self.stats_speed.set_line_wrap(True)
+        # Shown by _refresh_stats only when there is a speed to report; this
+        # keeps the window's show_all() from showing it as an empty gap.
+        self.stats_speed.set_no_show_all(True)
+        self.stats_speed.set_margin_top(6)
+        vbox.pack_start(self.stats_speed, False, False, 0)
+
+        self.stats_footnote = Gtk.Label(xalign=0)
+        self.stats_footnote.set_line_wrap(True)
+        self.stats_footnote.get_style_context().add_class("dim-label")
+        vbox.pack_start(self.stats_footnote, False, False, 0)
+
+        # Typing speed, for "time saved". A number box: type a value straight
+        # in, or nudge it with the - / + buttons; it won't take anything that
+        # isn't a whole number between MIN and MAX.
+        speed_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        speed_row.set_margin_top(4)
+        speed_row.pack_start(Gtk.Label(label="Your typing speed:"), False, False, 0)
+        self.typing_wpm_spin = Gtk.SpinButton.new_with_range(
+            stats_module.MIN_TYPING_WPM, stats_module.MAX_TYPING_WPM, 1)
+        self.typing_wpm_spin.set_numeric(True)
+        self.typing_wpm_spin.set_value(
+            stats_module.clamp_typing_wpm(self.config.get("typing_wpm", stats_module.TYPING_WPM)))
+        self.typing_wpm_spin.set_tooltip_text(
+            "Most people type 35 to 45 words a minute. A free online typing test "
+            "will tell you yours. Used only to work out time saved.")
+        self.typing_wpm_spin.connect("value-changed", self._on_typing_wpm_changed)
+        speed_row.pack_start(self.typing_wpm_spin, False, False, 0)
+        speed_row.pack_start(Gtk.Label(label="words a minute"), False, False, 0)
+        vbox.pack_start(speed_row, False, False, 0)
+
+        vbox.pack_start(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 8)
+
+        controls = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        self.usage_stats_check = Gtk.CheckButton(label="Keep usage stats")
+        self.usage_stats_check.set_active(bool(self.config.get("usage_stats", True)))
+        self.usage_stats_check.set_tooltip_text(
+            "Count words, dictations and speaking time per day. Turning this off "
+            "stops counting; the stats you already have stay until you reset them.")
+        self.usage_stats_check.connect(
+            "toggled", lambda c: self.update_config("usage_stats", c.get_active()))
+        controls.pack_start(self.usage_stats_check, False, False, 0)
+        reset_btn = Gtk.Button(label="Reset Stats...")
+        reset_btn.set_tooltip_text("Delete all usage stats and start counting from zero")
+        reset_btn.connect("clicked", self._on_reset_stats)
+        controls.pack_end(reset_btn, False, False, 0)
+        vbox.pack_start(controls, False, False, 0)
+
+        privacy = Gtk.Label(xalign=0)
+        privacy.set_line_wrap(True)
+        privacy.set_text("Only these numbers are kept, on this computer. "
+                         "TalkType never saves what you said.")
+        vbox.pack_start(privacy, False, False, 0)
+
+        self._refresh_stats()
+        return vbox
+
+    def _refresh_stats(self):
+        """Fill the Stats tab from the stats file."""
+        from . import stats as stats_module
+        if not hasattr(self, "stats_cells"):
+            return
+        typing_wpm = self._typing_wpm()
+        data = stats_module.summary(stats_module.load(), typing_wpm=typing_wpm)
+        for (key, field), cell in self.stats_cells.items():
+            value = data[key][field]
+            if field in ("seconds", "saved"):
+                cell.set_text(stats_module.format_duration(value))
+            else:
+                cell.set_text(f"{value:,}")
+
+        if stats_module.is_damaged():
+            self.stats_subtitle.set_text(
+                "Your stats file couldn't be read, so nothing is being counted. "
+                "Reset Stats below starts it fresh.")
+        elif data["first_day"] is None:
+            self.stats_subtitle.set_text(
+                "Nothing counted yet. Dictate something and your stats show up here.")
+        else:
+            since = data["first_day"].strftime("%B %-d, %Y")
+            streak = data["streak"]
+            streak_text = (f" You've dictated {streak} days in a row." if streak >= 2 else "")
+            self.stats_subtitle.set_text(f"Counting since {since}.{streak_text}")
+
+        self.stats_footnote.set_text(
+            f"* Time saved is how long typing the same words would take at your "
+            f"typing speed ({typing_wpm} words a minute), minus the time you spent dictating.")
+
+        if data["wpm"]:
+            times = data["wpm"] / typing_wpm
+            compare = (f" That's about {times:.1f} times as fast as you type."
+                       if times >= 1.2 else f" Your typing speed is set to {typing_wpm}.")
+            self.stats_speed.set_text(
+                f"You dictate about {data['wpm']} words a minute, pauses included.{compare}")
+            self.stats_speed.show()
+        else:
+            self.stats_speed.set_text("")
+            self.stats_speed.hide()
+
+        self._stats_daily = data["daily"]
+        self.stats_chart.queue_draw()
+
+    def _typing_wpm(self):
+        from . import stats as stats_module
+        if hasattr(self, "typing_wpm_spin"):
+            return stats_module.clamp_typing_wpm(self.typing_wpm_spin.get_value_as_int())
+        return stats_module.clamp_typing_wpm(
+            self.config.get("typing_wpm", stats_module.TYPING_WPM))
+
+    def _on_typing_wpm_changed(self, spin):
+        """Save the new speed (on Apply/OK, like every setting) and show its
+        effect on time saved straight away."""
+        self.update_config("typing_wpm", spin.get_value_as_int())
+        self._refresh_stats()
+
+    def _draw_stats_chart(self, widget, cr):
+        """Bar chart of words per day, oldest on the left, today highlighted."""
+        daily = self._stats_daily
+        if not daily:
+            return False
+        width = widget.get_allocated_width()
+        height = widget.get_allocated_height()
+        label_h, top = 18, 16
+        plot_h = height - label_h - top
+        most = max((w for _d, w in daily), default=0)
+        slot = width / len(daily)
+        bar_w = max(4, slot * 0.6)
+
+        style = widget.get_style_context()
+        fg = style.get_color(Gtk.StateFlags.NORMAL)
+
+        # Baseline
+        cr.set_source_rgba(fg.red, fg.green, fg.blue, 0.25)
+        cr.rectangle(0, top + plot_h, width, 1)
+        cr.fill()
+
+        cr.select_font_face("Sans")
+        cr.set_font_size(10)
+        for i, (day, words) in enumerate(daily):
+            x = i * slot + (slot - bar_w) / 2
+            if words and most:
+                h = max(2, plot_h * words / most)
+                is_today = i == len(daily) - 1
+                if is_today:
+                    cr.set_source_rgb(0.30, 0.69, 0.31)      # TalkType green
+                else:
+                    cr.set_source_rgba(0.30, 0.69, 0.31, 0.55)
+                cr.rectangle(x, top + plot_h - h, bar_w, h)
+                cr.fill()
+            # Day-of-month under each bar
+            label = str(day.day)
+            ext = cr.text_extents(label)
+            cr.set_source_rgba(fg.red, fg.green, fg.blue, 0.6)
+            cr.move_to(i * slot + (slot - ext.width) / 2, height - 4)
+            cr.show_text(label)
+
+        if most:
+            cr.set_source_rgba(fg.red, fg.green, fg.blue, 0.6)
+            cr.move_to(2, 11)
+            cr.show_text(f"most: {most:,} words")
+        return False
+
+    def _on_reset_stats(self, _button):
+        from . import stats as stats_module
+        dialog = Gtk.MessageDialog(
+            transient_for=self.window, modal=True,
+            message_type=Gtk.MessageType.WARNING, buttons=Gtk.ButtonsType.NONE,
+            text="Reset your usage stats?")
+        dialog.format_secondary_text(
+            "This deletes every count so far and starts again from zero. It can't be undone.")
+        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        dialog.add_button("Reset Stats", Gtk.ResponseType.OK)
+        answer = dialog.run()
+        dialog.destroy()
+        if answer == Gtk.ResponseType.OK:
+            stats_module.reset()
+            self._refresh_stats()
+
     def create_updates_tab(self):
         """Create the Updates tab for checking for software updates."""
         import threading
@@ -2560,8 +2814,8 @@ class PreferencesWindow:
 
     def bring_to_front(self, tab=None):
         """Show this window in front of the others (another "open" happened)."""
-        if tab == "updates":
-            self.notebook.set_current_page(4)
+        if tab:
+            self.select_tab(tab)
         from .raise_window import raise_window
         raise_window(self.window)
 
@@ -2763,6 +3017,17 @@ class PreferencesWindow:
         # Track last selected model to avoid showing dialog when clicking same model
         if not hasattr(self, '_last_selected_model'):
             self._last_selected_model = self.config.get("model")
+
+        # On AMD / Intel graphics, whisper.cpp runs every Whisper model, large-v3
+        # included, without NVIDIA's CUDA files, and its own model file is
+        # fetched on Apply (_download_selected_model). The CUDA gate and the
+        # faster-whisper size warning below don't apply.
+        if self.config.get("device") == "vulkan":
+            from . import whisper_vulkan
+            if whisper_vulkan.supports_model(new_model):
+                self._last_selected_model = new_model
+                self.update_config("model", new_model)
+                return
 
         # If large-v3 is selected, check CUDA availability first
         if new_model == "large-v3":
@@ -3346,6 +3611,153 @@ class PreferencesWindow:
                 "Check your internet connection and try turning the option on again.")
             err.run()
             err.destroy()
+
+    # --- AMD / Intel graphics (whisper_vulkan.py) ---------------------------
+
+    def _on_device_changed(self, combo):
+        """Switching to AMD / Intel graphics downloads what it needs and checks
+        it is actually faster than the processor before keeping it. Any other
+        device is simply saved."""
+        device = combo.get_active_id()
+        if device is None:
+            return
+        if device != "vulkan":
+            self.update_config("device", device)
+            self._device_before = device
+            return
+        if self._device_before == "vulkan":
+            self.update_config("device", device)
+            return
+        if self._setup_vulkan(self.config.get("model")):
+            self.update_config("device", "vulkan")
+            self._device_before = "vulkan"
+        else:
+            combo.handler_block_by_func(self._on_device_changed)
+            combo.set_active_id(self._device_before)
+            combo.handler_unblock_by_func(self._on_device_changed)
+
+    def _message(self, kind, title, text, buttons=Gtk.ButtonsType.OK):
+        dialog = Gtk.MessageDialog(transient_for=self.window, modal=True,
+                                   message_type=kind, buttons=buttons, text=title)
+        dialog.format_secondary_text(text)
+        response = dialog.run()
+        dialog.destroy()
+        return response
+
+    def _setup_vulkan(self, model):
+        """Download and speed-check AMD / Intel graphics for *model*. True if
+        TalkType should use the graphics chip."""
+        from . import whisper_vulkan as wv
+        if not wv.supports_model(model):
+            self._message(
+                Gtk.MessageType.INFO, "Pick a Whisper model first",
+                "AMD / Intel graphics speeds up the Whisper models. You're using Parakeet, "
+                "which runs on the processor and is already fast there.\n\n"
+                "To use your graphics chip, choose a Whisper model (Small, Medium or Large-v3) "
+                "and then choose AMD / Intel graphics again.")
+            return False
+        if not self._download_vulkan_files(model, confirm=True):
+            return False
+        return self._run_vulkan_speed_check(model)
+
+    def _download_vulkan_files(self, model, confirm):
+        """Make sure the engine and *model*'s whisper.cpp file are downloaded.
+        True when both are there."""
+        from . import whisper_vulkan as wv
+        from talktype.download_progress_dialog import DownloadTask, UnifiedDownloadDialog
+        tasks = []
+        if not wv.is_engine_installed():
+            tasks.append(DownloadTask("Graphics engine", "whisper.cpp (Vulkan)",
+                                      wv.ENGINE_SIZE_TEXT, wv.make_engine_download_func()))
+        if wv.model_path(model) is None:
+            tasks.append(DownloadTask("Speech model", f"{model.title()} (for graphics)",
+                                      wv.MODEL_FILES[model][1], wv.make_model_download_func(model)))
+        if not tasks:
+            return True
+        if confirm:
+            answer = self._message(
+                Gtk.MessageType.QUESTION, "Set up AMD / Intel graphics?",
+                "TalkType needs a one-time download: the graphics engine "
+                f"({wv.ENGINE_SIZE_TEXT}) and the {model.title()} model in the format it uses "
+                f"({wv.MODEL_FILES[model][1]}).\n\n"
+                "Afterwards TalkType checks whether your graphics chip is really faster than "
+                "your processor, and only uses it if it is. Everything runs on this computer.",
+                buttons=Gtk.ButtonsType.OK_CANCEL)
+            if answer != Gtk.ResponseType.OK:
+                return False
+        dialog = UnifiedDownloadDialog(
+            parent=self.window, title="Setting Up AMD / Intel Graphics",
+            description="One-time download. Everything runs on this computer.")
+        for task in tasks:
+            dialog.add_task(task)
+        results = dialog.run()
+        if all(r.get("success") for r in results.values()) and wv.is_installed(model):
+            return True
+        if not any(r.get("cancelled") for r in results.values()):
+            self._message(Gtk.MessageType.ERROR, "The download did not finish",
+                          "Check your internet connection and try again.")
+        return False
+
+    def _run_vulkan_speed_check(self, model):
+        """Time the graphics chip against the processor on a short sample, tell
+        the user the result, and return True if the graphics chip should be used."""
+        from . import whisper_vulkan as wv
+        import threading
+        result = {}
+
+        def work():
+            try:
+                device = wv.find_device()
+                if device is None:
+                    result["error"] = "TalkType couldn't find an AMD or Intel graphics chip it can use."
+                else:
+                    result["times"] = wv.speed_check(model, device)
+            except Exception as e:
+                result["error"] = f"The speed check didn't work: {e}"
+
+        waiting = Gtk.Dialog(title="Checking Speed", transient_for=self.window, modal=True)
+        waiting.set_deletable(False)
+        box = waiting.get_content_area()
+        box.set_spacing(12)
+        box.set_border_width(18)
+        row = Gtk.Box(spacing=12)
+        spinner = Gtk.Spinner()
+        spinner.start()
+        row.pack_start(spinner, False, False, 0)
+        row.pack_start(Gtk.Label(label="Checking how fast your graphics chip is compared to your\n"
+                                       "processor. This can take up to a minute.", xalign=0),
+                       False, False, 0)
+        box.add(row)
+        waiting.show_all()
+        thread = threading.Thread(target=work, daemon=True)
+        thread.start()
+
+        def poll():
+            if thread.is_alive():
+                return True
+            waiting.response(Gtk.ResponseType.OK)
+            return False
+
+        GLib.timeout_add(200, poll)
+        waiting.run()
+        waiting.destroy()
+
+        if "error" in result:
+            self._message(Gtk.MessageType.WARNING, "Keeping the processor", result["error"])
+            return False
+        gpu, cpu = result["times"]
+        if wv.graphics_is_worth_it(gpu, cpu):
+            self._message(
+                Gtk.MessageType.INFO, "Your graphics chip is faster",
+                f"It transcribed the test in {gpu:.1f} seconds, your processor in {cpu:.1f}, "
+                f"about {cpu / gpu:.0f} times faster. TalkType will use your graphics chip.")
+            return True
+        self._message(
+            Gtk.MessageType.INFO, "Your processor is faster here",
+            f"Your processor transcribed the test in {cpu:.1f} seconds and your graphics chip "
+            f"in {gpu:.1f}. The graphics built into some processors is too small to help, so "
+            "TalkType will keep using the processor.")
+        return False
 
     def _untick_ai_corrections(self):
         """Put the AI box back to unticked without re-running its handler."""
@@ -4254,6 +4666,9 @@ class PreferencesWindow:
                 vadj.set_value(0)
         except Exception:
             pass
+        # The dictation service adds to the stats while this window is open.
+        if notebook.get_tab_label_text(page) == "Stats":
+            self._refresh_stats()
 
     def _download_selected_model(self):
         """Download the model selected in the dropdown, if it needs it.
@@ -4267,6 +4682,12 @@ class PreferencesWindow:
         model_name = self.config.get("model")
         if not model_name:
             return (True, False)
+
+        if self.config.get("device") == "vulkan":
+            from . import whisper_vulkan
+            if whisper_vulkan.supports_model(model_name):
+                ok = self._download_vulkan_files(model_name, confirm=False)
+                return (ok, ok)
 
         success, was_downloaded, cancelled = self.check_and_download_model(model_name)
         if cancelled:
@@ -4598,24 +5019,22 @@ class PreferencesWindow:
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="TalkType Preferences")
-    parser.add_argument("--tab", choices=["general", "audio", "advanced", "commands", "updates"],
+    parser.add_argument("--tab", choices=["general", "audio", "advanced", "commands", "stats", "updates"],
                         help="Tab to open initially")
     args = parser.parse_args()
 
     # Handlers go in BEFORE the pidfile is written (_acquire_prefs_singleton):
     # anyone who finds our pid there may signal us, and an unhandled SIGUSR1
     # would terminate this process. Until the window exists they do nothing.
-    import signal as _signal
     window_holder = []
 
-    def _on_front_request(tab):
+    def _on_front_request(*_args):
+        tab = prefs_ipc.take_tab_request()        # e.g. "stats" from the tray
         if window_holder:
             window_holder[0].bring_to_front(tab)
         return True  # keep the handler installed
 
     GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, prefs_ipc.FRONT, _on_front_request, None)
-    GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, prefs_ipc.FRONT_UPDATES,
-                         _on_front_request, "updates")
 
     _acquire_prefs_singleton(args.tab)
     app = PreferencesWindow()
@@ -4623,15 +5042,7 @@ def main():
 
     # Switch to specified tab if requested
     if args.tab:
-        tab_indices = {
-            "general": 0,
-            "audio": 1,
-            "advanced": 2,
-            "commands": 3,
-            "updates": 4
-        }
-        if args.tab in tab_indices:
-            app.notebook.set_current_page(tab_indices[args.tab])
+        app.select_tab(args.tab)
 
     Gtk.main()
 

@@ -234,6 +234,12 @@ Quick one-click optimization via tray menu:
 • Hover over one to read it, click to copy it, then paste with Ctrl+V
 • Kept in memory only, never saved to disk, gone when you log out
 
+<b>AMD and Intel graphics</b> (Preferences → General → Device)
+• Choose "AMD / Intel graphics" to run the Whisper models on an AMD or Intel graphics chip
+• A one-time download, then a quick test against your processor
+• TalkType only uses the graphics chip if it's clearly faster, and tells you the result
+• Parakeet always runs on the processor, where it's already fast
+
 <b>Fix a Word</b> (teach TalkType a word it keeps getting wrong)
 • Tray menu → Fix a Word..., or Preferences → Voice Commands → Fix a Word...
 • Pick a recent dictation, click the wrong word (or drag across a few),
@@ -241,6 +247,14 @@ Quick one-click optimization via tray menu:
 • From then on it's fixed in every dictation, with any speech model
 • Your fixes live in Preferences → Voice Commands, where you can edit or remove them
 • Handy for names, brands and technical terms, like "bamboo studio" → BambuStudio
+
+<b>Your Stats</b> (tray menu → Your Stats..., or Preferences → Stats)
+• How many words you've dictated today, this week and all time
+• How long you spent dictating, and roughly how much typing time that saved
+• A chart of the last two weeks, and how fast you talk compared to typing
+• Only the numbers are kept, on your computer. TalkType never saves what you said
+• Set your own typing speed there, so time saved fits you
+• Turn it off or reset it from the same tab
 
 <b>Language Support</b>
 • Auto-detect language from speech
