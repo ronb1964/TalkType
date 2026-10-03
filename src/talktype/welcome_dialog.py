@@ -3052,19 +3052,25 @@ def _setup_vulkan_engine_first_run():
 
 
 def _download_vulkan_model_first_run(model):
-    """Download *model* in whisper.cpp's format. True when it's on disk."""
+    """Download *model* in whisper.cpp's format (and an engine that can run
+    it, if the one there can't). True when both are on disk."""
     try:
         from talktype import whisper_vulkan as wv
         from talktype.download_progress_dialog import DownloadTask, UnifiedDownloadDialog
-        if wv.model_path(model) is not None:
+        from talktype.model_helper import model_display_name
+        if wv.is_installed(model):
             return True
         dialog = UnifiedDownloadDialog(
             parent=None, title="Downloading Your Model",
             description="The speech model in the format your graphics engine uses. One-time download.")
-        dialog.add_task(DownloadTask("Speech model", f"{model.title()} (for Vulkan)",
-                                     wv.MODEL_FILES[model][1], wv.make_model_download_func(model)))
+        if not wv.is_engine_installed(model):
+            dialog.add_task(DownloadTask("Graphics engine", "whisper.cpp (Vulkan)",
+                                         wv.ENGINE_SIZE_TEXT, wv.make_engine_download_func(model)))
+        if wv.model_path(model) is None:
+            dialog.add_task(DownloadTask("Speech model", f"{model_display_name(model)} (for Vulkan)",
+                                         wv.MODEL_FILES[model][1], wv.make_model_download_func(model)))
         dialog.run()
-        return wv.model_path(model) is not None
+        return wv.is_installed(model)
     except Exception as e:
         logger.warning(f"Vulkan model download failed: {e}")
         return False

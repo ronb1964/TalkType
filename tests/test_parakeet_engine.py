@@ -137,6 +137,16 @@ def test_menus_show_the_device_parakeet_really_uses():
     assert effective_device("large-v3", "cuda") == "cuda"
     assert effective_device("small", "cpu") == "cpu"
 
+
+def test_parakeet_is_on_the_graphics_chip_only_once_its_vulkan_files_are_there(monkeypatch):
+    from talktype import whisper_vulkan as wv
+    from talktype.parakeet_engine import effective_device
+    monkeypatch.setattr(wv, "is_installed", lambda m: False)
+    assert effective_device("parakeet-v3", "vulkan") == "cpu"
+    monkeypatch.setattr(wv, "is_installed", lambda m: True)
+    assert effective_device("parakeet-v3", "vulkan") == "vulkan"
+    assert effective_device("parakeet-v3", "cuda") == "cpu"     # CUDA has no Parakeet
+
     from talktype.dbus_service import TalkTypeDBusService
     svc = TalkTypeDBusService.__new__(TalkTypeDBusService)
     svc.app = SimpleNamespace(config=SimpleNamespace(model="parakeet-v3", device="cuda"))

@@ -235,11 +235,12 @@ Quick one-click optimization via tray menu:
 • Kept in memory only, never saved to disk, gone when you log out
 
 <b>Graphics cards through Vulkan</b> (Preferences → General → Device)
-• Choose "Vulkan (any GPU)" to run the Whisper models on an AMD, Intel or NVIDIA graphics chip
+• Choose "Vulkan (any GPU)" to run Whisper or Parakeet on an AMD, Intel or NVIDIA graphics chip
 • On NVIDIA it's a light alternative to CUDA: about the same speed, a 24 MB download instead of 1.4 GB
 • A one-time download, then a quick test against your processor
 • TalkType only uses the graphics chip if it's clearly faster, and tells you the result
-• Parakeet always runs on the processor, where it's already fast
+• Parakeet is already fast on the processor, and about 10 times faster again on a graphics card
+• With any other device, Parakeet runs on the processor (CUDA can't run it)
 
 <b>Fix a Word</b> (teach TalkType a word it keeps getting wrong)
 • Tray menu → Fix a Word..., or Preferences → Voice Commands → Fix a Word...

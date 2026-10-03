@@ -1943,13 +1943,15 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
         return _strip_hallucinations(raw) or None
 
     from .parakeet_engine import ParakeetModel
-    if isinstance(model, ParakeetModel):
+    from .parakeet_gpu import ParakeetGpuModel
+    if isinstance(model, (ParakeetModel, ParakeetGpuModel)):
         # Parakeet detects the language itself and has no Whisper-style
         # decoding options. It also does not invent "thank you" in silence,
         # but the hallucination filter is still run: its YouTube-phrase tier
         # is harmless, and it keeps both engines on one path from here on.
         raw = model.recognize(audio_f32)
-        logger.info(f"TIMING: Transcription completed in {time.time() - transcribe_start:.2f}s (Parakeet)")
+        where = " on GPU" if isinstance(model, ParakeetGpuModel) else ""
+        logger.info(f"TIMING: Transcription completed in {time.time() - transcribe_start:.2f}s (Parakeet{where})")
         print(f"\U0001f4dd Raw (Parakeet): {_loggable(raw)}")
         logger.info(f"Raw transcription (Parakeet): {_loggable(raw)}")
         return _strip_hallucinations(raw) or None
@@ -3039,12 +3041,44 @@ def _build_vulkan_model(settings: Settings):
     return None
 
 
+def _build_parakeet_gpu_model(settings: Settings):
+    """Parakeet on the graphics chip through Vulkan (parakeet_gpu.py), or None
+    to use the processor.
+
+    Without its graphics files that's quiet: someone on 0.13.1 with Vulkan as
+    the device and Parakeet as the model never downloaded them, ran Parakeet
+    on the processor, and shouldn't get a warning at every start. Choosing
+    Vulkan again in Preferences sets it up. A real failure is reported."""
+    from . import parakeet_gpu, whisper_vulkan
+    from .parakeet_engine import PARAKEET_MODEL
+    if not whisper_vulkan.is_installed(PARAKEET_MODEL):
+        logger.info("Parakeet's graphics files aren't downloaded; Parakeet runs on the processor")
+        return None
+    reason = None
+    try:
+        device_index = whisper_vulkan.find_device()
+        if device_index is None:
+            reason = "no graphics chip was found"
+        else:
+            model = parakeet_gpu.ParakeetGpuModel(device_index)
+            print(f"✅ Parakeet loaded on the GPU through Vulkan (device {device_index})")
+            logger.info(f"Model loaded: {PARAKEET_MODEL} on vulkan device {device_index}")
+            return model
+    except Exception as e:
+        reason = f"the graphics helper failed to start ({e})"
+    logger.warning(f"Vulkan GPU not used for Parakeet: {reason}; using the processor")
+    _notify("TalkType", "Couldn't run Parakeet on your graphics card, so TalkType is using the "
+                        "processor for now. Choose the device again in Preferences to set it up.")
+    return None
+
+
 def build_model(settings: Settings):
     from .model_helper import download_model_with_progress
     from .parakeet_engine import is_parakeet
 
-    if settings.device.lower() == "vulkan" and not is_parakeet(settings.model):
-        vulkan_model = _build_vulkan_model(settings)
+    if settings.device.lower() == "vulkan":
+        build_on_gpu = _build_parakeet_gpu_model if is_parakeet(settings.model) else _build_vulkan_model
+        vulkan_model = build_on_gpu(settings)
         if vulkan_model is not None:
             return vulkan_model
         # Fall through to the processor for this run only. settings.device is
@@ -3064,7 +3098,7 @@ def build_model(settings: Settings):
         if model is None:
             raise ModelUnavailable(f"The {settings.model} model was not downloaded (cancelled or failed)")
 
-        # Parakeet ignores the device setting and always runs on the CPU.
+        # Parakeet gets here only on the processor (the graphics route returned above).
         where = "cpu" if is_parakeet(settings.model) else settings.device
         print(f"✅ Model loaded successfully on {where.upper()}")
         logger.info(f"Model loaded: {settings.model} on {where}")

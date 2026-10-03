@@ -16,6 +16,10 @@ see PARAKEET_ATTRIBUTION, shown in the About dialog.
 
 The rest of TalkType treats "parakeet-v3" as just another model name, so the
 model pickers, config validation and download dialogs all work unchanged.
+
+With the device set to "Vulkan (any GPU)", Parakeet runs on the graphics chip
+instead, through whisper.cpp (parakeet_gpu.py). This processor version stays
+downloaded as the fallback.
 """
 import os
 
@@ -55,9 +59,17 @@ def is_parakeet(model_name) -> bool:
 
 
 def effective_device(model_name, device) -> str:
-    """The device a model really runs on. Parakeet always uses the CPU, so a
-    leftover "cuda" setting must not make the menus claim it is on the GPU."""
-    return "cpu" if is_parakeet(model_name) else (device or "cpu")
+    """The device a model really runs on, for the menus. Parakeet runs on the
+    graphics chip only through Vulkan, and only once its files for that are
+    downloaded (parakeet_gpu.py); otherwise it's on the processor, so a
+    leftover "cuda" setting must not make the menus claim it's on the GPU."""
+    if not is_parakeet(model_name):
+        return device or "cpu"
+    if (device or "").lower() == "vulkan":
+        from . import whisper_vulkan
+        if whisper_vulkan.is_installed(model_name):
+            return "vulkan"
+    return "cpu"
 
 
 def cached_model_dir():

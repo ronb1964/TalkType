@@ -135,3 +135,27 @@ def test_cuda_users_are_unaffected(env):
     env.apply("accurate")
     assert env.saved == [("large-v3", "cuda")]
     assert not [c for c in env.calls if c[0] in ("chooser", "vulkan-setup", "vulkan-files")]
+
+
+def test_a_vulkan_user_keeps_vulkan_for_fast_and_accurate(env):
+    """Parakeet runs on the graphics chip through Vulkan too, so picking
+    Fast & Accurate no longer moves a Vulkan user to the processor."""
+    env.device = "vulkan"
+    env.vulkan_installed = {"parakeet-v3"}
+    env.apply("parakeet")
+    assert env.saved == [("parakeet-v3", "vulkan")]
+    assert not [c for c in env.calls if c[0] == "fw-download"]
+
+
+def test_fast_and_accurate_on_vulkan_downloads_parakeets_graphics_file(env):
+    env.device = "vulkan"
+    env.apply("parakeet")
+    assert ("vulkan-files", "parakeet-v3") in env.calls
+    assert env.saved == [("parakeet-v3", "vulkan")]
+
+
+def test_fast_and_accurate_without_vulkan_stays_on_the_processor(env):
+    env.fw_cached = {"parakeet-v3"}
+    env.apply("parakeet")
+    assert env.saved == [("parakeet-v3", "cpu")]
+    assert not [c for c in env.calls if c[0].startswith("vulkan")]

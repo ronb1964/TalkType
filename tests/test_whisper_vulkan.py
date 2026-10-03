@@ -67,11 +67,57 @@ def test_offered_with_any_graphics_chip_and_vulkan(monkeypatch):
     assert wv.is_offered() is False
 
 
-def test_every_whisper_model_has_a_whisper_cpp_file_and_parakeet_does_not():
+def test_every_offered_model_has_a_file_in_whisper_cpp_format():
+    """Parakeet included: whisper.cpp 1.9.4 runs it too (libparakeet)."""
     from talktype.model_helper import OFFERED_MODELS
-    from talktype.parakeet_engine import is_parakeet
     for model in OFFERED_MODELS:
-        assert wv.supports_model(model) != is_parakeet(model)
+        assert wv.supports_model(model), model
+
+
+def test_parakeet_comes_from_its_own_repo_and_whisper_from_whisper_cpps():
+    from talktype.parakeet_engine import PARAKEET_MODEL
+    assert wv.model_repo(PARAKEET_MODEL) == "ggml-org/parakeet-GGUF"
+    assert wv.MODEL_FILES[PARAKEET_MODEL][0] == "ggml-parakeet-tdt-0.6b-v3-q8_0.bin"
+    assert wv.model_repo("small") == "ggerganov/whisper.cpp"
+
+
+def _engine(tmp_path, monkeypatch, *names):
+    """An engine folder holding executables *names*."""
+    monkeypatch.setattr(wv, "_engine_dir", lambda: str(tmp_path))
+    for name in names:
+        f = tmp_path / name
+        f.write_text("")
+        f.chmod(0o755)
+
+
+def test_parakeet_needs_an_engine_built_with_parakeet(tmp_path, monkeypatch):
+    """Engine build 1 (TalkType 0.12.0 to 0.13.1) has no Parakeet in it. It
+    still counts as installed for Whisper, so nobody re-downloads it."""
+    from talktype.parakeet_engine import PARAKEET_MODEL
+    _engine(tmp_path, monkeypatch, "whisper-server")
+    assert wv.is_engine_installed() and wv.is_engine_installed("small")
+    assert not wv.is_engine_installed(PARAKEET_MODEL)
+    _engine(tmp_path, monkeypatch, "whisper-server", "parakeet-cli", "libparakeet.so")
+    assert wv.is_engine_installed(PARAKEET_MODEL)
+
+
+def test_engine_download_fetches_again_when_parakeet_is_missing(tmp_path, monkeypatch):
+    from talktype.parakeet_engine import PARAKEET_MODEL
+    _engine(tmp_path, monkeypatch, "whisper-server")
+    fetched = []
+    monkeypatch.setattr("talktype.download_utils.download_file",
+                        lambda url, *a, **k: fetched.append(url) or False)
+    assert wv.make_engine_download_func("small")(lambda *a: None, None) is True
+    assert fetched == []
+    wv.make_engine_download_func(PARAKEET_MODEL)(lambda *a: None, None)
+    assert fetched == [wv.ENGINE_URL]
+
+
+def test_engine_build_2_has_its_own_asset_so_build_1_stays_valid():
+    """0.12.0 to 0.13.1 check build 1's SHA256, so build 2 can't reuse its name."""
+    assert wv.ENGINE_ASSET == "talktype-whisper-vulkan-1.9.4-b2-x64.tar.gz"
+    assert wv.ENGINE_TAG == "whisper-vulkan-1.9.4-b2"
+    assert wv.ENGINE_NAME == "talktype-whisper-vulkan-1.9.4"    # unpacks over build 1
 
 
 def test_wav_is_16_bit_mono_and_keeps_the_samples():
@@ -128,6 +174,31 @@ def test_speed_check_reads_whisper_cli_timings(monkeypatch):
     assert [("-dev" in r, "-ng" in r) for r in runs] == [(True, False), (True, False), (False, True)]
 
 
+def test_parakeet_speed_check_uses_parakeet_cli_without_its_load_time(monkeypatch):
+    """Loading onto a graphics card takes longer than onto the processor, and
+    Parakeet transcribes the sample so fast that counting the load would hide
+    most of the difference."""
+    from talktype.parakeet_engine import PARAKEET_MODEL
+    runs = []
+
+    class Done:
+        returncode = 0
+
+        def __init__(self, load, total):
+            self.stderr = (f"parakeet_print_timings:     load time =   {load * 1000:.2f} ms\n"
+                           f"parakeet_print_timings:    total time =   {total * 1000:.2f} ms\n")
+
+    def fake_run(cmd, **kw):
+        runs.append(cmd)
+        return Done(0.08, 0.84) if "-ng" in cmd else Done(0.20, 0.26)
+
+    monkeypatch.setattr(wv.subprocess, "run", fake_run)
+    monkeypatch.setattr(wv, "model_path", lambda m: "/models/p.bin")
+    gpu, cpu = wv.speed_check(PARAKEET_MODEL, 0, threads=4)
+    assert (round(gpu, 2), round(cpu, 2)) == (0.06, 0.76)
+    assert all(r[0].endswith("parakeet-cli") for r in runs)
+
+
 @pytest.mark.parametrize("text, cleaned", [
     (" [BLANK_AUDIO]", ""),                                   # silence, measured
     (" [MUSIC] Okay let's go [NOISE]", "Okay let's go"),
@@ -175,13 +246,75 @@ def test_service_falls_back_to_the_processor_when_the_engine_is_missing(monkeypa
     assert settings.device == "vulkan"        # the user's choice is not overwritten
 
 
-def test_parakeet_never_uses_the_graphics_engine(monkeypatch):
+def test_parakeet_never_uses_the_whisper_engine(monkeypatch):
     from talktype import app
     from talktype.parakeet_engine import PARAKEET_MODEL
-    monkeypatch.setattr(wv, "VulkanWhisperModel", lambda *a: pytest.fail("used the graphics engine"))
+    monkeypatch.setattr(wv, "VulkanWhisperModel", lambda *a: pytest.fail("used the Whisper engine"))
+    monkeypatch.setattr(wv, "is_installed", lambda m: False)
     monkeypatch.setattr("talktype.model_helper.download_model_with_progress",
                         lambda model, device, compute_type, **k: "parakeet-model")
     assert app.build_model(_settings(model=PARAKEET_MODEL)) == "parakeet-model"
+
+
+class FakeParakeetGpu:
+    def __init__(self, device_index):
+        self.device_index = device_index
+
+    def recognize(self, audio):
+        return "Hello there."
+
+
+def test_service_runs_parakeet_on_the_graphics_chip(monkeypatch):
+    from talktype import app, parakeet_gpu
+    from talktype.parakeet_engine import PARAKEET_MODEL
+    monkeypatch.setattr(wv, "is_installed", lambda m: True)
+    monkeypatch.setattr(wv, "find_device", lambda: 0)
+    monkeypatch.setattr(parakeet_gpu, "ParakeetGpuModel", FakeParakeetGpu)
+    model = app.build_model(_settings(model=PARAKEET_MODEL))
+    assert isinstance(model, FakeParakeetGpu) and model.device_index == 0
+
+
+def test_parakeet_on_vulkan_without_its_files_quietly_uses_the_processor(monkeypatch):
+    """Someone on 0.13.1 with Vulkan as the device and Parakeet as the model
+    has never downloaded Parakeet's graphics files. They keep the processor,
+    as before, without a warning at every start."""
+    from talktype import app, parakeet_gpu
+    from talktype.parakeet_engine import PARAKEET_MODEL
+    told = []
+    monkeypatch.setattr(wv, "is_installed", lambda m: False)
+    monkeypatch.setattr(parakeet_gpu, "ParakeetGpuModel", lambda *a: pytest.fail("started the helper"))
+    monkeypatch.setattr(app, "_notify", lambda *a: told.append(a))
+    monkeypatch.setattr("talktype.model_helper.download_model_with_progress",
+                        lambda model, device, compute_type, **k: f"parakeet-on-{device}")
+    assert app.build_model(_settings(model=PARAKEET_MODEL)) == "parakeet-on-cpu"
+    assert told == []
+
+
+def test_parakeet_falls_back_to_the_processor_when_the_helper_fails(monkeypatch):
+    from talktype import app, parakeet_gpu
+    from talktype.parakeet_engine import PARAKEET_MODEL
+    told = []
+
+    def broken(device_index):
+        raise RuntimeError("driver said no")
+
+    monkeypatch.setattr(wv, "is_installed", lambda m: True)
+    monkeypatch.setattr(wv, "find_device", lambda: 0)
+    monkeypatch.setattr(parakeet_gpu, "ParakeetGpuModel", broken)
+    monkeypatch.setattr(app, "_notify", lambda *a: told.append(a))
+    monkeypatch.setattr("talktype.model_helper.download_model_with_progress",
+                        lambda model, device, compute_type, **k: f"parakeet-on-{device}")
+    settings = _settings(model=PARAKEET_MODEL)
+    assert app.build_model(settings) == "parakeet-on-cpu"
+    assert told and settings.device == "vulkan"
+
+
+def test_parakeet_on_the_graphics_chip_transcribes(monkeypatch):
+    from talktype import app, parakeet_gpu
+    gpu = parakeet_gpu.ParakeetGpuModel.__new__(parakeet_gpu.ParakeetGpuModel)
+    monkeypatch.setattr(parakeet_gpu.ParakeetGpuModel, "recognize", lambda self, a: "Hello there.")
+    monkeypatch.setattr(app, "model", gpu, raising=False)
+    assert app._transcribe_audio(np.zeros(16000, dtype=np.float32), None) == "Hello there."
 
 
 def test_transcription_ignores_the_engines_no_speech_score(monkeypatch):
@@ -197,7 +330,7 @@ def test_first_run_light_choice_switches_the_device_once_the_engine_is_there(mon
     from talktype import welcome_dialog as wd
     from talktype.config import Settings
     saved = []
-    monkeypatch.setattr(wv, "is_engine_installed", lambda: True)
+    monkeypatch.setattr(wv, "is_engine_installed", lambda *a: True)
     monkeypatch.setattr("talktype.config.load_config", lambda: Settings())
     monkeypatch.setattr("talktype.config.save_config", lambda c: saved.append(c.device))
     wd._setup_vulkan_engine_first_run()
@@ -214,7 +347,7 @@ def test_first_run_light_choice_stays_on_the_processor_if_the_engine_never_arriv
         def add_task(self, task): pass
         def run(self): return {}
 
-    monkeypatch.setattr(wv, "is_engine_installed", lambda: False)
+    monkeypatch.setattr(wv, "is_engine_installed", lambda *a: False)
     monkeypatch.setattr(dpd, "UnifiedDownloadDialog", NoDownload)
     monkeypatch.setattr("talktype.config.save_config", lambda c: saved.append(c.device))
     wd._setup_vulkan_engine_first_run()
@@ -223,5 +356,24 @@ def test_first_run_light_choice_stays_on_the_processor_if_the_engine_never_arriv
 
 def test_first_run_model_download_is_skipped_when_already_there(monkeypatch):
     from talktype import welcome_dialog as wd
+    monkeypatch.setattr(wv, "is_engine_installed", lambda *a: True)
     monkeypatch.setattr(wv, "model_path", lambda m: "/models/x.bin")
     assert wd._download_vulkan_model_first_run("small") is True
+
+
+def test_first_run_parakeet_on_vulkan_fetches_an_engine_that_can_run_it(monkeypatch):
+    """Engine build 1 can't run Parakeet, so it's fetched again with the model."""
+    from talktype import welcome_dialog as wd
+    import talktype.download_progress_dialog as dpd
+    added = []
+
+    class Dialog:
+        def __init__(self, **kw): pass
+        def add_task(self, task): added.append(task.name)
+        def run(self): return {}
+
+    monkeypatch.setattr(wv, "is_engine_installed", lambda *a: not a or a[0] != "parakeet-v3")
+    monkeypatch.setattr(wv, "model_path", lambda m: None)
+    monkeypatch.setattr(dpd, "UnifiedDownloadDialog", Dialog)
+    assert wd._download_vulkan_model_first_run("parakeet-v3") is False
+    assert added == ["Graphics engine", "Speech model"]

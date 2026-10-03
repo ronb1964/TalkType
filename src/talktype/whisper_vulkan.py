@@ -14,6 +14,11 @@ Nothing here is downloaded unless the user picks "Vulkan (any GPU)" as the
 device: the engine (~24 MB) and the model in whisper.cpp's own format, which
 is a separate file from the faster-whisper one.
 
+whisper.cpp 1.9.4 also runs Parakeet (libparakeet), so the same engine runs
+Parakeet on the graphics chip: 0.17 s instead of 2.15 s for 66 s of speech on
+an RTX 4070 Super (2026-10-03). That runs as its own helper process,
+parakeet_gpu.py, because whisper-server only serves Whisper models.
+
 At run time it is a whisper-server process, started and watched the same way
 as the AI cleanup engine (engine_process.py): it dies with the dictation
 service and leftovers from a crash are cleaned up. Each dictation is sent to
@@ -42,6 +47,7 @@ import numpy as np
 
 from . import engine_process
 from .logger import setup_logger
+from .parakeet_engine import PARAKEET_MODEL, is_parakeet
 
 logger = setup_logger(__name__)
 
@@ -52,13 +58,18 @@ MENU_LABEL = "GPU (Vulkan)"             # "Device:" line in the tray and GNOME m
 # --- The engine download ------------------------------------------------------
 
 ENGINE_VERSION = "1.9.4"                           # whisper.cpp release it is built from
+# Build 2 adds Parakeet (libparakeet.so, parakeet-cli). It gets its own asset
+# and pre-release: 0.12.0 to 0.13.1 download build 1 and check its SHA256, so
+# build 1 must stay exactly as published. The folder inside keeps the old
+# name, so build 2 unpacks over build 1 as a superset.
+ENGINE_BUILD = 2
 ENGINE_NAME = f"talktype-whisper-vulkan-{ENGINE_VERSION}"
-ENGINE_ASSET = f"{ENGINE_NAME}-x64.tar.gz"
-ENGINE_TAG = f"whisper-vulkan-{ENGINE_VERSION}"     # TalkType GitHub pre-release
+ENGINE_ASSET = f"{ENGINE_NAME}-b{ENGINE_BUILD}-x64.tar.gz"
+ENGINE_TAG = f"whisper-vulkan-{ENGINE_VERSION}-b{ENGINE_BUILD}"     # TalkType GitHub pre-release
 ENGINE_URL = f"https://github.com/ronb1964/TalkType/releases/download/{ENGINE_TAG}/{ENGINE_ASSET}"
 # From build-vulkan-engine.sh's .sha256; the download is refused if it doesn't
 # match, so a tampered or truncated engine is never run.
-ENGINE_SHA256 = "d4bb41ffdd38a4b31b4d8318cd76c35f82c3d538c485fc02c41e2fee2399220b"
+ENGINE_SHA256 = "deb77b2912a90a584ecdec1017f14e75d0037ca78db601f030017a66f7b10b92"
 ENGINE_SIZE_TEXT = "24 MB"
 
 # --- Models, in whisper.cpp's format -------------------------------------------
@@ -73,12 +84,22 @@ MODEL_FILES = {
     "small": ("ggml-small-q8_0.bin", "252 MB"),
     "medium": ("ggml-medium-q5_0.bin", "514 MB"),
     "large-v3": ("ggml-large-v3-q5_0.bin", "1 GB"),
+    # q8_0, the same size as the processor's int8 download, and slightly
+    # more accurate: 3.65% word errors vs 4.35% on LibriSpeech (2026-10-03).
+    PARAKEET_MODEL: ("ggml-parakeet-tdt-0.6b-v3-q8_0.bin", "669 MB"),
 }
+# Models not hosted in whisper.cpp's own repo.
+MODEL_REPOS = {PARAKEET_MODEL: "ggml-org/parakeet-GGUF"}
 
 
 def supports_model(model_name) -> bool:
-    """Parakeet has its own engine and stays on the processor."""
+    """Whether *model_name* can run on the graphics chip through Vulkan."""
     return model_name in MODEL_FILES
+
+
+def model_repo(model_name):
+    """Hugging Face repo holding *model_name*'s whisper.cpp file."""
+    return MODEL_REPOS.get(model_name, MODEL_REPO)
 
 
 # --- Is there a graphics chip? -------------------------------------------------
@@ -131,8 +152,12 @@ def _binary(name):
     return os.path.join(_engine_dir(), name)
 
 
-def is_engine_installed() -> bool:
-    return os.access(_binary("whisper-server"), os.X_OK)
+def is_engine_installed(model_name=None) -> bool:
+    """The engine is downloaded, and can run *model_name* if one is given.
+    Build 1 has no Parakeet in it but still serves every Whisper model."""
+    if not os.access(_binary("whisper-server"), os.X_OK):
+        return False
+    return not is_parakeet(model_name) or os.access(_binary("parakeet-cli"), os.X_OK)
 
 
 def model_path(model_name):
@@ -141,21 +166,23 @@ def model_path(model_name):
         return None
     try:
         from huggingface_hub import hf_hub_download
-        return hf_hub_download(MODEL_REPO, MODEL_FILES[model_name][0], local_files_only=True)
+        return hf_hub_download(model_repo(model_name), MODEL_FILES[model_name][0],
+                               local_files_only=True)
     except Exception:
         return None
 
 
 def is_installed(model_name) -> bool:
     """Engine and this model's whisper.cpp file are both downloaded."""
-    return is_engine_installed() and model_path(model_name) is not None
+    return is_engine_installed(model_name) and model_path(model_name) is not None
 
 
-def make_engine_download_func():
-    """DownloadTask function: fetch, verify and unpack the engine."""
+def make_engine_download_func(model_name=None):
+    """DownloadTask function: fetch, verify and unpack the engine, unless the
+    one already there can run *model_name*."""
     def download(progress_callback, cancel_event):
         from .download_utils import download_file
-        if is_engine_installed():
+        if is_engine_installed(model_name):
             progress_callback("Already downloaded", 100)
             return True
         parent = os.path.dirname(_engine_dir())
@@ -196,7 +223,7 @@ def make_engine_download_func():
 def make_model_download_func(model_name):
     """DownloadTask function: fetch *model_name*'s whisper.cpp file."""
     from .model_helper import make_model_download_func as _hf_download
-    return _hf_download(f"whisper-vulkan-{model_name}", repo_id=MODEL_REPO,
+    return _hf_download(f"whisper-vulkan-{model_name}", repo_id=model_repo(model_name),
                         only_files=(MODEL_FILES[model_name][0],))
 
 
@@ -245,17 +272,26 @@ def find_device():
 # --- The speed check -----------------------------------------------------------
 
 _TOTAL_TIME = re.compile(r"total time =\s+([\d.]+) ms")
+_LOAD_TIME = re.compile(r"load time =\s+([\d.]+) ms")
 
 
-def _time_one(model, extra_args, threads):
+def _time_one(model, extra_args, threads, cli="whisper-cli"):
     out = subprocess.run(
-        [_binary("whisper-cli"), "-m", model, "-f", _binary("speed-check.wav"),
+        [_binary(cli), "-m", model, "-f", _binary("speed-check.wav"),
          "-t", str(threads), *extra_args],
         capture_output=True, text=True, timeout=300, env=_engine_env())
     found = _TOTAL_TIME.search(out.stderr)
     if out.returncode != 0 or not found:
         raise RuntimeError(f"speed check run failed (exit {out.returncode})")
-    return float(found.group(1)) / 1000
+    seconds = float(found.group(1)) / 1000
+    if cli == "parakeet-cli":
+        # Parakeet transcribes the sample in a few hundredths of a second on a
+        # graphics card, so loading the model (0.2 s there, 0.08 s on the
+        # processor) would swamp the comparison. The service loads it once.
+        load = _LOAD_TIME.search(out.stderr)
+        if load:
+            seconds -= float(load.group(1)) / 1000
+    return seconds
 
 
 def speed_check(model_name, device_index, threads=None):
@@ -264,10 +300,11 @@ def speed_check(model_name, device_index, threads=None):
     and the second one counted: the first pays one-time shader setup."""
     threads = threads or max(1, (os.cpu_count() or 2) // 2)
     model = model_path(model_name)
+    cli = "parakeet-cli" if is_parakeet(model_name) else "whisper-cli"
     gpu_args = ["-dev", str(device_index)]
-    _time_one(model, gpu_args, threads)
-    gpu = _time_one(model, gpu_args, threads)
-    cpu = _time_one(model, ["-ng"], threads)
+    _time_one(model, gpu_args, threads, cli)
+    gpu = _time_one(model, gpu_args, threads, cli)
+    cpu = _time_one(model, ["-ng"], threads, cli)
     logger.info(f"Speed check ({model_name}): graphics {gpu:.2f}s, processor {cpu:.2f}s")
     return gpu, cpu
 

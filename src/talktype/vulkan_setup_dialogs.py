@@ -13,6 +13,7 @@ from gi.repository import Gtk, GLib
 
 from . import whisper_vulkan as wv
 from .logger import setup_logger
+from .model_helper import model_display_name
 
 logger = setup_logger(__name__)
 
@@ -58,21 +59,24 @@ def ensure_files(parent, model, confirm):
     """Make sure the engine and *model*'s whisper.cpp file are downloaded.
     True when both are there."""
     from .download_progress_dialog import DownloadTask, UnifiedDownloadDialog
-    tasks = []
-    if not wv.is_engine_installed():
+    name = model_display_name(model)
+    tasks, needed = [], []
+    # Engine build 1 (0.12.0 to 0.13.1) can't run Parakeet, so it's fetched
+    # again, as a superset, the first time someone sets Parakeet up.
+    if not wv.is_engine_installed(model):
         tasks.append(DownloadTask("Graphics engine", "whisper.cpp (Vulkan)",
-                                  wv.ENGINE_SIZE_TEXT, wv.make_engine_download_func()))
+                                  wv.ENGINE_SIZE_TEXT, wv.make_engine_download_func(model)))
+        needed.append(f"the graphics engine ({wv.ENGINE_SIZE_TEXT})")
     if wv.model_path(model) is None:
-        tasks.append(DownloadTask("Speech model", f"{model.title()} (for graphics)",
+        tasks.append(DownloadTask("Speech model", f"{name} (for graphics)",
                                   wv.MODEL_FILES[model][1], wv.make_model_download_func(model)))
+        needed.append(f"the {name} model in the format it uses ({wv.MODEL_FILES[model][1]})")
     if not tasks:
         return True
     if confirm:
         answer = message(
             parent, Gtk.MessageType.QUESTION, "Set up your graphics card with Vulkan?",
-            "TalkType needs a one-time download: the graphics engine "
-            f"({wv.ENGINE_SIZE_TEXT}) and the {model.title()} model in the format it uses "
-            f"({wv.MODEL_FILES[model][1]}).\n\n"
+            f"TalkType needs a one-time download: {' and '.join(needed)}.\n\n"
             "Afterwards TalkType checks whether your graphics chip is really faster than "
             "your processor, and only uses it if it is. Everything runs on this computer.",
             buttons=Gtk.ButtonsType.OK_CANCEL)
@@ -155,11 +159,12 @@ def set_up(parent, model, confirm=True):
     """Download and speed-check the Vulkan engine for *model*. True if TalkType
     should use the graphics chip."""
     if not wv.supports_model(model):
-        message(parent, Gtk.MessageType.INFO, "Pick a Whisper model first",
-                "Your graphics card speeds up the Whisper models. You're using Parakeet, "
-                "which runs on the processor and is already fast there.\n\n"
-                "To use your graphics chip, choose a Whisper model (Small, Medium or Large-v3) "
-                "and then choose Vulkan again.")
+        # English-only and older Whisper variants (small.en, large-v2, ...) have
+        # no file in whisper.cpp's format here.
+        message(parent, Gtk.MessageType.INFO, "Pick another model first",
+                f"{model_display_name(model)} can't run on your graphics chip through Vulkan.\n\n"
+                "To use your graphics chip, choose Parakeet or a Whisper model (Small, Medium "
+                "or Large-v3) and then choose Vulkan again.")
         return False
     if not ensure_files(parent, model, confirm):
         return False

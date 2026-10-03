@@ -417,7 +417,8 @@ class PreferencesWindow:
             if whisper_vulkan.is_offered() or self.config["device"] == "vulkan":
                 self.device_combo.append("vulkan", whisper_vulkan.DEVICE_LABEL)
                 tooltip_text += ("\n• Vulkan (any GPU): AMD, Intel or NVIDIA. On NVIDIA about as "
-                                 "fast as CUDA for a 24 MB download (one-time, with a speed check)")
+                                 "fast as CUDA for a 24 MB download (one-time, with a speed check). "
+                                 "Also runs Parakeet on the graphics chip")
         except Exception as e:
             print(f"Could not check for Vulkan graphics: {e}")
         
@@ -702,7 +703,7 @@ class PreferencesWindow:
             "small":    "small — recommended balance",
             "medium":   "medium — better accuracy",
             "large-v3": "large-v3 — best accuracy",
-            "parakeet-v3": "Parakeet — fast and accurate on CPU, English + 24 European languages",
+            "parakeet-v3": "Parakeet — fast and accurate, English + 24 European languages",
         }
         from .model_helper import OFFERED_MODELS
 
@@ -3022,6 +3023,9 @@ class PreferencesWindow:
         # Prevent recursive calls when reverting model selection
         if hasattr(self, '_updating_model') and self._updating_model:
             return
+        # Several choices below open dialogs; close the list first so it isn't
+        # left drawn on top of them.
+        combo.popdown()
 
         # Read model ID from ListStore (column 0) via active iter
         _it = combo.get_active_iter()
@@ -3656,6 +3660,12 @@ class PreferencesWindow:
         if self._device_before == "vulkan":
             self.update_config("device", device)
             return
+        # The setup shows dialogs. Run it once the dropdown has closed, or its
+        # list stays drawn on top of them.
+        combo.popdown()
+        GLib.idle_add(self._finish_switch_to_vulkan, combo)
+
+    def _finish_switch_to_vulkan(self, combo):
         if self._setup_vulkan(self.config.get("model")):
             self.update_config("device", "vulkan")
             self._device_before = "vulkan"
@@ -3663,6 +3673,7 @@ class PreferencesWindow:
             combo.handler_block_by_func(self._on_device_changed)
             combo.set_active_id(self._device_before)
             combo.handler_unblock_by_func(self._on_device_changed)
+        return False        # run once
 
     def _vulkan_offered(self):
         try:
@@ -4633,8 +4644,12 @@ class PreferencesWindow:
         if self.config.get("device") == "vulkan":
             from . import whisper_vulkan
             if whisper_vulkan.supports_model(model_name):
+                # "Downloaded" only if something actually was: OK stays open
+                # after a download, and reporting files that were already
+                # there kept OK from ever closing Preferences on Vulkan.
+                already_there = whisper_vulkan.is_installed(model_name)
                 ok = self._download_vulkan_files(model_name, confirm=False)
-                return (ok, ok)
+                return (ok, ok and not already_there)
 
         success, was_downloaded, cancelled = self.check_and_download_model(model_name)
         if cancelled:

@@ -724,8 +724,9 @@ class DictationTray:
             "label": "Fast & Accurate",
             "description": "Parakeet, no GPU needed, English + European languages",
             "model": "parakeet-v3",
-            # Parakeet always runs on the CPU (parakeet_engine.py), so the
-            # device is recorded honestly rather than claiming "cuda".
+            # The processor, unless the user is set up for Vulkan, in which
+            # case set_performance_preset keeps Vulkan and Parakeet runs on the
+            # graphics chip. Never "cuda": CUDA can't run Parakeet.
             "device": "cpu"
         },
         "battery": {
@@ -851,9 +852,13 @@ class DictationTray:
 
             # GPU presets ("cuda" in the table means "use the graphics card")
             # run through Vulkan (whisper_vulkan.py) when the user is set up
-            # for it, or chooses it below for Most Accurate.
+            # for it, or chooses it below for Most Accurate. So does Fast &
+            # Accurate: Parakeet runs on the graphics chip through Vulkan too
+            # (parakeet_gpu.py), and elsewhere on the processor.
             from . import whisper_vulkan as _wv
-            vulkan_route = (preset["device"] == "cuda" and _wv.supports_model(model_name)
+            from .parakeet_engine import is_parakeet as _is_parakeet
+            vulkan_route = ((preset["device"] == "cuda" or _is_parakeet(model_name))
+                            and _wv.supports_model(model_name)
                             and load_config().device == "vulkan")
 
             # large-v3 needs the graphics card: CUDA, or Vulkan. Check BEFORE
