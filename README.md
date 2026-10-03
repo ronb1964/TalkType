@@ -26,7 +26,7 @@ Most voice dictation tools on Linux are either cloud-based (privacy concerns), c
 - **Zero configuration** — Download the AppImage, run it, start talking. First-run wizard handles the rest.
 - **Any desktop environment** — GNOME (with native shell extension), KDE, XFCE, Sway, Hyprland, and more.
 - **Fast without a graphics card** — the Parakeet model gives large-v3 class accuracy in well under a second on an ordinary processor (English and 24 European languages).
-- **GPU accelerated** — Optional NVIDIA CUDA support for 3-5x faster Whisper transcription.
+- **GPU accelerated, any brand** — Whisper runs on NVIDIA, AMD or Intel graphics through Vulkan, a 24 MB download. NVIDIA cards can use CUDA (1.4 GB) instead.
 
 ---
 
@@ -153,7 +153,7 @@ enough interest and I'll make it happen.
 | **Dependencies** | None to install by hand — ydotool, ydotoold and wl-clipboard ship inside TalkType, and the ydotoold daemon starts automatically on first run |
 | **Permissions** | First run asks for your admin password once, to let TalkType read your keyboard and type into other apps. **Restart afterwards** for it to take effect |
 | **Audio** | Working microphone |
-| **GPU (optional)** | NVIDIA GPU for CUDA acceleration |
+| **GPU (optional)** | Any NVIDIA, AMD or Intel graphics chip (Vulkan), or CUDA on NVIDIA |
 
 ---
 
@@ -235,19 +235,24 @@ Choose the right model for your needs in Preferences → General:
 | **Parakeet** | 670 MB | Fast, even without a GPU | Best | English + 24 European languages |
 
 > **Tip:** Start with "small" for everyday use. Enable GPU acceleration for larger models.
-> No NVIDIA card? Try **Parakeet** (Preferences, or tray → Performance → Fast & Accurate). It is a different engine from NVIDIA and runs on your processor, but it does not cover Chinese, Japanese, Korean, Arabic and other non-European languages. Use a Whisper model for those.
+> No graphics card? Try **Parakeet** (Preferences, or tray → Performance → Fast & Accurate). It's a different engine that NVIDIA made, and it runs on your processor. It doesn't cover Chinese, Japanese, Korean, Arabic and other non-European languages. Use a Whisper model for those.
 
 ---
 
 ## GPU Acceleration
 
-TalkType supports NVIDIA CUDA for 3-5x faster transcription:
+A graphics card makes the Whisper models much faster. There are two ways to use one:
 
-1. **Automatic detection** - TalkType detects your NVIDIA GPU on first run
-2. **One-click download** - Download CUDA libraries (~800MB) when prompted
-3. **Automatic activation** - GPU mode enables after download
+| | Works on | Download | Pick it in |
+|---|---|---|---|
+| **Vulkan (Light)** | NVIDIA, AMD and Intel | 24 MB | Preferences → General → Device → Vulkan (any GPU) |
+| **CUDA (Full)** | NVIDIA only | 1.4 GB | Preferences → Advanced → Download CUDA Libraries |
 
-You can also enable GPU later: **Preferences → Advanced → Download CUDA Libraries**
+On an RTX 4070 Super both were equally fast: half a second for 11 seconds of speech with the Large model. If TalkType finds an NVIDIA card on first run, it asks which one you want.
+
+Before switching to Vulkan, TalkType times your graphics chip against your processor and only switches if the graphics chip is clearly faster. The graphics built into some desktop processors is too small to help, and in that case it tells you and keeps using the processor.
+
+Parakeet doesn't need a graphics card. It's already fast on the processor.
 
 ---
 
@@ -257,7 +262,7 @@ Settings are stored in `~/.config/talktype/config.toml`:
 
 ```toml
 model = "small"           # AI model: tiny, base, small, medium, large-v3
-device = "cpu"            # "cpu" or "cuda" (GPU)
+device = "cpu"            # "cpu", "vulkan" (any GPU) or "cuda" (NVIDIA)
 hold_hotkey = "F8"        # Hold-to-talk key (hold to record, release to stop)
 toggle_hotkey = "F9"      # Tap-to-toggle key (press once start, press again stop)
 # Both hotkeys are always active simultaneously
@@ -340,7 +345,7 @@ Most common on Fedora, where permission to *type* is granted separately from
 permission to *read keys*, so typing can work while hotkeys do not.
 
 ### Transcription slow?
-- Enable GPU acceleration if you have NVIDIA GPU
+- Use your graphics card if you have one (see [GPU Acceleration](#gpu-acceleration))
 - Try a smaller model (tiny or base)
 - Use Performance presets in tray menu
 
