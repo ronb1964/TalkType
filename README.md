@@ -72,7 +72,7 @@ Most voice dictation tools on Linux are either cloud-based (privacy concerns), c
 - **Dual Hotkeys Always Active** - F8 (hold-to-talk) AND F9 (tap-to-toggle) simultaneously - fully customizable
 - **Hands-free** (optional) - Double-tap F9, talk, and the recording stops by itself when you go quiet. A single tap is still a normal on/off toggle, so long dictation with thinking pauses is never cut off
 - **AI-Powered Transcription** - OpenAI's Whisper models (tiny to large-v3), or NVIDIA's Parakeet for fast, accurate dictation with no GPU
-- **GPU Acceleration** - Optional NVIDIA CUDA support for 3-5x faster transcription, and AMD / Intel graphics support through Vulkan. TalkType times your graphics chip against your processor first and only uses it if it's faster
+- **GPU Acceleration** - Use your graphics card for much faster transcription. Vulkan (a 24 MB download) works on NVIDIA, AMD and Intel; on NVIDIA you can also use CUDA (1.4 GB). TalkType times your graphics chip against your processor first and only uses it if it's faster
 - **Smart Text Processing** - Auto-punctuation, smart quotes, auto-spacing
 - **Voice Commands** - Say "comma", "period", "new paragraph", "undo last word", and more
 - **Custom Commands** - Define your own phrase shortcuts (e.g., "my email" → your@email.com)

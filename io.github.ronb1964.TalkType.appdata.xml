@@ -85,6 +85,16 @@
   </screenshots>
 
   <releases>
+    <release version="0.13.0" date="2026-10-03">
+      <description>
+        <p>A lighter way to use an NVIDIA graphics card</p>
+        <ul>
+          <li>NVIDIA cards can now use the 24 MB Vulkan engine instead of the 1.4 GB CUDA libraries, at about the same speed</li>
+          <li>First-run setup offers a choice between Full (CUDA) and Light (Vulkan)</li>
+          <li>The Large model can be set up through Vulkan on NVIDIA, AMD and Intel graphics</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.12.0" date="2026-10-03">
       <description>
         <p>Usage stats, and Whisper on AMD and Intel graphics</p>

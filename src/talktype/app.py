@@ -1934,9 +1934,9 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
     from .whisper_vulkan import VulkanWhisperModel
     if isinstance(model, VulkanWhisperModel):
         raw, _no_speech = model.transcribe(audio_f32, language)
-        logger.info(f"TIMING: Transcription completed in {time.time() - transcribe_start:.2f}s (AMD / Intel graphics)")
+        logger.info(f"TIMING: Transcription completed in {time.time() - transcribe_start:.2f}s (Vulkan GPU)")
         print(f"\U0001f4dd Raw (graphics): {_loggable(raw)}")
-        logger.info(f"Raw transcription (AMD / Intel graphics): {_loggable(raw)}")
+        logger.info(f"Raw transcription (Vulkan GPU): {_loggable(raw)}")
         # whisper.cpp's no-speech score isn't reliable (0.90 on clear speech,
         # 0.00 on silence, see whisper_vulkan.parse_result), so it isn't passed
         # on: the filter then only strips what it can recognise on its own.
@@ -3014,7 +3014,7 @@ def _build_model_or_exit(settings: Settings):
 
 
 def _build_vulkan_model(settings: Settings):
-    """The AMD / Intel graphics engine for settings.model, or None to use the
+    """The Vulkan graphics engine for settings.model, or None to use the
     processor instead (with the reason logged and the user told). Never stops
     dictation: anything missing or broken falls back to the CPU."""
     from . import whisper_vulkan
@@ -3025,16 +3025,16 @@ def _build_vulkan_model(settings: Settings):
         try:
             device_index = whisper_vulkan.find_device()
             if device_index is None:
-                reason = "no AMD or Intel graphics chip was found"
+                reason = "no graphics chip was found"
             else:
                 model = whisper_vulkan.VulkanWhisperModel(settings.model, device_index)
-                print(f"✅ Model loaded successfully on AMD / Intel graphics (device {device_index})")
+                print(f"✅ Model loaded successfully on the GPU through Vulkan (device {device_index})")
                 logger.info(f"Model loaded: {settings.model} on vulkan device {device_index}")
                 return model
         except Exception as e:
             reason = f"the graphics engine failed to start ({e})"
-    logger.warning(f"AMD / Intel graphics not used for {settings.model}: {reason}; using the processor")
-    _notify("TalkType", "Couldn't use your AMD / Intel graphics, so TalkType is using the "
+    logger.warning(f"Vulkan GPU not used for {settings.model}: {reason}; using the processor")
+    _notify("TalkType", "Couldn't use your graphics card through Vulkan, so TalkType is using the "
                         "processor for now. Choose the device again in Preferences to set it up.")
     return None
 

@@ -88,7 +88,7 @@ VALID_MODELS = {
     "parakeet-v3",
 }
 
-VALID_DEVICES = {"cpu", "cuda", "vulkan"}   # vulkan: AMD / Intel graphics (whisper_vulkan.py)
+VALID_DEVICES = {"cpu", "cuda", "vulkan"}   # vulkan: any GPU through whisper.cpp (whisper_vulkan.py)
 VALID_MODES = {"hold", "toggle"}
 VALID_INJECTION_MODES = {"type", "paste", "auto"}
 
@@ -117,7 +117,7 @@ CLASSIC_CYAN_HEX = "#4db3ff"
 @dataclass
 class Settings:
     model: str = "small"        # tiny/base/small/medium/large-v3 …
-    device: str = "cpu"         # "cpu", "cuda" (NVIDIA) or "vulkan" (AMD / Intel graphics)
+    device: str = "cpu"         # "cpu", "cuda" (NVIDIA via CUDA) or "vulkan" (any GPU via whisper.cpp)
     hotkey: str = ""            # hold-to-talk hotkey (empty until user picks during onboarding)
     beeps: bool = True          # beeps on/off
     smart_quotes: bool = True   # "smart quotes"

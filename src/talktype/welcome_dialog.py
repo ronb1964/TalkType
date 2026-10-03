@@ -459,6 +459,7 @@ class WelcomeDialog:
         self.dialog = None
         self.extension_check = None
         self.cuda_check = None
+        self.gpu_vulkan_radio = None  # NVIDIA: the light Vulkan choice next to CUDA
         self.required_pulse_box = None  # Flatpak: the red pulsing "Required" warning box
         self.fix_typing_button = None
         self.install_ydotool_button = None
@@ -1700,6 +1701,37 @@ class WelcomeDialog:
         storage_note.set_opacity(0.7)
         cuda_box.pack_start(storage_note, False, False, 0)
 
+        # The light alternative: whisper.cpp through Vulkan (whisper_vulkan.py).
+        # On an RTX 4070 Super it matched CUDA's speed for a 24 MB download
+        # instead of 1.4 GB. CUDA stays pre-selected: it's the long-proven
+        # route; Vulkan is new.
+        try:
+            from talktype import whisper_vulkan
+            vulkan_ok = whisper_vulkan.vulkan_available()
+        except Exception:
+            vulkan_ok = False
+        if vulkan_ok:
+            label = self.cuda_check.get_child()
+            label.set_markup('🚀 <b>Use your NVIDIA graphics card</b>')
+            self.cuda_check.set_tooltip_text(
+                "Run speech recognition on your NVIDIA graphics card. Pick how below.")
+            choice_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+            choice_box.set_margin_start(30)
+            choice_box.set_margin_top(6)
+            cuda_radio = Gtk.RadioButton.new_with_label(
+                None, "Full: NVIDIA's CUDA libraries (1.4 GB), TalkType's long-standing setup")
+            self.gpu_vulkan_radio = Gtk.RadioButton.new_with_label_from_widget(
+                cuda_radio, "Light: Vulkan (24 MB), about as fast in our tests")
+            self.gpu_vulkan_radio.set_tooltip_text(
+                "A small graphics engine instead of NVIDIA's CUDA libraries. On an RTX 4070 "
+                "Super it was just as fast. The Whisper model downloads in its own format.")
+            for radio in (cuda_radio, self.gpu_vulkan_radio):
+                choice_box.pack_start(radio, False, False, 0)
+            choice_box.set_sensitive(self.cuda_check.get_active())
+            self.cuda_check.connect("toggled", lambda c: choice_box.set_sensitive(c.get_active()))
+            cuda_box.pack_start(choice_box, False, False, 0)
+            cuda_box.reorder_child(choice_box, 1)      # right under the checkbox
+
         vbox.pack_start(cuda_box, False, False, 0)
 
     def _build_footer(self, vbox):
@@ -1839,7 +1871,10 @@ class WelcomeDialog:
             result['install_extension'] = self.extension_check.get_active()
 
         if self.cuda_check:
-            result['download_cuda'] = self.cuda_check.get_active()
+            use_gpu = self.cuda_check.get_active()
+            light = bool(use_gpu and self.gpu_vulkan_radio and self.gpu_vulkan_radio.get_active())
+            result['download_cuda'] = use_gpu and not light
+            result['use_vulkan'] = light
 
         # Include typing setup status
         result['uinput_fixed'] = self.uinput_fixed
@@ -2103,6 +2138,13 @@ def show_tips_and_features_dialog(extension_installed=False):
     except Exception:
         _has_nvidia = False
         _has_cuda   = False
+    # Set up for Vulkan (the light GPU choice): it runs large-v3 without CUDA.
+    try:
+        from .config import load_config as _load_cfg
+        _on_vulkan = _load_cfg().device == "vulkan"
+    except Exception:
+        _on_vulkan = False
+    _has_cuda = _has_cuda or _on_vulkan
 
     # Build model store — all models are always selectable (is_sensitive=True).
     # If the user picks large-v3 without CUDA, a popup explains what's needed.
@@ -2187,9 +2229,9 @@ def show_tips_and_features_dialog(extension_installed=False):
         # large-v3 selected — check CUDA availability RIGHT NOW
         # (it may have changed since the dialog opened, e.g. user just downloaded it)
         try:
-            _cuda_now = _cuda_helper.has_talktype_cuda_libraries()
+            _cuda_now = _cuda_helper.has_talktype_cuda_libraries() or _on_vulkan
         except Exception:
-            _cuda_now = False
+            _cuda_now = _on_vulkan
 
         if _cuda_now:
             # CUDA is available — allow the selection
@@ -2984,6 +3026,50 @@ def show_hotkey_test_dialog():
     return response == Gtk.ResponseType.OK
 
 
+def _setup_vulkan_engine_first_run():
+    """First run, light GPU choice: download the Vulkan engine and switch the
+    device to it. On failure the device stays on the processor."""
+    try:
+        from talktype import whisper_vulkan as wv
+        from talktype.download_progress_dialog import DownloadTask, UnifiedDownloadDialog
+        from talktype.config import load_config, save_config
+        if not wv.is_engine_installed():
+            dialog = UnifiedDownloadDialog(
+                parent=None, title="Setting Up Vulkan",
+                description="A small graphics engine for your NVIDIA card. One-time download.")
+            dialog.add_task(DownloadTask("Graphics engine", "whisper.cpp (Vulkan)",
+                                         wv.ENGINE_SIZE_TEXT, wv.make_engine_download_func()))
+            dialog.run()
+        if wv.is_engine_installed():
+            config = load_config()
+            config.device = "vulkan"
+            save_config(config)
+            logger.info("✅ Vulkan engine ready; device set to vulkan")
+        else:
+            logger.warning("Vulkan engine not downloaded; staying on the processor")
+    except Exception as e:
+        logger.warning(f"Vulkan setup failed, staying on the processor: {e}")
+
+
+def _download_vulkan_model_first_run(model):
+    """Download *model* in whisper.cpp's format. True when it's on disk."""
+    try:
+        from talktype import whisper_vulkan as wv
+        from talktype.download_progress_dialog import DownloadTask, UnifiedDownloadDialog
+        if wv.model_path(model) is not None:
+            return True
+        dialog = UnifiedDownloadDialog(
+            parent=None, title="Downloading Your Model",
+            description="The speech model in the format your graphics engine uses. One-time download.")
+        dialog.add_task(DownloadTask("Speech model", f"{model.title()} (for Vulkan)",
+                                     wv.MODEL_FILES[model][1], wv.make_model_download_func(model)))
+        dialog.run()
+        return wv.model_path(model) is not None
+    except Exception as e:
+        logger.warning(f"Vulkan model download failed: {e}")
+        return False
+
+
 def show_welcome_and_install():
     """
     Show welcome dialog and handle optional installations.
@@ -3037,6 +3123,11 @@ def show_welcome_and_install():
         except Exception as e:
             logger.error(f"Error during installations: {e}", exc_info=True)
 
+    # The light GPU choice: fetch the Vulkan engine now. The model itself is
+    # downloaded in Vulkan's format after the model is chosen (below).
+    if result.get('use_vulkan'):
+        _setup_vulkan_engine_first_run()
+
     # Show hotkey testing dialog — but NOT on the Flatpak. That dialog detects
     # key presses via evdev (raw /dev/input), which the sandbox blocks ("No
     # keyboards found for evdev"), and the F8/F9 it shows are the evdev defaults,
@@ -3067,10 +3158,30 @@ def show_welcome_and_install():
 
             config = load_config()
             device = config.device
+
+            # Vulkan: the model comes in whisper.cpp's format instead. If that
+            # download doesn't work out, fall back to the processor so setup
+            # still ends with a model that works.
+            vulkan_ready = False
+            if device.lower() == "vulkan":
+                from talktype import whisper_vulkan
+                if whisper_vulkan.supports_model(selected_model):
+                    vulkan_ready = _download_vulkan_model_first_run(selected_model)
+                    if not vulkan_ready:
+                        config.device = device = "cpu"
+                        save_config(config)
+                        logger.warning("Vulkan model download didn't finish; using the processor")
+                        already_cached = is_model_cached(selected_model)
+
             compute_type = "float16" if device.lower() == "cuda" else "int8"
             logger.info(f"Download config: device={device}, compute_type={compute_type}")
 
-            if already_cached:
+            if vulkan_ready:
+                config.model = selected_model
+                save_config(config)
+                model = True
+                logger.info(f"✅ {selected_model} ready for Vulkan")
+            elif already_cached:
                 # Model files already on disk — just save config and move on.
                 # DO NOT load the model here; the dictation service will load it
                 # when it starts. Loading large models (especially large-v3 on CUDA)

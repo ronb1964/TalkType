@@ -1,13 +1,16 @@
 """
-Whisper on AMD and Intel graphics, through Vulkan.
+Whisper on any graphics card, through Vulkan.
 
 TalkType's usual Whisper engine (faster-whisper / CTranslate2) can only use
-NVIDIA graphics. For everyone else this runs whisper.cpp built with its
-Vulkan backend, which works on AMD, Intel and NVIDIA alike. whisper.cpp
+NVIDIA graphics, through CUDA. This runs whisper.cpp built with its Vulkan
+backend instead, which works on AMD, Intel and NVIDIA alike. For AMD and
+Intel it's the only way to use the graphics chip. For NVIDIA it's the light
+option: measured on an RTX 4070 Super it matched CUDA's speed (large-v3,
+0.51 s vs 0.53 s for 11 s of speech) for a 24 MB download instead of 1.4 GB. whisper.cpp
 publishes no Linux Vulkan build, so TalkType builds one (build-vulkan-engine.sh)
 and hosts it as a GitHub pre-release.
 
-Nothing here is downloaded unless the user picks "AMD / Intel graphics" as the
+Nothing here is downloaded unless the user picks "Vulkan (any GPU)" as the
 device: the engine (~24 MB) and the model in whisper.cpp's own format, which
 is a separate file from the faster-whisper one.
 
@@ -43,7 +46,8 @@ from .logger import setup_logger
 logger = setup_logger(__name__)
 
 DEVICE = "vulkan"   # the config value for this device
-DEVICE_LABEL = "AMD / Intel graphics"
+DEVICE_LABEL = "Vulkan (any GPU)"       # Preferences' Device dropdown
+MENU_LABEL = "GPU (Vulkan)"             # "Device:" line in the tray and GNOME menus
 
 # --- The engine download ------------------------------------------------------
 
@@ -77,7 +81,7 @@ def supports_model(model_name) -> bool:
     return model_name in MODEL_FILES
 
 
-# --- Is there an AMD or Intel graphics chip? -----------------------------------
+# --- Is there a graphics chip? -------------------------------------------------
 
 AMD_VENDOR, INTEL_VENDOR, NVIDIA_VENDOR = "0x1002", "0x8086", "0x10de"
 
@@ -106,9 +110,14 @@ def vulkan_available() -> bool:
 
 
 def is_offered() -> bool:
-    """Show "AMD / Intel graphics" as a device choice?"""
+    """Show "Vulkan (any GPU)" as a device choice? Any AMD, Intel or NVIDIA
+    chip with a Vulkan driver (NVIDIA's own driver includes one)."""
     vendors = graphics_vendors()
-    return bool(vendors & {AMD_VENDOR, INTEL_VENDOR}) and vulkan_available()
+    return bool(vendors & {AMD_VENDOR, INTEL_VENDOR, NVIDIA_VENDOR}) and vulkan_available()
+
+
+def has_nvidia() -> bool:
+    return NVIDIA_VENDOR in graphics_vendors()
 
 
 # --- Where things live ---------------------------------------------------------
@@ -206,12 +215,14 @@ def parse_vulkan_devices(output):
 
 
 def choose_device(devices):
-    """The AMD or Intel chip to use: a separate graphics card before one built
-    into the processor (much bigger), and never NVIDIA, which has CUDA. None if
-    there is no such chip."""
-    candidates = [d for d in devices if not d[2]]
-    candidates.sort(key=lambda d: d[3])          # discrete (uma 0) first
-    return candidates[0][0] if candidates else None
+    """The graphics chip to use: a separate graphics card (any brand) before
+    one built into the processor, which is far smaller. On a machine with an
+    NVIDIA card and a Ryzen's built-in Radeon, that's the NVIDIA card: 16x
+    faster than the processor, where the built-in chip was no faster at all.
+    None if there is no graphics chip."""
+    if not devices:
+        return None
+    return sorted(devices, key=lambda d: d[3])[0][0]     # discrete (uma 0) first, stable
 
 
 def _engine_env():
@@ -219,7 +230,7 @@ def _engine_env():
 
 
 def find_device():
-    """Index of the AMD / Intel chip the engine sees, or None."""
+    """Index of the graphics chip the engine should use, or None."""
     try:
         out = subprocess.run([_binary("whisper-server"), "--help"], capture_output=True,
                              text=True, timeout=30, env=_engine_env()).stderr

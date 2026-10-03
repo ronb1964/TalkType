@@ -142,10 +142,10 @@ AUR votes only move when asked for — the package sat at zero from December
 
 ---
 
-## AMD / INTEL GRAPHICS ENGINE — BUILT AND HOSTED SEPARATELY
+## VULKAN GRAPHICS ENGINE — BUILT AND HOSTED SEPARATELY
 
-The "AMD / Intel graphics" device runs whisper.cpp's whisper-server with its
-Vulkan backend (`src/talktype/whisper_vulkan.py`). whisper.cpp publishes no
+The "Vulkan (any GPU)" device (config value `vulkan`; AMD, Intel and NVIDIA)
+runs whisper.cpp's whisper-server with its Vulkan backend (`src/talktype/whisper_vulkan.py`). whisper.cpp publishes no
 Linux Vulkan build, so TalkType builds one. It is NOT part of the AppImage
 and is NOT rebuilt for each release. It only changes when whisper.cpp does.
 

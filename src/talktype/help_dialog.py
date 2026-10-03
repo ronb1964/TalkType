@@ -234,8 +234,9 @@ Quick one-click optimization via tray menu:
 • Hover over one to read it, click to copy it, then paste with Ctrl+V
 • Kept in memory only, never saved to disk, gone when you log out
 
-<b>AMD and Intel graphics</b> (Preferences → General → Device)
-• Choose "AMD / Intel graphics" to run the Whisper models on an AMD or Intel graphics chip
+<b>Graphics cards through Vulkan</b> (Preferences → General → Device)
+• Choose "Vulkan (any GPU)" to run the Whisper models on an AMD, Intel or NVIDIA graphics chip
+• On NVIDIA it's a light alternative to CUDA: about the same speed, a 24 MB download instead of 1.4 GB
 • A one-time download, then a quick test against your processor
 • TalkType only uses the graphics chip if it's clearly faster, and tells you the result
 • Parakeet always runs on the processor, where it's already fast

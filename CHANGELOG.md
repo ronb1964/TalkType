@@ -2,6 +2,26 @@
 
 All notable changes to TalkType are documented here.
 
+## [0.13.0] - 2026-10-03
+
+A much lighter way to use an NVIDIA graphics card.
+
+- Until now, using an NVIDIA card meant downloading NVIDIA's CUDA libraries,
+  about 1.4 GB. The Vulkan engine from 0.12.0 works on NVIDIA cards too, and
+  on my RTX 4070 Super it was just as fast as CUDA: half a second for 11
+  seconds of speech with the Large model, either way. It's a 24 MB download.
+- When TalkType first sets up and finds an NVIDIA card, you now get to pick:
+  Full (CUDA, 1.4 GB) like before, or Light (Vulkan, 24 MB). Full is still the
+  default for now, since it's been in use a lot longer.
+- In Preferences the device is now called Vulkan (any GPU), and it shows up
+  on NVIDIA, AMD and Intel. If you have a graphics card plus graphics built
+  into the processor, it uses the card.
+- Picking the Large model without CUDA now offers Light (Vulkan) or Full
+  (CUDA), instead of only the 4.4 GB CUDA download. The Light route is about
+  1 GB all in, because the Large model is smaller in Vulkan's format too.
+- If you're on AMD or Intel graphics, picking the Large model now offers to
+  set up Vulkan, instead of saying it can't be done.
+
 ## [0.12.0] - 2026-10-03
 
 TalkType keeps score now, if you want it to, and Whisper can use AMD and

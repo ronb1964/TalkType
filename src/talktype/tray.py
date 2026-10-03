@@ -906,9 +906,9 @@ class DictationTray:
                             text="Cannot Apply 'Most Accurate' Preset"
                         )
                         _dlg.format_secondary_text(
-                            "'Most Accurate' requires an NVIDIA GPU + CUDA libraries.\n\n"
-                            "AMD and Intel GPUs are not supported for the large-v3 model.\n"
-                            "Please choose a different performance preset."
+                            "The 'Most Accurate' preset uses an NVIDIA card through CUDA.\n\n"
+                            "On AMD or Intel graphics, open Preferences, choose\n"
+                            "Vulkan (any GPU) as the Device, then pick Large-v3 there."
                         )
                         _dlg.set_keep_above(True)
                         _dlg.run()
@@ -1032,7 +1032,7 @@ class DictationTray:
                 device_names = {
                     'cpu': 'CPU',
                     'cuda': 'GPU (CUDA)',
-                    'vulkan': 'AMD / Intel graphics',
+                    'vulkan': 'GPU (Vulkan)',
                 }
                 from .parakeet_engine import effective_device
                 device = effective_device(cfg.model, cfg.device)

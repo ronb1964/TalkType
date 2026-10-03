@@ -315,7 +315,7 @@ def make_model_download_func():
 
 # --- The running engine ------------------------------------------------------
 
-# Shared with the AMD / Intel graphics engine; see engine_process.py.
+# Shared with the Vulkan graphics engine; see engine_process.py.
 _set_parent_death_signal = engine_process.set_parent_death_signal
 _is_talktype_process = engine_process.is_talktype_process
 

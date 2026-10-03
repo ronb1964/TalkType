@@ -708,7 +708,7 @@ class TalkTypeIndicator extends PanelMenu.Button {
             const deviceNames = {
                 'cpu': 'CPU',
                 'cuda': 'GPU (CUDA)',
-                'vulkan': 'AMD / Intel graphics'
+                'vulkan': 'GPU (Vulkan)'
             };
             const deviceDisplay = deviceNames[this._currentDevice] || this._currentDevice.toUpperCase();
             this._deviceDisplayItem.label.text = `Device: ${deviceDisplay}`;

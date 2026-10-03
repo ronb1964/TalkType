@@ -29,8 +29,10 @@ def test_parses_the_device_list_the_engine_prints():
     ]
 
 
-def test_picks_the_amd_chip_over_nvidia():
-    assert wv.choose_device(wv.parse_vulkan_devices(REAL_DEVICE_LIST)) == 1
+def test_picks_the_graphics_card_over_built_in_graphics_any_brand():
+    """On the development machine: the RTX 4070 Super, not the Ryzen's tiny
+    built-in Radeon (16x faster than the CPU vs no faster at all)."""
+    assert wv.choose_device(wv.parse_vulkan_devices(REAL_DEVICE_LIST)) == 0
 
 
 def test_prefers_a_graphics_card_over_built_in_graphics():
@@ -39,8 +41,9 @@ def test_prefers_a_graphics_card_over_built_in_graphics():
     assert wv.choose_device(devices) == 1
 
 
-def test_no_amd_or_intel_chip_means_no_device():
-    assert wv.choose_device([(0, "NVIDIA GeForce RTX 3060", True, False)]) is None
+def test_an_nvidia_card_alone_is_used_and_no_chip_means_none():
+    assert wv.choose_device([(0, "NVIDIA GeForce RTX 3060", True, False)]) == 0
+    assert wv.choose_device([(0, "AMD Radeon 780M (radv)", False, True)]) == 0
     assert wv.choose_device([]) is None
 
 
@@ -52,12 +55,14 @@ def test_finds_amd_and_intel_chips_from_the_kernel(tmp_path):
     assert wv.graphics_vendors(str(tmp_path)) == {"0x10de", "0x1002"}
 
 
-def test_offered_only_with_amd_or_intel_graphics_and_vulkan(monkeypatch):
+def test_offered_with_any_graphics_chip_and_vulkan(monkeypatch):
     monkeypatch.setattr(wv, "vulkan_available", lambda: True)
-    monkeypatch.setattr(wv, "graphics_vendors", lambda: {wv.NVIDIA_VENDOR})
+    for vendors in ({wv.NVIDIA_VENDOR}, {wv.AMD_VENDOR}, {wv.INTEL_VENDOR}):
+        monkeypatch.setattr(wv, "graphics_vendors", lambda v=vendors: v)
+        assert wv.is_offered() is True
+    monkeypatch.setattr(wv, "graphics_vendors", lambda: set())       # e.g. a VM
     assert wv.is_offered() is False
-    monkeypatch.setattr(wv, "graphics_vendors", lambda: {wv.NVIDIA_VENDOR, wv.INTEL_VENDOR})
-    assert wv.is_offered() is True
+    monkeypatch.setattr(wv, "graphics_vendors", lambda: {wv.NVIDIA_VENDOR})
     monkeypatch.setattr(wv, "vulkan_available", lambda: False)
     assert wv.is_offered() is False
 
@@ -184,3 +189,39 @@ def test_transcription_ignores_the_engines_no_speech_score(monkeypatch):
     from talktype import app
     monkeypatch.setattr(app, "model", FakeEngine("small", 1), raising=False)
     assert app._transcribe_audio(np.zeros(16000, dtype=np.float32), "en") == "Thank you."
+
+
+# --- first-run setup: the light choice for NVIDIA ---------------------------------
+
+def test_first_run_light_choice_switches_the_device_once_the_engine_is_there(monkeypatch):
+    from talktype import welcome_dialog as wd
+    from talktype.config import Settings
+    saved = []
+    monkeypatch.setattr(wv, "is_engine_installed", lambda: True)
+    monkeypatch.setattr("talktype.config.load_config", lambda: Settings())
+    monkeypatch.setattr("talktype.config.save_config", lambda c: saved.append(c.device))
+    wd._setup_vulkan_engine_first_run()
+    assert saved == ["vulkan"]
+
+
+def test_first_run_light_choice_stays_on_the_processor_if_the_engine_never_arrives(monkeypatch):
+    from talktype import welcome_dialog as wd
+    import talktype.download_progress_dialog as dpd
+    saved = []
+
+    class NoDownload:
+        def __init__(self, **kw): pass
+        def add_task(self, task): pass
+        def run(self): return {}
+
+    monkeypatch.setattr(wv, "is_engine_installed", lambda: False)
+    monkeypatch.setattr(dpd, "UnifiedDownloadDialog", NoDownload)
+    monkeypatch.setattr("talktype.config.save_config", lambda c: saved.append(c.device))
+    wd._setup_vulkan_engine_first_run()
+    assert saved == []
+
+
+def test_first_run_model_download_is_skipped_when_already_there(monkeypatch):
+    from talktype import welcome_dialog as wd
+    monkeypatch.setattr(wv, "model_path", lambda m: "/models/x.bin")
+    assert wd._download_vulkan_model_first_run("small") is True

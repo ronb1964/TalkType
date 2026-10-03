@@ -409,16 +409,17 @@ class PreferencesWindow:
             if self.config["device"] == "cuda":
                 self.config["device"] = "cpu"
 
-        # AMD / Intel graphics through Vulkan (whisper_vulkan.py). Offered when
-        # such a chip is present, and kept if it is already the setting.
+        # Any graphics card through Vulkan (whisper_vulkan.py): the only GPU
+        # option on AMD / Intel, and the light one on NVIDIA. Offered when a
+        # graphics chip is present, and kept if it is already the setting.
         try:
             from . import whisper_vulkan
             if whisper_vulkan.is_offered() or self.config["device"] == "vulkan":
                 self.device_combo.append("vulkan", whisper_vulkan.DEVICE_LABEL)
-                tooltip_text += ("\n• AMD / Intel graphics: faster Whisper on AMD and Intel "
-                                 "graphics chips (one-time download, with a speed check)")
+                tooltip_text += ("\n• Vulkan (any GPU): AMD, Intel or NVIDIA. On NVIDIA about as "
+                                 "fast as CUDA for a 24 MB download (one-time, with a speed check)")
         except Exception as e:
-            print(f"Could not check for AMD / Intel graphics: {e}")
+            print(f"Could not check for Vulkan graphics: {e}")
         
         # Set active selection and tooltip
         self.device_combo.set_active_id(self.config["device"])
@@ -1721,6 +1722,20 @@ class PreferencesWindow:
         grid.attach(gpu_button_box, 0, row, 2, 1)
         row += 1
 
+        # The light alternative to CUDA (and the only GPU route on AMD / Intel).
+        if self._vulkan_offered():
+            vulkan_hint = Gtk.Label(xalign=0)
+            vulkan_hint.set_line_wrap(True)
+            vulkan_hint.set_margin_start(10)
+            vulkan_hint.set_margin_top(4)
+            vulkan_hint.set_text(
+                "Lighter option: choose Vulkan (any GPU) as the Device on the General tab. "
+                "It's a 24 MB download instead of 1.4 GB, works on AMD, Intel and NVIDIA, "
+                "and was about as fast as CUDA in our tests.")
+            vulkan_hint.get_style_context().add_class("dim-label")
+            grid.attach(vulkan_hint, 0, row, 2, 1)
+            row += 1
+
         # Initial GPU check
         GLib.timeout_add(500, self._initial_gpu_check)
 
@@ -3018,7 +3033,7 @@ class PreferencesWindow:
         if not hasattr(self, '_last_selected_model'):
             self._last_selected_model = self.config.get("model")
 
-        # On AMD / Intel graphics, whisper.cpp runs every Whisper model, large-v3
+        # On Vulkan, whisper.cpp runs every Whisper model, large-v3
         # included, without NVIDIA's CUDA files, and its own model file is
         # fetched on Apply (_download_selected_model). The CUDA gate and the
         # faster-whisper size warning below don't apply.
@@ -3049,24 +3064,32 @@ class PreferencesWindow:
                 self._updating_model = False
 
                 if _has_nvidia:
-                    # Offer unified CUDA + model download — same as tray behavior
+                    # Two ways to run large-v3 on the card: Vulkan (light, about
+                    # the same speed measured on an RTX 4070 Super) or CUDA
+                    # (TalkType's long-standing NVIDIA setup).
                     _dlg = Gtk.MessageDialog(
                         transient_for=self.window,
                         flags=0,
                         message_type=Gtk.MessageType.QUESTION,
-                        buttons=Gtk.ButtonsType.YES_NO,
-                        text="Downloads Required"
+                        buttons=Gtk.ButtonsType.NONE,
+                        text="Large-v3 needs your graphics card"
                     )
                     _dlg.format_secondary_text(
-                        "The 'large-v3' model needs two downloads:\n\n"
-                        "  • CUDA GPU Libraries   (~1.4GB)\n"
-                        "  • Large-v3 AI Model    (~3GB)\n\n"
-                        "Total: ~4.4GB — one-time download.\n\n"
-                        "Would you like to download both now?"
+                        "There are two ways to set it up:\n\n"
+                        "  • Light (Vulkan): a 24 MB graphics engine plus Large-v3 in its\n"
+                        "    format (1 GB). About as fast as CUDA in our tests.\n\n"
+                        "  • Full (CUDA): NVIDIA's CUDA libraries (1.4 GB) plus\n"
+                        "    Large-v3 (3 GB). TalkType's long-standing NVIDIA setup.\n\n"
+                        "Either is a one-time download."
                     )
+                    _dlg.add_button("Cancel", Gtk.ResponseType.CANCEL)
+                    _dlg.add_button("Light (Vulkan)", Gtk.ResponseType.APPLY)
+                    _dlg.add_button("Full (CUDA)", Gtk.ResponseType.YES)
                     _dlg.set_keep_above(True)
                     _resp = _dlg.run()
                     _dlg.destroy()
+                    if _resp == Gtk.ResponseType.APPLY:
+                        self._switch_to_vulkan_for_model(combo, "large-v3")
                     if _resp == Gtk.ResponseType.YES:
                         from .download_progress_dialog import show_unified_download_dialog
                         _results = show_unified_download_dialog(
@@ -3080,17 +3103,28 @@ class PreferencesWindow:
                         elif _cuda_ok and not _model_ok:
                             # CUDA worked but model failed — refresh dropdown, don't auto-select
                             self._refresh_device_options()
+                elif self._vulkan_offered():
+                    # AMD / Intel graphics: large-v3 can run there through Vulkan.
+                    if self._message(
+                            Gtk.MessageType.QUESTION, "Large-v3 needs your graphics card",
+                            "Large-v3 can run on your AMD or Intel graphics through Vulkan. "
+                            "That's a one-time download of a 24 MB graphics engine and Large-v3 in "
+                            "its format (1 GB), then a quick check that your graphics chip is "
+                            "really faster than your processor.",
+                            buttons=Gtk.ButtonsType.OK_CANCEL) == Gtk.ResponseType.OK:
+                        self._switch_to_vulkan_for_model(combo, "large-v3", confirm=False)
+                    return
                 else:
                     _dlg = Gtk.MessageDialog(
                         transient_for=self.window,
                         flags=0,
                         message_type=Gtk.MessageType.WARNING,
                         buttons=Gtk.ButtonsType.OK,
-                        text="NVIDIA GPU Required"
+                        text="Graphics Card Required"
                     )
                     _dlg.format_secondary_text(
-                        "The 'large-v3' model requires an NVIDIA GPU with CUDA support.\n\n"
-                        "This model is not compatible with CPU-only or AMD/Intel GPU systems."
+                        "The 'large-v3' model needs a graphics card to run at a usable speed.\n\n"
+                        "TalkType didn't find one it can use on this computer."
                     )
                     _dlg.set_keep_above(True)
                     _dlg.run()
@@ -3612,10 +3646,10 @@ class PreferencesWindow:
             err.run()
             err.destroy()
 
-    # --- AMD / Intel graphics (whisper_vulkan.py) ---------------------------
+    # --- Vulkan (any GPU, whisper_vulkan.py) ---------------------------------
 
     def _on_device_changed(self, combo):
-        """Switching to AMD / Intel graphics downloads what it needs and checks
+        """Switching to Vulkan downloads what it needs and checks
         it is actually faster than the processor before keeping it. Any other
         device is simply saved."""
         device = combo.get_active_id()
@@ -3636,6 +3670,30 @@ class PreferencesWindow:
             combo.set_active_id(self._device_before)
             combo.handler_unblock_by_func(self._on_device_changed)
 
+    def _vulkan_offered(self):
+        try:
+            from . import whisper_vulkan
+            return whisper_vulkan.is_offered()
+        except Exception:
+            return False
+
+    def _switch_to_vulkan_for_model(self, model_combo, model, confirm=True):
+        """Set up Vulkan for *model* (download plus speed check). If it's kept,
+        select both the model and the Vulkan device; otherwise change nothing."""
+        if not self._setup_vulkan(model, confirm=confirm):
+            return False
+        self._updating_model = True
+        model_combo.set_active_id(model)
+        self._updating_model = False
+        self._last_selected_model = model
+        self.update_config("model", model)
+        self.device_combo.handler_block_by_func(self._on_device_changed)
+        self.device_combo.set_active_id("vulkan")
+        self.device_combo.handler_unblock_by_func(self._on_device_changed)
+        self.update_config("device", "vulkan")
+        self._device_before = "vulkan"
+        return True
+
     def _message(self, kind, title, text, buttons=Gtk.ButtonsType.OK):
         dialog = Gtk.MessageDialog(transient_for=self.window, modal=True,
                                    message_type=kind, buttons=buttons, text=title)
@@ -3644,19 +3702,19 @@ class PreferencesWindow:
         dialog.destroy()
         return response
 
-    def _setup_vulkan(self, model):
-        """Download and speed-check AMD / Intel graphics for *model*. True if
+    def _setup_vulkan(self, model, confirm=True):
+        """Download and speed-check the Vulkan engine for *model*. True if
         TalkType should use the graphics chip."""
         from . import whisper_vulkan as wv
         if not wv.supports_model(model):
             self._message(
                 Gtk.MessageType.INFO, "Pick a Whisper model first",
-                "AMD / Intel graphics speeds up the Whisper models. You're using Parakeet, "
+                "Your graphics card speeds up the Whisper models. You're using Parakeet, "
                 "which runs on the processor and is already fast there.\n\n"
                 "To use your graphics chip, choose a Whisper model (Small, Medium or Large-v3) "
-                "and then choose AMD / Intel graphics again.")
+                "and then choose Vulkan again.")
             return False
-        if not self._download_vulkan_files(model, confirm=True):
+        if not self._download_vulkan_files(model, confirm=confirm):
             return False
         return self._run_vulkan_speed_check(model)
 
@@ -3676,7 +3734,7 @@ class PreferencesWindow:
             return True
         if confirm:
             answer = self._message(
-                Gtk.MessageType.QUESTION, "Set up AMD / Intel graphics?",
+                Gtk.MessageType.QUESTION, "Set up your graphics card with Vulkan?",
                 "TalkType needs a one-time download: the graphics engine "
                 f"({wv.ENGINE_SIZE_TEXT}) and the {model.title()} model in the format it uses "
                 f"({wv.MODEL_FILES[model][1]}).\n\n"
@@ -3686,7 +3744,7 @@ class PreferencesWindow:
             if answer != Gtk.ResponseType.OK:
                 return False
         dialog = UnifiedDownloadDialog(
-            parent=self.window, title="Setting Up AMD / Intel Graphics",
+            parent=self.window, title="Setting Up Vulkan",
             description="One-time download. Everything runs on this computer.")
         for task in tasks:
             dialog.add_task(task)
@@ -3709,7 +3767,7 @@ class PreferencesWindow:
             try:
                 device = wv.find_device()
                 if device is None:
-                    result["error"] = "TalkType couldn't find an AMD or Intel graphics chip it can use."
+                    result["error"] = "TalkType couldn't find a graphics chip it can use."
                 else:
                     result["times"] = wv.speed_check(model, device)
             except Exception as e:
