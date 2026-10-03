@@ -208,10 +208,19 @@ def test_unchecking_needs_no_dialog_and_disables(monkeypatch):
 # --- clearing the log ------------------------------------------------------
 
 def test_log_file_path_follows_dev_mode(monkeypatch):
+    # The suite redirects logs via TALKTYPE_LOG_DIR (tests/conftest.py); this
+    # checks the normal rule, so switch that off. Only paths are computed.
+    monkeypatch.delenv("TALKTYPE_LOG_DIR", raising=False)
     monkeypatch.setenv("DEV_MODE", "1")
     assert tlog.log_file_path().parent.name == "talktype-dev"
     monkeypatch.delenv("DEV_MODE", raising=False)
     assert tlog.log_file_path().parent.name == "talktype"
+
+
+def test_talktype_log_dir_overrides_the_location(monkeypatch, tmp_path):
+    monkeypatch.setenv("DEV_MODE", "1")
+    monkeypatch.setenv("TALKTYPE_LOG_DIR", str(tmp_path))
+    assert tlog.log_file_path() == tmp_path / "talktype.log"
 
 
 def test_clear_log_empties_main_and_removes_backup(tmp_path):
