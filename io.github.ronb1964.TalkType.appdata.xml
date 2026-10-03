@@ -85,6 +85,15 @@
   </screenshots>
 
   <releases>
+    <release version="0.13.1" date="2026-10-03">
+      <description>
+        <p>Performance presets work with Vulkan</p>
+        <ul>
+          <li>Most Accurate can be set up through Vulkan on NVIDIA, AMD and Intel graphics</li>
+          <li>Graphics presets keep you on Vulkan instead of switching to the processor</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.13.0" date="2026-10-03">
       <description>
         <p>A lighter way to use an NVIDIA graphics card</p>

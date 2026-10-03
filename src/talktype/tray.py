@@ -798,6 +798,41 @@ class DictationTray:
         except Exception:
             return "custom"
 
+    def _revert_preset_radio(self):
+        """Put the Performance radio back on the preset that's actually in use."""
+        self._updating_preset = True
+        try:
+            _cur = self._get_current_preset()
+            if _cur in self.preset_radios:
+                self.preset_radios[_cur].set_active(True)
+            elif hasattr(self, 'preset_custom'):
+                self.preset_custom.set_active(True)
+        except Exception as _re:
+            logger.error(f"Failed to revert preset radio: {_re}")
+        finally:
+            self._updating_preset = False
+
+    def _download_cuda_for_most_accurate(self):
+        """The Full route for 'Most Accurate': download CUDA and large-v3
+        together, then apply the preset and restart the dictation service."""
+        from .config import load_config, save_config
+        from .download_progress_dialog import show_unified_download_dialog
+        _results = show_unified_download_dialog(cuda=True, model="large-v3")
+        _cuda_ok = _results.get("CUDA Libraries", {}).get("success", False)
+        _model_ok = _results.get("large-v3 AI Model", {}).get("success", False)
+        if not (_cuda_ok and _model_ok):
+            return
+        try:
+            cfg = load_config()
+            cfg.model = "large-v3"
+            cfg.device = "cuda"
+            save_config(cfg)
+            logger.info("Both downloads complete — applied Most Accurate preset (large-v3, cuda)")
+            self.update_menu_display()
+            self.restart_service(None)
+        except Exception as _ae:
+            logger.error(f"Failed to apply preset after download: {_ae}")
+
     def set_performance_preset(self, preset_id: str):
         """Apply a performance preset."""
         # Prevent recursive calls when programmatically setting radio buttons
@@ -814,11 +849,18 @@ class DictationTray:
             from .config import load_config, save_config
             from .model_helper import is_model_cached_fast, download_model_with_progress
 
-            # large-v3 requires NVIDIA GPU + CUDA libraries.
-            # Check BEFORE anything else — if CUDA missing, show a dialog and bail out.
-            # NOTE: This block is intentionally outside the inner try/except so that
-            # an exception here CANNOT fall through to the model download below.
-            if model_name == "large-v3":
+            # GPU presets ("cuda" in the table means "use the graphics card")
+            # run through Vulkan (whisper_vulkan.py) when the user is set up
+            # for it, or chooses it below for Most Accurate.
+            from . import whisper_vulkan as _wv
+            vulkan_route = (preset["device"] == "cuda" and _wv.supports_model(model_name)
+                            and load_config().device == "vulkan")
+
+            # large-v3 needs the graphics card: CUDA, or Vulkan. Check BEFORE
+            # anything else; if neither is ready, ask, and stop if nothing is set
+            # up. This block is outside the inner try/except so an exception here
+            # can't fall through to the faster-whisper model download below.
+            if model_name == "large-v3" and not vulkan_route:
                 _cuda_ok = False
                 try:
                     from .cuda_helper import has_talktype_cuda_libraries
@@ -828,93 +870,72 @@ class DictationTray:
                     _cuda_ok = False  # Treat as missing — safer than allowing large-v3
 
                 if not _cuda_ok:
-                    # Detect NVIDIA GPU for the right error message and action
                     _has_nvidia = False
                     try:
                         from .cuda_helper import detect_nvidia_gpu
                         _has_nvidia = bool(detect_nvidia_gpu())
                     except Exception:
                         pass
-
-                    # Revert the radio button back to current preset (do this before
-                    # showing any dialog so the UI is already correct if user cancels)
-                    self._updating_preset = True
                     try:
-                        _cur = self._get_current_preset()
-                        if _cur in self.preset_radios:
-                            self.preset_radios[_cur].set_active(True)
-                        elif hasattr(self, 'preset_custom'):
-                            self.preset_custom.set_active(True)
-                    except Exception as _re:
-                        logger.error(f"Failed to revert preset radio: {_re}")
-                    finally:
-                        self._updating_preset = False
+                        _vulkan_offered = _wv.is_offered()
+                    except Exception:
+                        _vulkan_offered = False
 
+                    # Put the radio back first, so the menu is right whatever
+                    # the user answers below.
+                    self._revert_preset_radio()
+
+                    from .vulkan_setup_dialogs import (choose_light_or_full, set_up as _vulkan_set_up,
+                                                       message as _message, LIGHT, FULL)
                     if _has_nvidia:
-                        # NVIDIA GPU detected — offer to download BOTH CUDA + large-v3 together.
-                        # One confirmation, then one unified dialog showing both progress bars.
-                        _dlg = Gtk.MessageDialog(
-                            parent=None,
-                            flags=0,
-                            message_type=Gtk.MessageType.QUESTION,
-                            buttons=Gtk.ButtonsType.YES_NO,
-                            text="Download Required for 'Most Accurate'"
-                        )
-                        _dlg.format_secondary_text(
-                            "Two components need to be downloaded before 'Most Accurate' can be used:\n\n"
-                            "  • CUDA GPU Libraries   (~1.4GB)\n"
-                            "  • Large-v3 AI Model    (~3GB)\n\n"
-                            "Total: ~4.4GB — one-time download, cached for future use.\n\n"
-                            "Would you like to download both now?"
-                        )
-                        _dlg.set_keep_above(True)
-                        _response = _dlg.run()
-                        _dlg.destroy()
-                        if _response == Gtk.ResponseType.YES:
-                            # Show the unified dialog — this blocks until both downloads finish
-                            # (or are cancelled).  After both succeed, auto-apply the preset.
-                            from .download_progress_dialog import show_unified_download_dialog
-                            _results = show_unified_download_dialog(
-                                cuda=True,
-                                model="large-v3",
-                            )
-                            _cuda_ok = _results.get("CUDA Libraries", {}).get("success", False)
-                            _model_ok = _results.get("large-v3 AI Model", {}).get("success", False)
-                            if _cuda_ok and _model_ok:
-                                # Both downloads succeeded — save the preset config and
-                                # restart the dictation service so it picks up CUDA + large-v3.
-                                try:
-                                    cfg = load_config()
-                                    cfg.model = "large-v3"
-                                    cfg.device = "cuda"
-                                    save_config(cfg)
-                                    logger.info(
-                                        "Both downloads complete — applied Most Accurate preset "
-                                        "(large-v3, cuda)"
-                                    )
-                                    self.update_menu_display()
-                                    self.restart_service(None)
-                                except Exception as _ae:
-                                    logger.error(f"Failed to apply preset after download: {_ae}")
+                        if _vulkan_offered:
+                            _choice = choose_light_or_full(None, "large-v3")
+                        else:
+                            _choice = FULL if _message(
+                                None, Gtk.MessageType.QUESTION,
+                                "Download Required for 'Most Accurate'",
+                                "Two components need to be downloaded before 'Most Accurate' "
+                                "can be used:\n\n"
+                                "  • CUDA GPU Libraries   (~1.4GB)\n"
+                                "  • Large-v3 AI Model    (~3GB)\n\n"
+                                "Total: ~4.4GB, a one-time download.\n\n"
+                                "Would you like to download both now?",
+                                buttons=Gtk.ButtonsType.YES_NO) == Gtk.ResponseType.YES else None
+                        if _choice == FULL:
+                            self._download_cuda_for_most_accurate()
+                            return
+                        if _choice != LIGHT or not _vulkan_set_up(None, "large-v3", confirm=False):
+                            return
+                        vulkan_route = True
+                    elif _vulkan_offered:
+                        if _message(
+                                None, Gtk.MessageType.QUESTION, "Set up 'Most Accurate'?",
+                                "'Most Accurate' runs Large-v3 on your graphics card. On AMD and "
+                                "Intel graphics that works through Vulkan: a one-time download of "
+                                f"a {_wv.ENGINE_SIZE_TEXT} graphics engine and Large-v3 in its "
+                                f"format ({_wv.MODEL_FILES['large-v3'][1]}), then a quick check "
+                                "that your graphics chip is really faster than your processor.",
+                                buttons=Gtk.ButtonsType.OK_CANCEL) != Gtk.ResponseType.OK:
+                            return
+                        if not _vulkan_set_up(None, "large-v3", confirm=False):
+                            return
+                        vulkan_route = True
                     else:
-                        # No NVIDIA GPU — just inform, no download to offer
-                        _dlg = Gtk.MessageDialog(
-                            parent=None,
-                            flags=0,
-                            message_type=Gtk.MessageType.WARNING,
-                            buttons=Gtk.ButtonsType.OK,
-                            text="Cannot Apply 'Most Accurate' Preset"
-                        )
-                        _dlg.format_secondary_text(
-                            "The 'Most Accurate' preset uses an NVIDIA card through CUDA.\n\n"
-                            "On AMD or Intel graphics, open Preferences, choose\n"
-                            "Vulkan (any GPU) as the Device, then pick Large-v3 there."
-                        )
-                        _dlg.set_keep_above(True)
-                        _dlg.run()
-                        _dlg.destroy()
+                        _message(None, Gtk.MessageType.WARNING,
+                                 "Cannot Apply 'Most Accurate' Preset",
+                                 "'Most Accurate' runs the Large-v3 model on a graphics card, "
+                                 "and TalkType didn't find one it can use on this computer.\n\n"
+                                 "Please choose a different performance preset.")
+                        return
 
-                    return  # Always stop here — never fall through to model download
+            # On the Vulkan route the model is whisper.cpp's file, not
+            # faster-whisper's, so fetch that one (if missing) instead.
+            if vulkan_route and not _wv.is_installed(model_name):
+                from .vulkan_setup_dialogs import ensure_files
+                if not ensure_files(None, model_name, confirm=True):
+                    logger.info(f"Vulkan model download cancelled for preset {preset_id}")
+                    self._revert_preset_radio()
+                    return
 
             # Check if model is cached. The fast variant answers this from
             # file presence; is_model_cached() answered it by constructing a
@@ -923,7 +944,7 @@ class DictationTray:
             # dispatches no D-Bus, and the dictation service calls into the
             # tray from the thread that holds an exclusive grab on every
             # keyboard — so this call could freeze the whole system's input.
-            if not is_model_cached_fast(model_name):
+            if not vulkan_route and not is_model_cached_fast(model_name):
                 logger.info(f"Model {model_name} not cached, showing download dialog")
                 # Show download dialog - this returns the model or None if cancelled
                 model = download_model_with_progress(model_name, device="cpu", show_confirmation=True)
@@ -948,7 +969,7 @@ class DictationTray:
 
             # Determine effective device — presets marked "cuda" require CUDA libraries.
             # If CUDA isn't installed, silently use CPU so the service doesn't crash.
-            effective_device = preset["device"]
+            effective_device = "vulkan" if vulkan_route else preset["device"]
             if effective_device == "cuda":
                 try:
                     from .cuda_helper import has_talktype_cuda_libraries

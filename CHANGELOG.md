@@ -2,6 +2,18 @@
 
 All notable changes to TalkType are documented here.
 
+## [0.13.1] - 2026-10-03
+
+The Performance presets know about Vulkan now.
+
+- Picking Most Accurate from the tray menu used to need NVIDIA's CUDA
+  libraries, and without them it either offered the 4.4 GB download or said
+  it couldn't be done. Now an NVIDIA card gets the same Light (Vulkan) or Full
+  (CUDA) choice as setup, and AMD or Intel graphics get offered Vulkan.
+- If you're already set up with Vulkan, picking Balanced, Quality or Most
+  Accurate keeps you on Vulkan. Before, it quietly moved you back to the
+  processor because it didn't find CUDA.
+
 ## [0.13.0] - 2026-10-03
 
 A much lighter way to use an NVIDIA graphics card.

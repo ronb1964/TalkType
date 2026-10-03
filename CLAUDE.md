@@ -160,6 +160,9 @@ To update it:
    `whisper_vulkan.py`.
 4. Ask Ron before uploading. It is public.
 
+The setup dialogs (download, speed check, Light/Full choice) live in
+`vulkan_setup_dialogs.py`, shared by Preferences and the tray's presets.
+
 ---
 
 ## DESTRUCTIVE COMMANDS — ALWAYS ASK FIRST

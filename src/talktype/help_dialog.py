@@ -211,7 +211,7 @@ system resources. Adjust this in Preferences → Advanced.
 Quick one-click optimization via tray menu:
 • <b>Fastest:</b> Tiny model, CPU - instant results
 • <b>Balanced:</b> Small model, GPU - good accuracy with speed
-• <b>Most Accurate:</b> Large-v3 model, GPU - best quality
+• <b>Most Accurate:</b> Large-v3 model on your graphics card (CUDA or Vulkan) - best quality
 • <b>Fast &amp; Accurate:</b> Parakeet model - large-v3 class accuracy, no GPU needed
 • <b>Battery Saver:</b> Tiny model, CPU, short timeout
 

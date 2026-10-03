@@ -3067,29 +3067,23 @@ class PreferencesWindow:
                     # Two ways to run large-v3 on the card: Vulkan (light, about
                     # the same speed measured on an RTX 4070 Super) or CUDA
                     # (TalkType's long-standing NVIDIA setup).
-                    _dlg = Gtk.MessageDialog(
-                        transient_for=self.window,
-                        flags=0,
-                        message_type=Gtk.MessageType.QUESTION,
-                        buttons=Gtk.ButtonsType.NONE,
-                        text="Large-v3 needs your graphics card"
-                    )
-                    _dlg.format_secondary_text(
-                        "There are two ways to set it up:\n\n"
-                        "  • Light (Vulkan): a 24 MB graphics engine plus Large-v3 in its\n"
-                        "    format (1 GB). About as fast as CUDA in our tests.\n\n"
-                        "  • Full (CUDA): NVIDIA's CUDA libraries (1.4 GB) plus\n"
-                        "    Large-v3 (3 GB). TalkType's long-standing NVIDIA setup.\n\n"
-                        "Either is a one-time download."
-                    )
-                    _dlg.add_button("Cancel", Gtk.ResponseType.CANCEL)
-                    _dlg.add_button("Light (Vulkan)", Gtk.ResponseType.APPLY)
-                    _dlg.add_button("Full (CUDA)", Gtk.ResponseType.YES)
-                    _dlg.set_keep_above(True)
-                    _resp = _dlg.run()
-                    _dlg.destroy()
-                    if _resp == Gtk.ResponseType.APPLY:
+                    from .vulkan_setup_dialogs import choose_light_or_full, LIGHT, FULL
+                    if self._vulkan_offered():
+                        _choice = choose_light_or_full(self.window, "large-v3")
+                    else:
+                        # No Vulkan here: CUDA is the only route, so ask before
+                        # starting a 4.4 GB download.
+                        _choice = FULL if self._message(
+                            Gtk.MessageType.QUESTION, "Downloads Required",
+                            "The 'large-v3' model needs two downloads:\n\n"
+                            "  • CUDA GPU Libraries   (~1.4GB)\n"
+                            "  • Large-v3 AI Model    (~3GB)\n\n"
+                            "Total: ~4.4GB, a one-time download.\n\n"
+                            "Would you like to download both now?",
+                            buttons=Gtk.ButtonsType.YES_NO) == Gtk.ResponseType.YES else None
+                    if _choice == LIGHT:
                         self._switch_to_vulkan_for_model(combo, "large-v3")
+                    _resp = Gtk.ResponseType.YES if _choice == FULL else Gtk.ResponseType.CANCEL
                     if _resp == Gtk.ResponseType.YES:
                         from .download_progress_dialog import show_unified_download_dialog
                         _results = show_unified_download_dialog(
@@ -3703,119 +3697,14 @@ class PreferencesWindow:
         return response
 
     def _setup_vulkan(self, model, confirm=True):
-        """Download and speed-check the Vulkan engine for *model*. True if
-        TalkType should use the graphics chip."""
-        from . import whisper_vulkan as wv
-        if not wv.supports_model(model):
-            self._message(
-                Gtk.MessageType.INFO, "Pick a Whisper model first",
-                "Your graphics card speeds up the Whisper models. You're using Parakeet, "
-                "which runs on the processor and is already fast there.\n\n"
-                "To use your graphics chip, choose a Whisper model (Small, Medium or Large-v3) "
-                "and then choose Vulkan again.")
-            return False
-        if not self._download_vulkan_files(model, confirm=confirm):
-            return False
-        return self._run_vulkan_speed_check(model)
+        """Download and speed-check Vulkan for *model* (vulkan_setup_dialogs).
+        True if TalkType should use the graphics chip."""
+        from .vulkan_setup_dialogs import set_up
+        return set_up(self.window, model, confirm=confirm)
 
     def _download_vulkan_files(self, model, confirm):
-        """Make sure the engine and *model*'s whisper.cpp file are downloaded.
-        True when both are there."""
-        from . import whisper_vulkan as wv
-        from talktype.download_progress_dialog import DownloadTask, UnifiedDownloadDialog
-        tasks = []
-        if not wv.is_engine_installed():
-            tasks.append(DownloadTask("Graphics engine", "whisper.cpp (Vulkan)",
-                                      wv.ENGINE_SIZE_TEXT, wv.make_engine_download_func()))
-        if wv.model_path(model) is None:
-            tasks.append(DownloadTask("Speech model", f"{model.title()} (for graphics)",
-                                      wv.MODEL_FILES[model][1], wv.make_model_download_func(model)))
-        if not tasks:
-            return True
-        if confirm:
-            answer = self._message(
-                Gtk.MessageType.QUESTION, "Set up your graphics card with Vulkan?",
-                "TalkType needs a one-time download: the graphics engine "
-                f"({wv.ENGINE_SIZE_TEXT}) and the {model.title()} model in the format it uses "
-                f"({wv.MODEL_FILES[model][1]}).\n\n"
-                "Afterwards TalkType checks whether your graphics chip is really faster than "
-                "your processor, and only uses it if it is. Everything runs on this computer.",
-                buttons=Gtk.ButtonsType.OK_CANCEL)
-            if answer != Gtk.ResponseType.OK:
-                return False
-        dialog = UnifiedDownloadDialog(
-            parent=self.window, title="Setting Up Vulkan",
-            description="One-time download. Everything runs on this computer.")
-        for task in tasks:
-            dialog.add_task(task)
-        results = dialog.run()
-        if all(r.get("success") for r in results.values()) and wv.is_installed(model):
-            return True
-        if not any(r.get("cancelled") for r in results.values()):
-            self._message(Gtk.MessageType.ERROR, "The download did not finish",
-                          "Check your internet connection and try again.")
-        return False
-
-    def _run_vulkan_speed_check(self, model):
-        """Time the graphics chip against the processor on a short sample, tell
-        the user the result, and return True if the graphics chip should be used."""
-        from . import whisper_vulkan as wv
-        import threading
-        result = {}
-
-        def work():
-            try:
-                device = wv.find_device()
-                if device is None:
-                    result["error"] = "TalkType couldn't find a graphics chip it can use."
-                else:
-                    result["times"] = wv.speed_check(model, device)
-            except Exception as e:
-                result["error"] = f"The speed check didn't work: {e}"
-
-        waiting = Gtk.Dialog(title="Checking Speed", transient_for=self.window, modal=True)
-        waiting.set_deletable(False)
-        box = waiting.get_content_area()
-        box.set_spacing(12)
-        box.set_border_width(18)
-        row = Gtk.Box(spacing=12)
-        spinner = Gtk.Spinner()
-        spinner.start()
-        row.pack_start(spinner, False, False, 0)
-        row.pack_start(Gtk.Label(label="Checking how fast your graphics chip is compared to your\n"
-                                       "processor. This can take up to a minute.", xalign=0),
-                       False, False, 0)
-        box.add(row)
-        waiting.show_all()
-        thread = threading.Thread(target=work, daemon=True)
-        thread.start()
-
-        def poll():
-            if thread.is_alive():
-                return True
-            waiting.response(Gtk.ResponseType.OK)
-            return False
-
-        GLib.timeout_add(200, poll)
-        waiting.run()
-        waiting.destroy()
-
-        if "error" in result:
-            self._message(Gtk.MessageType.WARNING, "Keeping the processor", result["error"])
-            return False
-        gpu, cpu = result["times"]
-        if wv.graphics_is_worth_it(gpu, cpu):
-            self._message(
-                Gtk.MessageType.INFO, "Your graphics chip is faster",
-                f"It transcribed the test in {gpu:.1f} seconds, your processor in {cpu:.1f}, "
-                f"about {cpu / gpu:.0f} times faster. TalkType will use your graphics chip.")
-            return True
-        self._message(
-            Gtk.MessageType.INFO, "Your processor is faster here",
-            f"Your processor transcribed the test in {cpu:.1f} seconds and your graphics chip "
-            f"in {gpu:.1f}. The graphics built into some processors is too small to help, so "
-            "TalkType will keep using the processor.")
-        return False
+        from .vulkan_setup_dialogs import ensure_files
+        return ensure_files(self.window, model, confirm)
 
     def _untick_ai_corrections(self):
         """Put the AI box back to unticked without re-running its handler."""
