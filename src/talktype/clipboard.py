@@ -37,6 +37,31 @@ def copy_text(text):
         return False
 
 
+def copy_text_on_gtk_thread(text, timeout=1.0):
+    """copy_text, run on the thread that runs Gtk.main(). True on success.
+
+    For the dictation service on X11, which has no wl-copy to lean on. GTK may
+    only be touched from its own thread, and the service's typing runs on
+    another one, so the copy is queued there and waited for. The service keeps
+    the X11 clipboard selection afterwards and its GTK loop answers the
+    target app's paste request. If the loop isn't running, nothing happens
+    within *timeout* and this returns False.
+    """
+    import threading
+    from gi.repository import GLib
+
+    done = threading.Event()
+    result = []
+
+    def _copy():
+        result.append(copy_text(text))
+        done.set()
+        return False            # run once
+
+    GLib.idle_add(_copy)
+    return done.wait(timeout) and bool(result and result[0])
+
+
 # --- Paste mode and the user's clipboard (GitHub issue #7) ----------------------------
 # Paste mode puts each dictation on the clipboard and sends Ctrl+V. That used to
 # throw away whatever the user had copied, and KDE's Klipper saved every

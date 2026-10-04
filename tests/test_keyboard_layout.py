@@ -103,6 +103,26 @@ def test_us_keyboards_keep_the_old_typing_path():
     assert kl.needs_layout_typing(("us", "intl"), "anything") is True  # dead-key variant
 
 
+def test_non_ascii_on_a_us_keyboard_is_planned_not_typed_blind():
+    """`ydotool type` only knows US key positions: Cyrillic came out as 9s."""
+    assert kl.needs_layout_typing(("us", ""), "Привіт") is True
+    assert kl.needs_layout_typing(("us", ""), "I\u2019m") is True       # smart apostrophe
+
+
+def test_the_blocking_character_is_named():
+    """guelz had to match timestamps to find which dictation fell back."""
+    assert kl.KeyPlanner("ua", "").plan_or_blocker("Це Windows 10") == (None, "W")
+    tokens, blocker = kl.KeyPlanner("ua", "").plan_or_blocker("Привіт, світе.")
+    assert tokens and blocker is None
+
+
+def test_untypable_text_raises_with_the_layout_and_character(monkeypatch):
+    monkeypatch.setattr(kl, "active_layout", lambda: ("us", ""))
+    with pytest.raises(kl.UntypableText) as e:
+        kl.layout_key_events("Привіт")
+    assert e.value.args == (("us", ""), "П")
+
+
 # --- finding the active layout ---------------------------------------------------
 
 def test_kde_reports_the_active_layout(monkeypatch):
@@ -144,12 +164,46 @@ def test_sway_reports_the_active_layout_by_its_description(monkeypatch):
     assert kl.active_layout() == ("ch", "")
 
 
-def test_x11_reports_the_layout(monkeypatch):
-    monkeypatch.setattr(kl, "_desktop", lambda: "xfce")
-    monkeypatch.setattr(kl, "_setxkbmap_query",
-                        lambda: "rules:      evdev\nmodel:      pc105\nlayout:     fr,us\nvariant:    oss,\n")
+def _x11(monkeypatch, layouts, variants, group):
+    monkeypatch.setattr(kl, "_desktop", lambda: "lxqt")
+    monkeypatch.setattr(kl, "_setxkbmap_query", lambda: (
+        f"rules:      evdev\nmodel:      pc105\nlayout:     {layouts}\n"
+        + (f"variant:    {variants}\n" if variants is not None else "")))
+    monkeypatch.setattr(kl, "_x11_active_group", lambda: group)
     monkeypatch.setenv("XDG_SESSION_TYPE", "x11")
+
+
+def test_x11_reports_the_layout(monkeypatch):
+    _x11(monkeypatch, "fr,us", "oss,", 0)
     assert kl.active_layout() == ("fr", "oss")
+
+
+def test_x11_reports_the_layout_that_is_on_not_the_first(monkeypatch):
+    """The Fedora report: "us,ua" with Ukrainian active was typed as US, and
+    Ukrainian came out as 9s with commas and full stops as б and ю."""
+    _x11(monkeypatch, "us,ua", None, 1)
+    assert kl.active_layout() == ("ua", "")
+
+
+def test_x11_never_gives_the_first_layouts_variant_to_another(monkeypatch):
+    _x11(monkeypatch, "us,ua", "dvorak", 1)
+    assert kl.active_layout() == ("ua", "")
+
+
+@pytest.mark.parametrize("group", [None, 7])
+def test_x11_without_a_usable_group_uses_the_first(monkeypatch, group):
+    _x11(monkeypatch, "us,ua", ",", group)
+    assert kl.active_layout() == ("us", "")
+
+
+def test_x11_group_failure_is_not_fatal(monkeypatch):
+    _x11(monkeypatch, "de,us", None, 0)
+
+    def broken():
+        raise OSError("no libX11")
+
+    monkeypatch.setattr(kl, "_x11_active_group", broken)
+    assert kl.active_layout() == ("de", "")
 
 
 def test_the_system_setting_is_the_last_resort(monkeypatch, tmp_path):
@@ -183,6 +237,8 @@ def typing(monkeypatch):
     monkeypatch.setattr(app, "_which", lambda name: name == "ydotool")
     monkeypatch.setattr(app, "_ydotool_key", lambda keys, **kw: calls.append(("key", list(keys))) or True)
     monkeypatch.setattr(app, "_paste_text", lambda text, **kw: calls.append(("paste", text)) or True)
+    monkeypatch.setattr(app, "_paste_text_x11", lambda text: calls.append(("x11 paste", text)) or True)
+    monkeypatch.setattr(app, "_is_wayland_session", lambda: True)
 
     class Done:
         returncode = 0
@@ -216,6 +272,29 @@ def test_untypable_text_is_pasted_instead(typing, monkeypatch):
     monkeypatch.setattr(kl, "active_layout", lambda: ("de", ""))
     assert app._type_text_raw("nice 👍") is True
     assert calls == [("paste", "nice 👍")]
+
+
+def test_untypable_text_on_x11_uses_the_x11_clipboard(typing, monkeypatch):
+    """wl-copy can't reach an X11 display, so _paste_text refuses there."""
+    app, calls = typing
+    monkeypatch.setattr(app, "_is_wayland_session", lambda: False)
+    monkeypatch.setattr(kl, "active_layout", lambda: ("ua", ""))
+    assert app._type_text_raw("Це Windows 10") is True
+    assert calls == [("x11 paste", "Це Windows 10")]
+
+
+def test_ukrainian_on_a_ukrainian_layout_is_typed(typing, monkeypatch):
+    app, calls = typing
+    monkeypatch.setattr(kl, "active_layout", lambda: ("ua", ""))
+    assert app._type_text_raw("Привіт") is True
+    assert calls[0][0] == "key"
+
+
+def test_cyrillic_on_a_us_layout_is_pasted_not_typed(typing, monkeypatch):
+    app, calls = typing
+    monkeypatch.setattr(kl, "active_layout", lambda: ("us", ""))
+    assert app._type_text_raw("Привіт") is True
+    assert calls == [("paste", "Привіт")]
 
 
 def test_the_electron_fast_path_is_layout_aware_too(typing, monkeypatch):

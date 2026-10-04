@@ -13,9 +13,11 @@ for, like a capital Ä on a Swiss keyboard, is typed as its accent's dead key
 followed by the letter. The keys go out through `ydotool key`, the same
 uinput path as before, so no new permission is needed.
 
-US layouts keep using `ydotool type` exactly as before. If some character
-can't be typed on the active layout at all (an emoji, Latin text on a Russian
-layout), the caller pastes that dictation instead, which works on any layout.
+US layouts keep using `ydotool type` for plain ASCII. Anything else on a US
+layout goes through the planner too: `ydotool type` turns Cyrillic into junk.
+If some character can't be typed on the active layout at all (an emoji, Latin
+text on a Ukrainian layout), the caller pastes that dictation instead, which
+works on any layout.
 
 Finding the active layout depends on the desktop:
   KDE        org.kde.keyboard over D-Bus (the active one of the configured list)
@@ -23,11 +25,12 @@ Finding the active layout depends on the desktop:
   Hyprland   `j/devices` on its socket (the main keyboard)
   Sway       GET_INPUTS on its socket; names are descriptions, mapped to codes
              with libxkbregistry
-  X11        setxkbmap -query
+  X11        setxkbmap -query for the list, XkbGetState for which one is on
   otherwise  the system default (xorg.conf.d / /etc/default/keyboard)
 Anything that fails just means "unknown", and unknown means the old US path.
 """
 import ctypes as C
+import ctypes.util
 import json
 import os
 import re
@@ -157,6 +160,10 @@ class KeyPlanner:
     def plan(self, text):
         """ydotool `key` arguments ("keycode:pressed") that type *text*, or None
         if some character can't be typed on this layout."""
+        return self.plan_or_blocker(text)[0]
+
+    def plan_or_blocker(self, text):
+        """(tokens, None), or (None, the first character that can't be typed)."""
         tokens = []
         for char in text:
             entry = self._keys.get(self._keysym(char))
@@ -169,8 +176,8 @@ class KeyPlanner:
                 base = self._keys.get(self._keysym(parts[0]))
                 if dead and base and self._press(dead, tokens) and self._press(base, tokens):
                     continue
-            return None
-        return tokens
+            return None, char
+        return tokens, None
 
 
 _planners = {}
@@ -185,11 +192,15 @@ def planner_for(layout_variant):
 
 def needs_layout_typing(layout_variant, text) -> bool:
     """Whether text should be typed key by key for this layout: anything but
-    plain US. Unknown layouts (None) keep the old path."""
+    ASCII on plain US. Unknown layouts (None) keep the old path.
+
+    Non-ASCII on US goes through the planner as well, so that Cyrillic or an
+    emoji ends up pasted (UntypableText) rather than handed to `ydotool type`,
+    which only knows US key positions and typed Ukrainian as a row of 9s."""
     if not layout_variant:
         return False
     layout, variant = layout_variant
-    return not (layout == "us" and not variant)
+    return not (layout == "us" and not variant and text.isascii())
 
 
 # --- the active layout ---------------------------------------------------------------
@@ -300,9 +311,50 @@ def _setxkbmap_query():
     return subprocess.run(["setxkbmap", "-query"], capture_output=True, text=True, timeout=2).stdout
 
 
+_XKB_USE_CORE_KBD = 0x0100
+
+
+def _x11_active_group():
+    """Which of the configured layouts is on (its XKB group), or None.
+
+    setxkbmap -query lists every layout ("us,ua") and says nothing about which
+    one is active, so the first was always used. On a Ukrainian desktop with
+    English listed first, Cyrillic was typed with US keys and came out as 9s,
+    with commas and full stops turning into б and ю. XkbGetState is the Xlib
+    call that knows; the group is the first byte of XkbStateRec.
+    """
+    x11 = C.CDLL(C.util.find_library("X11") or "libX11.so.6")
+    x11.XOpenDisplay.restype = C.c_void_p
+    x11.XOpenDisplay.argtypes = [C.c_char_p]
+    x11.XkbGetState.argtypes = [C.c_void_p, C.c_uint, C.c_void_p]
+    x11.XCloseDisplay.argtypes = [C.c_void_p]
+    display = x11.XOpenDisplay(None)
+    if not display:
+        return None
+    try:
+        state = (C.c_ubyte * 64)()      # XkbStateRec is 18 bytes; room to spare
+        if x11.XkbGetState(display, _XKB_USE_CORE_KBD, state) != 0:
+            return None
+        return state[0]
+    finally:
+        x11.XCloseDisplay(display)
+
+
 def _x11_layout():
     fields = dict(re.findall(r"^(\w+):\s*(.*)$", _setxkbmap_query(), re.M))
-    return (_first(fields.get("layout")), _first(fields.get("variant"))) if fields.get("layout") else None
+    if not fields.get("layout"):
+        return None
+    try:
+        group = _x11_active_group() or 0
+    except Exception as e:
+        logger.debug(f"Could not read the active X11 layout group: {e}")
+        group = 0
+    variants = [v.strip() for v in (fields.get("variant") or "").split(",")]
+    # A layout without a variant of its own has none; the first layout's
+    # ("us(dvorak),ua" lists just "dvorak") must not be applied to it.
+    variant = variants[group] if group < len(variants) else ""
+    # _first falls back to the first layout if the group is out of range.
+    return _first(fields["layout"], group), variant
 
 
 def _system_layout():
@@ -361,11 +413,12 @@ def layout_key_events(text):
     layout = active_layout()
     if not needs_layout_typing(layout, text):
         return None
-    tokens = planner_for(layout).plan(text)
+    tokens, blocker = planner_for(layout).plan_or_blocker(text)
     if tokens is None:
-        raise UntypableText(layout)
+        raise UntypableText(layout, blocker)
     return tokens
 
 
 class UntypableText(Exception):
-    """Some character can't be typed on the active layout."""
+    """Some character can't be typed on the active layout.
+    args: ((layout, variant), the first character that can't be typed)."""

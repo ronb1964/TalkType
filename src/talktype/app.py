@@ -1565,8 +1565,12 @@ def _type_on_layout(text: str, delay_ms: int, what: str):
     try:
         tokens = keyboard_layout.layout_key_events(text)
     except keyboard_layout.UntypableText as e:
-        logger.info(f"{what}: the {e.args[0]} keyboard layout can't type some of this text; pasting instead")
-        return _paste_text(text)
+        layout, blocker = e.args
+        logger.info(f"{what}: the {layout} keyboard layout can't type {blocker!r} "
+                    f"(U+{ord(blocker):04X}); pasting instead")
+        if _is_wayland_session():
+            return _paste_text(text)
+        return _paste_text_x11(text)
     except Exception as e:
         logger.warning(f"{what}: couldn't work out keys for the keyboard layout ({e}); typing as US")
         return None
@@ -1800,6 +1804,44 @@ def _type_text_fast(text: str, delay_ms: int = 1):
         return False
 
 
+def _send_paste_keystroke() -> bool:
+    """Ctrl+V, or Ctrl+Shift+V into a terminal, where Ctrl+V is readline's
+    quoted-insert. The window class comes from the tray's cache (the GNOME
+    extension, the KWin script or a compositor's focus events fill it); None
+    when nothing has reported yet. True if the keystroke was sent."""
+    focused_class = _query_focused_window_class()
+    # KEY_LEFTSHIFT=42, KEY_LEFTCTRL=29, KEY_V=47
+    if is_terminal_class(focused_class):
+        keys = ["42:1", "29:1", "47:1", "47:0", "29:0", "42:0"]  # Ctrl+Shift+V
+        logger.info(f"Paste: Ctrl+Shift+V (terminal class={focused_class!r})")
+    else:
+        keys = ["29:1", "47:1", "47:0", "29:0"]  # Ctrl+V
+        logger.info(f"Paste: Ctrl+V (class={focused_class!r})")
+    if not _ydotool_key(keys, what="paste"):
+        # The keystroke never reached the desktop: the text is sitting on the
+        # clipboard but never made it into the app.
+        logger.error("Paste keystroke failed — text was not inserted")
+        return False
+    return True
+
+
+def _paste_text_x11(text: str) -> bool:
+    """Paste on an X11 session, for text the keyboard layout can't type.
+
+    _paste_text needs wl-copy, which only talks to Wayland. Here the service
+    puts the text on the X11 clipboard through its own GTK loop and then sends
+    the same paste keystroke. It's only the fallback for untypable text
+    (Latin words on a Ukrainian layout, an emoji); ordinary X11 dictation is
+    still typed. True only if the text reached the app.
+    """
+    from . import clipboard
+    if not clipboard.copy_text_on_gtk_thread(text):
+        logger.error("X11 paste: couldn't put the text on the clipboard; nothing was inserted")
+        return False
+    time.sleep(0.08)    # let the selection settle before the app asks for it
+    return _send_paste_keystroke()
+
+
 def _paste_text(text: str, send_trailing_keys: bool = False):
     """
     Wayland paste injection: put text on clipboard, then Ctrl+V or Shift+Ctrl+V.
@@ -1868,25 +1910,8 @@ def _paste_text(text: str, send_trailing_keys: bool = False):
                     logger.error(f"wl-copy failed (exit {status}) — clipboard not set, skipping paste")
                     return False
 
-                # Resolve focused window class via D-Bus query (tray-side cache).
-                # None when the extension hasn't pushed yet or the service is down.
-                focused_class = _query_focused_window_class()
-
-                is_terminal = is_terminal_class(focused_class)
-
-                # KEY_LEFTSHIFT=42, KEY_LEFTCTRL=29, KEY_V=47
-                if is_terminal:
-                    keys = ["42:1", "29:1", "47:1", "47:0", "29:0", "42:0"]  # Ctrl+Shift+V
-                    logger.info(f"Paste: Ctrl+Shift+V (terminal class={focused_class!r})")
-                else:
-                    keys = ["29:1", "47:1", "47:0", "29:0"]  # Ctrl+V
-                    logger.info(f"Paste: Ctrl+V (class={focused_class!r})")
-
                 ydotool_start = time.time()
-                if not _ydotool_key(keys, what="paste"):
-                    # The keystroke never reached the compositor: the text is
-                    # sitting on the clipboard but never made it into the app.
-                    logger.error("Paste keystroke failed — text was not inserted")
+                if not _send_paste_keystroke():
                     return False
                 ydotool_time = time.time() - ydotool_start
                 logger.info(f"TIMING: ydotool paste command took {ydotool_time:.3f}s")
