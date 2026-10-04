@@ -2465,6 +2465,14 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         if rec_sr != SAMPLE_RATE:
             audio_f32 = _resample_audio(audio_f32, rec_sr, SAMPLE_RATE)
 
+        # A quick tap of the key with nothing said: speech engines can invent
+        # a word ("Thank you.") in a fraction of a second of room noise.
+        from .silence import is_speechless_tap
+        if is_speechless_tap(audio_f32, SAMPLE_RATE):
+            print("ℹ️  (Short tap with no speech; nothing typed)")
+            logger.info(f"Skipped a {len(audio_f32) / SAMPLE_RATE:.2f}s recording with no speech in it")
+            return
+
         # Stage 1: Transcribe audio → raw text
         raw = _transcribe_audio(audio_f32, language)
         logger.info(f"TIMING: Transcription pipeline took {time.time() - t0:.2f}s")

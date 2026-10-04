@@ -235,13 +235,13 @@ Choose the right model for your needs in Preferences → General:
 | **Parakeet** | 670 MB | Fast, even without a GPU | Best | English + 24 European languages |
 
 > **Tip:** Start with "small" for everyday use. Enable GPU acceleration for larger models.
-> No graphics card? Try **Parakeet** (Preferences, or tray → Performance → Fast & Accurate). It's a different engine that NVIDIA made, and it runs on your processor. It doesn't cover Chinese, Japanese, Korean, Arabic and other non-European languages. Use a Whisper model for those.
+> No graphics card? Try **Parakeet** (Preferences, or tray → Performance → Fast & Accurate). It's a different engine that NVIDIA made, and it runs on your processor (or on your graphics card through Vulkan). It doesn't cover Chinese, Japanese, Korean, Arabic and other non-European languages. Use a Whisper model for those.
 
 ---
 
 ## GPU Acceleration
 
-A graphics card makes the Whisper models much faster. There are two ways to use one:
+A graphics card makes the Whisper models much faster, and with Vulkan it speeds up Parakeet too. There are two ways to use one:
 
 | | Works on | Download | Pick it in |
 |---|---|---|---|
@@ -252,7 +252,7 @@ On an RTX 4070 Super both were equally fast: half a second for 11 seconds of spe
 
 Before switching to Vulkan, TalkType times your graphics chip against your processor and only switches if the graphics chip is clearly faster. The graphics built into some desktop processors is too small to help, and in that case it tells you and keeps using the processor.
 
-Parakeet doesn't need a graphics card. It's already fast on the processor.
+Parakeet doesn't need a graphics card, since it's already fast on the processor. With the device set to Vulkan it runs on the graphics card anyway: on an RTX 4070 Super, a minute of speech took 0.2 seconds instead of 2, with the same accuracy. That needs a second copy of Parakeet in the graphics engine's format (669 MB). The processor copy stays too, as a fallback. CUDA can't run Parakeet.
 
 ---
 

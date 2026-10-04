@@ -2,6 +2,38 @@
 
 All notable changes to TalkType are documented here.
 
+## [0.14.0] - 2026-10-03
+
+Parakeet can use your graphics card now, and dictating into a terminal works
+on a lot more desktops.
+
+- With the device set to Vulkan (any GPU), Parakeet runs on the graphics
+  card. On my RTX 4070 Super a minute of talking takes about 0.2 seconds
+  instead of 2, and it's just as accurate. Choosing Vulkan in Preferences
+  downloads a copy of Parakeet made for the graphics engine (669 MB) and
+  checks that your graphics card is really faster than your processor
+  before it switches. The processor copy stays, so if the graphics card ever
+  has trouble, TalkType goes back to it.
+- Terminals need Ctrl+Shift+V to paste, so TalkType has to know when you're
+  in one. That only worked on GNOME and KDE. Now it also works on Sway, i3,
+  Hyprland and niri, and on X11 desktops like XFCE, MATE and Cinnamon.
+  Hyprland is the one I couldn't try on a real machine, so if you're on
+  Hyprland I'd like to hear whether dictating into a terminal works for you.
+- Ghostty, GNOME Console, xfce4-terminal, Guake and more than a dozen other
+  terminals were missing from TalkType's list and got the wrong paste. That's
+  fixed on every desktop.
+- On Vulkan, clicking OK in Preferences never closed the window. That's been
+  there since 0.12.0 and it's fixed. The Device dropdown also closes now
+  before the speed check pops up, instead of staying drawn on top of it.
+- On the first-run screen, the Full and Light choices for an NVIDIA card
+  stayed greyed out until you ticked the box above them, so it looked like
+  Light couldn't be picked. Picking either one ticks the box for you now.
+- A quick tap of the key with nothing said doesn't get typed out anymore.
+  Parakeet would sometimes hear "Thank you." in that fraction of a second of
+  background noise.
+- Help has a link to the TalkType Discussions page, for questions or just
+  telling me how it's going.
+
 ## [0.13.1] - 2026-10-03
 
 The Performance presets know about Vulkan now.

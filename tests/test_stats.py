@@ -236,7 +236,9 @@ def test_stats_are_saved_after_the_text_is_typed(stats_file, monkeypatch):
     monkeypatch.setattr("talktype.history.add_entry", lambda text: None)
     monkeypatch.setattr(app, "_inject_text", lambda text, mode, t0: order.append("typed"))
     monkeypatch.setattr(stats, "record", lambda words, seconds: order.append("counted"))
-    frames = [np.ones(1600, dtype=np.int16).tobytes()]
+    # A full second: a near-silent 0.1 s would be dropped as an accidental tap
+    # (silence.is_speechless_tap) before reaching the engine.
+    frames = [np.ones(app.SAMPLE_RATE, dtype=np.int16).tobytes()]
     app._transcribe_and_inject(frames, app.SAMPLE_RATE, beeps_on=False,
                                smart_quotes=False, notify_on=False)
     assert order == ["typed", "counted"]

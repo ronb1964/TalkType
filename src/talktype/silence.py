@@ -100,3 +100,50 @@ class SilenceDetector:
         if not self.fired:
             return 0
         return max(0, int((self.silence_time - _TAIL_KEEP_S) * self.sample_rate))
+
+
+# --- An accidental tap of the hold key ---------------------------------------------
+# A tap just over MIN_HOLD_MS records a fraction of a second of room noise and
+# the key's click, and Parakeet can "hear" a word in it: "Thank you." got typed
+# into a terminal while testing 0.14.0, and the processor engine says "Yeah."
+# to 0.4 s of loud hiss. Whisper has a no-speech score to catch this; Parakeet
+# has none. So a recording this short is only transcribed if some of it is
+# clearly louder than its own background.
+
+TAP_MAX_S = 0.6             # longer recordings are always transcribed, silent or not
+_TAP_BLOCK_S = 0.02
+# Tuned on 26 real taps from a Sennheiser Profile desk mic (noisy background,
+# int16 RMS 70-130; the key's thump reached 1.6-4.7x that for a few tens of
+# ms) and 5,039 real speech clips of 0.3-0.5 s, plus real words laid over that
+# mic's own background (2026-10-03). At 2.5x: all 26 taps dropped, no speech
+# at normal or loud level dropped, 3 of 138 very soft single words dropped.
+# 1.5x let 10 of the 26 taps through, and Parakeet on the processor typed
+# "Yeah." for them. A ratio needs the second route below: when a short clip is
+# all speech, its quietest blocks are speech too (4x alone dropped 224 of 510
+# half-second speech windows).
+_TAP_SPEECH_OVER_NOISE = 2.5    # over the clip's quietest blocks
+_TAP_MIN_SPEECH_RMS = 60.0      # int16 RMS, about -55 dBFS: far below any voice
+_TAP_VOICE_RMS = 500.0          # about -36 dBFS: normal speaking level, speech on its own
+_TAP_MIN_SPEECH_S = 0.08    # a key click is ~10 ms, a desk thump ~50; a word is longer
+
+
+def is_speechless_tap(audio_f32, sample_rate) -> bool:
+    """True for a recording shorter than TAP_MAX_S with no stretch of speech
+    in it, which should be dropped rather than transcribed.
+
+    Loudness is judged against the clip's own background (its quietest
+    blocks), so a quiet microphone saying a quick word still counts, and
+    normal speaking volume counts on its own, so a word that fills the whole
+    clip does too."""
+    if len(audio_f32) >= TAP_MAX_S * sample_rate:
+        return False
+    block = max(1, int(_TAP_BLOCK_S * sample_rate))
+    count = len(audio_f32) // block
+    if count < 3:
+        return True                 # under 60 ms: nothing to say in that
+    blocks = np.asarray(audio_f32[:count * block], dtype=np.float64).reshape(count, block) * 32768.0
+    rms = np.sqrt(np.mean(blocks * blocks, axis=1))
+    background = np.percentile(rms, 20)
+    loud = ((rms > max(background * _TAP_SPEECH_OVER_NOISE, _TAP_MIN_SPEECH_RMS))
+            | (rms > _TAP_VOICE_RMS))
+    return loud.sum() * _TAP_BLOCK_S < _TAP_MIN_SPEECH_S

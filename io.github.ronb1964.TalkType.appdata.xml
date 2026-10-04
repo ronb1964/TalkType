@@ -85,6 +85,19 @@
   </screenshots>
 
   <releases>
+    <release version="0.14.0" date="2026-10-03">
+      <description>
+        <p>Parakeet on the graphics card, and terminal dictation on more desktops</p>
+        <ul>
+          <li>Parakeet runs on the graphics card through Vulkan, about 10 times faster</li>
+          <li>Terminal paste works on Sway, i3, Hyprland, niri and X11 desktops like XFCE, MATE and Cinnamon</li>
+          <li>Ghostty, GNOME Console, Guake and other terminals get the right paste</li>
+          <li>OK closes Preferences again when the device is Vulkan</li>
+          <li>A quick accidental tap of the key no longer types a stray word</li>
+          <li>Help links to the TalkType Discussions page</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.13.1" date="2026-10-03">
       <description>
         <p>Performance presets work with Vulkan</p>

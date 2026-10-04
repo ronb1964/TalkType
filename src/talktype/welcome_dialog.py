@@ -1725,10 +1725,14 @@ class WelcomeDialog:
             self.gpu_vulkan_radio.set_tooltip_text(
                 "A small graphics engine instead of NVIDIA's CUDA libraries. On an RTX 4070 "
                 "Super it was just as fast. The Whisper model downloads in its own format.")
+            # Never greyed out: picking either one ticks the box above. They
+            # used to stay greyed until the box was ticked, and that read as
+            # "Light can't be chosen" (Ron, testing 0.14.0). "clicked", not
+            # "toggled": Full starts selected, so clicking it changes nothing
+            # and wouldn't emit "toggled".
             for radio in (cuda_radio, self.gpu_vulkan_radio):
                 choice_box.pack_start(radio, False, False, 0)
-            choice_box.set_sensitive(self.cuda_check.get_active())
-            self.cuda_check.connect("toggled", lambda c: choice_box.set_sensitive(c.get_active()))
+                radio.connect("clicked", lambda r: self.cuda_check.set_active(True))
             cuda_box.pack_start(choice_box, False, False, 0)
             cuda_box.reorder_child(choice_box, 1)      # right under the checkbox
 

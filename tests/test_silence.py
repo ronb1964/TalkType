@@ -206,3 +206,74 @@ def test_setting_follows_config(monkeypatch):
     assert app._auto_stop_seconds == 3.0
     app._apply_cleanup_settings(SimpleNamespace(auto_stop_silence=False, auto_stop_seconds=3.0))
     assert app._auto_stop_seconds == 0.0
+
+
+# --- an accidental tap of the hold key ------------------------------------------
+# A tap just over the minimum hold time records a fraction of a second of room
+# noise and the key's click, and Parakeet can "hear" a word in that: "Thank
+# you." was typed into Konsole while testing 0.14.0 (2026-10-03).
+
+from talktype.silence import is_speechless_tap  # noqa: E402
+
+
+def f32(int16_audio):
+    return int16_audio.astype(np.float32) / 32768.0
+
+
+def click(seconds=0.25, noise_level=60.0):
+    """Room noise with a key click: 10 ms, loud."""
+    audio = noise(seconds, noise_level).astype(np.float64)
+    start = int(0.05 * SR)
+    audio[start:start + 160] += rng.normal(0, 6000, 160)
+    return np.clip(audio, -32768, 32767).astype(np.int16)
+
+
+def test_a_tap_with_only_room_noise_has_no_speech():
+    assert is_speechless_tap(f32(noise(0.25)), SR)
+
+
+def test_a_tap_with_a_key_click_has_no_speech():
+    assert is_speechless_tap(f32(click()), SR)
+
+
+def test_a_tap_on_a_noisy_desk_mic_has_no_speech():
+    """Shaped like real taps from a Sennheiser Profile: a noisy background
+    and a key thump about 4x louder for 40 ms. The first version of this check
+    (1.5x) let such taps through, and Parakeet typed "Yeah." for them."""
+    audio = noise(0.3, 100).astype(np.float64)
+    start = int(0.02 * SR)
+    audio[start:start + 640] += rng.normal(0, 380, 640)
+    assert is_speechless_tap(f32(np.clip(audio, -32768, 32767).astype(np.int16)), SR)
+
+
+def test_a_quick_word_is_kept():
+    word = np.concatenate([noise(0.08), speech(0.3), noise(0.07)])
+    assert not is_speechless_tap(f32(word), SR)
+
+
+def test_a_quick_quiet_word_is_kept_too():
+    """Judged against the clip's own background, not a fixed loudness, so a
+    quiet microphone isn't mistaken for silence."""
+    word = np.concatenate([noise(0.08, 15), speech(0.3, level=250, noise_level=15),
+                           noise(0.07, 15)])
+    assert not is_speechless_tap(f32(word), SR)
+
+
+def test_a_word_that_fills_the_whole_tap_is_kept():
+    """Real speech has no neat gaps; with a 4x ratio this dropped 224 of 510
+    real half-second clips, because the clip's quietest blocks were speech."""
+    t = np.arange(int(0.45 * SR)) / SR
+    voice = np.sin(2 * np.pi * 180 * t) * (2000 + 800 * np.sin(2 * np.pi * 4 * t))
+    assert not is_speechless_tap(f32((voice + rng.normal(0, 60, t.size)).astype(np.int16)), SR)
+
+
+def test_anything_longer_than_a_tap_is_never_judged():
+    """Long recordings go to the engine as always, silent or not."""
+    assert not is_speechless_tap(f32(noise(1.0)), SR)
+
+
+def test_the_service_skips_a_speechless_tap(monkeypatch):
+    from talktype import app
+    monkeypatch.setattr(app, "_transcribe_audio",
+                        lambda *a: pytest.fail("a speechless tap was transcribed"))
+    app._transcribe_and_inject([click().tobytes()], SR, False, False, False)

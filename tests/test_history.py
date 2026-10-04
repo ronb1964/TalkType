@@ -87,7 +87,9 @@ def test_dictation_is_recorded_before_it_is_typed(monkeypatch):
     monkeypatch.setattr(app, "_inject_text",
                         lambda text, mode, t0: order.append(("typed", history.get_entries())))
 
-    frames = [np.ones(1600, dtype=np.int16).tobytes()]
+    # A full second: a near-silent 0.1 s would be dropped as an accidental tap
+    # (silence.is_speechless_tap) before reaching the engine.
+    frames = [np.ones(app.SAMPLE_RATE, dtype=np.int16).tobytes()]
     app._transcribe_and_inject(frames, app.SAMPLE_RATE, beeps_on=False,
                                smart_quotes=False, notify_on=False)
 
