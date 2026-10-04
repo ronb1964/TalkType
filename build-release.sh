@@ -38,6 +38,16 @@ else
     CONTAINER_CMD="docker"
 fi
 
+# Who owns the AppImage afterwards. Docker writes files as root, so the
+# container hands them back to your user (container-build.sh chowns when
+# BUILD_USER is set). Rootless podman already writes them as you, and that
+# same chown maps to a sub-UID (e.g. 525287), leaving files you can't delete
+# without `podman unshare`. So only Docker gets BUILD_USER.
+OWNER_ARGS=()
+if [ "$CONTAINER_CMD" = "docker" ]; then
+    OWNER_ARGS=(-e BUILD_USER="$(id -u)" -e BUILD_GROUP="$(id -g)")
+fi
+
 echo "📦 Building in Ubuntu 22.04 container..."
 echo ""
 
@@ -53,8 +63,7 @@ $CONTAINER_CMD run --rm \
     -v "$HOME/.cache/pip-talktype-build:/root/.cache/pip:Z" \
     -w /build \
     -e HOME=/tmp \
-    -e BUILD_USER=$(id -u) \
-    -e BUILD_GROUP=$(id -g) \
+    "${OWNER_ARGS[@]}" \
     ubuntu:22.04 \
     bash /build/container-build.sh
 
