@@ -24,13 +24,15 @@ Nothing here may be fatal. A missing KWin, a refused call or an unwritable data
 directory costs the paste hint; it must never cost the tray.
 """
 
-import logging
 import os
 
 from . import desktop_detect
 from .dbus_service import DBUS_INTERFACE, DBUS_NAME, DBUS_PATH
+from .logger import setup_logger
 
-logger = logging.getLogger(__name__)
+# setup_logger: a plain getLogger never reaches talktype.log, which hid this
+# module's warnings entirely.
+logger = setup_logger(__name__)
 
 # KWin identifies loaded scripts by this name; unloading uses it too.
 SCRIPT_PLUGIN_NAME = "talktype-focus"
@@ -38,7 +40,6 @@ SCRIPT_PLUGIN_NAME = "talktype-focus"
 KWIN_SERVICE = "org.kde.KWin"
 KWIN_SCRIPTING_PATH = "/Scripting"
 KWIN_SCRIPTING_INTERFACE = "org.kde.kwin.Scripting"
-KWIN_SCRIPT_INTERFACE = "org.kde.kwin.Script"
 
 
 def script_path() -> str:
@@ -81,8 +82,7 @@ def session_bus():
     """A .call(method, *args) shim over KWin's Scripting interface.
 
     dbus is imported here rather than at module scope so this module stays
-    importable (and testable) without dbus-python present. run() lives on a
-    per-script object KWin creates at load time, which is why it is special-cased.
+    importable (and testable) without dbus-python present.
     """
     import dbus
 
@@ -96,10 +96,6 @@ def session_bus():
 
     class _KWinBus:
         def call(self, method, *args):
-            if method == "run":
-                obj = bus.get_object(
-                    KWIN_SERVICE, f"{KWIN_SCRIPTING_PATH}/Script{args[0]}")
-                return obj.run(dbus_interface=KWIN_SCRIPT_INTERFACE)
             obj = bus.get_object(KWIN_SERVICE, KWIN_SCRIPTING_PATH)
             kwargs = {"dbus_interface": KWIN_SCRIPTING_INTERFACE}
             if method in signatures:
@@ -107,6 +103,26 @@ def session_bus():
             return getattr(obj, method)(*args, **kwargs)
 
     return _KWinBus()
+
+
+def load_and_start(bus, path, plugin_name) -> None:
+    """Load a script file into KWin and start it. Raises if KWin refuses.
+
+    Started with Scripting.start(), which runs every loaded script that isn't
+    running yet, NOT with run() on /Scripting/Script<id>. KWin numbers a new
+    script by how many are loaded (scripts.size()), so after an unload a new
+    script can get the number of one still loaded. Its D-Bus object then fails
+    to register and run() starts the other script instead. That happened as
+    soon as TalkType had two scripts: after a tray restart the focus script
+    loaded but never ran, every paste fell back to Ctrl+V, and a terminal
+    showed "^V". start() skips scripts already running, so it is safe to call
+    for one new script.
+    """
+    script_id = bus.call("loadScript", path, plugin_name)
+    if int(script_id) < 0:
+        # -1: a script by this name is still loaded (the unload hadn't landed).
+        raise RuntimeError(f"KWin already has a script named {plugin_name}")
+    bus.call("start")
 
 
 def should_provide() -> bool:
@@ -150,8 +166,7 @@ def start(bus) -> bool:
         logger.debug(f"No previous KWin focus script to unload: {e}")
 
     try:
-        script_id = bus.call("loadScript", path, SCRIPT_PLUGIN_NAME)
-        bus.call("run", script_id)
+        load_and_start(bus, path, SCRIPT_PLUGIN_NAME)
     except Exception as e:
         logger.warning(f"Could not load the KWin focus script: {e}")
         return False

@@ -2942,6 +2942,15 @@ def _loop_evdev(cfg: Settings, input_device_idx):
         print(f"Voice Commands hotkey: {vc_hotkey_str}")
         logger.info(f"Voice Commands hotkey: {vc_hotkey_str}")
 
+    # On KDE, have KWin hold the hotkeys back from the focused app. We read
+    # them below the desktop, so without this F8 also reaches it ("~" in a
+    # terminal). Released by stop_dictation_service, the tray, or on exit.
+    # The exit hook is registered even if this claim fails: a later hotkey
+    # change can still succeed, and release() is a no-op off KDE.
+    from . import kwin_hotkeys
+    kwin_hotkeys.claim(cfg)
+    atexit.register(kwin_hotkeys.release)
+
     # Track which modifier keys are currently held (for combo detection)
     held_modifiers: set[int] = set()
 
@@ -2979,6 +2988,9 @@ def _loop_evdev(cfg: Settings, input_device_idx):
             voice_cmds_combo = live.voice_cmds_combo
             voice_cmds_main_key = live.voice_cmds_main_key
             mode = live.mode
+            # Re-claim even if the hotkeys look unchanged: claim() is cheap,
+            # and comparing would mean a second copy of the hotkey fields.
+            kwin_hotkeys.claim(cfg)
             logger.info("Applied settings change without restarting")
 
         # Poll all input devices for key events

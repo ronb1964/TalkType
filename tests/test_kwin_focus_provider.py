@@ -97,7 +97,7 @@ class TestStartAndStop:
 
         assert K.start(bus) is True
         assert (tmp_path / "focus.js").exists()
-        assert bus.methods() == ["unloadScript", "loadScript", "run"]
+        assert bus.methods() == ["unloadScript", "loadScript", "start"]
 
     def test_a_stale_copy_is_unloaded_before_loading(self, tmp_path, monkeypatch, on_kde):
         """KWin keeps a script loaded across tray restarts; two would double-report."""
@@ -130,11 +130,29 @@ class TestItIsNeverFatal:
 
         assert K.start(bus) is False  # must not raise
 
-    def test_a_failing_run_is_survivable(self, tmp_path, monkeypatch, on_kde):
+    def test_a_failing_start_is_survivable(self, tmp_path, monkeypatch, on_kde):
         monkeypatch.setattr(K, "script_path", lambda: str(tmp_path / "focus.js"))
-        bus = FakeBus(fail_on={"run"})
+        bus = FakeBus(fail_on={"start"})
 
         assert K.start(bus) is False
+
+    def test_a_refused_load_is_reported(self, tmp_path, monkeypatch, on_kde):
+        """loadScript returns -1 when a script by that name is still loaded."""
+        monkeypatch.setattr(K, "script_path", lambda: str(tmp_path / "focus.js"))
+        bus = FakeBus(load_result=-1)
+
+        assert K.start(bus) is False
+        assert "start" not in bus.methods()
+
+    def test_it_never_starts_a_script_by_its_number(self, tmp_path, monkeypatch, on_kde):
+        """KWin numbers scripts by list length, so after an unload a new one can
+        share a number with one still loaded, and run() on that number starts
+        the wrong script. This is what left the focus script dead and made
+        terminals show "^V"."""
+        monkeypatch.setattr(K, "script_path", lambda: str(tmp_path / "focus.js"))
+        bus = FakeBus()
+        K.start(bus)
+        assert "run" not in bus.methods()
 
     def test_an_unwritable_script_path_is_survivable(self, monkeypatch, on_kde):
         monkeypatch.setattr(K, "script_path",

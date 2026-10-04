@@ -132,6 +132,14 @@ def stop_dictation_service(force: bool = False) -> None:
             os.kill(pid, sig)
         except OSError:
             pass  # exited between the scan and the kill
+    # SIGTERM/SIGKILL skip the service's exit hooks, so hand its hotkeys back
+    # to the desktop from here. Otherwise KWin would keep swallowing F8 with
+    # dictation off.
+    try:
+        from . import kwin_hotkeys
+        kwin_hotkeys.release()
+    except Exception as e:
+        logger.debug(f"Could not release the KWin hotkeys: {e}")
 
 
 def build_service_env(base_env=None, dev_pythonpath=None):

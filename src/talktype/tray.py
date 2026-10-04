@@ -175,6 +175,10 @@ class DictationTray:
 
         # Track service state for change detection
         self._last_service_state = self.is_service_running()
+        if not self._last_service_state:
+            # A service that crashed in an earlier session can leave KWin
+            # holding the hotkeys back from every app.
+            self._release_desktop_hotkeys()
 
         # Check service status every 1 second and update menu (faster sync in dev mode)
         GLib.timeout_add_seconds(1, self.update_status_and_menu)
@@ -571,6 +575,10 @@ class DictationTray:
         # If state changed, emit D-Bus signal
         if old_state is not None and old_state != new_state:
             logger.info(f"Service state changed: {old_state} -> {new_state}")
+            if not new_state:
+                # Normal stops release the hotkeys themselves; a crash or a
+                # SIGKILL doesn't, and F8 would stay swallowed with dictation off.
+                self._release_desktop_hotkeys()
             if self.dbus_service:
                 try:
                     self.dbus_service.emit_service_state(new_state)
@@ -580,6 +588,20 @@ class DictationTray:
 
         self._last_service_state = new_state
         return repeat
+
+    def _release_desktop_hotkeys(self):
+        """Give the hotkeys back to the desktop if no service is holding them.
+
+        Rechecked here because a service started in the meantime has claimed
+        them for itself, and releasing would undo that.
+        """
+        if self.is_service_running():
+            return
+        try:
+            from . import kwin_hotkeys
+            kwin_hotkeys.release()
+        except Exception as e:
+            logger.debug(f"Could not release the KWin hotkeys: {e}")
 
     def toggle_service(self, widget):
         """Toggle dictation service on/off."""
