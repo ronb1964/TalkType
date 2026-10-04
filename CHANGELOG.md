@@ -2,6 +2,31 @@
 
 All notable changes to TalkType are documented here.
 
+## [0.14.1] - 2026-10-04
+
+Mostly keyboard fixes, and a lot of them came from guelz testing on a Swiss
+keyboard.
+
+- Typing mode works on keyboard layouts other than US English now. It used to
+  send US key positions, so on a German or Swiss keyboard Y and Z came out
+  swapped and umlauts couldn't be typed at all. TalkType reads the layout you
+  have on and presses the keys that layout actually uses, accented letters
+  included. If the layout has no way to type something, like Latin words on a
+  Ukrainian keyboard, that dictation gets pasted instead. (#8)
+- On X11, TalkType read the first layout in your list instead of the one you'd
+  switched to, so Ukrainian came out as a row of 9s. It reads the active one
+  now, and on X11 it can paste the text a layout can't type, which it couldn't
+  do before.
+- Pressing F8 also reached whatever app you were in, so a terminal showed a
+  stray "~". On KDE and GNOME your hotkeys stay with TalkType while dictation is
+  on, and go back to being normal keys when you turn it off. GNOME needs the
+  updated extension (version 14), and Check for Updates will offer it.
+- Dictations are marked so clipboard managers like Klipper leave them out of
+  their history. There's also a new option to put back whatever you'd copied
+  before the dictation. It's in Preferences, Advanced, under Text Injection,
+  and it's off by default because I like being able to paste a dictation again
+  when it lands in the wrong window. (#7)
+
 ## [0.14.0] - 2026-10-03
 
 Parakeet can use your graphics card now, and dictating into a terminal works

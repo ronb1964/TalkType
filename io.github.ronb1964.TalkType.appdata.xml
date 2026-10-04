@@ -85,6 +85,18 @@
   </screenshots>
 
   <releases>
+    <release version="0.14.1" date="2026-10-04">
+      <description>
+        <p>Keyboard layout and hotkey fixes</p>
+        <ul>
+          <li>Typing mode uses the real keys of non-US layouts, so Y and Z and accented letters come out right</li>
+          <li>On X11 the active keyboard layout is used, not the first one in the list</li>
+          <li>Text a layout can't type is pasted instead, on X11 too</li>
+          <li>The hotkey no longer leaks into the focused app on KDE and GNOME</li>
+          <li>Dictations stay out of clipboard manager history, with an option to restore the clipboard</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.14.0" date="2026-10-03">
       <description>
         <p>Parakeet on the graphics card, and terminal dictation on more desktops</p>
