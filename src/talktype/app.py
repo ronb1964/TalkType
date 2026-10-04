@@ -36,6 +36,10 @@ _log_transcripts = False
 # Whether each dictation is counted in the usage stats (stats.py, Preferences >
 # Stats). Numbers only; the text itself is never stored.
 _usage_stats = True
+# Put the user's clipboard back after pasting a dictation (config
+# restore_clipboard, issue #7); refreshed with the other live settings.
+_restore_clipboard = False
+_clipboard_keeper = None        # clipboard.ClipboardKeeper, created on the first paste that needs it
 
 
 def _loggable(text):
@@ -990,6 +994,9 @@ def _reload_live_settings(cfg, indicator):
         global _usage_stats
         _usage_stats = getattr(cfg, "usage_stats", True)
 
+        global _restore_clipboard
+        _restore_clipboard = getattr(cfg, "restore_clipboard", False)
+
         _apply_cleanup_settings(cfg)
 
         if indicator is not None:
@@ -1807,7 +1814,20 @@ def _paste_text(text: str, send_trailing_keys: bool = False):
             # wl-copy needs to stay running to serve clipboard requests
             paste_start = time.time()
             logger.info(f"TIMING: Starting paste operation for {len(text)} chars")
-            proc = subprocess.Popen(["wl-copy"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            # Optionally keep what the user had copied, to put back afterwards
+            # (issue #7). Off by default: a dictation left on the clipboard can
+            # be re-pasted if it landed in the wrong window.
+            from . import clipboard
+            global _clipboard_keeper
+            keeping = _restore_clipboard
+            if keeping:
+                if _clipboard_keeper is None:
+                    _clipboard_keeper = clipboard.ClipboardKeeper()
+                _clipboard_keeper.before_paste()
+            # --sensitive keeps the dictation out of clipboard managers' history
+            # (Klipper saved every one to disk) where wl-copy supports it.
+            proc = subprocess.Popen(clipboard.wl_copy_command(), stdin=subprocess.PIPE,
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             try:
                 proc.stdin.write(text.encode("utf-8"))
                 proc.stdin.close()
@@ -1862,6 +1882,10 @@ def _paste_text(text: str, send_trailing_keys: bool = False):
                     proc.wait(timeout=0.3)
                 except Exception:
                     pass  # wl-copy cleanup is best-effort
+                # Restore even after a failed paste, so the user's clipboard
+                # isn't lost either way.
+                if keeping:
+                    _clipboard_keeper.after_paste(text)
     except subprocess.TimeoutExpired as e:
         logger.error(f"Paste injection timeout: {e}")
     except Exception as e:
@@ -3281,6 +3305,8 @@ def main():
 
     global _usage_stats
     _usage_stats = getattr(cfg, 'usage_stats', True)
+    global _restore_clipboard
+    _restore_clipboard = getattr(cfg, 'restore_clipboard', False)
 
     # Dictation cleanup; the AI engine (if on) loads in the background.
     _apply_cleanup_settings(cfg)

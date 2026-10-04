@@ -1543,6 +1543,21 @@ class PreferencesWindow:
             grid.attach(inject_combo, 1, row, 1, 1)
             row += 1
 
+            # Paste puts the dictation on the clipboard, replacing whatever was
+            # copied (issue #7). Off by default: a dictation left there can be
+            # re-pasted if it went into the wrong window.
+            restore_check = Gtk.CheckButton(label="Put back what I'd copied after pasting a dictation")
+            restore_check.set_active(bool(self.config.get("restore_clipboard", False)))
+            restore_check.connect("toggled", lambda x: self.update_config("restore_clipboard", x.get_active()))
+            restore_check.set_tooltip_text(
+                "Pasting a dictation puts it on the clipboard, replacing whatever you'd copied.\n"
+                "With this on, TalkType puts your copied item back half a second after pasting.\n\n"
+                "Leave it off if you like to re-paste a dictation that went into the wrong window.\n"
+                "Recent Dictations in the tray menu keeps your last 20 either way.\n\n"
+                "Dictations are always kept out of clipboard history (like KDE's Klipper).")
+            grid.attach(restore_check, 0, row, 2, 1)
+            row += 1
+
         # ===== DICTATION CLEANUP SECTION =====
         cleanup_sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
         cleanup_sep.set_margin_top(20)

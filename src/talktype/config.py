@@ -154,6 +154,7 @@ class Settings:
     auto_stop_silence: bool = False      # toggle recordings stop by themselves when you stop talking (silence.py)
     auto_stop_seconds: float = 2.0       # seconds of silence before an auto-stop (0.5-10)
     usage_stats: bool = True             # count words/dictations/speaking time per day (stats.py; numbers only, never text)
+    restore_clipboard: bool = False      # put back what the user had copied after pasting a dictation (clipboard.ClipboardKeeper, issue #7)
     typing_wpm: int = 40                 # the user's typing speed, for "time saved" on the Stats tab (10-200)
 
 
@@ -731,6 +732,8 @@ LIVE_APPLIED_KEYS = {
     "auto_stop_seconds",
     # Usage stats; read into a module global on each reload, checked per dictation.
     "usage_stats",
+    # Read into a module global on each reload, checked on each paste.
+    "restore_clipboard",
 }
 
 

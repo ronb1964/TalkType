@@ -35,7 +35,10 @@ apt-get install -y -qq \
     scdoc \
     fuse \
     libfuse2 \
-    wl-clipboard \
+    meson \
+    ninja-build \
+    libwayland-dev \
+    wayland-protocols \
     zsync \
     > /dev/null 2>&1
 
@@ -226,9 +229,19 @@ make -j$(nproc) > /dev/null 2>&1
 cp ydotool ydotoold /build/AppDir/usr/bin/
 cd /build
 
-# Bundle wl-clipboard for clipboard paste support
-echo "📋 Bundling wl-clipboard..."
-cp /usr/bin/wl-copy /usr/bin/wl-paste /build/AppDir/usr/bin/
+# Bundle wl-clipboard for clipboard paste support. Built from source because
+# Ubuntu 22.04 ships 2.0.0, and paste needs 2.3.0's wl-copy --sensitive: it
+# keeps dictations out of clipboard managers' history (KDE's Klipper saved
+# every one to disk, issue #7). Pinned to a release tag.
+WL_CLIPBOARD_VERSION=v2.3.0
+echo "📋 Building wl-clipboard $WL_CLIPBOARD_VERSION..."
+rm -rf /tmp/wl-clipboard
+git clone -q --depth 1 --branch "$WL_CLIPBOARD_VERSION" https://github.com/bugaevc/wl-clipboard /tmp/wl-clipboard
+meson setup /tmp/wl-clipboard/build /tmp/wl-clipboard --buildtype=release > /dev/null
+ninja -C /tmp/wl-clipboard/build > /dev/null
+cp /tmp/wl-clipboard/build/src/wl-copy /tmp/wl-clipboard/build/src/wl-paste /build/AppDir/usr/bin/
+/build/AppDir/usr/bin/wl-copy --help | grep -q -- --sensitive \
+    || { echo "❌ bundled wl-copy has no --sensitive"; exit 1; }
 
 # Bundle GTK3 and GObject Introspection
 echo "   Bundling GTK3 libraries..."
