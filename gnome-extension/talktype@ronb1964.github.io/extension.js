@@ -10,6 +10,8 @@ import St from 'gi://St';
 import Gio from 'gi://Gio';
 import Clutter from 'gi://Clutter';
 import Pango from 'gi://Pango';
+import Meta from 'gi://Meta';
+import Shell from 'gi://Shell';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
@@ -78,6 +80,9 @@ const TalkTypeIface = `
     </signal>
     <signal name="ServiceStateChanged">
       <arg type="b" name="is_running"/>
+    </signal>
+    <signal name="HotkeysChanged">
+      <arg type="as" name="accelerators"/>
     </signal>
     <signal name="TranscriptionComplete">
       <arg type="s" name="text"/>
@@ -192,6 +197,15 @@ class TalkTypeIndicator extends PanelMenu.Button {
         this._currentInjectionMode = 'auto';
         this._dbusAvailable = false;
 
+        // TalkType reads its hotkeys below the desktop, so GNOME Shell also
+        // hands F8 to the focused app and a terminal prints "~". While the
+        // service runs we grab the hotkeys here, which keeps them from the
+        // app; TalkType still sees them. The list comes from the service via
+        // the tray (HotkeysChanged / GetStatus) in accelerator syntax.
+        // accelerator -> action id from grab_accelerator.
+        this._hotkeys = [];
+        this._grabs = new Map();
+
         // Connect to D-Bus
         this._connectDBus();
 
@@ -231,6 +245,12 @@ class TalkTypeIndicator extends PanelMenu.Button {
                 this._isServiceRunning = isRunning;
                 this._updateIcon();
                 this._updateMenu();  // Update menu when service state changes
+                this._syncHotkeyGrabs();
+            }));
+
+            this._signalIds.push(this._proxy.connectSignal('HotkeysChanged', (proxy, sender, [accelerators]) => {
+                this._hotkeys = accelerators;
+                this._syncHotkeyGrabs();
             }));
 
             this._signalIds.push(this._proxy.connectSignal('ModelChanged', (proxy, sender, [modelName]) => {
@@ -305,6 +325,7 @@ class TalkTypeIndicator extends PanelMenu.Button {
                 this._dbusAvailable = false;
                 this._isServiceRunning = false;
                 this._isRecording = false;
+                this._syncHotkeyGrabs();  // TalkType quit: give the keys back
                 this.hide();
                 console.log('TalkType: D-Bus service vanished (app quit) - hiding indicator');
             }
@@ -604,10 +625,47 @@ class TalkTypeIndicator extends PanelMenu.Button {
                 }
             }
             this._currentInjectionMode = status.injection_mode ? status.injection_mode.deep_unpack() : 'auto';
+            // Absent from a TalkType older than 0.14.1: then nothing is grabbed,
+            // which is how it always behaved.
+            this._hotkeys = status.hotkeys ? status.hotkeys.deep_unpack() : [];
 
             this._updateIcon();
             this._updateMenu();
+            this._syncHotkeyGrabs();
         });
+    }
+
+    _syncHotkeyGrabs() {
+        // Grab exactly the service's hotkeys while it runs, and none otherwise:
+        // with dictation off, F8 must be an ordinary key again.
+        const wanted = (this._dbusAvailable && this._isServiceRunning) ? this._hotkeys : [];
+        for (const [accel, action] of this._grabs) {
+            if (!wanted.includes(accel)) {
+                this._ungrabHotkey(action);
+                this._grabs.delete(accel);
+            }
+        }
+        for (const accel of wanted) {
+            if (this._grabs.has(accel))
+                continue;
+            // The same two calls GNOME Shell's own GrabAccelerator makes.
+            const action = global.display.grab_accelerator(accel, Meta.KeyBindingFlags.NONE);
+            if (action === Meta.KeyBindingAction.NONE) {
+                // Usually another shortcut already has it. Dictation still
+                // works; the key just reaches the app too, as before.
+                console.warn(`TalkType: could not hold ${accel} back from apps (already in use?)`);
+                continue;
+            }
+            // ALL: also while the overview or a system modal is up, or the key
+            // would leak there.
+            Main.wm.allowKeybinding(Meta.external_binding_name_for_action(action), Shell.ActionMode.ALL);
+            this._grabs.set(accel, action);
+        }
+    }
+
+    _ungrabHotkey(action) {
+        Main.wm.allowKeybinding(Meta.external_binding_name_for_action(action), Shell.ActionMode.NONE);
+        global.display.ungrab_accelerator(action);
     }
 
     _getCurrentPreset() {
@@ -726,6 +784,12 @@ class TalkTypeIndicator extends PanelMenu.Button {
         // Cancel the update-check fallback timer so it can't fire against a
         // destroyed menu item after the extension is disabled.
         this._clearUpdateTimeout();
+
+        // Never leave a key grabbed behind a disabled extension (screen lock
+        // disables it too); it would swallow F8 with nothing listening.
+        for (const action of this._grabs.values())
+            this._ungrabHotkey(action);
+        this._grabs.clear();
 
         // Clean up D-Bus name watcher
         if (this._nameWatcherId) {

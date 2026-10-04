@@ -320,6 +320,28 @@ def _get_tray_dbus_proxy():
     return _tray_dbus_proxy
 
 
+def _claim_desktop_hotkeys(cfg):
+    """Ask the desktop to keep the hotkeys away from the focused app.
+
+    We read them below the desktop, so without this F8 also reaches the app
+    ("~" in a terminal). On KDE a KWin script holds them (kwin_hotkeys); on
+    GNOME the extension does, from the list sent to the tray here. Called at
+    startup and after every live settings change. Neither part can fail
+    dictation: the KDE claim never raises, and this is a fire-and-forget call.
+    """
+    from . import gnome_hotkeys, kwin_hotkeys
+    kwin_hotkeys.claim(cfg)
+    try:
+        import dbus
+        _get_tray_dbus_proxy().NotifyClaimedHotkeys(
+            dbus.Array(gnome_hotkeys.accelerators(cfg), signature='s'),
+            dbus_interface='io.github.ronb1964.TalkType',
+            timeout=_TRAY_DBUS_TIMEOUT,
+        )
+    except Exception as e:
+        logger.debug(f"Could not send the hotkeys to the tray: {e}")
+
+
 def _notify_tray_hotkey_pressed(key_name: str):
     """Send hotkey press notification to tray D-Bus service during test mode.
 
@@ -2942,13 +2964,14 @@ def _loop_evdev(cfg: Settings, input_device_idx):
         print(f"Voice Commands hotkey: {vc_hotkey_str}")
         logger.info(f"Voice Commands hotkey: {vc_hotkey_str}")
 
-    # On KDE, have KWin hold the hotkeys back from the focused app. We read
-    # them below the desktop, so without this F8 also reaches it ("~" in a
-    # terminal). Released by stop_dictation_service, the tray, or on exit.
-    # The exit hook is registered even if this claim fails: a later hotkey
-    # change can still succeed, and release() is a no-op off KDE.
+    # Have the desktop hold the hotkeys back from the focused app (see
+    # _claim_desktop_hotkeys). On KDE they are released by
+    # stop_dictation_service, the tray, or this exit hook; registered even if
+    # the claim failed, since a later hotkey change can still succeed, and
+    # release() is a no-op off KDE. GNOME's extension lets go by itself when
+    # the tray reports the service stopped.
     from . import kwin_hotkeys
-    kwin_hotkeys.claim(cfg)
+    _claim_desktop_hotkeys(cfg)
     atexit.register(kwin_hotkeys.release)
 
     # Track which modifier keys are currently held (for combo detection)
@@ -2990,7 +3013,7 @@ def _loop_evdev(cfg: Settings, input_device_idx):
             mode = live.mode
             # Re-claim even if the hotkeys look unchanged: claim() is cheap,
             # and comparing would mean a second copy of the hotkey fields.
-            kwin_hotkeys.claim(cfg)
+            _claim_desktop_hotkeys(cfg)
             logger.info("Applied settings change without restarting")
 
         # Poll all input devices for key events

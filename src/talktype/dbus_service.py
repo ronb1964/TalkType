@@ -72,6 +72,8 @@ class TalkTypeDBusService(dbus.service.Object):
         already has the name, the service gets NameExistsException.
         """
         self.app = app_instance
+        # Hotkeys the running service asked the GNOME extension to hold back.
+        self.claimed_hotkeys = []
 
         # Set up D-Bus main loop
         dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
@@ -168,6 +170,10 @@ class TalkTypeDBusService(dbus.service.Object):
                 getattr(self.app.config, 'auto_timeout_enabled', False))
             status['auto_timeout_minutes'] = int(
                 getattr(self.app.config, 'auto_timeout_minutes', 0))
+
+        # The hotkeys the extension grabs while the service runs. An explicit
+        # signature, or an empty list could not be sent as a variant.
+        status['hotkeys'] = dbus.Array(self.claimed_hotkeys, signature='s')
 
         # Add statistics if available
         if hasattr(self.app, 'stats'):
@@ -332,6 +338,23 @@ class TalkTypeDBusService(dbus.service.Object):
         logger.debug(f"D-Bus: NotifyHotkeyPressed called: {key_name}")
         self.HotkeyPressed(key_name)
 
+    @dbus.service.method(DBUS_INTERFACE, in_signature='as')
+    def NotifyClaimedHotkeys(self, accelerators):
+        """Called by the dictation service with its hotkeys, in GNOME
+        accelerator syntax. The GNOME extension grabs them while the service
+        runs so they don't also reach the focused app (see gnome_hotkeys).
+        """
+        self.claimed_hotkeys = [str(a) for a in accelerators]
+        logger.debug(f"D-Bus: NotifyClaimedHotkeys: {self.claimed_hotkeys}")
+        self.HotkeysChanged(self.claimed_hotkeys)
+
+    def clear_claimed_hotkeys(self):
+        """The service stopped. Forget its hotkeys, so a status read during the
+        next start can't hand the extension a list that may since have changed."""
+        if self.claimed_hotkeys:
+            self.claimed_hotkeys = []
+            self.HotkeysChanged([])
+
     @dbus.service.method(DBUS_INTERFACE)
     def CheckForUpdates(self):
         """
@@ -406,6 +429,11 @@ class TalkTypeDBusService(dbus.service.Object):
     @dbus.service.signal(DBUS_INTERFACE, signature='ss')
     def ErrorOccurred(self, error_type: str, message: str):
         """Emitted when an error occurs"""
+        pass
+
+    @dbus.service.signal(DBUS_INTERFACE, signature='as')
+    def HotkeysChanged(self, accelerators):
+        """The hotkeys the GNOME extension should hold back (empty: none)."""
         pass
 
     @dbus.service.signal(DBUS_INTERFACE, signature='s')

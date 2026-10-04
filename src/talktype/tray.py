@@ -579,6 +579,8 @@ class DictationTray:
                 # Normal stops release the hotkeys themselves; a crash or a
                 # SIGKILL doesn't, and F8 would stay swallowed with dictation off.
                 self._release_desktop_hotkeys()
+                if self.dbus_service:
+                    self.dbus_service.clear_claimed_hotkeys()
             if self.dbus_service:
                 try:
                     self.dbus_service.emit_service_state(new_state)
