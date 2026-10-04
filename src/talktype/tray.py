@@ -374,29 +374,25 @@ class DictationTray:
         # Slow path: scan /proc to find an existing service process
         # (handles case where service started before tray, e.g., at boot)
         try:
-            my_pid = os.getpid()
-            for entry in os.listdir("/proc"):
-                if not entry.isdigit():
-                    continue
-                entry_pid = int(entry)
-                if entry_pid == my_pid:
-                    continue
-                if self._check_pid_is_service(entry_pid):
-                    self._service_pid = entry_pid
-                    return True
+            from .service_launcher import find_service_pids
+            pids = find_service_pids()
         except Exception:
-            pass
+            return False
+        if pids:
+            self._service_pid = pids[0]
+            return True
         return False
 
     @staticmethod
     def _check_pid_is_service(pid):
-        """Check if a given PID is a TalkType dictation service process."""
-        try:
-            with open(f"/proc/{pid}/cmdline", "rb") as f:
-                cmd = f.read().decode(errors="ignore")
-            return "talktype.app" in cmd or "bin/dictate" in cmd
-        except (FileNotFoundError, PermissionError, ProcessLookupError):
-            return False
+        """Check if a given PID is a TalkType dictation service process.
+
+        The PID cached here is the target of toggle_recording's SIGUSR1, so a
+        false match isn't cosmetic: it signals an unrelated process. The rule
+        lives in service_launcher so this, Quit and the hotkey test all agree.
+        """
+        from .service_launcher import is_service_pid
+        return is_service_pid(pid)
 
     def _auto_start_service(self):
         """Auto-start the dictation service if not already running."""

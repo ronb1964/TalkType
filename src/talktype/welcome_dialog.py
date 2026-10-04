@@ -2542,8 +2542,8 @@ def show_hotkey_test_dialog():
             time.sleep(0.3)
 
             # Verify no processes remain
-            result = subprocess.run(["pgrep", "-f", "talktype.app"], capture_output=True)
-            if result.returncode == 0:
+            from talktype.service_launcher import find_service_pids
+            if find_service_pids():
                 # Still running! Try again
                 print("⚠️ Service still running, killing again...")
                 stop_dictation_service(force=True)

@@ -15,15 +15,20 @@ patterns, and they disagreed:
   * "bin/dictate" is a prefix of "bin/dictate-tray", which is the only launcher
     the shipped AppImage actually contains.
 
-One helper now owns the patterns, and these tests pin the property that matters:
-every pattern hits the service, and none of them hits the tray.
+One helper now owns the rule, and these tests pin the property that matters:
+it hits the service, and nothing else, above all not the tray.
 
-pkill -f matches an extended regular expression against the whole command line,
-so the patterns are checked here with re.search.
+The rule compares whole arguments, not substrings. pkill/pgrep -f match a regex
+against the joined command line, so a shell running
+`bash -c "pgrep -f talktype.app"` passed for the service. The tray cached that
+PID and toggle_recording would have sent it SIGUSR1; the Preferences hotkey test
+sent SIGUSR2 to the first pgrep hit. Both signals kill a process that doesn't
+handle them.
 """
 
+import os
 import pathlib
-import re
+import signal
 
 import pytest
 
@@ -31,118 +36,182 @@ from talktype import service_launcher
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
-# Real command lines, as they appear in /proc. The AppImage ones were taken
-# from an extracted v0.7.2: usr/bin/dictate-tray execs "python3 -m talktype.tray",
-# and usr/bin/dictate does not ship at all, so the service runs as the module.
-SERVICE_COMMAND_LINES = [
-    "/home/ron/Projects/TalkType/.venv/bin/python -m talktype.app",
-    "/tmp/.mount_TalkTyabc/usr/bin/python3 -m talktype.app",
-    "/opt/talktype/usr/bin/dictate",
-    "/opt/talktype/usr/bin/dictate --verbose",
+# Real argument lists, as they appear in /proc/<pid>/cmdline. The AppImage ones
+# were taken from an extracted v0.7.2: usr/bin/dictate-tray execs
+# "python3 -m talktype.tray", and usr/bin/dictate does not ship at all, so the
+# service runs as the module. A pip install's `dictate` console script is run
+# by the kernel as "<python> /path/bin/dictate".
+SERVICE_ARGVS = [
+    ["/home/ron/Projects/TalkType/.venv/bin/python", "-m", "talktype.app"],
+    ["/tmp/.mount_TalkTyabc/usr/bin/python3", "-m", "talktype.app"],
+    ["python3", "-X", "faulthandler", "-m", "talktype.app"],
+    ["/opt/talktype/usr/bin/dictate"],
+    ["/opt/talktype/usr/bin/dictate", "--verbose"],
+    ["/usr/bin/python3", "/home/u/.local/bin/dictate"],
 ]
 
-# Anything here being killed is a bug. The tray is the parent process: killing
+# Anything here being matched is a bug. The tray is the parent process: killing
 # it takes down the menu, the D-Bus service and the user's only way to quit.
-MUST_SURVIVE_COMMAND_LINES = [
-    "/home/ron/Projects/TalkType/.venv/bin/python -m talktype.tray",
-    "/tmp/.mount_TalkTyabc/usr/bin/python3 -m talktype.tray",
-    "/tmp/.mount_TalkTyabc/usr/bin/dictate-tray",
-    "/tmp/.mount_TalkTyabc/usr/bin/python3 -m talktype.prefs",
-    "/bin/bash -c cd /home/ron/Projects/TalkType && ./build-release.sh",
-    "node /home/ron/.local/share/talktype-notes/index.js",
+NOT_THE_SERVICE_ARGVS = [
+    ["/home/ron/Projects/TalkType/.venv/bin/python", "-m", "talktype.tray"],
+    ["/tmp/.mount_TalkTyabc/usr/bin/python3", "-m", "talktype.tray"],
+    ["/tmp/.mount_TalkTyabc/usr/bin/dictate-tray"],
+    ["/tmp/.mount_TalkTyabc/usr/bin/python3", "-m", "talktype.prefs"],
+    ["/bin/bash", "-c", "cd /home/ron/Projects/TalkType && ./build-release.sh"],
+    ["node", "/home/ron/.local/share/talktype-notes/index.js"],
+    # The ones the old substring match got wrong:
+    ["/bin/bash", "-c", "pgrep -af talktype.app"],
+    ["grep", "-rn", "talktype.app", "src/"],
+    ["less", "/tmp/talktype.app.log"],
+    ["vim", "/opt/talktype/usr/bin/dictate"],
+    ["/bin/bash", "-c", "/opt/talktype/usr/bin/dictate"],
+    [],
 ]
 
 
-def _matches(pattern, command_line):
-    return re.search(pattern, command_line) is not None
+class TestTheRuleHitsTheService:
+    @pytest.mark.parametrize("argv", SERVICE_ARGVS)
+    def test_every_service_argv_is_matched(self, argv):
+        assert service_launcher.is_service_argv(argv), (
+            f"the service running as {argv!r} would not be found"
+        )
 
 
-class TestThePatternsHitTheService:
-    @pytest.mark.parametrize("command_line", SERVICE_COMMAND_LINES)
-    def test_every_service_command_line_is_matched(self, command_line):
-        assert any(
-            _matches(p, command_line)
-            for p in service_launcher.SERVICE_KILL_PATTERNS
-        ), f"nothing would kill the service running as {command_line!r}"
-
-
-class TestThePatternsSpareEverythingElse:
-    @pytest.mark.parametrize("command_line", MUST_SURVIVE_COMMAND_LINES)
-    def test_no_pattern_matches(self, command_line):
-        hits = [
-            p for p in service_launcher.SERVICE_KILL_PATTERNS
-            if _matches(p, command_line)
-        ]
-        assert hits == [], f"{hits} would kill {command_line!r}"
+class TestTheRuleSparesEverythingElse:
+    @pytest.mark.parametrize("argv", NOT_THE_SERVICE_ARGVS)
+    def test_not_matched(self, argv):
+        assert not service_launcher.is_service_argv(argv), (
+            f"{argv!r} would be taken for the service"
+        )
 
     def test_the_tray_is_spared_specifically(self):
         """The regression that mattered: '-m talktype' matches '-m talktype.tray'."""
-        tray = "/usr/bin/python3 -m talktype.tray"
-        assert not any(
-            _matches(p, tray) for p in service_launcher.SERVICE_KILL_PATTERNS
+        assert not service_launcher.is_service_argv(
+            ["/usr/bin/python3", "-m", "talktype.tray"]
         )
 
     def test_dictate_tray_is_spared(self):
         """'bin/dictate' is a prefix of the only launcher the AppImage ships."""
-        assert not any(
-            _matches(p, "/tmp/.mount_x/usr/bin/dictate-tray")
-            for p in service_launcher.SERVICE_KILL_PATTERNS
+        assert not service_launcher.is_service_argv(
+            ["/tmp/.mount_x/usr/bin/dictate-tray"]
         )
 
 
+class TestFindingTheServiceInProc:
+    """find_service_pids against a fake /proc, so it runs anywhere."""
+
+    @pytest.fixture
+    def fake_proc(self, monkeypatch):
+        procs = {}  # pid -> (uid, argv)
+
+        def listdir(path):
+            assert path == "/proc"
+            return [str(p) for p in procs] + ["self", "meminfo"]
+
+        class _Stat:
+            def __init__(self, uid):
+                self.st_uid = uid
+
+        def stat(path):
+            pid = int(path.rsplit("/", 1)[1])
+            if pid not in procs:
+                raise FileNotFoundError(path)
+            return _Stat(procs[pid][0])
+
+        def read_argv(pid):
+            return procs[pid][1] if pid in procs else None
+
+        monkeypatch.setattr(service_launcher.os, "listdir", listdir)
+        monkeypatch.setattr(service_launcher.os, "stat", stat)
+        monkeypatch.setattr(service_launcher, "_read_argv", read_argv)
+        monkeypatch.setattr(service_launcher.os, "getuid", lambda: 1000)
+        monkeypatch.setattr(service_launcher.os, "getpid", lambda: 1)
+        return procs
+
+    def test_finds_only_the_service(self, fake_proc):
+        fake_proc[10] = (1000, ["python", "-m", "talktype.tray"])
+        fake_proc[11] = (1000, ["python", "-m", "talktype.app"])
+        fake_proc[12] = (1000, ["/bin/bash", "-c", "pgrep -f talktype.app"])
+        assert service_launcher.find_service_pids() == [11]
+
+    def test_ignores_other_users(self, fake_proc):
+        """Another user's service is not ours to signal (and os.kill would fail)."""
+        fake_proc[20] = (1001, ["python", "-m", "talktype.app"])
+        assert service_launcher.find_service_pids() == []
+
+    def test_skips_itself(self, fake_proc):
+        fake_proc[1] = (1000, ["python", "-m", "talktype.app"])
+        assert service_launcher.find_service_pids() == []
+
+    def test_a_process_that_vanished_is_skipped(self, fake_proc):
+        fake_proc[30] = (1000, None)  # cmdline unreadable: exited mid-scan
+        assert service_launcher.find_service_pids() == []
+
+
+class TestReadArgv:
+    def test_reads_this_process(self):
+        argv = service_launcher._read_argv(os.getpid())
+        assert argv and all(isinstance(a, str) and a for a in argv)
+
+    def test_missing_pid_is_none(self):
+        assert service_launcher._read_argv(2 ** 30) is None
+
+
 class TestStopDictationService:
-    def test_it_runs_pkill_for_every_pattern(self, monkeypatch):
-        calls = []
-        monkeypatch.setattr(service_launcher.subprocess, "run",
-                            lambda argv, **kw: calls.append(argv))
+    def _capture(self, monkeypatch, pids):
+        sent = []
+        monkeypatch.setattr(service_launcher, "find_service_pids", lambda: pids)
+        monkeypatch.setattr(service_launcher.os, "kill",
+                            lambda pid, sig: sent.append((pid, sig)))
+        return sent
 
+    def test_it_terminates_every_service(self, monkeypatch):
+        sent = self._capture(monkeypatch, [11, 12])
         service_launcher.stop_dictation_service()
-
-        used = [c[-1] for c in calls]
-        assert used == list(service_launcher.SERVICE_KILL_PATTERNS)
-        assert all("-9" not in c for c in calls), "a normal stop must not SIGKILL"
+        assert sent == [(11, signal.SIGTERM), (12, signal.SIGTERM)], (
+            "a normal stop must not SIGKILL"
+        )
 
     def test_force_uses_sigkill(self, monkeypatch):
-        calls = []
-        monkeypatch.setattr(service_launcher.subprocess, "run",
-                            lambda argv, **kw: calls.append(argv))
-
+        sent = self._capture(monkeypatch, [11])
         service_launcher.stop_dictation_service(force=True)
+        assert sent == [(11, signal.SIGKILL)]
 
-        assert all("-9" in c for c in calls)
-
-    def test_every_call_is_bounded(self, monkeypatch):
-        """A wedged pkill must not hang the GTK thread that called it."""
-        seen = []
-        monkeypatch.setattr(service_launcher.subprocess, "run",
-                            lambda argv, **kw: seen.append(kw.get("timeout")))
-
-        service_launcher.stop_dictation_service()
-
-        assert all(t is not None for t in seen)
-
-    def test_a_failing_pkill_does_not_propagate(self, monkeypatch):
+    def test_a_process_that_already_exited_does_not_propagate(self, monkeypatch):
         """Quit and onboarding both call this; neither may die on it."""
-        def boom(argv, **kw):
-            raise OSError("pkill not found")
+        monkeypatch.setattr(service_launcher, "find_service_pids", lambda: [11])
 
-        monkeypatch.setattr(service_launcher.subprocess, "run", boom)
+        def gone(pid, sig):
+            raise ProcessLookupError(pid)
 
+        monkeypatch.setattr(service_launcher.os, "kill", gone)
+        service_launcher.stop_dictation_service()  # must not raise
+
+    def test_a_failing_scan_does_not_propagate(self, monkeypatch):
+        def boom():
+            raise OSError("/proc unavailable")
+
+        monkeypatch.setattr(service_launcher, "find_service_pids", boom)
         service_launcher.stop_dictation_service()  # must not raise
 
 
 class TestNobodyHandRollsItAnyMore:
-    def test_only_the_helper_shells_out_to_pkill(self):
-        """Six call sites with four patterns is how they drifted apart."""
+    def test_nobody_pkills_or_pgreps_for_the_service(self):
+        """Six call sites with four patterns is how they drifted apart, and the
+        substring matching pkill/pgrep -f do is the bug in its own right."""
         offenders = []
         for path in (ROOT / "src" / "talktype").glob("*.py"):
             if path.name == "service_launcher.py":
                 continue
-            if '"pkill"' in path.read_text() or "'pkill'" in path.read_text():
-                offenders.append(path.name)
+            for line in path.read_text().splitlines():
+                if line.lstrip().startswith("#"):
+                    continue  # history lessons in comments are fine
+                if "pkill" in line and "talktype" in line or \
+                        '"pgrep"' in line and "talktype" in line:
+                    offenders.append(f"{path.name}: {line.strip()}")
 
         assert offenders == [], (
-            f"{offenders} run pkill directly; use "
-            f"service_launcher.stop_dictation_service() so the patterns stay "
-            f"in one place"
+            f"{offenders} look for the service by hand; use "
+            f"service_launcher.find_service_pids() / stop_dictation_service() "
+            f"so the rule stays in one place"
         )

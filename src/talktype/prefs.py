@@ -4843,8 +4843,6 @@ class PreferencesWindow:
         (no phantom floods) and hotkey presses are reported back via D-Bus
         HotkeyPressed signals instead of starting/stopping recording.
         """
-        import subprocess as _sp
-
         # The service tests against the SAVED hotkeys, but this dialog labels its
         # rows from the pending dropdown selections. If the user changed a hotkey
         # without applying, those disagree and the wrong row lights up. Make them
@@ -4866,12 +4864,15 @@ class PreferencesWindow:
             warn.destroy()
             return
 
-        # Find the app.py process PID
+        # Find the dictation service's PID. This used `pgrep -f talktype.app`,
+        # which also matches any shell or editor whose command line merely
+        # mentions it, and SIGUSR2 kills a process that doesn't handle it.
         app_pid = None
         try:
-            result = _sp.run(["pgrep", "-f", "talktype.app"], capture_output=True, text=True)
-            if result.returncode == 0:
-                app_pid = int(result.stdout.strip().split('\n')[0])
+            from .service_launcher import find_service_pids
+            pids = find_service_pids()
+            if pids:
+                app_pid = pids[0]
         except Exception:
             pass
 

@@ -18,6 +18,7 @@ symptom that exposed the duplication.
 
 import logging
 import os
+import signal
 import subprocess
 import sys
 
@@ -40,34 +41,74 @@ _DEV_SITE_PACKAGES = (
 )
 
 
-# Extended regular expressions matched by `pkill -f` against a whole command
-# line. They must hit the dictation service and nothing else — above all not the
-# tray, which is the parent process and the user's only route to Quit.
-#
-# Each escape earns its place:
-#   talktype\.app       — the module the service runs as. A bare "talktype"
-#                         (once used by the D-Bus quit handler) also matches the
-#                         tray, Preferences, and any shell command mentioning
-#                         the project directory; six live processes when measured.
-#   bin/dictate(...)    — the AppImage launcher, anchored so it cannot match
-#                         bin/dictate-tray, which is the only launcher the
-#                         shipped AppImage actually contains.
-#
-# Deliberately absent: "-m talktype". It matches "-m talktype.tray", so the tray
-# would SIGKILL itself. It survived in two files only because pkill reads a
-# leading dash as an option and refused to run at all.
-# "[^-]" rather than a whitespace class: POSIX bracket expressions and GNU \s
-# behave differently across pkill builds and Python's re, and the tests match
-# these against sample command lines. Excluding the dash is what rules out
-# bin/dictate-tray, which is the whole point of anchoring it.
-SERVICE_KILL_PATTERNS = (
-    r"talktype\.app",
-    r"bin/dictate([^-]|$)",
-)
+def is_service_argv(argv) -> bool:
+    """True if *argv* (a process's argument list) is the dictation service.
 
-# A pkill that cannot be reaped must not hang the GTK thread that called it —
-# quit and first-run onboarding both run this on the main loop.
-_PKILL_TIMEOUT_S = 5.0
+    The service only ever runs one of two ways:
+      * ``<python> -m talktype.app`` — dev checkouts, the AppImage, the .deb and
+        .rpm (which repackage the AppImage) and the Flatpak.
+      * the ``dictate`` console script from a pip install, which the kernel
+        runs as ``<python> /path/bin/dictate`` (or ``/path/bin/dictate``).
+
+    So this compares whole arguments, never substrings of the command line.
+    A substring match ("talktype.app" anywhere) is how a shell running
+    ``bash -c "pgrep -f talktype.app"`` once passed for the service: the tray
+    cached that shell's PID, and toggle_recording would have sent SIGUSR1 to
+    it, which kills a process that doesn't handle it. Exact arguments also keep
+    the tray safe: "-m talktype.tray" and bin/dictate-tray never match.
+    """
+    argv = list(argv)
+    for i, arg in enumerate(argv[:-1]):
+        if arg == "-m" and argv[i + 1] == "talktype.app":
+            return True
+    if not argv:
+        return False
+    # The program itself, or the script a Python interpreter is running.
+    # Anywhere else "dictate" is just a file another program was handed
+    # (`vim .../bin/dictate`).
+    if os.path.basename(argv[0]) == "dictate":
+        return True
+    return (len(argv) > 1 and os.path.basename(argv[0]).startswith("python")
+            and os.path.basename(argv[1]) == "dictate")
+
+
+def _read_argv(pid):
+    """A process's argument list from /proc, or None if it can't be read."""
+    try:
+        with open(f"/proc/{pid}/cmdline", "rb") as f:
+            raw = f.read()
+    except OSError:
+        return None  # gone already, or not ours to read
+    # cmdline is NUL-separated with a trailing NUL; kernel threads have none.
+    return [a.decode(errors="ignore") for a in raw.split(b"\0") if a]
+
+
+def is_service_pid(pid) -> bool:
+    """True if *pid* is a running dictation service owned by this user."""
+    try:
+        if os.stat(f"/proc/{pid}").st_uid != os.getuid():
+            return False
+    except OSError:
+        return False
+    argv = _read_argv(pid)
+    return bool(argv) and is_service_argv(argv)
+
+
+def find_service_pids():
+    """PIDs of every dictation service this user is running, read from /proc.
+
+    No subprocess: the tray polls this, and pgrep/pkill only offer substring
+    matching on the joined command line, which is the bug is_service_argv fixes.
+    """
+    me = os.getpid()
+    try:
+        entries = os.listdir("/proc")
+    except OSError:
+        return []
+    return [
+        int(e) for e in entries
+        if e.isdigit() and int(e) != me and is_service_pid(int(e))
+    ]
 
 
 def stop_dictation_service(force: bool = False) -> None:
@@ -80,13 +121,17 @@ def stop_dictation_service(force: bool = False) -> None:
     is a far better outcome than propagating an exception — one of them is the
     quit handler, and the other is the first thing a new user ever sees.
     """
-    signal_flag = ["-9"] if force else []
-    for pattern in SERVICE_KILL_PATTERNS:
-        argv = ["pkill", *signal_flag, "-f", pattern]
+    sig = signal.SIGKILL if force else signal.SIGTERM
+    try:
+        pids = find_service_pids()
+    except Exception as e:
+        logger.warning(f"Could not look for the dictation service: {e}")
+        return
+    for pid in pids:
         try:
-            subprocess.run(argv, capture_output=True, timeout=_PKILL_TIMEOUT_S)
-        except Exception as e:
-            logger.warning(f"Could not run {' '.join(argv)}: {e}")
+            os.kill(pid, sig)
+        except OSError:
+            pass  # exited between the scan and the kill
 
 
 def build_service_env(base_env=None, dev_pythonpath=None):
