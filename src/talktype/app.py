@@ -1620,6 +1620,8 @@ _TERMINAL_WM_CLASSES = frozenset({
     "com.system76.CosmicTerm",
     "mate-terminal", "lxterminal", "qterminal", "terminology",
     "st", "st-256color", "sakura", "Termite", "contour",
+    # X11 desktops (XFCE, MATE, Cinnamon...) report these WM_CLASS names.
+    "Guake", "Tilda", "Roxterm", "cool-retro-term", "Eterm",
 })
 
 # Lower-cased once, because the class now arrives from two independent sources —

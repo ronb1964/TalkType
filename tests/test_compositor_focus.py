@@ -33,7 +33,8 @@ def _serve(path, handler):
 
 
 def _clear_env(monkeypatch):
-    for var in ("SWAYSOCK", "I3SOCK", "HYPRLAND_INSTANCE_SIGNATURE", "NIRI_SOCKET"):
+    for var in ("SWAYSOCK", "I3SOCK", "HYPRLAND_INSTANCE_SIGNATURE", "NIRI_SOCKET",
+                "XDG_SESSION_TYPE", "DISPLAY", "WAYLAND_DISPLAY"):
         monkeypatch.delenv(var, raising=False)
 
 
@@ -209,3 +210,85 @@ def test_a_reported_window_wins_over_asking_the_compositor(monkeypatch):
 def test_terminals_common_on_tiling_desktops_get_terminal_paste(app_id):
     from talktype.app import is_terminal_class
     assert is_terminal_class(app_id)
+
+
+# --- plain X11 desktops (XFCE, MATE, Cinnamon, LXQt, Openbox...) ---------------------
+
+@pytest.mark.parametrize("raw, expected", [
+    (b"xfce4-terminal\x00Xfce4-terminal\x00", "Xfce4-terminal"),   # instance, class
+    (b"xterm\x00XTerm\x00", "XTerm"),
+    (b"lonely\x00", "lonely"),                                     # class missing
+    (b"", None),
+])
+def test_wm_class_gives_the_class_part(raw, expected):
+    assert cf.parse_wm_class(raw) == expected
+
+
+def test_an_x11_session_asks_the_x_server(monkeypatch):
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("XDG_SESSION_TYPE", "x11")
+    monkeypatch.setenv("DISPLAY", ":0")
+    monkeypatch.setattr(cf, "_from_x11", lambda: "Xfce4-terminal")
+    assert cf.focused_class() == "Xfce4-terminal"
+
+
+def test_a_wayland_session_never_asks_xwayland(monkeypatch):
+    """The dictation service has DISPLAY even on Wayland (XWayland, for the
+    recording indicator), but XWayland only knows the X11 apps, so its
+    answer could name a window that doesn't have focus."""
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("XDG_SESSION_TYPE", "wayland")
+    monkeypatch.setenv("DISPLAY", ":0")
+    monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
+    monkeypatch.setattr(cf, "_from_x11", lambda: pytest.fail("asked XWayland"))
+    assert cf.focused_class() is None
+
+
+def test_without_a_session_type_x11_is_used_only_with_no_wayland(monkeypatch):
+    _clear_env(monkeypatch)
+    monkeypatch.delenv("XDG_SESSION_TYPE", raising=False)
+    monkeypatch.setenv("DISPLAY", ":0")
+    monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
+    monkeypatch.setattr(cf, "_from_x11", lambda: pytest.fail("asked XWayland"))
+    assert cf.focused_class() is None
+    monkeypatch.delenv("WAYLAND_DISPLAY")
+    monkeypatch.setattr(cf, "_from_x11", lambda: "XTerm")
+    assert cf.focused_class() == "XTerm"
+
+
+def test_i3_on_x11_uses_its_own_socket_first(tmp_path, monkeypatch):
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("XDG_SESSION_TYPE", "x11")
+    monkeypatch.setenv("DISPLAY", ":0")
+    path = tmp_path / "i3.sock"
+    done = _serve(path, _i3_server(_tree("foot")))
+    monkeypatch.setenv("I3SOCK", str(path))
+    monkeypatch.setattr(cf, "_from_x11", lambda: pytest.fail("asked X11 first"))
+    assert cf.focused_class() == "foot"
+    done.join(1)
+
+
+def test_an_x_server_problem_means_unknown(monkeypatch):
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("XDG_SESSION_TYPE", "x11")
+    monkeypatch.setenv("DISPLAY", ":99")
+
+    def broken():
+        raise OSError("cannot connect")
+
+    monkeypatch.setattr(cf, "_from_x11", broken)
+    assert cf.focused_class() is None
+
+
+def test_no_x_server_at_all_is_unknown_not_an_error(monkeypatch):
+    """The real XCB code, pointed at a display that doesn't exist."""
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("XDG_SESSION_TYPE", "x11")
+    monkeypatch.setenv("DISPLAY", ":987")
+    assert cf.focused_class() is None
+
+
+@pytest.mark.parametrize("wm_class", ["Guake", "Tilda", "Roxterm", "cool-retro-term", "Mate-terminal"])
+def test_x11_terminals_get_terminal_paste(wm_class):
+    from talktype.app import is_terminal_class
+    assert is_terminal_class(wm_class)
