@@ -1524,6 +1524,32 @@ def _type_text(text: str) -> bool:
     # Normal text typing
     return _type_text_raw(text)
 
+def _type_on_layout(text: str, delay_ms: int, what: str):
+    """Type *text* on a non-US keyboard layout, or return None to use
+    `ydotool type` (plain US layouts, or the layout couldn't be read).
+
+    `ydotool type` sends US key positions, which the compositor reads with the
+    real layout: Y and Z swapped on QWERTZ, umlauts impossible (issue #8).
+    keyboard_layout works out the real keys instead. If the layout can't type
+    some character at all, the dictation is pasted, which works on any layout."""
+    from . import keyboard_layout
+    try:
+        tokens = keyboard_layout.layout_key_events(text)
+    except keyboard_layout.UntypableText as e:
+        logger.info(f"{what}: the {e.args[0]} keyboard layout can't type some of this text; pasting instead")
+        return _paste_text(text)
+    except Exception as e:
+        logger.warning(f"{what}: couldn't work out keys for the keyboard layout ({e}); typing as US")
+        return None
+    if tokens is None:
+        return None
+    logger.info(f"{what}: typing {len(text)} chars for the keyboard layout, delay={delay_ms}ms")
+    # ydotool key -d is the wait between every press and release, so a
+    # character takes about two delays, like `ydotool type -d -H` with the same value.
+    timeout = 10 + len(tokens) * delay_ms / 1000 * 2
+    return _ydotool_key(["-d", str(delay_ms)] + tokens, timeout=timeout, what=what)
+
+
 def _type_text_raw(text: str):
     """
     Type text using ydotool or fallback methods.
@@ -1535,6 +1561,9 @@ def _type_text_raw(text: str):
     global _typing_delay
     
     if _which("ydotool"):
+        layout_result = _type_on_layout(text, max(5, min(50, _typing_delay)), "layout typing")
+        if layout_result is not None:
+            return layout_result
         try:
             env = _get_ydotool_env()
             # -d = delay between keydown and keyup (ms)
@@ -1714,6 +1743,9 @@ def _type_text_fast(text: str, delay_ms: int = 1):
     if not _which("ydotool"):
         logger.error("Fast-type fallback: ydotool unavailable")
         return False
+    layout_result = _type_on_layout(text, max(1, delay_ms), "layout fast-type")
+    if layout_result is not None:
+        return layout_result
     try:
         env = _get_ydotool_env()
         d = str(max(1, delay_ms))
