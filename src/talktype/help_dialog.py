@@ -14,6 +14,11 @@ import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk
 
+# Where the Help window's feedback link goes; the Setup Complete screen
+# points to the same page.
+FEEDBACK_URL = "https://github.com/ronb1964/TalkType/discussions"
+ISSUES_URL = "https://github.com/ronb1964/TalkType/issues"
+
 
 def _install_facts():
     """Format-specific strings the help text interpolates. One place to keep the
@@ -480,8 +485,8 @@ and punctuation — wrap the replacement text in double quotes.
 • Give the target app a moment to focus before speaking
 
 <b>Transcription too slow:</b>
-• Enable GPU acceleration if you have an NVIDIA GPU
-• Try a smaller AI model (tiny/base/small)
+• Use your graphics card: Preferences → General → Device (NVIDIA, AMD or Intel)
+• Try Parakeet, or a smaller Whisper model (tiny/base/small)
 • Use Performance presets in the tray menu
 
 <b>Service won't start:</b>
@@ -491,11 +496,22 @@ and punctuation — wrap the replacement text in double quotes.
 <b>Bug Reports &amp; Feedback:</b>
 Found a bug or have a feature request? We'd love to hear from you!
 
-• <b>Report bugs:</b> https://github.com/ronb1964/TalkType/issues
+• <b>Report bugs:</b> <a href="{ISSUES_URL}">TalkType issues on GitHub</a>
+• <b>Questions, ideas, or just how it's working for you:</b> <a href="{FEEDBACK_URL}">TalkType Discussions</a>
 • <b>Include:</b> your Linux distro, desktop environment, and TalkType version
 • <b>Log file:</b> {f["log_path"]}
 
 Your feedback helps make TalkType better for everyone!''')
+
+    # A passive feedback link under the tabs, so it's there whichever tab is
+    # open. Help never asks for feedback on its own; this is only for people
+    # who go looking. Not an action-area button: those emit a response, and
+    # the response handler below closes Help.
+    feedback_link = Gtk.LinkButton.new_with_label(
+        FEEDBACK_URL, "Questions or feedback? Leave a note on TalkType Discussions")
+    feedback_link.set_halign(Gtk.Align.START)
+    feedback_link.set_margin_top(6)
+    content.pack_start(feedback_link, False, False, 0)
 
     # Close button
     close_button = Gtk.Button(label="Close")
