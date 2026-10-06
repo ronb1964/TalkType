@@ -23,6 +23,14 @@ downloaded as the fallback.
 """
 import os
 
+# The 25 languages Parakeet TDT 0.6B v3 knows (ISO 639-1), from NVIDIA's model
+# card. It detects which one is spoken by itself and ignores TalkType's
+# language setting, so for any other language the user needs a Whisper model.
+PARAKEET_LANGUAGES = frozenset({
+    "bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de", "el", "hu", "it",
+    "lv", "lt", "mt", "pl", "pt", "ro", "sk", "sl", "es", "sv", "ru", "uk",
+})
+
 from .logger import setup_logger
 
 logger = setup_logger(__name__)

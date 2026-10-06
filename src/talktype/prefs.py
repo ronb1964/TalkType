@@ -252,6 +252,28 @@ def _hide_widgets(*widgets):
         w.hide()
 
 
+def model_setting_warning(model, device, language_mode, language, language_name=""):
+    """What's wrong with this model/device/language combination, or "".
+
+    Parakeet can't run on CUDA: with that device it quietly uses the processor
+    while Preferences says "CUDA (GPU)". And it knows 25 languages, detects the
+    one spoken and ignores the language setting, so choosing Japanese with it
+    gets nothing useful. Both used to pass without a word.
+    """
+    if model != "parakeet-v3":
+        return ""
+    from .parakeet_engine import PARAKEET_LANGUAGES
+    notes = []
+    if device == "cuda":
+        notes.append("Parakeet can't use CUDA, so it runs on the processor. To use your "
+                     "graphics card, set the Device to Vulkan (any GPU).")
+    if language_mode == "manual" and language and language not in PARAKEET_LANGUAGES:
+        lang = language_name or language
+        notes.append(f"Parakeet doesn't understand {lang}. It knows English and 24 European "
+                     f"languages. For {lang}, choose one of the Whisper models.")
+    return "\n".join(notes)
+
+
 class PreferencesWindow:
     def __init__(self):
         # Set GTK theme to prefer dark mode
@@ -852,6 +874,20 @@ class PreferencesWindow:
         row += 1
 
         # Initial visibility will be set by _update_language_ui_state
+
+        # A warning for model/device/language combinations that don't do what
+        # they say: Parakeet with CUDA runs on the processor, and Parakeet
+        # ignores a language it doesn't know. Hidden while there's nothing to say.
+        self.model_combo_hint = Gtk.Label(xalign=0)
+        self.model_combo_hint.set_line_wrap(True)
+        self.model_combo_hint.set_max_width_chars(60)
+        self.model_combo_hint.set_margin_top(4)
+        self.model_combo_hint.set_no_show_all(True)
+        grid.attach(self.model_combo_hint, 0, row, 2, 1)
+        row += 1
+        for _combo in (self.model_combo, self.device_combo, self.lang_mode_combo, self.lang_combo):
+            _combo.connect("changed", lambda *_: self._update_model_combo_hint())
+        self._update_model_combo_hint()
 
         # ===== HOTKEY CONFIGURATION SECTION =====
         separator1 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
@@ -3035,6 +3071,25 @@ class PreferencesWindow:
         # autostart state disagreed from then on. The file is now written by
         # save_config(), so the setting takes effect exactly when the user
         # saves it — and not at all when they cancel.
+
+    def _update_model_combo_hint(self):
+        """Show or hide the warning under the model settings."""
+        label = getattr(self, "model_combo_hint", None)
+        if label is None:
+            return
+        it = self.model_combo.get_active_iter()
+        model = self.model_store.get_value(it, 0) if it is not None else ""
+        name = self.lang_combo.get_active_text() or ""
+        message = model_setting_warning(
+            model, self.device_combo.get_active_id() or "",
+            self.lang_mode_combo.get_active_id() or "auto",
+            self.lang_combo.get_active_id() or "",
+            name.split(" ", 1)[-1])     # "🇯🇵 Japanese" -> "Japanese"
+        if message:
+            label.set_markup(f"⚠️ <i>{GLib.markup_escape_text(message)}</i>")
+            label.show()
+        else:
+            label.hide()
 
     def _on_model_changed(self, combo):
         """Handle model selection change with warning for large models."""
