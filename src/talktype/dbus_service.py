@@ -184,6 +184,9 @@ class TalkTypeDBusService(dbus.service.Object):
         # signature, or an empty list could not be sent as a variant.
         status['hotkeys'] = dbus.Array(self.claimed_hotkeys, signature='s')
 
+        current = getattr(self.app, "current_preset", None)
+        status['preset'] = str(current() if current else "custom")
+
         # Add statistics if available
         if hasattr(self.app, 'stats'):
             status['stats'] = {
@@ -265,9 +268,18 @@ class TalkTypeDBusService(dbus.service.Object):
         """
         return _focused_window_class or ''
 
+    @dbus.service.method(DBUS_INTERFACE, out_signature='a(sss)')
+    def GetPresets(self):
+        """The Performance presets for this computer: (id, label, description).
+        The GNOME extension builds its menu from this, so it can't drift from
+        the tray's."""
+        get = getattr(self.app, "get_presets", None)
+        return dbus.Array([dbus.Struct(p, signature='sss') for p in (get() if get else [])],
+                          signature='(sss)')
+
     @dbus.service.method(DBUS_INTERFACE, in_signature='s')
     def ApplyPerformancePreset(self, preset: str):
-        """Apply a performance preset (fastest/balanced/accurate/battery)"""
+        """Apply a performance preset (recommended/lightest/battery)"""
         self._dispatch('set_performance_preset', preset)
 
     @dbus.service.method(DBUS_INTERFACE, out_signature='as')

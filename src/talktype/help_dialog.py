@@ -215,16 +215,11 @@ system resources. Adjust this in Preferences → Advanced.
 • Audio beeps for start/stop feedback
 
 <b>Performance Mode Presets</b>
-Quick one-click changes from the tray menu (Performance):
-• <b>Fastest:</b> Tiny model on the processor - instant, basic accuracy
-• <b>Light:</b> Base model on the processor
-• <b>Balanced:</b> Small model, on the graphics card if one is set up
-• <b>Quality:</b> Medium model, on the graphics card if one is set up
-• <b>Most Accurate:</b> Large-v3 on your graphics card (CUDA or Vulkan)
-• <b>Fast &amp; Accurate:</b> Parakeet - the most accurate for English and 24 European
-  languages. It runs on the processor; to use your graphics card, set the Device
-  to "Vulkan (any GPU)" in Preferences
-• <b>Battery Saver:</b> Tiny model on the processor, stops after 2 idle minutes
+Quick changes from the tray menu (Performance):
+• <b>Recommended for this computer:</b> the setup TalkType picks for your graphics card
+  and language, usually Parakeet on your graphics card
+• <b>Lightest:</b> Whisper Base on the processor, the smallest download and the least work
+• <b>Battery saver:</b> Whisper Tiny on the processor, stops after 2 idle minutes
 After choosing one, the tray's Device line shows where it really runs.
 
 <b>Smart Text Processing</b>

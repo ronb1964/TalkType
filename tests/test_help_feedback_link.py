@@ -76,8 +76,8 @@ def test_every_help_tab_is_valid_markup(dialog):
 
 
 def test_help_lists_every_tray_preset(dialog):
-    """Help listed 5 of the 7 presets, with Balanced described as "GPU"."""
-    from talktype.tray import DictationTray
+    """Help listed 5 of the 7 old presets; it must name each of today's."""
+    from talktype import recommend
     text = "\n".join(l.get_text() for l in _help_labels(dialog))
-    for preset in DictationTray.PERFORMANCE_PRESETS.values():
-        assert f"{preset['label']}:" in text, f"Help doesn't mention the {preset['label']} preset"
+    for preset in recommend.presets("en", recommend.Hardware(None)):
+        assert f"{preset.label}:" in text, f"Help doesn't mention the {preset.label} preset"

@@ -2,7 +2,7 @@
 The dialogs for setting up the Vulkan graphics engine (whisper_vulkan.py).
 
 Shared by Preferences (the Device dropdown, the Large-v3 prompt) and the tray
-(the "Most Accurate" and other GPU presets), so every route to Vulkan asks the
+(the Recommended preset on a graphics card), so every route to Vulkan asks the
 same questions, downloads the same way, and runs the same speed check.
 """
 import threading

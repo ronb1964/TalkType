@@ -365,12 +365,12 @@ def show_unified_download_dialog(cuda=False, extension=False, model=None, parent
     """
     # Build default title/description when downloading CUDA + a model together
     if title is None and cuda and model:
-        title = "Downloading 'Most Accurate' Components"
+        title = f"Downloading {model} and CUDA"
     if description is None and cuda and model:
         from talktype.model_helper import MODEL_DISPLAY_SIZES
         model_size = MODEL_DISPLAY_SIZES.get(model, "~3 GB")
         description = (
-            f"To use the 'Most Accurate' preset, TalkType needs two things:\n\n"
+            f"To run {model} on your NVIDIA graphics card with CUDA, TalkType needs two things:\n\n"
             f"  • <b>CUDA GPU Libraries</b> (~1.4GB) — unlocks GPU acceleration on your NVIDIA card\n"
             f"  • <b>{model} AI Model</b> ({model_size}) — the highest-accuracy speech recognition model\n\n"
             f"Both are one-time downloads. This may take several minutes depending on your connection."

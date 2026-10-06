@@ -269,6 +269,13 @@ class DictationTray:
                     self.tray = tray
                     self.is_recording = False
 
+                def get_presets(self):
+                    """(id, label, description) for the GNOME extension's Performance menu."""
+                    return [(p.id, p.label, p.description) for p in self.tray._current_presets()]
+
+                def current_preset(self):
+                    return self.tray._get_current_preset()
+
                 @property
                 def service_running(self):
                     """Get current service running state."""
@@ -754,117 +761,76 @@ class DictationTray:
         except Exception as e:
             logger.error(f"Failed to set injection mode: {e}")
 
-    # Performance preset definitions
-    # Each preset defines: model, device
-    PERFORMANCE_PRESETS = {
-        "fastest": {
-            "label": "Fastest",
-            "description": "tiny model, CPU",
-            "model": "tiny",
-            "device": "cpu"
-        },
-        "light": {
-            "label": "Light",
-            "description": "base model, CPU",
-            "model": "base",
-            "device": "cpu"
-        },
-        "balanced": {
-            "label": "Balanced",
-            "description": "small model, GPU if available",
-            "model": "small",
-            "device": "cuda"  # Will fall back to CPU if no GPU
-        },
-        "quality": {
-            "label": "Quality",
-            "description": "medium model, GPU if available",
-            "model": "medium",
-            "device": "cuda"  # Will fall back to CPU if no GPU
-        },
-        "accurate": {
-            "label": "Most Accurate",
-            "description": "large-v3 model, GPU",
-            "model": "large-v3",
-            "device": "cuda"
-        },
-        "parakeet": {
-            "label": "Fast & Accurate",
-            "description": "Parakeet, no GPU needed, English + European languages",
-            "model": "parakeet-v3",
-            # The processor, unless the user is set up for Vulkan, in which
-            # case set_performance_preset keeps Vulkan and Parakeet runs on the
-            # graphics chip. Never "cuda": CUDA can't run Parakeet.
-            "device": "cpu"
-        },
-        "battery": {
-            "label": "Battery Saver",
-            "description": "tiny model, CPU, short timeout",
-            "model": "tiny",
-            "device": "cpu",
-            # The short timeout is what distinguishes this from "Fastest" —
-            # they are otherwise the same tiny/CPU pair. Declaring it here
-            # rather than hard-coding it in set_performance_preset() lets
-            # _get_current_preset() tell the two apart, which it previously
-            # could not: it matched on model+device and returned the first
-            # hit, so Battery Saver could never show as the active preset.
-            "auto_timeout_enabled": True,
-            "auto_timeout_minutes": 2,
-        }
-    }
-
-    # Preset keys that are settings to compare/apply, beyond model and device.
-    _PRESET_EXTRA_KEYS = ("auto_timeout_enabled", "auto_timeout_minutes")
+    def _current_presets(self):
+        """The Performance presets for this computer and language (recommend.py)."""
+        from . import recommend
+        from .config import load_config
+        cfg = load_config()
+        return recommend.presets(recommend.effective_language(cfg), recommend.detect_hardware(cfg))
 
     def _get_current_preset(self) -> str:
-        """
-        Determine which preset matches current settings, or 'custom' if none match.
-        Match primarily by model - device varies by available hardware.
-        """
+        """Id of the preset the settings match, or 'custom'."""
         try:
+            from . import recommend
             from .config import load_config
-            cfg = load_config()
-
-            def extras_match(preset):
-                """Presets that declare extra settings must match those too.
-
-                Without this, two presets sharing a model/device pair are
-                indistinguishable and the earlier one always wins.
-                """
-                return all(
-                    getattr(cfg, key, None) == preset[key]
-                    for key in self._PRESET_EXTRA_KEYS
-                    if key in preset
-                )
-
-            def declares_extras(preset):
-                return any(k in preset for k in self._PRESET_EXTRA_KEYS)
-
-            # Most specific first: only presets that declare extra settings,
-            # and only when those match too. Checking the less specific
-            # presets first would let "Fastest" claim a "Battery Saver"
-            # config, since the two share their model and device.
-            for preset_id, preset in self.PERFORMANCE_PRESETS.items():
-                if (declares_extras(preset)
-                        and cfg.model == preset["model"]
-                        and cfg.device == preset["device"]
-                        and extras_match(preset)):
-                    return preset_id
-
-            # Then model + device, for presets that declare no extras.
-            for preset_id, preset in self.PERFORMANCE_PRESETS.items():
-                if (cfg.model == preset["model"] and cfg.device == preset["device"]
-                        and not any(k in preset for k in self._PRESET_EXTRA_KEYS)):
-                    return preset_id
-
-            # Fall back to model-only match (device may differ due to hardware)
-            for preset_id, preset in self.PERFORMANCE_PRESETS.items():
-                if (cfg.model == preset["model"]
-                        and not any(k in preset for k in self._PRESET_EXTRA_KEYS)):
-                    return preset_id
-
-            return "custom"
+            return recommend.match_preset(load_config(), self._current_presets())
         except Exception:
             return "custom"
+
+    def set_performance_preset(self, preset_id: str):
+        """Apply a Performance preset: Recommended, Lightest or Battery saver.
+
+        Recommended on a graphics card runs the same setup as Preferences
+        (confirm and download the Vulkan files, then the speed check) and
+        uses the processor if the chip is slower. Cancelling the download
+        changes nothing. Ids from an older GNOME extension ("balanced",
+        "accurate"...) are ignored."""
+        if getattr(self, "_updating_preset", False):
+            return
+        try:
+            preset = next((p for p in self._current_presets() if p.id == preset_id), None)
+        except Exception as e:
+            logger.error(f"Could not work out the presets: {e}")
+            preset = None
+        if preset is None:
+            logger.info(f"Ignoring unknown performance preset {preset_id!r}")
+            self._revert_preset_radio()
+            return
+        try:
+            from .config import load_config, save_config
+            from .model_helper import is_model_cached_fast, download_model_with_progress
+            model, device = preset.model, preset.device
+            if device == "vulkan":
+                from .vulkan_setup_dialogs import ensure_files, run_speed_check
+                if not ensure_files(None, model, confirm=True):
+                    self._revert_preset_radio()
+                    return
+                if not run_speed_check(None, model):
+                    device = "cpu"
+            if device == "cpu" and not is_model_cached_fast(model):
+                downloaded = download_model_with_progress(model, device="cpu", show_confirmation=True)
+                if downloaded is None:
+                    self._revert_preset_radio()
+                    return
+                del downloaded
+            cfg = load_config()
+            cfg.model, cfg.device = model, device
+            for key, value in preset.extras:
+                setattr(cfg, key, value)
+            save_config(cfg)
+            from .app import _notify
+            try:
+                from . import whisper_vulkan as _wv
+                _gpu_offered = _wv.is_offered()
+            except Exception:
+                _gpu_offered = False
+            logger.info(f"Applied performance preset: {preset.label} ({model} on {device})")
+            _notify("TalkType", preset_notice(preset.label, cfg.model, cfg.device, _gpu_offered))
+            self.update_menu_display()
+            self._emit_model_changed(cfg.model)
+            self.restart_service(None)
+        except Exception as e:
+            logger.error(f"Failed to apply performance preset: {e}")
 
     def _revert_preset_radio(self):
         """Put the Performance radio back on the preset that's actually in use."""
@@ -879,220 +845,6 @@ class DictationTray:
             logger.error(f"Failed to revert preset radio: {_re}")
         finally:
             self._updating_preset = False
-
-    def _download_cuda_for_most_accurate(self):
-        """The Full route for 'Most Accurate': download CUDA and large-v3
-        together, then apply the preset and restart the dictation service."""
-        from .config import load_config, save_config
-        from .download_progress_dialog import show_unified_download_dialog
-        _results = show_unified_download_dialog(cuda=True, model="large-v3")
-        _cuda_ok = _results.get("CUDA Libraries", {}).get("success", False)
-        _model_ok = _results.get("large-v3 AI Model", {}).get("success", False)
-        if not (_cuda_ok and _model_ok):
-            return
-        try:
-            cfg = load_config()
-            cfg.model = "large-v3"
-            cfg.device = "cuda"
-            save_config(cfg)
-            logger.info("Both downloads complete — applied Most Accurate preset (large-v3, cuda)")
-            self.update_menu_display()
-            self.restart_service(None)
-        except Exception as _ae:
-            logger.error(f"Failed to apply preset after download: {_ae}")
-
-    def set_performance_preset(self, preset_id: str):
-        """Apply a performance preset."""
-        # Prevent recursive calls when programmatically setting radio buttons
-        if hasattr(self, '_updating_preset') and self._updating_preset:
-            return
-
-        if preset_id == "custom" or preset_id not in self.PERFORMANCE_PRESETS:
-            return
-
-        preset = self.PERFORMANCE_PRESETS[preset_id]
-        model_name = preset["model"]
-
-        try:
-            from .config import load_config, save_config
-            from .model_helper import is_model_cached_fast, download_model_with_progress
-
-            # GPU presets ("cuda" in the table means "use the graphics card")
-            # run through Vulkan (whisper_vulkan.py) when the user is set up
-            # for it, or chooses it below for Most Accurate. So does Fast &
-            # Accurate: Parakeet runs on the graphics chip through Vulkan too
-            # (parakeet_gpu.py), and elsewhere on the processor.
-            from . import whisper_vulkan as _wv
-            from .parakeet_engine import is_parakeet as _is_parakeet
-            vulkan_route = ((preset["device"] == "cuda" or _is_parakeet(model_name))
-                            and _wv.supports_model(model_name)
-                            and load_config().device == "vulkan")
-
-            # large-v3 needs the graphics card: CUDA, or Vulkan. Check BEFORE
-            # anything else; if neither is ready, ask, and stop if nothing is set
-            # up. This block is outside the inner try/except so an exception here
-            # can't fall through to the faster-whisper model download below.
-            if model_name == "large-v3" and not vulkan_route:
-                _cuda_ok = False
-                try:
-                    from .cuda_helper import has_talktype_cuda_libraries
-                    _cuda_ok = has_talktype_cuda_libraries()
-                except Exception as _e:
-                    logger.error(f"CUDA check error: {_e}")
-                    _cuda_ok = False  # Treat as missing — safer than allowing large-v3
-
-                if not _cuda_ok:
-                    _has_nvidia = False
-                    try:
-                        from .cuda_helper import detect_nvidia_gpu
-                        _has_nvidia = bool(detect_nvidia_gpu())
-                    except Exception:
-                        pass
-                    try:
-                        _vulkan_offered = _wv.is_offered()
-                    except Exception:
-                        _vulkan_offered = False
-
-                    # Put the radio back first, so the menu is right whatever
-                    # the user answers below.
-                    self._revert_preset_radio()
-
-                    from .vulkan_setup_dialogs import (choose_light_or_full, set_up as _vulkan_set_up,
-                                                       message as _message, LIGHT, FULL)
-                    if _has_nvidia:
-                        if _vulkan_offered:
-                            _choice = choose_light_or_full(None, "large-v3")
-                        else:
-                            _choice = FULL if _message(
-                                None, Gtk.MessageType.QUESTION,
-                                "Download Required for 'Most Accurate'",
-                                "Two components need to be downloaded before 'Most Accurate' "
-                                "can be used:\n\n"
-                                "  • CUDA GPU Libraries   (~1.4GB)\n"
-                                "  • Large-v3 AI Model    (~3GB)\n\n"
-                                "Total: ~4.4GB, a one-time download.\n\n"
-                                "Would you like to download both now?",
-                                buttons=Gtk.ButtonsType.YES_NO) == Gtk.ResponseType.YES else None
-                        if _choice == FULL:
-                            self._download_cuda_for_most_accurate()
-                            return
-                        if _choice != LIGHT or not _vulkan_set_up(None, "large-v3", confirm=False):
-                            return
-                        vulkan_route = True
-                    elif _vulkan_offered:
-                        if _message(
-                                None, Gtk.MessageType.QUESTION, "Set up 'Most Accurate'?",
-                                "'Most Accurate' runs Large-v3 on your graphics card. On AMD and "
-                                "Intel graphics that works through Vulkan: a one-time download of "
-                                f"a {_wv.ENGINE_SIZE_TEXT} graphics engine and Large-v3 in its "
-                                f"format ({_wv.MODEL_FILES['large-v3'][1]}), then a quick check "
-                                "that your graphics chip is really faster than your processor.",
-                                buttons=Gtk.ButtonsType.OK_CANCEL) != Gtk.ResponseType.OK:
-                            return
-                        if not _vulkan_set_up(None, "large-v3", confirm=False):
-                            return
-                        vulkan_route = True
-                    else:
-                        _message(None, Gtk.MessageType.WARNING,
-                                 "Cannot Apply 'Most Accurate' Preset",
-                                 "'Most Accurate' runs the Large-v3 model on a graphics card, "
-                                 "and TalkType didn't find one it can use on this computer.\n\n"
-                                 "Please choose a different performance preset.")
-                        return
-
-            # On the Vulkan route the model is whisper.cpp's file, not
-            # faster-whisper's, so fetch that one (if missing) instead.
-            if vulkan_route and not _wv.is_installed(model_name):
-                from .vulkan_setup_dialogs import ensure_files
-                if not ensure_files(None, model_name, confirm=True):
-                    logger.info(f"Vulkan model download cancelled for preset {preset_id}")
-                    self._revert_preset_radio()
-                    return
-
-            # Check if model is cached. The fast variant answers this from
-            # file presence; is_model_cached() answered it by constructing a
-            # real WhisperModel, which blocks this GTK main loop for seconds
-            # to tens of seconds on large-v3. While it is blocked the tray
-            # dispatches no D-Bus, and the dictation service calls into the
-            # tray from the thread that holds an exclusive grab on every
-            # keyboard — so this call could freeze the whole system's input.
-            if not vulkan_route and not is_model_cached_fast(model_name):
-                logger.info(f"Model {model_name} not cached, showing download dialog")
-                # Show download dialog - this returns the model or None if cancelled
-                model = download_model_with_progress(model_name, device="cpu", show_confirmation=True)
-                if model is None:
-                    # User cancelled download or download failed
-                    logger.info(f"Model download cancelled for preset {preset_id}")
-                    # Revert radio button to current preset
-                    self._updating_preset = True
-                    current_preset = self._get_current_preset()
-                    if current_preset in self.preset_radios:
-                        self.preset_radios[current_preset].set_active(True)
-                    elif hasattr(self, 'preset_custom'):
-                        self.preset_custom.set_active(True)
-                    self._updating_preset = False
-                    return
-                else:
-                    # Model downloaded successfully, free it (will be loaded by service)
-                    del model
-                    logger.info(f"Model {model_name} downloaded successfully")
-
-            cfg = load_config()
-
-            # Determine effective device — presets marked "cuda" require CUDA libraries.
-            # If CUDA isn't installed, silently use CPU so the service doesn't crash.
-            effective_device = "vulkan" if vulkan_route else preset["device"]
-            if effective_device == "cuda":
-                try:
-                    from .cuda_helper import has_talktype_cuda_libraries
-                    if not has_talktype_cuda_libraries():
-                        effective_device = "cpu"
-                        logger.info(
-                            f"Preset '{preset_id}' requests CUDA but libraries not installed — "
-                            "saving device=cpu to prevent service crash."
-                        )
-                except Exception:
-                    effective_device = "cpu"  # Safer to assume no CUDA if check fails
-
-            # Apply preset settings
-            cfg.model = preset["model"]
-            cfg.device = effective_device
-
-            # Battery saver also reduces timeout
-            # Apply any extra settings the preset declares, so what gets saved
-            # is exactly what _get_current_preset() matches against.
-            for key in self._PRESET_EXTRA_KEYS:
-                if key in preset:
-                    setattr(cfg, key, preset[key])
-
-            # Save config
-            save_config(cfg)
-
-            # Notify user
-            from .app import _notify
-            logger.info(f"Applied performance preset: {preset['label']}")
-            try:
-                from . import whisper_vulkan as _wv
-                _gpu_offered = _wv.is_offered()
-            except Exception:
-                _gpu_offered = False
-            _notify("TalkType", preset_notice(preset['label'], cfg.model, cfg.device, _gpu_offered))
-
-            # Update menu display
-            self.update_menu_display()
-
-            # Tell the GNOME extension the change actually took effect. The
-            # tray owns the D-Bus name the extension listens on, so this has to
-            # be emitted here — emitting it from the dictation service (which
-            # does not own the name) never reaches the extension, which is why
-            # its menu kept showing the previous model indefinitely.
-            self._emit_model_changed(cfg.model)
-
-            # Restart service to apply new model
-            self.restart_service(None)
-
-        except Exception as e:
-            logger.error(f"Failed to apply performance preset: {e}")
 
     def update_menu_display(self, is_running=None):
         """Update menu display with current service status and model.
@@ -1146,6 +898,9 @@ class DictationTray:
                 # Update performance preset radio buttons
                 if hasattr(self, 'preset_radios'):
                     self._updating_preset = True
+                    for _p in self._current_presets():
+                        if _p.id in self.preset_radios:
+                            self.preset_radios[_p.id].set_label(f"{_p.label} ({_p.description})")
                     current_preset = self._get_current_preset()
                     if current_preset in self.preset_radios:
                         self.preset_radios[current_preset].set_active(True)
@@ -1938,7 +1693,7 @@ class DictationTray:
         return item
 
     def _build_performance_submenu(self):
-        """Build the Performance preset submenu (7 presets + Custom fallback).
+        """Build the Performance preset submenu (Recommended, Lightest, Battery saver + Custom).
 
         Stores radio button references on self for later state updates.
         Returns the parent MenuItem that contains the submenu.
@@ -1946,23 +1701,15 @@ class DictationTray:
         submenu = Gtk.Menu()
         self.preset_radios = {}
         preset_group = None
-
-        # Add preset options in order (smallest to largest model, then battery saver)
-        preset_order = ["fastest", "light", "balanced", "quality", "accurate", "parakeet", "battery"]
-        for preset_id in preset_order:
-            preset = self.PERFORMANCE_PRESETS[preset_id]
-            label = f"{preset['label']} ({preset['description']})"
-            if preset_group is None:
-                radio = Gtk.RadioMenuItem(label=label)
-                preset_group = radio
-            else:
-                radio = Gtk.RadioMenuItem(label=label, group=preset_group)
-            # GTK fires "activate" on the radio being UNselected as well as the
-            # one clicked. Acting on both re-applied the old preset first (a
-            # needless service restart) before applying the new one.
-            radio.connect("activate", lambda w, pid=preset_id: w.get_active() and self.set_performance_preset(pid))
+        for preset in self._current_presets():
+            label = f"{preset.label} ({preset.description})"
+            radio = (Gtk.RadioMenuItem(label=label) if preset_group is None
+                     else Gtk.RadioMenuItem(label=label, group=preset_group))
+            preset_group = preset_group or radio
+            # GTK fires "activate" on the radio being unselected too; act on the selected one.
+            radio.connect("activate", lambda w, pid=preset.id: w.get_active() and self.set_performance_preset(pid))
             submenu.append(radio)
-            self.preset_radios[preset_id] = radio
+            self.preset_radios[preset.id] = radio
 
         # "Custom" option (shown when settings don't match any preset)
         submenu.append(Gtk.SeparatorMenuItem())
