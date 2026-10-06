@@ -2283,11 +2283,16 @@ def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: b
     return text
 
 
-def _inject_text(text: str, injection_mode: str, t0: float):
+def _inject_text(text: str, injection_mode: str, t0: float) -> str:
     """Determine the best injection method and insert text into the active app.
 
     Tries AT-SPI first (if auto mode recommends it), then paste, then typing.
     t0 is the timestamp when stop_recording began (for timing logs).
+
+    Returns how it went: "ok" (all of it arrived), "partial" (some chunks of a
+    multi-part dictation arrived, then it stopped) or "failed" (none did).
+    The caller tells the user about anything but "ok"; this function used to
+    return nothing, so a dictation that never arrived failed silently.
     """
     # Determine injection method (auto mode does smart detection)
     detection_start = time.time()
@@ -2349,7 +2354,7 @@ def _inject_text(text: str, injection_mode: str, t0: float):
                 # so backspace counts match what was actually sent.
                 state.last_inserted_text = unified.replace(marker, "\n")
                 logger.debug(f"Stored last inserted text for undo: {len(state.last_inserted_text)} chars (fast-type)")
-                return
+                return "ok"
 
             # Partial delivery: chunks already in the document must not be sent
             # again by the fallback below, or the user gets a duplicate copy.
@@ -2360,7 +2365,7 @@ def _inject_text(text: str, injection_mode: str, t0: float):
                     f"Fast-type stopped after {delivered_parts} chunk(s) — "
                     f"not re-injecting, undo buffer holds only what landed"
                 )
-                return
+                return "partial"
             # Nothing landed, so the normal injection path can safely try again.
             logger.warning("Fast-type failed, falling through to normal injection")
         elif focused_class in _ELECTRON_PASTE_BROKEN_CLASSES:
@@ -2449,7 +2454,7 @@ def _inject_text(text: str, injection_mode: str, t0: float):
                     f"Injection stopped after {resume_at}/{len(parts)} chunks \u2014 "
                     f"undo buffer holds only what landed"
                 )
-                return
+                return "partial" if resume_at else "failed"
 
     # --- Simple paste (no markers) ---
     elif use_paste and _paste_text(text):
@@ -2479,6 +2484,7 @@ def _inject_text(text: str, injection_mode: str, t0: float):
         logger.debug(f"Stored last inserted text for undo: {len(state.last_inserted_text)} chars")
     else:
         logger.warning("Injection failed — undo buffer left unchanged")
+    return "ok" if inject_ok else "failed"
 
 
 def _toggle_pressed_while_recording(beeps_on: bool) -> bool:
@@ -2548,6 +2554,33 @@ def _finish_capture(beeps_on: bool, notify_on: bool):
     return frames, rec_sr
 
 
+# What to tell the user when a dictation didn't reach the window. The text is
+# always in Recent Dictations by then (it's saved before injection starts).
+_UNDELIVERED_NOTICES = {
+    "failed": "Couldn't type that dictation into the window. It's saved in Recent "
+              "Dictations in the TalkType menu: click it to copy, then paste with Ctrl+V.",
+    "partial": "Only part of that dictation reached the window. The whole text is saved "
+               "in Recent Dictations in the TalkType menu: click it to copy, then paste "
+               "with Ctrl+V.",
+}
+
+
+def _report_undelivered(outcome: str, beeps_on: bool):
+    """Tell the user a dictation didn't (fully) reach the window.
+
+    Always shown, whatever the notifications setting, like a missing microphone:
+    a Fedora user dictated for minutes on X11 with every word transcribed and
+    none arriving, nothing said why, and he concluded his laptop was too weak.
+    The low cancel beep follows the "done" beep, which has already played, so a
+    desktop without notifications still hears that something went wrong.
+    """
+    message = _UNDELIVERED_NOTICES[outcome]
+    print(f"⚠️  {message}")
+    logger.warning(f"Dictation not delivered ({outcome}); told the user")
+    _beep(beeps_on, *CANCEL_BEEP)
+    _notify("TalkType", message)
+
+
 def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                            language=None, auto_space=True, auto_period=True,
                            injection_mode="type"):
@@ -2601,7 +2634,16 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         if text:
             from .history import add_entry
             add_entry(text)
-            _inject_text(text, injection_mode, t0)
+            try:
+                outcome = _inject_text(text, injection_mode, t0)
+            except Exception as e:
+                # The transcription worked; only getting it into the window
+                # didn't. It used to fall to the "Transcription error" handler
+                # below, which says otherwise and shows only with notifications on.
+                logger.error(f"Injection error: {e}", exc_info=True)
+                outcome = "failed"
+            if outcome in _UNDELIVERED_NOTICES:
+                _report_undelivered(outcome, beeps_on)
             if _usage_stats:
                 # After typing, so saving the counts never delays the text.
                 # Counts only (words, seconds dictating); see stats.py.
