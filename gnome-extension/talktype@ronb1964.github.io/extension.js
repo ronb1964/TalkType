@@ -40,6 +40,9 @@ const TalkTypeIface = `
     <method name="GetStatus">
       <arg type="a{sv}" direction="out" name="status"/>
     </method>
+    <method name="GetPresets">
+      <arg type="a(sss)" direction="out" name="presets"/>
+    </method>
 
     <!-- Actions -->
     <method name="StartRecording"/>
@@ -111,64 +114,6 @@ const TalkTypeIface = `
   </interface>
 </node>`;
 
-// Performance presets - must match tray.py definitions
-// Order matters: Object.entries() preserves insertion order for the submenu
-const PERFORMANCE_PRESETS = {
-    'fastest': {
-        label: 'Fastest',
-        description: 'tiny model, CPU',
-        model: 'tiny',
-        device: 'cpu'
-    },
-    'light': {
-        label: 'Light',
-        description: 'base model, CPU',
-        model: 'base',
-        device: 'cpu'
-    },
-    'balanced': {
-        label: 'Balanced',
-        description: 'small model, GPU if available',
-        model: 'small',
-        device: 'cuda'
-    },
-    'quality': {
-        label: 'Quality',
-        description: 'medium model, GPU if available',
-        model: 'medium',
-        device: 'cuda'
-    },
-    'accurate': {
-        label: 'Most Accurate',
-        description: 'large-v3 model, GPU',
-        model: 'large-v3',
-        device: 'cuda'
-    },
-    'parakeet': {
-        label: 'Fast & Accurate',
-        description: 'Parakeet, no GPU needed, English + European languages',
-        model: 'parakeet-v3',
-        device: 'cpu'
-    },
-    'battery': {
-        label: 'Battery Saver',
-        description: 'tiny model, CPU, short timeout',
-        model: 'tiny',
-        device: 'cpu',
-        // The short timeout is the ONLY thing separating this from "Fastest" —
-        // they are otherwise the same tiny/CPU pair. Declared here so
-        // _getCurrentPreset() can tell them apart; without it the earlier entry
-        // ('fastest') always won and Battery Saver could never show its dot.
-        // Must stay in step with PERFORMANCE_PRESETS in tray.py.
-        auto_timeout_enabled: true,
-        auto_timeout_minutes: 2
-    }
-};
-
-// Preset keys that are settings to compare beyond model and device.
-// Mirrors _PRESET_EXTRA_KEYS in tray.py.
-const PRESET_EXTRA_KEYS = ['auto_timeout_enabled', 'auto_timeout_minutes'];
-
 const TalkTypeProxy = Gio.DBusProxy.makeProxyWrapper(TalkTypeIface);
 
 // Panel indicator for TalkType
@@ -189,11 +134,8 @@ class TalkTypeIndicator extends PanelMenu.Button {
         this._isServiceRunning = false;
         this._currentModel = 'unknown';
         this._currentDevice = 'unknown';
-        // Settings beyond model/device that presets may match on. Empty until
-        // the first GetStatus reply; an older TalkType that does not report
-        // them simply never matches a preset that declares extras, which is
-        // the previous behaviour rather than a wrong dot.
-        this._currentExtras = {};
+        // Id of the active preset, worked out by the tray (recommend.match_preset).
+        this._currentPreset = 'custom';
         this._currentInjectionMode = 'auto';
         this._dbusAvailable = false;
 
@@ -361,8 +303,10 @@ class TalkTypeIndicator extends PanelMenu.Button {
         this._historySubMenu = new PopupMenu.PopupSubMenuMenuItem('Recent Dictations');
         this.menu.addMenuItem(this._historySubMenu);
         this.menu.connect('open-state-changed', (_menu, open) => {
-            if (open)
+            if (open) {
                 this._refreshHistoryMenu();
+                this._refreshPresets();
+            }
         });
 
         // Fix a Word, top level right under Recent Dictations as in the tray.
@@ -388,22 +332,8 @@ class TalkTypeIndicator extends PanelMenu.Button {
 
         // Performance submenu
         this._performanceSubMenu = new PopupMenu.PopupSubMenuMenuItem('Performance');
+        // Filled from the tray's GetPresets each time the menu opens.
         this._presetItems = {};
-        for (let [key, preset] of Object.entries(PERFORMANCE_PRESETS)) {
-            let item = new PopupMenu.PopupMenuItem(`${preset.label} (${preset.description})`);
-            item._presetKey = key;
-            item.connect('activate', () => {
-                // Don't mark the choice here. The tray can legitimately refuse
-                // it ("Most Accurate" without an NVIDIA card, or a cancelled
-                // model download), and marking optimistically then showed a dot
-                // next to a preset that was never applied. The dot is driven
-                // only by the ModelChanged signal / status refresh below, which
-                // reflects what actually took effect.
-                this._proxy.ApplyPerformancePresetRemote(key);
-            });
-            this._presetItems[key] = item;
-            this._performanceSubMenu.menu.addMenuItem(item);
-        }
         this.menu.addMenuItem(this._performanceSubMenu);
 
         // Text Injection Mode submenu
@@ -615,15 +545,8 @@ class TalkTypeIndicator extends PanelMenu.Button {
             this._currentModel = status.model ? status.model.deep_unpack() : 'unknown';
             this._currentDevice = status.device ? status.device.deep_unpack() : 'unknown';
 
-            // Extra settings used to tell same-model/device presets apart
-            // (Battery Saver vs Fastest). Absent when talking to a TalkType
-            // older than v0.6.0, so read defensively.
-            this._currentExtras = {};
-            for (const key of PRESET_EXTRA_KEYS) {
-                if (status[key]) {
-                    this._currentExtras[key] = status[key].deep_unpack();
-                }
-            }
+            // The tray works out which preset is active (recommend.match_preset).
+            this._currentPreset = status.preset ? status.preset.deep_unpack() : 'custom';
             this._currentInjectionMode = status.injection_mode ? status.injection_mode.deep_unpack() : 'auto';
             // Absent from a TalkType older than 0.14.1: then nothing is grabbed,
             // which is how it always behaved.
@@ -668,45 +591,29 @@ class TalkTypeIndicator extends PanelMenu.Button {
         global.display.ungrab_accelerator(action);
     }
 
-    _getCurrentPreset() {
-        // Three-pass match, mirroring _get_current_preset() in tray.py.
-        const declaresExtras = (preset) =>
-            PRESET_EXTRA_KEYS.some(k => k in preset);
-
-        const extrasMatch = (preset) =>
-            PRESET_EXTRA_KEYS.every(k =>
-                !(k in preset) || this._currentExtras[k] === preset[k]);
-
-        // Most specific first: presets that declare extra settings, and only
-        // when those match too. Checking the less specific presets first would
-        // let "Fastest" claim a "Battery Saver" config, since the two share
-        // their model and device — which is exactly what used to happen.
-        for (let [key, preset] of Object.entries(PERFORMANCE_PRESETS)) {
-            if (declaresExtras(preset)
-                    && preset.model === this._currentModel
-                    && preset.device === this._currentDevice
-                    && extrasMatch(preset)) {
-                return key;
+    _refreshPresets() {
+        // The tray owns the presets (recommend.py): build the submenu from them
+        // each time the menu opens, so the two menus can't drift. Don't mark a
+        // choice on click: the tray can refuse it (a cancelled download), and
+        // the dot follows what actually took effect (status.preset).
+        const menu = this._performanceSubMenu.menu;
+        this._proxy.GetPresetsRemote((result, error) => {
+            menu.removeAll();
+            this._presetItems = {};
+            const presets = result ? result[0] : null;
+            if (error || !presets || presets.length === 0) {
+                menu.addMenuItem(new PopupMenu.PopupMenuItem(
+                    'Update TalkType to use presets', {reactive: false}));
+                return;
             }
-        }
-        // Then model + device, for presets that declare no extras.
-        for (let [key, preset] of Object.entries(PERFORMANCE_PRESETS)) {
-            if (!declaresExtras(preset)
-                    && preset.model === this._currentModel
-                    && preset.device === this._currentDevice) {
-                return key;
+            for (const [id, label, description] of presets) {
+                const item = new PopupMenu.PopupMenuItem(`${label} (${description})`);
+                item.connect('activate', () => this._proxy.ApplyPerformancePresetRemote(id));
+                this._presetItems[id] = item;
+                menu.addMenuItem(item);
             }
-        }
-        // Finally model alone. The device gets downgraded from GPU to CPU on
-        // machines without CUDA, so requiring an exact match left the whole
-        // submenu showing nothing selected on AMD and Intel systems while the
-        // GTK tray showed the preset correctly.
-        for (let [key, preset] of Object.entries(PERFORMANCE_PRESETS)) {
-            if (!declaresExtras(preset) && preset.model === this._currentModel) {
-                return key;
-            }
-        }
-        return null;  // Custom settings, no preset matches
+            this._updatePresetSelection(this._currentPreset);
+        });
     }
 
     _updateIcon() {
@@ -772,8 +679,7 @@ class TalkTypeIndicator extends PanelMenu.Button {
             this._deviceDisplayItem.label.text = `Device: ${deviceDisplay}`;
 
             // Update preset selection
-            const currentPreset = this._getCurrentPreset();
-            this._updatePresetSelection(currentPreset);
+            this._updatePresetSelection(this._currentPreset);
 
             // Update injection mode selection
             this._updateInjectionSelection(this._currentInjectionMode || 'auto');
