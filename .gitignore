@@ -182,3 +182,6 @@ archive/
 
 # AMD/Intel graphics engine builds (build-vulkan-engine.sh); hosted on a GitHub pre-release
 talktype-whisper-vulkan-*.tar.gz*
+
+# Brainstorming mockups (visual companion), local only
+.superpowers/
