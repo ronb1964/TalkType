@@ -56,3 +56,28 @@ def test_troubleshooting_links_can_be_clicked(dialog):
     markup = " ".join(w.get_label() or "" for w in _widgets(dialog) if isinstance(w, Gtk.Label))
     assert '<a href="https://github.com/ronb1964/TalkType/issues"' in markup
     assert f'<a href="{help_dialog.FEEDBACK_URL}"' in markup
+
+
+def _help_labels(dialog):
+    return [w for w in _widgets(dialog) if isinstance(w, Gtk.Label) and w.get_use_markup()]
+
+
+def test_every_help_tab_is_valid_markup(dialog):
+    """A stray & or < leaves a whole tab blank (GTK drops bad markup)."""
+    from gi.repository import Pango
+    labels = _help_labels(dialog)
+    assert labels
+    import re
+    for label in labels:
+        # GTK labels add <a href> links on top of Pango markup.
+        markup = re.sub(r"</?a\b[^>]*>", "", label.get_label())
+        Pango.parse_markup(markup, -1, "\0")   # raises on bad markup
+        assert label.get_text().strip()
+
+
+def test_help_lists_every_tray_preset(dialog):
+    """Help listed 5 of the 7 presets, with Balanced described as "GPU"."""
+    from talktype.tray import DictationTray
+    text = "\n".join(l.get_text() for l in _help_labels(dialog))
+    for preset in DictationTray.PERFORMANCE_PRESETS.values():
+        assert f"{preset['label']}:" in text, f"Help doesn't mention the {preset['label']} preset"

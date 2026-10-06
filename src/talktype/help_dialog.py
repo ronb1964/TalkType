@@ -68,7 +68,9 @@ def show_help_dialog():
             "and clipboard paste isn't used.")
     else:
         typing_para = (
-            "• <b>Keyboard Simulation (default):</b> types text using ydotool/wtype.\n"
+            "• <b>Auto (default):</b> picks for you: usually Clipboard Paste, and "
+            "typing where paste doesn't work.\n"
+            "• <b>Keyboard Typing:</b> types text using ydotool/wtype.\n"
             "• <b>Clipboard Paste:</b> copies to the clipboard then simulates "
             "Ctrl+V — use it if typing doesn't work in a particular app.")
 
@@ -180,7 +182,7 @@ The dictation service starts automatically when you launch TalkType.
 <b>🎉 First-Run Setup</b>
 On first launch, TalkType shows a welcome dialog that:
 {first_run_hotkey_bullet}• Offers to install the GNOME extension (if on GNOME desktop)
-• Offers to download CUDA libraries (if an NVIDIA GPU is detected)
+• Offers to use your NVIDIA graphics card (if one is detected)
 • Adapts automatically to your system capabilities
 
 <b>1. Begin Dictating</b>
@@ -213,12 +215,17 @@ system resources. Adjust this in Preferences → Advanced.
 • Audio beeps for start/stop feedback
 
 <b>Performance Mode Presets</b>
-Quick one-click optimization via tray menu:
-• <b>Fastest:</b> Tiny model, CPU - instant results
-• <b>Balanced:</b> Small model, GPU - good accuracy with speed
-• <b>Most Accurate:</b> Large-v3 model on your graphics card (CUDA or Vulkan) - best quality
-• <b>Fast &amp; Accurate:</b> Parakeet model - large-v3 class accuracy, no GPU needed
-• <b>Battery Saver:</b> Tiny model, CPU, short timeout
+Quick one-click changes from the tray menu (Performance):
+• <b>Fastest:</b> Tiny model on the processor - instant, basic accuracy
+• <b>Light:</b> Base model on the processor
+• <b>Balanced:</b> Small model, on the graphics card if one is set up
+• <b>Quality:</b> Medium model, on the graphics card if one is set up
+• <b>Most Accurate:</b> Large-v3 on your graphics card (CUDA or Vulkan)
+• <b>Fast &amp; Accurate:</b> Parakeet - the most accurate for English and 24 European
+  languages. It runs on the processor; to use your graphics card, set the Device
+  to "Vulkan (any GPU)" in Preferences
+• <b>Battery Saver:</b> Tiny model on the processor, stops after 2 idle minutes
+After choosing one, the tray's Device line shows where it really runs.
 
 <b>Smart Text Processing</b>
 • Auto-punctuation for natural text flow
@@ -265,7 +272,8 @@ Quick one-click optimization via tray menu:
 
 <b>Language Support</b>
 • Auto-detect language from speech
-• Manually select from 50+ supported languages
+• Or choose one of 33 common languages by hand. Whisper models know 99 languages;
+  Parakeet knows English and 24 European languages and always detects which by itself
 • Great for multilingual users
 
 <b>Audio Control</b>
@@ -340,13 +348,15 @@ For any other language, use Whisper: "small" on the processor, or
     create_tab("⚙️ Advanced", f'''<span size="large"><b>Advanced Features</b></span>
 
 <b>🎮 GPU Acceleration</b>
-If you have an NVIDIA graphics card, enable GPU acceleration for 3-5x faster transcription:
-• On first run with an NVIDIA GPU, you'll be offered to download CUDA libraries (~1.4GB)
-• After download completes, click OK or Apply in Preferences to activate GPU mode
-• Device automatically switches to "CUDA (GPU)" - no manual selection needed
-• GPU mode significantly reduces transcription time (3-5x faster)
-• Allows use of larger models without slowdown
-• Can also download CUDA later: Preferences → Advanced → "Download CUDA Libraries"
+A graphics card makes transcription several times faster. Choose it in
+Preferences → General → Device:
+• <b>Vulkan (any GPU):</b> AMD, Intel or NVIDIA, a 24 MB download. It's the only
+  way to run Parakeet on the graphics card. TalkType checks your graphics card is
+  really faster than your processor before it switches.
+• <b>CUDA (GPU):</b> NVIDIA only, for the Whisper models, a ~1.4 GB download
+  (Preferences → Advanced → "Download CUDA Libraries"). Parakeet can't use it.
+• If the graphics card can't start, TalkType uses the processor instead and tells
+  you, and the tray's Device line shows it, for example "CPU (Vulkan didn't start)".
 
 <b>🔋 Power Management</b>
 TalkType includes intelligent timeout to save system resources:
