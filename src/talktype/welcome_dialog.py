@@ -3076,6 +3076,22 @@ def _setup_vulkan_engine_first_run():
         logger.warning(f"Vulkan setup failed, staying on the processor: {e}")
 
 
+def _vulkan_speed_check_first_run(model):
+    """True if the graphics chip should run *model*: the same speed check (and
+    messages) as choosing Vulkan in Preferences.
+
+    First run used to switch to Vulkan without it, so the small graphics built
+    into some processors could end up slower than the processor itself, with
+    nothing to say so. Any error keeps the processor, as Preferences does.
+    """
+    try:
+        from talktype import vulkan_setup_dialogs
+        return vulkan_setup_dialogs.run_speed_check(None, model)
+    except Exception as e:
+        logger.warning(f"First-run speed check failed, using the processor: {e}")
+        return False
+
+
 def _download_vulkan_model_first_run(model):
     """Download *model* in whisper.cpp's format (and an engine that can run
     it, if the one there can't). True when both are on disk."""
@@ -3197,11 +3213,12 @@ def show_welcome_and_install():
             if device.lower() == "vulkan":
                 from talktype import whisper_vulkan
                 if whisper_vulkan.supports_model(selected_model):
-                    vulkan_ready = _download_vulkan_model_first_run(selected_model)
+                    vulkan_ready = (_download_vulkan_model_first_run(selected_model)
+                                    and _vulkan_speed_check_first_run(selected_model))
                     if not vulkan_ready:
                         config.device = device = "cpu"
                         save_config(config)
-                        logger.warning("Vulkan model download didn't finish; using the processor")
+                        logger.warning("Not using Vulkan after first-run setup; using the processor")
                         already_cached = is_model_cached(selected_model)
 
             compute_type = "float16" if device.lower() == "cuda" else "int8"

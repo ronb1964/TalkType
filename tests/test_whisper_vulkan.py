@@ -377,3 +377,32 @@ def test_first_run_parakeet_on_vulkan_fetches_an_engine_that_can_run_it(monkeypa
     monkeypatch.setattr(dpd, "UnifiedDownloadDialog", Dialog)
     assert wd._download_vulkan_model_first_run("parakeet-v3") is False
     assert added == ["Graphics engine", "Speech model"]
+
+
+def test_first_run_vulkan_uses_the_preferences_speed_check(monkeypatch):
+    """First run switched to Vulkan without timing it, so weak built-in
+    graphics could end up slower than the processor."""
+    from talktype import welcome_dialog as wd
+    seen = []
+    monkeypatch.setattr("talktype.vulkan_setup_dialogs.run_speed_check",
+                        lambda parent, model: seen.append(model) or False)
+    assert wd._vulkan_speed_check_first_run("parakeet-v3") is False
+    assert seen == ["parakeet-v3"]
+
+
+def test_first_run_speed_check_error_keeps_the_processor(monkeypatch):
+    from talktype import welcome_dialog as wd
+
+    def boom(parent, model):
+        raise RuntimeError("no Vulkan device")
+
+    monkeypatch.setattr("talktype.vulkan_setup_dialogs.run_speed_check", boom)
+    assert wd._vulkan_speed_check_first_run("small") is False
+
+
+def test_first_run_only_uses_vulkan_when_it_wins_the_speed_check():
+    """The download alone no longer settles it."""
+    import pathlib
+    src = (pathlib.Path(__file__).resolve().parent.parent / "src" / "talktype" / "welcome_dialog.py").read_text()
+    assert ("vulkan_ready = (_download_vulkan_model_first_run(selected_model)\n"
+            "                                    and _vulkan_speed_check_first_run(selected_model))") in src
