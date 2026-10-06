@@ -388,6 +388,16 @@ class WelcomeDialog:
         from .desktop_detect import is_gnome
         self.has_gnome = is_gnome() if force_gnome is None else force_gnome
         self.has_nvidia = detect_nvidia_gpu() if force_nvidia is None else force_nvidia
+        # What to recommend (recommend.py): the graphics chip and the language.
+        from . import recommend as _rec
+        try:
+            from .config import load_config
+            _cfg = load_config()
+        except Exception:
+            _cfg = None
+        self.hardware = _rec.detect_hardware(_cfg)
+        self.initial_language = _rec.system_language()
+        self._chosen_model = None      # set when the user picks a model in Other options
         
         # Detect uinput access (for keystroke injection)
         if force_uinput is None:
@@ -440,8 +450,7 @@ class WelcomeDialog:
             additional_height = 0
             if self.has_gnome:
                 additional_height += 160  # GNOME extension section
-            if self.has_nvidia:
-                additional_height += 180  # CUDA section
+            additional_height += 170  # recommendation card
             if self.is_flatpak:
                 additional_height += 190  # Shortcut setup section (Flatpak)
             # Typing setup section shows if either uinput OR ydotoold needs fixing
@@ -458,8 +467,7 @@ class WelcomeDialog:
         # Build the dialog
         self.dialog = None
         self.extension_check = None
-        self.cuda_check = None
-        self.gpu_vulkan_radio = None  # NVIDIA: the light Vulkan choice next to CUDA
+        self.gpu_check = None  # "Use my graphics card" under Other options
         self.required_pulse_box = None  # Flatpak: the red pulsing "Required" warning box
         self.fix_typing_button = None
         self.install_ydotool_button = None
@@ -558,7 +566,18 @@ class WelcomeDialog:
             .tt-quit:active {
                 background-color: rgba(255, 255, 255, 0.22);
             }
-        """)
+                    .tt-rec-card {
+                border: 2px solid #4a90e2;
+                border-radius: 10px;
+                padding: 12px 14px;
+                background-color: rgba(74, 144, 226, 0.10);
+            }
+            .tt-rec-tag {
+                color: #7fb2f0;
+                font-weight: bold;
+                font-size: 9pt;
+            }
+""")
         # Apply CSS globally but with specific class names to avoid affecting other dialogs
         Gtk.StyleContext.add_provider_for_screen(
             self.dialog.get_screen() if self.dialog.get_screen() else Gdk.Screen.get_default(),
@@ -696,12 +715,16 @@ class WelcomeDialog:
         sep3.set_margin_bottom(10)
         vbox.pack_start(sep3, False, False, 0)
 
+        # The setup this computer should get (recommend.py), with Other options.
+        if not self.hotkey_unsupported:
+            self._build_recommendation(vbox)
+
         # PortAudio setup section (shown FIRST if needed - required for audio recording)
         if self.needs_portaudio_install:
             self._build_portaudio_setup_section(vbox)
 
             # Separator after PortAudio section
-            if self.needs_uinput_fix or self.needs_ydotoold_setup or self.has_gnome or self.has_nvidia:
+            if self.needs_uinput_fix or self.needs_ydotoold_setup or self.has_gnome:
                 sep_portaudio = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
                 sep_portaudio.set_margin_top(15)
                 sep_portaudio.set_margin_bottom(10)
@@ -712,7 +735,7 @@ class WelcomeDialog:
         if self.is_flatpak:
             self._build_shortcut_setup_section(vbox)
 
-            if self.has_gnome or self.has_nvidia:
+            if self.has_gnome:
                 sep_sc = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
                 sep_sc.set_margin_top(15)
                 sep_sc.set_margin_bottom(10)
@@ -723,14 +746,14 @@ class WelcomeDialog:
             self._build_typing_setup_section(vbox)
 
             # Separator after typing setup section
-            if self.has_gnome or self.has_nvidia:
+            if self.has_gnome:
                 sep_uinput = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
                 sep_uinput.set_margin_top(15)
                 sep_uinput.set_margin_bottom(10)
                 vbox.pack_start(sep_uinput, False, False, 0)
 
         # Optional Features header (only show if we have GNOME or NVIDIA options)
-        if self.has_gnome or self.has_nvidia:
+        if self.has_gnome:
             optional_label = Gtk.Label()
             optional_label.set_markup('<span size="large"><b>⚙️ Optional Features</b></span>')
             optional_label.set_halign(Gtk.Align.START)
@@ -740,13 +763,10 @@ class WelcomeDialog:
             if self.has_gnome:
                 self._build_gnome_extension_option(vbox)
 
-            # CUDA Libraries (if detected)
-            if self.has_nvidia:
-                self._build_cuda_option(vbox)
 
             # Preferences note
             note = Gtk.Label()
-            note.set_markup('<span size="small">💡 <i>You can install or change these anytime in Preferences → Advanced</i></span>')
+            note.set_markup('<span size="small">💡 <i>You can change these anytime in Preferences</i></span>')
             note.set_halign(Gtk.Align.START)
             note.set_margin_top(10)
             note.set_opacity(0.7)
@@ -960,7 +980,7 @@ class WelcomeDialog:
         box.set_margin_bottom(10)
 
         # This is a hard stop: the app cannot function here. Flag it so the footer
-        # disables "Let's Go!", and pulse the warning red so it can't be skipped.
+        # disables "Set it up", and pulse the warning red so it can't be skipped.
         self.hotkey_unsupported = True
 
         pulse = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
@@ -1634,109 +1654,116 @@ class WelcomeDialog:
 
         vbox.pack_start(ext_box, False, False, 0)
 
-    def _build_cuda_option(self, vbox):
-        """Build CUDA libraries checkbox and details."""
-        cuda_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        cuda_box.set_margin_start(20)
-        cuda_box.set_margin_top(10)
+    def _build_recommendation(self, vbox):
+        """The "Recommended for your computer" card and Other options.
 
-        # Checkbox with label
-        self.cuda_check = Gtk.CheckButton()
-        self.cuda_check.get_style_context().add_class('welcome-checkbox')
-        cuda_label = Gtk.Label()
-        cuda_label.set_markup('📦 <b>Download CUDA Libraries</b> <span size="small">(~1.4GB)</span>')
-        cuda_label.set_halign(Gtk.Align.START)
-        self.cuda_check.add(cuda_label)
-        self.cuda_check.set_tooltip_text(
-            "Download NVIDIA CUDA libraries for GPU-accelerated transcription.\n"
-            "Provides 3-5x faster performance with your NVIDIA graphics card.\n"
-            "Download is ~1.4GB and may take a few minutes depending on connection speed.\n"
-            "GPU mode will be automatically enabled after successful download."
-        )
-        cuda_box.pack_start(self.cuda_check, False, False, 0)
+        The card always shows exactly what will be set up; choices that can't
+        work are greyed out with the reason (recommend.option_states)."""
+        from . import recommend as rec
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        card.get_style_context().add_class("tt-rec-card")
+        tag = Gtk.Label(xalign=0)
+        tag.set_markup("RECOMMENDED FOR YOUR COMPUTER")
+        tag.get_style_context().add_class("tt-rec-tag")
+        self.rec_title = Gtk.Label(xalign=0)
+        self.rec_explanation = Gtk.Label(xalign=0)
+        self.rec_explanation.set_line_wrap(True)
+        self.rec_download = Gtk.Label(xalign=0)
+        self.rec_download.set_opacity(0.75)
+        for w in (tag, self.rec_title, self.rec_explanation, self.rec_download):
+            card.pack_start(w, False, False, 0)
+        vbox.pack_start(card, False, False, 6)
 
-        # NVIDIA detected badge
-        nvidia_badge = Gtk.Label()
-        nvidia_badge.set_markup('<b>NVIDIA GPU Detected!</b>')
-        nvidia_badge.set_halign(Gtk.Align.START)
-        nvidia_badge.set_margin_start(30)
-        cuda_box.pack_start(nvidia_badge, False, False, 0)
+        expander = Gtk.Expander(label="Other options")
+        other = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        other.set_margin_start(12)
 
-        # CUDA description
-        cuda_desc = Gtk.Label()
-        cuda_desc.set_markup('Enable GPU-accelerated speech recognition:')
-        cuda_desc.set_halign(Gtk.Align.START)
-        cuda_desc.set_margin_start(30)
-        cuda_desc.set_margin_top(5)
-        cuda_desc.set_opacity(0.9)
-        cuda_box.pack_start(cuda_desc, False, False, 0)
+        lang_row = Gtk.Box(spacing=8)
+        lang_row.pack_start(Gtk.Label(label="I dictate in", xalign=0), False, False, 0)
+        self.lang_combo = Gtk.ComboBoxText()
+        codes = [c for c, _ in rec.LANGUAGES]
+        for code, name in rec.LANGUAGES:
+            self.lang_combo.append(code, name)
+        if self.initial_language not in codes:
+            self.lang_combo.append(self.initial_language, rec.language_name(self.initial_language))
+        self.lang_combo.set_active_id(self.initial_language)
+        lang_row.pack_start(self.lang_combo, False, False, 0)
+        other.pack_start(lang_row, False, False, 0)
 
-        # CUDA benefits
-        cuda_benefits = [
-            "⚡ 3-5x faster transcription speed",
-            "🎯 Better accuracy for longer recordings",
-            "💻 Lower CPU usage during transcription"
-        ]
+        model_header = Gtk.Label(xalign=0)
+        model_header.set_markup("<b>Speech model</b>")
+        other.pack_start(model_header, False, False, 4)
+        self.model_radios, self.model_reasons, group = {}, {}, None
+        for state in rec.option_states(self.initial_language, self.hardware):
+            radio = Gtk.RadioButton.new_from_widget(group)
+            group = group or radio
+            text = Gtk.Label(xalign=0)
+            text.set_line_wrap(True)
+            radio.add(text)
+            radio.connect("toggled", self._on_model_radio, state.model)
+            self.model_radios[state.model] = radio
+            self.model_reasons[state.model] = text
+            other.pack_start(radio, False, False, 0)
+        more = Gtk.Label(xalign=0)
+        more.set_markup('<span size="small"><i>More models (Tiny, Base, Medium) are in Preferences.</i></span>')
+        other.pack_start(more, False, False, 0)
 
-        cuda_benefits_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
-        cuda_benefits_box.set_margin_start(45)
+        where = Gtk.Label(xalign=0)
+        where.set_markup("<b>Where it runs</b>")
+        other.pack_start(where, False, False, 4)
+        if self.hardware.gpu:
+            self.gpu_check = Gtk.CheckButton(label=f"Use my graphics card ({self.hardware.gpu_name})")
+            self.gpu_check.set_active(True)
+            self.gpu_check.set_tooltip_text("Several times faster. TalkType checks it really is "
+                                            "faster than your processor before using it.")
+            self.gpu_check.connect("toggled", lambda *_: self._refresh_recommendation())
+            other.pack_start(self.gpu_check, False, False, 0)
+        else:
+            other.pack_start(Gtk.Label(label="On this computer's processor", xalign=0), False, False, 0)
 
-        for benefit in cuda_benefits:
-            label = Gtk.Label()
-            label.set_markup(benefit)
-            label.set_halign(Gtk.Align.START)
-            label.set_opacity(0.85)
-            cuda_benefits_box.pack_start(label, False, False, 0)
+        expander.add(other)
+        vbox.pack_start(expander, False, False, 0)
+        self.lang_combo.connect("changed", lambda *_: self._refresh_recommendation())
+        self._refresh_recommendation()
 
-        cuda_box.pack_start(cuda_benefits_box, False, False, 0)
+    def _language(self):
+        return self.lang_combo.get_active_id() or self.initial_language
 
-        # Storage note
-        storage_note = Gtk.Label()
-        from talktype.config import get_data_dir
-        data_dir = get_data_dir()
-        storage_note.set_markup(f'<span size="small" style="italic">(Libraries will be stored in {data_dir}/)</span>')
-        storage_note.set_halign(Gtk.Align.START)
-        storage_note.set_margin_start(30)
-        storage_note.set_margin_top(3)
-        storage_note.set_opacity(0.7)
-        cuda_box.pack_start(storage_note, False, False, 0)
+    def _use_gpu(self):
+        return bool(self.gpu_check and self.gpu_check.get_active())
 
-        # The light alternative: whisper.cpp through Vulkan (whisper_vulkan.py).
-        # On an RTX 4070 Super it matched CUDA's speed for a 24 MB download
-        # instead of 1.4 GB. CUDA stays pre-selected: it's the long-proven
-        # route; Vulkan is new.
+    def _current_setup(self):
+        from . import recommend as rec
+        return rec.recommend(self._language(), self.hardware,
+                             model=self._chosen_model, use_gpu=self._use_gpu())
+
+    def _on_model_radio(self, radio, model):
+        if radio.get_active() and not getattr(self, "_syncing", False):
+            self._chosen_model = model
+            self._refresh_recommendation()
+
+    def _refresh_recommendation(self):
+        """Update the card and the greyed choices from recommend.py."""
+        from . import recommend as rec
+        setup = self._current_setup()
+        name = rec.language_name(self._language())
+        self.rec_title.set_markup(f"<b>{GLib.markup_escape_text(setup.title)}</b>")
+        self.rec_explanation.set_markup(
+            f"{GLib.markup_escape_text(setup.explanation)} For <b>{GLib.markup_escape_text(name)}</b>.")
+        self.rec_download.set_text(setup.download_text)
+        self._syncing = True
         try:
-            from talktype import whisper_vulkan
-            vulkan_ok = whisper_vulkan.vulkan_available()
-        except Exception:
-            vulkan_ok = False
-        if vulkan_ok:
-            label = self.cuda_check.get_child()
-            label.set_markup('🚀 <b>Use your NVIDIA graphics card</b>')
-            self.cuda_check.set_tooltip_text(
-                "Run speech recognition on your NVIDIA graphics card. Pick how below.")
-            choice_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-            choice_box.set_margin_start(30)
-            choice_box.set_margin_top(6)
-            cuda_radio = Gtk.RadioButton.new_with_label(
-                None, "Full: NVIDIA's CUDA libraries (1.4 GB), TalkType's long-standing setup")
-            self.gpu_vulkan_radio = Gtk.RadioButton.new_with_label_from_widget(
-                cuda_radio, "Light: Vulkan (24 MB), about as fast in our tests")
-            self.gpu_vulkan_radio.set_tooltip_text(
-                "A small graphics engine instead of NVIDIA's CUDA libraries. On an RTX 4070 "
-                "Super it was just as fast. The Whisper model downloads in its own format.")
-            # Never greyed out: picking either one ticks the box above. They
-            # used to stay greyed until the box was ticked, and that read as
-            # "Light can't be chosen" (Ron, testing 0.14.0). "clicked", not
-            # "toggled": Full starts selected, so clicking it changes nothing
-            # and wouldn't emit "toggled".
-            for radio in (cuda_radio, self.gpu_vulkan_radio):
-                choice_box.pack_start(radio, False, False, 0)
-                radio.connect("clicked", lambda r: self.cuda_check.set_active(True))
-            cuda_box.pack_start(choice_box, False, False, 0)
-            cuda_box.reorder_child(choice_box, 1)      # right under the checkbox
-
-        vbox.pack_start(cuda_box, False, False, 0)
+            for state in rec.option_states(self._language(), self.hardware):
+                radio, text = self.model_radios[state.model], self.model_reasons[state.model]
+                radio.set_sensitive(state.available)
+                note = state.description if state.available else state.reason
+                mark = " (recommended)" if state.model == setup.model else ""
+                text.set_markup(f"<b>{state.label}</b>{mark}, {state.size}\n"
+                                f'<span size="small">{GLib.markup_escape_text(note)}</span>')
+                if state.model == setup.model:
+                    radio.set_active(True)
+        finally:
+            self._syncing = False
 
     def _build_footer(self, vbox):
         """Build the footer section."""
@@ -1783,8 +1810,8 @@ class WelcomeDialog:
         next_label.set_opacity(0.8)
         vbox.pack_start(next_label, False, False, 0)
 
-        # Centered "Let's Go!" button
-        continue_btn = Gtk.Button(label="Let's Go!")
+        # Centered "Set it up" button
+        continue_btn = Gtk.Button(label="Set it up")
         continue_btn.set_size_request(200, 40)
         continue_btn.get_style_context().add_class("suggested-action")
         continue_btn.connect("clicked", lambda w: self.dialog.response(Gtk.ResponseType.OK))
@@ -1799,8 +1826,6 @@ class WelcomeDialog:
         targets = []
         if self.extension_check:
             targets.append(self.extension_check)
-        if self.cuda_check:
-            targets.append(self.cuda_check)
         # The Flatpak "Required" warning box pulses too — red, via .tt-required.
         if self.required_pulse_box:
             targets.append(self.required_pulse_box)
@@ -1850,7 +1875,7 @@ class WelcomeDialog:
             dict: User selections with keys:
                 - 'install_extension': bool (if GNOME detected)
                 - 'download_cuda': bool (if NVIDIA detected)
-                - 'continue': bool (True if user clicked "Let's Go!")
+                - 'continue': bool (True if user clicked "Set it up")
         """
         # Show dialog and fade in
         self.dialog.set_opacity(0.0)
@@ -1874,11 +1899,11 @@ class WelcomeDialog:
         if self.extension_check:
             result['install_extension'] = self.extension_check.get_active()
 
-        if self.cuda_check:
-            use_gpu = self.cuda_check.get_active()
-            light = bool(use_gpu and self.gpu_vulkan_radio and self.gpu_vulkan_radio.get_active())
-            result['download_cuda'] = use_gpu and not light
-            result['use_vulkan'] = light
+        if hasattr(self, "rec_title"):
+            setup = self._current_setup()
+            result['model'] = setup.model
+            result['device'] = setup.device
+            result['dictation_language'] = self._language()
 
         # Include typing setup status
         result['uinput_fixed'] = self.uinput_fixed
