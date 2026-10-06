@@ -3143,6 +3143,31 @@ class ModelUnavailable(Exception):
 _QUALITY_ORDER = ("large-v3", "parakeet-v3", "medium", "small", "base", "tiny")
 
 
+def _guard_large_v3_without_cuda(cfg):
+    """large-v3 on CUDA without TalkType's CUDA libraries runs as medium.
+
+    It keeps the service usable for someone who set up large-v3 with CUDA and
+    later lost the libraries (a fresh profile, a cleaned data folder). It must
+    leave Vulkan alone: large-v3 runs there without any CUDA library, and this
+    check predates Vulkan, so AMD and Intel users who set up large-v3 on their
+    graphics card silently got medium while the tray said "Large". Vulkan has
+    its own fallback, which tells the user.
+    """
+    if cfg.model != "large-v3" or str(cfg.device).lower() == "vulkan":
+        return
+    try:
+        from .cuda_helper import has_talktype_cuda_libraries
+        if not has_talktype_cuda_libraries():
+            logger.warning(
+                "large-v3 selected but CUDA libraries not found — "
+                "falling back to 'medium' to prevent non-functional state."
+            )
+            print("⚠️  large-v3 requires CUDA (not installed). Falling back to 'medium'.")
+            cfg.model = "medium"
+    except Exception:
+        pass  # If cuda_helper unavailable, let the existing error handling deal with it
+
+
 def _pick_fallback_model(wanted, downloaded, has_cuda):
     """The downloaded model closest in quality to *wanted*, or None.
 
@@ -3379,22 +3404,7 @@ def main():
     if args.notify: cfg.notify = (args.notify == "on")
     if args.language is not None: cfg.language = args.language
 
-    # Guard: large-v3 requires CUDA — silently fall back to medium if CUDA
-    # is not installed. This prevents the service from becoming completely
-    # non-functional when someone opens the app without CUDA after having
-    # previously configured it with the large model.
-    if cfg.model == "large-v3":
-        try:
-            from .cuda_helper import has_talktype_cuda_libraries
-            if not has_talktype_cuda_libraries():
-                logger.warning(
-                    "large-v3 selected but CUDA libraries not found — "
-                    "falling back to 'medium' to prevent non-functional state."
-                )
-                print("⚠️  large-v3 requires CUDA (not installed). Falling back to 'medium'.")
-                cfg.model = "medium"
-        except Exception:
-            pass  # If cuda_helper unavailable, let the existing error handling deal with it
+    _guard_large_v3_without_cuda(cfg)
 
     # Set global typing delay from config
     global _typing_delay
