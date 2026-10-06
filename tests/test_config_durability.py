@@ -605,7 +605,7 @@ def test_a_transient_read_error_does_not_pin_the_process_to_defaults(config_path
     monkeypatch.setattr(config, "_load_toml_file", flaky)
 
     first = config.load_config()
-    assert first.model == "small"          # defaults for this call only
+    assert first.model == config.Settings.model   # defaults for this call only
 
     second = config.load_config()
     assert second.model == "large-v3", "the good file on disk was never re-read"
@@ -632,7 +632,7 @@ def test_an_unreadable_config_is_not_overwritten_with_defaults(config_path,
     monkeypatch.setattr(config, "_load_toml_file", unreadable)
 
     loaded = config.load_config()
-    assert loaded.model == "small"         # defaults, as designed
+    assert loaded.model == config.Settings.model  # defaults, as designed
 
     # The tray now writes that back — this must not destroy the file.
     with pytest.raises(config.ConfigNotLoadedError):

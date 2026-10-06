@@ -328,10 +328,13 @@ Configure in: Preferences → General → Model
 • More natural sentence structure
 
 <b>Recommendation:</b>
-Start with "small" for everyday use. Upgrade to "medium" or "large-v3"
-if you need better accuracy for professional or technical dictation.
-No NVIDIA graphics card? Try Parakeet: it gives large-v3 class accuracy
-at small-model speed, as long as you dictate in a supported language.''')
+Use Parakeet if you dictate in English or one of the 24 European languages
+it knows. It makes fewer mistakes than any Whisper model on English, and
+it's fast even without a graphics card. With a graphics card (NVIDIA, AMD
+or Intel), set the Device to "Vulkan (any GPU)" in Preferences for even
+faster results.
+For any other language, use Whisper: "small" on the processor, or
+"large-v3" on a graphics card for the best accuracy.''')
 
     # Tab 4: Advanced
     create_tab("⚙️ Advanced", f'''<span size="large"><b>Advanced Features</b></span>

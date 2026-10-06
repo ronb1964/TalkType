@@ -2162,10 +2162,10 @@ def show_tips_and_features_dialog(extension_installed=False):
     _MODEL_LABELS = {
         "tiny":     "Tiny (fastest) — 39MB",
         "base":     "Base (fast, basic accuracy) — 74MB",
-        "small":    "Small (recommended) — 244MB",
+        "small":    "Small (99 languages) — 244MB",
         "medium":   "Medium (better accuracy) — 769MB",
         "large-v3": "Large (best quality) — 3GB",
-        "parakeet-v3": "Parakeet (fast, accurate, no GPU needed; English + 24 European languages) — 670MB",
+        "parakeet-v3": "Parakeet (recommended) — 670MB",
     }
 
     model_store = Gtk.ListStore(str, str, bool)
@@ -2181,10 +2181,10 @@ def show_tips_and_features_dialog(extension_installed=False):
     model_combo.pack_start(_renderer, True)
     model_combo.add_attribute(_renderer, "text", 1)
     model_combo.add_attribute(_renderer, "sensitive", 2)
-    # Default to Small by NAME, not position. The list is ordered by size now,
-    # so index 0 is Tiny — a positional default would quietly hand every new
-    # user the fastest, least accurate model.
-    model_combo.set_active(OFFERED_MODELS.index("small"))
+    # Default to Parakeet by NAME, not position. The list is ordered by size, so
+    # index 0 is Tiny — a positional default would quietly hand every new user
+    # the fastest, least accurate model.
+    model_combo.set_active(OFFERED_MODELS.index("parakeet-v3"))
     model_combo.set_size_request(320, -1)  # Fixed width — don't stretch to fill dialog
     model_combo.set_tooltip_text(
         "Choose which AI model to download. You can change this later in Preferences.")
@@ -2200,10 +2200,10 @@ def show_tips_and_features_dialog(extension_installed=False):
     model_section.pack_start(model_box, False, False, 0)
 
     # Track last valid selection to revert if large-v3 is blocked. Must match the
-    # initial set_active below (small), by NAME not a hard-coded number — the
+    # initial set_active above (Parakeet), by NAME not a hard-coded number — the
     # offered list has grown before (base was added) and left stale indices that
     # reverted CPU users to the wrong model.
-    _last_model_index = [OFFERED_MODELS.index("small")]
+    _last_model_index = [OFFERED_MODELS.index("parakeet-v3")]
     _updating_combo = [False]  # Prevent recursive "changed" signals
 
     def _update_button_text(model_id):
@@ -2334,8 +2334,10 @@ def show_tips_and_features_dialog(extension_installed=False):
     # Model description
     model_desc = Gtk.Label()
     model_desc.set_markup(
-        '<span size="small">The Small model provides good accuracy for most use cases\n'
-        'with fast downloads and quick transcription.\n\n'
+        '<span size="small">Parakeet is the most accurate choice for English and 24\n'
+        'European languages, and it\'s fast even without a graphics card.\n'
+        'Dictate in another language? Pick one of the Whisper models\n'
+        '(Small is a good start), which know 99 languages.\n\n'
         'You can change models anytime in Preferences.</span>'
     )
     model_desc.set_line_wrap(True)
@@ -2378,7 +2380,7 @@ def show_tips_and_features_dialog(extension_installed=False):
         it = model_combo.get_active_iter()
         if it is not None:
             return model_store.get_value(it, 0)
-        return "small"
+        return "parakeet-v3"
 
     # Store selected model
     selected_model = [get_combo_model_id()]  # Use list to make mutable

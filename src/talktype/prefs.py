@@ -670,14 +670,16 @@ class PreferencesWindow:
         model_label = Gtk.Label(label="Model 💡:", xalign=0)
         model_label.set_tooltip_text(
             "Speech model - choose based on your needs:\n\n"
+            "• Parakeet (670 MB): recommended. The most accurate for English\n"
+            "  and 24 European languages, and fast even on the processor.\n"
+            "  On a graphics card, set Device to Vulkan.\n\n"
+            "Whisper models, for the other 75 or so languages:\n"
             "• tiny (39 MB): Fastest, basic accuracy - quick notes\n"
             "• base (74 MB): Fast, good accuracy - casual use\n"
-            "• small (244 MB): Balanced - recommended for most users\n"
+            "• small (244 MB): Balanced - a good start on the processor\n"
             "• medium (769 MB): Slower, very accurate - professional use\n"
-            "• large-v3 (~3 GB): Best accuracy - technical/professional work\n"
-            "  ⚠️ Takes 30-60 seconds to load initially\n"
-            "• Parakeet (670 MB): large-v3 class accuracy, fast with no GPU;\n"
-            "  English + 24 European languages (NVIDIA model, not Whisper)\n\n"
+            "• large-v3 (~3 GB): Whisper's best - needs a graphics card\n"
+            "  ⚠️ Takes 30-60 seconds to load initially\n\n"
             "Larger Whisper models provide:\n"
             "• Better word recognition (technical terms, proper nouns)\n"
             "• Improved punctuation and context awareness\n"
@@ -700,10 +702,10 @@ class PreferencesWindow:
         _MODEL_DISPLAY = {
             "tiny":     "tiny — fastest, lowest accuracy",
             "base":     "base — fast, basic accuracy",
-            "small":    "small — recommended balance",
+            "small":    "small — good balance, 99 languages",
             "medium":   "medium — better accuracy",
             "large-v3": "large-v3 — best accuracy",
-            "parakeet-v3": "Parakeet — fast and accurate, English + 24 European languages",
+            "parakeet-v3": "Parakeet — recommended: most accurate, English + 24 European languages",
         }
         from .model_helper import OFFERED_MODELS
 
@@ -736,13 +738,14 @@ class PreferencesWindow:
         model_combo.add_attribute(_renderer, "sensitive", 2)
 
         # Set active row to match current config model
-        _current = self.config.get("model", "small")
+        from .config import Settings
+        _current = self.config.get("model", Settings.model)
         for _i, _row in enumerate(self.model_store):
             if _row[0] == _current:
                 model_combo.set_active(_i)
                 break
         else:
-            model_combo.set_active(2)  # Fall back to small
+            model_combo.set_active(OFFERED_MODELS.index(Settings.model))  # the default
 
         self.model_combo = model_combo  # Store reference for later use
         model_combo.connect("changed", self._on_model_changed)

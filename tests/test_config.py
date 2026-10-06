@@ -173,3 +173,25 @@ def test_model_cache_check_fast_unknown_model():
     False for unknown models (used on every Apply/OK click in prefs)."""
     from talktype.model_helper import is_model_cached_fast
     assert is_model_cached_fast("no-such-model") is False
+
+
+def test_parakeet_is_the_default_model():
+    """New installs start on Parakeet: more accurate than any Whisper model on
+    English (Open ASR Leaderboard) and fast on a processor. Existing configs
+    keep whatever model they saved."""
+    from talktype.config import Settings
+    assert Settings().model == "parakeet-v3"
+    assert Settings().device == "cpu"   # the graphics card is chosen at setup
+
+
+def test_first_run_and_preferences_recommend_parakeet():
+    """Both pickers used to call Small "recommended" and preselect it."""
+    import pathlib
+    src = pathlib.Path(__file__).resolve().parent.parent / "src" / "talktype"
+    welcome = (src / "welcome_dialog.py").read_text()
+    prefs = (src / "prefs.py").read_text()
+    assert 'model_combo.set_active(OFFERED_MODELS.index("parakeet-v3"))' in welcome
+    assert "Small (recommended)" not in welcome
+    assert "Parakeet (recommended)" in welcome
+    assert '"small":    "small — recommended balance"' not in prefs
+    assert "Parakeet — recommended" in prefs

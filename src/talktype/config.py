@@ -116,7 +116,9 @@ CLASSIC_CYAN_HEX = "#4db3ff"
 
 @dataclass
 class Settings:
-    model: str = "small"        # tiny/base/small/medium/large-v3 …
+    model: str = "parakeet-v3"  # parakeet-v3 or tiny/base/small/medium/large-v3 …
+                                # Parakeet is the default: more accurate than large-v3 on
+                                # English (Open ASR Leaderboard) and fast on a processor.
     device: str = "cpu"         # "cpu", "cuda" (NVIDIA via CUDA) or "vulkan" (any GPU via whisper.cpp)
     hotkey: str = ""            # hold-to-talk hotkey (empty until user picks during onboarding)
     beeps: bool = True          # beeps on/off
