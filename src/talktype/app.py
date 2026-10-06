@@ -3247,6 +3247,7 @@ def _build_vulkan_model(settings: Settings):
                 model = whisper_vulkan.VulkanWhisperModel(settings.model, device_index)
                 print(f"✅ Model loaded successfully on the GPU through Vulkan (device {device_index})")
                 logger.info(f"Model loaded: {settings.model} on vulkan device {device_index}")
+                _record_engine(settings.model, "vulkan")
                 return model
         except Exception as e:
             reason = f"the graphics engine failed to start ({e})"
@@ -3278,6 +3279,7 @@ def _build_parakeet_gpu_model(settings: Settings):
             model = parakeet_gpu.ParakeetGpuModel(device_index)
             print(f"✅ Parakeet loaded on the GPU through Vulkan (device {device_index})")
             logger.info(f"Model loaded: {PARAKEET_MODEL} on vulkan device {device_index}")
+            _record_engine(PARAKEET_MODEL, "vulkan")
             return model
     except Exception as e:
         reason = f"the graphics helper failed to start ({e})"
@@ -3285,6 +3287,33 @@ def _build_parakeet_gpu_model(settings: Settings):
     _notify("TalkType", "Couldn't run Parakeet on your graphics card, so TalkType is using the "
                         "processor for now. Choose the device again in Preferences to set it up.")
     return None
+
+
+# What the service really loaded, as (model, device) with device "cpu", "cuda" or
+# "vulkan". It can differ from the settings: Vulkan or CUDA falls back to the
+# processor, Parakeet can't use CUDA, a missing model is swapped for one that's
+# downloaded. The tray and the GNOME menu showed the settings, so they could
+# say "GPU (Vulkan)" while the processor did the work.
+_running_engine = None
+
+
+def _record_engine(model, device):
+    global _running_engine
+    _running_engine = (str(model), str(device).lower())
+
+
+def _notify_tray_running_engine():
+    """Tell the tray what's really running (see _running_engine)."""
+    if _running_engine is None:
+        return
+    try:
+        _get_tray_dbus_proxy().NotifyRunningEngine(
+            *_running_engine,
+            dbus_interface='io.github.ronb1964.TalkType',
+            timeout=_TRAY_DBUS_TIMEOUT,
+        )
+    except Exception as e:
+        logger.debug(f"Could not tell the tray which engine is running: {e}")
 
 
 def build_model(settings: Settings):
@@ -3317,6 +3346,7 @@ def build_model(settings: Settings):
         where = "cpu" if is_parakeet(settings.model) else settings.device
         print(f"✅ Model loaded successfully on {where.upper()}")
         logger.info(f"Model loaded: {settings.model} on {where}")
+        _record_engine(settings.model, where)
         return model
     except ModelUnavailable:
         # Never "fall back to CPU" here. That fallback exists for a CUDA load
@@ -3346,6 +3376,12 @@ def build_model(settings: Settings):
 
                 print("✅ Model loaded successfully on CPU (fallback)")
                 logger.info("Model loaded on CPU (fallback from CUDA)")
+                _record_engine(settings.model, "cpu")
+                # This switches the saved device to the processor (below), so
+                # say so: it used to happen with only a console line.
+                _notify("TalkType", "Couldn't use your NVIDIA graphics card (CUDA), so TalkType "
+                                    "switched to the processor. Choose the device again in "
+                                    "Preferences to try the graphics card.")
 
                 # Persist device=cpu to config so future service restarts don't
                 # try CUDA again and crash in a loop.
@@ -3641,6 +3677,7 @@ def main():
         model = _build_model_or_exit(cfg)
     print(f"Config: model={cfg.model} device={cfg.device} lang={cfg.language or 'auto'} auto_space={cfg.auto_space} auto_period={cfg.auto_period}")
     logger.info(f"Configuration: model={cfg.model}, device={cfg.device}, language={cfg.language or 'auto'}, auto_space={cfg.auto_space}, auto_period={cfg.auto_period}")
+    _notify_tray_running_engine()
     # Register signal handlers:
     # SIGUSR1: toggle recording (sent by tray for D-Bus toggle commands)
     # SIGUSR2: toggle hotkey test mode (sent by prefs dialog for Test Hotkeys)

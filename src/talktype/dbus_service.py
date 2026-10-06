@@ -74,6 +74,8 @@ class TalkTypeDBusService(dbus.service.Object):
         self.app = app_instance
         # Hotkeys the running service asked the GNOME extension to hold back.
         self.claimed_hotkeys = []
+        # (model, device) the running service really loaded; None until it says.
+        self.running_engine = None
 
         # Set up D-Bus main loop
         dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
@@ -134,7 +136,11 @@ class TalkTypeDBusService(dbus.service.Object):
 
     @dbus.service.method(DBUS_INTERFACE, out_signature='s')
     def GetCurrentModel(self):
-        """Get the current Whisper model name"""
+        """The model the service really runs, or the configured one before it
+        has reported (see NotifyRunningEngine)."""
+        running = getattr(self, "running_engine", None)
+        if running:
+            return running[0]
         if hasattr(self.app, 'config'):
             return str(getattr(self.app.config, 'model', 'large-v3'))
         return 'unknown'
@@ -143,6 +149,9 @@ class TalkTypeDBusService(dbus.service.Object):
     def GetDeviceType(self):
         """Get the device the model really runs on (cpu/cuda). This is what
         the GNOME extension's Device line shows, so it matches the tray."""
+        running = getattr(self, "running_engine", None)
+        if running:
+            return running[1]
         if hasattr(self.app, 'config'):
             from .parakeet_engine import effective_device
             cfg = self.app.config
@@ -347,6 +356,18 @@ class TalkTypeDBusService(dbus.service.Object):
         self.claimed_hotkeys = [str(a) for a in accelerators]
         logger.debug(f"D-Bus: NotifyClaimedHotkeys: {self.claimed_hotkeys}")
         self.HotkeysChanged(self.claimed_hotkeys)
+
+    @dbus.service.method(DBUS_INTERFACE, in_signature='ss')
+    def NotifyRunningEngine(self, model, device):
+        """Called by the dictation service once its model is loaded: what it
+        really runs, which a fallback can make different from the settings."""
+        self.running_engine = (str(model), str(device))
+        logger.info(f"D-Bus: service is running {model} on {device}")
+        self.ModelChanged(str(model))   # the extension re-reads GetStatus on this
+
+    def clear_running_engine(self):
+        """The service stopped; until it reports again, show the settings."""
+        self.running_engine = None
 
     def clear_claimed_hotkeys(self):
         """The service stopped. Forget its hotkeys, so a status read during the

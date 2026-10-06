@@ -122,6 +122,52 @@ def _acquire_tray_singleton():
 # Global to keep lock file open
 _tray_lockfile_handle = None
 
+def engine_status(cfg_model, cfg_device, running=None):
+    """(model id, device text) for the tray's "Active Model" and "Device" lines.
+
+    *running* is (model, device) as reported by the dictation service, or None
+    when it hasn't reported (stopped, starting, or an older service). The lines
+    used to show the settings only, so after a fallback they said "GPU (Vulkan)"
+    while the processor did the work. When what runs differs from the setting,
+    the device text says why in a few words.
+    """
+    from .parakeet_engine import effective_device
+    names = {'cpu': 'CPU', 'cuda': 'GPU (CUDA)', 'vulkan': 'GPU (Vulkan)'}
+    wanted = str(cfg_device or "cpu").lower()
+    if running:
+        model, device = running[0], str(running[1]).lower()
+    else:
+        model, device = cfg_model, effective_device(cfg_model, wanted)
+    text = names.get(device, device.upper())
+    if device == "cpu" and wanted in ("cuda", "vulkan"):
+        from .parakeet_engine import is_parakeet
+        if wanted == "cuda" and is_parakeet(model):
+            text += " (Parakeet can't use CUDA)"
+        elif running:
+            text += f" ({'CUDA' if wanted == 'cuda' else 'Vulkan'} didn't start)"
+    return model, text
+
+
+def preset_notice(label, model, device, gpu_offered):
+    """The notification after choosing a Performance preset.
+
+    It used to say only "Performance: Balanced / Restarting service...", though
+    "Balanced (GPU if available)" often ends up on the processor and "Fast &
+    Accurate" always did, even next to a fast graphics card. Now it says where
+    the model really runs and, if that's the processor on a computer with a
+    usable graphics chip, how to move it there.
+    """
+    from .model_helper import model_display_name
+    _, where = engine_status(model, device)
+    where = ("the processor" if where.startswith("CPU")
+             else "the graphics card (CUDA)" if "CUDA" in where
+             else "the graphics card (Vulkan)")
+    text = f"Performance: {label}\n{model_display_name(model)} on {where}."
+    if where == "the processor" and gpu_offered:
+        text += " To use your graphics card, set the Device to Vulkan in Preferences."
+    return text + "\nRestarting service..."
+
+
 class DictationTray:
     def __init__(self):
         # TalkType is a dark-themed app: Preferences and the onboarding windows
@@ -581,6 +627,7 @@ class DictationTray:
                 self._release_desktop_hotkeys()
                 if self.dbus_service:
                     self.dbus_service.clear_claimed_hotkeys()
+                    self.dbus_service.clear_running_engine()
             if self.dbus_service:
                 try:
                     self.dbus_service.emit_service_state(new_state)
@@ -1024,7 +1071,12 @@ class DictationTray:
             # Notify user
             from .app import _notify
             logger.info(f"Applied performance preset: {preset['label']}")
-            _notify("TalkType", f"Performance: {preset['label']}\nRestarting service...")
+            try:
+                from . import whisper_vulkan as _wv
+                _gpu_offered = _wv.is_offered()
+            except Exception:
+                _gpu_offered = False
+            _notify("TalkType", preset_notice(preset['label'], cfg.model, cfg.device, _gpu_offered))
 
             # Update menu display
             self.update_menu_display()
@@ -1071,18 +1123,12 @@ class DictationTray:
                     'large': 'Large (best quality)',
                     'parakeet-v3': 'Parakeet'
                 }
-                display_name = model_names.get(cfg.model, cfg.model)
+                running = None
+                if is_running and getattr(self, "dbus_service", None):
+                    running = self.dbus_service.running_engine
+                model_id, device_display = engine_status(cfg.model, cfg.device, running)
+                display_name = model_names.get(model_id, model_id)
                 self.model_display_item.set_label(f"Active Model: {display_name}")
-
-                # Update device display
-                device_names = {
-                    'cpu': 'CPU',
-                    'cuda': 'GPU (CUDA)',
-                    'vulkan': 'GPU (Vulkan)',
-                }
-                from .parakeet_engine import effective_device
-                device = effective_device(cfg.model, cfg.device)
-                device_display = device_names.get(device, device.upper())
                 self.device_display_item.set_label(f"Device: {device_display}")
 
                 # Update injection mode radio buttons
