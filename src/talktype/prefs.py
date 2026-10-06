@@ -741,9 +741,16 @@ class PreferencesWindow:
                     self.model_store.append([_mid,
                         "large-v3 — click to download required CUDA libraries", True])
                 else:
-                    # Selectable — clicking it will explain why it's not supported
+                    # Selectable. On AMD/Intel, clicking it offers Vulkan; this
+                    # label used to say "requires NVIDIA GPU" even there.
+                    try:
+                        from . import whisper_vulkan as _wv
+                        _vk = _wv.is_offered()
+                    except Exception:
+                        _vk = False
                     self.model_store.append([_mid,
-                        "large-v3 — requires NVIDIA GPU (not available)", True])
+                        "large-v3 — Whisper's best, on your graphics card (Vulkan)" if _vk
+                        else "large-v3 — needs a graphics card (none found)", True])
             else:
                 self.model_store.append([_mid, _MODEL_DISPLAY[_mid], True])
 

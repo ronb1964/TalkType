@@ -1930,6 +1930,25 @@ def show_welcome_dialog(parent=None):
     return result_container[0]
 
 
+def _large_v3_without_nvidia_message():
+    """(title, body) for choosing large-v3 at first run without an NVIDIA card."""
+    try:
+        from . import whisper_vulkan
+        on_vulkan = whisper_vulkan.is_offered()
+    except Exception:
+        on_vulkan = False
+    parakeet = ("Or start with Parakeet: for English and 24 European languages it's even "
+                "more accurate, and it runs well on the processor.")
+    if on_vulkan:
+        return ("Large-v3 needs your graphics card",
+                "Large-v3 can run on your AMD or Intel graphics through Vulkan. Finish "
+                "setup first, then in Preferences set the Device to \"Vulkan (any GPU)\" "
+                "and choose large-v3.\n\n" + parakeet)
+    return ("Graphics card required",
+            "Large-v3 needs a graphics card, and TalkType didn't find one it can "
+            "use.\n\n" + parakeet)
+
+
 def show_tips_and_features_dialog(extension_installed=False):
     """
     Show tips and features dialog after hotkey testing.
@@ -2173,7 +2192,7 @@ def show_tips_and_features_dialog(extension_installed=False):
         _label = _MODEL_LABELS[_mid]
         if _mid == "large-v3" and not _has_cuda:
             # Still selectable — choosing it explains what is needed.
-            _label += " · needs CUDA download" if _has_nvidia else " · NVIDIA GPU required"
+            _label += " · needs CUDA download" if _has_nvidia else " · needs a graphics card"
         model_store.append([_mid, _label, True])
 
     model_combo = Gtk.ComboBox.new_with_model(model_store)
@@ -2313,18 +2332,18 @@ def show_tips_and_features_dialog(extension_installed=False):
                 except Exception as _e:
                     logger.warning(f"Failed to launch unified download: {_e}")
         else:
-            # No NVIDIA GPU — explain the limitation
+            # No NVIDIA card. This used to say large-v3 was "not compatible with
+            # AMD/Intel GPU systems", which stopped being true in 0.12.0: it runs
+            # there through Vulkan, set up from Preferences.
+            _title, _body = _large_v3_without_nvidia_message()
             _dlg = Gtk.MessageDialog(
                 transient_for=None,
                 flags=0,
-                message_type=Gtk.MessageType.WARNING,
+                message_type=Gtk.MessageType.INFO,
                 buttons=Gtk.ButtonsType.OK,
-                text="NVIDIA GPU Required"
+                text=_title
             )
-            _dlg.format_secondary_text(
-                "The Large model requires an NVIDIA GPU with CUDA support.\n\n"
-                "This model is not compatible with CPU-only or AMD/Intel GPU systems."
-            )
+            _dlg.format_secondary_text(_body)
             _dlg.set_keep_above(True)
             _dlg.run()
             _dlg.destroy()
