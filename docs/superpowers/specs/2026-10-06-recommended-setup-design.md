@@ -104,7 +104,7 @@ Starting Model" section of the tips dialog is removed; the tips stay.
 | Preset | What it sets |
 |---|---|
 | Recommended for this computer | Exactly what first run would recommend now |
-| Lightest | Whisper Small on the processor |
+| Lightest | Whisper Base on the processor (never the same as Recommended, which is Small without a graphics card for non-European languages) |
 | Battery saver | Whisper Tiny on the processor, auto-timeout on, 2 minutes |
 
 The greyed "Custom (via Preferences)" line stays. The radio dot shows the
@@ -154,9 +154,20 @@ setup already matches.
 - `differs_from_recommendation(cfg, language, hw)`: drives the update
   notice.
 
-Language: the config field `dictation_language` (new, default "") holds
-the user's choice. When it's empty, `system_language()` is used. Whisper's
-`language` and `language_mode` settings are unchanged.
+Language (`effective_language(cfg)`), in this order:
+1. the config field `dictation_language` (new, default ""), set at first run;
+2. otherwise a language picked by hand in Preferences (`language_mode`
+   "manual" + `language`), so an existing Japanese Whisper setup isn't
+   switched to Parakeet;
+3. otherwise `system_language()`.
+
+Whisper's own `language` and `language_mode` settings are unchanged.
+
+A weak graphics chip: when the speed check finds the processor faster,
+the new config flag `vulkan_slower` is set (and cleared when the graphics
+chip wins). `detect_hardware(cfg)` then reports no usable graphics chip,
+so the recommendation, the Recommended preset and the update notice stop
+proposing it.
 
 ### First run (`welcome_dialog.py`)
 
@@ -191,8 +202,9 @@ the user's choice. When it's empty, `system_language()` is used. Whisper's
 - The extension builds its Performance submenu from GetPresets, refreshed
   on every menu open, and marks the active one from `status.preset`. It
   drops its hard-coded PERFORMANCE_PRESETS, so the two menus can't drift.
-  The extension version goes to 15. An old TalkType with no GetPresets
-  gets the old hard-coded list as a fallback.
+  The extension version goes to 15. With a TalkType too old to have
+  GetPresets, the submenu shows one disabled line, "Update TalkType to use
+  presets".
 
 ### Update notice (`tray.py`)
 
