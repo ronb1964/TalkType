@@ -96,21 +96,8 @@ def ensure_files(parent, model, confirm):
     return False
 
 
-def run_speed_check(parent, model):
-    """Time the graphics chip against the processor on a short sample, tell
-    the user the result, and return True if the graphics chip should be used."""
-    result = {}
-
-    def work():
-        try:
-            device = wv.find_device()
-            if device is None:
-                result["error"] = "TalkType couldn't find a graphics chip it can use."
-            else:
-                result["times"] = wv.speed_check(model, device)
-        except Exception as e:
-            result["error"] = f"The speed check didn't work: {e}"
-
+def _wait_dialog(parent, work):
+    """Run *work* on a thread behind a modal "Checking Speed" spinner."""
     waiting = Gtk.Dialog(title="Checking Speed", transient_for=parent, modal=True)
     waiting.set_deletable(False)
     waiting.set_keep_above(True)
@@ -139,15 +126,47 @@ def run_speed_check(parent, model):
     waiting.run()
     waiting.destroy()
 
+
+def _remember_speed_result(processor_won):
+    """recommend.py stops proposing the graphics chip once it lost (vulkan_slower)."""
+    try:
+        from .config import load_config, save_config
+        cfg = load_config()
+        if cfg.vulkan_slower != processor_won:
+            cfg.vulkan_slower = processor_won
+            save_config(cfg)
+    except Exception:
+        pass
+
+
+def run_speed_check(parent, model):
+    """Time the graphics chip against the processor on a short sample, tell
+    the user the result, and return True if the graphics chip should be used."""
+    result = {}
+
+    def work():
+        try:
+            device = wv.find_device()
+            if device is None:
+                result["error"] = "TalkType couldn't find a graphics chip it can use."
+            else:
+                result["times"] = wv.speed_check(model, device)
+        except Exception as e:
+            result["error"] = f"The speed check didn't work: {e}"
+
+    _wait_dialog(parent, work)
+
     if "error" in result:
         message(parent, Gtk.MessageType.WARNING, "Keeping the processor", result["error"])
         return False
     gpu, cpu = result["times"]
     if wv.graphics_is_worth_it(gpu, cpu):
+        _remember_speed_result(False)
         message(parent, Gtk.MessageType.INFO, "Your graphics chip is faster",
                 f"It transcribed the test in {gpu:.1f} seconds, your processor in {cpu:.1f}, "
                 f"about {cpu / gpu:.0f} times faster. TalkType will use your graphics chip.")
         return True
+    _remember_speed_result(True)
     message(parent, Gtk.MessageType.INFO, "Your processor is faster here",
             f"Your processor transcribed the test in {cpu:.1f} seconds and your graphics chip "
             f"in {gpu:.1f}. The graphics built into some processors is too small to help, so "

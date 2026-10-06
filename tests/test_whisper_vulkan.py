@@ -5,6 +5,7 @@ hand on an RTX 4070 Super and a Ryzen 7800X3D's built-in Radeon; these cover
 everything around them.
 """
 import io
+import types
 import wave
 
 import numpy as np
@@ -406,3 +407,19 @@ def test_first_run_only_uses_vulkan_when_it_wins_the_speed_check():
     src = (pathlib.Path(__file__).resolve().parent.parent / "src" / "talktype" / "welcome_dialog.py").read_text()
     assert ("vulkan_ready = (_download_vulkan_model_first_run(selected_model)\n"
             "                                    and _vulkan_speed_check_first_run(selected_model))") in src
+
+
+@pytest.mark.parametrize("times,slower", [((1.0, 5.0), False), ((5.0, 1.0), True)])
+def test_speed_check_remembers_which_won(monkeypatch, times, slower):
+    """Review focus 1: recommend.py must not keep proposing a slower chip."""
+    from talktype import vulkan_setup_dialogs as vsd
+    saved = {}
+    cfg = types.SimpleNamespace(vulkan_slower=not slower)
+    monkeypatch.setattr(vsd.wv, "find_device", lambda: 0)
+    monkeypatch.setattr(vsd.wv, "speed_check", lambda model, dev: times)
+    monkeypatch.setattr(vsd, "message", lambda *a, **k: None)
+    monkeypatch.setattr("talktype.config.load_config", lambda: cfg)
+    monkeypatch.setattr("talktype.config.save_config", lambda c: saved.update(slower=c.vulkan_slower))
+    monkeypatch.setattr(vsd, "_wait_dialog", lambda parent, work: work())
+    vsd.run_speed_check(None, "small")
+    assert saved == {"slower": slower}
