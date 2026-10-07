@@ -49,3 +49,59 @@ def test_tips_dialog_no_longer_picks_a_model():
     import pathlib
     src = pathlib.Path(wd.__file__).read_text()
     assert "Choose Your Starting Model" not in src
+
+
+@pytest.fixture
+def store(monkeypatch):
+    """Like the real config: every load is a fresh copy and every save writes
+    all of it back. The shared-object fixture above hid a lost write."""
+    saved = {"model": "parakeet-v3", "device": "cpu", "dictation_language": "",
+             "recommend_notice_shown": False, "vulkan_slower": False}
+    calls = []
+    monkeypatch.setattr("talktype.config.load_config", lambda: types.SimpleNamespace(**saved))
+    monkeypatch.setattr("talktype.config.save_config", lambda c: saved.update(vars(c)))
+    monkeypatch.setattr(wd, "_setup_vulkan_engine_first_run", lambda: None)
+    monkeypatch.setattr(wd, "_download_vulkan_model_first_run", lambda m: True)
+    monkeypatch.setattr("talktype.model_helper.is_model_cached", lambda m: False)
+    monkeypatch.setattr("talktype.model_helper.download_model_with_progress",
+                        lambda m, **k: calls.append(m) or object())
+    return saved, calls
+
+
+def _processor_wins(monkeypatch):
+    """The real speed check records the loss in its own load/save."""
+    from talktype.config import load_config, save_config
+
+    def check(model):
+        cfg = load_config()
+        cfg.vulkan_slower = True
+        save_config(cfg)
+        return False
+    monkeypatch.setattr(wd, "_vulkan_speed_check_first_run", check)
+
+
+def test_a_lost_speed_check_stays_remembered(store, monkeypatch):
+    saved, calls = store
+    _processor_wins(monkeypatch)
+    wd._apply_first_run_setup({"model": "parakeet-v3", "device": "vulkan", "dictation_language": "en"})
+    assert saved["vulkan_slower"] is True
+    assert (saved["model"], saved["device"]) == ("parakeet-v3", "cpu")
+
+
+def test_large_v3_becomes_small_when_it_ends_up_on_the_processor(store, monkeypatch):
+    """Large-v3 on the processor is the setup the card greys out ("Needs a
+    graphics card"), and first run would have fetched 3 GB of it unasked."""
+    saved, calls = store
+    _processor_wins(monkeypatch)
+    wd._apply_first_run_setup({"model": "large-v3", "device": "vulkan", "dictation_language": "ja"})
+    assert (saved["model"], saved["device"]) == ("small", "cpu")
+    assert calls == ["small"]
+
+
+def test_failed_graphics_download_also_falls_back_to_small(store, monkeypatch):
+    saved, calls = store
+    monkeypatch.setattr(wd, "_download_vulkan_model_first_run", lambda m: False)
+    monkeypatch.setattr(wd, "_vulkan_speed_check_first_run", lambda m: True)
+    wd._apply_first_run_setup({"model": "large-v3", "device": "vulkan", "dictation_language": "ja"})
+    assert (saved["model"], saved["device"]) == ("small", "cpu")
+    assert calls == ["small"]

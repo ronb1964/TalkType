@@ -1835,8 +1835,8 @@ class WelcomeDialog:
         next_label = Gtk.Label()
         if self.is_flatpak:
             next_label.set_markup(
-                '<span><b>Next:</b> choose your speech model, then TalkType '
-                'starts and prompts you to set your dictation key.</span>')
+                '<span><b>Next:</b> TalkType downloads your speech model, then starts '
+                'and prompts you to set your dictation key.</span>')
         else:
             next_label.set_markup('<span><b>Next:</b> You\'ll test your hotkeys to ensure they work correctly</span>')
         next_label.set_halign(Gtk.Align.START)
@@ -2901,6 +2901,15 @@ def _download_vulkan_model_first_run(model):
         return False
 
 
+def _processor_model(model, result):
+    """The model to use when setup ends up on the processor after all. Large-v3
+    needs a graphics card (the card greys it out without one), so it becomes
+    what the card recommends there: Whisper Small."""
+    from talktype import recommend
+    return recommend.recommend(result.get("dictation_language") or "en",
+                               recommend.Hardware(None), model=model).model
+
+
 def _apply_first_run_setup(result):
     """Save the setup the welcome card showed, then download it.
 
@@ -2936,8 +2945,11 @@ def _apply_first_run_setup(result):
         config = load_config()
         device = config.device
         if device.lower() == "vulkan" and not whisper_vulkan.supports_model(selected_model):
-            config.device = device = "cpu"
+            selected_model = _processor_model(selected_model, result)
+            config.model, config.device = selected_model, "cpu"
+            device = "cpu"
             save_config(config)
+            already_cached = is_model_cached(selected_model)
 
         # Vulkan: the model comes in whisper.cpp's format instead. If that
         # download doesn't work out, fall back to the processor so setup
@@ -2947,10 +2959,16 @@ def _apply_first_run_setup(result):
             _setup_vulkan_engine_first_run()
             vulkan_ready = (_download_vulkan_model_first_run(selected_model)
                             and _vulkan_speed_check_first_run(selected_model))
+            # Re-read: the steps above saved what they learned (the speed
+            # check records vulkan_slower), and saving the copy loaded before
+            # them would quietly undo it.
+            config = load_config()
             if not vulkan_ready:
-                config.device = device = "cpu"
+                selected_model = _processor_model(selected_model, result)
+                config.model, config.device = selected_model, "cpu"
+                device = "cpu"
                 save_config(config)
-                logger.warning("Not using Vulkan after first-run setup; using the processor")
+                logger.warning(f"Not using Vulkan after first-run setup; {selected_model} on the processor")
                 already_cached = is_model_cached(selected_model)
 
         compute_type = "float16" if device.lower() == "cuda" else "int8"

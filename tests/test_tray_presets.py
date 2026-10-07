@@ -77,6 +77,18 @@ def test_recommended_falls_back_to_the_processor_when_it_is_faster(env, monkeypa
     assert saved == [("parakeet-v3", "cpu")]
 
 
+def test_large_v3_becomes_small_when_the_processor_is_faster(env, monkeypatch):
+    """Japanese with a graphics card: Recommended is Large-v3 on it. Losing the
+    speed check used to leave Large-v3 on the processor, the setup first run
+    greys out ("Needs a graphics card")."""
+    cfg, saved = env
+    cfg.dictation_language = "ja"
+    monkeypatch.setattr("talktype.vulkan_setup_dialogs.ensure_files", lambda p, m, confirm: True)
+    monkeypatch.setattr("talktype.vulkan_setup_dialogs.run_speed_check", lambda p, m: False)
+    FakeTray().set_performance_preset("recommended")
+    assert saved == [("small", "cpu")]
+
+
 def test_cancelling_the_download_changes_nothing(env, monkeypatch):
     """Review focus 4."""
     cfg, saved = env

@@ -79,8 +79,10 @@ def test_effective_language_order(monkeypatch):
     monkeypatch.setattr(r, "system_language", lambda env=None: "en")
     cfg = types.SimpleNamespace(dictation_language="", language_mode="manual", language="ja")
     assert r.effective_language(cfg) == "ja"           # an old manual choice counts
-    cfg.dictation_language = "de"
-    assert r.effective_language(cfg) == "de"           # the first-run choice wins
+    cfg.dictation_language = "en"
+    assert r.effective_language(cfg) == "ja"           # set in Preferences after first run
+    cfg.language_mode = "auto"
+    assert r.effective_language(cfg) == "en"           # otherwise the first-run choice
     cfg2 = types.SimpleNamespace(dictation_language="", language_mode="auto", language="")
     assert r.effective_language(cfg2) == "en"          # the system locale
 

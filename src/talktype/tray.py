@@ -843,7 +843,12 @@ class DictationTray:
                     self._revert_preset_radio()
                     return
                 if not run_speed_check(None, model):
+                    # On the processor, use what Recommended means there:
+                    # Large-v3 needs a graphics card, so it becomes Small.
+                    from . import recommend
                     device = "cpu"
+                    model = recommend.recommend(recommend.effective_language(load_config()),
+                                                recommend.Hardware(None), model=model).model
             if device == "cpu" and not is_model_cached_fast(model):
                 downloaded = download_model_with_progress(model, device="cpu", show_confirmation=True)
                 if downloaded is None:

@@ -155,11 +155,15 @@ setup already matches.
   notice.
 
 Language (`effective_language(cfg)`), in this order:
-1. the config field `dictation_language` (new, default ""), set at first run;
-2. otherwise a language picked by hand in Preferences (`language_mode`
-   "manual" + `language`), so an existing Japanese Whisper setup isn't
-   switched to Parakeet;
+1. a language picked by hand in Preferences (`language_mode` "manual" +
+   `language`). First run never sets one, so it is always the latest
+   choice, and it keeps an existing Japanese Whisper setup off Parakeet;
+2. otherwise the config field `dictation_language` (new, default ""), set
+   at first run;
 3. otherwise `system_language()`.
+
+(Changed after the final review: with the first-run choice first, a user
+who later picked Japanese in Preferences got Parakeet as "Recommended".)
 
 Whisper's own `language` and `language_mode` settings are unchanged.
 

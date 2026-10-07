@@ -75,3 +75,9 @@ def test_change_link_opens_other_options_at_the_language(dialog):
     handled = dialog.rec_explanation.emit("activate-link", "change")
     assert handled is True
     assert dialog.options_expander.get_expanded()
+
+
+def test_flatpak_footer_no_longer_promises_a_model_choice():
+    """The model is chosen on this screen now; the later picker is gone."""
+    assert "choose your speech model" not in SRC
+    assert "downloads your speech model, then starts" in SRC

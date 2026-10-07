@@ -67,15 +67,13 @@ def system_language(env=None):
 
 
 def effective_language(cfg):
-    """The language to recommend for: the first-run choice, then a language
-    picked by hand in Preferences (so an existing Japanese setup isn't
-    switched to Parakeet), then the desktop's language."""
-    chosen = getattr(cfg, "dictation_language", "") or ""
-    if chosen:
-        return chosen
+    """The language to recommend for: a language picked by hand in Preferences
+    (always the latest choice: first run never sets one, and it keeps an
+    existing Japanese setup off Parakeet), then the first-run choice, then
+    the desktop's language."""
     if getattr(cfg, "language_mode", "auto") == "manual" and getattr(cfg, "language", ""):
         return cfg.language
-    return system_language()
+    return getattr(cfg, "dictation_language", "") or system_language()
 
 
 @dataclass(frozen=True)
