@@ -38,7 +38,9 @@ chmod +x ~/AppImages/TalkType-v*.AppImage
 cd /home/ron/Projects/TalkType
 ./fresh-start-for-testing.sh
 ```
-- Check that ALL items show "✓ Removed" in the output
+- Check that ALL items show "✓ Removed" in the output, including
+  "✓ TalkType models removed". Since 0.14.2 the script clears Parakeet, the
+  Vulkan models and the AI model too, so first run really downloads them
 - Show Ron the AppImage file size (must be under 1GB)
 
 ### Step 7: Launch the AppImage from a Terminal (Claude runs this)
@@ -56,19 +58,30 @@ sleep 3 && cat /tmp/talktype-output.log
 - Continue monitoring output as Ron tests — check the log after each reported issue
 
 ### Step 8: Ron Tests — WAIT for Results
-Ron tests against this checklist. Do NOT proceed until he reports back:
-- [ ] Welcome screen appears on first launch
-- [ ] GPU detection works and offers CUDA download
-- [ ] CUDA download shows progress bar
-- [ ] After CUDA download, green checkmark appears immediately
-- [ ] Device auto-switches to "cuda" after CUDA download
-- [ ] Model downloads show progress bars
-- [ ] Default settings are correct (auto_period=True, auto_timeout=5min, language_mode=auto)
-- [ ] Dictation works in CPU mode
-- [ ] Dictation works in GPU mode after CUDA download
+Ron tests against this checklist. Do NOT proceed until he reports back.
+Claude checks every item against the log too
+(`~/.config/talktype/talktype.log`), not only Ron's report. In 0.14.1 the
+"GPU" test had really run on the processor.
+
+First run (since 0.14.2 it recommends one setup; CUDA is not offered here):
+- [ ] Welcome screen appears, and its card names the graphics card and language ("Parakeet on your NVIDIA ..., For English")
+- [ ] Other options: changing the language, model or graphics-card tickbox updates the card and its download size
+- [ ] Hotkey test, then the tips screen (no model picker)
+- [ ] Downloads show progress bars: the Vulkan engine and Parakeet for the graphics card. The log must show a real download, not "cached"
+- [ ] The speed check runs, and the log shows its result (`Speed check (parakeet-v3): graphics …s, processor …s`)
+- [ ] Default settings are correct (model=parakeet-v3, device=vulkan when the card won, auto_period=True, auto_timeout 5 min, language_mode=auto)
+- [ ] Dictation works on the graphics card (log: `Parakeet on GPU`)
+
+Preferences and the rest:
+- [ ] Dictation works in CPU mode (Device → CPU downloads the processor copy of Parakeet with a progress bar)
+- [ ] CUDA: Preferences → Advanced → Download CUDA Libraries shows a progress bar, then a green checkmark at once, and the device switches to "cuda"
+- [ ] Dictation works on CUDA with a Whisper model (e.g. small)
+- [ ] AI self-corrections: turning it on downloads the model; "meet at three, no wait, four" types "meet at four"
 - [ ] Auto-punctuation works consistently
 - [ ] Start/stop beeps play
 - [ ] Preferences mic test works (level meter, record, replay)
+- [ ] Tray → Performance shows Recommended / Lightest / Battery saver, with the dot on the active one
+- [ ] F8 and F9 leave no stray character in a terminal (KDE and GNOME)
 
 ### Step 9: Fix and Rebuild if Needed
 If ANY test fails: fix the issue, go back to Step 2, and repeat.
