@@ -229,13 +229,13 @@ Choose the right model for your needs in Preferences → General:
 |-------|------|-------|----------|----------|
 | **tiny** | 39 MB | Fastest | Basic | Quick notes |
 | **base** | 74 MB | Fast | Good | Casual use |
-| **small** | 244 MB | Balanced | Very Good | **Recommended** |
+| **small** | 244 MB | Balanced | Very Good | Any of 99 languages |
 | **medium** | 769 MB | Slower | Excellent | Professional |
 | **large-v3** | ~3 GB | Slowest | Best | Technical work |
-| **Parakeet** | 670 MB | Fast, even without a GPU | Best | English + 24 European languages |
+| **Parakeet** | 670 MB | Fast, even without a GPU | Best | **Recommended** for English + 24 European languages |
 
-> **Tip:** Start with "small" for everyday use. Enable GPU acceleration for larger models.
-> No graphics card? Try **Parakeet** (Preferences, or tray → Performance → Fast & Accurate). It's a different engine that NVIDIA made, and it runs on your processor (or on your graphics card through Vulkan). It doesn't cover Chinese, Japanese, Korean, Arabic and other non-European languages. Use a Whisper model for those.
+> **Tip:** First run recommends a setup for your computer and language, and tray → Performance → **Recommended for this computer** puts you back on it any time.
+> **Parakeet** is the default. It's a different engine that NVIDIA made, and it runs on your processor (or on your graphics card through Vulkan). It doesn't cover Chinese, Japanese, Korean, Arabic and other non-European languages. For those, first run picks Whisper: Small on the processor, or Large-v3 on a graphics card.
 
 ---
 
@@ -248,7 +248,7 @@ A graphics card makes the Whisper models much faster, and with Vulkan it speeds 
 | **Vulkan (Light)** | NVIDIA, AMD and Intel | 24 MB | Preferences → General → Device → Vulkan (any GPU) |
 | **CUDA (Full)** | NVIDIA only | 1.4 GB | Preferences → Advanced → Download CUDA Libraries |
 
-On an RTX 4070 Super both were equally fast: half a second for 11 seconds of speech with the Large model. If TalkType finds an NVIDIA card on first run, it asks which one you want.
+On an RTX 4070 Super both were equally fast: half a second for 11 seconds of speech with the Large model. First run uses any graphics card through Vulkan. CUDA is set up from Preferences.
 
 Before switching to Vulkan, TalkType times your graphics chip against your processor and only switches if the graphics chip is clearly faster. The graphics built into some desktop processors is too small to help, and in that case it tells you and keeps using the processor.
 
@@ -261,12 +261,13 @@ Parakeet doesn't need a graphics card, since it's already fast on the processor.
 Settings are stored in `~/.config/talktype/config.toml`:
 
 ```toml
-model = "small"           # AI model: tiny, base, small, medium, large-v3
+model = "parakeet-v3"     # AI model: parakeet-v3, tiny, base, small, medium, large-v3
 device = "cpu"            # "cpu", "vulkan" (any GPU) or "cuda" (NVIDIA)
-hold_hotkey = "F8"        # Hold-to-talk key (hold to record, release to stop)
+hotkey = "F8"             # Hold-to-talk key (hold to record, release to stop)
 toggle_hotkey = "F9"      # Tap-to-toggle key (press once start, press again stop)
 # Both hotkeys are always active simultaneously
-language_mode = "auto"    # "auto" or specific language code
+language_mode = "auto"    # "auto", or "manual" to use the language below
+language = ""             # language code for manual mode, e.g. "de"
 beeps = true              # Audio feedback sounds
 smart_quotes = true       # Use curly quotes " "
 auto_space = true         # Auto-space between utterances
@@ -346,8 +347,8 @@ permission to *read keys*, so typing can work while hotkeys do not.
 
 ### Transcription slow?
 - Use your graphics card if you have one (see [GPU Acceleration](#gpu-acceleration))
-- Try a smaller model (tiny or base)
-- Use Performance presets in tray menu
+- Try Parakeet, or a smaller Whisper model (tiny or base)
+- Tray menu → Performance → Recommended for this computer
 
 ### Tray icon not visible (GNOME)?
 - TalkType offers to install its GNOME extension on first run

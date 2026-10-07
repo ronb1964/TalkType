@@ -181,16 +181,18 @@ The dictation service starts automatically when you launch TalkType.
 
 <b>🎉 First-Run Setup</b>
 On first launch, TalkType shows a welcome dialog that:
+• Recommends a setup for your computer: the speech model, and whether to use
+  your graphics card (NVIDIA, AMD or Intel), for the language you dictate in.
+  "Other options" lets you change any of it, with each choice explained
 {first_run_hotkey_bullet}• Offers to install the GNOME extension (if on GNOME desktop)
-• Offers to use your NVIDIA graphics card (if one is detected)
-• Adapts automatically to your system capabilities
 
 <b>1. Begin Dictating</b>
 Both keys are always active at once — {keys_line}.
-• <b>Recording Indicator:</b> a red microphone icon appears during active dictation.
+• <b>Recording Indicator:</b> an indicator appears on screen while you're recording
+  (choose its style and color in Preferences → Audio).
 
 <b>2. Configure Settings</b>
-Right-click → "Preferences" to customize the AI model, language, GPU acceleration,
+Open the TalkType menu → "Preferences" to customize the AI model, language, GPU acceleration,
 beeps, and more. (Dictation keys are set in {keys_where}.)
 
 <b>3. Dictate!</b>
@@ -225,7 +227,7 @@ After choosing one, the tray's Device line shows where it really runs.
 
 <b>Smart Text Processing</b>
 • Auto-punctuation for natural text flow
-• Smart quotes (" " instead of " ")
+• Smart quotes (\u201c \u201d instead of " ")
 • Auto-spacing before new text
 • Optional auto-period at end of sentences
 • Voice-activated undo (word, sentence, paragraph, or everything)
@@ -251,11 +253,11 @@ After choosing one, the tray's Device line shows where it really runs.
 • With any other device, Parakeet runs on the processor (CUDA can't run it)
 
 <b>Fix a Word</b> (teach TalkType a word it keeps getting wrong)
-• Tray menu → Fix a Word..., or Preferences → Voice Commands → Fix a Word...
+• Tray menu → Fix a Word..., or Preferences → Commands → Fix a Word...
 • Pick a recent dictation, click the wrong word (or drag across a few),
   type the right spelling, then click Always fix this
 • From then on it's fixed in every dictation, with any speech model
-• Your fixes live in Preferences → Voice Commands, where you can edit or remove them
+• Your fixes live in Preferences → Commands, where you can edit or remove them
 • Handy for names, brands and technical terms, like "bamboo studio" → BambuStudio
 
 <b>Your Stats</b> (tray menu → Your Stats..., or Preferences → Stats)
@@ -303,7 +305,7 @@ Configure in: Preferences → General → Model
 <b>• small (244 MB)</b>
   Speed: ⚡⚡⚡ Balanced
   Accuracy: ⭐⭐⭐⭐ Very good
-  Best for: General use (recommended)
+  Best for: General use in any of 99 languages
 
 <b>• medium (769 MB)</b>
   Speed: ⚡⚡ Slower
@@ -332,6 +334,9 @@ Configure in: Preferences → General → Model
 • More natural sentence structure
 
 <b>Recommendation:</b>
+The easiest way: tray menu → Performance → <b>Recommended for this computer</b>.
+It picks the model and device for your graphics card and language, the same
+as first run does.
 Use Parakeet if you dictate in English or one of the 24 European languages
 it knows. It makes fewer mistakes than any Whisper model on English, and
 it's fast even without a graphics card. With a graphics card (NVIDIA, AMD
@@ -375,6 +380,7 @@ Fine-tune audio in Preferences → Audio tab:
     create_tab("🗣️ Voice Commands", '''<span size="large"><b>Voice Commands Reference</b></span>
 
 Use these spoken commands during dictation to insert punctuation and formatting.
+The commands are English words, whatever language you dictate in.
 
 <b>💡 Quick Access:</b> Set a Voice Commands hotkey in Preferences → General
 to pop up a compact cheat sheet anytime. Also available from the tray menu.
@@ -388,8 +394,8 @@ to pop up a compact cheat sheet anytime. Also available from the tray menu.
 • Say <b>colon</b> for :
 • Say <b>apostrophe</b> for '
 • Say <b>quote</b> for regular "
-• Say <b>open quote</b> or <b>open quotes</b> for "
-• Say <b>close quote</b> or <b>close quotes</b> for "
+• Say <b>open quote</b> or <b>open quotes</b> for \u201c
+• Say <b>close quote</b> or <b>close quotes</b> for \u201d
 • Say <b>hyphen</b> or <b>dash</b> for -
 • Say <b>em dash</b> for —
 • Say <b>dot dot dot</b> or <b>ellipsis</b> for …
@@ -418,7 +424,7 @@ To output the word instead of executing the command, say <b>literal</b> or <b>th
 • <b>literal question mark</b> → "question mark" (not ?)
 • <b>literal exclamation point</b> → "exclamation point" (not !)
 
-Works with most voice commands!
+Works with any punctuation or formatting command.
 
 <b>Usage Examples:</b>
 Say: <i>Hello world comma how are you question mark</i>
@@ -427,9 +433,6 @@ Result: Hello world, how are you?
 Say: <i>First sentence period new line Second sentence exclamation point</i>
 Result: First sentence.
 Second sentence!
-
-Say: <i>The temperature is 98 point 6 degrees</i>
-Result: The temperature is 98.6 degrees
 
 <b>Custom Voice Commands:</b>
 Define your own phrase → replacement shortcuts in Preferences → Commands tab.
@@ -447,6 +450,11 @@ and punctuation — wrap the replacement text in double quotes.
 • Say <b>undo last paragraph</b> to delete back to the last line break
 • Say <b>undo everything</b> or <b>delete everything</b> to clear the field
 • Also works: <b>delete last word</b>, <b>remove last word</b>, <b>clear all</b>, etc.
+
+<b>Changing Your Mind:</b>
+• Say <b>no wait</b>, <b>I mean</b>, <b>make that</b>, <b>scratch that</b> or <b>or rather</b>
+  to correct yourself: "meet at 3, no wait, 4" → "meet at 4"
+• Needs <b>Fix self-corrections with AI</b> in Preferences → Advanced
 
 <b>Smart Features:</b>
 • Auto-capitalization after sentences
@@ -470,8 +478,8 @@ and punctuation — wrap the replacement text in double quotes.
 • Pause briefly at sentence ends for better punctuation
 
 <b>Status Indicators:</b>
-• Tray icon shows service status (bright = running, dimmed = stopped)
-• Red recording indicator appears on screen during dictation
+• Tray icon shows service status (a muted microphone means it's stopped)
+• A recording indicator appears on screen during dictation (Preferences → Audio)
 • Audio beeps indicate recording start/stop (can be disabled)
 
 <b>Installation &amp; Updates:</b>
@@ -496,11 +504,11 @@ and punctuation — wrap the replacement text in double quotes.
 <b>Transcription too slow:</b>
 • Use your graphics card: Preferences → General → Device (NVIDIA, AMD or Intel)
 • Try Parakeet, or a smaller Whisper model (tiny/base/small)
-• Use Performance presets in the tray menu
+• Tray menu → Performance → Recommended for this computer
 
 <b>Service won't start:</b>
 • Check logs: {f["log_path"]}
-• Restart from the tray menu: Stop Service then Start Service{kde_notice}
+• Use Restart Service in the tray menu, or turn Dictation Service off and on{kde_notice}
 
 <b>Bug Reports &amp; Feedback:</b>
 Found a bug or have a feature request? We'd love to hear from you!
