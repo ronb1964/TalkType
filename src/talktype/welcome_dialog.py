@@ -628,7 +628,7 @@ class WelcomeDialog:
         # Subtitle
         subtitle = Gtk.Label()
         subtitle.set_markup('<span size="medium">AI-powered speech recognition for Linux</span>')
-        subtitle.set_opacity(0.7)
+        subtitle.set_opacity(0.85)
         vbox.pack_start(subtitle, False, False, 0)
 
         # Separator
@@ -766,10 +766,10 @@ class WelcomeDialog:
 
             # Preferences note
             note = Gtk.Label()
-            note.set_markup('<span size="small">💡 <i>You can change these anytime in Preferences</i></span>')
+            note.set_markup('<span>💡 <i>You can change these anytime in Preferences</i></span>')
             note.set_halign(Gtk.Align.START)
             note.set_margin_top(10)
-            note.set_opacity(0.7)
+            note.set_opacity(0.85)
             vbox.pack_start(note, False, False, 0)
 
     def _build_portaudio_setup_section(self, vbox):
@@ -1369,13 +1369,13 @@ class WelcomeDialog:
         # Alternative note
         alt_note = Gtk.Label()
         alt_note.set_markup(
-            '<span size="small"><i>💡 Alternative: You can skip this and use "Clipboard Paste" mode instead.\n'
+            '<span><i>💡 Alternative: You can skip this and use "Clipboard Paste" mode instead.\n'
             '   This can be configured in Preferences → Advanced → Text Injection</i></span>'
         )
         alt_note.set_halign(Gtk.Align.START)
         alt_note.set_margin_start(10)
         alt_note.set_margin_top(8)
-        alt_note.set_opacity(0.7)
+        alt_note.set_opacity(0.85)
         alt_note.set_line_wrap(True)
         alt_note.set_max_width_chars(65)
         typing_box.pack_start(alt_note, False, False, 0)
@@ -1645,11 +1645,11 @@ class WelcomeDialog:
 
         # Requires log out note
         logout_note = Gtk.Label()
-        logout_note.set_markup('<span size="small" style="italic">(Requires logging out and back in after installation)</span>')
+        logout_note.set_markup('<span style="italic">(Requires logging out and back in after installation)</span>')
         logout_note.set_halign(Gtk.Align.START)
         logout_note.set_margin_start(30)
         logout_note.set_margin_top(3)
-        logout_note.set_opacity(0.7)
+        logout_note.set_opacity(0.85)
         ext_box.pack_start(logout_note, False, False, 0)
 
         vbox.pack_start(ext_box, False, False, 0)
@@ -1671,7 +1671,7 @@ class WelcomeDialog:
         # Its "change" link (after the language) opens Other options there.
         self.rec_explanation.connect("activate-link", self._on_change_language)
         self.rec_download = Gtk.Label(xalign=0)
-        self.rec_download.set_opacity(0.75)
+        self.rec_download.set_opacity(0.85)
         for w in (tag, self.rec_title, self.rec_explanation, self.rec_download):
             card.pack_start(w, False, False, 0)
         vbox.pack_start(card, False, False, 6)
@@ -1712,7 +1712,7 @@ class WelcomeDialog:
             self.model_reasons[state.model] = text
             other.pack_start(radio, False, False, 0)
         more = Gtk.Label(xalign=0)
-        more.set_markup('<span size="small"><i>More models (Tiny, Base, Medium) are in Preferences.</i></span>')
+        more.set_markup('<span><i>More models (Tiny, Base, Medium) are in Preferences.</i></span>')
         other.pack_start(more, False, False, 0)
 
         where = Gtk.Label(xalign=0)
@@ -1795,7 +1795,7 @@ class WelcomeDialog:
                 note = state.description if state.available else state.reason
                 mark = " (recommended)" if state.model == setup.model else ""
                 text.set_markup(f"<b>{state.label}</b>{mark}, {state.size}\n"
-                                f'<span size="small">{GLib.markup_escape_text(note)}</span>')
+                                f'<span>{GLib.markup_escape_text(note)}</span>')
                 if state.model == setup.model:
                     radio.set_active(True)
         finally:
@@ -1843,7 +1843,7 @@ class WelcomeDialog:
         next_label.set_halign(Gtk.Align.START)
         next_label.set_line_wrap(True)
         next_label.set_margin_top(10)
-        next_label.set_opacity(0.8)
+        next_label.set_opacity(0.85)
         vbox.pack_start(next_label, False, False, 0)
 
         # Centered "Set it up" button
@@ -2005,7 +2005,7 @@ def show_tips_and_features_dialog(extension_installed=False):
     # Cap height to the screen + allow resizing so the "Continue" button is always
     # reachable; the content is wrapped in a ScrolledWindow below for overflow.
     from .ui_style import fit_dialog_to_screen
-    fit_dialog_to_screen(dialog, 600, 650 if extension_installed else 600)
+    fit_dialog_to_screen(dialog, 600, 860 if extension_installed else 700)
 
     # Add CSS for pulsing logout reminder
     if extension_installed:
@@ -2108,7 +2108,7 @@ def show_tips_and_features_dialog(extension_installed=False):
     tips += [
         ("🎤 <b>Voice Commands</b>", "Say \"period\", \"comma\", \"new paragraph\" and more to punctuate naturally"),
         ("⚙️ <b>Smart Features</b>", "Auto-punctuation and auto-spacing are enabled by default for smooth dictation"),
-        ("🔧 <b>Customize Settings</b>", "Right-click the tray icon to access Preferences - adjust models, hotkeys, and more"),
+        ("🔧 <b>Customize Settings</b>", "Open the TalkType menu (tray icon) for Preferences - adjust models, hotkeys, and more"),
         ("📖 <b>Learn More</b>", "Click \"Help\" in the tray menu for full documentation and voice command list"),
         ("🚀 <b>Quick Start</b>", "Press your hotkey and start talking - TalkType does the rest!")
     ]
@@ -2124,7 +2124,7 @@ def show_tips_and_features_dialog(extension_installed=False):
         tip_box.pack_start(title_label, False, False, 0)
 
         desc_label = Gtk.Label()
-        desc_label.set_markup(f'<span size="small">{description}</span>')
+        desc_label.set_markup(f'<span>{description}</span>')
         desc_label.set_halign(Gtk.Align.START)
         desc_label.set_line_wrap(True)
         desc_label.set_max_width_chars(60)
@@ -2152,7 +2152,7 @@ def show_tips_and_features_dialog(extension_installed=False):
         logout_reminder = Gtk.Label()
         logout_reminder.set_markup(
             '<span size="medium"><b>⚠️ Important: GNOME Extension Installed</b></span>\n\n'
-            '<span size="small">Please <b>log out and back in</b> for the GNOME extension to become active.\n'
+            '<span>Please <b>log out and back in</b> for the GNOME extension to become active.\n'
             'The extension adds panel integration and enhanced Wayland support.</span>'
         )
         logout_reminder.set_line_wrap(True)
@@ -2174,12 +2174,12 @@ def show_tips_and_features_dialog(extension_installed=False):
 
     encourage_label = Gtk.Label()
     encourage_label.set_markup(
-        '<span size="small"><i>💡 Explore the Preferences to discover more features like\n'
+        '<span><i>💡 Explore the Preferences to discover more features like\n'
         'GPU acceleration, different model sizes, and custom punctuation!</i></span>'
     )
     encourage_label.set_line_wrap(True)
     encourage_label.set_justify(Gtk.Justification.CENTER)
-    encourage_label.set_opacity(0.8)
+    encourage_label.set_opacity(0.85)
     vbox.pack_start(encourage_label, False, False, 0)
 
     # Continue button with proper padding
@@ -2491,7 +2491,7 @@ def show_hotkey_test_dialog():
 
     # Status label — updated by key detection
     ready_label = Gtk.Label()
-    ready_label.set_markup('<span size="small" color="#888888">Hold each hotkey, then release to confirm it works</span>')
+    ready_label.set_markup('<span>Hold each hotkey, then release to confirm it works</span>')
     ready_label.set_xalign(0)
     ready_label.set_halign(Gtk.Align.CENTER)
     ready_label.set_margin_top(2)
@@ -2695,7 +2695,7 @@ def show_hotkey_test_dialog():
     # Info label
     info_label = Gtk.Label()
     info_label.set_markup(
-        '<span size="small"><i>💡 Both hotkeys will be saved to your configuration.\n'
+        '<span><i>💡 Both hotkeys will be saved to your configuration.\n'
         'You can change between Push-to-talk and Toggle mode anytime in Preferences.</i></span>'
     )
     info_label.set_line_wrap(True)
@@ -2706,11 +2706,11 @@ def show_hotkey_test_dialog():
     # Note about conflicts
     conflict_label = Gtk.Label()
     conflict_label.set_markup(
-        '<span size="small"><i>⚠️ If a key doesn\'t respond, it may be used by another application.</i></span>'
+        '<span><i>⚠️ If a key doesn\'t respond, it may be used by another application.</i></span>'
     )
     conflict_label.set_line_wrap(True)
     conflict_label.set_xalign(0)
-    conflict_label.set_opacity(0.8)
+    conflict_label.set_opacity(0.85)
     content.pack_start(conflict_label, False, False, 0)
 
     # Continue button
@@ -3318,13 +3318,13 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
 
         if appimage_installed:
             path_label = Gtk.Label()
-            path_label.set_markup('<span size="small">📁 Installed to: <b>~/AppImages/TalkType.AppImage</b></span>')
+            path_label.set_markup('<span>📁 Installed to: <b>~/AppImages/TalkType.AppImage</b></span>')
             path_label.set_halign(Gtk.Align.CENTER)
             install_box.pack_start(path_label, False, False, 0)
 
         if launcher_created:
             launcher_label = Gtk.Label()
-            launcher_label.set_markup('<span size="small">✅ Added to Applications menu</span>')
+            launcher_label.set_markup('<span>✅ Added to Applications menu</span>')
             launcher_label.set_halign(Gtk.Align.CENTER)
             install_box.pack_start(launcher_label, False, False, 0)
 
@@ -3357,7 +3357,7 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
 
     for step in steps:
         step_label = Gtk.Label()
-        step_label.set_markup(f'<span size="small">{step}</span>')
+        step_label.set_markup(f'<span>{step}</span>')
         step_label.set_halign(Gtk.Align.START)
         steps_box.pack_start(step_label, False, False, 0)
 
@@ -3366,20 +3366,20 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
     # Tips - combined into one line
     tip_label = Gtk.Label()
     tip_label.set_markup(
-        '<span size="small"><i>💡 Say "period", "comma", "new paragraph" for punctuation</i></span>'
+        '<span><i>💡 Say "period", "comma", "new paragraph" for punctuation</i></span>'
     )
     tip_label.set_halign(Gtk.Align.START)
     tip_label.set_margin_top(8)
-    tip_label.set_opacity(0.8)
+    tip_label.set_opacity(0.85)
     vbox.pack_start(tip_label, False, False, 0)
 
     settings_label = Gtk.Label()
     settings_label.set_markup(
-        '<span size="small"><i>⚙️ Right-click tray icon for settings</i></span>'
+        '<span><i>⚙️ Open the TalkType menu (tray icon) for settings</i></span>'
     )
     settings_label.set_halign(Gtk.Align.START)
     settings_label.set_margin_top(2)
-    settings_label.set_opacity(0.8)
+    settings_label.set_opacity(0.85)
     vbox.pack_start(settings_label, False, False, 0)
 
     # Onboarding turns on launch-at-login by default (see show_welcome_and_install).
@@ -3387,12 +3387,12 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
     # startup setting without telling the user is exactly the kind of surprise to avoid.
     autostart_label = Gtk.Label()
     autostart_label.set_markup(
-        '<span size="small"><i>🔁 TalkType will start automatically when you log in '
+        '<span><i>🔁 TalkType will start automatically when you log in '
         '(turn this off in Preferences → General)</i></span>'
     )
     autostart_label.set_halign(Gtk.Align.START)
     autostart_label.set_margin_top(2)
-    autostart_label.set_opacity(0.8)
+    autostart_label.set_opacity(0.85)
     autostart_label.set_line_wrap(True)
     vbox.pack_start(autostart_label, False, False, 0)
 
@@ -3401,7 +3401,7 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
     # later. GTK opens the link in the user's default browser when clicked.
     feedback_label = Gtk.Label()
     feedback_label.set_markup(
-        '<span size="small">Once you\'ve tried it out, I\'d love to hear how it\'s '
+        '<span>Once you\'ve tried it out, I\'d love to hear how it\'s '
         'working for you, good or bad. Leave a note on the '
         '<a href="https://github.com/ronb1964/TalkType/discussions">'
         'TalkType Discussions page</a>.</span>'
@@ -3426,7 +3426,7 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
         restart_reminder = Gtk.Label()
         restart_reminder.set_markup(
             '<span size="medium"><b>⚠️ One last step: restart your computer</b></span>\n'
-            '<span size="small">Typing and hotkeys need a restart to activate. '
+            '<span>Typing and hotkeys need a restart to activate. '
             'Logging out is often not enough.</span>'
         )
         restart_reminder.set_line_wrap(True)
