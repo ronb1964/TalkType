@@ -168,6 +168,40 @@ def preset_notice(label, model, device, gpu_offered):
     return text + "\nRestarting service..."
 
 
+def recommend_notice_text(setup):
+    """The one-time notice for an existing user whose setup isn't the
+    recommended one. *setup* is recommend.Setup; its title says what and where."""
+    return (f"There's a better setup for this computer: {setup.title}. Choose Performance "
+            "→ Recommended for this computer in the TalkType menu to switch.")
+
+
+def maybe_show_recommend_notice():
+    """Once, on the first start after updating: tell existing users when the
+    recommended setup differs from theirs (Ron, 2026-10-06). Never on first run
+    (first run sets recommend_notice_shown) or the Flatpak. Returns False so it
+    can run as a one-shot GLib timeout."""
+    try:
+        import os as _os
+        from . import recommend
+        from .config import load_config, save_config
+        from .cuda_helper import is_first_run
+        if _os.environ.get("FLATPAK_ID") or is_first_run():
+            return False
+        cfg = load_config()
+        if cfg.recommend_notice_shown:
+            return False
+        better = recommend.differs_from_recommendation(cfg, recommend.detect_hardware(cfg))
+        if better is not None:
+            from .app import _notify
+            _notify("TalkType", recommend_notice_text(better))
+            logger.info(f"Told the user about the recommended setup: {better.title}")
+        cfg.recommend_notice_shown = True
+        save_config(cfg)
+    except Exception as e:
+        logger.debug(f"Recommended-setup notice skipped: {e}")
+    return False
+
+
 class DictationTray:
     def __init__(self):
         # TalkType is a dark-themed app: Preferences and the onboarding windows
@@ -228,6 +262,9 @@ class DictationTray:
 
         # Check service status every 1 second and update menu (faster sync in dev mode)
         GLib.timeout_add_seconds(1, self.update_status_and_menu)
+
+        # Once after updating: point existing users at the recommended setup.
+        GLib.timeout_add_seconds(15, maybe_show_recommend_notice)
 
         # Auto-start will be triggered after welcome dialog on first run
         # or immediately if not first run (handled in main())
