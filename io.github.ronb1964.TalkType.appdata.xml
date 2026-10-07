@@ -85,6 +85,20 @@
   </screenshots>
 
   <releases>
+    <release version="0.14.2" date="2026-10-06">
+      <description>
+        <p>A recommended setup for your computer</p>
+        <ul>
+          <li>First run shows one recommended setup for your graphics card and language, with other options explained</li>
+          <li>AMD and Intel graphics are used at first run through Vulkan, after a speed check</li>
+          <li>Parakeet is the default model for new installs</li>
+          <li>Three Performance presets: Recommended for this computer, Lightest and Battery saver</li>
+          <li>Existing users are told once if there's a better setup for their computer</li>
+          <li>The menus show what really runs, and large-v3 on Vulkan no longer runs as medium</li>
+          <li>A dictation that doesn't reach the window is reported instead of lost silently</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.14.1" date="2026-10-04">
       <description>
         <p>Keyboard layout and hotkey fixes</p>

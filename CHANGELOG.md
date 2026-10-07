@@ -2,6 +2,49 @@
 
 All notable changes to TalkType are documented here.
 
+## [0.14.2] - 2026-10-06
+
+This one's mostly about setup. TalkType has a lot of settings now and it was
+way too easy to end up on a slow combination without knowing it. I did it
+myself, I ran Parakeet on the processor for weeks with a graphics card sitting
+there doing nothing.
+
+- First run picks a setup for you now. It looks at your graphics card and
+  your language and shows one card that says what you'll get, something like
+  "Parakeet on your NVIDIA GeForce RTX 4070 SUPER", and how big the download
+  is. Click Set it up and that's exactly what gets downloaded. Other options
+  lets you change the language, the model, or whether it uses the graphics
+  card, and anything that won't work on your computer is greyed out with the
+  reason. The separate model picker that came after the hotkey test is gone.
+- AMD and Intel graphics get used at first run too now, through Vulkan.
+  TalkType still checks the graphics card is really faster than your processor
+  before it switches, and stays on the processor if it isn't. The big CUDA
+  download isn't offered at first run anymore. It's still in Preferences.
+- Parakeet is the default model for new installs.
+- The Performance menu went from seven presets down to three: Recommended for
+  this computer, Lightest and Battery saver. The old ones were named after
+  models and half the time did something other than what the label said.
+  Going back from Battery saver puts the auto-stop back to 5 minutes. The
+  GNOME menu gets its presets from TalkType itself now, so it needs extension
+  version 15, and Check for Updates will offer it.
+- If you're already set up and there's a better setup for your computer, you
+  get one notification about it after updating. Just the once, and nothing
+  changes unless you pick it.
+- The tray and GNOME menus show what's really running instead of just what the
+  settings say. That turned up a few things that were quietly wrong. Large-v3
+  on Vulkan was actually running as medium. AMD and Intel users were told
+  large-v3 wouldn't run for them when it does. And Preferences warns you now
+  when Parakeet can't do what your settings ask for.
+- If a dictation doesn't make it into the window, TalkType tells you instead
+  of failing silently. It's saved in Recent Dictations so you can paste it.
+- The Voice Commands window and Help were behind. They never mentioned "no
+  wait" or "scratch that" for correcting yourself, and Help still talked about
+  a red indicator and menu items that don't exist anymore. Both are caught up,
+  and they say the commands are English words whatever language you dictate in.
+- The download sizes for the Whisper models were about half of what they
+  really are. Small said 244 MB and downloads 486 MB. They're the real numbers
+  now, everywhere they show up.
+
 ## [0.14.1] - 2026-10-04
 
 Mostly keyboard fixes, and a lot of them came from guelz testing on a Swiss
