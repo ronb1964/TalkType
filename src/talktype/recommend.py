@@ -155,8 +155,8 @@ def recommend(language, hw, model=None, use_gpu=None):
     gpu = hw.gpu if use_gpu is None else bool(use_gpu and hw.gpu)
     note = ""
     if model in (None, PARAKEET) and not parakeet_ok:
-        note = (f"Parakeet doesn't understand {name}, so this uses Whisper, "
-                "which knows 99 languages. ")
+        # The benefit line that follows already says Whisper knows 99 languages.
+        note = f"Parakeet doesn't understand {name}, so this uses Whisper. "
         model = "large-v3" if gpu else "small"
     elif model is None:
         model = PARAKEET

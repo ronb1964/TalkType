@@ -1668,13 +1668,16 @@ class WelcomeDialog:
         self.rec_title = Gtk.Label(xalign=0)
         self.rec_explanation = Gtk.Label(xalign=0)
         self.rec_explanation.set_line_wrap(True)
+        # Its "change" link (after the language) opens Other options there.
+        self.rec_explanation.connect("activate-link", self._on_change_language)
         self.rec_download = Gtk.Label(xalign=0)
         self.rec_download.set_opacity(0.75)
         for w in (tag, self.rec_title, self.rec_explanation, self.rec_download):
             card.pack_start(w, False, False, 0)
         vbox.pack_start(card, False, False, 6)
 
-        expander = Gtk.Expander(label="Other options")
+        expander = self.options_expander = Gtk.Expander(label="Other options")
+        expander.connect("notify::expanded", self._on_options_toggled)
         other = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         other.set_margin_start(12)
 
@@ -1746,6 +1749,33 @@ class WelcomeDialog:
             self._chosen_model = model
             self._refresh_recommendation()
 
+    def _on_change_language(self, _label, uri):
+        """The card's "change" link: open Other options at the language."""
+        if uri != "change":
+            return False
+        self.options_expander.set_expanded(True)
+        self.lang_combo.grab_focus()
+        return True
+
+    def _on_options_toggled(self, expander, _pspec):
+        """Opening Other options adds its choices below the bottom of the
+        window. Scroll so they start near the top instead of leaving the user
+        to find them."""
+        if not expander.get_expanded():
+            return
+        scrolled = expander.get_ancestor(Gtk.ScrolledWindow)
+        if scrolled is None:
+            return
+
+        def scroll():
+            # After the expanded content has its size.
+            target = expander.translate_coordinates(scrolled.get_child(), 0, 0)
+            if target:
+                adj = scrolled.get_vadjustment()
+                adj.set_value(min(max(target[1] - 12, 0), adj.get_upper() - adj.get_page_size()))
+            return False
+        GLib.timeout_add(60, scroll)
+
     def _refresh_recommendation(self):
         """Update the card and the greyed choices from recommend.py."""
         from . import recommend as rec
@@ -1753,7 +1783,8 @@ class WelcomeDialog:
         name = rec.language_name(self._language())
         self.rec_title.set_markup(f"<b>{GLib.markup_escape_text(setup.title)}</b>")
         self.rec_explanation.set_markup(
-            f"{GLib.markup_escape_text(setup.explanation)} For <b>{GLib.markup_escape_text(name)}</b>.")
+            f"{GLib.markup_escape_text(setup.explanation)} For <b>{GLib.markup_escape_text(name)}</b>.  "
+            '<a href="change">change</a>')
         self.rec_download.set_text(setup.download_text)
         self._syncing = True
         try:

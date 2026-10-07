@@ -155,3 +155,12 @@ def test_new_settings_exist_and_are_live():
     s = Settings()
     assert (s.dictation_language, s.recommend_notice_shown, s.vulkan_slower) == ("", False, False)
     assert {"dictation_language", "recommend_notice_shown", "vulkan_slower"} <= LIVE_APPLIED_KEYS
+
+
+@pytest.mark.parametrize("hw", [r.Hardware("NVIDIA GeForce RTX 4070 SUPER", True), r.Hardware(None)])
+def test_explanation_never_repeats_itself(hw):
+    """Japanese on a graphics card used to read "...uses Whisper, which knows 99
+    languages. Whisper's most accurate, and it knows 99 languages." """
+    for model in (None, "parakeet-v3", "small", "large-v3"):
+        s = r.recommend("ja", hw, model=model)
+        assert s.explanation.count("99 languages") <= 1, s.explanation
