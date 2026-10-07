@@ -185,13 +185,12 @@ def test_parakeet_is_the_default_model():
 
 
 def test_first_run_and_preferences_recommend_parakeet():
-    """Both pickers used to call Small "recommended" and preselect it."""
+    """Both pickers used to call Small "recommended" and preselect it.
+    First run now recommends through recommend.py (the welcome card)."""
     import pathlib
+    from talktype import recommend
+    assert recommend.recommend("en", recommend.Hardware(None)).model == "parakeet-v3"
     src = pathlib.Path(__file__).resolve().parent.parent / "src" / "talktype"
-    welcome = (src / "welcome_dialog.py").read_text()
     prefs = (src / "prefs.py").read_text()
-    assert 'model_combo.set_active(OFFERED_MODELS.index("parakeet-v3"))' in welcome
-    assert "Small (recommended)" not in welcome
-    assert "Parakeet (recommended)" in welcome
     assert '"small":    "small — recommended balance"' not in prefs
     assert "Parakeet — recommended" in prefs

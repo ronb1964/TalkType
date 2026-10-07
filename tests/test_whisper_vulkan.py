@@ -401,14 +401,6 @@ def test_first_run_speed_check_error_keeps_the_processor(monkeypatch):
     assert wd._vulkan_speed_check_first_run("small") is False
 
 
-def test_first_run_only_uses_vulkan_when_it_wins_the_speed_check():
-    """The download alone no longer settles it."""
-    import pathlib
-    src = (pathlib.Path(__file__).resolve().parent.parent / "src" / "talktype" / "welcome_dialog.py").read_text()
-    assert ("vulkan_ready = (_download_vulkan_model_first_run(selected_model)\n"
-            "                                    and _vulkan_speed_check_first_run(selected_model))") in src
-
-
 @pytest.mark.parametrize("times,slower", [((1.0, 5.0), False), ((5.0, 1.0), True)])
 def test_speed_check_remembers_which_won(monkeypatch, times, slower):
     """Review focus 1: recommend.py must not keep proposing a slower chip."""

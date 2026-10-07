@@ -14,9 +14,10 @@ import pathlib
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
+# First run no longer has a full picker: its card offers three models chosen
+# by recommend.py, and points to Preferences for the rest.
 SCREENS_WITH_MODEL_PICKERS = [
     "src/talktype/prefs.py",
-    "src/talktype/welcome_dialog.py",
 ]
 
 

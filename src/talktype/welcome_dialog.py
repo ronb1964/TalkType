@@ -482,7 +482,7 @@ class WelcomeDialog:
     def _build_dialog(self):
         """Build the GTK dialog with appropriate content."""
         self.dialog = Gtk.Dialog(title="Welcome to TalkType!")
-        # Cap height to the screen and allow resizing so the footer (Get Started
+        # Cap height to the screen and allow resizing so the footer (Set it up
         # button) is always reachable. The content below is in a ScrolledWindow, so
         # overflow scrolls instead of being cut off. See fit_dialog_to_screen.
         from .ui_style import fit_dialog_to_screen
@@ -1680,6 +1680,10 @@ class WelcomeDialog:
 
         lang_row = Gtk.Box(spacing=8)
         lang_row.pack_start(Gtk.Label(label="I dictate in", xalign=0), False, False, 0)
+        # The first dropdown a new user ever touches. Without this its popup
+        # opens in menu mode, on top of the button and the text above it.
+        from .ui_style import apply_dropdown_list_style
+        apply_dropdown_list_style()
         self.lang_combo = Gtk.ComboBoxText()
         codes = [c for c, _ in rec.LANGUAGES]
         for code, name in rec.LANGUAGES:
@@ -1874,7 +1878,8 @@ class WelcomeDialog:
         Returns:
             dict: User selections with keys:
                 - 'install_extension': bool (if GNOME detected)
-                - 'download_cuda': bool (if NVIDIA detected)
+                - 'model', 'device', 'dictation_language': the setup the
+                  recommendation card shows (absent on an unsupported desktop)
                 - 'continue': bool (True if user clicked "Set it up")
         """
         # Show dialog and fade in
@@ -1955,43 +1960,17 @@ def show_welcome_dialog(parent=None):
     return result_container[0]
 
 
-def _large_v3_without_nvidia_message():
-    """(title, body) for choosing large-v3 at first run without an NVIDIA card."""
-    try:
-        from . import whisper_vulkan
-        on_vulkan = whisper_vulkan.is_offered()
-    except Exception:
-        on_vulkan = False
-    parakeet = ("Or start with Parakeet: for English and 24 European languages it's even "
-                "more accurate, and it runs well on the processor.")
-    if on_vulkan:
-        return ("Large-v3 needs your graphics card",
-                "Large-v3 can run on your AMD or Intel graphics through Vulkan. Finish "
-                "setup first, then in Preferences set the Device to \"Vulkan (any GPU)\" "
-                "and choose large-v3.\n\n" + parakeet)
-    return ("Graphics card required",
-            "Large-v3 needs a graphics card, and TalkType didn't find one it can "
-            "use.\n\n" + parakeet)
-
-
 def show_tips_and_features_dialog(extension_installed=False):
     """
     Show tips and features dialog after hotkey testing.
     Encourages users to explore TalkType's capabilities.
-    Now includes model selection for first-run download.
 
     Args:
         extension_installed: Whether GNOME extension was installed (requires logout reminder)
     """
-    # The starting-model picker below is the first dropdown a new user ever
-    # touches. Without this its popup opens in menu mode, on top of the button
-    # and the text above it, which looks broken on first run.
-    from .ui_style import apply_dropdown_list_style
-    apply_dropdown_list_style()
-
     dialog = Gtk.Dialog(title="TalkType - Setup Complete!")
     dialog.set_border_width(0)
-    # Cap height to the screen + allow resizing so the "Get Started" button is always
+    # Cap height to the screen + allow resizing so the "Continue" button is always
     # reachable; the content is wrapped in a ScrolledWindow below for overflow.
     from .ui_style import fit_dialog_to_screen
     fit_dialog_to_screen(dialog, 600, 650 if extension_installed else 600)
@@ -2039,7 +2018,7 @@ def show_tips_and_features_dialog(extension_installed=False):
     content = dialog.get_content_area()
     content.set_spacing(0)
 
-    # Scroll the content so the footer (Get Started) stays reachable on short screens.
+    # Scroll the content so the footer (Continue) stays reachable on short screens.
     scrolled = Gtk.ScrolledWindow()
     scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
     content.pack_start(scrolled, True, True, 0)
@@ -2155,243 +2134,6 @@ def show_tips_and_features_dialog(extension_installed=False):
         logout_reminder_box.add(logout_reminder)
         vbox.pack_start(logout_reminder_box, False, False, 0)
 
-    # Model selection section
-    sep_model = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
-    sep_model.set_margin_top(15)
-    sep_model.set_margin_bottom(10)
-    vbox.pack_start(sep_model, False, False, 0)
-
-    model_section = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-    model_section.set_margin_start(20)
-    model_section.set_margin_end(20)
-
-    # Model selection header
-    model_header = Gtk.Label()
-    model_header.set_markup('<span size="medium"><b>💡 Choose Your Starting Model</b></span>')
-    model_header.set_halign(Gtk.Align.START)
-    model_section.pack_start(model_header, False, False, 0)
-
-    # Model dropdown with description
-    model_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-
-    model_label = Gtk.Label()
-    model_label.set_markup('<b>Model:</b>')
-    model_box.pack_start(model_label, False, False, 0)
-
-    # Check GPU/CUDA availability to determine large-v3 eligibility
-    try:
-        from . import cuda_helper as _cuda_helper
-        _has_nvidia = bool(_cuda_helper.detect_nvidia_gpu())
-        _has_cuda   = _cuda_helper.has_talktype_cuda_libraries()
-    except Exception:
-        _has_nvidia = False
-        _has_cuda   = False
-    # Set up for Vulkan (the light GPU choice): it runs large-v3 without CUDA.
-    try:
-        from .config import load_config as _load_cfg
-        _on_vulkan = _load_cfg().device == "vulkan"
-    except Exception:
-        _on_vulkan = False
-    _has_cuda = _has_cuda or _on_vulkan
-
-    # Build model store — all models are always selectable (is_sensitive=True).
-    # If the user picks large-v3 without CUDA, a popup explains what's needed.
-    #
-    # Built from OFFERED_MODELS so this screen cannot fall behind Preferences.
-    # It did: this list was maintained separately and omitted "base" entirely,
-    # so first-run users were shown four models and Preferences later showed
-    # five, with nothing to indicate one had been hidden from them.
-    from .model_helper import OFFERED_MODELS
-
-    _MODEL_LABELS = {
-        "tiny":     "Tiny (fastest) — 39MB",
-        "base":     "Base (fast, basic accuracy) — 74MB",
-        "small":    "Small (99 languages) — 244MB",
-        "medium":   "Medium (better accuracy) — 769MB",
-        "large-v3": "Large (best quality) — 3GB",
-        "parakeet-v3": "Parakeet (recommended) — 670MB",
-    }
-
-    model_store = Gtk.ListStore(str, str, bool)
-    for _mid in OFFERED_MODELS:
-        _label = _MODEL_LABELS[_mid]
-        if _mid == "large-v3" and not _has_cuda:
-            # Still selectable — choosing it explains what is needed.
-            _label += " · needs CUDA download" if _has_nvidia else " · needs a graphics card"
-        model_store.append([_mid, _label, True])
-
-    model_combo = Gtk.ComboBox.new_with_model(model_store)
-    _renderer = Gtk.CellRendererText()
-    model_combo.pack_start(_renderer, True)
-    model_combo.add_attribute(_renderer, "text", 1)
-    model_combo.add_attribute(_renderer, "sensitive", 2)
-    # Default to Parakeet by NAME, not position. The list is ordered by size, so
-    # index 0 is Tiny — a positional default would quietly hand every new user
-    # the fastest, least accurate model.
-    model_combo.set_active(OFFERED_MODELS.index("parakeet-v3"))
-    model_combo.set_size_request(320, -1)  # Fixed width — don't stretch to fill dialog
-    model_combo.set_tooltip_text(
-        "Choose which AI model to download. You can change this later in Preferences.")
-    # Forward the scroll wheel to the page instead of changing the selection.
-    # Without this, scrolling the dialog with the cursor over this dropdown
-    # silently switches the model — and landing on "Large" pops an "NVIDIA GPU
-    # Required" error the user never asked for. forward_combo_scroll also keeps
-    # the page scrolling under the cursor (same fix prefs.py applies to its combos).
-    from .ui_style import forward_combo_scroll
-    forward_combo_scroll(model_combo)
-    model_box.pack_start(model_combo, False, False, 0)
-
-    model_section.pack_start(model_box, False, False, 0)
-
-    # Track last valid selection to revert if large-v3 is blocked. Must match the
-    # initial set_active above (Parakeet), by NAME not a hard-coded number — the
-    # offered list has grown before (base was added) and left stale indices that
-    # reverted CPU users to the wrong model.
-    _last_model_index = [OFFERED_MODELS.index("parakeet-v3")]
-    _updating_combo = [False]  # Prevent recursive "changed" signals
-
-    def _update_button_text(model_id):
-        """Update button label based on whether the selected model is cached."""
-        from .model_helper import is_model_cached
-        if is_model_cached(model_id):
-            get_started_button.set_label("Get Started!")
-        else:
-            get_started_button.set_label("Download and Get Started!")
-
-    def _on_onboarding_model_changed(combo):
-        """Handle model selection in onboarding — gate large-v3 behind CUDA."""
-        if _updating_combo[0]:
-            return
-
-        _it = combo.get_active_iter()
-        if _it is None:
-            return
-        _mid = model_store.get_value(_it, 0)
-
-        if _mid != "large-v3":
-            # Normal model — just remember the selection and update button
-            _last_model_index[0] = combo.get_active()
-            _update_button_text(_mid)
-            return
-
-        # large-v3 selected — check CUDA availability RIGHT NOW
-        # (it may have changed since the dialog opened, e.g. user just downloaded it)
-        try:
-            _cuda_now = _cuda_helper.has_talktype_cuda_libraries() or _on_vulkan
-        except Exception:
-            _cuda_now = _on_vulkan
-
-        if _cuda_now:
-            # CUDA is available — allow the selection
-            _last_model_index[0] = combo.get_active()
-            return
-
-        # --- CUDA not available — revert combo and show a helpful popup ---
-        _updating_combo[0] = True
-        combo.set_active(_last_model_index[0])
-        _updating_combo[0] = False
-
-        if _has_nvidia:
-            # NVIDIA present — offer unified CUDA + model download
-            _dlg = Gtk.MessageDialog(
-                transient_for=None,
-                flags=0,
-                message_type=Gtk.MessageType.QUESTION,
-                buttons=Gtk.ButtonsType.YES_NO,
-                text="Downloads Required"
-            )
-            _dlg.format_secondary_text(
-                "The Large model needs two downloads to get started:\n\n"
-                "1. CUDA GPU libraries (~1.4GB) — enables GPU acceleration\n"
-                "2. Large-v3 AI model (~3GB) — highest-accuracy transcription\n\n"
-                "Total: ~4.4GB. This may take several minutes.\n\n"
-                "Would you like to download both now?"
-            )
-            _dlg.set_keep_above(True)
-            _resp = _dlg.run()
-            _dlg.destroy()
-
-            if _resp == Gtk.ResponseType.YES:
-                try:
-                    from .download_progress_dialog import show_unified_download_dialog
-                    results = show_unified_download_dialog(
-                        cuda=True, model="large-v3",
-                        title="Downloading Large Model Components",
-                        description=(
-                            "TalkType is downloading two components for the Large model:\n\n"
-                            "  • <b>CUDA GPU Libraries</b> (~1.4GB) — unlocks GPU acceleration on your NVIDIA card\n"
-                            "  • <b>large-v3 AI Model</b> (~3GB) — the highest-accuracy speech recognition model\n\n"
-                            "Both are one-time downloads. This may take several minutes."
-                        )
-                    )
-                    # Check if BOTH succeeded
-                    _cuda_ok = results.get("CUDA Libraries", {}).get("success", False)
-                    _model_ok = results.get("large-v3 AI Model", {}).get("success", False)
-                    if _cuda_ok and _model_ok:
-                        # Update label and auto-select large-v3
-                        for row in model_store:
-                            if row[0] == "large-v3":
-                                row[1] = "Large (best quality) — 3GB"
-                                break
-                        _updating_combo[0] = True
-                        _lv3 = OFFERED_MODELS.index("large-v3")  # by name — indices have drifted before
-                        combo.set_active(_lv3)
-                        _updating_combo[0] = False
-                        _last_model_index[0] = _lv3
-                        # Update button text — model is already downloaded
-                        get_started_button.set_label("Get Started!")
-                        # Set device to cuda in config
-                        try:
-                            from .config import load_config, save_config
-                            cfg = load_config()
-                            cfg.device = "cuda"
-                            save_config(cfg)
-                        except Exception:
-                            pass
-                    elif _cuda_ok and not _model_ok:
-                        # CUDA worked but model failed — update label, keep small selected
-                        for row in model_store:
-                            if row[0] == "large-v3":
-                                row[1] = "Large (best quality) — 3GB"
-                                break
-                except Exception as _e:
-                    logger.warning(f"Failed to launch unified download: {_e}")
-        else:
-            # No NVIDIA card. This used to say large-v3 was "not compatible with
-            # AMD/Intel GPU systems", which stopped being true in 0.12.0: it runs
-            # there through Vulkan, set up from Preferences.
-            _title, _body = _large_v3_without_nvidia_message()
-            _dlg = Gtk.MessageDialog(
-                transient_for=None,
-                flags=0,
-                message_type=Gtk.MessageType.INFO,
-                buttons=Gtk.ButtonsType.OK,
-                text=_title
-            )
-            _dlg.format_secondary_text(_body)
-            _dlg.set_keep_above(True)
-            _dlg.run()
-            _dlg.destroy()
-
-    model_combo.connect("changed", _on_onboarding_model_changed)
-
-    # Model description
-    model_desc = Gtk.Label()
-    model_desc.set_markup(
-        '<span size="small">Parakeet is the most accurate choice for English and 24\n'
-        'European languages, and it\'s fast even without a graphics card.\n'
-        'Dictate in another language? Pick one of the Whisper models\n'
-        '(Small is a good start), which know 99 languages.\n\n'
-        'You can change models anytime in Preferences.</span>'
-    )
-    model_desc.set_line_wrap(True)
-    model_desc.set_justify(Gtk.Justification.LEFT)
-    model_desc.set_halign(Gtk.Align.START)
-    model_desc.set_opacity(0.9)
-    model_section.pack_start(model_desc, False, False, 0)
-
-    vbox.pack_start(model_section, False, False, 0)
-
     # Bottom section - encourage exploration
     sep2 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
     sep2.set_margin_top(15)
@@ -2408,30 +2150,19 @@ def show_tips_and_features_dialog(extension_installed=False):
     encourage_label.set_opacity(0.8)
     vbox.pack_start(encourage_label, False, False, 0)
 
-    # Get Started button with proper padding
+    # Continue button with proper padding
     button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
     button_box.set_margin_top(10)
     button_box.set_margin_bottom(10)
     button_box.set_margin_start(20)
     button_box.set_margin_end(20)
 
-    get_started_button = Gtk.Button(label="Download and Get Started!")
+    get_started_button = Gtk.Button(label="Continue")
     get_started_button.get_style_context().add_class("suggested-action")
-    get_started_button.set_size_request(200, -1)  # Wider for new text
-
-    # Helper to read the currently selected model ID from the ListStore combo
-    def get_combo_model_id():
-        it = model_combo.get_active_iter()
-        if it is not None:
-            return model_store.get_value(it, 0)
-        return "parakeet-v3"
-
-    # Store selected model
-    selected_model = [get_combo_model_id()]  # Use list to make mutable
+    get_started_button.set_size_request(160, -1)
 
     def on_get_started_clicked(button):
-        """Handle Get Started button - show animated feedback then close dialog"""
-        selected_model[0] = get_combo_model_id()
+        """Handle Continue button - show animated feedback then close dialog"""
 
         # Gray out button and start animated "Setting up TalkType" dots
         button.set_sensitive(False)
@@ -2501,9 +2232,6 @@ def show_tips_and_features_dialog(extension_installed=False):
         GLib.source_remove(pulse_timer_id)
 
     dialog.destroy()
-
-    # Return the selected model for downloading
-    return selected_model[0]
 
 
 def _restore_gnome_keybindings(begin_resize, begin_move):
@@ -3077,8 +2805,8 @@ def show_hotkey_test_dialog():
 
 
 def _setup_vulkan_engine_first_run():
-    """First run, light GPU choice: download the Vulkan engine and switch the
-    device to it. On failure the device stays on the processor."""
+    """First run on the graphics card: download the Vulkan engine and switch
+    the device to it. On failure the device stays on the processor."""
     try:
         from talktype import whisper_vulkan as wv
         from talktype.download_progress_dialog import DownloadTask, UnifiedDownloadDialog
@@ -3086,7 +2814,7 @@ def _setup_vulkan_engine_first_run():
         if not wv.is_engine_installed():
             dialog = UnifiedDownloadDialog(
                 parent=None, title="Setting Up Vulkan",
-                description="A small graphics engine for your NVIDIA card. One-time download.")
+                description="A small engine that runs speech recognition on your graphics card. One-time download.")
             dialog.add_task(DownloadTask("Graphics engine", "whisper.cpp (Vulkan)",
                                          wv.ENGINE_SIZE_TEXT, wv.make_engine_download_func()))
             dialog.run()
@@ -3142,6 +2870,165 @@ def _download_vulkan_model_first_run(model):
         return False
 
 
+def _apply_first_run_setup(result):
+    """Save the setup the welcome card showed, then download it.
+
+    *result* is WelcomeDialog.run()'s: model, device ("vulkan" or "cpu") and
+    dictation_language. On the graphics card this fetches the Vulkan engine
+    and the model in its format, then runs the speed check; if any of that
+    doesn't work out it falls back to the processor. CUDA is never fetched
+    here (it lives in Preferences). The update notice is marked shown, since
+    a new install starts on the recommendation already.
+    """
+    from talktype.config import load_config, save_config
+    selected_model = result["model"]
+    try:
+        config = load_config()
+        config.model = selected_model
+        config.device = result["device"]
+        config.dictation_language = result.get("dictation_language", "")
+        config.recommend_notice_shown = True
+        save_config(config)
+    except Exception as e:
+        logger.warning(f"Could not save the first-run setup: {e}")
+
+    logger.info(f"Setting up {selected_model} on {result['device']}")
+    try:
+        from talktype.model_helper import download_model_with_progress, is_model_cached
+        from talktype import whisper_vulkan
+
+        # Check if model is already cached
+        already_cached = is_model_cached(selected_model)
+        logger.info(f"Model {selected_model} cached status: {already_cached}")
+        print(f"📦 Model {selected_model} cached: {already_cached}")
+
+        config = load_config()
+        device = config.device
+        if device.lower() == "vulkan" and not whisper_vulkan.supports_model(selected_model):
+            config.device = device = "cpu"
+            save_config(config)
+
+        # Vulkan: the model comes in whisper.cpp's format instead. If that
+        # download doesn't work out, fall back to the processor so setup
+        # still ends with a model that works.
+        vulkan_ready = False
+        if device.lower() == "vulkan":
+            _setup_vulkan_engine_first_run()
+            vulkan_ready = (_download_vulkan_model_first_run(selected_model)
+                            and _vulkan_speed_check_first_run(selected_model))
+            if not vulkan_ready:
+                config.device = device = "cpu"
+                save_config(config)
+                logger.warning("Not using Vulkan after first-run setup; using the processor")
+                already_cached = is_model_cached(selected_model)
+
+        compute_type = "float16" if device.lower() == "cuda" else "int8"
+        logger.info(f"Download config: device={device}, compute_type={compute_type}")
+
+        if vulkan_ready:
+            config.model = selected_model
+            save_config(config)
+            model = True
+            logger.info(f"✅ {selected_model} ready for Vulkan")
+        elif already_cached:
+            # Model files already on disk — just save config and move on.
+            # DO NOT load the model here; the dictation service will load it
+            # when it starts. Loading large models (especially large-v3 on CUDA)
+            # takes 5-10 seconds and would freeze the UI with no feedback.
+            logger.info(f"✅ {selected_model} already cached — skipping load, saving config")
+            print(f"✅ {selected_model} already cached — skipping model load")
+            config.model = selected_model
+            save_config(config)
+            model = True  # Treat as success so the flow continues normally
+        else:
+            # Model not on disk yet — download it with a progress bar
+            model = download_model_with_progress(
+                selected_model,
+                device=device,
+                compute_type=compute_type,
+                parent=None,
+                show_confirmation=False  # No confirmation - user already chose
+            )
+
+        if model:
+            if model is not True:
+                # Freshly downloaded — update config and free the loaded model.
+                # IMPORTANT: freeing a large model (especially on CUDA) can take
+                # several seconds on the main thread and freeze the UI. We pass the
+                # model to a background thread so it's freed there instead.
+                config.model = selected_model
+                save_config(config)
+                logger.info(f"✅ Config updated to use {selected_model} model")
+                import threading as _th
+                def _free_in_background(m):
+                    pass  # m goes out of scope here, freeing memory in background thread
+                _th.Thread(target=_free_in_background, args=(model,), daemon=True).start()
+                del model  # Remove main thread's ref; background thread holds the last ref
+            logger.info(f"✅ {selected_model} model ready")
+        else:
+            # Download failed or was cancelled - fall back to smaller model
+            logger.warning(f"Model download returned None for {selected_model} (likely cancelled or failed)")
+
+            # Try fallback models in order: small, tiny
+            fallback_models = ["small", "tiny"] if selected_model not in ["small", "tiny"] else ["tiny"]
+
+            for fallback in fallback_models:
+                if is_model_cached(fallback):
+                    logger.info(f"✅ Using cached {fallback} model as fallback")
+                    config.model = fallback
+                    save_config(config)
+                    break
+
+                logger.info(f"Attempting fallback to {fallback} model...")
+                try:
+                    fallback_model = download_model_with_progress(
+                        fallback,
+                        device=device,
+                        compute_type=compute_type,
+                        parent=None,
+                        show_confirmation=False
+                    )
+
+                    if fallback_model:
+                        logger.info(f"✅ Fallback to {fallback} model successful")
+                        config.model = fallback
+                        save_config(config)
+                        del fallback_model
+                        break
+                    else:
+                        logger.warning(f"Fallback to {fallback} also failed")
+                except Exception as e:
+                    logger.warning(f"Error downloading fallback {fallback}: {e}")
+
+    except Exception as e:
+        logger.warning(f"Error downloading {selected_model} model: {e}")
+        # Try to ensure SOME model is available (tiny as last resort)
+        try:
+            from talktype.model_helper import is_model_cached, download_model_with_progress
+            from talktype.config import load_config, save_config
+
+            config = load_config()
+
+            if not is_model_cached("tiny"):
+                logger.info("Downloading tiny model as emergency fallback...")
+                tiny_model = download_model_with_progress(
+                    "tiny",
+                    device="cpu",
+                    compute_type="int8",
+                    parent=None,
+                    show_confirmation=False
+                )
+                if tiny_model:
+                    config.model = "tiny"
+                    save_config(config)
+                    del tiny_model
+            else:
+                config.model = "tiny"
+                save_config(config)
+        except Exception:
+            pass  # Last resort failed, app will try to download on first run
+
+
 def show_welcome_and_install():
     """
     Show welcome dialog and handle optional installations.
@@ -3157,48 +3044,23 @@ def show_welcome_and_install():
         logger.info("User cancelled welcome dialog")
         return result
 
-    # Determine what needs to be downloaded
-    download_cuda = result.get('download_cuda', False)
+    # The GNOME extension is the only optional download left on the welcome
+    # screen; the speech model (and the Vulkan engine) follow the hotkey test.
     install_extension = result.get('install_extension', False)
     extension_installed = False  # Track if extension was successfully installed
 
-    # If user selected any downloads, show unified download dialog
-    if download_cuda or install_extension:
+    if install_extension:
         try:
             from talktype.download_progress_dialog import show_unified_download_dialog
-
-            # Show unified download dialog with selected tasks
             download_results = show_unified_download_dialog(
-                cuda=download_cuda,
-                extension=install_extension,
+                cuda=False,
+                extension=True,
                 parent=None
             )
-
             logger.info(f"Download results: {download_results}")
-
-            # Handle post-download actions
-            if download_cuda and download_results.get('CUDA Libraries', {}).get('success'):
-                # CUDA was downloaded successfully - auto-enable GPU mode
-                try:
-                    from talktype.config import load_config, save_config
-                    config = load_config()
-                    if config.device != "cuda":
-                        config.device = "cuda"
-                        save_config(config)
-                        logger.info("✅ Automatically enabled GPU mode in config")
-                except Exception as e:
-                    logger.warning(f"Could not auto-enable GPU mode: {e}")
-
-            # Store extension install result for later use
-            extension_installed = install_extension and download_results.get('GNOME Extension', {}).get('success')
-
+            extension_installed = download_results.get('GNOME Extension', {}).get('success')
         except Exception as e:
             logger.error(f"Error during installations: {e}", exc_info=True)
-
-    # The light GPU choice: fetch the Vulkan engine now. The model itself is
-    # downloaded in Vulkan's format after the model is chosen (below).
-    if result.get('use_vulkan'):
-        _setup_vulkan_engine_first_run()
 
     # Show hotkey testing dialog — but NOT on the Flatpak. That dialog detects
     # key presses via evdev (raw /dev/input), which the sandbox blocks ("No
@@ -3212,145 +3074,12 @@ def show_welcome_and_install():
         show_hotkey_test_dialog()
 
     # Show tips and features dialog (with extension logout reminder if needed)
-    # This now includes model selection and returns the selected model
-    logger.info("Showing tips and features dialog with model selection")
-    selected_model = show_tips_and_features_dialog(extension_installed=extension_installed)
+    logger.info("Showing tips and features dialog")
+    show_tips_and_features_dialog(extension_installed=extension_installed)
 
-    # Download the selected model (no confirmation needed - user already chose)
-    if selected_model:
-        logger.info(f"Downloading selected model: {selected_model}")
-        try:
-            from talktype.model_helper import download_model_with_progress, is_model_cached
-            from talktype.config import load_config, save_config
-
-            # Check if model is already cached
-            already_cached = is_model_cached(selected_model)
-            logger.info(f"Model {selected_model} cached status: {already_cached}")
-            print(f"📦 Model {selected_model} cached: {already_cached}")
-
-            config = load_config()
-            device = config.device
-
-            # Vulkan: the model comes in whisper.cpp's format instead. If that
-            # download doesn't work out, fall back to the processor so setup
-            # still ends with a model that works.
-            vulkan_ready = False
-            if device.lower() == "vulkan":
-                from talktype import whisper_vulkan
-                if whisper_vulkan.supports_model(selected_model):
-                    vulkan_ready = (_download_vulkan_model_first_run(selected_model)
-                                    and _vulkan_speed_check_first_run(selected_model))
-                    if not vulkan_ready:
-                        config.device = device = "cpu"
-                        save_config(config)
-                        logger.warning("Not using Vulkan after first-run setup; using the processor")
-                        already_cached = is_model_cached(selected_model)
-
-            compute_type = "float16" if device.lower() == "cuda" else "int8"
-            logger.info(f"Download config: device={device}, compute_type={compute_type}")
-
-            if vulkan_ready:
-                config.model = selected_model
-                save_config(config)
-                model = True
-                logger.info(f"✅ {selected_model} ready for Vulkan")
-            elif already_cached:
-                # Model files already on disk — just save config and move on.
-                # DO NOT load the model here; the dictation service will load it
-                # when it starts. Loading large models (especially large-v3 on CUDA)
-                # takes 5-10 seconds and would freeze the UI with no feedback.
-                logger.info(f"✅ {selected_model} already cached — skipping load, saving config")
-                print(f"✅ {selected_model} already cached — skipping model load")
-                config.model = selected_model
-                save_config(config)
-                model = True  # Treat as success so the flow continues normally
-            else:
-                # Model not on disk yet — download it with a progress bar
-                model = download_model_with_progress(
-                    selected_model,
-                    device=device,
-                    compute_type=compute_type,
-                    parent=None,
-                    show_confirmation=False  # No confirmation - user already chose
-                )
-
-            if model:
-                if model is not True:
-                    # Freshly downloaded — update config and free the loaded model.
-                    # IMPORTANT: freeing a large model (especially on CUDA) can take
-                    # several seconds on the main thread and freeze the UI. We pass the
-                    # model to a background thread so it's freed there instead.
-                    config.model = selected_model
-                    save_config(config)
-                    logger.info(f"✅ Config updated to use {selected_model} model")
-                    import threading as _th
-                    def _free_in_background(m):
-                        pass  # m goes out of scope here, freeing memory in background thread
-                    _th.Thread(target=_free_in_background, args=(model,), daemon=True).start()
-                    del model  # Remove main thread's ref; background thread holds the last ref
-                logger.info(f"✅ {selected_model} model ready")
-            else:
-                # Download failed or was cancelled - fall back to smaller model
-                logger.warning(f"Model download returned None for {selected_model} (likely cancelled or failed)")
-
-                # Try fallback models in order: small, tiny
-                fallback_models = ["small", "tiny"] if selected_model not in ["small", "tiny"] else ["tiny"]
-
-                for fallback in fallback_models:
-                    if is_model_cached(fallback):
-                        logger.info(f"✅ Using cached {fallback} model as fallback")
-                        config.model = fallback
-                        save_config(config)
-                        break
-
-                    logger.info(f"Attempting fallback to {fallback} model...")
-                    try:
-                        fallback_model = download_model_with_progress(
-                            fallback,
-                            device=device,
-                            compute_type=compute_type,
-                            parent=None,
-                            show_confirmation=False
-                        )
-
-                        if fallback_model:
-                            logger.info(f"✅ Fallback to {fallback} model successful")
-                            config.model = fallback
-                            save_config(config)
-                            del fallback_model
-                            break
-                        else:
-                            logger.warning(f"Fallback to {fallback} also failed")
-                    except Exception as e:
-                        logger.warning(f"Error downloading fallback {fallback}: {e}")
-
-        except Exception as e:
-            logger.warning(f"Error downloading {selected_model} model: {e}")
-            # Try to ensure SOME model is available (tiny as last resort)
-            try:
-                from talktype.model_helper import is_model_cached, download_model_with_progress
-                from talktype.config import load_config, save_config
-
-                config = load_config()
-
-                if not is_model_cached("tiny"):
-                    logger.info("Downloading tiny model as emergency fallback...")
-                    tiny_model = download_model_with_progress(
-                        "tiny",
-                        device="cpu",
-                        compute_type="int8",
-                        parent=None,
-                        show_confirmation=False
-                    )
-                    if tiny_model:
-                        config.model = "tiny"
-                        save_config(config)
-                        del tiny_model
-                else:
-                    config.model = "tiny"
-                    save_config(config)
-            except Exception:
-                pass  # Last resort failed, app will try to download on first run
+    # Then download exactly what the welcome card showed.
+    if "model" in result:
+        _apply_first_run_setup(result)
 
     # Install AppImage to standard location and create desktop launcher (if running from AppImage).
     # The AppImage copy is 300MB+ so we run it in a background thread to avoid freezing the UI.

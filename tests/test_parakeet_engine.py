@@ -27,12 +27,11 @@ def test_parakeet_is_offered_valid_and_downloadable():
 
 
 def test_every_offered_model_has_a_label_on_every_picker():
-    """Both pickers index a label dict by model id; a missing key crashes the
-    screen as it opens, which on the setup screen means no way to finish setup."""
+    """The picker indexes a label dict by model id; a missing key crashes the
+    screen as it opens. (First run's card has no full picker any more.)"""
     from talktype.model_helper import OFFERED_MODELS
 
-    for path, dict_name in (("src/talktype/prefs.py", "_MODEL_DISPLAY"),
-                            ("src/talktype/welcome_dialog.py", "_MODEL_LABELS")):
+    for path, dict_name in (("src/talktype/prefs.py", "_MODEL_DISPLAY"),):
         source = (ROOT / path).read_text()
         body = re.search(dict_name + r" = \{(.*?)\n\s*\}", source, re.S).group(1)
         keys = set(re.findall(r'"([^"]+)":', body))
