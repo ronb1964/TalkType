@@ -106,13 +106,15 @@ MODEL_REPOS = {
 # different engine (see parakeet_engine.py).
 OFFERED_MODELS = ("tiny", "base", "small", "medium", "large-v3", PARAKEET_MODEL)
 
-# Model sizes for display (compressed size users will download)
+# What each model really downloads for the processor (and CUDA), in decimal
+# MB as Hugging Face lists it. Until 0.14.2 these were the models' sizes in
+# millions of parameters, about half the real download (tests/test_model_sizes.py).
 MODEL_DISPLAY_SIZES = {
-    "tiny": "39 MB",
-    "base": "74 MB",
-    "small": "244 MB",
-    "medium": "769 MB",
-    "large-v3": "~3 GB",
+    "tiny": "78 MB",
+    "base": "148 MB",
+    "small": "486 MB",
+    "medium": "1.5 GB",
+    "large-v3": "3.1 GB",
     PARAKEET_MODEL: "670 MB",
 }
 

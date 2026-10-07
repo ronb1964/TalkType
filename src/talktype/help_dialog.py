@@ -289,30 +289,32 @@ After choosing one, the tray's Device line shows where it really runs.
     create_tab("🤖 AI Models", '''<span size="large"><b>Choosing the Right AI Model</b></span>
 
 Configure in: Preferences → General → Model
+Sizes are the download for the processor. On a graphics card (Vulkan) the
+Whisper models download in a smaller format, about half the size.
 
 <b>Available Models:</b>
 
-<b>• tiny (39 MB)</b>
+<b>• tiny (78 MB)</b>
   Speed: ⚡⚡⚡⚡⚡ Fastest
   Accuracy: ⭐⭐ Basic
   Best for: Quick notes, casual use
 
-<b>• base (74 MB)</b>
+<b>• base (148 MB)</b>
   Speed: ⚡⚡⚡⚡ Fast
   Accuracy: ⭐⭐⭐ Good
   Best for: Casual dictation
 
-<b>• small (244 MB)</b>
+<b>• small (486 MB)</b>
   Speed: ⚡⚡⚡ Balanced
   Accuracy: ⭐⭐⭐⭐ Very good
   Best for: General use in any of 99 languages
 
-<b>• medium (769 MB)</b>
+<b>• medium (1.5 GB)</b>
   Speed: ⚡⚡ Slower
   Accuracy: ⭐⭐⭐⭐⭐ Excellent
   Best for: Professional dictation
 
-<b>• large-v3 (~3 GB)</b>
+<b>• large-v3 (3.1 GB)</b>
   Speed: ⚡ Slowest
   Accuracy: ⭐⭐⭐⭐⭐⭐ Best possible
   Best for: Technical/professional work

@@ -43,9 +43,9 @@ _BENEFIT = {
 _DOWNLOAD = {
     (PARAKEET, "vulkan"): "About 700 MB",
     (PARAKEET, "cpu"): "About 670 MB",
-    ("small", "vulkan"): "About 280 MB",
-    ("small", "cpu"): "About 250 MB",
-    ("large-v3", "vulkan"): "About 1 GB",
+    ("small", "vulkan"): "About 290 MB",
+    ("small", "cpu"): "About 490 MB",
+    ("large-v3", "vulkan"): "About 1.1 GB",
 }
 
 
@@ -183,20 +183,23 @@ class OptionState:
     reason: str
 
 
-def option_states(language, hw):
+def option_states(language, hw, use_gpu=None):
     """The models offered under Other options, each with why it can't be
-    picked when it can't. Tiny, Base and Medium live in Preferences."""
+    picked when it can't. Tiny, Base and Medium live in Preferences.
+    Sizes are what each one downloads with the graphics card on or off
+    (*use_gpu*, default: on when there is a usable one)."""
     name = language_name(language or "en")
     parakeet_ok = (language or "en") in PARAKEET_LANGUAGES
+    gpu = hw.gpu if use_gpu is None else bool(use_gpu and hw.gpu)
     return [
-        OptionState(PARAKEET, "Parakeet", "670 MB",
+        OptionState(PARAKEET, "Parakeet", "about 670 MB",
                     "The most accurate for English and 24 European languages. "
                     "Fast even without a graphics card.",
                     parakeet_ok, "" if parakeet_ok else f"Doesn't understand {name}."),
-        OptionState("small", "Whisper Small", "250 MB",
+        OptionState("small", "Whisper Small", "about 290 MB" if gpu else "about 490 MB",
                     "Knows 99 languages. A good choice on an older or slower computer.",
                     True, ""),
-        OptionState("large-v3", "Whisper Large-v3", "about 1 GB",
+        OptionState("large-v3", "Whisper Large-v3", "about 1.1 GB",
                     "Whisper's most accurate, for languages Parakeet doesn't know. "
                     "Needs a graphics card.",
                     hw.gpu, "" if hw.gpu else "Needs a graphics card."),

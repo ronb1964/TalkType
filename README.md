@@ -227,11 +227,11 @@ Choose the right model for your needs in Preferences → General:
 
 | Model | Size | Speed | Accuracy | Best For |
 |-------|------|-------|----------|----------|
-| **tiny** | 39 MB | Fastest | Basic | Quick notes |
-| **base** | 74 MB | Fast | Good | Casual use |
-| **small** | 244 MB | Balanced | Very Good | Any of 99 languages |
-| **medium** | 769 MB | Slower | Excellent | Professional |
-| **large-v3** | ~3 GB | Slowest | Best | Technical work |
+| **tiny** | 78 MB | Fastest | Basic | Quick notes |
+| **base** | 148 MB | Fast | Good | Casual use |
+| **small** | 486 MB | Balanced | Very Good | Any of 99 languages |
+| **medium** | 1.5 GB | Slower | Excellent | Professional |
+| **large-v3** | 3.1 GB | Slowest | Best | Technical work |
 | **Parakeet** | 670 MB | Fast, even without a GPU | Best | **Recommended** for English + 24 European languages |
 
 > **Tip:** First run recommends a setup for your computer and language, and tray → Performance → **Recommended for this computer** puts you back on it any time.

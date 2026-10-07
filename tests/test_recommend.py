@@ -50,7 +50,7 @@ def test_overrides_are_honoured_or_explained():
 def test_download_text_matches_the_setup():
     assert r.recommend("en", NVIDIA).download_text == "About 700 MB, downloaded once."
     assert r.recommend("en", NONE).download_text == "About 670 MB, downloaded once."
-    assert r.recommend("ja", NVIDIA).download_text == "About 1 GB, downloaded once."
+    assert r.recommend("ja", NVIDIA).download_text == "About 1.1 GB, downloaded once."
 
 
 def test_option_states_grey_out_what_cant_work():

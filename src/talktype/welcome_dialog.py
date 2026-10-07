@@ -1788,7 +1788,8 @@ class WelcomeDialog:
         self.rec_download.set_text(setup.download_text)
         self._syncing = True
         try:
-            for state in rec.option_states(self._language(), self.hardware):
+            for state in rec.option_states(self._language(), self.hardware,
+                                           use_gpu=self._use_gpu()):
                 radio, text = self.model_radios[state.model], self.model_reasons[state.model]
                 radio.set_sensitive(state.available)
                 note = state.description if state.available else state.reason

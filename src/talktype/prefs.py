@@ -696,11 +696,12 @@ class PreferencesWindow:
             "  and 24 European languages, and fast even on the processor.\n"
             "  On a graphics card, set Device to Vulkan.\n\n"
             "Whisper models, for the other 75 or so languages:\n"
-            "• tiny (39 MB): Fastest, basic accuracy - quick notes\n"
-            "• base (74 MB): Fast, good accuracy - casual use\n"
-            "• small (244 MB): Balanced - a good start on the processor\n"
-            "• medium (769 MB): Slower, very accurate - professional use\n"
-            "• large-v3 (~3 GB): Whisper's best - needs a graphics card\n"
+            "• tiny (78 MB): Fastest, basic accuracy - quick notes\n"
+            "• base (148 MB): Fast, good accuracy - casual use\n"
+            "• small (486 MB): Balanced - a good start on the processor\n"
+            "• medium (1.5 GB): Slower, very accurate - professional use\n"
+            "• large-v3 (3.1 GB): Whisper's best - needs a graphics card\n"
+            "  (Sizes are for the processor; the Vulkan copies are about half.)\n"
             "  ⚠️ Takes 30-60 seconds to load initially\n\n"
             "Larger Whisper models provide:\n"
             "• Better word recognition (technical terms, proper nouns)\n"
@@ -4509,15 +4510,8 @@ class PreferencesWindow:
         content.set_margin_end(20)
         content.set_spacing(15)
 
-        # Model sizes for display
-        model_sizes = {
-            "tiny": "39 MB",
-            "base": "74 MB",
-            "small": "244 MB",
-            "medium": "769 MB",
-            "large-v3": "~3 GB"
-        }
-        size_str = model_sizes.get(model_name, "unknown size")
+        from .model_helper import MODEL_DISPLAY_SIZES
+        size_str = MODEL_DISPLAY_SIZES.get(model_name, "unknown size")
 
         # Status label
         status_label = Gtk.Label()

@@ -79,11 +79,11 @@ ENGINE_SIZE_TEXT = "24 MB"
 
 MODEL_REPO = "ggerganov/whisper.cpp"
 MODEL_FILES = {
-    "tiny": ("ggml-tiny-q8_0.bin", "42 MB"),
-    "base": ("ggml-base-q8_0.bin", "78 MB"),
-    "small": ("ggml-small-q8_0.bin", "252 MB"),
-    "medium": ("ggml-medium-q5_0.bin", "514 MB"),
-    "large-v3": ("ggml-large-v3-q5_0.bin", "1 GB"),
+    "tiny": ("ggml-tiny-q8_0.bin", "44 MB"),
+    "base": ("ggml-base-q8_0.bin", "82 MB"),
+    "small": ("ggml-small-q8_0.bin", "264 MB"),
+    "medium": ("ggml-medium-q5_0.bin", "539 MB"),
+    "large-v3": ("ggml-large-v3-q5_0.bin", "1.1 GB"),
     # q8_0, the same size as the processor's int8 download, and slightly
     # more accurate: 3.65% word errors vs 4.35% on LibriSpeech (2026-10-03).
     PARAKEET_MODEL: ("ggml-parakeet-tdt-0.6b-v3-q8_0.bin", "669 MB"),
