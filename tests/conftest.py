@@ -18,6 +18,30 @@ os.environ["TALKTYPE_LOG_DIR"] = _LOG_DIR
 atexit.register(shutil.rmtree, _LOG_DIR, ignore_errors=True)
 
 
+def _hold_back_notifications():
+    """Desktop notifications from tests must never reach the user's desktop.
+
+    A CUDA-fallback test popped "Couldn't use your NVIDIA graphics card" on
+    every suite run, all through a release test. Patched here, at conftest
+    import, so it covers module-level code too; tests that check a message
+    stub app._notify themselves.
+    """
+    try:
+        import gi
+        gi.require_version("Notify", "0.7")
+        from gi.repository import Notify
+    except Exception:
+        return
+
+    def _held_back(self, *args, **kwargs):
+        return True
+
+    Notify.Notification.show = _held_back
+
+
+_hold_back_notifications()
+
+
 @pytest.fixture(autouse=True)
 def _no_real_kwin(monkeypatch):
     """Never let a test register or release hotkeys in the user's live KWin.
