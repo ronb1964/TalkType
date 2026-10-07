@@ -105,6 +105,25 @@ def test_battery_saver_sets_its_timeout(env):
     assert (cfg.auto_timeout_enabled, cfg.auto_timeout_minutes) == (True, 2)
 
 
+@pytest.mark.parametrize("preset_id", ["recommended", "lightest"])
+def test_leaving_battery_saver_puts_the_timeout_back_to_5_minutes(env, monkeypatch, preset_id):
+    """Ron, 2026-10-06: after Battery saver, the other presets used to keep
+    its 2-minute auto-stop."""
+    cfg, saved = env
+    monkeypatch.setattr("talktype.vulkan_setup_dialogs.ensure_files", lambda p, m, confirm: True)
+    monkeypatch.setattr("talktype.vulkan_setup_dialogs.run_speed_check", lambda p, m: True)
+    FakeTray().set_performance_preset("battery")
+    FakeTray().set_performance_preset(preset_id)
+    assert (cfg.auto_timeout_enabled, cfg.auto_timeout_minutes) == (True, 5)
+
+
+def test_a_timeout_set_in_preferences_is_kept(env, monkeypatch):
+    cfg, saved = env
+    cfg.auto_timeout_minutes = 10
+    FakeTray().set_performance_preset("lightest")
+    assert cfg.auto_timeout_minutes == 10
+
+
 @pytest.mark.parametrize("old_id", ["balanced", "accurate", "parakeet", "fastest", "custom"])
 def test_old_or_unknown_ids_are_ignored(env, old_id):
     """Review focus 3: an older GNOME extension sends the old ids."""

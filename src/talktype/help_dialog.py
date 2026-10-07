@@ -220,6 +220,7 @@ Quick changes from the tray menu (Performance):
   and language, usually Parakeet on your graphics card
 • <b>Lightest:</b> Whisper Base on the processor, the smallest download and the least work
 • <b>Battery saver:</b> Whisper Tiny on the processor, stops after 2 idle minutes
+  (choosing another preset puts that back to 5 minutes)
 After choosing one, the tray's Device line shows where it really runs.
 
 <b>Smart Text Processing</b>

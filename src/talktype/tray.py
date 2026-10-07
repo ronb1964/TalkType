@@ -859,6 +859,15 @@ class DictationTray:
             cfg.model, cfg.device = model, device
             for key, value in preset.extras:
                 setattr(cfg, key, value)
+            if not preset.extras:
+                # Leaving Battery saver: put back the settings it changed
+                # (2-minute auto-stop) to their defaults, unless the user has
+                # since chosen their own in Preferences (Ron, 2026-10-06).
+                from .config import Settings
+                battery = next((p for p in self._current_presets() if p.id == "battery"), None)
+                if battery and all(getattr(cfg, k, None) == v for k, v in battery.extras):
+                    for key, _ in battery.extras:
+                        setattr(cfg, key, getattr(Settings, key))
             save_config(cfg)
             from .app import _notify
             try:
