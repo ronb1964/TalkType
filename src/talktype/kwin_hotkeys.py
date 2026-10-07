@@ -33,6 +33,7 @@ never cost dictation.
 """
 
 import os
+import time
 
 from . import desktop_detect
 from .kwin_focus import (KWIN_SCRIPTING_INTERFACE, KWIN_SCRIPTING_PATH,
@@ -174,21 +175,33 @@ def _unregister_ours(bus) -> None:
                 logger.debug(f"Could not unregister KWin shortcut {name}: {e}")
 
 
+# Pauses before reading KWin's shortcuts again, about a second in all. KWin
+# registers the script's shortcuts a moment after it starts, so right after a
+# quick re-claim (a service restart) the first read can come back empty for
+# keys KWin is about to hold. Only keys still missing after these are refused.
+_READBACK_WAITS = (0.1, 0.2, 0.3, 0.4)
+
+
 def _log_refused(bus, shortcuts) -> None:
     """Say which hotkeys KDE would not give us (already another shortcut's)."""
-    try:
-        infos = bus.call("allShortcutInfos")
-        # (name, text, component, component name, context, context name,
-        #  keys, default keys), as read back from Plasma 6.7.4.
-        got = {str(i[0]): list(i[6]) for i in infos}
-    except Exception as e:
-        logger.debug(f"Could not read back KWin shortcuts: {e}")
-        return
-    for name, _text, key in shortcuts:
-        if not got.get(name):
-            logger.warning(
-                f"KDE already uses {key} for another shortcut, so it will still "
-                f"reach the focused app as well as starting dictation")
+    waits = list(_READBACK_WAITS)
+    while True:
+        try:
+            infos = bus.call("allShortcutInfos")
+            # (name, text, component, component name, context, context name,
+            #  keys, default keys), as read back from Plasma 6.7.4.
+            got = {str(i[0]): list(i[6]) for i in infos}
+        except Exception as e:
+            logger.debug(f"Could not read back KWin shortcuts: {e}")
+            return
+        missing = [s for s in shortcuts if not got.get(s[0])]
+        if not missing or not waits:
+            break
+        time.sleep(waits.pop(0))
+    for _name, _text, key in missing:
+        logger.warning(
+            f"KDE already uses {key} for another shortcut, so it will still "
+            f"reach the focused app as well as starting dictation")
 
 
 def claim(cfg, bus=None) -> bool:

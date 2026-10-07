@@ -56,6 +56,7 @@ class FakeBus:
 def on_kde(monkeypatch, tmp_path):
     monkeypatch.setattr(kh, "should_claim", lambda: True)
     monkeypatch.setattr(kh, "script_path", lambda: str(tmp_path / "kwin" / "hk.js"))
+    monkeypatch.setattr(kh.time, "sleep", lambda s: None)   # tests never really wait
 
 
 class TestKeySequences:
@@ -115,6 +116,33 @@ class TestClaim:
         bus = FakeBus(refuse={"talktype-hold-F8"})
         kh.claim(_cfg("F8", "", ""), bus)
         assert "KDE already uses F8" in caplog.text
+
+    def test_keys_kwin_is_still_registering_are_not_reported(self, on_kde, caplog, monkeypatch):
+        """Restarting the service re-claims the keys within a second, and the
+        first read-back can come before KWin has finished: 0.14.2's test logged
+        "KDE already uses F8" while KWin really held F8, F9 and Ctrl+Alt+V."""
+        waits = []
+        monkeypatch.setattr(kh.time, "sleep", waits.append)
+        bus = FakeBus()
+        real_call, empty_reads = bus.call, [2]
+
+        def slow_kwin(method, *args):
+            result = real_call(method, *args)
+            if method == "allShortcutInfos" and empty_reads[0]:
+                empty_reads[0] -= 1
+                return [(i[0], *i[1:6], [], i[7]) for i in result]
+            return result
+        bus.call = slow_kwin
+        kh.claim(_cfg(), bus)
+        assert "already uses" not in caplog.text
+        assert len(waits) == 2
+
+    def test_a_refused_key_is_reported_after_waiting(self, on_kde, caplog, monkeypatch):
+        waits = []
+        monkeypatch.setattr(kh.time, "sleep", waits.append)
+        kh.claim(_cfg("F8", "", ""), FakeBus(refuse={"talktype-hold-F8"}))
+        assert "KDE already uses F8" in caplog.text
+        assert 0 < sum(waits) <= 1.5          # it waits a little, never long
 
     def test_no_keys_means_no_script(self, on_kde):
         bus = FakeBus()
