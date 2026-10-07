@@ -42,10 +42,24 @@ echo "   ℹ️  Dev CUDA libraries preserved (if you had them)"
 
 # 4. Remove Hugging Face model cache (including xet chunk cache)
 echo "4. Removing Hugging Face model cache..."
+# Every model TalkType downloads, so first run really downloads them again:
+# Whisper for the processor and CUDA (Systran), Parakeet for the processor
+# (istupakov) and for Vulkan (ggml-org), Whisper for Vulkan (ggerganov), and
+# the self-corrections AI (Qwen). Parakeet became the default in 0.14.0 and
+# was never removed here, so release tests skipped its download. Other apps'
+# models in the same cache are left alone.
+TALKTYPE_MODEL_REPOS=(
+    "models--Systran--faster-whisper-*"
+    "models--istupakov--parakeet-tdt-0.6b-v3-onnx"
+    "models--ggml-org--parakeet-GGUF"
+    "models--ggerganov--whisper.cpp"
+    "models--Qwen--Qwen2.5-1.5B-Instruct-GGUF"
+)
 if [ -d ~/.cache/huggingface/hub ]; then
-    rm -rf ~/.cache/huggingface/hub/models--Systran--faster-whisper-* 2>/dev/null || true
-    rm -rf ~/.cache/huggingface/hub/.locks/models--Systran--faster-whisper-* 2>/dev/null || true
-    echo "   ✓ All whisper models removed (small, medium, large - will be re-downloaded)"
+    for repo in "${TALKTYPE_MODEL_REPOS[@]}"; do
+        rm -rf ~/.cache/huggingface/hub/$repo ~/.cache/huggingface/hub/.locks/$repo 2>/dev/null || true
+    done
+    echo "   ✓ All TalkType models removed (Whisper, Parakeet, Vulkan and AI - will be re-downloaded)"
 else
     echo "   ✓ No model cache found"
 fi
@@ -82,7 +96,9 @@ fi
 echo ""
 echo "🔍 Verification:"
 [ ! -d ~/.config/talktype ] && echo "   ✓ Config dir removed" || echo "   ❌ Config dir still exists!"
-[ ! -d ~/.local/share/talktype ] && echo "   ✓ Data dir removed" || echo "   ❌ Data dir still exists!"
+[ ! -d ~/.local/share/TalkType ] && echo "   ✓ Data dir removed" || echo "   ❌ Data dir still exists!"
+left=$(for repo in "${TALKTYPE_MODEL_REPOS[@]}"; do ls -d ~/.cache/huggingface/hub/$repo 2>/dev/null || true; done)
+[ -z "$left" ] && echo "   ✓ TalkType models removed" || echo "   ❌ Models still there: $left"
 ! pgrep -f "talktype" > /dev/null && echo "   ✓ No processes running" || echo "   ❌ Processes still running!"
 
 echo ""
