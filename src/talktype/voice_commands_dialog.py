@@ -111,10 +111,11 @@ def _on_key_press(dialog, event):
 def _build_markup():
     """Build the Pango markup for the cheat sheet content."""
     return '''<span size="large"><b>Voice Commands</b></span>
+The commands are English words, whatever language you dictate in.
 
 <b>Punctuation</b>
   <b>comma</b> → ,          <b>period</b> / <b>full stop</b> → .
-  <b>question mark</b> → ?    <b>exclamation point</b> → !
+  <b>question mark</b> → ?    <b>exclamation point</b> / <b>exclamation mark</b> → !
   <b>semicolon</b> → ;        <b>colon</b> → :
   <b>apostrophe</b> → '       <b>quote</b> → "
   <b>open quote</b> → \u201c         <b>close quote</b> → \u201d
@@ -127,22 +128,31 @@ def _build_markup():
   <b>open brace</b> → {         <b>close brace</b> → }
 
 <b>Formatting</b>
-  <b>new line</b> / <b>return</b> / <b>line break</b> → line break
-  <b>new paragraph</b> → double line break
+  <b>new line</b> / <b>newline</b> / <b>return</b> / <b>line break</b> → line break
+  <b>new paragraph</b> / <b>paragraph break</b> → double line break
   <b>tab</b> → tab character
   <b>soft break</b> → three spaces
 
 <b>Undo</b>
-  <b>delete last word</b> / <b>undo last word</b> → delete last dictated word
+  <b>delete last word</b> / <b>undo last word</b> / <b>remove last word</b> → delete last dictated word
   <b>delete last sentence</b> → delete back to previous sentence
   <b>delete last paragraph</b> → delete back to last line break
   <b>delete last 3 words</b> / <b>undo last two sentences</b> → counted undo (1–10 or digits)
-  <b>delete everything</b> / <b>clear all</b> → wipe the entire input field (Ctrl+A, Backspace)
+  <b>delete everything</b> / <b>delete all</b> / <b>clear everything</b> / <b>clear all</b> /
+  <b>undo everything</b> / <b>undo all</b> → wipe the entire input field (Ctrl+A, Backspace)
+
+<b>Changing Your Mind</b>
+Correct yourself mid-sentence with <b>no wait</b>, <b>I mean</b>, <b>make that</b>,
+<b>scratch that</b> or <b>or rather</b>:
+  "meet at 3, no wait, 4" → "meet at 4"
+Needs <b>Fix self-corrections with AI</b> turned on in Preferences → Advanced
+(a one-time download of about 1.1 GB).
 
 <b>Literal Words</b>
-Say <b>literal</b> or <b>the word</b> before a command to type it as text:
-  <b>literal period</b> → "period"    <b>literal comma</b> → "comma"
-  <b>literal tab</b> → "tab"          <b>literal return</b> → "return"
+Say <b>literal</b> or <b>the word</b> before any punctuation or formatting word
+to type the word itself:
+  <b>literal period</b> → "period"    <b>the word comma</b> → "comma"
+  <b>literal new line</b> → "new line"
 
 <b>Custom Commands</b>
 Define your own in Preferences → Commands tab.
