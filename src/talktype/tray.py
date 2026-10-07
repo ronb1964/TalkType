@@ -178,8 +178,8 @@ def recommend_notice_text(setup):
 def maybe_show_recommend_notice():
     """Once, on the first start after updating: tell existing users when the
     recommended setup differs from theirs (Ron, 2026-10-06). Never on first run
-    (first run sets recommend_notice_shown) or the Flatpak. Returns False so it
-    can run as a one-shot GLib timeout."""
+    (first run sets recommend_notice_shown) or the Flatpak. Runs as a GLib
+    timeout: True (ask again) until the dictation service is up, then False."""
     try:
         import os as _os
         from . import recommend
@@ -187,6 +187,9 @@ def maybe_show_recommend_notice():
         from .cuda_helper import is_first_run
         if _os.environ.get("FLATPAK_ID") or is_first_run():
             return False
+        from .service_launcher import find_service_pids
+        if not find_service_pids():
+            return True        # the service isn't up yet: ask again next tick
         cfg = load_config()
         if cfg.recommend_notice_shown:
             return False
@@ -265,6 +268,11 @@ class DictationTray:
 
         # Once after updating: point existing users at the recommended setup.
         GLib.timeout_add_seconds(15, maybe_show_recommend_notice)
+        # Find the graphics chip now, off the main loop: the Performance menu
+        # needs it, and the first lookup runs nvidia-smi (cached after that).
+        import threading
+        from . import recommend as _recommend
+        threading.Thread(target=_recommend.detect_hardware, daemon=True).start()
 
         # Auto-start will be triggered after welcome dialog on first run
         # or immediately if not first run (handled in main())
@@ -833,6 +841,11 @@ class DictationTray:
             logger.info(f"Ignoring unknown performance preset {preset_id!r}")
             self._revert_preset_radio()
             return
+        if self._get_current_preset() == preset_id:
+            # Already in effect (the GNOME menu sends clicks on the dotted
+            # item too): no download check, speed check or restart.
+            logger.info(f"Performance preset {preset_id!r} is already in effect")
+            return
         try:
             from .config import load_config, save_config
             from .model_helper import is_model_cached_fast, download_model_with_progress
@@ -882,6 +895,23 @@ class DictationTray:
             self.restart_service(None)
         except Exception as e:
             logger.error(f"Failed to apply performance preset: {e}")
+
+    def _sync_preset_radios(self):
+        """Refresh the Performance labels and put the dot on the active preset.
+        The busy flag (which makes set_performance_preset ignore the toggles
+        this causes) is always cleared, or every later click would be ignored."""
+        self._updating_preset = True
+        try:
+            for _p in self._current_presets():
+                if _p.id in self.preset_radios:
+                    self.preset_radios[_p.id].set_label(f"{_p.label} ({_p.description})")
+            current_preset = self._get_current_preset()
+            if current_preset in self.preset_radios:
+                self.preset_radios[current_preset].set_active(True)
+            elif hasattr(self, 'preset_custom'):
+                self.preset_custom.set_active(True)
+        finally:
+            self._updating_preset = False
 
     def _revert_preset_radio(self):
         """Put the Performance radio back on the preset that's actually in use."""
@@ -948,16 +978,7 @@ class DictationTray:
 
                 # Update performance preset radio buttons
                 if hasattr(self, 'preset_radios'):
-                    self._updating_preset = True
-                    for _p in self._current_presets():
-                        if _p.id in self.preset_radios:
-                            self.preset_radios[_p.id].set_label(f"{_p.label} ({_p.description})")
-                    current_preset = self._get_current_preset()
-                    if current_preset in self.preset_radios:
-                        self.preset_radios[current_preset].set_active(True)
-                    elif hasattr(self, 'preset_custom'):
-                        self.preset_custom.set_active(True)
-                    self._updating_preset = False
+                    self._sync_preset_radios()
             except Exception as e:
                 logger.error(f"Failed to update model/device display: {e}")
                 self.model_display_item.set_label("Active Model: Unknown")

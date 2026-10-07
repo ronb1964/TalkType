@@ -274,7 +274,13 @@ class TalkTypeDBusService(dbus.service.Object):
         The GNOME extension builds its menu from this, so it can't drift from
         the tray's."""
         get = getattr(self.app, "get_presets", None)
-        return dbus.Array([dbus.Struct(p, signature='sss') for p in (get() if get else [])],
+        try:
+            presets = get() if get else []
+        except Exception as e:
+            # An empty list, not a D-Bus error: the menu keeps working.
+            logger.error(f"Could not work out the presets: {e}")
+            presets = []
+        return dbus.Array([dbus.Struct(p, signature='sss') for p in presets],
                           signature='(sss)')
 
     @dbus.service.method(DBUS_INTERFACE, in_signature='s')

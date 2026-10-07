@@ -2836,31 +2836,6 @@ def show_hotkey_test_dialog():
     return response == Gtk.ResponseType.OK
 
 
-def _setup_vulkan_engine_first_run():
-    """First run on the graphics card: download the Vulkan engine and switch
-    the device to it. On failure the device stays on the processor."""
-    try:
-        from talktype import whisper_vulkan as wv
-        from talktype.download_progress_dialog import DownloadTask, UnifiedDownloadDialog
-        from talktype.config import load_config, save_config
-        if not wv.is_engine_installed():
-            dialog = UnifiedDownloadDialog(
-                parent=None, title="Setting Up Vulkan",
-                description="A small engine that runs speech recognition on your graphics card. One-time download.")
-            dialog.add_task(DownloadTask("Graphics engine", "whisper.cpp (Vulkan)",
-                                         wv.ENGINE_SIZE_TEXT, wv.make_engine_download_func()))
-            dialog.run()
-        if wv.is_engine_installed():
-            config = load_config()
-            config.device = "vulkan"
-            save_config(config)
-            logger.info("✅ Vulkan engine ready; device set to vulkan")
-        else:
-            logger.warning("Vulkan engine not downloaded; staying on the processor")
-    except Exception as e:
-        logger.warning(f"Vulkan setup failed, staying on the processor: {e}")
-
-
 def _vulkan_speed_check_first_run(model):
     """True if the graphics chip should run *model*: the same speed check (and
     messages) as choosing Vulkan in Preferences.
@@ -2957,7 +2932,7 @@ def _apply_first_run_setup(result):
         # still ends with a model that works.
         vulkan_ready = False
         if device.lower() == "vulkan":
-            _setup_vulkan_engine_first_run()
+            # One download window: it fetches the engine too when it's missing.
             vulkan_ready = (_download_vulkan_model_first_run(selected_model)
                             and _vulkan_speed_check_first_run(selected_model))
             # Re-read: the steps above saved what they learned (the speed

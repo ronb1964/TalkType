@@ -163,3 +163,43 @@ def test_old_preset_table_is_gone():
     src = (tray_mod.__file__)
     text = open(src).read()
     assert "PERFORMANCE_PRESETS" not in text and "_download_cuda_for_most_accurate" not in text
+
+
+def test_preset_radio_sync_always_clears_the_busy_flag():
+    """Review minor: the flag was set without try/finally, so one failure
+    would have left every later preset click silently ignored."""
+    t = FakeTray()
+    t.preset_radios = {}
+
+    def broken():
+        raise RuntimeError("presets")
+    t._current_presets = broken
+    with pytest.raises(RuntimeError):
+        tray_mod.DictationTray._sync_preset_radios(t)
+    assert t._updating_preset is False
+
+
+def test_choosing_the_active_preset_again_changes_nothing(env, monkeypatch):
+    """The GNOME menu sends a click on the dotted item too: it used to rerun
+    the download check and speed check, then restart the service."""
+    cfg, saved = env
+    cfg.model, cfg.device = "parakeet-v3", "vulkan"     # Recommended on NVIDIA
+    checks = []
+    monkeypatch.setattr("talktype.vulkan_setup_dialogs.ensure_files",
+                        lambda p, m, confirm: checks.append(m) or True)
+    monkeypatch.setattr("talktype.vulkan_setup_dialogs.run_speed_check",
+                        lambda p, m: checks.append(("speed", m)) or True)
+    t = FakeTray()
+    t.set_performance_preset("recommended")
+    assert checks == [] and saved == [] and t.restarted == 0
+
+
+def test_dbus_presets_failure_is_an_empty_list_not_an_error(caplog):
+    from talktype.dbus_service import TalkTypeDBusService
+    svc = TalkTypeDBusService.__new__(TalkTypeDBusService)
+
+    def broken():
+        raise RuntimeError("no presets")
+    svc.app = types.SimpleNamespace(get_presets=broken)
+    assert list(svc.GetPresets()) == []
+    assert "no presets" in caplog.text

@@ -327,34 +327,6 @@ def test_transcription_ignores_the_engines_no_speech_score(monkeypatch):
 
 # --- first-run setup: the light choice for NVIDIA ---------------------------------
 
-def test_first_run_light_choice_switches_the_device_once_the_engine_is_there(monkeypatch):
-    from talktype import welcome_dialog as wd
-    from talktype.config import Settings
-    saved = []
-    monkeypatch.setattr(wv, "is_engine_installed", lambda *a: True)
-    monkeypatch.setattr("talktype.config.load_config", lambda: Settings())
-    monkeypatch.setattr("talktype.config.save_config", lambda c: saved.append(c.device))
-    wd._setup_vulkan_engine_first_run()
-    assert saved == ["vulkan"]
-
-
-def test_first_run_light_choice_stays_on_the_processor_if_the_engine_never_arrives(monkeypatch):
-    from talktype import welcome_dialog as wd
-    import talktype.download_progress_dialog as dpd
-    saved = []
-
-    class NoDownload:
-        def __init__(self, **kw): pass
-        def add_task(self, task): pass
-        def run(self): return {}
-
-    monkeypatch.setattr(wv, "is_engine_installed", lambda *a: False)
-    monkeypatch.setattr(dpd, "UnifiedDownloadDialog", NoDownload)
-    monkeypatch.setattr("talktype.config.save_config", lambda c: saved.append(c.device))
-    wd._setup_vulkan_engine_first_run()
-    assert saved == []
-
-
 def test_first_run_model_download_is_skipped_when_already_there(monkeypatch):
     from talktype import welcome_dialog as wd
     monkeypatch.setattr(wv, "is_engine_installed", lambda *a: True)

@@ -13,7 +13,7 @@ def env(monkeypatch):
     calls = []
     monkeypatch.setattr("talktype.config.load_config", lambda: cfg)
     monkeypatch.setattr("talktype.config.save_config", lambda c: calls.append(("save", c.model, c.device)))
-    monkeypatch.setattr(wd, "_setup_vulkan_engine_first_run", lambda: calls.append(("engine",)))
+    monkeypatch.setattr(wd, "_setup_vulkan_engine_first_run", lambda: calls.append(("engine",)), raising=False)
     monkeypatch.setattr(wd, "_download_vulkan_model_first_run", lambda m: calls.append(("vk", m)) or True)
     monkeypatch.setattr(wd, "_vulkan_speed_check_first_run", lambda m: calls.append(("speed", m)) or True)
     monkeypatch.setattr("talktype.model_helper.is_model_cached", lambda m: False)
@@ -23,9 +23,13 @@ def env(monkeypatch):
 
 
 def test_graphics_card_setup(env):
+    """One download window: the model's own window fetches the engine too.
+    A separate engine window first meant two windows, and on a dead network
+    the engine was tried twice (review minor)."""
     cfg, calls = env
     wd._apply_first_run_setup({"model": "parakeet-v3", "device": "vulkan", "dictation_language": "en"})
-    assert ("engine",) in calls and ("vk", "parakeet-v3") in calls and ("speed", "parakeet-v3") in calls
+    assert ("engine",) not in calls
+    assert ("vk", "parakeet-v3") in calls and ("speed", "parakeet-v3") in calls
     assert (cfg.model, cfg.device, cfg.dictation_language) == ("parakeet-v3", "vulkan", "en")
     assert cfg.recommend_notice_shown is True
     assert not any(c[0] == "cpu" for c in calls)
@@ -60,7 +64,6 @@ def store(monkeypatch):
     calls = []
     monkeypatch.setattr("talktype.config.load_config", lambda: types.SimpleNamespace(**saved))
     monkeypatch.setattr("talktype.config.save_config", lambda c: saved.update(vars(c)))
-    monkeypatch.setattr(wd, "_setup_vulkan_engine_first_run", lambda: None)
     monkeypatch.setattr(wd, "_download_vulkan_model_first_run", lambda m: True)
     monkeypatch.setattr("talktype.model_helper.is_model_cached", lambda m: False)
     monkeypatch.setattr("talktype.model_helper.download_model_with_progress",

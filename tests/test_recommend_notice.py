@@ -19,6 +19,7 @@ def env(monkeypatch):
     monkeypatch.setattr("talktype.config.save_config", lambda c: saved.append(c.recommend_notice_shown))
     monkeypatch.setattr("talktype.app._notify", lambda t, b: notes.append(b))
     monkeypatch.setattr("talktype.cuda_helper.is_first_run", lambda: False)
+    monkeypatch.setattr("talktype.service_launcher.find_service_pids", lambda: [4242])
     monkeypatch.setattr(r, "detect_hardware", lambda cfg=None: NVIDIA)
     monkeypatch.delenv("FLATPAK_ID", raising=False)
     return cfg, notes, saved
@@ -57,3 +58,14 @@ def test_notice_wording():
         "There's a better setup for this computer: Parakeet on your NVIDIA GeForce "
         "RTX 4070 SUPER. Choose Performance → Recommended for this computer in the "
         "TalkType menu to switch.")
+
+
+def test_waits_for_the_dictation_service(env, monkeypatch):
+    """Spec: the notice comes once the service is up, not on a fixed timer."""
+    cfg, notes, saved = env
+    monkeypatch.setattr("talktype.service_launcher.find_service_pids", lambda: [])
+    assert tray.maybe_show_recommend_notice() is True       # ask again later
+    assert notes == [] and saved == []
+    monkeypatch.setattr("talktype.service_launcher.find_service_pids", lambda: [4242])
+    assert tray.maybe_show_recommend_notice() is False
+    assert len(notes) == 1
