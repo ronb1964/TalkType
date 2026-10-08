@@ -32,7 +32,9 @@ window.talktype-prefs {
     padding: 12px 24px;
     margin: 0 4px;
     border-radius: 6px 6px 0 0;
-    transition: all 150ms ease;
+    /* No transition here: Preferences picks its tab (--tab, tray -> Your
+       Stats) before the first frame, and on KDE a transition started then
+       never runs, leaving "General" highlighted over the Stats page. */
     font-weight: 500;
 }
 
