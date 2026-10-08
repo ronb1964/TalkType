@@ -71,16 +71,24 @@
 
   <screenshots>
     <screenshot type="default">
-      <caption>Welcome screen with first-run setup guidance</caption>
-      <image>https://raw.githubusercontent.com/ronb1964/TalkType/main/screenshots/TalkType_welcome.png</image>
+      <caption>Hold a key and talk: your words are typed into any app</caption>
+      <image>https://raw.githubusercontent.com/ronb1964/TalkType/main/screenshots/dictating.png</image>
     </screenshot>
     <screenshot>
-      <caption>Preferences window with GPU acceleration and model selection</caption>
-      <image>https://raw.githubusercontent.com/ronb1964/TalkType/main/screenshots/TalkType_preferences.png</image>
+      <caption>First run recommends the best setup for your computer and language</caption>
+      <image>https://raw.githubusercontent.com/ronb1964/TalkType/main/screenshots/welcome-recommended.png</image>
     </screenshot>
     <screenshot>
-      <caption>Hotkey configuration confirmation dialog</caption>
-      <image>https://raw.githubusercontent.com/ronb1964/TalkType/main/screenshots/TalkType_Nvidia.png</image>
+      <caption>The tray menu, with one-click Performance presets</caption>
+      <image>https://raw.githubusercontent.com/ronb1964/TalkType/main/screenshots/tray-performance.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Preferences: speech model, graphics card and hotkeys</caption>
+      <image>https://raw.githubusercontent.com/ronb1964/TalkType/main/screenshots/prefs-general.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Voice commands for punctuation, formatting and corrections</caption>
+      <image>https://raw.githubusercontent.com/ronb1964/TalkType/main/screenshots/voice-commands.png</image>
     </screenshot>
   </screenshots>
 

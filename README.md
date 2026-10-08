@@ -33,12 +33,25 @@ Most voice dictation tools on Linux are either cloud-based (privacy concerns), c
 ## Screenshots
 
 <p align="center">
-  <img src="screenshots/tray-menu.png" alt="System Tray Menu" width="200">
-  &nbsp;&nbsp;&nbsp;
-  <img src="screenshots/recording-indicator.png" alt="Recording Indicator" width="150">
+  <img src="screenshots/dictating.png" alt="Dictating a letter in LibreOffice Writer, with TalkType's recording indicator showing" width="90%">
 </p>
 <p align="center">
-  <em>System tray menu &bull; Recording indicator with timer</em>
+  <em>Hold F8 and talk: the orb shows TalkType is listening, and your words land wherever you're typing</em>
+</p>
+
+<p align="center">
+  <img src="screenshots/welcome-recommended.png" alt="First run: the recommended setup for this computer" width="40%">
+  <img src="screenshots/welcome-other-options.png" alt="First run: Other options, with every choice explained" width="40%">
+</p>
+<p align="center">
+  <em>First run recommends a setup for your computer and language &bull; Other options explains every choice</em>
+</p>
+
+<p align="center">
+  <img src="screenshots/tray-performance.png" alt="Tray menu with the Performance presets" width="70%">
+</p>
+<p align="center">
+  <em>The tray menu, with the Performance presets</em>
 </p>
 
 <p align="center">
@@ -46,7 +59,7 @@ Most voice dictation tools on Linux are either cloud-based (privacy concerns), c
   <img src="screenshots/prefs-advanced.png" alt="Preferences - Advanced" width="45%">
 </p>
 <p align="center">
-  <em>General settings with model selection &bull; Advanced settings with GPU acceleration</em>
+  <em>Model, graphics card and hotkeys &bull; Dictation cleanup and AI self-corrections</em>
 </p>
 
 <p align="center">
@@ -54,7 +67,15 @@ Most voice dictation tools on Linux are either cloud-based (privacy concerns), c
   <img src="screenshots/prefs-commands.png" alt="Preferences - Commands" width="45%">
 </p>
 <p align="center">
-  <em>Audio settings with microphone test &bull; Custom voice commands</em>
+  <em>Microphone test and recording indicator &bull; Custom voice commands and Fix a Word</em>
+</p>
+
+<p align="center">
+  <img src="screenshots/prefs-stats.png" alt="Preferences - Stats" width="45%">
+  <img src="screenshots/voice-commands.png" alt="Voice Commands quick reference" width="30%">
+</p>
+<p align="center">
+  <em>Your dictation stats &bull; The Voice Commands quick reference</em>
 </p>
 
 <p align="center">
