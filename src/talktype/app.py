@@ -3420,6 +3420,8 @@ def parse_args():
     return ap.parse_args()
 
 def main():
+    from . import desktop_identity
+    desktop_identity.apply()        # TalkType's icon on its windows, not KDE's generic one
     # The loaded speech model. Usually built after the GTK loop starts; built
     # earlier when it must first be downloaded (see the GTK section below).
     global model

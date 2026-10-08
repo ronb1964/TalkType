@@ -2002,6 +2002,8 @@ def _ensure_ydotoold_running():
         logger.error(f"Failed to start ydotoold: {e}")
 
 def main():
+    from . import desktop_identity
+    desktop_identity.apply()        # TalkType's icon on its windows, not KDE's generic one
     _acquire_tray_singleton()
 
     # Ensure ydotoold is running for text injection

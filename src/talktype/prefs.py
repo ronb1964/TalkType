@@ -5054,6 +5054,8 @@ class PreferencesWindow:
 
 
 def main():
+    from . import desktop_identity
+    desktop_identity.apply()        # TalkType's icon on its windows, not KDE's generic one
     import argparse
     parser = argparse.ArgumentParser(description="TalkType Preferences")
     parser.add_argument("--tab", choices=["general", "audio", "advanced", "commands", "stats", "updates"],
