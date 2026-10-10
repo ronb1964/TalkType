@@ -229,25 +229,46 @@ _RE_STANDALONE_I = re.compile(r"\bi\b(?!\.\s*e\.)")
 _RE_PUNCT_OUTSIDE_QUOTE = re.compile(r"\u201d( ?)([!?,;:.])")
 
 # --- 14) Email/URL formatting ---
+# Email endings. The country ones (.no .it .in .my .us ...) are also English
+# words that start sentences: with spaces allowed around the dot, "Look at this.
+# My car broke." came out "Look@this.My car broke.". So:
+#   - "name at domain.tld" written JOINED becomes an address before anything
+#     else runs (the space-after-period pass would split it apart otherwise),
+#     for any ending;
+#   - with spaces around the dot only the endings that can't be words count;
+#   - the space-closing fixes only touch the text right after an "@" address.
+_EMAIL_TLDS_SAFE = "com|org|net|edu|gov|io"
+_EMAIL_TLDS_ALL = (_EMAIL_TLDS_SAFE + "|co|uk|ca|de|fr|us|au|jp|cn|in|br|mx|ru|kr|es|it|nl|se|"
+                   "no|fi|pl|cz|hu|ro|gr|pt|ie|nz|za|ae|il|tr|th|vn|ph|id|my|sg|hk|tw")
+# Case-sensitive on purpose: endings are lowercase, and "three.No" is a
+# transcriber's missed space before a new sentence, not an address.
+_RE_EMAIL_JOINED = re.compile(
+    r"([a-zA-Z0-9._-]+)\s+at\s+([a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*\.(?:" + _EMAIL_TLDS_ALL + r"))\b"
+)
 _RE_EMAIL_AT_WORD = re.compile(
-    r"([a-zA-Z0-9._-]+)\s+at\s+([a-zA-Z0-9.-]+)\s*\.\s*"
-    r"(com|org|net|edu|gov|io|co|uk|ca|de|fr|us|au|jp|cn|in|br|mx|ru|kr|es|it|nl|se|no|fi|pl|cz|hu|ro|gr|pt|ie|nz|za|ae|il|tr|th|vn|ph|id|my|sg|hk|tw)\b",
+    r"([a-zA-Z0-9._-]+)\s+at\s+([a-zA-Z0-9.-]+?)\s*\.\s*(" + _EMAIL_TLDS_SAFE + r")\b",
     re.IGNORECASE
 )
-_EMAIL_TLD_FIXES = [
-    (re.compile(r"@\s+"), "@"),
-    (re.compile(r"\.\s*([Cc]om)\b"), ".com"),
-    (re.compile(r"\.\s*([Oo]rg)\b"), ".org"),
-    (re.compile(r"\.\s*([Nn]et)\b"), ".net"),
-    (re.compile(r"\.\s*([Ee]du)\b"), ".edu"),
-    (re.compile(r"\.\s*([Gg]ov)\b"), ".gov"),
-    (re.compile(r"\.\s*([Ii]o)\b"), ".io"),
-    (re.compile(r"\.\s*([Cc]o)\b"), ".co"),
-    (re.compile(r"\.\s*([Uu]k)\b"), ".uk"),
-    (re.compile(r"\.\s*([Cc]a)\b"), ".ca"),
-    (re.compile(r"\.\s*([Dd]e)\b"), ".de"),
-    (re.compile(r"\.\s*([Ff]r)\b"), ".fr"),
-]
+_RE_EMAIL_SPLIT_TLD = re.compile(
+    r"(@[\w-]+(?:\.[\w-]+)*)\s*\.\s*(" + _EMAIL_TLDS_ALL + r")\b",
+    re.IGNORECASE
+)
+_RE_EMAIL_AT_SPACE = re.compile(r"@\s+")
+
+
+# A dot directly followed by a web ending (no space): part of an address.
+_RE_JOINED_TLD = re.compile(r"\.(?:" + _EMAIL_TLDS_ALL + r"|dev)\b")  # lowercase: "it.It" is a missed space
+
+
+def _fix_email_spacing(text: str) -> str:
+    """Close the gaps the punctuation passes open inside an address:
+    "john@gmail. Com" -> "john@gmail.com", "a@b. co. uk" -> "a@b.co.uk"."""
+    text = _RE_EMAIL_AT_SPACE.sub("@", text)
+    while True:
+        fixed = _RE_EMAIL_SPLIT_TLD.sub(lambda m: f"{m.group(1)}.{m.group(2).lower()}", text)
+        if fixed == text:
+            return text
+        text = fixed
 
 # --- 15) Time formatting ---
 # Fix Whisper's mangled time output: "11. 30 p. m." → "11:30 PM", "11 p. m." → "11 PM"
@@ -346,6 +367,10 @@ def _space_after_ender_repl(m: re.Match) -> str:
         # protected by _RE_ADDRESSY; filenames had no equivalent guard.
         if (prev.isalnum() or prev in "_-") and _RE_FILE_EXT.match(s, i):
             return ch
+        # Domains written joined ("example.com", "github.com/x", "a.co.uk"):
+        # same reason. A real sentence break always has the space already.
+        if (prev.isalnum() or prev == "-") and _RE_JOINED_TLD.match(s, i):
+            return ch
     return ch + " "
 
 
@@ -404,7 +429,11 @@ def normalize_text(text: str, auto_period: bool = True) -> str:
     if not text:
         return text
 
-    # --- 0) Handle quoted text - preserve everything inside quotes as literal ---
+    # --- 0) A spoken address written joined ("ron at example.de"), before the
+    #        space-after-period pass can split it (see _RE_EMAIL_JOINED) ---
+    text = _RE_EMAIL_JOINED.sub(r"\1@\2", text)
+
+    # --- 0.05) Handle quoted text - preserve everything inside quotes as literal ---
     quoted_sections = []
     def save_quoted(match):
         quoted_sections.append(match.group(1))
@@ -556,8 +585,7 @@ def normalize_text(text: str, auto_period: bool = True) -> str:
 
     # --- 14) Fix email/URL formatting ---
     text = _RE_EMAIL_AT_WORD.sub(r"\1@\2.\3", text)
-    for pat, repl in _EMAIL_TLD_FIXES:
-        text = pat.sub(repl, text)
+    text = _fix_email_spacing(text)
 
     # (Time formatting moved to step 6.5 — see the note there.)
 

@@ -1,3 +1,4 @@
+import pytest
 from talktype.normalize import normalize_text
 
 def test_basic_punct():
@@ -489,3 +490,51 @@ def test_auto_period_off_still_normalizes_everything_else():
     """Turning the period off must not turn off capitalization or spacing."""
     out = normalize_text("hello comma world", auto_period=False)
     assert out == "Hello, world"
+
+
+# The email rule turns "name at domain.tld" into name@domain.tld. Country
+# endings like .no .it .in .my .us are also English words that start sentences,
+# so "Look at this. My car broke." became "Look@this.My car broke." A space
+# around the dot may only count for endings that can't be words.
+@pytest.mark.parametrize("said", [
+    "Meet me at three. No wait, four o'clock.",
+    "Look at this. My car broke.",
+    "We met at church. It was nice.",
+    "I'll be at home. In the morning I leave.",
+    "We arrived at noon. Us and the kids.",
+    "Stop at the bank. Es is closed.",
+])
+def test_sentence_after_at_is_not_an_email(said):
+    assert "@" not in normalize_text(said)
+
+
+@pytest.mark.parametrize("said, expected", [
+    ("email john at gmail.com", "Email john@gmail.com."),
+    ("email john at gmail. com", "Email john@gmail.com."),
+    ("ron at example . org please", "Ron@example.org please."),
+    ("send it to ron at example.de", "Send it to ron@example.de."),
+    ("Write to sales at acme.co today", "Write to sales@acme.co today."),
+])
+def test_spoken_email_addresses_still_join(said, expected):
+    assert normalize_text(said) == expected
+
+
+# The space-after-the-dot fix for email endings ran on ALL text, so a sentence
+# starting with "Net", "Co" or "De" got glued to the one before it.
+@pytest.mark.parametrize("said", [
+    "That's it. Net profit was up.",
+    "I left early. Co-workers stayed.",
+])
+def test_tld_space_fix_only_touches_email_addresses(said):
+    out = normalize_text(said)
+    assert ". " in out and ".net" not in out.lower() and ".co" not in out.lower()
+
+
+def test_tld_space_fix_still_joins_a_split_address():
+    assert normalize_text("write to john@gmail. Com today") == "Write to john@gmail.com today."
+
+
+def test_missed_space_before_a_capital_is_still_a_sentence_break():
+    """Endings are lowercase; "it.It" is a transcriber's missed space."""
+    assert normalize_text("I like it.It was good") == "I like it. It was good."
+    assert normalize_text("meet me at three.No wait") == "Meet me at three. No wait."
