@@ -93,6 +93,18 @@
   </screenshots>
 
   <releases>
+    <release version="0.14.4" date="2026-10-10">
+      <description>
+        <p>Clearer typing problems, faster start and better self-corrections</p>
+        <ul>
+          <li>When a dictation can't be typed, TalkType says why and what fixes it</li>
+          <li>Whisper models load once at start instead of twice</li>
+          <li>Self-corrections work when a pause splits off "no wait"</li>
+          <li>Performance has a Custom item that opens Preferences, in the GNOME menu too</li>
+          <li>Long dropdown lists open in columns; Stats and Updates fit the window</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.14.3" date="2026-10-10">
       <description>
         <p>Fixes for GNOME and KDE</p>

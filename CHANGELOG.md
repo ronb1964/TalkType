@@ -2,6 +2,38 @@
 
 All notable changes to TalkType are documented here.
 
+## [0.14.4] - 2026-10-10
+
+Mostly things that came out of testing 0.14.3, plus a few older bugs that a
+second review turned up.
+
+- When a dictation can't be typed into the window, TalkType now tells you why
+  and what fixes it. Usually it's the typing setup: after Fix Typing you have
+  to restart the computer before typing works, and nothing said so. A Fedora
+  user dictated for minutes with every word transcribed and none typed, and
+  figured his laptop was too weak. If the typing helper has stopped, TalkType
+  starts it again.
+- The welcome screen said you could skip the typing setup and use Clipboard
+  Paste instead. That was wrong, paste needs the same setup. It now says your
+  dictations are still kept in Recent Dictations.
+- Whisper models were loaded twice every time the dictation service started,
+  once just to check the model was downloaded. Large-v3 starts a couple of
+  seconds faster now and doesn't need the extra memory.
+- Correcting yourself works better when you pause before "no wait". The
+  speech model puts a period there and the AI read it as two sentences, so
+  "Meet me at three. No wait, four o'clock." mostly came out unchanged. In
+  testing it went from 4 out of 10 fixed to 8 out of 10. It's also stricter
+  now, so it won't drop the "no wait" and keep the wrong time.
+- "look at github.com" and the like turned into an email address. Fixed.
+- A failed download of the AI model could be reported as finished.
+- The Stats page fits without the Reset button half hidden under the edge,
+  and so does Updates.
+- Performance > Custom opens Preferences now, in the tray and in the GNOME
+  menu. The GNOME menu didn't have Custom at all, so a custom setup showed no
+  dot there. That needs extension version 16, and Check for Updates offers it.
+- Long dropdown lists like the language list open as three columns, so they
+  fit on the screen with your current choice showing.
+
 ## [0.14.3] - 2026-10-10
 
 Small one, mostly fixes. The main one came from Stefano on GNOME.
