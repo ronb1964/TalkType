@@ -4113,8 +4113,11 @@ class PreferencesWindow:
             
             # Run the fix
             success, message = uinput_helper.install_udev_rule_with_pkexec(self.window)
-            
+
             if success:
+                # A daemon started before the permissions existed has already
+                # exited; start it again in case they work without a restart.
+                uinput_helper.ensure_ydotoold_running()
                 # Show success dialog
                 msg = Gtk.MessageDialog(
                     transient_for=self.window,

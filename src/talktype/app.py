@@ -2575,6 +2575,20 @@ def _report_undelivered(outcome: str, beeps_on: bool):
     desktop without notifications still hears that something went wrong.
     """
     message = _UNDELIVERED_NOTICES[outcome]
+    if outcome == "failed":
+        # Say why, when it's the typing setup: the same user's permissions had
+        # been granted but needed a restart, and "couldn't type" alone didn't
+        # tell him that. A stopped helper is restarted for the next dictation.
+        try:
+            from . import uinput_helper
+            reason = uinput_helper.typing_blocked_reason()
+            if reason == uinput_helper.TYPING_HELPER_STOPPED:
+                uinput_helper.ensure_ydotoold_running()
+            if reason:
+                message = (f"{reason} The dictation is saved in Recent Dictations "
+                           "in the TalkType menu: click it to copy, then paste with Ctrl+V.")
+        except Exception as e:
+            logger.debug(f"Couldn't work out why typing failed: {e}")
     print(f"⚠️  {message}")
     logger.warning(f"Dictation not delivered ({outcome}); told the user")
     _beep(beeps_on, *CANCEL_BEEP)

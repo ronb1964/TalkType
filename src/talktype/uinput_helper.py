@@ -26,6 +26,7 @@ import subprocess
 import grp
 import pwd
 import shlex
+import shutil
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -463,6 +464,15 @@ def setup_ydotoold_service():
         # Find ydotoold binary path (it's the daemon, not the CLI tool)
         ydotoold_path = find_ydotoold_path()
         if not ydotoold_path:
+            # No system ydotoold, but TalkType brings its own (AppImage, and the
+            # .deb/.rpm built from it). A systemd unit can't point at the
+            # AppImage's mount, which vanishes when the app exits, but the tray
+            # starts the bundled daemon itself (ensure_ydotoold_running), so
+            # there's nothing to install. This used to say the ydotool package
+            # "may be incomplete" to people who'd never installed it at all.
+            if shutil.which("ydotoold"):
+                ensure_ydotoold_running()
+                return (True, "Using TalkType's built-in typing helper; it starts with TalkType")
             return (False, "ydotoold daemon not found. The ydotool package may be incomplete.\n"
                           "Try reinstalling: sudo apt install --reinstall ydotool")
 
@@ -527,6 +537,86 @@ def setup_ydotoold_service():
     except Exception as e:
         logger.error(f"Error setting up ydotoold service: {e}")
         return (False, f"Error setting up ydotoold: {e}")
+
+
+def ydotoold_process_running():
+    """Is a ydotoold process alive? The process, not its socket: a daemon that
+    died leaves .ydotool_socket behind, which check_ydotoold_running() would
+    count as running, and then nothing would ever start it again."""
+    try:
+        return subprocess.run(["pgrep", "-x", "ydotoold"], capture_output=True,
+                              timeout=2).returncode == 0
+    except Exception:
+        return True     # can't tell: don't claim it stopped, don't start a second one
+
+
+def ensure_ydotoold_running():
+    """Start ydotoold if it isn't running. Never raises, never waits.
+
+    The tray calls this at launch; Fix Typing calls it again once permissions
+    are granted, because a daemon that started without them has already exited
+    ("failed to open uinput device: Permission denied") and nothing else would
+    bring it back. A bundled copy is found first on the AppImage's PATH.
+    """
+    # The Flatpak types through libei, not ydotool, and doesn't ship the daemon.
+    if os.environ.get("FLATPAK_ID"):
+        return
+    try:
+        if ydotoold_process_running():
+            logger.debug("ydotoold is already running")
+            return
+        logger.info("Starting ydotoold daemon for text injection...")
+        subprocess.Popen(["ydotoold"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        logger.info("ydotoold launch requested")
+    except FileNotFoundError:
+        logger.warning("ydotoold not found in PATH - text injection may not work")
+    except Exception as e:
+        logger.error(f"Failed to start ydotoold: {e}")
+
+
+# What to tell someone whose dictation couldn't be typed, by cause. Shown in the
+# "didn't reach the window" notice; each names the fix, not just the failure.
+TYPING_RESTART_PENDING = ("TalkType can't type yet: restart your computer to finish "
+                          "the typing setup.")
+TYPING_NO_PERMISSION = ("TalkType doesn't have permission to type. Open Preferences, "
+                        "Advanced, Fix Typing Permissions, then restart your computer.")
+TYPING_HELPER_STOPPED = ("TalkType's typing helper had stopped. It's been started "
+                         "again, so try that dictation once more.")
+
+
+def _username():
+    try:
+        return pwd.getpwuid(os.getuid()).pw_name
+    except Exception:
+        return os.environ.get("USER", "")
+
+
+def _input_group_pending_restart():
+    """True when setup has added this user to 'input' but the login session
+    predates it. os.getgroups() is fixed at login; the group's member list
+    changes the moment usermod runs."""
+    try:
+        group = grp.getgrnam("input")
+    except KeyError:
+        return False
+    return _username() in group.gr_mem and group.gr_gid not in os.getgroups()
+
+
+def typing_blocked_reason():
+    """Why ydotool can't type right now, as advice for the user, or None.
+
+    None also when there's nothing ydotool-shaped to check (Flatpak, no
+    /dev/uinput): the caller then keeps its generic message.
+    """
+    if os.environ.get("FLATPAK_ID") or not os.path.exists("/dev/uinput"):
+        return None
+    if not check_uinput_writable():
+        if _input_group_pending_restart():
+            return TYPING_RESTART_PENDING
+        return TYPING_NO_PERMISSION
+    if not ydotoold_process_running():
+        return TYPING_HELPER_STOPPED
+    return None
 
 
 def get_ydotoold_status():

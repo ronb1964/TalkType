@@ -1973,33 +1973,9 @@ class DictationTray:
         self.indicator.set_menu(self.build_menu())
 
 def _ensure_ydotoold_running():
-    """Ensure ydotoold daemon is running for text injection."""
-    # In a Flatpak, typing goes through the libei output backend (Backend B), not
-    # ydotool — the daemon isn't bundled, so don't try to start it (or log a scary
-    # "ydotoold not found" warning).
-    if os.environ.get("FLATPAK_ID"):
-        return
-    try:
-        # Check if ydotoold is already running
-        result = subprocess.run(["pgrep", "-x", "ydotoold"],
-                              capture_output=True, text=True)
-        if result.returncode == 0:
-            logger.debug("ydotoold is already running")
-            return
-
-        # Start ydotoold if not running. Don't block startup waiting for it —
-        # the daemon comes up within a moment and the first dictation is many
-        # seconds away, so the old time.sleep(2) just delayed the tray icon
-        # from appearing on every login.
-        logger.info("Starting ydotoold daemon for text injection...")
-        subprocess.Popen(["ydotoold"],
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL)
-        logger.info("ydotoold launch requested")
-    except FileNotFoundError:
-        logger.warning("ydotoold not found in PATH - text injection may not work")
-    except Exception as e:
-        logger.error(f"Failed to start ydotoold: {e}")
+    """Ensure ydotoold daemon is running for text injection (see uinput_helper)."""
+    from .uinput_helper import ensure_ydotoold_running
+    ensure_ydotoold_running()
 
 def main():
     from . import desktop_identity
