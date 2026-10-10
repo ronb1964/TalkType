@@ -146,3 +146,31 @@ class TestRollbackIsNarrow:
         prefs_cls.on_apply(stub, None)
 
         assert stub.saved_models == ["small"]
+
+
+class FakeCombo:
+    """Records the dropdown's choice, and whether the change handler was muted."""
+
+    def __init__(self, owner, active):
+        self.owner, self.active, self.muted = owner, active, None
+
+    def set_active_id(self, model):
+        self.active = model
+        self.muted = getattr(self.owner, "_updating_model", False)
+
+
+class TestDropdownFollowsTheRollback:
+    def test_the_dropdown_goes_back_to_the_model_in_use(self, prefs_cls):
+        """Cancelling the Medium download left the dropdown on Medium while
+        the service kept running the old model, so Preferences showed a
+        model that wasn't in use."""
+        stub = StubPrefs(on_disk_model="parakeet-v3", chosen_model="medium")
+        stub.model_combo = FakeCombo(stub, "medium")
+        stub.download_result = (False, False)
+
+        prefs_cls.on_apply(stub, None)
+
+        assert stub.model_combo.active == "parakeet-v3"
+        assert stub.model_combo.muted is True  # no model-picked dialogs
+        assert stub._updating_model is False
+        assert stub._last_selected_model == "parakeet-v3"

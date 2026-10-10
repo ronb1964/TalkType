@@ -4768,11 +4768,21 @@ class PreferencesWindow:
         would actually load the model.
 
         Only the model is undone; the user's other edits saved fine and stay.
+        The dropdown goes back too: left on the cancelled model, it showed a
+        model that wasn't in use.
         """
         if previous_model is None or self.config.get("model") == previous_model:
             return
         self.config["model"] = previous_model
         self.save_config()
+        combo = getattr(self, "model_combo", None)
+        if combo is not None:
+            self._updating_model = True  # no "you picked a model" dialogs
+            try:
+                combo.set_active_id(previous_model)
+            finally:
+                self._updating_model = False
+            self._last_selected_model = previous_model
 
     def on_apply(self, button):
         """Apply changes, restarting the service only if something needs it."""
