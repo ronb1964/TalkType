@@ -99,6 +99,11 @@ def _match_menu_width(combo, allocation):
         logger.debug(f"_match_menu_width failed: {e}")
 
 
+# Longer dropdown lists open as a grid on Wayland; see _drop_down_below.
+_GRID_AFTER = 15
+_GRID_COLUMNS = 3
+
+
 def _drop_down_below(combo):
     """Make one combo's popup drop down below the button, the Wayland way.
 
@@ -110,11 +115,18 @@ def _drop_down_below(combo):
     the compositor places it (flip, slide or resize), so it's correct on any
     monitor too. One column looks the same as a normal list.
 
+    A long list (more than _GRID_AFTER choices, like the 33 languages) gets
+    _GRID_COLUMNS columns instead: in one column it ran off the screen from
+    the top, with the current choice out of sight (GTK doesn't scroll a
+    wrap-mode menu to it). As a grid it all fits, current choice highlighted.
+
     Leaves a combo that already has a wrap width alone. Never raises.
     """
     try:
         if combo.get_wrap_width() == 0:
-            combo.set_wrap_width(1)
+            model = combo.get_model()
+            rows = len(model) if model is not None else 0
+            combo.set_wrap_width(_GRID_COLUMNS if rows > _GRID_AFTER else 1)
             combo.connect("size-allocate", _match_menu_width)
     except Exception as e:
         logger.debug(f"_drop_down_below failed: {e}")

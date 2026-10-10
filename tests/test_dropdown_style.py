@@ -156,6 +156,20 @@ def test_drop_down_below_leaves_an_explicit_wrap_width_alone(gtk):
     assert combo.get_wrap_width() == 3
 
 
+@pytest.mark.parametrize("items, columns", [(6, 1), (12, 1), (15, 1), (16, 3), (33, 3)])
+def test_long_lists_open_as_a_grid(gtk, items, columns):
+    """On Wayland the list hangs below the button and starts at the top, and
+    the 33 languages ran off the screen with the current one out of sight.
+    In three columns they fit, all visible, the current one highlighted."""
+    from talktype.ui_style import _drop_down_below
+
+    combo = gtk.ComboBoxText()
+    for i in range(items):
+        combo.append_text(f"Language {i}")
+    _drop_down_below(combo)
+    assert combo.get_wrap_width() == columns
+
+
 def test_helper_gives_combos_the_right_popup_for_this_display(gtk):
     """Combos realised after the helper runs: wrap path on Wayland only."""
     from gi.repository import Gdk
