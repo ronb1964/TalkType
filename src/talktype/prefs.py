@@ -2065,11 +2065,13 @@ class PreferencesWindow:
         Numbers only; see stats.py for what is (and isn't) stored."""
         from . import stats as stats_module
 
-        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        # Spacing kept tight so the whole page fits the window without
+        # scrolling; at 10/15 the last row (Reset Stats) sat half under the edge.
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=7)
         vbox.set_margin_start(20)
         vbox.set_margin_end(20)
-        vbox.set_margin_top(15)
-        vbox.set_margin_bottom(15)
+        vbox.set_margin_top(10)
+        vbox.set_margin_bottom(10)
 
         header = Gtk.Label(xalign=0)
         header.set_markup('<span size="large"><b>Your Dictation Stats</b></span>')
@@ -2101,10 +2103,10 @@ class PreferencesWindow:
         # Words per day, last two weeks
         chart_title = Gtk.Label(xalign=0)
         chart_title.set_markup("<b>Words per day, last 2 weeks</b>")
-        chart_title.set_margin_top(12)
+        chart_title.set_margin_top(6)
         vbox.pack_start(chart_title, False, False, 0)
         self.stats_chart = Gtk.DrawingArea()
-        self.stats_chart.set_size_request(-1, 130)
+        self.stats_chart.set_size_request(-1, 105)
         self.stats_chart.connect("draw", self._draw_stats_chart)
         self._stats_daily = []
         vbox.pack_start(self.stats_chart, False, False, 0)
@@ -2141,7 +2143,7 @@ class PreferencesWindow:
         speed_row.pack_start(Gtk.Label(label="words a minute"), False, False, 0)
         vbox.pack_start(speed_row, False, False, 0)
 
-        vbox.pack_start(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 8)
+        vbox.pack_start(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL), False, False, 4)
 
         controls = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         self.usage_stats_check = Gtk.CheckButton(label="Keep usage stats")
@@ -2293,11 +2295,13 @@ class PreferencesWindow:
         import threading
         from . import update_checker
 
-        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        # Spacing kept tight so the whole page fits the window without
+        # scrolling; at 10/15 the last row sat just under the edge.
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=7)
         vbox.set_margin_start(20)
         vbox.set_margin_end(20)
-        vbox.set_margin_top(15)
-        vbox.set_margin_bottom(15)
+        vbox.set_margin_top(10)
+        vbox.set_margin_bottom(10)
 
         # Header
         header = Gtk.Label()
@@ -2331,7 +2335,7 @@ class PreferencesWindow:
             _hide_widgets(self.ext_version_label)   # GNOME-only, see advanced tab
 
         version_frame.add(version_box)
-        vbox.pack_start(version_frame, False, False, 10)
+        vbox.pack_start(version_frame, False, False, 6)
 
         # Check for updates button
         check_btn = Gtk.Button(label="Check for Updates")
