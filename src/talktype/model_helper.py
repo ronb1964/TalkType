@@ -119,29 +119,16 @@ MODEL_DISPLAY_SIZES = {
 }
 
 
-def is_model_cached(model_name):
-    """
-    Check if a Whisper model is already downloaded/cached.
-
-    Args:
-        model_name: Model size (e.g., "tiny", "small", "medium", "large-v3")
-
-    Returns:
-        bool: True if model is cached, False otherwise
-    """
-    if is_parakeet(model_name):
-        # Loading Parakeet would take seconds; its files are enough to tell.
-        return _parakeet_cached_dir() is not None
+def _loads_on_cpu(model_name):
+    """Can this cached Whisper model be loaded at all? Used only after a load
+    has already failed, to tell broken files (download again) from a problem
+    with the device or its libraries (downloading again wouldn't help). int8,
+    the processor's own type, so ctranslate2 doesn't warn about float16."""
     try:
         from faster_whisper import WhisperModel
-        # Try to load with local_files_only=True
-        # This will succeed if model is cached, fail if not
-        model = WhisperModel(
-            model_name,
-            device="cpu",
-            local_files_only=True
-        )
-        del model  # Clean up
+        model = WhisperModel(model_name, device="cpu", compute_type="int8",
+                             local_files_only=True)
+        del model
         return True
     except Exception:
         return False
@@ -151,8 +138,8 @@ def is_model_cached_fast(model_name):
     """
     Lightweight cache-completeness check — file presence only.
 
-    Unlike is_model_cached(), this does NOT load the model into RAM (which
-    takes seconds and gigabytes for large-v3). snapshot_download with
+    Does NOT load the model into RAM, which takes seconds and gigabytes for
+    large-v3 (the old trial-load check did, on every service start). snapshot_download with
     local_files_only=True verifies every file of the cached revision exists
     and raises if any is missing — so a partial cache from a cancelled
     download correctly reports False. Safe to call on every Apply/OK click.
@@ -170,8 +157,13 @@ def is_model_cached_fast(model_name):
         # config.json). Check the files faster-whisper actually loads —
         # hf_hub_download links a file into the snapshot only after its
         # download fully completes, so presence implies completeness.
-        return all(os.path.isfile(os.path.join(snapshot_path, f))
-                   for f in ESSENTIAL_MODEL_FILES)
+        if not all(os.path.isfile(os.path.join(snapshot_path, f))
+                   for f in ESSENTIAL_MODEL_FILES):
+            return False
+        # ctranslate2 won't load a Whisper model without its vocabulary, which
+        # is .txt for the small models and .json for large-v3.
+        return any(os.path.isfile(os.path.join(snapshot_path, f))
+                   for f in ("vocabulary.txt", "vocabulary.json"))
     except Exception:
         return False
 
@@ -358,15 +350,26 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
     Returns:
         WhisperModel (or ParakeetModel) instance, or None if cancelled/failed
     """
-    # Check if already cached
-    cached = is_model_cached(model_name)
+    # Check if already cached: the files, not a trial load (that loaded the
+    # model twice on every start).
+    cached = is_model_cached_fast(model_name)
     logger.info(f"Model cache check: {model_name} cached={cached}")
     print(f"📦 Model cache check: {model_name} cached={cached}")
 
     if cached:
         logger.info(f"Model {model_name} already cached, loading directly (no download window)")
         print(f"✅ Model {model_name} already cached - loading without download")
-        return load_model(model_name, device=device, compute_type=compute_type)
+        try:
+            return load_model(model_name, device=device, compute_type=compute_type)
+        except Exception as e:
+            # The files are there but didn't load. If they load on the
+            # processor, the trouble is the device (CUDA libraries, driver),
+            # which a new download wouldn't fix. Otherwise they're broken, and
+            # the trial load used to catch that by reporting "not cached".
+            if is_parakeet(model_name) or _loads_on_cpu(model_name):
+                raise
+            logger.warning(f"Model {model_name} looked downloaded but won't load "
+                           f"({e}); downloading it again")
 
     logger.info(f"Model {model_name} NOT cached - showing download progress dialog")
     print(f"📥 Model {model_name} NOT cached - will download and show progress")

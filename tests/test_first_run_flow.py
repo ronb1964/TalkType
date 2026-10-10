@@ -16,7 +16,7 @@ def env(monkeypatch):
     monkeypatch.setattr(wd, "_setup_vulkan_engine_first_run", lambda: calls.append(("engine",)), raising=False)
     monkeypatch.setattr(wd, "_download_vulkan_model_first_run", lambda m: calls.append(("vk", m)) or True)
     monkeypatch.setattr(wd, "_vulkan_speed_check_first_run", lambda m: calls.append(("speed", m)) or True)
-    monkeypatch.setattr("talktype.model_helper.is_model_cached", lambda m: False)
+    monkeypatch.setattr("talktype.model_helper.is_model_cached_fast", lambda m: False)
     monkeypatch.setattr("talktype.model_helper.download_model_with_progress",
                         lambda m, **k: calls.append(("cpu", m)) or object())
     return cfg, calls
@@ -65,7 +65,7 @@ def store(monkeypatch):
     monkeypatch.setattr("talktype.config.load_config", lambda: types.SimpleNamespace(**saved))
     monkeypatch.setattr("talktype.config.save_config", lambda c: saved.update(vars(c)))
     monkeypatch.setattr(wd, "_download_vulkan_model_first_run", lambda m: True)
-    monkeypatch.setattr("talktype.model_helper.is_model_cached", lambda m: False)
+    monkeypatch.setattr("talktype.model_helper.is_model_cached_fast", lambda m: False)
     monkeypatch.setattr("talktype.model_helper.download_model_with_progress",
                         lambda m, **k: calls.append(m) or object())
     return saved, calls

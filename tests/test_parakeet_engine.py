@@ -83,11 +83,9 @@ def test_cache_checks_use_parakeet_files(monkeypatch):
 
     monkeypatch.setattr(model_helper, "_parakeet_cached_dir", lambda: None)
     assert model_helper.is_model_cached_fast("parakeet-v3") is False
-    assert model_helper.is_model_cached("parakeet-v3") is False
 
     monkeypatch.setattr(model_helper, "_parakeet_cached_dir", lambda: "/some/dir")
     assert model_helper.is_model_cached_fast("parakeet-v3") is True
-    assert model_helper.is_model_cached("parakeet-v3") is True
 
 
 def test_missing_parakeet_file_makes_the_download_unusable():

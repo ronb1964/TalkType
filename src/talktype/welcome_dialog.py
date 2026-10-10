@@ -2916,11 +2916,11 @@ def _apply_first_run_setup(result):
 
     logger.info(f"Setting up {selected_model} on {result['device']}")
     try:
-        from talktype.model_helper import download_model_with_progress, is_model_cached
+        from talktype.model_helper import download_model_with_progress, is_model_cached_fast
         from talktype import whisper_vulkan
 
         # Check if model is already cached
-        already_cached = is_model_cached(selected_model)
+        already_cached = is_model_cached_fast(selected_model)
         logger.info(f"Model {selected_model} cached status: {already_cached}")
         print(f"📦 Model {selected_model} cached: {already_cached}")
 
@@ -2931,7 +2931,7 @@ def _apply_first_run_setup(result):
             config.model, config.device = selected_model, "cpu"
             device = "cpu"
             save_config(config)
-            already_cached = is_model_cached(selected_model)
+            already_cached = is_model_cached_fast(selected_model)
 
         # Vulkan: the model comes in whisper.cpp's format instead. If that
         # download doesn't work out, fall back to the processor so setup
@@ -2951,7 +2951,7 @@ def _apply_first_run_setup(result):
                 device = "cpu"
                 save_config(config)
                 logger.warning(f"Not using Vulkan after first-run setup; {selected_model} on the processor")
-                already_cached = is_model_cached(selected_model)
+                already_cached = is_model_cached_fast(selected_model)
 
         compute_type = "float16" if device.lower() == "cuda" else "int8"
         logger.info(f"Download config: device={device}, compute_type={compute_type}")
@@ -3004,7 +3004,7 @@ def _apply_first_run_setup(result):
             fallback_models = ["small", "tiny"] if selected_model not in ["small", "tiny"] else ["tiny"]
 
             for fallback in fallback_models:
-                if is_model_cached(fallback):
+                if is_model_cached_fast(fallback):
                     logger.info(f"✅ Using cached {fallback} model as fallback")
                     config.model = fallback
                     save_config(config)
@@ -3035,12 +3035,12 @@ def _apply_first_run_setup(result):
         logger.warning(f"Error downloading {selected_model} model: {e}")
         # Try to ensure SOME model is available (tiny as last resort)
         try:
-            from talktype.model_helper import is_model_cached, download_model_with_progress
+            from talktype.model_helper import is_model_cached_fast, download_model_with_progress
             from talktype.config import load_config, save_config
 
             config = load_config()
 
-            if not is_model_cached("tiny"):
+            if not is_model_cached_fast("tiny"):
                 logger.info("Downloading tiny model as emergency fallback...")
                 tiny_model = download_model_with_progress(
                     "tiny",
