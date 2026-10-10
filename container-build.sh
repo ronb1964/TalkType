@@ -249,13 +249,6 @@ echo "   Bundling GTK3 libraries..."
 cp /usr/lib/x86_64-linux-gnu/libgirepository-1.0.so.1 AppDir/usr/lib/
 cp /usr/lib/x86_64-linux-gnu/libffi.so.* AppDir/usr/lib/
 
-# Bundle Cairo libraries (needed for recording indicator)
-echo "   Bundling Cairo libraries..."
-cp /usr/lib/x86_64-linux-gnu/libcairo.so.2 AppDir/usr/lib/ 2>/dev/null || \
-    echo "     ⚠️  Warning: libcairo.so.2 not found"
-cp /usr/lib/x86_64-linux-gnu/libcairo-gobject.so.2 AppDir/usr/lib/ 2>/dev/null || \
-    echo "     ⚠️  Warning: libcairo-gobject.so.2 not found"
-echo "     ✓ Cairo libraries bundled"
 mkdir -p AppDir/usr/lib/girepository-1.0
 
 # Copy typelibs from both possible locations. The `|| true` is deliberate here:
@@ -398,6 +391,15 @@ else
 fi
 EOF
 chmod +x AppDir/AppRun
+
+# The Cairo C libraries stay out of the bundle (see "Do NOT bundle" above).
+# Checked last, after every copy step. Fail the build if one got in: blank emoji is easy to miss.
+for lib in libcairo.so.2 libcairo-gobject.so.2 libpangocairo-1.0.so.0; do
+    if [ -e "AppDir/usr/lib/$lib" ]; then
+        echo "     ❌ $lib is bundled; it hides the system's and blanks every emoji"
+        exit 1
+    fi
+done
 
 # Download and extract appimagetool - FUSE does not work in containers.
 # This is the current tool from github.com/AppImage/appimagetool, NOT the
