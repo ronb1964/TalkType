@@ -612,6 +612,14 @@ class TalkTypeIndicator extends PanelMenu.Button {
                 this._presetItems[id] = item;
                 menu.addMenuItem(item);
             }
+            // Same as the GTK tray: Custom has the dot when the settings match
+            // no preset (status.preset is 'custom'), and opens Preferences,
+            // where a custom setup is made.
+            menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+            const custom = new PopupMenu.PopupMenuItem('Custom (opens Preferences)');
+            custom.connect('activate', () => this._proxy.OpenPreferencesRemote());
+            this._presetItems['custom'] = custom;
+            menu.addMenuItem(custom);
             this._updatePresetSelection(this._currentPreset);
         });
     }

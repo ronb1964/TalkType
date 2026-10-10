@@ -1,0 +1,46 @@
+"""Tray > Performance > Custom opens Preferences.
+
+It was a greyed-out marker. Clicking a radio item moves the dot to it, so
+after opening Preferences the dot must go back to the setup that's really in
+use: Custom only shows the dot when the settings match no preset.
+"""
+import types
+
+from talktype.tray import DictationTray
+
+
+class Item:
+    def __init__(self, active):
+        self.active = active
+
+    def get_active(self):
+        return self.active
+
+
+def fake_tray(updating=False):
+    calls = []
+    return types.SimpleNamespace(
+        _updating_preset=updating,
+        open_preferences=lambda _: calls.append("prefs"),
+        _revert_preset_radio=lambda: calls.append("revert"),
+        calls=calls,
+    )
+
+
+def test_clicking_custom_opens_preferences_then_puts_the_dot_back():
+    tray = fake_tray()
+    DictationTray._on_custom_preset(tray, Item(active=True))
+    assert tray.calls == ["prefs", "revert"]
+
+
+def test_the_dot_leaving_custom_does_not_open_preferences():
+    """GTK sends "activate" to the radio being unselected too."""
+    tray = fake_tray()
+    DictationTray._on_custom_preset(tray, Item(active=False))
+    assert tray.calls == []
+
+
+def test_the_tray_moving_the_dot_itself_does_not_open_preferences():
+    tray = fake_tray(updating=True)
+    DictationTray._on_custom_preset(tray, Item(active=True))
+    assert tray.calls == []

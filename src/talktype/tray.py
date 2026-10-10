@@ -1783,15 +1783,28 @@ class DictationTray:
             submenu.append(radio)
             self.preset_radios[preset.id] = radio
 
-        # "Custom" option (shown when settings don't match any preset)
+        # "Custom": has the dot when the settings match no preset, and opens
+        # Preferences, where a custom setup is made. Same label and place as
+        # the GNOME menu's.
         submenu.append(Gtk.SeparatorMenuItem())
-        self.preset_custom = Gtk.RadioMenuItem(label="Custom (via Preferences)", group=preset_group)
-        self.preset_custom.set_sensitive(False)
+        self.preset_custom = Gtk.RadioMenuItem(label="Custom (opens Preferences)", group=preset_group)
+        self.preset_custom.connect("activate", self._on_custom_preset)
         submenu.append(self.preset_custom)
 
         item = Gtk.MenuItem(label="Performance")
         item.set_submenu(submenu)
         return item
+
+    def _on_custom_preset(self, item):
+        """Performance > Custom: open Preferences. Clicking a radio item moves
+        the dot to it, so put the dot back on what's really in use; Custom only
+        has it when the settings match no preset."""
+        # GTK sends "activate" to the radio being unselected as well, and the
+        # tray moving the dot itself (_updating_preset) is not a click.
+        if getattr(self, "_updating_preset", False) or not item.get_active():
+            return
+        self.open_preferences(None)
+        self._revert_preset_radio()
 
     def _build_history_submenu(self):
         """Build the Recent Dictations submenu and keep it current.
