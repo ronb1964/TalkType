@@ -25,12 +25,9 @@ logger = logging.getLogger(__name__)
 # future GTK drops it the popups revert to menu mode — cosmetic only, nothing
 # stops working.
 #
-# X11 ONLY (issue #9). On Wayland a window can't learn its place on the desktop,
-# so GTK3 (gtkcombobox.c, gtk_combo_box_list_position) gets the list's position
-# relative to the window and then clamps it against the monitor's work area in
-# GLOBAL coordinates. On a monitor that doesn't start at 0,0 (a second screen)
-# that shoves the popup off screen and the value can't be changed. GTK bug #6105,
-# open and unfixed. Wayland gets _drop_down_below() instead, see there.
+# X11 only. On Wayland GTK3 clamps the window-relative list position against
+# the monitor's global work area, which pushes the popup off screen on a second
+# monitor (GTK #6105, TalkType #9). Wayland gets _drop_down_below() instead.
 _DROPDOWN_CSS = b"""
 combobox {
     -GtkComboBox-appears-as-list: 1;
@@ -63,78 +60,55 @@ _installed = False
 
 
 def _wants_list_mode(display):
-    """True only on X11, the one backend where GTK3 places list popups correctly.
-
-    Checked by class name so it needs no GdkX11 typelib. Anything unrecognised
-    gets GTK's default menu mode, which is safe everywhere. Never raises.
-    """
-    try:
-        return type(display).__name__.startswith("GdkX11")
-    except Exception:
-        return False
+    """True only on X11, the one backend where GTK3 places list popups right.
+    By class name, so it needs no GdkX11 typelib."""
+    return type(display).__name__.startswith("GdkX11")
 
 
 def _match_menu_width(combo, allocation):
-    """Keep a wrap-mode combo's popup menu as wide as the combo itself.
-
-    GTK only sizes the menu to the button in plain menu mode; in wrap mode it is
-    as narrow as its longest item, which looks detached from a wide button. The
-    menu hangs from the button's text, not its edge (measured on KDE: 17 px in),
-    so take that inset off or the menu overhangs the button's right side.
-    """
-    try:
-        acc = combo.get_popup_accessible()
-        menu = acc.get_widget() if acc is not None else None
-        if menu is None:
-            return
-        width = allocation.width
-        child = combo.get_child()
-        if child is not None:
-            inset = child.get_allocation().x - allocation.x
-            if 0 < inset < width:
-                width -= inset
-        if menu.get_size_request()[0] != width:
-            menu.set_size_request(width, -1)
-    except Exception as e:
-        logger.debug(f"_match_menu_width failed: {e}")
+    """size-allocate handler: make a wrap-mode popup as wide as its button
+    (GTK sizes it to the longest item). The menu hangs from the button's text,
+    not its edge, so the inset comes off or it overhangs on the right."""
+    acc = combo.get_popup_accessible()
+    menu = acc.get_widget() if acc is not None else None
+    if menu is None:
+        return
+    width = allocation.width
+    child = combo.get_child()
+    if child is not None:
+        inset = child.get_allocation().x - allocation.x
+        if 0 < inset < width:
+            width -= inset
+    if menu.get_size_request()[0] != width:
+        menu.set_size_request(width, -1)
 
 
-# Longer dropdown lists open as a grid on Wayland; see _drop_down_below.
+# On Wayland, lists longer than this open as a grid; see _drop_down_below.
 _GRID_AFTER = 15
 _GRID_COLUMNS = 3
 
 
 def _drop_down_below(combo):
-    """Make one combo's popup drop down below the button, the Wayland way.
+    """Give a combo a wrap width, so on Wayland its popup hangs below the button.
 
-    Plain menu mode lines the selected item up over the button and corrects its
-    scroll position after the compositor has placed it (gtkcombobox.c,
-    gtk_menu_update_scroll_offset). On KDE that leaves the first open squashed,
-    with scroll arrows and half-hidden items, until the mouse moves. With a wrap
-    width GTK takes its other path instead: the menu hangs below the button and
-    the compositor places it (flip, slide or resize), so it's correct on any
-    monitor too. One column looks the same as a normal list.
-
-    A long list (more than _GRID_AFTER choices, like the 33 languages) gets
-    _GRID_COLUMNS columns instead: in one column it ran off the screen from
-    the top, with the current choice out of sight (GTK doesn't scroll a
-    wrap-mode menu to it). As a grid it all fits, current choice highlighted.
-
-    Leaves a combo that already has a wrap width alone. Never raises.
+    Plain menu mode lines the selected item up over the button and fixes its
+    scroll position after the compositor has placed it, which on KDE opened
+    squashed, with scroll arrows, until the mouse moved. In wrap mode GTK
+    anchors the menu below the button and the compositor places it, right on
+    any monitor. A long list (the 33 languages) gets columns: GTK doesn't
+    scroll a wrap-mode menu to the current choice, and as a grid it all fits.
+    A combo that already has a wrap width is left alone.
     """
-    try:
-        if combo.get_wrap_width() == 0:
-            model = combo.get_model()
-            rows = len(model) if model is not None else 0
-            combo.set_wrap_width(_GRID_COLUMNS if rows > _GRID_AFTER else 1)
-            combo.connect("size-allocate", _match_menu_width)
-    except Exception as e:
-        logger.debug(f"_drop_down_below failed: {e}")
+    if combo.get_wrap_width() == 0:
+        model = combo.get_model()
+        rows = len(model) if model is not None else 0
+        combo.set_wrap_width(_GRID_COLUMNS if rows > _GRID_AFTER else 1)
+        combo.connect("size-allocate", _match_menu_width)
 
 
 def _on_widget_realize(widget, *_args):
-    """Emission hook: give every ComboBox the Wayland drop-down treatment as it
-    is realised, before anyone can click it. Returns True to stay installed."""
+    """Emission hook for every widget's "realize": each ComboBox gets the
+    Wayland drop-down before it can be clicked. True keeps the hook installed."""
     if isinstance(widget, Gtk.ComboBox):
         _drop_down_below(widget)
     return True

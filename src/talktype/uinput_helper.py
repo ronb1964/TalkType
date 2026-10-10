@@ -370,34 +370,14 @@ def find_ydotoold_path():
 
 
 def check_ydotoold_running():
-    """
-    Check if ydotoold daemon is currently running.
-
-    Checks both:
-    1. Process is running (via pgrep)
-    2. Socket file exists (more reliable indicator)
-
-    Returns:
-        bool: True if ydotoold is running, False otherwise
-    """
-    # Check if socket file exists (most reliable indicator)
-    runtime_dir = os.environ.get('XDG_RUNTIME_DIR', f'/run/user/{os.getuid()}')
-    socket_path = os.path.join(runtime_dir, '.ydotool_socket')
-    if os.path.exists(socket_path):
-        logger.debug(f"ydotool socket found at {socket_path}")
-        return True
-
-    # Fallback: check if process is running
+    """Whether a ydotoold process is alive. Not its socket file: a daemon that
+    died leaves .ydotool_socket behind, and then nothing would restart it."""
     try:
-        result = subprocess.run(['pgrep', '-f', 'ydotoold'],
-                               capture_output=True, timeout=2)
-        if result.returncode == 0:
-            logger.debug("ydotoold process found via pgrep")
-            return True
+        return subprocess.run(["pgrep", "-x", "ydotoold"], capture_output=True,
+                              timeout=2).returncode == 0
     except Exception as e:
         logger.warning(f"Could not check ydotoold status: {e}")
-
-    return False
+        return True     # can't tell: don't report it stopped or start a second one
 
 
 def check_ydotoold_service_exists():
@@ -464,12 +444,9 @@ def setup_ydotoold_service():
         # Find ydotoold binary path (it's the daemon, not the CLI tool)
         ydotoold_path = find_ydotoold_path()
         if not ydotoold_path:
-            # No system ydotoold, but TalkType brings its own (AppImage, and the
-            # .deb/.rpm built from it). A systemd unit can't point at the
-            # AppImage's mount, which vanishes when the app exits, but the tray
-            # starts the bundled daemon itself (ensure_ydotoold_running), so
-            # there's nothing to install. This used to say the ydotool package
-            # "may be incomplete" to people who'd never installed it at all.
+            # No system ydotoold, but TalkType's own copy is on PATH. A systemd
+            # unit can't point at the AppImage's mount, which goes away when
+            # the app exits, so the tray starts this copy itself instead.
             if shutil.which("ydotoold"):
                 ensure_ydotoold_running()
                 return (True, "Using TalkType's built-in typing helper; it starts with TalkType")
@@ -539,30 +516,15 @@ def setup_ydotoold_service():
         return (False, f"Error setting up ydotoold: {e}")
 
 
-def ydotoold_process_running():
-    """Is a ydotoold process alive? The process, not its socket: a daemon that
-    died leaves .ydotool_socket behind, which check_ydotoold_running() would
-    count as running, and then nothing would ever start it again."""
-    try:
-        return subprocess.run(["pgrep", "-x", "ydotoold"], capture_output=True,
-                              timeout=2).returncode == 0
-    except Exception:
-        return True     # can't tell: don't claim it stopped, don't start a second one
-
-
 def ensure_ydotoold_running():
-    """Start ydotoold if it isn't running. Never raises, never waits.
-
-    The tray calls this at launch; Fix Typing calls it again once permissions
-    are granted, because a daemon that started without them has already exited
-    ("failed to open uinput device: Permission denied") and nothing else would
-    bring it back. A bundled copy is found first on the AppImage's PATH.
-    """
+    """Start ydotoold if it isn't running; never raises or waits. Called at
+    tray launch and again after Fix Typing, since a daemon that started
+    without permission to /dev/uinput has already exited."""
     # The Flatpak types through libei, not ydotool, and doesn't ship the daemon.
     if os.environ.get("FLATPAK_ID"):
         return
     try:
-        if ydotoold_process_running():
+        if check_ydotoold_running():
             logger.debug("ydotoold is already running")
             return
         logger.info("Starting ydotoold daemon for text injection...")
@@ -574,8 +536,7 @@ def ensure_ydotoold_running():
         logger.error(f"Failed to start ydotoold: {e}")
 
 
-# What to tell someone whose dictation couldn't be typed, by cause. Shown in the
-# "didn't reach the window" notice; each names the fix, not just the failure.
+# Why a dictation couldn't be typed, for the "didn't reach the window" notice.
 TYPING_RESTART_PENDING = ("TalkType can't type yet: restart your computer to finish "
                           "the typing setup.")
 TYPING_NO_PERMISSION = ("TalkType doesn't have permission to type. Open Preferences, "
@@ -603,18 +564,15 @@ def _input_group_pending_restart():
 
 
 def typing_blocked_reason():
-    """Why ydotool can't type right now, as advice for the user, or None.
-
-    None also when there's nothing ydotool-shaped to check (Flatpak, no
-    /dev/uinput): the caller then keeps its generic message.
-    """
+    """Why ydotool can't type right now, as advice for the user, or None
+    (also when there's nothing to check: the Flatpak, or no /dev/uinput)."""
     if os.environ.get("FLATPAK_ID") or not os.path.exists("/dev/uinput"):
         return None
     if not check_uinput_writable():
         if _input_group_pending_restart():
             return TYPING_RESTART_PENDING
         return TYPING_NO_PERMISSION
-    if not ydotoold_process_running():
+    if not check_ydotoold_running():
         return TYPING_HELPER_STOPPED
     return None
 

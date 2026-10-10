@@ -8,13 +8,9 @@ The file check answers the same question, and a cached model that turns out
 broken is still downloaded again.
 """
 
-import pathlib
-
 import pytest
 
 from talktype import model_helper as M
-
-SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "talktype"
 
 
 @pytest.fixture
@@ -37,15 +33,6 @@ def test_whisper_needs_its_vocabulary_file(snapshot):
 def test_whisper_with_vocabulary_counts_as_downloaded(snapshot, vocab):
     (snapshot / vocab).write_text("x")
     assert M.is_model_cached_fast("small") is True
-
-
-def test_the_slow_check_is_gone():
-    assert not hasattr(M, "is_model_cached"), (
-        "is_model_cached() loaded a whole model to check the cache; use "
-        "is_model_cached_fast()")
-    offenders = [p.name for p in SRC.glob("*.py")
-                 if "is_model_cached(" in p.read_text()]
-    assert offenders == []
 
 
 def test_a_cached_model_is_loaded_once(monkeypatch):

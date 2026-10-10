@@ -1783,9 +1783,7 @@ class DictationTray:
             submenu.append(radio)
             self.preset_radios[preset.id] = radio
 
-        # "Custom": has the dot when the settings match no preset, and opens
-        # Preferences, where a custom setup is made. Same label and place as
-        # the GNOME menu's.
+        # Custom has the dot when the settings match no preset; it opens Preferences.
         submenu.append(Gtk.SeparatorMenuItem())
         self.preset_custom = Gtk.RadioMenuItem(label="Custom (opens Preferences)", group=preset_group)
         self.preset_custom.connect("activate", self._on_custom_preset)
@@ -1796,19 +1794,22 @@ class DictationTray:
         return item
 
     def _on_custom_preset(self, item):
-        """Performance > Custom: open Preferences. Clicking a radio item moves
-        the dot to it, so put the dot back on what's really in use; Custom only
-        has it when the settings match no preset."""
-        # GTK sends "activate" to the radio being unselected as well, and the
-        # tray moving the dot itself (_updating_preset) is not a click.
+        """Performance > Custom: open Preferences, then put the dot back on the
+        setup in use (clicking a radio item moves it)."""
+        # "activate" also comes for the radio being unselected, and for the
+        # tray moving the dot itself.
         if getattr(self, "_updating_preset", False) or not item.get_active():
             return
         self.open_preferences(None)
-        # Not straight away. KDE ticks a clicked item in its own copy of the
-        # menu, and a move to Custom and back within one main-loop pass goes
-        # out over DBusMenu as no change at all, so KDE kept its tick next to
-        # the real one: two dots. Apart, both updates reach it.
-        GLib.timeout_add(150, lambda: self._revert_preset_radio() and False)
+
+        def put_dot_back():
+            self._revert_preset_radio()
+            return False    # once
+
+        # Delayed: KDE ticks the clicked item in its own copy of the menu, and
+        # a move there and back in the same main-loop pass reaches it as no
+        # change, which left two dots.
+        GLib.timeout_add(150, put_dot_back)
 
     def _build_history_submenu(self):
         """Build the Recent Dictations submenu and keep it current.
@@ -1989,18 +1990,14 @@ class DictationTray:
         """Rebuild and refresh the tray menu (useful after CUDA installation)."""
         self.indicator.set_menu(self.build_menu())
 
-def _ensure_ydotoold_running():
-    """Ensure ydotoold daemon is running for text injection (see uinput_helper)."""
-    from .uinput_helper import ensure_ydotoold_running
-    ensure_ydotoold_running()
 
 def main():
     from . import desktop_identity
     desktop_identity.apply()        # TalkType's icon on its windows, not KDE's generic one
     _acquire_tray_singleton()
 
-    # Ensure ydotoold is running for text injection
-    _ensure_ydotoold_running()
+    from .uinput_helper import ensure_ydotoold_running
+    ensure_ydotoold_running()       # the typing daemon
 
     tray = DictationTray()
 

@@ -2065,8 +2065,7 @@ class PreferencesWindow:
         Numbers only; see stats.py for what is (and isn't) stored."""
         from . import stats as stats_module
 
-        # Spacing kept tight so the whole page fits the window without
-        # scrolling; at 10/15 the last row (Reset Stats) sat half under the edge.
+        # Tight spacing: the whole page fits the window without scrolling.
         vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=7)
         vbox.set_margin_start(20)
         vbox.set_margin_end(20)
@@ -2295,8 +2294,7 @@ class PreferencesWindow:
         import threading
         from . import update_checker
 
-        # Spacing kept tight so the whole page fits the window without
-        # scrolling; at 10/15 the last row sat just under the edge.
+        # Tight spacing: the whole page fits the window without scrolling.
         vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=7)
         vbox.set_margin_start(20)
         vbox.set_margin_end(20)
@@ -4119,9 +4117,7 @@ class PreferencesWindow:
             success, message = uinput_helper.install_udev_rule_with_pkexec(self.window)
 
             if success:
-                # A daemon started before the permissions existed has already
-                # exited; start it again in case they work without a restart.
-                uinput_helper.ensure_ydotoold_running()
+                uinput_helper.ensure_ydotoold_running()   # one started without permission has exited
                 # Show success dialog
                 msg = Gtk.MessageDialog(
                     transient_for=self.window,

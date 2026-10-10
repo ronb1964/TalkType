@@ -45,3 +45,24 @@ def test_an_essential_file_in_a_subdirectory_still_counts():
 def test_the_essential_list_matches_what_the_cache_check_requires():
     """Both places must agree on what a usable model is."""
     assert set(ESSENTIAL_MODEL_FILES) == {"model.bin", "config.json", "tokenizer.json"}
+
+
+def test_a_missing_vocabulary_fails():
+    """ctranslate2 can't load a Whisper model without it (.txt or .json)."""
+    assert _download_is_usable(["vocabulary.json"]) is False
+    assert _download_is_usable(["vocabulary.txt"]) is False
+
+
+def test_a_file_asked_for_by_name_is_never_optional(monkeypatch):
+    """The AI model is fetched as one named file, which isn't on the Whisper
+    list, so a failed download of it used to count as a success."""
+    import huggingface_hub
+    from talktype import model_helper as M
+
+    def fails(**kwargs):
+        raise OSError("connection reset")
+    monkeypatch.setattr(huggingface_hub, "hf_hub_download", fails)
+    monkeypatch.setattr(M, "_files_to_download", lambda name, repo: [("model.gguf", 10)])
+    download = M.make_model_download_func("AI model", repo_id="some/repo",
+                                          only_files=["model.gguf"])
+    assert download(lambda *a: None, type("E", (), {"is_set": lambda self: False})()) is False

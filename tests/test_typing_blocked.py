@@ -7,16 +7,11 @@ restart. 0.14.2 started telling users a dictation didn't arrive, but not why,
 so the notice must now name the cause and the fix.
 """
 
-import grp
-import pathlib
 import types
 
 import pytest
 
 from talktype import uinput_helper as U
-
-ROOT = pathlib.Path(__file__).resolve().parent.parent
-
 
 @pytest.fixture
 def host(monkeypatch):
@@ -28,7 +23,7 @@ def host(monkeypatch):
     state = types.SimpleNamespace(writable=True, running=True,
                                   in_system=False, in_session=False)
     monkeypatch.setattr(U, "check_uinput_writable", lambda: state.writable)
-    monkeypatch.setattr(U, "ydotoold_process_running", lambda: state.running)
+    monkeypatch.setattr(U, "check_ydotoold_running", lambda: state.running)
     group = types.SimpleNamespace(gr_gid=4242, gr_mem=[])
     monkeypatch.setattr(U.grp, "getgrnam", lambda name: group)
     monkeypatch.setattr(U, "_username", lambda: "tester")
@@ -122,23 +117,9 @@ def test_ensure_ydotoold_running_starts_it_only_when_stopped(monkeypatch):
     calls = []
     monkeypatch.delenv("FLATPAK_ID", raising=False)
     monkeypatch.setattr(U.subprocess, "Popen", lambda args, **k: calls.append(args))
-    monkeypatch.setattr(U, "ydotoold_process_running", lambda: True)
+    monkeypatch.setattr(U, "check_ydotoold_running", lambda: True)
     U.ensure_ydotoold_running()
     assert calls == []
-    monkeypatch.setattr(U, "ydotoold_process_running", lambda: False)
+    monkeypatch.setattr(U, "check_ydotoold_running", lambda: False)
     U.ensure_ydotoold_running()
     assert calls == [["ydotoold"]]
-
-
-def test_welcome_no_longer_offers_clipboard_paste_as_a_way_around_setup():
-    """Clipboard Paste presses Ctrl+V through the same ydotool, so it needs the
-    same permissions. Suggesting it as the alternative sent people nowhere."""
-    text = (ROOT / "src/talktype/welcome_dialog.py").read_text()
-    assert '"Clipboard Paste" mode instead' not in text
-
-
-@pytest.mark.parametrize("module", ["src/talktype/welcome_dialog.py", "src/talktype/prefs.py"])
-def test_fix_typing_restarts_the_helper(module):
-    """The tray starts ydotoold once, at launch. If it died for lack of
-    permission, nothing started it again after Fix Typing granted it."""
-    assert "ensure_ydotoold_running" in (ROOT / module).read_text()

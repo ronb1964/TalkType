@@ -538,3 +538,20 @@ def test_missed_space_before_a_capital_is_still_a_sentence_break():
     """Endings are lowercase; "it.It" is a transcriber's missed space."""
     assert normalize_text("I like it.It was good") == "I like it. It was good."
     assert normalize_text("meet me at three.No wait") == "Meet me at three. No wait."
+
+
+@pytest.mark.parametrize("said", [
+    "look at github.com/ron",
+    "we arrived at example.com",
+    "the docs are at example.org",
+    "I'm at example.net all day",
+])
+def test_an_ordinary_word_before_at_is_not_an_email_name(said):
+    """In a spoken address the word before "at" is a mailbox name, never
+    "look", "arrived" or "are"."""
+    assert "@" not in normalize_text(said)
+
+
+def test_mailbox_names_that_are_words_still_work():
+    assert normalize_text("write to sales at acme.com") == "Write to sales@acme.com."
+    assert normalize_text("email contact at example.org") == "Email contact@example.org."

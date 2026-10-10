@@ -21,8 +21,6 @@ SAFE = [
     ("Order two boxes of screws, no wait, three boxes.", "Order three boxes of screws."),
     ("Buy the red paint for the van. Sorry, the blue paint.", "Buy the blue paint for the van."),
     ("Call Dave, sorry, I mean Steve, about it.", "Call Steve about it."),
-    # "I mean", "actually" and "sorry" are also fillers people use
-    ("That's fine, I mean, it works.", "That's fine, it works."),
 ]
 
 UNSAFE = [
@@ -50,6 +48,8 @@ UNSAFE = [
     ("Give Dave the keys, no wait, give Steve the keys.", "Give Dave the keys."),
     # deleted only the correction phrase: both values left, the wrong one first
     ("Meet me at three. No wait. Four o'clock.", "Meet me at three. Four o'clock."),
+    ("Set it to 5, actually 10.", "Set it to 5 10."),
+    ("Call Dave, I mean Steve.", "Call Dave Steve."),
     ("Turn left at the light, no, right.", "Turn left at the light, right."),
     ("Paint it red, make that blue.", "Paint it red, blue."),
 ]

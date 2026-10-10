@@ -229,24 +229,20 @@ _RE_STANDALONE_I = re.compile(r"\bi\b(?!\.\s*e\.)")
 _RE_PUNCT_OUTSIDE_QUOTE = re.compile(r"\u201d( ?)([!?,;:.])")
 
 # --- 14) Email/URL formatting ---
-# Email endings. The country ones (.no .it .in .my .us ...) are also English
-# words that start sentences: with spaces allowed around the dot, "Look at this.
-# My car broke." came out "Look@this.My car broke.". So:
-#   - "name at domain.tld" written JOINED becomes an address before anything
-#     else runs (the space-after-period pass would split it apart otherwise),
-#     for any ending;
-#   - with spaces around the dot only the endings that can't be words count;
-#   - the space-closing fixes only touch the text right after an "@" address.
+# Country endings (.no .it .my .in .us ...) are also words that start
+# sentences, so they only count written joined to the domain ("example.de");
+# with spaces around the dot ("gmail. com") only endings that can't be words
+# do. Otherwise "Look at this. My car" became "Look@this.My car".
 _EMAIL_TLDS_SAFE = "com|org|net|edu|gov|io"
 _EMAIL_TLDS_ALL = (_EMAIL_TLDS_SAFE + "|co|uk|ca|de|fr|us|au|jp|cn|in|br|mx|ru|kr|es|it|nl|se|"
                    "no|fi|pl|cz|hu|ro|gr|pt|ie|nz|za|ae|il|tr|th|vn|ph|id|my|sg|hk|tw")
-# Case-sensitive on purpose: endings are lowercase, and "three.No" is a
-# transcriber's missed space before a new sentence, not an address.
+_EMAIL_NAME = r"(?<![\w'’])([a-zA-Z0-9._-]+)"
+# Case-sensitive: endings are lowercase, and "three.No" is a missed space.
 _RE_EMAIL_JOINED = re.compile(
-    r"([a-zA-Z0-9._-]+)\s+at\s+([a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*\.(?:" + _EMAIL_TLDS_ALL + r"))\b"
+    _EMAIL_NAME + r"\s+at\s+([a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*\.(?:" + _EMAIL_TLDS_ALL + r"))\b"
 )
 _RE_EMAIL_AT_WORD = re.compile(
-    r"([a-zA-Z0-9._-]+)\s+at\s+([a-zA-Z0-9.-]+?)\s*\.\s*(" + _EMAIL_TLDS_SAFE + r")\b",
+    _EMAIL_NAME + r"\s+at\s+([a-zA-Z0-9.-]+?)\s*\.\s*(" + _EMAIL_TLDS_SAFE + r")\b",
     re.IGNORECASE
 )
 _RE_EMAIL_SPLIT_TLD = re.compile(
@@ -254,10 +250,29 @@ _RE_EMAIL_SPLIT_TLD = re.compile(
     re.IGNORECASE
 )
 _RE_EMAIL_AT_SPACE = re.compile(r"@\s+")
+# A dot written joined to a lowercase web ending is part of an address.
+_RE_JOINED_TLD = re.compile(r"\.(?:" + _EMAIL_TLDS_ALL + r"|dev)\b")
+
+# Words that come before "at" in ordinary speech ("look at github.com", "we
+# arrived at example.com") and are never the mailbox name of a spoken address.
+_NOT_EMAIL_NAMES = frozenset("""
+    look looks looked looking arrive arrives arrived arriving be is are was were
+    am been it here there online live lives lived posted hosted available found
+    located based meet met stay stays stayed staying visit visited work works
+    worked working sign signed log logged up in on out me us you him her them
+""".split())
 
 
-# A dot directly followed by a web ending (no space): part of an address.
-_RE_JOINED_TLD = re.compile(r"\.(?:" + _EMAIL_TLDS_ALL + r"|dev)\b")  # lowercase: "it.It" is a missed space
+def _join_email(m):
+    """"ron at example.de" -> "ron@example.de", unless "ron" is an ordinary word."""
+    name, domain = m.groups()
+    return m.group(0) if name.lower() in _NOT_EMAIL_NAMES else f"{name}@{domain}"
+
+
+def _join_spaced_email(m):
+    """"ron at gmail. com" -> "ron@gmail.com", unless "ron" is an ordinary word."""
+    name, domain, tld = m.groups()
+    return m.group(0) if name.lower() in _NOT_EMAIL_NAMES else f"{name}@{domain}.{tld}"
 
 
 def _fix_email_spacing(text: str) -> str:
@@ -269,6 +284,7 @@ def _fix_email_spacing(text: str) -> str:
         if fixed == text:
             return text
         text = fixed
+
 
 # --- 15) Time formatting ---
 # Fix Whisper's mangled time output: "11. 30 p. m." → "11:30 PM", "11 p. m." → "11 PM"
@@ -367,8 +383,7 @@ def _space_after_ender_repl(m: re.Match) -> str:
         # protected by _RE_ADDRESSY; filenames had no equivalent guard.
         if (prev.isalnum() or prev in "_-") and _RE_FILE_EXT.match(s, i):
             return ch
-        # Domains written joined ("example.com", "github.com/x", "a.co.uk"):
-        # same reason. A real sentence break always has the space already.
+        # Domains written joined ("example.com", "a.co.uk"): same reason.
         if (prev.isalnum() or prev == "-") and _RE_JOINED_TLD.match(s, i):
             return ch
     return ch + " "
@@ -429,11 +444,10 @@ def normalize_text(text: str, auto_period: bool = True) -> str:
     if not text:
         return text
 
-    # --- 0) A spoken address written joined ("ron at example.de"), before the
-    #        space-after-period pass can split it (see _RE_EMAIL_JOINED) ---
-    text = _RE_EMAIL_JOINED.sub(r"\1@\2", text)
-
-    # --- 0.05) Handle quoted text - preserve everything inside quotes as literal ---
+    # --- 0) Handle quoted text - preserve everything inside quotes as literal ---
+    # A spoken address written joined ("ron at example.de") is joined first,
+    # before the space-after-period pass can split it.
+    text = _RE_EMAIL_JOINED.sub(_join_email, text)
     quoted_sections = []
     def save_quoted(match):
         quoted_sections.append(match.group(1))
@@ -584,7 +598,7 @@ def normalize_text(text: str, auto_period: bool = True) -> str:
         text = text.replace(f"__QUOTED_{i}__", f'"{quoted_text}"')
 
     # --- 14) Fix email/URL formatting ---
-    text = _RE_EMAIL_AT_WORD.sub(r"\1@\2.\3", text)
+    text = _RE_EMAIL_AT_WORD.sub(_join_spaced_email, text)
     text = _fix_email_spacing(text)
 
     # (Time formatting moved to step 6.5 — see the note there.)

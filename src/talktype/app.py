@@ -2576,9 +2576,7 @@ def _report_undelivered(outcome: str, beeps_on: bool):
     """
     message = _UNDELIVERED_NOTICES[outcome]
     if outcome == "failed":
-        # Say why, when it's the typing setup: the same user's permissions had
-        # been granted but needed a restart, and "couldn't type" alone didn't
-        # tell him that. A stopped helper is restarted for the next dictation.
+        # When the typing setup is the reason, say what fixes it.
         try:
             from . import uinput_helper
             reason = uinput_helper.typing_blocked_reason()

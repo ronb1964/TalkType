@@ -1367,10 +1367,10 @@ class WelcomeDialog:
         typing_box.pack_start(button_box, False, False, 0)
 
         # Alternative note
+        # Not "use Clipboard Paste instead": paste presses Ctrl+V through the
+        # same ydotool, so it needs these permissions too.
         alt_note = Gtk.Label()
         alt_note.set_markup(
-            # Not "use Clipboard Paste instead": paste presses Ctrl+V through the
-            # same ydotool, so it needs exactly these permissions too.
             '<span><i>💡 If you skip this, TalkType can\'t type into other apps, but every\n'
             '   dictation is kept in Recent Dictations in the TalkType menu to copy and paste.</i></span>'
         )
@@ -1431,8 +1431,7 @@ class WelcomeDialog:
                     needs_logout = True
                     self.uinput_fixed = True
                     logger.info("uinput permissions setup successful")
-                    # A daemon started before the permissions existed has
-                    # already exited; start it again in case they work now.
+                    # A daemon started without the permission has exited.
                     from talktype.uinput_helper import ensure_ydotoold_running
                     ensure_ydotoold_running()
                 else:
