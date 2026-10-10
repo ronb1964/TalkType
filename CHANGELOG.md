@@ -43,6 +43,8 @@ second review turned up.
 - Cancelling a model download in Preferences left the dropdown showing the
   model you cancelled, though the old one was still the one in use. It goes
   back now.
+- After a model download, OK left Preferences open, so you had to click OK
+  twice. OK closes now; Apply is the one that keeps the window open.
 
 ## [0.14.3] - 2026-10-10
 

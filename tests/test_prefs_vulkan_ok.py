@@ -1,9 +1,9 @@
-"""OK in Preferences must close the window on Vulkan.
+"""OK in Preferences closes the window, even right after a model download.
 
-OK deliberately stays open after a model download, so the user can keep
-adjusting. On Vulkan, _download_selected_model reported "downloaded" whenever
-the files were merely present, so OK never closed Preferences for anyone on
-Vulkan (0.12.0 to 0.13.1, found 2026-10-03).
+OK used to stay open after a download "so the user can keep adjusting", which
+meant clicking OK twice. Apply is the button that keeps the window open. On
+Vulkan it was worse: files that were merely present counted as a download, so
+OK never closed Preferences at all (0.12.0 to 0.13.1, found 2026-10-03).
 """
 from types import SimpleNamespace
 
@@ -20,21 +20,39 @@ def prefs_cls():
     return PreferencesWindow
 
 
-def _stub(model, downloads):
+def _vulkan_stub(model, downloads):
     stub = SimpleNamespace(config={"model": model, "device": "vulkan"})
     stub._download_vulkan_files = lambda m, confirm: downloads.append(m) or True
     return stub
 
 
-@pytest.mark.parametrize("model", ["small", "parakeet-v3"])
-def test_files_already_there_are_not_reported_as_a_download(prefs_cls, monkeypatch, model):
-    downloads = []
-    monkeypatch.setattr(wv, "is_installed", lambda m: True)
-    assert prefs_cls._download_selected_model(_stub(model, downloads)) == (True, False)
-
-
-def test_a_real_download_is_reported(prefs_cls, monkeypatch):
+def test_a_vulkan_model_download_reports_success(prefs_cls, monkeypatch):
     downloads = []
     monkeypatch.setattr(wv, "is_installed", lambda m: bool(downloads))
-    assert prefs_cls._download_selected_model(_stub("parakeet-v3", downloads)) == (True, True)
+    assert prefs_cls._download_selected_model(_vulkan_stub("parakeet-v3", downloads)) is True
     assert downloads == ["parakeet-v3"]
+
+
+def test_ok_closes_after_a_model_download(prefs_cls, monkeypatch):
+    """Pick Small, click OK, it downloads: the window then closes by itself."""
+    from talktype import prefs
+    quit_calls = []
+    monkeypatch.setattr(prefs.Gtk, "main_quit", lambda: quit_calls.append(True))
+
+    closed = []
+    stub = SimpleNamespace(
+        _config_at_open={"model": "parakeet-v3"},
+        config={"model": "small"},
+        save_config=lambda: True,
+        _changed_since_open=lambda: {"model"},
+        _download_selected_model=lambda: True,  # downloaded fine
+        _apply_or_restart=lambda changed: True,
+        _stop_mic_test=lambda: None,
+        _release_pidfile=lambda: None,
+        window=SimpleNamespace(destroy=lambda: closed.append(True)),
+    )
+
+    prefs_cls.on_ok(stub, None)
+
+    assert closed == [True]
+    assert quit_calls == [True]

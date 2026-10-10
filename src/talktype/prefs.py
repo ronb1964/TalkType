@@ -4709,30 +4709,24 @@ class PreferencesWindow:
         """Download the model selected in the dropdown, if it needs it.
 
         Shows the shared 'Model download failed!' error dialog on failure.
-        Returns (success, was_downloaded) — success True when nothing needed
-        downloading.
+        Returns True on success, including when nothing needed downloading.
         """
         # Use the model that was actually SAVED (merged config) — if the tray
         # switched models while this window was open, the combo may be stale.
         model_name = self.config.get("model")
         if not model_name:
-            return (True, False)
+            return True
 
         if self.config.get("device") == "vulkan":
             from . import whisper_vulkan
             if whisper_vulkan.supports_model(model_name):
-                # "Downloaded" only if something actually was: OK stays open
-                # after a download, and reporting files that were already
-                # there kept OK from ever closing Preferences on Vulkan.
-                already_there = whisper_vulkan.is_installed(model_name)
-                ok = self._download_vulkan_files(model_name, confirm=False)
-                return (ok, ok and not already_there)
+                return self._download_vulkan_files(model_name, confirm=False)
 
-        success, was_downloaded, cancelled = self.check_and_download_model(model_name)
+        success, _was_downloaded, cancelled = self.check_and_download_model(model_name)
         if cancelled:
             # User cancelled — no scary "check your internet connection"
             # dialog; just report failure so Apply/OK stops cleanly.
-            return (False, False)
+            return False
         if not success:
             dialog = Gtk.MessageDialog(
                 transient_for=self.window,
@@ -4750,7 +4744,7 @@ class PreferencesWindow:
             dialog.format_secondary_text("Failed to download the Whisper model. Please check your internet connection.")
             dialog.run()
             dialog.destroy()
-        return (success, was_downloaded)
+        return success
 
     def _rollback_model(self, previous_model):
         """Undo a model change whose download never completed.
@@ -4798,8 +4792,7 @@ class PreferencesWindow:
 
         if self.save_config():
             # Check if model needs downloading
-            success, _was_downloaded = self._download_selected_model()
-            if not success:
+            if not self._download_selected_model():
                 self._rollback_model(previous_model)
                 return
 
@@ -4870,17 +4863,12 @@ class PreferencesWindow:
 
         if self.save_config():
             # Check if model needs downloading
-            success, model_was_downloaded = self._download_selected_model()
-            if not success:
+            if not self._download_selected_model():
                 self._rollback_model(previous_model)
                 return
 
+            # OK closes even after a download; Apply is the one that stays open.
             service_restarted = self._apply_or_restart(changed)
-
-            # If model was just downloaded, keep preferences open so user can adjust other settings
-            if model_was_downloaded:
-                # Don't close the window - let user make more changes if needed
-                return
 
             # Stop the mic test (if running) and clean up PID file before closing
             self._stop_mic_test()

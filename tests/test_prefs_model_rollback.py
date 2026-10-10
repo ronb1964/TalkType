@@ -39,7 +39,7 @@ class StubPrefs:
         self._config_at_open = {"model": on_disk_model, "beeps": True}
         self.config = {"model": chosen_model, "beeps": True}
         self.saved_models = []
-        self.download_result = (False, False)  # (success, was_downloaded)
+        self.download_result = False  # did the download succeed
         self.restart_calls = 0
 
     # --- real collaborators, stubbed ---
@@ -87,7 +87,7 @@ class TestApply:
     def test_a_cancelled_download_leaves_the_previous_model_on_disk(self, prefs_cls):
         """Cancel the 3 GB download and config must still name the live model."""
         stub = StubPrefs(on_disk_model="small", chosen_model="large-v3")
-        stub.download_result = (False, False)
+        stub.download_result = False
 
         prefs_cls.on_apply(stub, None)
 
@@ -95,7 +95,7 @@ class TestApply:
 
     def test_a_cancelled_download_does_not_restart_the_service(self, prefs_cls):
         stub = StubPrefs()
-        stub.download_result = (False, False)
+        stub.download_result = False
 
         prefs_cls.on_apply(stub, None)
 
@@ -108,7 +108,7 @@ class TestApply:
         next Apply actually restarts the service onto it.
         """
         stub = StubPrefs(on_disk_model="small", chosen_model="large-v3")
-        stub.download_result = (False, False)
+        stub.download_result = False
 
         prefs_cls.on_apply(stub, None)
 
@@ -120,7 +120,7 @@ class TestApply:
 class TestOk:
     def test_a_cancelled_download_leaves_the_previous_model_on_disk(self, prefs_cls):
         stub = StubPrefs(on_disk_model="small", chosen_model="large-v3")
-        stub.download_result = (False, False)
+        stub.download_result = False
 
         prefs_cls.on_ok(stub, None)
 
@@ -132,7 +132,7 @@ class TestRollbackIsNarrow:
         """Only the model is undone — the user's other edits were saved fine."""
         stub = StubPrefs(on_disk_model="small", chosen_model="large-v3")
         stub.config["beeps"] = False
-        stub.download_result = (False, False)
+        stub.download_result = False
 
         prefs_cls.on_apply(stub, None)
 
@@ -141,7 +141,7 @@ class TestRollbackIsNarrow:
     def test_no_second_write_when_the_model_did_not_change(self, prefs_cls):
         """A failed download of the already-selected model has nothing to undo."""
         stub = StubPrefs(on_disk_model="small", chosen_model="small")
-        stub.download_result = (False, False)
+        stub.download_result = False
 
         prefs_cls.on_apply(stub, None)
 
@@ -166,7 +166,7 @@ class TestDropdownFollowsTheRollback:
         model that wasn't in use."""
         stub = StubPrefs(on_disk_model="parakeet-v3", chosen_model="medium")
         stub.model_combo = FakeCombo(stub, "medium")
-        stub.download_result = (False, False)
+        stub.download_result = False
 
         prefs_cls.on_apply(stub, None)
 
