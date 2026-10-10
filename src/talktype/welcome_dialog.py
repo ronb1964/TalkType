@@ -450,7 +450,7 @@ class WelcomeDialog:
             additional_height = 0
             if self.has_gnome:
                 additional_height += 160  # GNOME extension section
-            additional_height += 205  # recommendation card + its options button
+            additional_height += 225  # recommendation card + its options button
             if self.is_flatpak:
                 additional_height += 190  # Shortcut setup section (Flatpak)
             # Typing setup section shows if either uinput OR ydotoold needs fixing
@@ -605,7 +605,7 @@ class WelcomeDialog:
         # VBox inside scrolled window
         vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=15)
         vbox.set_margin_top(20)
-        vbox.set_margin_bottom(20)
+        vbox.set_margin_bottom(6)
         vbox.set_margin_start(30)
         vbox.set_margin_end(30)
         scrolled.add(vbox)
@@ -626,7 +626,16 @@ class WelcomeDialog:
                     or self.is_flatpak):
                 self._build_optional_features(vbox)
 
-        self._build_footer(vbox)
+        # The footer ("Next:" and Set it up / Quit) sits below the scrolling part,
+        # so it is always on screen whole. Inside the scroll, a title bar the
+        # desktop draws (KDE) or a short screen left the button flush with the
+        # bottom edge or out of sight, depending on where it was scrolled.
+        footer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        footer.set_margin_bottom(20)
+        footer.set_margin_start(30)
+        footer.set_margin_end(30)
+        content.pack_end(footer, False, False, 0)
+        self._build_footer(footer)
 
     def _build_header(self, vbox):
         """Build the header section."""

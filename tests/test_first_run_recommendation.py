@@ -77,6 +77,26 @@ def test_options_button_says_what_can_be_changed(dialog):
     assert not dialog.options_expander.get_expanded()
 
 
+def _find_button(widget, label):
+    if isinstance(widget, Gtk.Button) and widget.get_label() == label:
+        return widget
+    if isinstance(widget, Gtk.Container):
+        for child in widget.get_children():
+            found = _find_button(child, label)
+            if found:
+                return found
+    return None
+
+
+def test_set_it_up_is_pinned_outside_the_scroll(dialog):
+    """Inside the scrolling area, KDE's title bar left "Set it up" flush with
+    the window's bottom edge until the user scrolled. Pinned below it, the
+    button is always on screen whole."""
+    button = _find_button(dialog.dialog, "Set it up")
+    assert button is not None
+    assert button.get_ancestor(Gtk.ScrolledWindow) is None
+
+
 def test_flatpak_footer_no_longer_promises_a_model_choice():
     """The model is chosen on this screen now; the later picker is gone."""
     assert "choose your speech model" not in SRC
