@@ -93,6 +93,19 @@
   </screenshots>
 
   <releases>
+    <release version="0.14.3" date="2026-10-10">
+      <description>
+        <p>Fixes for GNOME and KDE</p>
+        <ul>
+          <li>Dropdowns work on a second monitor under GNOME on Wayland, and open cleanly on KDE</li>
+          <li>Ordinary sentences are no longer turned into email addresses</li>
+          <li>Windows show TalkType's icon on KDE instead of a generic one</li>
+          <li>Preferences highlights the tab it opened on</li>
+          <li>Choosing the Performance preset already in use no longer restarts the service</li>
+          <li>Current screenshots</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.14.2" date="2026-10-06">
       <description>
         <p>A recommended setup for your computer</p>

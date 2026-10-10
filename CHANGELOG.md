@@ -2,6 +2,38 @@
 
 All notable changes to TalkType are documented here.
 
+## [0.14.3] - 2026-10-10
+
+Small one, mostly fixes. The main one came from Stefano on GNOME.
+
+- On GNOME under Wayland, the dropdowns in Preferences couldn't be changed if
+  the window was on a second monitor. The list was opening off screen where you
+  couldn't see it. That's a GTK bug that never got fixed, so on Wayland the
+  dropdowns open a different way now that the desktop itself places, and it
+  works on any monitor. Thanks to Stefano Scipioni for tracking it down (#9).
+- While fixing that I found GTK's normal dropdown is no good on KDE either. The
+  first time you click one it opens squashed, with scroll arrows and the items
+  cut in half, until you move the mouse. The new way doesn't do that. The list
+  just drops down under the button.
+- Ordinary sentences could get turned into email addresses. "Look at this. My
+  car broke." came out as "Look@this.My car broke." because "my", "no", "it"
+  and "in" are also the endings of some countries' web addresses. Spoken
+  addresses like "john at gmail.com" still work.
+- On KDE, TalkType's windows showed a generic "W" icon in the title bar and
+  taskbar instead of TalkType's own. Every window was calling itself "python3",
+  so KDE couldn't match it to the launcher.
+- Opening Preferences straight to a tab, like Your Stats from the menu, showed
+  the right page but left General highlighted on KDE.
+- After a service restart on KDE, the log could say F8, F9 and Ctrl+Alt+V were
+  already taken by KDE when they weren't. It checks again for about a second
+  now before warning.
+- Picking the Performance preset you're already on doesn't rerun the speed
+  check and restart the service anymore. The GNOME menu sends a click even for
+  the one with the dot next to it.
+- First run on a graphics card shows one download window instead of two.
+- New screenshots in the README and the software store listing. The old store
+  ones were a year out of date.
+
 ## [0.14.2] - 2026-10-06
 
 This one's mostly about setup. TalkType has a lot of settings now and it was
