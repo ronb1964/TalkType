@@ -18,6 +18,9 @@ Two things are easy to get wrong here and both are covered below:
    a window-scoped provider does NOT reach child widgets — measured: the child
    combo still read False. The style must be installed for the whole screen or
    it silently does nothing.
+
+3. Wayland. List mode is X11-only: on Wayland GTK3 can place the list popup off
+   screen on a second monitor, so the dropdown can't be changed (issue #9).
 """
 
 import pathlib
@@ -43,9 +46,43 @@ def gtk():
         pytest.skip(f"GTK stack unavailable: {exc}")
 
 
-def test_helper_switches_combos_to_list_mode(gtk):
-    """The whole point: a real ComboBox must report list mode afterwards."""
-    from talktype.ui_style import apply_dropdown_list_style
+class _FakeDisplay:
+    """Stands in for a GdkDisplay; only the class name matters."""
+
+
+def _display_named(name):
+    return type(name, (_FakeDisplay,), {})()
+
+
+@pytest.mark.parametrize(
+    "class_name, expected",
+    [
+        ("GdkX11Display", True),
+        # Issue #9: on Wayland, GTK3's list-mode popup positions itself with
+        # window-relative coordinates clamped against the monitor's GLOBAL work
+        # area (gtkcombobox.c gtk_combo_box_list_position). On a monitor that
+        # does not start at 0,0 that shoves the popup off screen, so the value
+        # can't be changed. Menu mode uses xdg_popup positioning and works.
+        ("GdkWaylandDisplay", False),
+        ("SomethingElse", False),
+    ],
+)
+def test_list_mode_only_on_x11(class_name, expected):
+    from talktype.ui_style import _wants_list_mode
+
+    assert _wants_list_mode(_display_named(class_name)) is expected
+
+
+def test_list_mode_never_raises_on_odd_input():
+    from talktype.ui_style import _wants_list_mode
+
+    assert _wants_list_mode(None) is False
+
+
+def test_helper_sets_the_right_mode_for_this_display(gtk):
+    """A real ComboBox must end up in list mode on X11 and menu mode elsewhere."""
+    from gi.repository import Gdk
+    from talktype.ui_style import apply_dropdown_list_style, _wants_list_mode
 
     combo = gtk.ComboBoxText()
     combo.append_text("CPU")
@@ -65,9 +102,11 @@ def test_helper_switches_combos_to_list_mode(gtk):
     while gtk.events_pending():
         gtk.main_iteration()
 
-    assert combo.style_get_property("appears-as-list") is True, (
-        "appears-as-list did not take effect. GTK may have finally dropped this "
-        "deprecated style property — the popups will look wrong but still work."
+    expected = _wants_list_mode(Gdk.Display.get_default())
+    assert combo.style_get_property("appears-as-list") is expected, (
+        "appears-as-list did not match the display backend. On X11 GTK may have "
+        "finally dropped this deprecated property (cosmetic only); on Wayland it "
+        "must stay off or popups can open off screen (issue #9)."
     )
     win.destroy()
 

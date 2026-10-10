@@ -24,6 +24,14 @@ logger = logging.getLogger(__name__)
 # honoured in 3.24.52 (verified: the resolved value flips False -> True). If a
 # future GTK drops it the popups revert to menu mode — cosmetic only, nothing
 # stops working.
+#
+# X11 ONLY (issue #9). On Wayland a window can't learn its place on the desktop,
+# so GTK3 (gtkcombobox.c, gtk_combo_box_list_position) gets the list's position
+# relative to the window and then clamps it against the monitor's work area in
+# GLOBAL coordinates. On a monitor that doesn't start at 0,0 (a second screen)
+# that shoves the popup off screen and the value can't be changed. GTK bug #6105,
+# open and unfixed. Menu mode is placed by the compositor and works everywhere,
+# so Wayland keeps GTK's default and accepts the cosmetic overlap.
 _DROPDOWN_CSS = b"""
 combobox {
     -GtkComboBox-appears-as-list: 1;
@@ -55,10 +63,23 @@ colorswatch.dark overlay {
 _installed = False
 
 
+def _wants_list_mode(display):
+    """True only on X11, the one backend where GTK3 places list popups correctly.
+
+    Checked by class name so it needs no GdkX11 typelib. Anything unrecognised
+    gets GTK's default menu mode, which is safe everywhere. Never raises.
+    """
+    try:
+        return type(display).__name__.startswith("GdkX11")
+    except Exception:
+        return False
+
+
 def apply_dropdown_list_style():
-    """Install shared screen-wide GTK styling: ComboBox popups drop down below
-    the button (not over it), and color-picker swatch checkmarks contrast with
-    the swatch color so the selection is visible on white and black alike.
+    """Install shared screen-wide GTK styling: on X11, ComboBox popups drop down
+    below the button (not over it); everywhere, color-picker swatch checkmarks
+    contrast with the swatch color so the selection is visible on white and
+    black alike.
 
     Safe to call more than once; only the first call installs anything. Never
     raises — a styling failure must not stop a window from opening.
@@ -74,7 +95,10 @@ def apply_dropdown_list_style():
 
     try:
         provider = Gtk.CssProvider()
-        provider.load_from_data(_DROPDOWN_CSS + _SWATCH_CSS)
+        css = _SWATCH_CSS
+        if _wants_list_mode(screen.get_display()):
+            css = _DROPDOWN_CSS + css
+        provider.load_from_data(css)
         Gtk.StyleContext.add_provider_for_screen(
             screen, provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
         )
