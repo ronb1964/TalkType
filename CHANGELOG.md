@@ -33,6 +33,9 @@ second review turned up.
   dot there. That needs extension version 16, and Check for Updates offers it.
 - Long dropdown lists like the language list open as three columns, so they
   fit on the screen with your current choice showing.
+- On the welcome screen, "Other options" was easy to miss. It's now a button
+  that says what it's for: Change language, model or graphics card. The
+  "Set it up" button isn't cut off at the bottom anymore either.
 
 ## [0.14.3] - 2026-10-10
 

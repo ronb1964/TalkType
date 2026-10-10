@@ -450,7 +450,7 @@ class WelcomeDialog:
             additional_height = 0
             if self.has_gnome:
                 additional_height += 160  # GNOME extension section
-            additional_height += 170  # recommendation card
+            additional_height += 205  # recommendation card + its options button
             if self.is_flatpak:
                 additional_height += 190  # Shortcut setup section (Flatpak)
             # Typing setup section shows if either uinput OR ydotoold needs fixing
@@ -566,7 +566,7 @@ class WelcomeDialog:
             .tt-quit:active {
                 background-color: rgba(255, 255, 255, 0.22);
             }
-                    .tt-rec-card {
+            .tt-rec-card {
                 border: 2px solid #4a90e2;
                 border-radius: 10px;
                 padding: 12px 14px;
@@ -576,6 +576,16 @@ class WelcomeDialog:
                 color: #7fb2f0;
                 font-weight: bold;
                 font-size: 9pt;
+            }
+            /* Other options as a button: as a plain expander people missed it. */
+            expander.tt-options > title {
+                border: 1px solid rgba(255, 255, 255, 0.22);
+                border-radius: 6px;
+                padding: 3px 10px;
+                background-color: rgba(255, 255, 255, 0.06);
+            }
+            expander.tt-options > title:hover {
+                background-color: rgba(255, 255, 255, 0.12);
             }
 """)
         # Apply CSS globally but with specific class names to avoid affecting other dialogs
@@ -1673,18 +1683,20 @@ class WelcomeDialog:
         self.rec_title = Gtk.Label(xalign=0)
         self.rec_explanation = Gtk.Label(xalign=0)
         self.rec_explanation.set_line_wrap(True)
-        # Its "change" link (after the language) opens Other options there.
-        self.rec_explanation.connect("activate-link", self._on_change_language)
         self.rec_download = Gtk.Label(xalign=0)
         self.rec_download.set_opacity(0.85)
         for w in (tag, self.rec_title, self.rec_explanation, self.rec_download):
             card.pack_start(w, False, False, 0)
         vbox.pack_start(card, False, False, 6)
 
-        expander = self.options_expander = Gtk.Expander(label="Other options")
+        expander = self.options_expander = Gtk.Expander()
+        title = Gtk.Label(label="Change language, model or graphics card", hexpand=True)
+        expander.set_label_widget(title)
+        expander.get_style_context().add_class("tt-options")
         expander.connect("notify::expanded", self._on_options_toggled)
         other = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         other.set_margin_start(12)
+        other.set_margin_top(10)
 
         lang_row = Gtk.Box(spacing=8)
         lang_row.pack_start(Gtk.Label(label="I dictate in", xalign=0), False, False, 0)
@@ -1754,14 +1766,6 @@ class WelcomeDialog:
             self._chosen_model = model
             self._refresh_recommendation()
 
-    def _on_change_language(self, _label, uri):
-        """The card's "change" link: open Other options at the language."""
-        if uri != "change":
-            return False
-        self.options_expander.set_expanded(True)
-        self.lang_combo.grab_focus()
-        return True
-
     def _on_options_toggled(self, expander, _pspec):
         """Opening Other options adds its choices below the bottom of the
         window. Scroll so they start near the top instead of leaving the user
@@ -1788,8 +1792,7 @@ class WelcomeDialog:
         name = rec.language_name(self._language())
         self.rec_title.set_markup(f"<b>{GLib.markup_escape_text(setup.title)}</b>")
         self.rec_explanation.set_markup(
-            f"{GLib.markup_escape_text(setup.explanation)} For <b>{GLib.markup_escape_text(name)}</b>.  "
-            '<a href="change">change</a>')
+            f"{GLib.markup_escape_text(setup.explanation)} For <b>{GLib.markup_escape_text(name)}</b>.")
         self.rec_download.set_text(setup.download_text)
         self._syncing = True
         try:

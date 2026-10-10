@@ -102,6 +102,7 @@
           <li>Self-corrections work when a pause splits off "no wait"</li>
           <li>Performance has a Custom item that opens Preferences, in the GNOME menu too</li>
           <li>Long dropdown lists open in columns; Stats and Updates fit the window</li>
+          <li>The welcome screen has a clear button to change language, model or graphics card</li>
         </ul>
       </description>
     </release>

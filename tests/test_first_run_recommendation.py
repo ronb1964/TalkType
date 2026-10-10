@@ -67,14 +67,14 @@ def test_first_run_never_mentions_cuda():
     assert "Download CUDA Libraries" not in SRC
 
 
-def test_change_link_opens_other_options_at_the_language(dialog):
-    """Mockup A: "For English  change". The link was missing, so nothing on
-    the card said the language could be changed."""
-    assert '<a href="change">change</a>' in dialog.rec_explanation.get_label()
+def test_options_button_says_what_can_be_changed(dialog):
+    """A plain "Other options" expander went unnoticed, and a small "change"
+    link on the card was easy to miss too. One button names the choices."""
+    title = dialog.options_expander.get_label_widget().get_label()
+    assert title == "Change language, model or graphics card"
+    assert dialog.options_expander.get_style_context().has_class("tt-options")
+    assert "<a href" not in dialog.rec_explanation.get_label()
     assert not dialog.options_expander.get_expanded()
-    handled = dialog.rec_explanation.emit("activate-link", "change")
-    assert handled is True
-    assert dialog.options_expander.get_expanded()
 
 
 def test_flatpak_footer_no_longer_promises_a_model_choice():
