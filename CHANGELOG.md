@@ -36,6 +36,13 @@ second review turned up.
 - On the welcome screen, "Other options" was easy to miss. It's now a button
   that says what it's for: Change language, model or graphics card. The
   "Set it up" button isn't cut off at the bottom anymore either.
+- In the AppImage, every emoji was blank on newer distros like Fedora,
+  including the flags in the language list. It brought along an old copy of
+  the library that draws the text, and that one can't draw today's color emoji
+  font. It uses your system's copy now.
+- Cancelling a model download in Preferences left the dropdown showing the
+  model you cancelled, though the old one was still the one in use. It goes
+  back now.
 
 ## [0.14.3] - 2026-10-10
 

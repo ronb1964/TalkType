@@ -212,11 +212,12 @@ else
     echo "     ⚠️  WARNING: _dbus C bindings not found - GNOME extension may not work"
 fi
 
-# Copy Cairo C libraries
-install -Dm755 /usr/lib/x86_64-linux-gnu/libcairo.so.2 AppDir/usr/lib/libcairo.so.2
-install -Dm755 /usr/lib/x86_64-linux-gnu/libcairo-gobject.so.2 AppDir/usr/lib/libcairo-gobject.so.2
-install -Dm755 /usr/lib/x86_64-linux-gnu/libpangocairo-1.0.so.0 AppDir/usr/lib/libpangocairo-1.0.so.0
-echo "     ✓ Copied Cairo C libraries"
+# Do NOT bundle the Cairo C libraries (libcairo, libcairo-gobject,
+# libpangocairo). GTK needs them, so every desktop that can run TalkType has
+# them. Bundled, Ubuntu 22.04's cairo 1.16 replaced the system's, and it can't
+# draw the color emoji fonts newer distros ship (Fedora's Noto Color Emoji is
+# COLRv1 only): every emoji in the app, the language flags included, was
+# blank. The Python cairo package and _gi_cairo above are all that's needed.
 
 # Build ydotool
 echo "   Building ydotool..."
