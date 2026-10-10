@@ -1804,7 +1804,11 @@ class DictationTray:
         if getattr(self, "_updating_preset", False) or not item.get_active():
             return
         self.open_preferences(None)
-        self._revert_preset_radio()
+        # Not straight away. KDE ticks a clicked item in its own copy of the
+        # menu, and a move to Custom and back within one main-loop pass goes
+        # out over DBusMenu as no change at all, so KDE kept its tick next to
+        # the real one: two dots. Apart, both updates reach it.
+        GLib.timeout_add(150, lambda: self._revert_preset_radio() and False)
 
     def _build_history_submenu(self):
         """Build the Recent Dictations submenu and keep it current.

@@ -6,7 +6,24 @@ use: Custom only shows the dot when the settings match no preset.
 """
 import types
 
+import pytest
+
+from talktype import tray as tray_module
 from talktype.tray import DictationTray
+
+
+@pytest.fixture(autouse=True)
+def run_timeouts_now(monkeypatch):
+    """The dot goes back on a short timer; run it at once and record that it
+    was deferred rather than done in the same main-loop pass."""
+    deferred = []
+
+    def timeout_add(ms, fn, *args):
+        deferred.append(ms)
+        fn(*args)
+        return 1
+    monkeypatch.setattr(tray_module.GLib, "timeout_add", timeout_add)
+    return deferred
 
 
 class Item:
@@ -27,10 +44,12 @@ def fake_tray(updating=False):
     )
 
 
-def test_clicking_custom_opens_preferences_then_puts_the_dot_back():
+def test_clicking_custom_opens_preferences_then_puts_the_dot_back(run_timeouts_now):
     tray = fake_tray()
     DictationTray._on_custom_preset(tray, Item(active=True))
     assert tray.calls == ["prefs", "revert"]
+    # Deferred: done in the same pass, KDE showed two dots (see the handler).
+    assert run_timeouts_now and run_timeouts_now[0] > 0
 
 
 def test_the_dot_leaving_custom_does_not_open_preferences():
