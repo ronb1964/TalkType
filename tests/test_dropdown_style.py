@@ -21,6 +21,10 @@ Two things are easy to get wrong here and both are covered below:
 
 3. Wayland. List mode is X11-only: on Wayland GTK3 can place the list popup off
    screen on a second monitor, so the dropdown can't be changed (issue #9).
+   Plain menu mode isn't good enough either: on KDE it opens squashed, with
+   scroll arrows and half-hidden items, until the mouse moves. So on Wayland
+   every combo gets wrap_width=1, GTK's "drop the menu below the button" path,
+   which the compositor places, and the menu is made as wide as the button.
 """
 
 import pathlib
@@ -111,6 +115,65 @@ def test_helper_sets_the_right_mode_for_this_display(gtk):
     win.destroy()
 
 
+def _pump(gtk):
+    while gtk.events_pending():
+        gtk.main_iteration()
+
+
+def test_drop_down_below_uses_the_wrap_path_and_full_width(gtk):
+    """The Wayland treatment for one combo: wrap path, menu as wide as it."""
+    from talktype.ui_style import _drop_down_below
+
+    combo = gtk.ComboBoxText()
+    for t in ("CPU", "CUDA (GPU)", "Vulkan (any GPU)"):
+        combo.append_text(t)
+    combo.set_active(2)
+    combo.set_size_request(400, -1)
+    win = gtk.Window()
+    win.add(combo)
+
+    _drop_down_below(combo)
+    win.show_all()
+    _pump(gtk)
+
+    assert combo.get_wrap_width() == 1
+    menu = combo.get_popup_accessible().get_widget()
+    # The menu hangs from the button's text, so it's as wide as the button
+    # minus that inset: its right edge lines up with the button's.
+    inset = combo.get_child().get_allocation().x - combo.get_allocation().x
+    assert inset >= 0
+    assert menu.get_size_request()[0] == combo.get_allocated_width() - inset
+    assert menu.get_size_request()[0] > 300
+    win.destroy()
+
+
+def test_drop_down_below_leaves_an_explicit_wrap_width_alone(gtk):
+    from talktype.ui_style import _drop_down_below
+
+    combo = gtk.ComboBoxText()
+    combo.set_wrap_width(3)
+    _drop_down_below(combo)
+    assert combo.get_wrap_width() == 3
+
+
+def test_helper_gives_combos_the_right_popup_for_this_display(gtk):
+    """Combos realised after the helper runs: wrap path on Wayland only."""
+    from gi.repository import Gdk
+    from talktype.ui_style import apply_dropdown_list_style, _wants_list_mode
+
+    apply_dropdown_list_style()
+    combo = gtk.ComboBoxText()
+    combo.append_text("F8")
+    win = gtk.Window()
+    win.add(combo)
+    win.show_all()
+    _pump(gtk)
+
+    expected = 0 if _wants_list_mode(Gdk.Display.get_default()) else 1
+    assert combo.get_wrap_width() == expected
+    win.destroy()
+
+
 def test_helper_is_idempotent(gtk):
     """The tray calls it once and Preferences calls it again in-process."""
     from talktype.ui_style import apply_dropdown_list_style
@@ -124,6 +187,7 @@ def test_helper_is_idempotent(gtk):
     [
         "src/talktype/prefs.py",           # Model, Device, Language, hotkeys
         "src/talktype/welcome_dialog.py",  # first-run model picker
+        "src/talktype/fix_word_dialog.py", # which recent dictation
     ],
 )
 def test_every_window_with_dropdowns_applies_the_style(module):

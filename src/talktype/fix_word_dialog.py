@@ -72,6 +72,8 @@ class _FixWordDialog:
         win.add(box)
 
         # Which dictation. Hidden when there is only one to choose from.
+        from .ui_style import apply_dropdown_list_style
+        apply_dropdown_list_style()
         self.combo = Gtk.ComboBoxText()
         for text in entries:
             self.combo.append_text(preview(text, 70))
