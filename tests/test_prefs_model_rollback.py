@@ -63,6 +63,11 @@ class StubPrefs:
 
         return PreferencesWindow._rollback_download(self, previous)
 
+    def _set_choice(self, key, value):
+        from talktype.prefs import PreferencesWindow
+
+        return PreferencesWindow._set_choice(self, key, value)
+
     def _on_device_changed(self, combo):
         raise AssertionError("the device dialogs ran during a rollback")
 

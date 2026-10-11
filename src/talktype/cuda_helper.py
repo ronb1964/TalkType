@@ -559,25 +559,6 @@ def show_cuda_download_dialog(parent=None, on_success_callback=None):
     success = download_success[0]
 
     if success:
-        # Automatically enable GPU mode in config
-        try:
-            from talktype.config import load_config, save_config
-            config = load_config()
-            if config.device != "cuda":
-                config.device = "cuda"
-                save_config(config)
-                logger.info("✅ Automatically enabled GPU mode in config")
-        except Exception as e:
-            logger.warning(f"Could not auto-enable GPU mode in config: {e}")
-
-        # Run success callback if provided
-        if on_success_callback:
-            try:
-                on_success_callback()
-            except Exception as e:
-                logger.warning(f"Error in success callback: {e}")
-
-        # Show success message
         msg = message_dialog(
             parent=parent,
             message_type=Gtk.MessageType.INFO,
@@ -590,12 +571,18 @@ def show_cuda_download_dialog(parent=None, on_success_callback=None):
         if settings:
             settings.set_property("gtk-application-prefer-dark-theme", True)
 
-        msg.format_secondary_text(
-            "GPU acceleration is now available.\n\n"
-            "TalkType has been automatically configured to use your NVIDIA GPU for faster transcription."
-        )
+        msg.format_secondary_text("Your NVIDIA graphics card can now run the Whisper models with CUDA.")
         msg.run()
         msg.destroy()
+
+        # Switching the device is the caller's job (Preferences, through
+        # Apply): written here, the service never restarted onto it. After
+        # the message, so its question doesn't come before "Downloaded!".
+        if on_success_callback:
+            try:
+                on_success_callback()
+            except Exception as e:
+                logger.warning(f"Error in success callback: {e}")
         logger.info("CUDA libraries downloaded successfully")
     else:
         # Show error message

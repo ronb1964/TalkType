@@ -4001,14 +4001,6 @@ class PreferencesWindow:
             # Refresh device dropdown to show CUDA option
             self._refresh_device_options()
 
-            # Update device combo to reflect change and auto-save config
-            if hasattr(self, 'device_combo'):
-                self.device_combo.set_active_id("cuda")
-                # Auto-save to config so tray and service see the change
-                self.config["device"] = "cuda"
-                self.save_config()
-                print("✅ Automatically switched to GPU mode after CUDA download")
-
             # Unlock large-v3 in the model dropdown now that CUDA is available
             if hasattr(self, 'model_store'):
                 for row in self.model_store:
@@ -4016,6 +4008,8 @@ class PreferencesWindow:
                         row[1] = "large-v3 — best accuracy"
                         row[2] = True  # Make selectable
                         break
+
+            self._after_cuda_download()
 
         # Show the modern download dialog
         success = cuda_helper.show_cuda_download_dialog(
@@ -4752,6 +4746,52 @@ class PreferencesWindow:
             dialog.destroy()
         return success
 
+    def _after_cuda_download(self):
+        """Switch to CUDA now that it's downloaded, through Apply.
+
+        Never by saving directly: that moves the baseline Apply diffs against,
+        so the switch was saved but never restarted the service. Parakeet
+        can't use CUDA, and switching its device would move it from the
+        graphics card to the processor, so its user is asked first.
+        """
+        from .parakeet_engine import is_parakeet
+        if is_parakeet(self.config.get("model")):
+            box = message_dialog(transient_for=self.window, modal=True,
+                                 message_type=Gtk.MessageType.QUESTION,
+                                 buttons=Gtk.ButtonsType.NONE, text="CUDA is ready")
+            box.format_secondary_text(
+                "CUDA speeds up the Whisper models. Parakeet can't use it, and it "
+                "stays as fast as it is now.\n\n"
+                "Switch to Whisper Small on CUDA now?")
+            box.add_button("Keep Parakeet", Gtk.ResponseType.NO)
+            box.add_button("Switch to Whisper Small", Gtk.ResponseType.YES)
+            box.set_default_response(Gtk.ResponseType.YES)
+            answer = box.run()
+            box.destroy()
+            if answer != Gtk.ResponseType.YES:
+                return
+            self._set_choice("model", "small")
+        self._set_choice("device", "cuda")
+        self.on_apply(None)
+
+    def _set_choice(self, key, value):
+        """Set the model or device and its dropdown without the dropdown's
+        own reactions (model-picked dialogs, Vulkan's setup download)."""
+        self.config[key] = value
+        if key == "model" and getattr(self, "model_combo", None) is not None:
+            self._updating_model = True
+            try:
+                self.model_combo.set_active_id(value)
+            finally:
+                self._updating_model = False
+            self._last_selected_model = value
+        elif key == "device" and getattr(self, "device_combo", None) is not None:
+            self.device_combo.handler_block_by_func(self._on_device_changed)
+            try:
+                self.device_combo.set_active_id(value)
+            finally:
+                self.device_combo.handler_unblock_by_func(self._on_device_changed)
+
     def _rollback_download(self, previous):
         """Undo a model or device change whose download never completed.
 
@@ -4774,23 +4814,9 @@ class PreferencesWindow:
                 if v is not None and self.config.get(k) != v}
         if not undo:
             return
-        self.config.update(undo)
+        for key, value in undo.items():
+            self._set_choice(key, value)
         self.save_config()
-        combo = getattr(self, "model_combo", None)
-        if "model" in undo and combo is not None:
-            self._updating_model = True
-            try:
-                combo.set_active_id(undo["model"])
-            finally:
-                self._updating_model = False
-            self._last_selected_model = undo["model"]
-        combo = getattr(self, "device_combo", None)
-        if "device" in undo and combo is not None:
-            combo.handler_block_by_func(self._on_device_changed)
-            try:
-                combo.set_active_id(undo["device"])
-            finally:
-                combo.handler_unblock_by_func(self._on_device_changed)
 
     def on_apply(self, button):
         """Apply changes, restarting the service only if something needs it."""
