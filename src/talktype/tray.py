@@ -1052,56 +1052,6 @@ class DictationTray:
         except Exception as e:
             logger.error(f"Failed to open preferences updates tab: {e}")
 
-    def download_cuda(self, _):
-        """Download CUDA libraries for GPU acceleration."""
-        # Show confirmation dialog first
-        confirm_dialog = message_dialog(
-            message_type=Gtk.MessageType.QUESTION,
-            buttons=Gtk.ButtonsType.YES_NO,
-            text="Download CUDA Libraries?"
-        )
-        from talktype.config import get_data_dir
-        cuda_path = os.path.join(get_data_dir(), "cuda")
-        confirm_dialog.format_secondary_text(
-            "This will download approximately 1.4GB of CUDA libraries for GPU acceleration.\n\n"
-            f"The files will be stored in {cuda_path} and may take several minutes to download.\n\n"
-            "Continue with download?"
-        )
-        confirm_dialog.set_position(Gtk.WindowPosition.CENTER)
-        confirm_dialog.set_keep_above(True)
-        response = confirm_dialog.run()
-        confirm_dialog.destroy()
-
-        if response != Gtk.ResponseType.YES:
-            logger.info("CUDA download cancelled by user")
-            return
-
-        try:
-            from . import cuda_helper
-            logger.info("Starting CUDA download...")
-            success = cuda_helper.download_cuda_libraries()
-            if success:
-                logger.info("CUDA libraries downloaded successfully")
-                # Auto-switch to CUDA in config after successful download
-                try:
-                    from .config import load_config, save_config
-                    cfg = load_config()
-                    if cfg.device != "cuda":
-                        cfg.device = "cuda"
-                        save_config(cfg)
-                        logger.info("✅ Automatically switched to GPU mode after CUDA download")
-                        # Refresh menu to show updated device
-                        self.update_menu_display()
-                        # The device changed under the extension's feet — tell it,
-                        # or its Device line and preset dot stay on the old value.
-                        self._emit_model_changed(cfg.model)
-                except Exception as save_e:
-                    logger.warning(f"Could not auto-enable GPU mode: {save_e}")
-            else:
-                logger.error("CUDA download failed")
-        except Exception as e:
-            logger.error(f"Error downloading CUDA: {e}")
-    
     def show_help(self, _):
         """Show help dialog with TalkType features and instructions."""
         from .help_dialog import show_help_dialog
