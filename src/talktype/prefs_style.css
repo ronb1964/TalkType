@@ -151,6 +151,16 @@ window.talktype-prefs {
     border-color: @theme_selected_bg_color;
 }
 
+/* Links (GtkLinkButton) are text, not boxes. The button rule above drew
+   "Full changelog" as a bordered button around underlined text (Ron, 0.14.6). */
+.talktype-prefs button.link,
+.talktype-prefs button.link:hover {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0 4px;
+}
+
 /* Entry fields */
 .talktype-prefs entry {
     background: #2a2a2a;

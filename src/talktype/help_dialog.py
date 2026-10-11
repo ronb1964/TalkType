@@ -55,8 +55,7 @@ def show_help_dialog():
         hotkey_hold = "your <b>Hold-to-talk</b> key"
         hotkey_toggle = "your <b>Toggle-dictation</b> key"
     else:
-        keys_line = ("<b>F8</b> to hold-to-talk and <b>F9</b> to tap-to-toggle "
-                     "(both active at once)")
+        keys_line = "<b>F8</b> to hold-to-talk and <b>F9</b> to tap-to-toggle"
         keys_where = "<b>Preferences → General</b>"
         hotkey_hold = "<b>F8</b>"
         hotkey_toggle = "<b>F9</b>"
@@ -188,7 +187,7 @@ On first launch, TalkType shows a welcome dialog that:
 {first_run_hotkey_bullet}• Offers to install the GNOME extension (if on GNOME desktop)
 
 <b>1. Begin Dictating</b>
-Both keys are always active at once — {keys_line}.
+Both keys work at the same time: {keys_line}.
 • <b>Recording Indicator:</b> an indicator appears on screen while you're recording
   (choose its style and color in Preferences → Audio).
 
