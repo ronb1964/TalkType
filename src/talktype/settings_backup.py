@@ -1,7 +1,7 @@
 """Back up and restore TalkType's settings.
 
 Two uses:
-- A backup file the user saves and loads from Preferences → Advanced, to move
+- A backup file the user saves and loads from Preferences → Updates & Backup, to move
   to another computer or keep through a reinstall. It holds the settings, the
   voice commands (Fix a Word saves its words there too) and the usage stats.
 - Automatic copies, so a change or an update that went wrong can be undone.

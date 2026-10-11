@@ -57,7 +57,7 @@ It's free, it runs completely offline, and nothing you say ever leaves your comp
 
 First run looks at your graphics card and your language and picks a setup for you. On a graphics card, a sentence is typed out in about a fifth of a second. No graphics card is fine too: the default model is fast on an ordinary processor.
 
-Want something else? One button shows every choice, with what it costs you in download size and speed.
+Want something else? One button shows every choice, with what it costs you in download size and speed. Later on, **Use Recommended** in Preferences gets you back to it, and **What works with what?** shows which models run on which hardware.
 
 </td>
 </tr>
@@ -92,6 +92,16 @@ Your Stats shows the words you've dictated today, this week and all time, and ho
 
 </td>
 <td width="50%"><img src="screenshots/prefs-stats.png" alt="Preferences, Stats tab"></td>
+</tr>
+<tr>
+<td width="50%"><img src="screenshots/prefs-backup.png" alt="Preferences, Updates and Backup tab: save or load a backup, the backup folder, and earlier settings to go back to"></td>
+<td>
+
+### Take your setup with you
+
+Save your settings, voice commands, Fix a Word words and stats to one file, and load it on a new computer or after a reinstall. TalkType also keeps your last 10 settings on its own, so if a change or an update goes wrong you can just go back.
+
+</td>
 </tr>
 </table>
 
@@ -141,11 +151,11 @@ chmod +x TalkType-v*.AppImage
 
 The AppImage includes everything needed - just download and run!
 
-> **Note:** AppImages require FUSE 2 (`libfuse.so.2`). Install if needed:
-> - **Fedora/RHEL**: `sudo dnf install fuse`
-> - **Ubuntu/Debian**: `sudo apt install libfuse2`
-> - **Arch/Manjaro**: `sudo pacman -S fuse2`
-> - **openSUSE**: `sudo zypper install libfuse2`
+> **Note:** The AppImage doesn't need libfuse2 anymore. It does need `fusermount`, which nearly every desktop already has. If it won't start, install the `fuse3` package:
+> - **Fedora/RHEL**: `sudo dnf install fuse3`
+> - **Ubuntu/Debian**: `sudo apt install fuse3`
+> - **Arch/Manjaro**: `sudo pacman -S fuse3`
+> - **openSUSE**: `sudo zypper install fuse3`
 
 ### Flatpak
 
@@ -158,7 +168,7 @@ enough interest and I'll make it happen.
 
 | Requirement | Details |
 |------------|---------|
-| **OS** | Linux with Wayland |
+| **OS** | Linux, on Wayland or X11 (GNOME, KDE, Sway, Hyprland and more) |
 | **Dependencies** | None to install by hand — ydotool, ydotoold and wl-clipboard ship inside TalkType, and the ydotoold daemon starts automatically on first run |
 | **Permissions** | First run asks for your admin password once, to let TalkType read your keyboard and type into other apps. **Restart afterwards** for it to take effect |
 | **Audio** | Working microphone |
@@ -186,8 +196,8 @@ enough interest and I'll make it happen.
 ## All the features
 
 - **Two hotkeys, both always on.** Hold F8 to talk, or tap F9 to start and tap again to stop. Pick any keys you like.
-- **Hands-free if you want it.** Double-tap F9, talk, and it stops by itself when you go quiet. A single tap still works as a plain on/off switch, so a long dictation with thinking pauses never gets cut off.
-- **Your choice of speech model.** NVIDIA's Parakeet is the default: fast on any processor, for English and 24 European languages. OpenAI's Whisper covers 99 languages, from Tiny up to Large-v3.
+- **Hands-free if you want it.** Double-tap F9, talk, and it stops by itself when you go quiet. A single tap still works as a plain on/off switch, so a long dictation with thinking pauses never gets cut off. Say nothing for 10 seconds and it stops without typing anything.
+- **Your choice of speech model.** NVIDIA's Parakeet is the default: fast on any processor, for English and 24 European languages. OpenAI's Whisper covers 99 languages, from Tiny up to Large-v3. Not sure which? **What works with what?** in Preferences lays it out.
 - **Any graphics card.** NVIDIA, AMD or Intel through Vulkan, a 24 MB download. On NVIDIA you can use CUDA instead. TalkType times your graphics chip against your processor first and only uses it if it's really faster.
 - **Corrections.** Say "no wait", "scratch that", "I mean" or "actually" and the optional AI fixes it. It also drops "um", "uh" and stutters.
 - **Voice commands.** "comma", "period", "new paragraph", "undo last word", "delete last three sentences" and more. See the full list below.
@@ -196,6 +206,7 @@ enough interest and I'll make it happen.
 - **Fix a Word.** Teach it a name or term it keeps getting wrong.
 - **Recent Dictations.** Your last 20, one click to copy. Kept in memory only.
 - **Your Stats.** Words dictated and typing time saved, at your own typing speed.
+- **Settings backup.** Save everything to one file and load it on another computer. TalkType also keeps your last 10 settings on its own, so you can roll back a change.
 - **A recording indicator you can style.** Orb, waveform, frequency bars or radial, any color, anywhere on screen. It reacts to your voice so you know it's listening.
 - **Tells you why when it can't type.** If a dictation can't be typed into the window, TalkType says why and what fixes it.
 - **Private.** Everything runs on your computer, and what you dictate is never written to a log unless you turn that on for troubleshooting.
@@ -302,11 +313,12 @@ Choose the right model for your needs in Preferences → General:
 | **large-v3** | 3.1 GB | Slowest | Best | Technical work |
 | **Parakeet** | 670 MB | Fast, even without a GPU | Best | **Recommended** for English + 24 European languages |
 
-> **Tip:** First run recommends a setup for your computer and language, and tray → Performance → **Recommended for this computer** puts you back on it any time.
+> **Tip:** First run recommends a setup for your computer and language. **Use Recommended** in Preferences → General, or tray → Performance → **Recommended for this computer**, puts you back on it any time.
 > **Parakeet** is the default. It's a different engine that NVIDIA made, and it runs on your processor (or on your graphics card through Vulkan). It doesn't cover Chinese, Japanese, Korean, Arabic and other non-European languages. For those, first run picks Whisper: Small on the processor, or Large-v3 on a graphics card.
 
 </details>
 
+<a name="graphics-cards"></a>
 <details>
 <summary><b>Graphics cards</b></summary>
 
@@ -328,7 +340,7 @@ Parakeet doesn't need a graphics card, since it's already fast on the processor.
 <details>
 <summary><b>Settings file</b></summary>
 
-Settings are stored in `~/.config/talktype/config.toml`:
+Settings are stored in `~/.config/talktype/config.toml`. To keep a copy, use **Save Backup** in Preferences → Updates & Backup.
 
 ```toml
 model = "parakeet-v3"     # AI model: parakeet-v3, tiny, base, small, medium, large-v3
@@ -371,7 +383,7 @@ Most common on Fedora, where permission to *type* is granted separately from
 permission to *read keys*, so typing can work while hotkeys do not.
 
 ### Transcription slow?
-- Use your graphics card if you have one (see [GPU Acceleration](#gpu-acceleration))
+- Use your graphics card if you have one (see [Graphics cards](#graphics-cards) above)
 - Try Parakeet, or a smaller Whisper model (tiny or base)
 - Tray menu → Performance → Recommended for this computer
 

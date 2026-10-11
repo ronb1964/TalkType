@@ -183,7 +183,8 @@ The dictation service starts automatically when you launch TalkType.
 On first launch, TalkType shows a welcome dialog that:
 • Recommends a setup for your computer: the speech model, and whether to use
   your graphics card (NVIDIA, AMD or Intel), for the language you dictate in.
-  "Other options" lets you change any of it, with each choice explained
+  "Change language, model or graphics card" lets you change any of it,
+  with each choice explained
 {first_run_hotkey_bullet}• Offers to install the GNOME extension (if on GNOME desktop)
 
 <b>1. Begin Dictating</b>
@@ -337,9 +338,11 @@ Whisper models download in a smaller format, about half the size.
 • More natural sentence structure
 
 <b>Recommendation:</b>
-The easiest way: tray menu → Performance → <b>Recommended for this computer</b>.
-It picks the model and device for your graphics card and language, the same
-as first run does.
+The easiest way: <b>Use Recommended</b> in Preferences → General, or tray menu →
+Performance → <b>Recommended for this computer</b>. Both pick the model and
+device for your graphics card and language, the same as first run does.
+<b>What works with what?</b>, also in Preferences → General, shows which models
+run on the processor, Vulkan and CUDA, and which of those your computer has.
 Use Parakeet if you dictate in English or one of the 24 European languages
 it knows. It makes fewer mistakes than any Whisper model on English, and
 it's fast even without a graphics card. With a graphics card (NVIDIA, AMD
@@ -388,7 +391,7 @@ In Preferences → Updates &amp; Backup:
 Fine-tune audio in Preferences → Audio tab:
 • Select specific microphone
 • Test audio levels
-• Adjust input volume (PulseAudio systems)
+• Adjust input volume (PipeWire/PulseAudio systems)
 • Enable/disable audio beeps''')
 
     # Tab 5: Voice Commands
@@ -498,7 +501,7 @@ and punctuation — wrap the replacement text in double quotes.
 • Audio beeps indicate recording start/stop (can be disabled)
 
 <b>Installation &amp; Updates:</b>
-• <b>Check for updates:</b> the tray/panel menu, or Preferences → Updates tab.
+• <b>Check for updates:</b> the tray/panel menu, or Preferences → Updates &amp; Backup.
 • {update_block}
 • <b>Config files:</b> {f["cfg_dir"]}
 • <b>AI models:</b> {f["cache_dir"]}

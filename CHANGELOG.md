@@ -34,6 +34,31 @@ Intel computers.
   and bold now. In grey it was easy to miss.
 - The Updates tab got tighter so the backup fits on it too. The update
   status only shows up once you've checked.
+- If you're on Parakeet and pick CUDA, it now always asks which Whisper
+  model you want, even when CUDA is already downloaded. Before, it only
+  asked right after the download, and otherwise you ended up on CUDA with
+  Parakeet still running on the processor.
+- There's a Use Recommended button under Model and Device, so you can get
+  back to what first run picked without going through the tray. Next to it,
+  "What works with what?" shows which models run on the processor, Vulkan
+  and CUDA, and which of those your computer has.
+- Change a hotkey and TalkType offers to test it right away. On a lot of
+  laptops the F keys change brightness or volume unless you hold Fn, and the
+  test shows you that. If KDE already uses the key for one of its own
+  shortcuts, it tells you. That warning only went in the log before.
+- The hotkey lists say what F1, F5, F11 and F12 already do in most apps, so
+  nobody picks F5 and has the browser reload every time they dictate.
+- AI corrections understand stacked phrases. "Meet me at three o'clock.
+  No, actually, make that four o'clock." types "Meet me at four o'clock."
+  I checked it on the real model against ordinary sentences that start
+  with "No", "Sorry" or "Actually", and it left them alone.
+- Double-tap for hands-free and then say nothing, and it used to record
+  until you pressed the key again. It stops after 10 seconds now and
+  doesn't type anything.
+- The bars indicator kept growing in silence until the room noise looked
+  like talking. It stays low now and still fills up when you speak.
+- Preferences scrollbars sit beside the page instead of on top of it, and a
+  page that has more below fades at the bottom so you know to scroll.
 
 ## [0.14.5] - 2026-10-10
 
