@@ -35,9 +35,10 @@ class StubPrefs:
     written, and the baseline is reset to what was written.
     """
 
-    def __init__(self, on_disk_model="small", chosen_model="large-v3"):
-        self._config_at_open = {"model": on_disk_model, "beeps": True}
-        self.config = {"model": chosen_model, "beeps": True}
+    def __init__(self, on_disk_model="small", chosen_model="large-v3",
+                 on_disk_device="cpu", chosen_device="cpu"):
+        self._config_at_open = {"model": on_disk_model, "device": on_disk_device, "beeps": True}
+        self.config = {"model": chosen_model, "device": chosen_device, "beeps": True}
         self.saved_models = []
         self.download_result = False  # did the download succeed
         self.restart_calls = 0
@@ -56,11 +57,14 @@ class StubPrefs:
 
         return PreferencesWindow._changed_since_open(self)
 
-    def _rollback_model(self, previous_model):
+    def _rollback_download(self, previous):
         # The code under test — delegate, never reimplement.
         from talktype.prefs import PreferencesWindow
 
-        return PreferencesWindow._rollback_model(self, previous_model)
+        return PreferencesWindow._rollback_download(self, previous)
+
+    def _on_device_changed(self, combo):
+        raise AssertionError("the device dialogs ran during a rollback")
 
     def _download_selected_model(self):
         return self.download_result
@@ -174,3 +178,49 @@ class TestDropdownFollowsTheRollback:
         assert stub.model_combo.muted is True  # no model-picked dialogs
         assert stub._updating_model is False
         assert stub._last_selected_model == "parakeet-v3"
+
+
+class FakeDeviceCombo:
+    """The Device dropdown: its change handler must stay blocked while it is
+    put back, or switching to Vulkan would start its setup dialogs."""
+
+    def __init__(self, owner, active):
+        self.owner, self.active, self.blocked = owner, active, False
+
+    def handler_block_by_func(self, func):
+        self.blocked = True
+
+    def handler_unblock_by_func(self, func):
+        self.blocked = False
+
+    def set_active_id(self, device):
+        if not self.blocked:
+            self.owner._on_device_changed(self)
+        self.active = device
+
+
+class TestADeviceChangeIsRolledBackToo:
+    """Ron, 0.14.5 test: Device from Vulkan to CPU, OK, cancel the download
+    of the processor copy of Parakeet, OK again. config.toml said "cpu", the
+    retry saw no change, and dictation kept running on the graphics card."""
+
+    def _stub(self):
+        stub = StubPrefs(on_disk_model="parakeet-v3", chosen_model="parakeet-v3",
+                         on_disk_device="vulkan", chosen_device="cpu")
+        stub.device_combo = FakeDeviceCombo(stub, "cpu")
+        stub.download_result = False
+        return stub
+
+    def test_a_cancelled_download_puts_the_device_back(self, prefs_cls):
+        stub = self._stub()
+        prefs_cls.on_ok(stub, None)
+        assert stub.config["device"] == "vulkan"
+        assert stub._config_at_open["device"] == "vulkan"   # what's on disk
+        assert stub.device_combo.active == "vulkan"
+        assert stub.device_combo.blocked is False
+
+    def test_the_retry_still_restarts_onto_the_new_device(self, prefs_cls):
+        stub = self._stub()
+        prefs_cls.on_ok(stub, None)
+        stub.config["device"] = "cpu"     # the user picks CPU again
+        assert "device" in _changed_since_open(stub)

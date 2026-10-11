@@ -275,6 +275,11 @@ def model_setting_warning(model, device, language_mode, language, language_name=
     return "\n".join(notes)
 
 
+# What can need a download, and so is rolled back when it never finishes:
+# the model, and the device (the processor or Vulkan copy of a model).
+_DOWNLOAD_KEYS = ("model", "device")
+
+
 class PreferencesWindow:
     def __init__(self):
         # Set GTK theme to prefer dark mode
@@ -4747,37 +4752,45 @@ class PreferencesWindow:
             dialog.destroy()
         return success
 
-    def _rollback_model(self, previous_model):
-        """Undo a model change whose download never completed.
+    def _rollback_download(self, previous):
+        """Undo a model or device change whose download never completed.
 
         The config is saved *before* the download because the downloader reads
-        the model out of the merged config. Left alone, a cancelled or failed
-        download therefore leaves config.toml naming a model the service was
-        never given — and model changes are deliberately excluded from the
-        live-settings reload, so nothing corrects it.
+        the model and device out of the merged config. Left alone, a cancelled
+        or failed download leaves config.toml naming a setup the service was
+        never given, and these keys are excluded from the live-settings
+        reload, so nothing corrects it.
 
         The second write also repairs the baseline. save_config() resets
         _config_at_open to whatever it just wrote, so without this the retry
-        diffs the new model against itself, finds no change, and reports
-        "your changes are already in effect" while skipping the restart that
-        would actually load the model.
+        finds no change and skips the restart that would load the new setup:
+        Device -> CPU, cancel, OK again kept dictating on the graphics card.
 
-        Only the model is undone; the user's other edits saved fine and stay.
-        The dropdown goes back too: left on the cancelled model, it showed a
-        model that wasn't in use.
+        Only these keys are undone; the user's other edits saved fine and
+        stay. The dropdowns go back too, quietly: no model-picked dialogs, and
+        no device setup (Vulkan's starts a download).
         """
-        if previous_model is None or self.config.get("model") == previous_model:
+        undo = {k: v for k, v in previous.items()
+                if v is not None and self.config.get(k) != v}
+        if not undo:
             return
-        self.config["model"] = previous_model
+        self.config.update(undo)
         self.save_config()
         combo = getattr(self, "model_combo", None)
-        if combo is not None:
-            self._updating_model = True  # no "you picked a model" dialogs
+        if "model" in undo and combo is not None:
+            self._updating_model = True
             try:
-                combo.set_active_id(previous_model)
+                combo.set_active_id(undo["model"])
             finally:
                 self._updating_model = False
-            self._last_selected_model = previous_model
+            self._last_selected_model = undo["model"]
+        combo = getattr(self, "device_combo", None)
+        if "device" in undo and combo is not None:
+            combo.handler_block_by_func(self._on_device_changed)
+            try:
+                combo.set_active_id(undo["device"])
+            finally:
+                combo.handler_unblock_by_func(self._on_device_changed)
 
     def on_apply(self, button):
         """Apply changes, restarting the service only if something needs it."""
@@ -4788,13 +4801,13 @@ class PreferencesWindow:
         # MUST be computed before save_config(), which resets _config_at_open
         # to the merged result — after that there is nothing left to diff.
         changed = self._changed_since_open()
-        # Same reason: after the save this no longer names the live model.
-        previous_model = self._config_at_open.get("model")
+        # Same reason: after the save this no longer names the live setup.
+        previous = {k: self._config_at_open.get(k) for k in _DOWNLOAD_KEYS}
 
         if self.save_config():
             # Check if model needs downloading
             if not self._download_selected_model():
-                self._rollback_model(previous_model)
+                self._rollback_download(previous)
                 return
 
             # Restart only when the change actually requires it. The service
@@ -4859,13 +4872,13 @@ class PreferencesWindow:
 
         # MUST be computed before save_config(), which resets _config_at_open.
         changed = self._changed_since_open()
-        # Same reason: after the save this no longer names the live model.
-        previous_model = self._config_at_open.get("model")
+        # Same reason: after the save this no longer names the live setup.
+        previous = {k: self._config_at_open.get(k) for k in _DOWNLOAD_KEYS}
 
         if self.save_config():
             # Check if model needs downloading
             if not self._download_selected_model():
-                self._rollback_model(previous_model)
+                self._rollback_download(previous)
                 return
 
             # OK closes even after a download; Apply is the one that stays open.

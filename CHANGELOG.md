@@ -42,6 +42,10 @@ on KDE.
   the real model: 15 ordinary sentences like "Pick up milk. Actually pick up
   eggs too." were all left alone, and with one more example for the AI, 15
   of 16 corrections across all of today's tests were fixed.
+- Switching the device to CPU, cancelling the download, then clicking OK
+  again kept dictating on the graphics card, though Preferences said CPU.
+  Cancelling a download now puts the device back as well as the model, so
+  the next OK really switches.
 
 ## [0.14.4] - 2026-10-10
 
