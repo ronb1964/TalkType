@@ -82,6 +82,7 @@ Preferences and the rest:
 - [ ] Start/stop beeps play
 - [ ] Preferences mic test works (level meter, record, replay)
 - [ ] Tray → Performance shows Recommended / Lightest / Battery saver, with the dot on the active one
+- [ ] Backup: Preferences → Advanced → Save Backup opens the desktop's file dialog and writes the .zip. Change the hotkey, then Load Backup puts it back, restarts dictation (log) and closes Preferences. Restore Earlier Settings lists dated copies and undoes the load. A non-backup file is turned away with a message
 - [ ] F8 and F9 leave no stray character in a terminal (KDE and GNOME)
 
 ### Step 9: Fix and Rebuild if Needed

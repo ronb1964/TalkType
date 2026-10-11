@@ -1947,6 +1947,11 @@ def main():
     desktop_identity.apply()        # TalkType's icon on its windows, not KDE's generic one
     _acquire_tray_singleton()
 
+    # A copy of the settings to roll back to (Preferences → Advanced →
+    # Restore Earlier Settings), taken before this version touches them.
+    from .settings_backup import snapshot_if_changed
+    snapshot_if_changed()
+
     from .uinput_helper import ensure_ydotoold_running
     ensure_ydotoold_running()       # the typing daemon
 

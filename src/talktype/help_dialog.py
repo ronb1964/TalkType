@@ -368,6 +368,15 @@ TalkType includes intelligent timeout to save system resources:
 • <b>Smart detection:</b> Timer resets when you use hotkeys
 • <b>Battery friendly:</b> Reduces CPU/GPU usage when idle
 
+<b>💾 Backup</b>
+In Preferences → Advanced → Backup:
+• <b>Save Backup:</b> your settings, voice commands, Fix a Word words and stats in
+  one file, to keep or to load on another computer with <b>Load Backup</b>. If that
+  computer lacks the backup's graphics device, it keeps its own.
+• <b>Restore Earlier Settings:</b> TalkType keeps a copy of your last 10 settings
+  changes, taken when it starts, so a change or an update that went wrong can be
+  undone. Your stats stay as they are.
+
 <b>📝 Text Injection</b>
 {typing_para}
 

@@ -3,6 +3,7 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gtk, Gdk, GLib
 from .ui_style import message_dialog
+import datetime
 import os
 import subprocess
 import sys
@@ -1961,7 +1962,172 @@ class PreferencesWindow:
             _hide_widgets(separator3, extension_header,
                           self.extension_status_label, ext_button_box)
 
+        row = self._add_backup_section(grid, row)
         return grid
+
+    def _add_backup_section(self, grid, row):
+        """Advanced → Backup: a file to keep or take to another computer, and
+        the automatic copies the tray takes (settings_backup.py)."""
+        separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        separator.set_margin_top(20)
+        separator.set_margin_bottom(10)
+        grid.attach(separator, 0, row, 2, 1)
+        row += 1
+
+        header = Gtk.Label(xalign=0)
+        header.set_markup('<b>💾 Backup</b>')
+        header.set_margin_bottom(5)
+        grid.attach(header, 0, row, 2, 1)
+        row += 1
+
+        def note(text):
+            label = Gtk.Label(label=text, xalign=0)
+            label.set_line_wrap(True)
+            label.set_margin_start(10)
+            label.set_margin_bottom(6)
+            label.get_style_context().add_class("dim-label")
+            return label
+
+        def buttons(*specs):
+            box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+            box.set_margin_start(10)
+            box.set_margin_bottom(10)
+            for text, handler in specs:
+                button = Gtk.Button(label=text)
+                button.connect("clicked", handler)
+                box.pack_start(button, False, False, 0)
+            return box
+
+        from .settings_backup import KEEP
+        for widget in (
+                note("Save your settings, voice commands and stats to a file, to keep or "
+                     "to load on another computer."),
+                buttons(("Save Backup…", self._on_save_backup_clicked),
+                        ("Load Backup…", self._on_load_backup_clicked)),
+                note(f"TalkType also keeps copies of your last {KEEP} settings changes, "
+                     f"taken when it starts."),
+                buttons(("Restore Earlier Settings…", self._on_restore_earlier_clicked))):
+            grid.attach(widget, 0, row, 2, 1)
+            row += 1
+        return row
+
+    # --- Backup (settings_backup.py) ------------------------------------------
+
+    def _pick_file(self, title, save_name=None):
+        """The desktop's own file dialog (a portal in the Flatpak). Saves when
+        *save_name* is given, opens otherwise. The chosen path, or None."""
+        action = Gtk.FileChooserAction.SAVE if save_name else Gtk.FileChooserAction.OPEN
+        chooser = Gtk.FileChooserNative.new(title, self.window, action, None, None)
+        zips = Gtk.FileFilter()
+        zips.set_name("TalkType backups (*.zip)")
+        zips.add_pattern("*.zip")
+        chooser.add_filter(zips)
+        if save_name:
+            chooser.set_current_name(save_name)
+            chooser.set_do_overwrite_confirmation(True)
+        path = chooser.get_filename() if chooser.run() == Gtk.ResponseType.ACCEPT else None
+        chooser.destroy()
+        return path
+
+    def _on_save_backup_clicked(self, _button):
+        from . import settings_backup
+        name = f"TalkType-settings-{datetime.date.today().isoformat()}.zip"
+        path = self._pick_file("Save TalkType Backup", save_name=name)
+        if not path:
+            return
+        if not path.lower().endswith(".zip"):
+            path += ".zip"
+        try:
+            settings_backup.write_backup(path)
+        except (settings_backup.BackupError, OSError) as e:
+            self._message(Gtk.MessageType.ERROR, "The backup wasn't saved", str(e))
+            return
+        self._message(Gtk.MessageType.INFO, "Backup saved",
+                      f"Your settings, voice commands and stats are in:\n{path}")
+
+    def _on_load_backup_clicked(self, _button):
+        from . import settings_backup
+        path = self._pick_file("Load TalkType Backup")
+        if not path:
+            return
+        try:
+            backup = settings_backup.read_backup(path)
+        except settings_backup.BackupError as e:
+            self._message(Gtk.MessageType.ERROR, "That file can't be loaded", str(e))
+            return
+        made = backup.created
+        try:
+            made = settings_backup.when_label(datetime.datetime.fromisoformat(made))
+        except ValueError:
+            pass
+        if self._message(
+                Gtk.MessageType.QUESTION, "Load these settings?",
+                f"This backup was made {made} by TalkType {backup.version or '(unknown version)'}.\n\n"
+                "It replaces your settings, voice commands and Fix a Word words. Its stats "
+                "are added to yours. Your current settings are kept as a copy first, so "
+                "Restore Earlier Settings can undo this.",
+                buttons=Gtk.ButtonsType.OK_CANCEL) == Gtk.ResponseType.OK:
+            self._restore_backup(backup)
+
+    def _on_restore_earlier_clicked(self, _button):
+        from . import settings_backup
+        copies = settings_backup.list_snapshots()
+        if not copies:
+            self._message(Gtk.MessageType.INFO, "No earlier settings yet",
+                          "TalkType keeps a copy each time it starts with settings that "
+                          "changed since the last copy. There isn't one yet.")
+            return
+        box = message_dialog(transient_for=self.window, modal=True,
+                             message_type=Gtk.MessageType.QUESTION,
+                             buttons=Gtk.ButtonsType.NONE, text="Restore earlier settings")
+        box.format_secondary_text(
+            "Pick the settings to go back to. They replace your settings, voice commands "
+            "and Fix a Word words. Your stats stay as they are, and your current settings "
+            "are kept as a copy first.")
+        column = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        column.set_margin_start(24)
+        radios, group = [], None
+        for copy in copies:
+            radio = Gtk.RadioButton.new_with_label_from_widget(
+                group, settings_backup.when_label(copy.when))
+            group = group or radio
+            radios.append((radio, copy))
+            column.pack_start(radio, False, False, 0)
+        box.get_content_area().pack_start(column, False, False, 6)
+        box.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        box.add_button("Restore", Gtk.ResponseType.OK)
+        box.set_default_response(Gtk.ResponseType.OK)
+        box.show_all()
+        answer = box.run()
+        chosen = next(c for r, c in radios if r.get_active())
+        box.destroy()
+        if answer != Gtk.ResponseType.OK:
+            return
+        try:
+            backup = settings_backup.read_backup(chosen.path)
+        except settings_backup.BackupError as e:
+            self._message(Gtk.MessageType.ERROR, "That copy can't be restored", str(e))
+            return
+        self._restore_backup(backup)
+
+    def _restore_backup(self, backup):
+        """Put *backup* in place, restart dictation on it, and close without
+        saving: this window's own copy of the settings is now out of date and
+        would overwrite what was just restored."""
+        from . import settings_backup
+        try:
+            notes = settings_backup.restore(backup)
+        except OSError as e:
+            self._message(Gtk.MessageType.ERROR, "The settings weren't restored", str(e))
+            return
+        self._message(Gtk.MessageType.INFO, "Settings restored",
+                      "\n\n".join(notes + ["Dictation restarts with them now, and Preferences "
+                                           "closes. Open it again to see them."]))
+        if not self.restart_service():
+            self._message(Gtk.MessageType.WARNING, "Dictation didn't restart",
+                          "Use Restart Service in the tray menu to start it with the "
+                          "restored settings.")
+        self.on_cancel(None)
     
     def create_commands_tab(self):
         """Create the Custom Voice Commands tab."""
