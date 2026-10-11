@@ -1,0 +1,42 @@
+# Runs the test suite on GitHub's servers on every push and pull request, and
+# drives the "tests" badge at the top of the README.
+#
+# Uses Ubuntu's own Python, not actions/setup-python: GTK's Python bindings
+# (python3-gi) come from the system and only work with the system Python, the
+# same reason the local venv needs the system site-packages.
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0    # full history: a test compares when extension files last changed
+
+      - name: System packages (GTK, D-Bus, a virtual screen)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends \
+            python3-venv python3-gi python3-gi-cairo python3-dbus python3-evdev \
+            gir1.2-gtk-3.0 gir1.2-ayatanaappindicator3-0.1 gir1.2-notify-0.7 libportaudio2 \
+            libxkbregistry0 xkb-data \
+            xvfb xauth dbus dbus-x11
+
+      - name: Python packages
+        run: |
+          python3 -m venv --system-site-packages venv
+          venv/bin/pip install -q pytest numpy sounddevice pyperclip toml \
+            huggingface_hub tqdm faster-whisper onnx-asr
+
+      # A virtual screen for the GTK windows the tests build, and a private
+      # D-Bus session bus so no test reaches anything real.
+      - name: Run the tests
+        run: PYTHONPATH=src xvfb-run -a dbus-run-session -- venv/bin/python -m pytest tests/ -q
