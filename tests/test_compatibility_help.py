@@ -3,6 +3,8 @@
 Ron, 0.14.6 test: with Parakeet, Whisper, CPU, Vulkan and CUDA there were too
 many choices to know which work together.
 """
+import pytest
+
 from talktype import recommend as r
 from talktype import whisper_vulkan as wv
 from talktype.model_helper import OFFERED_MODELS
@@ -29,9 +31,19 @@ def test_large_v3_is_shown_needing_a_graphics_card():
     assert row[2][0] is False and row[3][0] and row[4][0]
 
 
-def test_the_computer_line_fits_the_hardware():
-    assert "all three" in r.this_computer(r.Hardware("NVIDIA GeForce RTX 4070 SUPER", True))
-    amd = r.this_computer(r.Hardware("AMD graphics", False))
-    assert "processor and Vulkan" in amd and "needs an NVIDIA" in amd
-    assert "CUDA and the processor" in r.this_computer(r.Hardware(None, True))
-    assert "processor column" in r.this_computer(r.Hardware(None, False))
+@pytest.mark.parametrize("hw, slower, says", [
+    (r.Hardware("NVIDIA GeForce RTX 4070 SUPER", True), False,
+     "NVIDIA GeForce RTX 4070 SUPER, so all three columns work"),
+    (r.Hardware("AMD graphics", False), False, "processor and Vulkan columns work here. CUDA needs"),
+    (r.Hardware("Intel graphics", False), False, "Intel graphics, so the processor and Vulkan"),
+    (r.Hardware("graphics card", False), False, "Your computer: a graphics card, so"),
+    (r.Hardware(None, False), True, "graphics chip was slower than the processor"),
+    (r.Hardware(None, True), True, "NVIDIA card, but your processor was faster"),
+    (r.Hardware(None, True), False, "Vulkan isn't working on it"),
+    (r.Hardware(None, False), False, "no graphics chip TalkType can use"),
+])
+def test_the_computer_line_fits_every_kind_of_computer(hw, slower, says):
+    """Ron asked how the line reads on other computers: "graphics card" read
+    as "Your computer: graphics card", and a chip that lost the speed check
+    was called no graphics card at all."""
+    assert says in r.this_computer(hw, slower)

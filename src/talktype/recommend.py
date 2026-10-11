@@ -276,15 +276,25 @@ COMPATIBILITY_NOTES = (
 )
 
 
-def this_computer(hw):
-    """The line under the table saying which columns apply here."""
+def this_computer(hw, slower=False):
+    """The line under the table saying which columns apply here. *slower*:
+    the speed check found the processor faster than the graphics chip, which
+    detect_hardware reports as no chip at all."""
+    name = hw.gpu_name if hw.gpu_name not in (None, "graphics card") else "a graphics card"
     if hw.gpu and hw.has_nvidia:
-        return (f"Your computer: {hw.gpu_name}, so all three columns work here.")
+        return f"Your computer: {name}, so all three columns work here."
     if hw.gpu:
-        return (f"Your computer: {hw.gpu_name}, so the processor and Vulkan columns "
-                f"work here. CUDA needs an NVIDIA card.")
+        return (f"Your computer: {name}, so the processor and Vulkan columns work here. "
+                f"CUDA needs an NVIDIA card.")
+    if slower and hw.has_nvidia:
+        return ("Your computer: an NVIDIA card, but your processor was faster through "
+                "Vulkan in TalkType's speed check, so the processor and CUDA columns "
+                "apply here.")
+    if slower:
+        return ("Your computer: its graphics chip was slower than the processor in "
+                "TalkType's speed check, so the processor column applies here.")
     if hw.has_nvidia:
-        return ("Your computer: an NVIDIA card, so CUDA and the processor work here. "
-                "Vulkan isn't usable, or the speed check found your processor faster.")
-    return ("Your computer: no graphics card TalkType can use, so the processor "
-            "column is the one that applies here.")
+        return ("Your computer: an NVIDIA card, but Vulkan isn't working on it, so the "
+                "processor and CUDA columns apply here.")
+    return ("Your computer: no graphics chip TalkType can use, so the processor "
+            "column applies here.")

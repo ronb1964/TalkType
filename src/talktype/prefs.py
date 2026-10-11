@@ -3413,6 +3413,7 @@ class PreferencesWindow:
         those apply to this computer. Explains only; changes nothing."""
         from . import recommend
         hw, _rec = self._recommendation()
+        slower = self._shown_language().vulkan_slower
         dialog = Gtk.Dialog(title="What works with what", transient_for=self.window, modal=True)
         dialog.add_button("Close", Gtk.ResponseType.CLOSE)
         box = dialog.get_content_area()
@@ -3435,7 +3436,7 @@ class PreferencesWindow:
                 grid.attach(cell, col, row, 1, 1)
         box.pack_start(grid, False, False, 0)
 
-        for text in (*recommend.COMPATIBILITY_NOTES, recommend.this_computer(hw)):
+        for text in (*recommend.COMPATIBILITY_NOTES, recommend.this_computer(hw, slower)):
             note = Gtk.Label(label=text, xalign=0)
             note.set_line_wrap(True)
             note.set_max_width_chars(70)
