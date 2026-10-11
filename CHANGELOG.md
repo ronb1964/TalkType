@@ -12,6 +12,7 @@ All notable changes to TalkType are documented here.
   It called a function the keyboard library doesn't have, which skipped every
   device. The test still worked through the window itself, so nobody noticed,
   but now it reads the keys the same way dictation does.
+- The Stats graph said "most: 1 words". It says "1 word" now.
 
 ## [0.14.4] - 2026-10-10
 

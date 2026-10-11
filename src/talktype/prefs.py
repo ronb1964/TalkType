@@ -2271,7 +2271,7 @@ class PreferencesWindow:
         if most:
             cr.set_source_rgba(fg.red, fg.green, fg.blue, 0.6)
             cr.move_to(2, 11)
-            cr.show_text(f"most: {most:,} words")
+            cr.show_text(f"most: {most:,} word{'' if most == 1 else 's'}")
         return False
 
     def _on_reset_stats(self, _button):
