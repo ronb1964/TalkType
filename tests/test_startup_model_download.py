@@ -20,6 +20,31 @@ def _settings(model="small", device="cuda"):
     return SimpleNamespace(model=model, device=device)
 
 
+@pytest.fixture(autouse=True)
+def cuda_installed(monkeypatch):
+    """These tests are about downloads and load failures with CUDA present."""
+    from talktype import cuda_helper
+    monkeypatch.setattr(cuda_helper, "has_cuda_libraries", lambda: True)
+
+
+def test_missing_cuda_files_use_the_processor_instead_of_crashing(monkeypatch):
+    """Device CUDA with the CUDA files gone: the model still loads "on cuda",
+    then the first dictation crashes the service inside the speech library
+    (libcudnn_ops.so.9 not found), past every Python fallback. Ron, 0.14.5
+    test. Use the processor for this run and say why; keep the setting."""
+    from talktype import cuda_helper
+    monkeypatch.setattr(cuda_helper, "has_cuda_libraries", lambda: False)
+    loaded, notes = [], []
+    monkeypatch.setattr(model_helper, "download_model_with_progress",
+                        lambda *a, **k: loaded.append(k.get("device")) or object())
+    monkeypatch.setattr(app, "_notify", lambda *a: notes.append(a))
+    settings = _settings(device="cuda")
+    app.build_model(settings)
+    assert loaded == ["cpu"]
+    assert settings.device == "cuda"          # the user's choice is kept
+    assert notes and "CUDA" in notes[0][1]
+
+
 def test_cancel_is_respected_on_an_nvidia_setup(monkeypatch):
     calls = []
     monkeypatch.setattr(model_helper, "download_model_with_progress",

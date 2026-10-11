@@ -3336,6 +3336,18 @@ def build_model(settings: Settings):
         # Preferences, and saving "cpu" would quietly undo the user's choice.
         settings = Settings(**{**vars(settings), "device": "cpu"})
 
+    if settings.device.lower() == "cuda" and not is_parakeet(settings.model):
+        from . import cuda_helper
+        if not cuda_helper.has_cuda_libraries():
+            # The model loads "on cuda" without these files, then the first
+            # dictation crashes inside the speech library (libcudnn missing),
+            # past every fallback below. Processor for this run; the setting
+            # stays, since downloading CUDA again in Preferences fixes it.
+            logger.warning("Device is CUDA but the CUDA libraries are missing; using the processor")
+            _notify("TalkType", "The CUDA files are missing, so TalkType is using the processor "
+                                "for now. Download them again in Preferences, Advanced.")
+            settings = Settings(**{**vars(settings), "device": "cpu"})
+
     compute_type = "float16" if settings.device.lower() == "cuda" else "int8"
     try:
         # Use model helper with progress dialog

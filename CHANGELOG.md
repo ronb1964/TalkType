@@ -51,6 +51,9 @@ on KDE.
   CUDA, switching it would have made it slower: on Parakeet you're asked
   which Whisper model to use on CUDA, from Tiny to Large-v3 with their
   download sizes, or you keep Parakeet as it is.
+- If the device was CUDA but the CUDA files were gone (an interrupted
+  download, a cleaned-up folder), every dictation crashed the service. Now it
+  uses the processor and tells you to download CUDA again.
 
 ## [0.14.4] - 2026-10-10
 
