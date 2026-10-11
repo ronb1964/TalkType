@@ -220,3 +220,20 @@ def test_last_saved_is_noted_and_doesnt_show_up_as_a_copy(home):
     sb.write_backup(str(home / "b.zip"))
     assert sb.last_saved() is not None
     assert sb.list_snapshots() == []
+
+
+def test_the_backup_folder_is_remembered(home):
+    folder = home / "Documents" / "TalkType backups"
+    folder.mkdir(parents=True)
+    assert sb.backup_folder() is None
+    sb.set_backup_folder(str(folder))
+    assert sb.backup_folder() == str(folder)
+    assert sb.list_snapshots() == []        # not mistaken for a copy
+
+
+def test_a_backup_folder_that_was_deleted_falls_back_to_none(home):
+    folder = home / "gone"
+    folder.mkdir()
+    sb.set_backup_folder(str(folder))
+    folder.rmdir()
+    assert sb.backup_folder() is None

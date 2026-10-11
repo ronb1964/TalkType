@@ -1,7 +1,8 @@
 import gi
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
-from gi.repository import Gtk, Gdk, GLib
+gi.require_version("Pango", "1.0")
+from gi.repository import Gtk, Gdk, GLib, Pango
 from .ui_style import message_dialog
 import datetime
 import os
@@ -1985,6 +1986,18 @@ class PreferencesWindow:
         self._show_last_backup()
         vbox.pack_start(row, False, False, 0)
 
+        # The folder Save Backup and Load Backup open in, picked once.
+        row = indented(Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10))
+        row.pack_start(Gtk.Label(label="Backup folder:", xalign=0), False, False, 0)
+        self.backup_folder_label = Gtk.Label(xalign=0)
+        self.backup_folder_label.set_ellipsize(Pango.EllipsizeMode.MIDDLE)
+        row.pack_start(self.backup_folder_label, True, True, 0)
+        change_btn = Gtk.Button(label="Change…")
+        change_btn.connect("clicked", self._on_change_backup_folder_clicked)
+        row.pack_end(change_btn, False, False, 0)
+        self._show_backup_folder()
+        vbox.pack_start(row, False, False, 0)
+
         vbox.pack_start(separator(), False, False, 0)
         vbox.pack_start(header("🕘 Earlier settings"), False, False, 0)
         vbox.pack_start(dim(f"TalkType keeps your last {settings_backup.KEEP} settings, saved "
@@ -2022,21 +2035,57 @@ class PreferencesWindow:
 
     # --- Backup (settings_backup.py) ------------------------------------------
 
-    def _pick_file(self, title, save_name=None):
-        """The desktop's own file dialog (a portal in the Flatpak). Saves when
-        *save_name* is given, opens otherwise. The chosen path, or None."""
-        action = Gtk.FileChooserAction.SAVE if save_name else Gtk.FileChooserAction.OPEN
+    def _pick_file(self, title, save_name=None, folder_only=False):
+        """The desktop's own file dialog (a portal in the Flatpak), starting
+        in the backup folder when one was picked. Saves when *save_name* is
+        given, picks a folder with *folder_only*, opens a file otherwise.
+        The chosen path, or None."""
+        from .settings_backup import backup_folder
+        if folder_only:
+            action = Gtk.FileChooserAction.SELECT_FOLDER
+        else:
+            action = Gtk.FileChooserAction.SAVE if save_name else Gtk.FileChooserAction.OPEN
         chooser = Gtk.FileChooserNative.new(title, self.window, action, None, None)
-        zips = Gtk.FileFilter()
-        zips.set_name("TalkType backups (*.zip)")
-        zips.add_pattern("*.zip")
-        chooser.add_filter(zips)
+        folder = backup_folder()
+        if folder:
+            chooser.set_current_folder(folder)
+        if not folder_only:
+            zips = Gtk.FileFilter()
+            zips.set_name("TalkType backups (*.zip)")
+            zips.add_pattern("*.zip")
+            chooser.add_filter(zips)
         if save_name:
             chooser.set_current_name(save_name)
             chooser.set_do_overwrite_confirmation(True)
         path = chooser.get_filename() if chooser.run() == Gtk.ResponseType.ACCEPT else None
         chooser.destroy()
         return path
+
+    def _show_backup_folder(self):
+        from .settings_backup import backup_folder
+        folder = backup_folder()
+        if folder:
+            home = os.path.expanduser("~")
+            shown = "~" + folder[len(home):] if folder.startswith(home + os.sep) else folder
+            self.backup_folder_label.set_text(shown)
+            self.backup_folder_label.set_tooltip_text(folder)
+        else:
+            self.backup_folder_label.set_markup('<span color="#888888">not chosen</span>')
+            self.backup_folder_label.set_tooltip_text(
+                "Pick a folder and Save Backup and Load Backup open there")
+
+    def _on_change_backup_folder_clicked(self, _button):
+        """Browse to a folder; saved straight away, like Save Backup itself."""
+        from .settings_backup import set_backup_folder
+        folder = self._pick_file("Choose the Folder for TalkType Backups", folder_only=True)
+        if not folder:
+            return
+        try:
+            set_backup_folder(folder)
+        except OSError as e:
+            self._message(Gtk.MessageType.ERROR, "The folder wasn't saved", str(e))
+            return
+        self._show_backup_folder()
 
     def _on_save_backup_clicked(self, _button):
         from . import settings_backup

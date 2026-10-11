@@ -142,6 +142,30 @@ def last_saved():
         return None
 
 
+def _folder_path():
+    """The folder the user picked for backup files, kept beside the copies
+    for the same reason as _last_saved_path."""
+    return os.path.join(snapshots_dir(), "backup-folder")
+
+
+def backup_folder():
+    """The folder the user picked for backup files, or None when none was
+    picked or it no longer exists (deleted, renamed, an unplugged drive)."""
+    data = _read_bytes(_folder_path())
+    try:
+        folder = data.decode().strip() if data else ""
+    except UnicodeDecodeError:
+        return None
+    return folder if folder and os.path.isdir(folder) else None
+
+
+def set_backup_folder(folder):
+    """Remember *folder* for Save Backup and Load Backup to open in."""
+    os.makedirs(snapshots_dir(), mode=0o700, exist_ok=True)
+    with open(_folder_path(), "w") as f:
+        f.write(folder)
+
+
 def write_backup(path):
     """Save the settings, commands and stats to the backup file *path*."""
     files = _current_files(with_stats=True)

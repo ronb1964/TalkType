@@ -373,6 +373,8 @@ In Preferences → Updates &amp; Backup:
 • <b>Save Backup:</b> your settings, voice commands, Fix a Word words and stats in
   one file, to keep or to load on another computer with <b>Load Backup</b>. If that
   computer lacks the backup's graphics device, it keeps its own.
+• <b>Backup folder:</b> pick it once with <b>Change…</b>, and Save Backup and
+  Load Backup open there.
 • <b>Earlier settings:</b> TalkType keeps a copy of your last 10 settings
   changes, taken when it starts, so a change or an update that went wrong can be
   undone. Your stats stay as they are.
