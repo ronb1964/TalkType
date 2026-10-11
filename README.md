@@ -13,6 +13,7 @@
   <a href="https://github.com/ronb1964/TalkType/releases/latest"><img src="https://img.shields.io/github/v/release/ronb1964/TalkType?label=download&color=2ea44f" alt="Download"></a>
   <a href="https://aur.archlinux.org/packages/talktype-appimage"><img src="https://img.shields.io/aur/version/talktype-appimage" alt="AUR version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license"></a>
+  <a href="https://github.com/ronb1964/TalkType/actions/workflows/tests.yml"><img src="https://img.shields.io/github/actions/workflow/status/ronb1964/TalkType/tests.yml?branch=main&label=tests" alt="Tests"></a>
   <img src="https://img.shields.io/badge/GNOME%20%C2%B7%20KDE%20%C2%B7%20Sway%20%C2%B7%20X11-supported-555" alt="GNOME, KDE, Sway and X11">
 </p>
 
