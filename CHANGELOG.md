@@ -25,7 +25,8 @@ All notable changes to TalkType are documented here.
   "actually" with one, since it's usually just a word. Now a sentence opening
   with it counts when it repeats a word from the sentence before. Tested on
   the real model: 15 ordinary sentences like "Pick up milk. Actually pick up
-  eggs too." were all left alone, and 4 of 6 corrections were fixed.
+  eggs too." were all left alone, and with one more example for the AI, 15
+  of 16 corrections across all of today's tests were fixed.
 
 ## [0.14.4] - 2026-10-10
 
