@@ -238,6 +238,64 @@ def _is_spliced_correction(src, out):
     return False
 
 
+# Words a restated clause uses in place of ones already said: "send IT to Jim",
+# "pick THEM up", "the red ONE".
+_STAND_INS = {"it", "them", "him", "her", "they", "one", "ones", "this", "that",
+              "these", "those", "there"}
+_MAX_SWAPPED = 3
+
+
+def _is_restated_correction(src, out):
+    """The shape a fix takes when the whole clause is said again: the model
+    keeps the first wording and swaps in only the new value.
+
+        send the report to bob  scratch that  send it to jim
+        first wording           cue           restated
+     -> send the report to jim
+
+    Accepted only in exactly that shape: everything before the cue is kept
+    except one piece of up to _MAX_SWAPPED words, which is replaced by a
+    different piece of the restated clause that sits next to the same word
+    ("to bob" / "to jim"), or at the start of both. Every other restated
+    word was already said or stands in for something said ("it"), so no
+    second change is dropped: "Call Bob, scratch that, email Jim" must not
+    become "Email Bob".
+    """
+    for c_start in range(1, len(src)):
+        for cue in _CUES_LONGEST_FIRST:
+            if tuple(src[c_start:c_start + len(cue)]) != cue:
+                continue
+            first, restated = src[:c_start], src[c_start + len(cue):]
+            # The answer fixes where the swap is: it keeps *before* and
+            # *after* of the first wording, so only the split point varies.
+            for w_start in range(len(first)):
+                before = first[:w_start]
+                for w_len in range(1, _MAX_SWAPPED + 1):
+                    wrong, after = first[w_start:w_start + w_len], first[w_start + w_len:]
+                    new = out[len(before):len(out) - len(after)]
+                    if (len(wrong) < w_len or not 1 <= len(new) <= _MAX_SWAPPED
+                            or new == wrong or out[:len(before)] != before
+                            or out[len(out) - len(after):] != after
+                            or (set(wrong) | set(new)) & _CUE_WORDS):
+                        continue
+                    for x_start in range(len(restated) - len(new) + 1):
+                        if restated[x_start:x_start + len(new)] != new:
+                            continue
+                        # Same place: the same word before both, or both
+                        # start their clause ("email ..." / "text ...").
+                        if before:
+                            placed = x_start > 0 and restated[x_start - 1] == before[-1]
+                        else:
+                            placed = x_start == 0
+                        # Never the replaced words: "Call Bob and Sue, scratch
+                        # that, call Jim and Bob" is not "Call Jim and Sue".
+                        rest = restated[:x_start] + restated[x_start + len(new):]
+                        if placed and set(rest) <= set(before + after) | _STAND_INS:
+                            return True
+            break   # longest cue at this position tried; move on
+    return False
+
+
 def edit_is_safe(said: str, edited: str) -> bool:
     """True only if *edited* is *said* with nothing but allowed edits."""
     src, out = _words(said), _words(edited)
@@ -246,8 +304,9 @@ def edit_is_safe(said: str, edited: str) -> bool:
     runs = _deleted_runs(src, out)
     if runs is not None and all(_deletion_allowed(run, src, start) for start, run in runs):
         return True
-    # Compare without fillers for the spliced shape; those may go anywhere.
-    return _is_spliced_correction(_without_fillers(src), _without_fillers(out))
+    # Compare without fillers for the spliced shapes; those may go anywhere.
+    src, out = _without_fillers(src), _without_fillers(out)
+    return _is_spliced_correction(src, out) or _is_restated_correction(src, out)
 
 
 # --- Where the engine lives ---------------------------------------------------

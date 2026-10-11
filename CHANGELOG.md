@@ -13,6 +13,13 @@ All notable changes to TalkType are documented here.
   device. The test still worked through the window itself, so nobody noticed,
   but now it reads the keys the same way dictation does.
 - The Stats graph said "most: 1 words". It says "1 word" now.
+- AI self-corrections now handle saying the whole thing again. "Send the
+  report to Bob. Scratch that, send it to Jim." types "Send the report to
+  Jim." Before, the AI got these right but the safety check that guards
+  against its mistakes threw the answer away, so it was typed as spoken. In
+  testing with the real model, restated sentences went from 2 out of 8 fixed
+  to 6 out of 8, and the check still refuses an answer that keeps the wrong
+  part or drops something you said.
 
 ## [0.14.4] - 2026-10-10
 

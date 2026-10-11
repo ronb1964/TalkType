@@ -21,6 +21,15 @@ SAFE = [
     ("Order two boxes of screws, no wait, three boxes.", "Order three boxes of screws."),
     ("Buy the red paint for the van. Sorry, the blue paint.", "Buy the blue paint for the van."),
     ("Call Dave, sorry, I mean Steve, about it.", "Call Steve about it."),
+    # a whole clause restated: the model keeps the first wording and swaps in
+    # the new value (real Qwen answers, 2026-10-10)
+    ("Send the report to Bob, scratch that, send it to Jim.", "Send the report to Jim."),
+    ("I'll pick up the kids at five, no wait, I'll pick them up at six.",
+     "I'll pick up the kids at six."),
+    ("Put it in the blue folder, I mean, put it in the red one.", "Put it in the red folder."),
+    ("Book the room for Monday, actually, book it for Tuesday.", "Book the room for Tuesday."),
+    ("Email the invoice to George, scratch that, text it to him.",
+     "Text the invoice to George."),
 ]
 
 UNSAFE = [
@@ -52,6 +61,19 @@ UNSAFE = [
     ("Call Dave, I mean Steve.", "Call Dave Steve."),
     ("Turn left at the light, no, right.", "Turn left at the light, right."),
     ("Paint it red, make that blue.", "Paint it red, blue."),
+    # restated clause: kept both instructions, or the first one
+    ("Email the invoice to George, scratch that, text it to him.",
+     "Email the invoice to George. Text it to him."),
+    ("Send the report to Bob, scratch that, send it to Jim.", "Send the report to Bob."),
+    # restated clause: the new value put in the wrong place
+    ("Send the report to Bob, scratch that, send it to Jim.", "Send the Jim to Bob."),
+    # restated clause: took one change and dropped the other (Jim)
+    ("Call Bob, scratch that, email Jim.", "Email Bob."),
+    ("Call Bob and Sue, scratch that, call Jim and Bob.", "Call Jim and Sue."),
+    ("Turn left at the light, no, turn right at the sign.", "Turn right at the light."),
+    # restated clause: a value nobody said, or a detail of the first one lost
+    ("Send the report to Bob, scratch that, send it to Jim.", "Send the report to Jimmy."),
+    ("Send the report to Bob, scratch that, send it to Jim.", "Send report to Jim."),
 ]
 
 
