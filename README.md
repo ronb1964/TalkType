@@ -27,6 +27,10 @@
   <img src="screenshots/demo.gif" alt="Dictating a letter: you hold the key and talk, the waveform shows TalkType listening, and the words appear. It fixes a 'no wait' correction and turns 'john at gmail dot com' into an email address." width="600">
 </p>
 
+**Want to hear it too?** Here's the one-minute version, with sound:
+
+https://github.com/user-attachments/assets/e2aa55f4-a4ff-482e-8884-cc92ac5809a9
+
 That works on GNOME, KDE, Sway, Hyprland and X11 with no setup, because TalkType reads the key straight from the keyboard instead of asking the desktop for it. Most Linux dictation tools can't do hold-to-talk on Wayland at all.
 
 It's free, it runs completely offline, and nothing you say ever leaves your computer.
