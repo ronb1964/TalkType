@@ -2,6 +2,39 @@
 
 All notable changes to TalkType are documented here.
 
+## [0.14.6] - 2026-10-11
+
+Settings backup, CUDA where you'd look for it, and a first run fix for AMD and
+Intel computers.
+
+- On some computers the first run screen never showed the setup it
+  recommends, the card that names your graphics card and asks your language.
+  It only showed up on GNOME, with an NVIDIA card, or when something needed
+  fixing first. So on KDE with AMD or Intel graphics and nothing to fix, you
+  got the default setup without being asked anything, and if you speak a
+  language Parakeet doesn't know, dictation came out wrong from the start.
+  It shows on every computer now. This one had been there since 0.14.2.
+- You can back up your settings. Preferences has a new Updates & Backup tab.
+  Save Backup puts your settings, voice commands, Fix a Word words and stats
+  in one file you can keep or load on another computer. Pick a backup folder
+  once and Save and Load open right there.
+- TalkType also keeps a copy of your settings each time it starts, if they
+  changed, and holds on to the last 10. If a change or an update goes wrong,
+  pick one under Earlier settings and go back. Your own backups are in that
+  same list, newest first.
+- Loading a backup on a computer that doesn't have the same graphics card
+  keeps that computer's own Device setting. A backup from an NVIDIA machine
+  won't leave you set to CUDA with no NVIDIA card.
+- CUDA is listed under Device on NVIDIA computers now, same as Vulkan. Before,
+  it only showed up after you found Download CUDA Libraries under Advanced.
+  Picking it asks first, downloads NVIDIA's 1.4 GB of files with a progress
+  bar and switches over.
+- With Parakeet picked, the CUDA choice says "Parakeet runs on the processor",
+  because Parakeet can't use CUDA. The warning under the settings is amber
+  and bold now. In grey it was easy to miss.
+- The Updates tab got tighter so the backup fits on it too. The update
+  status only shows up once you've checked.
+
 ## [0.14.5] - 2026-10-10
 
 Smarter corrections, addresses you can say out loud, and rounded message boxes
