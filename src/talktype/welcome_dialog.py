@@ -1873,19 +1873,16 @@ class WelcomeDialog:
         button_box.pack_start(continue_btn, False, False, 0)
         vbox.pack_start(button_box, False, False, 0)
 
+    def _pulse_targets(self):
+        """The widgets that pulse: the extension checkbox and the Flatpak
+        "Required" warning box (red, via .tt-required). Often neither."""
+        return [w for w in (self.extension_check, self.required_pulse_box) if w]
+
     def _pulse_checkboxes(self):
         """Animate checkboxes with smooth continuous pulsating glow."""
         import math
 
-        targets = []
-        if self.extension_check:
-            targets.append(self.extension_check)
-        # The Flatpak "Required" warning box pulses too — red, via .tt-required.
-        if self.required_pulse_box:
-            targets.append(self.required_pulse_box)
-
-        if not targets:
-            return False  # Nothing to animate
+        targets = self._pulse_targets()
 
         # Smooth continuous pulse using sin wave
         phase = getattr(self, '_pulse_phase', 0)
@@ -1937,14 +1934,17 @@ class WelcomeDialog:
         self.dialog.show_all()
         self._fade_in_dialog(0.0)
 
-        # Start pulsating animation for checkboxes (50ms for smooth continuous pulse)
+        # Pulse the checkbox/warning, if there is one (50ms for a smooth pulse).
+        # Only started when there is: a timer that stopped itself for lack of
+        # targets made the source_remove below warn "Source ID not found".
         self._pulse_phase = 0
-        pulse_timer = GLib.timeout_add(50, self._pulse_checkboxes)
+        pulse_timer = (GLib.timeout_add(50, self._pulse_checkboxes)
+                       if self._pulse_targets() else None)
 
         response = self.dialog.run()
 
-        # Stop pulsating animation
-        GLib.source_remove(pulse_timer)
+        if pulse_timer:
+            GLib.source_remove(pulse_timer)
 
         result = {'continue': response == Gtk.ResponseType.OK}
         # On an unsupported desktop the only footer action is "Quit TalkType"

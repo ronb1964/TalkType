@@ -101,3 +101,18 @@ def test_flatpak_footer_no_longer_promises_a_model_choice():
     """The model is chosen on this screen now; the later picker is gone."""
     assert "choose your speech model" not in SRC
     assert "downloads your speech model, then starts" in SRC
+
+
+def test_no_pulse_timer_without_anything_to_pulse(dialog, monkeypatch):
+    """With no extension checkbox and no Flatpak warning the pulse timer
+    stopped itself at once, and closing the window then removed it again:
+    GLib warned "Source ID … was not found" on every first run off GNOME."""
+    started, removed = [], []
+    monkeypatch.setattr(wd.GLib, "timeout_add", lambda *a: started.append(a) or 7)
+    monkeypatch.setattr(wd.GLib, "source_remove", lambda sid: removed.append(sid))
+    monkeypatch.setattr(dialog.dialog, "run", lambda: Gtk.ResponseType.OK)
+    monkeypatch.setattr(dialog, "_fade_in_dialog", lambda o: None)
+    assert dialog._pulse_targets() == []
+    dialog.run()
+    assert not any(a[1] == dialog._pulse_checkboxes for a in started)
+    assert removed == []
