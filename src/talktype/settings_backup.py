@@ -61,15 +61,38 @@ def _now():
     return datetime.datetime.now()
 
 
-def when_label(when, now=None):
-    """'Today 8:43 AM', 'Yesterday 9:50 PM' or 'Oct 10, 2026, 9:50 PM'."""
+def _uses_24_hour_clock():
+    """Whether this computer's region shows 21:50 rather than 9:50 PM.
+
+    Read from the region setting (LC_TIME), which KDE and GNOME both set
+    from their own Region settings: en_US formats times as %r (with AM/PM),
+    de_DE, en_GB and fr_FR as %T. The time-of-day codes that need AM/PM are
+    %r, %I, %l and %p; anything else is a 24-hour clock.
+    """
+    import locale
+    try:
+        locale.setlocale(locale.LC_TIME, "")    # GTK has done this already; harmless again
+        fmt = locale.nl_langinfo(locale.T_FMT)
+    except (locale.Error, AttributeError, ValueError):
+        return False
+    return not any(code in fmt for code in ("%r", "%I", "%l", "%p"))
+
+
+def when_label(when, now=None, twenty_four=None):
+    """'Today 8:43 AM', 'Yesterday 9:50 PM' or 'Oct 10, 2026, 9:50 PM', with
+    21:50 instead of 9:50 PM where the region uses a 24-hour clock."""
     now = now or _now()
-    clock = f"{when:%-I:%M %p}"
+    if twenty_four is None:
+        twenty_four = _uses_24_hour_clock()
+    clock = f"{when:%H:%M}" if twenty_four else f"{when:%-I:%M %p}"
     if when.date() == now.date():
         return f"Today {clock}"
     if when.date() == now.date() - datetime.timedelta(days=1):
         return f"Yesterday {clock}"
-    return f"{when:%b %-d, %Y}, {clock}"
+    # English month names whatever the region: %b would give "Okt 2" next to
+    # the English "Today" on a German computer, and TalkType is in English.
+    month = ("Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec").split()[when.month - 1]
+    return f"{month} {when.day}, {when.year}, {clock}"
 
 
 def suggested_name():

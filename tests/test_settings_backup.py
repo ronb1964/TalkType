@@ -210,9 +210,9 @@ def test_a_broken_copy_in_the_folder_is_skipped_not_fatal(home):
 
 def test_copies_are_named_the_way_people_say_dates():
     now = datetime.datetime(2026, 10, 11, 9, 0)
-    assert sb.when_label(datetime.datetime(2026, 10, 11, 8, 43), now) == "Today 8:43 AM"
-    assert sb.when_label(datetime.datetime(2026, 10, 10, 21, 50), now) == "Yesterday 9:50 PM"
-    assert sb.when_label(datetime.datetime(2026, 10, 2, 7, 5), now) == "Oct 2, 2026, 7:05 AM"
+    assert sb.when_label(datetime.datetime(2026, 10, 11, 8, 43), now, twenty_four=False) == "Today 8:43 AM"
+    assert sb.when_label(datetime.datetime(2026, 10, 10, 21, 50), now, twenty_four=False) == "Yesterday 9:50 PM"
+    assert sb.when_label(datetime.datetime(2026, 10, 2, 7, 5), now, twenty_four=False) == "Oct 2, 2026, 7:05 AM"
 
 
 def test_last_saved_is_noted_and_doesnt_show_up_as_a_copy(home):
@@ -282,3 +282,24 @@ def test_suggested_file_names_differ_within_a_day(monkeypatch):
     first = sb.suggested_name()
     monkeypatch.setattr(sb, "_now", lambda: datetime.datetime(2026, 10, 11, 9, 41))
     assert first == "TalkType-settings-2026-10-11-0915.zip" != sb.suggested_name()
+
+
+def test_times_follow_a_24_hour_clock_where_people_use_one():
+    now = datetime.datetime(2026, 10, 11, 23, 0)
+    when = datetime.datetime(2026, 10, 11, 21, 50)
+    assert sb.when_label(when, now, twenty_four=True) == "Today 21:50"
+    assert sb.when_label(when, now, twenty_four=False) == "Today 9:50 PM"
+    assert sb.when_label(datetime.datetime(2026, 10, 2, 7, 5), now, twenty_four=True) == "Oct 2, 2026, 07:05"
+
+
+@pytest.mark.parametrize("fmt, expected", [
+    ("%r", False),          # en_US
+    ("%I:%M:%S %p", False),
+    ("%T", True),           # de_DE, en_GB, fr_FR
+    ("%H:%M:%S", True),
+])
+def test_the_clock_is_read_from_the_region_setting(monkeypatch, fmt, expected):
+    import locale
+    monkeypatch.setattr(locale, "nl_langinfo", lambda item: fmt)
+    monkeypatch.setattr(locale, "setlocale", lambda *a: "")
+    assert sb._uses_24_hour_clock() is expected
