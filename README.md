@@ -27,7 +27,7 @@
   <img src="screenshots/demo.gif" alt="Dictating a letter: you hold the key and talk, the waveform shows TalkType listening, and the words appear. It fixes a 'no wait' correction and turns 'john at gmail dot com' into an email address." width="600">
 </p>
 
-**Want to hear it too?** Here's the one-minute version, with sound:
+**Want to hear it too?** Here's the one-minute version, with sound (GitHub starts it muted, so click the speaker icon):
 
 https://github.com/user-attachments/assets/e2aa55f4-a4ff-482e-8884-cc92ac5809a9
 
