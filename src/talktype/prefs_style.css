@@ -460,8 +460,13 @@ window.talktype-prefs {
    (Ron, 0.14.6). Drawing only: the controls under it still take clicks. */
 .talktype-prefs scrolledwindow undershoot.bottom {
     background-color: transparent;
-    background-image: linear-gradient(to top, #1e1e1e, rgba(30, 30, 30, 0));
-    background-size: 100% 36px;
+    /* Strong enough to notice, never solid. Tuned with Ron on 0.14.6: 36 px
+       of light fade went unnoticed, 80 px solid at the edge hid the last row,
+       70 px at 85% leaves it readable but clearly slipping under the edge.
+       Preferences always uses its own dark colours, so one tuning fits all. */
+    background-image: linear-gradient(to top, rgba(30, 30, 30, 0.85) 0%,
+                                      rgba(30, 30, 30, 0.55) 40%, rgba(30, 30, 30, 0) 100%);
+    background-size: 100% 70px;
     background-repeat: no-repeat;
     background-position: center bottom;
     border: none;
