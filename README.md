@@ -1,111 +1,94 @@
-# TalkType: voice dictation for Linux
+<p align="center">
+  <img src="io.github.ronb1964.TalkType.png" alt="TalkType" width="110">
+</p>
 
-**Hold a key, talk, let go. Your words show up wherever your cursor is.**
+<h1 align="center">TalkType</h1>
+
+<p align="center">
+  <b>Hold a key, talk, let go. Your words show up wherever your cursor is.</b><br>
+  Free voice dictation for Linux. It runs offline, and it works on Wayland.
+</p>
+
+<p align="center">
+  <a href="https://github.com/ronb1964/TalkType/releases/latest"><img src="https://img.shields.io/github/v/release/ronb1964/TalkType?label=download&color=2ea44f" alt="Download"></a>
+  <a href="https://aur.archlinux.org/packages/talktype-appimage"><img src="https://img.shields.io/aur/version/talktype-appimage" alt="AUR version"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license"></a>
+  <img src="https://img.shields.io/badge/GNOME%20%C2%B7%20KDE%20%C2%B7%20Sway%20%C2%B7%20X11-supported-555" alt="GNOME, KDE, Sway and X11">
+</p>
+
+<p align="center">
+  <a href="#installation">Install</a> &nbsp;&bull;&nbsp;
+  <a href="#what-it-does">What it does</a> &nbsp;&bull;&nbsp;
+  <a href="#all-the-features">All the features</a> &nbsp;&bull;&nbsp;
+  <a href="CHANGELOG.md">What's new</a>
+</p>
+
+<p align="center">
+  <img src="screenshots/demo.gif" alt="Dictating a letter: you hold the key and talk, the waveform shows TalkType listening, and the words appear. It fixes a 'no wait' correction and turns 'john at gmail dot com' into an email address." width="600">
+</p>
 
 That works on GNOME, KDE, Sway, Hyprland and X11 with no setup, because TalkType reads the key straight from the keyboard instead of asking the desktop for it. Most Linux dictation tools can't do hold-to-talk on Wayland at all.
 
 It's free, it runs completely offline, and nothing you say ever leaves your computer.
 
-[![AUR version](https://img.shields.io/aur/version/talktype-appimage)](https://aur.archlinux.org/packages/talktype-appimage)
-[![GitHub release](https://img.shields.io/github/v/release/ronb1964/TalkType)](https://github.com/ronb1964/TalkType/releases)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Linux](https://img.shields.io/badge/platform-Linux-lightgrey)](https://github.com/ronb1964/TalkType)
-
-<p align="center">
-  <img src="screenshots/demo.gif" alt="TalkType in action — press F8, speak, text appears" width="720">
-</p>
-
 ---
 
-## Why TalkType?
-
-Most voice dictation tools on Linux are either cloud-based (privacy concerns), command-line only (not user-friendly), or broken on Wayland. TalkType is different:
-
-- **Global hotkeys that actually work on Wayland** — many Linux dictation tools rely on X11 key grabs (or `pynput`), which Wayland blocks by design. TalkType reads the key at the kernel level via `/dev/input`, below the compositor, so push-to-talk works the same on GNOME, KDE, Sway and Hyprland (X11 too).
-- **100% offline** — All processing happens locally, using Whisper or Parakeet. Nothing is sent to the cloud.
-- **Zero configuration** — Download the AppImage, run it, start talking. First-run wizard handles the rest.
-- **Any desktop environment** — GNOME (with native shell extension), KDE, XFCE, Sway, Hyprland, and more.
-- **Fast without a graphics card** — the Parakeet model gives large-v3 class accuracy in well under a second on an ordinary processor (English and 24 European languages).
-- **GPU accelerated, any brand** — Whisper runs on NVIDIA, AMD or Intel graphics through Vulkan, a 24 MB download. NVIDIA cards can use CUDA (1.4 GB) instead.
-
----
-
-## Screenshots
+## What it does
 
 <p align="center">
-  <img src="screenshots/dictating.png" alt="Dictating a letter in LibreOffice Writer, with TalkType's recording indicator showing" width="90%">
-</p>
-<p align="center">
-  <em>Hold F8 and talk: the orb shows TalkType is listening, and your words land wherever you're typing</em>
+  <img src="screenshots/you-say.png" alt="You say: Let's say three o'clock, no wait, make that four o'clock. TalkType types: Let's say four o'clock. You say: send the plans to john at gmail dot com. TalkType types: john@gmail.com. You say: new paragraph could we meet on Thursday question mark. TalkType types a new paragraph with Could we meet on Thursday?" width="760">
 </p>
 
-<p align="center">
-  <img src="screenshots/welcome-recommended.png" alt="First run: the recommended setup for this computer" width="40%">
-  <img src="screenshots/welcome-other-options.png" alt="First run: Other options, with every choice explained" width="40%">
-</p>
-<p align="center">
-  <em>First run recommends a setup for your computer and language &bull; Other options explains every choice</em>
-</p>
+**It fixes it when you change your mind.** Say "no wait", "scratch that" or "actually" and correct yourself, and a small AI model on your own computer drops the wrong part. Every fix gets checked, and if the AI changed anything else, your words are typed exactly as you said them. It's optional, and it's off until you turn it on.
 
-<p align="center">
-  <img src="screenshots/tray-performance.png" alt="Tray menu with the Performance presets" width="70%">
-</p>
-<p align="center">
-  <em>The tray menu, with the Performance presets</em>
-</p>
+**Commands and addresses come out right.** Say "comma", "new paragraph" or "question mark" and you get the punctuation. Say an email or a web address the way you'd say it out loud and it's written the way it should be.
 
-<p align="center">
-  <img src="screenshots/prefs-general.png" alt="Preferences - General" width="45%">
-  <img src="screenshots/prefs-advanced.png" alt="Preferences - Advanced" width="45%">
-</p>
-<p align="center">
-  <em>Model, graphics card and hotkeys &bull; Dictation cleanup and AI self-corrections</em>
-</p>
+<table>
+<tr>
+<td width="50%"><img src="screenshots/welcome-recommended.png" alt="First run: the recommended setup for this computer"></td>
+<td>
 
-<p align="center">
-  <img src="screenshots/prefs-audio.png" alt="Preferences - Audio" width="45%">
-  <img src="screenshots/prefs-commands.png" alt="Preferences - Commands" width="45%">
-</p>
-<p align="center">
-  <em>Microphone test and recording indicator &bull; Custom voice commands and Fix a Word</em>
-</p>
+### Set up for your computer
 
-<p align="center">
-  <img src="screenshots/prefs-stats.png" alt="Preferences - Stats" width="45%">
-  <img src="screenshots/voice-commands.png" alt="Voice Commands quick reference" width="30%">
-</p>
-<p align="center">
-  <em>Your dictation stats &bull; The Voice Commands quick reference</em>
-</p>
+First run looks at your graphics card and your language and picks a setup for you. On a graphics card, a sentence is typed out in about a fifth of a second. No graphics card is fine too: the default model is fast on an ordinary processor.
 
-<p align="center">
-  <img src="screenshots/help-getting-started.png" alt="Help - Getting Started" width="45%">
-  <img src="screenshots/help-voice-commands.png" alt="Help - Voice Commands" width="45%">
-</p>
-<p align="center">
-  <em>Built-in help with getting started guide &bull; Complete voice commands reference</em>
-</p>
+Want something else? One button shows every choice, with what it costs you in download size and speed.
 
----
+</td>
+</tr>
+<tr>
+<td>
 
-## Features
+### Teach it your words
 
-- **Dual Hotkeys Always Active** - F8 (hold-to-talk) AND F9 (tap-to-toggle) simultaneously - fully customizable
-- **Hands-free** (optional) - Double-tap F9, talk, and the recording stops by itself when you go quiet. A single tap is still a normal on/off toggle, so long dictation with thinking pauses is never cut off
-- **AI-Powered Transcription** - OpenAI's Whisper models (tiny to large-v3), or NVIDIA's Parakeet for fast, accurate dictation with no GPU
-- **GPU Acceleration** - Use your graphics card for much faster transcription. Vulkan (a 24 MB download) works on NVIDIA, AMD and Intel; on NVIDIA you can also use CUDA (1.4 GB). TalkType times your graphics chip against your processor first and only uses it if it's faster
-- **Smart Text Processing** - Auto-punctuation, smart quotes, auto-spacing
-- **Voice Commands** - Say "comma", "period", "new paragraph", "undo last word", and more
-- **Custom Commands** - Define your own phrase shortcuts (e.g., "my email" → your@email.com)
-- **Visual Feedback** - On-screen recording indicator that reacts to your voice, with four styles (orb, waveform, frequency bars, radial), custom colors, and positioning anywhere on screen
-- **Dictation Cleanup** (optional) - Remove "um", "uh" and accidentally repeated words instantly, and optionally let a small AI model that runs on your own computer fix self-corrections ("meet at 3, no wait, 4" becomes "meet at 4"). Every AI edit is checked, and if it changed anything besides the correction your words are typed exactly as spoken. The AI uses your graphics card if you have one (NVIDIA, AMD or Intel) and your processor otherwise
-- **Fix a Word** - Teach TalkType a word it keeps getting wrong. Pick it out of a recent dictation, type the right spelling, and it's fixed in every dictation from then on. Great for names, brands and technical terms, and it works with every speech model
-- **Your Stats** - Pick Your Stats from the tray menu to see how many words you've dictated today, this week and all time, how much typing time it saved (at your own typing speed), and a chart of the last two weeks. Only the numbers are kept, on your computer, never what you said
-- **Recent Dictations** - Your last 20 dictations in the tray menu. Hover to read one, click to copy it again, handy when text lands in the wrong window. Kept in memory only and wiped at logout
-- **Private by Default** - Fully offline transcription, and your dictated text is never written to the log (opt-in only, for troubleshooting)
-- **GNOME Integration** - Native shell extension for GNOME desktop
-- **Smart Updates** - Built-in update checker that updates the right way for how you installed: through your package manager on `.deb`/`.rpm` (one click, one password prompt), in place for the AppImage, or via your AUR helper on Arch
-- **Wayland Native** - Works seamlessly on modern Linux desktops
+Names, brands, the part numbers you use every day. If TalkType keeps getting one wrong, pick it out of a recent dictation with **Fix a Word**, type it the right way, and it's fixed from then on.
+
+You can also make your own shortcuts, like "my email" for your address.
+
+</td>
+<td width="50%"><img src="screenshots/prefs-commands.png" alt="Preferences, Commands tab: custom voice commands and Fix a Word"></td>
+</tr>
+<tr>
+<td width="50%"><img src="screenshots/tray-performance.png" alt="Tray menu with the Performance presets"></td>
+<td>
+
+### Everything from the tray
+
+Start and stop dictation, switch between Recommended, Lightest and Battery saver, or grab one of your last 20 dictations back if the text landed in the wrong window. Those are kept in memory only and gone when you log out.
+
+</td>
+</tr>
+<tr>
+<td>
+
+### See how much typing it saves you
+
+Your Stats shows the words you've dictated today, this week and all time, and how long it would've taken to type them. Only the numbers are kept, never what you said.
+
+</td>
+<td width="50%"><img src="screenshots/prefs-stats.png" alt="Preferences, Stats tab"></td>
+</tr>
+</table>
 
 ---
 
@@ -195,7 +178,65 @@ enough interest and I'll make it happen.
 
 ---
 
-## Voice Commands
+## All the features
+
+- **Two hotkeys, both always on.** Hold F8 to talk, or tap F9 to start and tap again to stop. Pick any keys you like.
+- **Hands-free if you want it.** Double-tap F9, talk, and it stops by itself when you go quiet. A single tap still works as a plain on/off switch, so a long dictation with thinking pauses never gets cut off.
+- **Your choice of speech model.** NVIDIA's Parakeet is the default: fast on any processor, for English and 24 European languages. OpenAI's Whisper covers 99 languages, from Tiny up to Large-v3.
+- **Any graphics card.** NVIDIA, AMD or Intel through Vulkan, a 24 MB download. On NVIDIA you can use CUDA instead. TalkType times your graphics chip against your processor first and only uses it if it's really faster.
+- **Corrections.** Say "no wait", "scratch that", "I mean" or "actually" and the optional AI fixes it. It also drops "um", "uh" and stutters.
+- **Voice commands.** "comma", "period", "new paragraph", "undo last word", "delete last three sentences" and more. See the full list below.
+- **Email and web addresses.** "john at gmail dot com" types john@gmail.com, and "github dot com" types github.com.
+- **Your own commands.** Make a phrase type anything you want, like "my email" for your address.
+- **Fix a Word.** Teach it a name or term it keeps getting wrong.
+- **Recent Dictations.** Your last 20, one click to copy. Kept in memory only.
+- **Your Stats.** Words dictated and typing time saved, at your own typing speed.
+- **A recording indicator you can style.** Orb, waveform, frequency bars or radial, any color, anywhere on screen. It reacts to your voice so you know it's listening.
+- **Tells you why when it can't type.** If a dictation can't be typed into the window, TalkType says why and what fixes it.
+- **Private.** Everything runs on your computer, and what you dictate is never written to a log unless you turn that on for troubleshooting.
+- **GNOME extension.** A native panel menu on GNOME, and a tray icon everywhere else.
+- **Updates the right way.** Through your package manager for the .deb and .rpm, in place for the AppImage, or through your AUR helper on Arch.
+
+---
+
+## More
+
+<details>
+<summary><b>More screenshots</b></summary>
+
+<p align="center">
+  <img src="screenshots/dictating.png" alt="Dictating a letter in LibreOffice Writer, with TalkType's recording indicator showing" width="90%">
+</p>
+<p align="center"><em>Hold F8 and talk: the indicator shows TalkType is listening, and your words land wherever you're typing</em></p>
+
+<p align="center">
+  <img src="screenshots/welcome-recommended.png" alt="First run: the recommended setup for this computer" width="40%">
+  <img src="screenshots/welcome-other-options.png" alt="First run: changing the language, model or graphics card" width="40%">
+</p>
+<p align="center"><em>First run recommends a setup &bull; one button shows every choice</em></p>
+
+<p align="center">
+  <img src="screenshots/prefs-general.png" alt="Preferences, General" width="45%">
+  <img src="screenshots/prefs-advanced.png" alt="Preferences, Advanced" width="45%">
+</p>
+<p align="center"><em>Model, graphics card and hotkeys &bull; Dictation cleanup and AI self-corrections</em></p>
+
+<p align="center">
+  <img src="screenshots/prefs-audio.png" alt="Preferences, Audio" width="45%">
+  <img src="screenshots/voice-commands.png" alt="Voice Commands quick reference" width="30%">
+</p>
+<p align="center"><em>Microphone test and recording indicator &bull; The Voice Commands quick reference</em></p>
+
+<p align="center">
+  <img src="screenshots/help-getting-started.png" alt="Help, Getting Started" width="45%">
+  <img src="screenshots/help-voice-commands.png" alt="Help, Voice Commands" width="45%">
+</p>
+<p align="center"><em>Built-in help</em></p>
+
+</details>
+
+<details>
+<summary><b>Voice commands, the full list</b></summary>
 
 ### Punctuation
 | Say This | Result |
@@ -240,9 +281,10 @@ Say **"literal"** before any command to output the word instead:
 - "literal comma" → types "comma" (not ,)
 - "literal period" → types "period" (not .)
 
----
+</details>
 
-## AI Models
+<details>
+<summary><b>Speech models</b></summary>
 
 Choose the right model for your needs in Preferences → General:
 
@@ -258,9 +300,10 @@ Choose the right model for your needs in Preferences → General:
 > **Tip:** First run recommends a setup for your computer and language, and tray → Performance → **Recommended for this computer** puts you back on it any time.
 > **Parakeet** is the default. It's a different engine that NVIDIA made, and it runs on your processor (or on your graphics card through Vulkan). It doesn't cover Chinese, Japanese, Korean, Arabic and other non-European languages. For those, first run picks Whisper: Small on the processor, or Large-v3 on a graphics card.
 
----
+</details>
 
-## GPU Acceleration
+<details>
+<summary><b>Graphics cards</b></summary>
 
 A graphics card makes the Whisper models much faster, and with Vulkan it speeds up Parakeet too. There are two ways to use one:
 
@@ -275,9 +318,10 @@ Before switching to Vulkan, TalkType times your graphics chip against your proce
 
 Parakeet doesn't need a graphics card, since it's already fast on the processor. With the device set to Vulkan it runs on the graphics card anyway: on an RTX 4070 Super, a minute of speech took 0.2 seconds instead of 2, with the same accuracy. That needs a second copy of Parakeet in the graphics engine's format (669 MB). The processor copy stays too, as a fallback. CUDA can't run Parakeet.
 
----
+</details>
 
-## Configuration
+<details>
+<summary><b>Settings file</b></summary>
 
 Settings are stored in `~/.config/talktype/config.toml`:
 
@@ -295,9 +339,45 @@ auto_space = true         # Auto-space between utterances
 auto_period = true        # Add period at end of sentences
 ```
 
----
+</details>
 
-## Development
+<details>
+<summary><b>Troubleshooting</b></summary>
+
+### Text not appearing?
+- Check ydotoold is running: `systemctl --user status ydotoold`
+- Verify socket exists: `ls $XDG_RUNTIME_DIR/.ydotool_socket`
+
+### Hotkey not working?
+- Another app may be using F8/F9 - try different keys in Preferences
+- Ensure TalkType service is running (check tray icon)
+
+### No hotkey works at all?
+TalkType reads your keyboard directly, which requires your account to be in the
+system's `input` group. Without it no key can be detected, even though the app
+looks like it started fine.
+
+- Preferences → Advanced → Typing Setup → **Fix Typing Permissions**
+- **Then restart your computer.** Logging out and back in is often not enough —
+  a lingering user session keeps the old group list alive
+- Check it worked with `groups`; the list should include `input`
+
+Most common on Fedora, where permission to *type* is granted separately from
+permission to *read keys*, so typing can work while hotkeys do not.
+
+### Transcription slow?
+- Use your graphics card if you have one (see [GPU Acceleration](#gpu-acceleration))
+- Try Parakeet, or a smaller Whisper model (tiny or base)
+- Tray menu → Performance → Recommended for this computer
+
+### Tray icon not visible (GNOME)?
+- TalkType offers to install its GNOME extension on first run
+- Or manually: Preferences → Advanced → Install Extension
+
+</details>
+
+<details>
+<summary><b>Building from source</b></summary>
 
 ### From Source
 
@@ -341,52 +421,17 @@ systemctl --user daemon-reload
 systemctl --user enable --now ydotoold.service
 ```
 
----
-
-## Troubleshooting
-
-### Text not appearing?
-- Check ydotoold is running: `systemctl --user status ydotoold`
-- Verify socket exists: `ls $XDG_RUNTIME_DIR/.ydotool_socket`
-
-### Hotkey not working?
-- Another app may be using F8/F9 - try different keys in Preferences
-- Ensure TalkType service is running (check tray icon)
-
-### No hotkey works at all?
-TalkType reads your keyboard directly, which requires your account to be in the
-system's `input` group. Without it no key can be detected, even though the app
-looks like it started fine.
-
-- Preferences → Advanced → Typing Setup → **Fix Typing Permissions**
-- **Then restart your computer.** Logging out and back in is often not enough —
-  a lingering user session keeps the old group list alive
-- Check it worked with `groups`; the list should include `input`
-
-Most common on Fedora, where permission to *type* is granted separately from
-permission to *read keys*, so typing can work while hotkeys do not.
-
-### Transcription slow?
-- Use your graphics card if you have one (see [GPU Acceleration](#gpu-acceleration))
-- Try Parakeet, or a smaller Whisper model (tiny or base)
-- Tray menu → Performance → Recommended for this computer
-
-### Tray icon not visible (GNOME)?
-- TalkType offers to install its GNOME extension on first run
-- Or manually: Preferences → Advanced → Install Extension
+</details>
 
 ---
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
-
----
+MIT License. See [LICENSE](LICENSE) for details.
 
 <p align="center">
-  <b>TalkType</b> - Voice dictation that just works.<br>
-  <a href="https://github.com/ronb1964/TalkType/releases">Download</a> &bull;
+  <a href="https://github.com/ronb1964/TalkType/releases/latest">Download</a> &bull;
   <a href="CHANGELOG.md">Changelog</a> &bull;
-  <a href="https://github.com/ronb1964/TalkType/issues">Report Bug</a> &bull;
-  <a href="https://github.com/ronb1964/TalkType/issues">Request Feature</a>
+  <a href="https://github.com/ronb1964/TalkType/issues">Report a bug</a> &bull;
+  <a href="https://github.com/ronb1964/TalkType/discussions">Ideas and questions</a>
 </p>
