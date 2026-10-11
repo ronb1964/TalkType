@@ -2589,7 +2589,9 @@ def show_hotkey_test_dialog():
                     caps = dev.capabilities()
                     # Just check for EV_KEY capability (same as app.py does)
                     if ecodes.EV_KEY in caps:
-                        dev.set_nonblocking(True)
+                        # Already non-blocking: evdev opens with O_NONBLOCK.
+                        # A call here to a "make it non-blocking" method that
+                        # evdev doesn't have used to skip every keyboard.
                         devices.append(dev)
                         logger.info(f"Opened input device: {dev.name} at {path}")
                 except PermissionError:

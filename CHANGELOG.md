@@ -8,6 +8,10 @@ All notable changes to TalkType are documented here.
   corners on KDE while every other TalkType window had KDE's rounded frame.
   They get the desktop's own frame now, with rounded corners and a title bar,
   on KDE, GNOME and X11 desktops alike.
+- The hotkey test on the welcome screen never saw your keyboards directly.
+  It called a function the keyboard library doesn't have, which skipped every
+  device. The test still worked through the window itself, so nobody noticed,
+  but now it reads the keys the same way dictation does.
 
 ## [0.14.4] - 2026-10-10
 

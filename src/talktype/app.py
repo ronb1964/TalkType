@@ -1216,11 +1216,7 @@ def _rediscover_devices(devices) -> int:
             dev = InputDevice(path)
             if not _is_keyboard_device(dev):
                 continue
-            try:
-                dev.set_nonblocking(True)
-            except Exception:
-                pass
-            devices.append(dev)
+            devices.append(dev)  # evdev opens it non-blocking already
             added += 1
             logger.info(f"Input device appeared, now monitoring: {dev.name}")
         except Exception as e:
@@ -2994,10 +2990,8 @@ def _loop_evdev(cfg: Settings, input_device_idx):
     print(f"Auto-timeout: {svc.timeout_enabled} | Timeout: {svc.timeout_minutes} minutes")
     logger.info(f"Auto-timeout: enabled={svc.timeout_enabled}, minutes={svc.timeout_minutes}")
 
+    # evdev opens these non-blocking, which the read loop below relies on.
     devices = [InputDevice(p) for p in list_devices()]
-    for dev in devices:
-        try: dev.set_nonblocking(True)
-        except Exception: pass
     last_device_scan = time.time()
     # Establish both files' current mtimes so the first poll does not report a
     # spurious change and re-apply what the service just started with.
