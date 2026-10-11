@@ -79,3 +79,29 @@ def test_the_question_offers_every_whisper_model_with_large_v3_picked(prefs, mon
     assert [label.split(",")[0] for label in shown["labels"]] == \
         ["Tiny", "Base", "Small", "Medium", "Large-v3"]
     assert shown["active"][0].startswith("Large-v3") and "3.1 GB" in shown["active"][0]
+
+
+# --- CUDA already downloaded, picked in Device with Parakeet -----------------
+
+def _picker(prefs, answer):
+    """Device → CUDA with the files already there. Ron, 0.14.6 test: it just
+    switched and OK left Parakeet running on the processor under "CUDA"."""
+    stub = SimpleNamespace(config={"model": "parakeet-v3", "device": "vulkan"},
+                           _device_before="vulkan", asked=[])
+    stub._ask_whisper_model_for_cuda = lambda: stub.asked.append(True) or answer
+    stub._set_choice = lambda key, value: stub.config.__setitem__(key, value)
+    return stub
+
+
+def test_picking_cuda_on_parakeet_asks_for_a_whisper_model(prefs):
+    stub = _picker(prefs, "large-v3")
+    prefs.PreferencesWindow._finish_cuda_for_parakeet(stub, None)
+    assert stub.asked == [True]
+    # Chosen, not applied yet: OK or Apply downloads the model and restarts.
+    assert stub.config == {"model": "large-v3", "device": "cuda"}
+
+
+def test_keep_parakeet_puts_the_device_back(prefs):
+    stub = _picker(prefs, None)
+    prefs.PreferencesWindow._finish_cuda_for_parakeet(stub, None)
+    assert stub.config == {"model": "parakeet-v3", "device": "vulkan"}

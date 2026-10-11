@@ -3955,6 +3955,13 @@ class PreferencesWindow:
             combo.popdown()     # or the list stays drawn over the dialogs
             GLib.idle_add(self._finish_switch_to_cuda, combo)
             return
+        from .parakeet_engine import is_parakeet
+        if device == "cuda" and is_parakeet(self.config.get("model")):
+            # Parakeet can't use CUDA: ask for a Whisper model, the same
+            # question as after the download.
+            combo.popdown()
+            GLib.idle_add(self._finish_cuda_for_parakeet, combo)
+            return
         if device != "vulkan":
             self.update_config("device", device)
             self._device_before = device
@@ -3984,6 +3991,18 @@ class PreferencesWindow:
         _after_cuda_download() selects CUDA itself, through Apply."""
         self._set_choice("device", self._device_before)
         self._download_cuda()
+        return False        # run once
+
+    def _finish_cuda_for_parakeet(self, combo):
+        """CUDA picked, already downloaded, with Parakeet selected. Choosing
+        a Whisper model selects it and CUDA, applied by OK or Apply like any
+        other choice (Apply downloads the model). Keep Parakeet puts the
+        dropdown back: under "CUDA" it would only run on the processor."""
+        self._set_choice("device", self._device_before)
+        model = self._ask_whisper_model_for_cuda()
+        if model is not None:
+            self._set_choice("model", model)
+            self._set_choice("device", "cuda")
         return False        # run once
 
     def _vulkan_offered(self):
