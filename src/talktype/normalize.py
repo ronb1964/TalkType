@@ -296,15 +296,16 @@ def _join_spoken_dots(m):
 
 
 def _join_email(m):
-    """"ron at example.de" -> "ron@example.de", unless "ron" is an ordinary word."""
+    """"ron at example.de" -> "ron@example.de", unless "ron" is an ordinary word.
+    Lower case, as addresses are written: Parakeet capitalizes names ("John")."""
     name, domain = m.groups()
-    return m.group(0) if name.lower() in _NOT_EMAIL_NAMES else f"{name}@{domain}"
+    return m.group(0) if name.lower() in _NOT_EMAIL_NAMES else f"{name}@{domain}".lower()
 
 
 def _join_spaced_email(m):
     """"ron at gmail. com" -> "ron@gmail.com", unless "ron" is an ordinary word."""
     name, domain, tld = m.groups()
-    return m.group(0) if name.lower() in _NOT_EMAIL_NAMES else f"{name}@{domain}.{tld}"
+    return m.group(0) if name.lower() in _NOT_EMAIL_NAMES else f"{name}@{domain}.{tld}".lower()
 
 
 def _fix_email_spacing(text: str) -> str:

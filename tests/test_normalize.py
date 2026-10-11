@@ -511,7 +511,7 @@ def test_sentence_after_at_is_not_an_email(said):
 @pytest.mark.parametrize("said, expected", [
     ("email john at gmail.com", "Email john@gmail.com."),
     ("email john at gmail. com", "Email john@gmail.com."),
-    ("ron at example . org please", "Ron@example.org please."),
+    ("ron at example . org please", "ron@example.org please."),
     ("send it to ron at example.de", "Send it to ron@example.de."),
     ("Write to sales at acme.co today", "Write to sales@acme.co today."),
 ])
@@ -562,7 +562,7 @@ def test_mailbox_names_that_are_words_still_work():
 # it should come out the same way.
 @pytest.mark.parametrize("said, expected", [
     ("Email me at john at gmail dot com.", "Email me at john@gmail.com."),
-    ("Email me at John at Gmail dot com.", "Email me at John@gmail.com."),
+    ("Email me at John at Gmail dot com.", "Email me at john@gmail.com."),
     ("look at github dot com", "Look at github.com."),
     ("go to www dot example dot org for the details", "Go to www.example.org for the details."),
     ("write to sales at acme dot net today", "Write to sales@acme.net today."),
@@ -619,3 +619,14 @@ def test_a_missed_space_is_still_a_sentence_break():
 def test_punctuation_after_a_line_break_command_goes_with_it(said):
     out = normalize_text(said)
     assert out.replace("§SHIFT_ENTER§", "") == "Go to the shop."
+
+
+# Parakeet capitalizes a name ("John at gmail.com"), but an address is written
+# in lower case: "John@gmail.com" looked wrong.
+@pytest.mark.parametrize("said, expected", [
+    ("Send the plans to John at gmail.com.", "Send the plans to john@gmail.com."),
+    ("Email me at John at Gmail dot com.", "Email me at john@gmail.com."),
+    ("write to Sales at Acme. com today", "Write to sales@acme.com today."),
+])
+def test_a_spoken_address_is_lower_case(said, expected):
+    assert normalize_text(said) == expected
