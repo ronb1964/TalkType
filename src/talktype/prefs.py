@@ -2000,28 +2000,36 @@ class PreferencesWindow:
 
         vbox.pack_start(separator(), False, False, 0)
         vbox.pack_start(header("🕘 Earlier settings"), False, False, 0)
-        vbox.pack_start(dim(f"TalkType keeps your last {settings_backup.KEEP} settings, saved "
-                            f"when it starts if they changed. Go back to one if a change or an "
+        vbox.pack_start(dim(f"Your backups in the backup folder, and the copies TalkType "
+                            f"saves by itself when it starts (the last "
+                            f"{settings_backup.KEEP}). Go back to one if a change or an "
                             f"update went wrong."), False, False, 0)
         row = indented(Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10))
         self.earlier_combo = Gtk.ComboBoxText()
         self.earlier_combo.connect("button-press-event", self._on_combo_button_press)
         self._block_combo_scroll(self.earlier_combo)
-        copies = settings_backup.list_snapshots()
-        for copy in copies:
-            self.earlier_combo.append(copy.path, settings_backup.when_label(copy.when))
-        if copies:
-            self.earlier_combo.set_active(0)
-        else:
-            self.earlier_combo.append("", "None yet")
-            self.earlier_combo.set_active(0)
-            self.earlier_combo.set_sensitive(False)
         row.pack_start(self.earlier_combo, False, False, 0)
-        restore_btn = Gtk.Button(label="Restore")
-        restore_btn.connect("clicked", self._on_restore_earlier_clicked)
-        restore_btn.set_sensitive(bool(copies))
-        row.pack_start(restore_btn, False, False, 0)
+        self.restore_btn = Gtk.Button(label="Restore")
+        self.restore_btn.connect("clicked", self._on_restore_earlier_clicked)
+        row.pack_start(self.restore_btn, False, False, 0)
         vbox.pack_start(row, False, False, 0)
+        self._fill_restore_list()
+
+    def _fill_restore_list(self):
+        """The Earlier settings dropdown: backup files and automatic copies,
+        newest first. Refilled after Save Backup or a new backup folder."""
+        from . import settings_backup
+        self._restore_points = {p.path: p for p in settings_backup.restore_points()}
+        self.earlier_combo.remove_all()
+        for point in self._restore_points.values():
+            what = "your backup" if point.kind == "file" else "automatic"
+            self.earlier_combo.append(
+                point.path, f"{settings_backup.when_label(point.when)} — {what}")
+        if not self._restore_points:
+            self.earlier_combo.append("", "None yet")
+        self.earlier_combo.set_active(0)
+        self.earlier_combo.set_sensitive(bool(self._restore_points))
+        self.restore_btn.set_sensitive(bool(self._restore_points))
 
     def _show_last_backup(self):
         """'Last saved: never' in amber as a nudge, or when it was."""
@@ -2086,10 +2094,11 @@ class PreferencesWindow:
             self._message(Gtk.MessageType.ERROR, "The folder wasn't saved", str(e))
             return
         self._show_backup_folder()
+        self._fill_restore_list()       # the backups already in that folder
 
     def _on_save_backup_clicked(self, _button):
         from . import settings_backup
-        name = f"TalkType-settings-{datetime.date.today().isoformat()}.zip"
+        name = settings_backup.suggested_name()
         path = self._pick_file("Save TalkType Backup", save_name=name)
         if not path:
             return
@@ -2101,6 +2110,7 @@ class PreferencesWindow:
             self._message(Gtk.MessageType.ERROR, "The backup wasn't saved", str(e))
             return
         self._show_last_backup()
+        self._fill_restore_list()       # saved into the backup folder: listed now
         self._message(Gtk.MessageType.INFO, "Backup saved",
                       f"Your settings, voice commands and stats are in:\n{path}")
 
@@ -2130,16 +2140,21 @@ class PreferencesWindow:
 
     def _on_restore_earlier_clicked(self, _button):
         from . import settings_backup
-        path = self.earlier_combo.get_active_id()
-        if not path:
+        point = self._restore_points.get(self.earlier_combo.get_active_id() or "")
+        if point is None:
             return
+        # A backup file carries stats and adds them to these; an automatic
+        # copy has none, so rolling back a setting keeps today's count.
+        stats_note = ("Its stats are added to yours" if point.kind == "file"
+                      else "Your stats stay as they are")
         if self._message(
                 Gtk.MessageType.QUESTION, "Go back to these settings?",
                 f"Your settings, voice commands and Fix a Word words go back to how they "
-                f"were {self.earlier_combo.get_active_text()}. Your stats stay as they are, "
-                f"and your current settings are kept as a copy first.",
+                f"were {settings_backup.when_label(point.when)}. {stats_note}, and your "
+                f"current settings are kept as a copy first.",
                 buttons=Gtk.ButtonsType.OK_CANCEL) != Gtk.ResponseType.OK:
             return
+        path = point.path
         try:
             backup = settings_backup.read_backup(path)
         except settings_backup.BackupError as e:

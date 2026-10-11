@@ -29,6 +29,7 @@ logger = setup_logger(__name__)
 
 MANIFEST = "talktype-backup.json"
 KEEP = 10                       # automatic copies kept
+LIST_MAX = 15                   # restore points listed; more opens as a grid on Wayland
 _SETTINGS = "config.toml"
 _COMMANDS = "custom_commands.toml"
 _STATS = "stats.json"
@@ -53,6 +54,7 @@ class Backup:
 class Snapshot:
     path: str
     when: datetime.datetime
+    kind: str = "auto"          # "auto": a copy TalkType took; "file": the user's backup
 
 
 def _now():
@@ -68,6 +70,12 @@ def when_label(when, now=None):
     if when.date() == now.date() - datetime.timedelta(days=1):
         return f"Yesterday {clock}"
     return f"{when:%b %-d, %Y}, {clock}"
+
+
+def suggested_name():
+    """Save Backup's file name. With the time, so a second backup the same
+    day doesn't ask to replace the first."""
+    return f"TalkType-settings-{_now():%Y-%m-%d-%H%M}.zip"
 
 
 def _setting_files():
@@ -300,6 +308,41 @@ def list_snapshots():
             when = datetime.datetime.strptime(match.group(1), "%Y%m%d-%H%M%S")
             copies.append(Snapshot(os.path.join(snapshots_dir(), name), when))
     return sorted(copies, key=lambda c: c.when, reverse=True)
+
+
+def _made_at(path):
+    """When the backup file *path* was made, from its manifest, or None when
+    it isn't a TalkType backup. Reads only the manifest, so a folder of
+    backups lists quickly."""
+    try:
+        with zipfile.ZipFile(path) as z:
+            manifest = json.loads(z.read(MANIFEST))
+        if manifest.get("app") != "TalkType":
+            return None
+        return datetime.datetime.fromisoformat(manifest["created"])
+    except (zipfile.BadZipFile, OSError, KeyError, ValueError, AttributeError, TypeError):
+        return None
+
+
+def restore_points():
+    """Everything Preferences offers to go back to, newest first, at most
+    LIST_MAX: the automatic copies, and the user's own backup files in the
+    backup folder they picked."""
+    points = list_snapshots()
+    folder = backup_folder()
+    if folder:
+        try:
+            names = os.listdir(folder)
+        except OSError:
+            names = []
+        for name in names:
+            path = os.path.join(folder, name)
+            if name.lower().endswith(".zip") and os.path.isfile(path):
+                when = _made_at(path)
+                if when:
+                    points.append(Snapshot(path, when, "file"))
+    # On a tie (a backup saved the second TalkType started), the user's file first.
+    return sorted(points, key=lambda p: (p.when, p.kind == "file"), reverse=True)[:LIST_MAX]
 
 
 def snapshot_if_changed():

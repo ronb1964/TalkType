@@ -375,9 +375,10 @@ In Preferences → Updates &amp; Backup:
   computer lacks the backup's graphics device, it keeps its own.
 • <b>Backup folder:</b> pick it once with <b>Change…</b>, and Save Backup and
   Load Backup open there.
-• <b>Earlier settings:</b> TalkType keeps a copy of your last 10 settings
-  changes, taken when it starts, so a change or an update that went wrong can be
-  undone. Your stats stay as they are.
+• <b>Earlier settings:</b> one list of your backups in the backup folder and the
+  copies TalkType saves by itself when it starts (your last 10 settings changes),
+  so a change or an update that went wrong can be undone. Going back to an
+  automatic copy leaves your stats as they are.
 
 <b>📝 Text Injection</b>
 {typing_para}

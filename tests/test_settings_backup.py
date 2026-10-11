@@ -237,3 +237,48 @@ def test_a_backup_folder_that_was_deleted_falls_back_to_none(home):
     sb.set_backup_folder(str(folder))
     folder.rmdir()
     assert sb.backup_folder() is None
+
+
+# --- one list: automatic copies and the user's own backup files --------------
+
+def _backup_file(folder, name, when, monkeypatch):
+    monkeypatch.setattr(sb, "_now", lambda: when)
+    sb.write_backup(str(folder / name))
+
+
+def test_the_list_holds_copies_and_backup_files_newest_first(home, monkeypatch):
+    folder = home / "TalkType backups"
+    folder.mkdir()
+    sb.set_backup_folder(str(folder))
+    monkeypatch.setattr(sb, "_now", lambda: datetime.datetime(2026, 10, 11, 8, 58))
+    sb.snapshot_if_changed()
+    _backup_file(folder, "a.zip", datetime.datetime(2026, 10, 11, 9, 15), monkeypatch)
+    _backup_file(folder, "b.zip", datetime.datetime(2026, 10, 10, 20, 0), monkeypatch)
+    (folder / "holiday-photos.zip").write_bytes(b"not ours")      # someone else's zip
+    (folder / "notes.txt").write_text("hi")
+
+    points = sb.restore_points()
+    assert [(p.when.hour, p.kind) for p in points] == [(9, "file"), (8, "auto"), (20, "file")]
+
+
+def test_without_a_backup_folder_the_list_is_the_copies(home):
+    sb.snapshot_if_changed()
+    assert [p.kind for p in sb.restore_points()] == ["auto"]
+
+
+def test_the_list_is_kept_short(home, monkeypatch):
+    folder = home / "f"
+    folder.mkdir()
+    sb.set_backup_folder(str(folder))
+    for i in range(20):
+        _backup_file(folder, f"{i}.zip", datetime.datetime(2026, 10, 1, 8, i), monkeypatch)
+    points = sb.restore_points()
+    assert len(points) == sb.LIST_MAX
+    assert points[0].when.minute == 19                  # the newest ones
+
+
+def test_suggested_file_names_differ_within_a_day(monkeypatch):
+    monkeypatch.setattr(sb, "_now", lambda: datetime.datetime(2026, 10, 11, 9, 15))
+    first = sb.suggested_name()
+    monkeypatch.setattr(sb, "_now", lambda: datetime.datetime(2026, 10, 11, 9, 41))
+    assert first == "TalkType-settings-2026-10-11-0915.zip" != sb.suggested_name()
