@@ -213,3 +213,10 @@ def test_copies_are_named_the_way_people_say_dates():
     assert sb.when_label(datetime.datetime(2026, 10, 11, 8, 43), now) == "Today 8:43 AM"
     assert sb.when_label(datetime.datetime(2026, 10, 10, 21, 50), now) == "Yesterday 9:50 PM"
     assert sb.when_label(datetime.datetime(2026, 10, 2, 7, 5), now) == "Oct 2, 2026, 7:05 AM"
+
+
+def test_last_saved_is_noted_and_doesnt_show_up_as_a_copy(home):
+    assert sb.last_saved() is None
+    sb.write_backup(str(home / "b.zip"))
+    assert sb.last_saved() is not None
+    assert sb.list_snapshots() == []

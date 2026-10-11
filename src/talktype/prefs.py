@@ -626,7 +626,7 @@ class PreferencesWindow:
 
         # Updates tab
         updates_tab = self.create_updates_tab()
-        notebook.append_page(self._scrollable_tab(updates_tab), Gtk.Label(label="Updates"))
+        notebook.append_page(self._scrollable_tab(updates_tab), Gtk.Label(label="Updates & Backup"))
 
         vbox.pack_start(notebook, True, True, 0)
 
@@ -1962,54 +1962,63 @@ class PreferencesWindow:
             _hide_widgets(separator3, extension_header,
                           self.extension_status_label, ext_button_box)
 
-        row = self._add_backup_section(grid, row)
         return grid
 
-    def _add_backup_section(self, grid, row):
-        """Advanced → Backup: a file to keep or take to another computer, and
-        the automatic copies the tray takes (settings_backup.py)."""
-        separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
-        separator.set_margin_top(20)
-        separator.set_margin_bottom(10)
-        grid.attach(separator, 0, row, 2, 1)
-        row += 1
+    def _add_backup_section(self, vbox, header, dim, indented, separator):
+        """The Backup and Earlier settings halves of Updates & Backup: a file
+        to keep or take to another computer, and the automatic copies the
+        tray takes (settings_backup.py)."""
+        from . import settings_backup
 
-        header = Gtk.Label(xalign=0)
-        header.set_markup('<b>💾 Backup</b>')
-        header.set_margin_bottom(5)
-        grid.attach(header, 0, row, 2, 1)
-        row += 1
+        vbox.pack_start(separator(), False, False, 0)
+        vbox.pack_start(header("💾 Backup"), False, False, 0)
+        vbox.pack_start(dim("Your settings, voice commands, Fix a Word words and stats in one "
+                            "file, to keep or to load on another computer."), False, False, 0)
+        row = indented(Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10))
+        for text, handler in (("Save Backup…", self._on_save_backup_clicked),
+                              ("Load Backup…", self._on_load_backup_clicked)):
+            button = Gtk.Button(label=text)
+            button.connect("clicked", handler)
+            row.pack_start(button, False, False, 0)
+        self.last_backup_label = Gtk.Label(xalign=0)
+        row.pack_start(self.last_backup_label, False, False, 6)
+        self._show_last_backup()
+        vbox.pack_start(row, False, False, 0)
 
-        def note(text):
-            label = Gtk.Label(label=text, xalign=0)
-            label.set_line_wrap(True)
-            label.set_margin_start(10)
-            label.set_margin_bottom(6)
-            label.get_style_context().add_class("dim-label")
-            return label
+        vbox.pack_start(separator(), False, False, 0)
+        vbox.pack_start(header("🕘 Earlier settings"), False, False, 0)
+        vbox.pack_start(dim(f"TalkType keeps your last {settings_backup.KEEP} settings, saved "
+                            f"when it starts if they changed. Go back to one if a change or an "
+                            f"update went wrong."), False, False, 0)
+        row = indented(Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10))
+        self.earlier_combo = Gtk.ComboBoxText()
+        self.earlier_combo.connect("button-press-event", self._on_combo_button_press)
+        self._block_combo_scroll(self.earlier_combo)
+        copies = settings_backup.list_snapshots()
+        for copy in copies:
+            self.earlier_combo.append(copy.path, settings_backup.when_label(copy.when))
+        if copies:
+            self.earlier_combo.set_active(0)
+        else:
+            self.earlier_combo.append("", "None yet")
+            self.earlier_combo.set_active(0)
+            self.earlier_combo.set_sensitive(False)
+        row.pack_start(self.earlier_combo, False, False, 0)
+        restore_btn = Gtk.Button(label="Restore")
+        restore_btn.connect("clicked", self._on_restore_earlier_clicked)
+        restore_btn.set_sensitive(bool(copies))
+        row.pack_start(restore_btn, False, False, 0)
+        vbox.pack_start(row, False, False, 0)
 
-        def buttons(*specs):
-            box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-            box.set_margin_start(10)
-            box.set_margin_bottom(10)
-            for text, handler in specs:
-                button = Gtk.Button(label=text)
-                button.connect("clicked", handler)
-                box.pack_start(button, False, False, 0)
-            return box
-
-        from .settings_backup import KEEP
-        for widget in (
-                note("Save your settings, voice commands and stats to a file, to keep or "
-                     "to load on another computer."),
-                buttons(("Save Backup…", self._on_save_backup_clicked),
-                        ("Load Backup…", self._on_load_backup_clicked)),
-                note(f"TalkType also keeps copies of your last {KEEP} settings changes, "
-                     f"taken when it starts."),
-                buttons(("Restore Earlier Settings…", self._on_restore_earlier_clicked))):
-            grid.attach(widget, 0, row, 2, 1)
-            row += 1
-        return row
+    def _show_last_backup(self):
+        """'Last saved: never' in amber as a nudge, or when it was."""
+        from . import settings_backup
+        when = settings_backup.last_saved()
+        if when:
+            self.last_backup_label.set_markup(
+                f'<span color="#6db896">Last saved: {settings_backup.when_label(when)}</span>')
+        else:
+            self.last_backup_label.set_markup('<span color="#e6aa3c">Last saved: never</span>')
 
     # --- Backup (settings_backup.py) ------------------------------------------
 
@@ -2042,6 +2051,7 @@ class PreferencesWindow:
         except (settings_backup.BackupError, OSError) as e:
             self._message(Gtk.MessageType.ERROR, "The backup wasn't saved", str(e))
             return
+        self._show_last_backup()
         self._message(Gtk.MessageType.INFO, "Backup saved",
                       f"Your settings, voice commands and stats are in:\n{path}")
 
@@ -2065,46 +2075,24 @@ class PreferencesWindow:
                 f"This backup was made {made} by TalkType {backup.version or '(unknown version)'}.\n\n"
                 "It replaces your settings, voice commands and Fix a Word words. Its stats "
                 "are added to yours. Your current settings are kept as a copy first, so "
-                "Restore Earlier Settings can undo this.",
+                "Earlier settings, on this tab, can undo this.",
                 buttons=Gtk.ButtonsType.OK_CANCEL) == Gtk.ResponseType.OK:
             self._restore_backup(backup)
 
     def _on_restore_earlier_clicked(self, _button):
         from . import settings_backup
-        copies = settings_backup.list_snapshots()
-        if not copies:
-            self._message(Gtk.MessageType.INFO, "No earlier settings yet",
-                          "TalkType keeps a copy each time it starts with settings that "
-                          "changed since the last copy. There isn't one yet.")
+        path = self.earlier_combo.get_active_id()
+        if not path:
             return
-        box = message_dialog(transient_for=self.window, modal=True,
-                             message_type=Gtk.MessageType.QUESTION,
-                             buttons=Gtk.ButtonsType.NONE, text="Restore earlier settings")
-        box.format_secondary_text(
-            "Pick the settings to go back to. They replace your settings, voice commands "
-            "and Fix a Word words. Your stats stay as they are, and your current settings "
-            "are kept as a copy first.")
-        column = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        column.set_margin_start(24)
-        radios, group = [], None
-        for copy in copies:
-            radio = Gtk.RadioButton.new_with_label_from_widget(
-                group, settings_backup.when_label(copy.when))
-            group = group or radio
-            radios.append((radio, copy))
-            column.pack_start(radio, False, False, 0)
-        box.get_content_area().pack_start(column, False, False, 6)
-        box.add_button("Cancel", Gtk.ResponseType.CANCEL)
-        box.add_button("Restore", Gtk.ResponseType.OK)
-        box.set_default_response(Gtk.ResponseType.OK)
-        box.show_all()
-        answer = box.run()
-        chosen = next(c for r, c in radios if r.get_active())
-        box.destroy()
-        if answer != Gtk.ResponseType.OK:
+        if self._message(
+                Gtk.MessageType.QUESTION, "Go back to these settings?",
+                f"Your settings, voice commands and Fix a Word words go back to how they "
+                f"were {self.earlier_combo.get_active_text()}. Your stats stay as they are, "
+                f"and your current settings are kept as a copy first.",
+                buttons=Gtk.ButtonsType.OK_CANCEL) != Gtk.ResponseType.OK:
             return
         try:
-            backup = settings_backup.read_backup(chosen.path)
+            backup = settings_backup.read_backup(path)
         except settings_backup.BackupError as e:
             self._message(Gtk.MessageType.ERROR, "That copy can't be restored", str(e))
             return
@@ -2253,7 +2241,9 @@ class PreferencesWindow:
         label so adding a tab can't make --tab or bring_to_front open the wrong one."""
         for i in range(self.notebook.get_n_pages()):
             label = self.notebook.get_tab_label_text(self.notebook.get_nth_page(i)) or ""
-            if label.lower() == name.lower():
+            # Any word of the label: "updates" (the tray's --tab) and
+            # "backup" both find "Updates & Backup".
+            if name.lower() in label.lower().replace("&", " ").split():
                 self.notebook.set_current_page(i)
                 return True
         return False
@@ -2488,71 +2478,68 @@ class PreferencesWindow:
             self._refresh_stats()
 
     def create_updates_tab(self):
-        """Create the Updates tab for checking for software updates."""
-        import threading
+        """Updates & Backup: checking for a new version, a backup file, and
+        the automatic copies of the settings (settings_backup.py).
+
+        Packed tight so both fit the window without scrolling: the version
+        shares a line with Check for Updates, and the Update Status box only
+        appears once a check has run.
+        """
         from . import update_checker
 
-        # Tight spacing: the whole page fits the window without scrolling.
-        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=7)
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         vbox.set_margin_start(20)
         vbox.set_margin_end(20)
         vbox.set_margin_top(10)
         vbox.set_margin_bottom(10)
 
-        # Header
-        header = Gtk.Label()
-        header.set_markup('<span size="large"><b>Software Updates</b></span>')
-        header.set_xalign(0)
-        vbox.pack_start(header, False, False, 0)
+        def header(markup):
+            label = Gtk.Label(xalign=0)
+            label.set_markup(f"<b>{markup}</b>")
+            return label
 
-        # Current versions section
-        version_frame = Gtk.Frame(label="Current Versions")
-        version_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
-        version_box.set_margin_start(10)
-        version_box.set_margin_end(10)
-        version_box.set_margin_top(10)
-        version_box.set_margin_bottom(10)
+        def indented(widget):
+            widget.set_margin_start(10)
+            return widget
 
-        # AppImage version
-        current_version = update_checker.get_current_version()
-        self.app_version_label = Gtk.Label()
-        self.app_version_label.set_markup(f"<b>TalkType:</b> {current_version}")
-        self.app_version_label.set_xalign(0)
-        version_box.pack_start(self.app_version_label, False, False, 0)
+        def dim(text):
+            label = Gtk.Label(label=text, xalign=0)
+            label.set_line_wrap(True)
+            label.get_style_context().add_class("dim-label")
+            return indented(label)
 
-        # Extension version
-        ext_version = update_checker.get_extension_version()
-        ext_text = f"Version {ext_version}" if ext_version else "Not installed"
-        self.ext_version_label = Gtk.Label()
-        self.ext_version_label.set_markup(f"<b>GNOME Extension:</b> {ext_text}")
-        self.ext_version_label.set_xalign(0)
-        version_box.pack_start(self.ext_version_label, False, False, 0)
-        if not _on_gnome():
-            _hide_widgets(self.ext_version_label)   # GNOME-only, see advanced tab
+        def separator():
+            line = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+            line.set_margin_top(8)
+            line.set_margin_bottom(4)
+            return line
 
-        version_frame.add(version_box)
-        vbox.pack_start(version_frame, False, False, 6)
+        # --- Updates ---
+        vbox.pack_start(header("🔄 Updates"), False, False, 0)
 
-        # Check for updates button
+        version_row = indented(Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10))
+        versions = f"TalkType {update_checker.get_current_version()}"
+        if _on_gnome():
+            ext_version = update_checker.get_extension_version()
+            versions += (f"  ·  GNOME extension {ext_version}" if ext_version
+                         else "  ·  GNOME extension not installed")
+        version_row.pack_start(Gtk.Label(label=versions, xalign=0), True, True, 0)
         check_btn = Gtk.Button(label="Check for Updates")
-        check_btn.set_halign(Gtk.Align.START)
         check_btn.connect("clicked", self._on_check_updates_clicked)
-        vbox.pack_start(check_btn, False, False, 5)
+        version_row.pack_end(check_btn, False, False, 0)
+        vbox.pack_start(version_row, False, False, 0)
 
-        # Status area (hidden initially)
+        # The result of a check, with its Download & Install / View on GitHub
+        # / Update Extension buttons. Hidden until a check runs: empty, it
+        # took a fifth of the page to say "Click Check for Updates".
         self.update_status_frame = Gtk.Frame(label="Update Status")
         self.update_status_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
-        self.update_status_box.set_margin_start(10)
-        self.update_status_box.set_margin_end(10)
-        self.update_status_box.set_margin_top(10)
-        self.update_status_box.set_margin_bottom(10)
-
-        self.update_status_label = Gtk.Label(label="Click 'Check for Updates' to check for new versions.")
-        self.update_status_label.set_xalign(0)
+        for side in ("start", "end", "top", "bottom"):
+            getattr(self.update_status_box, f"set_margin_{side}")(10)
+        self.update_status_label = Gtk.Label(xalign=0)
         self.update_status_label.set_line_wrap(True)
         self.update_status_box.pack_start(self.update_status_label, False, False, 0)
 
-        # Buttons for update actions (hidden initially)
         self.update_actions_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         self.update_actions_box.set_margin_top(10)
 
@@ -2575,65 +2562,45 @@ class PreferencesWindow:
 
         self.update_status_box.pack_start(self.update_actions_box, False, False, 0)
         self.update_status_frame.add(self.update_status_box)
-        vbox.pack_start(self.update_status_frame, False, False, 10)
+        self.update_status_frame.set_no_show_all(True)
+        vbox.pack_start(indented(self.update_status_frame), False, False, 4)
 
         # Store release info for download button
         self._current_release = None
 
-        # Auto-check option
-        auto_check_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        auto_check_box.set_margin_top(10)
-
-        auto_check_toggle = Gtk.CheckButton(label="Automatically check for updates on startup")
+        auto_check_toggle = Gtk.CheckButton(label="Check automatically when TalkType starts")
         auto_check_toggle.set_active(self.config.get("auto_check_updates", True))
         auto_check_toggle.connect("toggled", lambda x: self.update_config("auto_check_updates", x.get_active()))
         auto_check_toggle.set_tooltip_text(
             "When enabled, TalkType will check for updates once per day when it starts.\n"
-            "If an update is found, you'll be notified and the Updates tab will open."
+            "If an update is found, you'll be notified and this tab will open."
         )
-        auto_check_box.pack_start(auto_check_toggle, False, False, 0)
+        vbox.pack_start(indented(auto_check_toggle), False, False, 0)
 
-        vbox.pack_start(auto_check_box, False, False, 5)
-
-        # Info text — reflects how TalkType was installed.
+        # How TalkType was installed decides how it updates. One line, with
+        # the changelog link at its end.
         install_type = update_checker.get_install_type()
-        if install_type == "appimage":
-            info_markup = (
-                '<span><b>AppImage location:</b> ~/AppImages/TalkType.AppImage\n'
-                'Updates are downloaded, installed, and TalkType restarts automatically.</span>')
-        elif install_type in ("rpm", "deb", "package"):
-            info_markup = (
-                '<span>Installed from a .deb/.rpm. TalkType downloads '
-                'and installs updates for you: <b>Check for Updates</b> fetches the '
-                'new package and installs it with your password — through your '
-                'system package manager, so dependencies resolve. (It is not on a '
-                'distro repository; TalkType checks GitHub itself.)</span>')
-        elif install_type == "aur":
-            info_markup = (
-                '<span>Installed from the AUR. Update with your AUR '
-                'helper (e.g. <tt>yay -S talktype-appimage</tt>).</span>')
-        elif install_type == "flatpak":
-            info_markup = (
-                '<span>Installed as a Flatpak. Update through Flatpak '
-                '(<tt>flatpak update</tt>) or your software center.</span>')
-        else:
-            info_markup = (
-                '<span>Running the development version — update with '
-                '<tt>git pull</tt> in your project folder.</span>')
-        info_label = Gtk.Label()
-        info_label.set_markup(info_markup)
-        info_label.set_xalign(0)
-        info_label.set_line_wrap(True)
-        vbox.pack_start(info_label, False, False, 10)
-
-        # Full changelog link
+        how = {
+            "appimage": "Updates install and TalkType restarts by itself.",
+            "rpm": ("Check for Updates installs the new .deb or .rpm through your package "
+                    "manager, with your password."),
+            "aur": "Installed from the AUR: update with your AUR helper (yay -S talktype-appimage).",
+            "flatpak": "Installed as a Flatpak: update with flatpak update or your software center.",
+        }
+        how["deb"] = how["package"] = how["rpm"]
+        info_row = indented(Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4))
+        info = Gtk.Label(label=how.get(install_type, "Development version: update with git pull."),
+                         xalign=0)
+        info.set_line_wrap(True)
+        info.get_style_context().add_class("dim-label")
+        info_row.pack_start(info, False, True, 0)
         changelog_link = Gtk.LinkButton.new_with_label(
-            update_checker.get_releases_url(),
-            "View Full Changelog on GitHub"
-        )
-        changelog_link.set_halign(Gtk.Align.START)
-        vbox.pack_start(changelog_link, False, False, 5)
+            update_checker.get_releases_url(), "Full changelog")
+        changelog_link.set_valign(Gtk.Align.CENTER)
+        info_row.pack_start(changelog_link, False, False, 0)
+        vbox.pack_start(info_row, False, False, 0)
 
+        self._add_backup_section(vbox, header, dim, indented, separator)
         return vbox
 
     def _on_check_updates_clicked(self, button):
@@ -2641,7 +2608,11 @@ class PreferencesWindow:
         import threading
         from . import update_checker
 
-        # Update status and hide action buttons
+        # Update status and hide action buttons. The status box is hidden
+        # until the first check; show_all skips a no_show_all widget, so
+        # that flag goes first (its buttons keep their own and stay hidden).
+        self.update_status_frame.set_no_show_all(False)
+        self.update_status_frame.show_all()
         self.update_status_label.set_text("Checking for updates...")
         self.download_btn.hide()
         self.view_release_btn.hide()
@@ -5269,7 +5240,7 @@ def main():
     desktop_identity.apply()        # TalkType's icon on its windows, not KDE's generic one
     import argparse
     parser = argparse.ArgumentParser(description="TalkType Preferences")
-    parser.add_argument("--tab", choices=["general", "audio", "advanced", "commands", "stats", "updates"],
+    parser.add_argument("--tab", choices=["general", "audio", "advanced", "commands", "stats", "updates", "backup"],
                         help="Tab to open initially")
     args = parser.parse_args()
 

@@ -126,12 +126,34 @@ def _write_zip(path, files):
         raise
 
 
+def _last_saved_path():
+    """When a backup file was last saved, for "Last saved:" in Preferences.
+    Kept out of config.toml: Preferences writing a setting outside Apply/OK
+    moves the baseline Apply compares against."""
+    return os.path.join(snapshots_dir(), "last-saved-backup")
+
+
+def last_saved():
+    """When a backup file was last saved here, or None."""
+    data = _read_bytes(_last_saved_path())
+    try:
+        return datetime.datetime.fromisoformat(data.decode().strip()) if data else None
+    except (UnicodeDecodeError, ValueError):
+        return None
+
+
 def write_backup(path):
     """Save the settings, commands and stats to the backup file *path*."""
     files = _current_files(with_stats=True)
     if _SETTINGS not in files:
         raise BackupError("There are no settings to back up yet.")
     _write_zip(path, files)
+    try:
+        os.makedirs(snapshots_dir(), mode=0o700, exist_ok=True)
+        with open(_last_saved_path(), "w") as f:
+            f.write(_now().isoformat(timespec="seconds"))
+    except OSError as e:
+        logger.warning(f"Could not note when the backup was saved: {e}")
 
 
 def read_backup(path):

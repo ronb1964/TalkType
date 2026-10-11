@@ -191,7 +191,7 @@ def test_preferences_finds_tabs_by_name_not_position():
     from talktype.prefs import PreferencesWindow
 
     notebook = Gtk.Notebook()
-    for name in ("General", "Audio", "Advanced", "Commands", "Stats", "Updates"):
+    for name in ("General", "Audio", "Advanced", "Commands", "Stats", "Updates & Backup"):
         page = Gtk.Box()
         page.show()          # GtkNotebook won't switch to a hidden page
         notebook.append_page(page, Gtk.Label(label=name))
@@ -285,3 +285,22 @@ def test_typing_speed_setting_needs_no_service_restart():
     from talktype import config
     assert config.Settings().typing_wpm == 40
     assert "typing_wpm" in config.LIVE_APPLIED_KEYS
+
+
+def test_the_tray_still_finds_updates_after_the_tab_became_updates_and_backup():
+    import types
+    import gi
+    gi.require_version("Gtk", "3.0")
+    from gi.repository import Gtk
+    from talktype.prefs import PreferencesWindow
+
+    notebook = Gtk.Notebook()
+    for name in ("General", "Stats", "Updates & Backup"):
+        page = Gtk.Box()
+        page.show()
+        notebook.append_page(page, Gtk.Label(label=name))
+    window = types.SimpleNamespace(notebook=notebook)
+    for asked in ("updates", "backup", "Updates"):
+        notebook.set_current_page(0)
+        assert PreferencesWindow.select_tab(window, asked) is True
+        assert notebook.get_current_page() == 2
