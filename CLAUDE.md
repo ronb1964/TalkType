@@ -79,6 +79,7 @@ Preferences and the rest:
 - [ ] Dictation works on CUDA with a Whisper model (e.g. small)
 - [ ] AI self-corrections: turning it on downloads the model; "meet at three, no wait, four" types "meet at four"
 - [ ] Auto-punctuation works consistently
+- [ ] Hands-free: double-tap F9 and say nothing. It stops by itself after 10 seconds with the cancel beep and types nothing (log: "Auto-stop: nothing said"). With the bars indicator, the bars stay low while it's quiet
 - [ ] Start/stop beeps play
 - [ ] Preferences mic test works (level meter, record, replay)
 - [ ] Tray → Performance shows Recommended / Lightest / Battery saver, with the dot on the active one

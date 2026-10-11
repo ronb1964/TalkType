@@ -211,7 +211,8 @@ system resources. Adjust this in Preferences → Advanced.
 <b>Two Keys, Always Active</b>
 • Hold-to-talk AND tap-to-toggle work simultaneously ({keys_line})
 • Hands-free option: double-tap the toggle key and the recording stops by
-  itself when you stop talking. A single tap stays a normal on/off toggle
+  itself when you stop talking. If you say nothing at all for 10 seconds, it
+  stops without typing anything. A single tap stays a normal on/off toggle
   (turn it on in Preferences → General, under the Toggle Hotkey)
 • Visual recording indicator on screen during active recording
 • Audio beeps for start/stop feedback

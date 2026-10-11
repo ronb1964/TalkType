@@ -37,13 +37,22 @@ _NOISE_RISE_PER_S = 1.5
 class SilenceDetector:
     """Feed it audio blocks as they arrive; it says when the speaker is done."""
 
+    # With nothing said at all for this long, stop anyway (nothing_said is
+    # set, and the recording is dropped rather than transcribed). Before the
+    # first word the silence setting doesn't apply, so a slow start isn't cut
+    # off; without this limit a recording with nothing said never ended
+    # (Ron, 0.14.6). Long enough to look at what you're answering first.
+    NOTHING_SAID_S = 10.0
+
     def __init__(self, silence_seconds: float, sample_rate: int):
         self.silence_seconds = float(silence_seconds)
         self.sample_rate = int(sample_rate)
         self.noise_floor = None
         self.speech_time = 0.0
         self.silence_time = 0.0
+        self.elapsed = 0.0
         self.fired = False
+        self.nothing_said = False
 
     @property
     def armed(self) -> bool:
@@ -60,6 +69,7 @@ class SilenceDetector:
             return False
         duration = samples.size / self.sample_rate
         rms = float(np.sqrt(np.mean(samples ** 2)))
+        self.elapsed += duration
 
         if self.fired:
             # A few blocks still arrive before the recording actually stops.
@@ -88,6 +98,9 @@ class SilenceDetector:
             return False
 
         if not self.armed:
+            if self.elapsed >= self.NOTHING_SAID_S:
+                self.fired = self.nothing_said = True
+                return True
             return False
         self.silence_time += duration
         if self.silence_time >= self.silence_seconds:

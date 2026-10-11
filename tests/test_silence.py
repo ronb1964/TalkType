@@ -277,3 +277,40 @@ def test_the_service_skips_a_speechless_tap(monkeypatch):
     monkeypatch.setattr(app, "_transcribe_audio",
                         lambda *a: pytest.fail("a speechless tap was transcribed"))
     app._transcribe_and_inject([click().tobytes()], SR, False, False, False)
+
+
+# --- Nothing said at all -----------------------------------------------------
+# Ron, 0.14.6 test: double-tap, say nothing, and the recording stayed open
+# until a third press. Before the first word only, a fixed limit applies.
+
+def test_nothing_said_for_the_limit_stops_and_says_so():
+    at, det = run(noise(12.0), 1.5)
+    assert at == pytest.approx(SilenceDetector.NOTHING_SAID_S, abs=0.05)
+    assert det.nothing_said
+
+
+def test_a_cough_in_the_quiet_still_counts_as_nothing_said():
+    at, det = run(np.concatenate([noise(4.0), speech(0.1), noise(8.0)]), 1.5)
+    assert at is not None and det.nothing_said
+
+
+def test_once_talking_starts_the_limit_no_longer_applies():
+    """Thinking for 8 s, then talking: the normal silence setting decides."""
+    audio = np.concatenate([noise(8.0), speech(4.0), noise(3.0)])
+    at, det = run(audio, 1.5)
+    assert at == pytest.approx(8.0 + 4.0 + 1.5, abs=0.1)
+    assert not det.nothing_said
+
+
+def test_a_hands_free_recording_with_nothing_said_is_dropped(monkeypatch):
+    app = _start(monkeypatch)
+    assert app._toggle_pressed_while_recording(beeps_on=False) is True
+    audio = noise(SilenceDetector.NOTHING_SAID_S + 0.5)
+    for i in range(0, len(audio), BLOCK):
+        app._sd_callback(audio[i:i + BLOCK].reshape(-1, 1), BLOCK, None, None)
+    assert app._cmd_stop_recording.is_set()
+    monkeypatch.setattr(app, "_stop_stream_safely", lambda: None)
+    assert app._finish_capture(False, False) is None      # nothing is transcribed
+    assert app.state.was_cancelled
+    app._cmd_stop_recording.clear()
+    app.state.was_cancelled = False

@@ -731,7 +731,10 @@ def _sd_callback(indata, frames_count, time_info, status):
         # loop to stop, exactly as a second press of the toggle key would.
         detector = state.silence
         if detector is not None and detector.feed(indata):
-            logger.info("Auto-stop: speaker went quiet, stopping the recording")
+            if detector.nothing_said:
+                logger.info("Auto-stop: nothing said, stopping without typing anything")
+            else:
+                logger.info("Auto-stop: speaker went quiet, stopping the recording")
             _cmd_stop_recording.set()
 
         # Feed the recording indicator whatever its active style needs.
@@ -2532,6 +2535,12 @@ def _finish_capture(beeps_on: bool, notify_on: bool):
     list, so the returned reference stays valid even if a new recording begins
     immediately â which is what lets Backend B run the slow transcription/typing
     on a worker thread without dropping or mixing audio."""
+    if state.silence is not None and state.silence.nothing_said:
+        # Hands-free with nothing said: drop it. Transcribing room noise can
+        # type a stray "Thank you." (see silence.is_speechless_tap).
+        state.silence = None
+        cancel_recording(beeps_on, notify_on, "Nothing heard, so nothing was typed")
+        return None
     held_ms = int((time.time() - (state.press_t0 or time.time())) * 1000)
     if held_ms < MIN_HOLD_MS:
         cancel_recording(beeps_on, notify_on, f"Cancelled (held {held_ms} ms)")
