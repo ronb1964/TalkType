@@ -555,3 +555,55 @@ def test_an_ordinary_word_before_at_is_not_an_email_name(said):
 def test_mailbox_names_that_are_words_still_work():
     assert normalize_text("write to sales at acme.com") == "Write to sales@acme.com."
     assert normalize_text("email contact at example.org") == "Email contact@example.org."
+
+
+# Parakeet writes a spoken "dot" in an address as the word about one time in
+# three ("john at gmail dot com"), the rest as "gmail.com". Said the same way,
+# it should come out the same way.
+@pytest.mark.parametrize("said, expected", [
+    ("Email me at john at gmail dot com.", "Email me at john@gmail.com."),
+    ("Email me at John at Gmail dot com.", "Email me at John@gmail.com."),
+    ("look at github dot com", "Look at github.com."),
+    ("go to www dot example dot org for the details", "Go to www.example.org for the details."),
+    ("write to sales at acme dot net today", "Write to sales@acme.net today."),
+    ("the docs are at docs dot python dot org", "The docs are at docs.python.org."),
+    ("visit example dot com for more", "Visit example.com for more."),
+    ("my email is ron at example dot com if you need it", "My email is ron@example.com if you need it."),
+])
+def test_a_spoken_dot_in_an_address_becomes_a_dot(said, expected):
+    assert normalize_text(said) == expected
+
+
+@pytest.mark.parametrize("said", [
+    "the dot com bubble burst in 2000",
+    "it was a dot com company",
+    "put a dot on the map",
+    "connect the dots",
+    "click the red dot",
+    "dot com",
+    "I remember the dot com days",
+    "dot dot dot",
+    "it was a big dot com company",
+    "the early dot com days were wild",
+    "we survived the old dot com crash",
+])
+def test_an_ordinary_dot_stays_a_word(said):
+    out = normalize_text(said)
+    assert ".com" not in out and ".on" not in out
+    assert "dot" in out.lower() or out == "…" or out.startswith("…")
+
+
+# Only the dot right before the ending was protected, so an address with more
+# parts was split like a sentence: "www.example.org" -> "www. Example.org".
+@pytest.mark.parametrize("said, expected", [
+    ("go to www.example.org for the details", "Go to www.example.org for the details."),
+    ("the docs are at docs.python.org", "The docs are at docs.python.org."),
+    ("email me at bob at mail.example.com", "Email me at bob@mail.example.com."),
+    ("see news.bbc.co.uk", "See news.bbc.co.uk."),
+])
+def test_an_address_with_more_parts_stays_whole(said, expected):
+    assert normalize_text(said) == expected
+
+
+def test_a_missed_space_is_still_a_sentence_break():
+    assert normalize_text("I left early.then I came back") == "I left early. Then I came back."

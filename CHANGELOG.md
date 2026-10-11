@@ -13,6 +13,14 @@ All notable changes to TalkType are documented here.
   device. The test still worked through the window itself, so nobody noticed,
   but now it reads the keys the same way dictation does.
 - The Stats graph said "most: 1 words". It says "1 word" now.
+- Saying an address with "dot" works every time. "Email me at john at gmail
+  dot com" types john@gmail.com, and "look at github dot com" types
+  github.com. Parakeet writes the word "dot" about one time in three, and
+  then you got the words instead. It only happens where it reads as an
+  address, so "a dot com company" stays as it is.
+- Addresses with more than one dot were split like sentences:
+  "www.example.org" came out as "www. Example.org", and an email like
+  bob@mail.example.com broke the same way. Fixed.
 - AI self-corrections now handle saying the whole thing again. "Send the
   report to Bob. Scratch that, send it to Jim." types "Send the report to
   Jim." Before, the AI got these right but the safety check that guards

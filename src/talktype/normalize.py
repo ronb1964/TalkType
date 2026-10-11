@@ -250,8 +250,9 @@ _RE_EMAIL_SPLIT_TLD = re.compile(
     re.IGNORECASE
 )
 _RE_EMAIL_AT_SPACE = re.compile(r"@\s+")
-# A dot written joined to a lowercase web ending is part of an address.
-_RE_JOINED_TLD = re.compile(r"\.(?:" + _EMAIL_TLDS_ALL + r"|dev)\b")
+# A dot written joined to a lowercase web ending is part of an address, and
+# so is one followed by more lowercase parts that end in one ("www.example.org").
+_RE_JOINED_TLD = re.compile(r"\.(?:[a-z0-9-]+\.)*(?:" + _EMAIL_TLDS_ALL + r"|dev)\b")
 
 # Words that come before "at" in ordinary speech ("look at github.com", "we
 # arrived at example.com") and are never the mailbox name of a spoken address.
@@ -261,6 +262,37 @@ _NOT_EMAIL_NAMES = frozenset("""
     located based meet met stay stays stayed staying visit visited work works
     worked working sign signed log logged up in on out me us you him her them
 """.split())
+
+
+# A spoken "dot" inside an address: "gmail dot com", "www dot example dot
+# org". Parakeet writes the word about one time in three; this makes it come
+# out the same as "gmail.com". Only before an ending that can't be a word, and
+# only where it reads as an address: after "at" (an email), with two dots, or
+# at the end of a clause. "Dot com" is also a description ("a dot com
+# company", "the dot com days"), and those stay words.
+_RE_SPOKEN_DOT_DOMAIN = re.compile(
+    r"(?<![\w'’])((?!dot\b)[a-z0-9][a-z0-9-]*(?:\s+dot\s+(?!dot\b)[a-z0-9][a-z0-9-]*)*)"
+    r"\s+dot\s+(" + _EMAIL_TLDS_SAFE + r")\b",
+    re.IGNORECASE
+)
+_NOT_DOMAIN_WORDS = frozenset("the a an this that my your our its his her their and or of".split())
+_RE_AFTER_AT = re.compile(r"(?i)\bat\s+$")
+_RE_CLAUSE_GOES_ON = re.compile(
+    r"(?i)\s*($|[.,!?;:)\]\"'”’§]|(for|to|and|or|if|when|so|but|please|today|"
+    r"tomorrow|now|instead|too|as|with|from)\b)")
+
+
+def _join_spoken_dots(m):
+    """"gmail dot com" -> "gmail.com" where it reads as an address."""
+    labels, tld = m.groups()
+    words = labels.split()
+    if words[0].lower() in _NOT_DOMAIN_WORDS:
+        return m.group(0)
+    s = m.string
+    if not (_RE_AFTER_AT.search(s, 0, m.start()) or len(words) > 1
+            or _RE_CLAUSE_GOES_ON.match(s, m.end())):
+        return m.group(0)
+    return re.sub(r"\s+dot\s+", ".", labels, flags=re.IGNORECASE).lower() + "." + tld.lower()
 
 
 def _join_email(m):
@@ -446,7 +478,8 @@ def normalize_text(text: str, auto_period: bool = True) -> str:
 
     # --- 0) Handle quoted text - preserve everything inside quotes as literal ---
     # A spoken address written joined ("ron at example.de") is joined first,
-    # before the space-after-period pass can split it.
+    # before the space-after-period pass can split it. Spoken dots go first.
+    text = _RE_SPOKEN_DOT_DOMAIN.sub(_join_spoken_dots, text)
     text = _RE_EMAIL_JOINED.sub(_join_email, text)
     quoted_sections = []
     def save_quoted(match):
