@@ -48,3 +48,47 @@ def test_steady_dc_offset_is_removed():
     for _ in range(6):        # fill the ring buffer with the constant
         out = sp.process(const)
     assert out.max() < 0.05, "steady DC offset must be removed, not shown"
+
+
+def _bars_over(make_block, seconds, proc=None):
+    from talktype.indicator_dsp import SpectrumProcessor
+    import numpy as np
+    proc = proc or SpectrumProcessor(bins=20)
+    out = [proc.process(make_block(i)) for i in range(int(seconds * 100))]
+    return proc, np.array(out)
+
+
+def _room(db, seed=0):
+    import numpy as np
+    rng = np.random.default_rng(seed)
+    return lambda i: (rng.standard_normal(160) * 10 ** (db / 20)).astype(np.float32)
+
+
+def _voice(db, start=0):
+    """Voiced speech-like sound: harmonics on a moving pitch, syllable rhythm."""
+    import numpy as np
+    def block(i):
+        t = (np.arange(160) + (start + i) * 160) / 16000
+        f0 = 140 + 30 * np.sin(2 * np.pi * 1.3 * t)
+        env = 0.5 + 0.5 * np.sin(2 * np.pi * 4 * t)
+        sig = sum(np.sin(2 * np.pi * f0 * k * t) / k for k in range(1, 12))
+        return (10 ** (db / 20) * env * sig / 2).astype(np.float32)
+    return block
+
+
+def test_silence_does_not_grow_into_tall_bars():
+    """Ron, 0.14.6: with nothing said, the bars grew higher and higher. The
+    per-band ceiling decayed with no floor, so it shrank onto the room's own
+    noise and stretched that to full height (half height within a second)."""
+    _proc, bars = _bars_over(_room(-55), 10)
+    assert bars[100:].mean() < 0.1          # after the first second
+    assert bars[-100:].max() < 0.35         # and still low ten seconds in
+
+
+def test_speech_after_silence_still_fills_the_bars():
+    import numpy as np
+    proc, _ = _bars_over(_room(-55), 3)
+    room = _room(-55, seed=1)
+    voice = _voice(-30, start=300)
+    _proc, bars = _bars_over(lambda i: voice(i) + room(i), 1, proc)
+    assert np.percentile(bars, 90) > 0.6

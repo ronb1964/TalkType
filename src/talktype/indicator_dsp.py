@@ -12,6 +12,14 @@ See docs/superpowers/specs/2026-08-14-recording-indicator-styles-design.md.
 import numpy as np
 
 
+# The smallest per-band range the bars are scaled to, on the log scale below.
+# Measured (2026-10-11, rooms at -65 to -48 dBFS): room noise peaks at 0.03 to
+# 0.17 above its floor, quiet speech (-42 dBFS) at 0.33 to 0.56 and normal
+# speech at about 1.0. So noise stays under a third of the bar height, and
+# speech still fills it.
+_MIN_CEIL = 0.6
+
+
 class SpectrumProcessor:
     def __init__(self, sample_rate=16000, ring_size=5600, bins=20,
                  freq_lo=110, freq_hi=4200):
@@ -25,7 +33,7 @@ class SpectrumProcessor:
         self._slices = [np.where((freqs >= edges[i]) & (freqs < edges[i + 1]))[0]
                         for i in range(bins)]
         self._floor = np.zeros(bins, dtype=np.float32)
-        self._ceil = np.full(bins, 1e-4, dtype=np.float32)
+        self._ceil = np.full(bins, _MIN_CEIL, dtype=np.float32)
 
     def process(self, samples):
         """Return `bins` floats in 0..1 for the most recent audio."""
@@ -49,8 +57,10 @@ class SpectrumProcessor:
         self._floor[~below] += (raw[~below] - self._floor[~below]) * 0.02
         residual = np.maximum(0.0, raw - self._floor)
 
-        # ceiling: fast attack, slow decay, giving each band full range.
+        # ceiling: fast attack, slow decay, giving each band full range. Never
+        # below _MIN_CEIL: decaying freely in silence it shrank onto the room's
+        # own noise and stretched that to full height (Ron, 0.14.6).
         up = residual > self._ceil
         self._ceil[up] = residual[up]
-        self._ceil[~up] *= 0.99
+        self._ceil[~up] = np.maximum(self._ceil[~up] * 0.99, _MIN_CEIL)
         return np.clip(residual / (self._ceil + 1e-4), 0.0, 1.0).astype(np.float32)
