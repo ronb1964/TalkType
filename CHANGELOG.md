@@ -2,7 +2,10 @@
 
 All notable changes to TalkType are documented here.
 
-## [Unreleased]
+## [0.14.5] - 2026-10-10
+
+Smarter corrections, addresses you can say out loud, and rounded message boxes
+on KDE.
 
 - TalkType's small message boxes, like "You're Up to Date!", had square
   corners on KDE while every other TalkType window had KDE's rounded frame.

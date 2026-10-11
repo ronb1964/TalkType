@@ -93,6 +93,17 @@
   </screenshots>
 
   <releases>
+    <release version="0.14.5" date="2026-10-10">
+      <description>
+        <p>Smarter corrections and spoken addresses</p>
+        <ul>
+          <li>Corrections handle saying the whole thing again ("scratch that, send it to Jim") and "actually" without a pause</li>
+          <li>Say an email or web address with "dot" and it's written as an address</li>
+          <li>Message boxes have rounded corners on KDE, like every other TalkType window</li>
+          <li>The welcome screen's hotkey test reads your keyboard directly</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.14.4" date="2026-10-10">
       <description>
         <p>Clearer typing problems, faster start and better self-corrections</p>
