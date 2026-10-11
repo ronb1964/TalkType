@@ -607,3 +607,15 @@ def test_an_address_with_more_parts_stays_whole(said, expected):
 
 def test_a_missed_space_is_still_a_sentence_break():
     assert normalize_text("I left early.then I came back") == "I left early. Then I came back."
+
+
+# Parakeet ends "New line" with a colon sometimes, not a period: the colon was
+# left at the start of the new line (": Go to ...").
+@pytest.mark.parametrize("said", [
+    "New line: Go to the shop.",
+    "New line; go to the shop.",
+    "New paragraph: Go to the shop.",
+])
+def test_punctuation_after_a_line_break_command_goes_with_it(said):
+    out = normalize_text(said)
+    assert out.replace("§SHIFT_ENTER§", "") == "Go to the shop."

@@ -137,8 +137,8 @@ _CONTEXT_PROTECT_PATTERNS = [
 
 # --- 1) Multi-word spoken punctuation → symbol ---
 _MULTI_WORD_REPLACEMENTS = [
-    (re.compile(r"\s*\bnew\s*line\b[,.\s]*|\bnewline\b|\breturn\b|\bline\s+break\b", re.IGNORECASE), "§SHIFT_ENTER§"),
-    (re.compile(r"[,.\s]*\bnew\s+paragraph\b[,.\s]*|\bparagraph\s+break\b[,.\s]*", re.IGNORECASE), "§SHIFT_ENTER§§SHIFT_ENTER§"),
+    (re.compile(r"\s*\bnew\s*line\b[,.:;\s]*|\bnewline\b|\breturn\b|\bline\s+break\b", re.IGNORECASE), "§SHIFT_ENTER§"),
+    (re.compile(r"[,.\s]*\bnew\s+paragraph\b[,.:;\s]*|\bparagraph\s+break\b[,.:;\s]*", re.IGNORECASE), "§SHIFT_ENTER§§SHIFT_ENTER§"),
     (re.compile(r"[,.\s]*\bsoft\s+break\b[,.\s]*|\bsoft\s+line\b[,.\s]*", re.IGNORECASE), "   "),
     (re.compile(r"\btab\b", re.IGNORECASE), "\t"),
     (re.compile(r"\bexclamation\s+point\b|\bexclamation\s+mark\b", re.IGNORECASE), "!"),

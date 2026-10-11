@@ -21,6 +21,8 @@ All notable changes to TalkType are documented here.
 - Addresses with more than one dot were split like sentences:
   "www.example.org" came out as "www. Example.org", and an email like
   bob@mail.example.com broke the same way. Fixed.
+- When the speech model wrote "New line:" with a colon, the colon was left
+  at the start of the new line. It goes with the command now.
 - AI self-corrections now handle saying the whole thing again. "Send the
   report to Bob. Scratch that, send it to Jim." types "Send the report to
   Jim." Before, the AI got these right but the safety check that guards
