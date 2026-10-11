@@ -688,6 +688,10 @@ class PreferencesWindow:
         """
         sw = Gtk.ScrolledWindow()
         sw.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        # The scrollbar gets its own strip beside the page. Drawn over the
+        # page (overlay scrolling) it sat inside the 20 px right margin, up
+        # against the dropdowns (Ron, 0.14.6).
+        sw.set_overlay_scrolling(False)
         sw.add(widget)
         self._install_capture_scroll(sw)
         return sw
