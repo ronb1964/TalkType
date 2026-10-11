@@ -453,3 +453,17 @@ window.talktype-prefs {
     color: #e6aa3c;
     font-weight: 600;
 }
+
+/* "More below": GTK draws a scrolled page's undershoot at an edge that has
+   more content past it, and only then. A fade into the page colour there,
+   so a page that happens to end on a row boundary doesn't look finished
+   (Ron, 0.14.6). Drawing only: the controls under it still take clicks. */
+.talktype-prefs scrolledwindow undershoot.bottom {
+    background-color: transparent;
+    background-image: linear-gradient(to top, #1e1e1e, rgba(30, 30, 30, 0));
+    background-size: 100% 36px;
+    background-repeat: no-repeat;
+    background-position: center bottom;
+    border: none;
+    box-shadow: none;
+}
