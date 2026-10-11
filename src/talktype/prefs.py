@@ -307,6 +307,9 @@ def hotkey_change_message(cfg, changed, refused):
     if offer_test:
         lines.append("Try it once in the test to make sure it reaches TalkType. On some "
                      "laptops the F-keys change the brightness or volume unless you hold Fn.")
+        # So Not Now isn't a dead end (Ron, 0.14.6: the button was below the fold).
+        lines.append("You can also test it later with Test Hotkeys, under the hotkeys on "
+                     "the General tab.")
     # KDE reports keys in Qt's spelling (Super is "Meta"): map back to ours.
     from .kwin_hotkeys import qt_key_sequence
     all_keys = ("hotkey", "toggle_hotkey", "voice_commands_hotkey")

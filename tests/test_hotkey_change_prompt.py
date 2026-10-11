@@ -43,3 +43,8 @@ def test_kdes_meta_spelling_maps_back_to_super():
     cfg = dict(CFG, voice_commands_hotkey="Ctrl+Super+V")
     text, _ = hotkey_change_message(cfg, {"voice_commands_hotkey"}, ["Ctrl+Meta+V"])
     assert "KDE already uses Ctrl+Super+V" in text
+
+
+def test_the_question_says_where_to_test_later():
+    text, _ = hotkey_change_message(CFG, {"hotkey"}, [])
+    assert "Test Hotkeys, under the hotkeys on the General tab" in text
