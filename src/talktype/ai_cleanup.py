@@ -101,8 +101,30 @@ _RE_OPENS_WITH_CORRECTION = re.compile(
     r"[.,!?]*\s*")
 
 
+# Parakeet often writes "Actually book it" with no comma. Such an opener is a
+# correction only when it restates the sentence before: the next word repeats
+# a real word of it ("Book the room for Monday. Actually book it for
+# Tuesday."), not "the", "it" or "I'll" ("Actually it was easy").
+# Group 1 is the phrase, as in _RE_OPENS_WITH_CORRECTION; group 2 the next word.
+_RE_OPENS_WITH_BARE_ACTUALLY = re.compile(r"(?i)^\W*(actually)\s+(?=([a-z0-9'’]+))")
+_PRONOUNS = {"i", "we", "you", "he", "she", "it", "they", "that", "there", "this"}
+
+
+def _restates_with_actually(before: str, sentence: str) -> bool:
+    m = _RE_OPENS_WITH_BARE_ACTUALLY.match(sentence)
+    if not m:
+        return False
+    word = m.group(2).lower().replace("’", "'")
+    if word.split("'")[0] in _PRONOUNS or word in _STAND_INS or word in _LINKING_WORDS:
+        return False
+    return word in _words(before)
+
+
 def has_correction(sentence: str) -> bool:
-    return bool(_RE_CORRECTION.search(sentence))
+    if _RE_CORRECTION.search(sentence):
+        return True
+    parts = _SENTENCE_END.split(sentence)
+    return any(_restates_with_actually(a, b) for a, b in zip(parts, parts[1:]))
 
 
 # --- The safety check --------------------------------------------------------
@@ -511,7 +533,8 @@ def _join_split_correction(before: str, correction: str) -> str:
     the AI only: "Meet me at three." + "No wait. Four o'clock." gives
     "Meet me at three, no wait, Four o'clock." The model fixes a correction
     within one sentence far more reliably than across two."""
-    m = _RE_OPENS_WITH_CORRECTION.match(correction)
+    m = (_RE_OPENS_WITH_CORRECTION.match(correction)
+         or _RE_OPENS_WITH_BARE_ACTUALLY.match(correction))
     if not m:                       # the value after a bare "No wait." sentence
         return f"{before} {correction}"
     cue = m.group(1).replace(",", "").lower()
@@ -540,7 +563,8 @@ def fix_self_corrections(text: str, engine: CorrectionEngine) -> str:
         for j, sentence in enumerate(parts):
             # After a bare "No wait." the corrected value is in the next sentence.
             after_bare_cue = bool(groups) and len(groups[-1]) > 1 and _is_bare_cue(parts[j - 1])
-            if groups and (_RE_OPENS_WITH_CORRECTION.match(sentence) or after_bare_cue):
+            if groups and (_RE_OPENS_WITH_CORRECTION.match(sentence) or after_bare_cue
+                           or _restates_with_actually(parts[j - 1], sentence)):
                 groups[-1].append(j)
             else:
                 groups.append([j])

@@ -20,6 +20,12 @@ All notable changes to TalkType are documented here.
   testing with the real model, restated sentences went from 2 out of 8 fixed
   to 6 out of 8, and the check still refuses an answer that keeps the wrong
   part or drops something you said.
+- "Actually" works as a correction without a pause. Parakeet often writes
+  "Actually book it for Tuesday" with no comma, and TalkType only counted
+  "actually" with one, since it's usually just a word. Now a sentence opening
+  with it counts when it repeats a word from the sentence before. Tested on
+  the real model: 15 ordinary sentences like "Pick up milk. Actually pick up
+  eggs too." were all left alone, and 4 of 6 corrections were fixed.
 
 ## [0.14.4] - 2026-10-10
 

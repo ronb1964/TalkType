@@ -229,3 +229,55 @@ def test_parent_death_uses_sigkill():
     """llama-server can stall in graceful shutdown and ignore SIGTERM."""
     import inspect
     assert "signal.SIGKILL" in inspect.getsource(ai._set_parent_death_signal)
+
+
+# --- "Actually" with no comma -----------------------------------------------
+# Parakeet often writes "Actually book it" with no comma. A sentence opening
+# that way counts as a correction only when the next word repeats a real word
+# of the sentence before (not "the", "it" or "I'll"). Measured on the real
+# model (2026-10-10): of 15 ordinary sentences that pass this gate, all 15
+# were left alone; 4 of 6 real corrections were fixed.
+
+ACTUALLY_CORRECTIONS = [
+    "Book the room for Monday. Actually book it for Tuesday.",
+    "Send the report to Bob. Actually send it to Jim.",
+    "Meet me at the shop. Actually meet me at the house.",
+    "Call me at five. Actually call me at six.",
+    "Order two sheets of plywood. Actually order three sheets.",
+    "Paint it white. Actually paint it gray.",
+]
+
+# Never sent: the word after "Actually" repeats nothing real.
+ACTUALLY_ORDINARY = [
+    "The fridge is installed. Actually the fridge was the easy part.",
+    "I finished the report. Actually it was easier than I thought.",
+    "I'll call the plumber. Actually I'll text him instead.",
+    "We're done for today. Actually we're ahead of schedule.",
+    "I actually like the blue one.",
+    "Actually book it for Tuesday.",
+]
+
+
+@pytest.mark.parametrize("text", ACTUALLY_CORRECTIONS)
+def test_actually_without_a_comma_counts_when_it_restates(text):
+    assert ai.has_correction(text)
+
+
+@pytest.mark.parametrize("text", ACTUALLY_ORDINARY)
+def test_actually_without_a_comma_is_otherwise_just_a_word(text):
+    assert not ai.has_correction(text)
+
+
+def test_a_restating_actually_is_joined_and_fixed():
+    engine = FakeEngine({"Book the room for Monday, actually, book it for Tuesday.":
+                         "Book the room for Tuesday."})
+    text = "The van is ready. Book the room for Monday. Actually book it for Tuesday. Thanks. "
+    assert ai.fix_self_corrections(text, engine) == \
+        "The van is ready. Book the room for Tuesday. Thanks. "
+    assert engine.asked == ["Book the room for Monday, actually, book it for Tuesday."]
+
+
+def test_an_unfixed_actually_keeps_its_original_punctuation():
+    """No comma is ever added to what was spoken; the AI's join is its own."""
+    text = "Paint it white. Actually paint it gray. "
+    assert ai.fix_self_corrections(text, FakeEngine({})) == text
