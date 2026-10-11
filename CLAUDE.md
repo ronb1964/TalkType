@@ -82,6 +82,7 @@ Preferences and the rest:
 - [ ] Start/stop beeps play
 - [ ] Preferences mic test works (level meter, record, replay)
 - [ ] Tray → Performance shows Recommended / Lightest / Battery saver, with the dot on the active one
+- [ ] Preferences → General: off the recommended setup, the row says "Recommended for this computer: …" with Use Recommended, which sets Model and Device (Vulkan: download and speed check first) and turns into "✓ You're on the recommended setup". "What works with what?" shows the models-by-device grid and a line about this computer
 - [ ] Backup: Preferences → Updates & Backup fits without scrolling. Save Backup opens the desktop's file dialog, writes the .zip, and "Last saved" turns from amber "never" to the date. Change the hotkey, then Load Backup puts it back, restarts dictation (log) and closes Preferences. Earlier settings lists both "— your backup" files from the backup folder and "— automatic" copies, newest first, and Restore undoes the load. A second backup the same day gets its own name (the time is in it). A non-backup file is turned away with a message. Backup folder → Change… opens a folder browser; after picking one, Save Backup and Load Backup open in it. Tray → Check for Updates still opens this tab
 - [ ] F8 and F9 leave no stray character in a terminal (KDE and GNOME)
 

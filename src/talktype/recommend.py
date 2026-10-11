@@ -251,3 +251,40 @@ def differs_from_recommendation(cfg, hw):
     if (getattr(cfg, "model", None), getattr(cfg, "device", None)) == (rec.model, rec.device):
         return None
     return rec
+
+
+# What runs where, for Preferences' "What works with what?" window. Rows of
+# (models, processor, Vulkan, CUDA); each cell is (works, note).
+# tests/test_compatibility_help.py checks the Vulkan column against
+# whisper_vulkan.MODEL_FILES, so the help can't drift from what really runs.
+COMPATIBILITY = (
+    ("Parakeet", (PARAKEET,),
+     (True, "fast"), (True, "fastest"), (False, "runs on the processor")),
+    ("Tiny, Base", ("tiny", "base"),
+     (True, ""), (True, ""), (True, "")),
+    ("Small, Medium", ("small", "medium"),
+     (True, "slower"), (True, ""), (True, "")),
+    ("Large-v3", ("large-v3",),
+     (False, "too slow"), (True, ""), (True, "")),
+)
+
+COMPATIBILITY_NOTES = (
+    "Languages: Parakeet knows English and 24 European languages. "
+    "Whisper models know about 99.",
+    "Vulkan is a 24 MB engine, and each model needs its own copy for it the "
+    "first time. CUDA is a one-time 1.4 GB download.",
+)
+
+
+def this_computer(hw):
+    """The line under the table saying which columns apply here."""
+    if hw.gpu and hw.has_nvidia:
+        return (f"Your computer: {hw.gpu_name}, so all three columns work here.")
+    if hw.gpu:
+        return (f"Your computer: {hw.gpu_name}, so the processor and Vulkan columns "
+                f"work here. CUDA needs an NVIDIA card.")
+    if hw.has_nvidia:
+        return ("Your computer: an NVIDIA card, so CUDA and the processor work here. "
+                "Vulkan isn't usable, or the speed check found your processor faster.")
+    return ("Your computer: no graphics card TalkType can use, so the processor "
+            "column is the one that applies here.")

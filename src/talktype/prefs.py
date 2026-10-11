@@ -738,8 +738,14 @@ class PreferencesWindow:
         model_header = Gtk.Label()
         model_header.set_markup('<b>AI Model Configuration</b>')
         model_header.set_xalign(0)
-        model_header.set_margin_bottom(10)
-        grid.attach(model_header, 0, row, 2, 1)
+        header_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        header_row.set_margin_bottom(10)
+        header_row.pack_start(model_header, True, True, 0)
+        # Which models run on which device: too many choices to know (Ron, 0.14.6).
+        compat_btn = Gtk.Button(label="What works with what?")
+        compat_btn.connect("clicked", self._show_compatibility)
+        header_row.pack_end(compat_btn, False, False, 0)
+        grid.attach(header_row, 0, row, 2, 1)
         row += 1
 
         # Model selection
@@ -947,6 +953,24 @@ class PreferencesWindow:
         self.model_combo_hint.set_no_show_all(True)
         grid.attach(self.model_combo_hint, 0, row, 2, 1)
         row += 1
+
+        # The setup first run recommends, one click away (Tray → Performance →
+        # Recommended does the same). Ron, 0.14.6: wandering off to CUDA and
+        # back left no easy way home without closing Preferences.
+        rec_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        rec_row.set_margin_top(8)
+        self.recommended_label = Gtk.Label(xalign=0)
+        self.recommended_label.set_line_wrap(True)
+        rec_row.pack_start(self.recommended_label, True, True, 0)
+        self.use_recommended_btn = Gtk.Button(label="Use Recommended")
+        self.use_recommended_btn.connect("clicked", self._on_use_recommended_clicked)
+        # Shown or hidden by _update_recommended_row; the window's show_all()
+        # would otherwise bring it back next to the tick.
+        self.use_recommended_btn.set_no_show_all(True)
+        rec_row.pack_end(self.use_recommended_btn, False, False, 0)
+        grid.attach(rec_row, 0, row, 2, 1)
+        row += 1
+
         for _combo in (self.model_combo, self.device_combo, self.lang_mode_combo, self.lang_combo):
             _combo.connect("changed", lambda *_: self._update_model_combo_hint())
         self._update_model_combo_hint()
@@ -3301,6 +3325,7 @@ class PreferencesWindow:
         it = self.model_combo.get_active_iter()
         model = self.model_store.get_value(it, 0) if it is not None else ""
         self._relabel_cuda_option(model)
+        self._update_recommended_row(model)
         name = self.lang_combo.get_active_text() or ""
         message = model_setting_warning(
             model, self.device_combo.get_active_id() or "",
@@ -3314,6 +3339,106 @@ class PreferencesWindow:
             label.show()
         else:
             label.hide()
+
+    # --- Recommended setup and "What works with what?" (recommend.py) ---------
+
+    def _recommendation(self):
+        """(hardware, the setup recommend.py picks) for the language chosen in
+        this window right now, not only the saved one."""
+        from . import recommend
+        shown = self._shown_language()
+        hw = recommend.detect_hardware(shown)
+        return hw, recommend.recommend(recommend.effective_language(shown), hw)
+
+    def _update_recommended_row(self, model):
+        """'Recommended for this computer: …  [Use Recommended]', or a tick
+        once the dropdowns already show it."""
+        label = getattr(self, "recommended_label", None)
+        if label is None:
+            return
+        try:
+            _hw, rec = self._recommendation()
+        except Exception as e:
+            print(f"Could not work out the recommended setup: {e}")
+            label.get_parent().set_no_show_all(True)
+            label.get_parent().hide()
+            return
+        if model == rec.model and self.device_combo.get_active_id() == rec.device:
+            label.set_markup('<span color="#6db896">✓ You\'re on the recommended setup '
+                             f'({GLib.markup_escape_text(rec.title)})</span>')
+            self.use_recommended_btn.hide()
+        else:
+            label.set_markup('<span color="#888888">Recommended for this computer:</span> '
+                             f'{GLib.markup_escape_text(rec.title)}')
+            self.use_recommended_btn.show()
+
+    def _on_use_recommended_clicked(self, _button):
+        """Set the dropdowns to the recommended setup, as Tray → Performance →
+        Recommended does: on Vulkan, its download and speed check first, and
+        the processor version if the graphics chip turns out slower. OK or
+        Apply puts it in effect, like any other choice."""
+        from . import recommend
+        from .vulkan_setup_dialogs import ensure_files, run_speed_check
+        hw, rec = self._recommendation()
+        model, device = rec.model, rec.device
+        if device == "vulkan":
+            if not ensure_files(self.window, model, confirm=True):
+                return                      # cancelled: nothing changes
+            if not run_speed_check(self.window, model):
+                # The speed check saved this itself; the row's recommendation
+                # needs it too, or it keeps offering the graphics card.
+                self._vulkan_slower_now = True
+                device = "cpu"
+                model = recommend.recommend(recommend.effective_language(
+                    self._shown_language()), recommend.Hardware(None), model=model).model
+        self._set_choice("model", model)
+        self._set_choice("device", device)
+        self._update_model_combo_hint()
+
+    def _shown_language(self):
+        """The language settings as this window shows them, for recommend.py."""
+        from types import SimpleNamespace
+        return SimpleNamespace(language_mode=self.lang_mode_combo.get_active_id() or "auto",
+                               language=self.lang_combo.get_active_id() or "",
+                               dictation_language=self.config.get("dictation_language", ""),
+                               vulkan_slower=(self.config.get("vulkan_slower", False)
+                                              or getattr(self, "_vulkan_slower_now", False)))
+
+    def _show_compatibility(self, _button):
+        """Which models run on the processor, Vulkan and CUDA, and which of
+        those apply to this computer. Explains only; changes nothing."""
+        from . import recommend
+        hw, _rec = self._recommendation()
+        dialog = Gtk.Dialog(title="What works with what", transient_for=self.window, modal=True)
+        dialog.add_button("Close", Gtk.ResponseType.CLOSE)
+        box = dialog.get_content_area()
+        for side in ("start", "end", "top", "bottom"):
+            getattr(box, f"set_margin_{side}")(16)
+        box.set_spacing(10)
+
+        grid = Gtk.Grid(column_spacing=24, row_spacing=8)
+        for col, head in enumerate(("", "Processor (CPU)", "Vulkan (any GPU)", "CUDA (NVIDIA)")):
+            label = Gtk.Label(xalign=0)
+            label.set_markup(f"<b>{head}</b>")
+            grid.attach(label, col, 0, 1, 1)
+        for row, (name, _models, *cells) in enumerate(recommend.COMPATIBILITY, start=1):
+            grid.attach(Gtk.Label(label=name, xalign=0), 0, row, 1, 1)
+            for col, (works, note) in enumerate(cells, start=1):
+                mark, colour = ("✓", "#6db896") if works else ("✗", "#e6aa3c")
+                text = f"{mark} {note}".strip()
+                cell = Gtk.Label(xalign=0)
+                cell.set_markup(f'<span color="{colour}">{GLib.markup_escape_text(text)}</span>')
+                grid.attach(cell, col, row, 1, 1)
+        box.pack_start(grid, False, False, 0)
+
+        for text in (*recommend.COMPATIBILITY_NOTES, recommend.this_computer(hw)):
+            note = Gtk.Label(label=text, xalign=0)
+            note.set_line_wrap(True)
+            note.set_max_width_chars(70)
+            box.pack_start(note, False, False, 0)
+        dialog.show_all()
+        dialog.run()
+        dialog.destroy()
 
     def _on_model_changed(self, combo):
         """Handle model selection change with warning for large models."""
