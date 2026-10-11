@@ -9,6 +9,7 @@ later dictation gets it right.
 import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk, GLib
+from .ui_style import message_dialog
 
 from . import vocabulary
 from .config import ConfigNotLoadedError
@@ -40,7 +41,7 @@ def show_fix_word_dialog(index=0, copy_text=None):
         raise_window(_active_dialog.window)
         return
     if not entries:
-        msg = Gtk.MessageDialog(
+        msg = message_dialog(
             message_type=Gtk.MessageType.INFO, buttons=Gtk.ButtonsType.OK,
             text="No recent dictations to fix yet")
         msg.format_secondary_text(
@@ -257,7 +258,7 @@ class _FixWordDialog:
         self.window.destroy()
 
     def _confirm_risky(self, phrase, replacement):
-        msg = Gtk.MessageDialog(
+        msg = message_dialog(
             transient_for=self.window, modal=True,
             message_type=Gtk.MessageType.WARNING, buttons=Gtk.ButtonsType.NONE,
             text=f"Always change “{phrase}” to “{replacement}”?")

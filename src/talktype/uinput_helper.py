@@ -1012,13 +1012,14 @@ def show_uinput_fix_dialog(parent=None):
         import gi
         gi.require_version('Gtk', '3.0')
         from gi.repository import Gtk
+        from .ui_style import message_dialog
         
         # Check current status
         has_access, reason = check_uinput_permission()
         
         if has_access:
             # Already working, nothing to do
-            dialog = Gtk.MessageDialog(
+            dialog = message_dialog(
                 transient_for=parent,
                 modal=True,
                 message_type=Gtk.MessageType.INFO,
@@ -1034,7 +1035,7 @@ def show_uinput_fix_dialog(parent=None):
             return True
         
         # Show fix dialog
-        dialog = Gtk.MessageDialog(
+        dialog = message_dialog(
             transient_for=parent,
             modal=True,
             message_type=Gtk.MessageType.WARNING,
@@ -1070,7 +1071,7 @@ def show_uinput_fix_dialog(parent=None):
             success, message = install_udev_rule_with_pkexec(parent)
             
             # Show result
-            result_dialog = Gtk.MessageDialog(
+            result_dialog = message_dialog(
                 transient_for=parent,
                 modal=True,
                 message_type=Gtk.MessageType.INFO if success else Gtk.MessageType.ERROR,

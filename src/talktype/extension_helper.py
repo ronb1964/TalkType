@@ -463,9 +463,10 @@ def offer_extension_installation(show_gui: bool = True) -> bool:
     if show_gui:
         try:
             from gi.repository import Gtk, GLib
+            from .ui_style import message_dialog
 
             # Create dialog
-            dialog = Gtk.MessageDialog(
+            dialog = message_dialog(
                 message_type=Gtk.MessageType.QUESTION,
                 buttons=Gtk.ButtonsType.YES_NO,
                 text="Install GNOME Extension?",
@@ -488,7 +489,7 @@ def offer_extension_installation(show_gui: bool = True) -> bool:
                 return False
 
             # User said yes - show progress dialog
-            progress_dialog = Gtk.MessageDialog(
+            progress_dialog = message_dialog(
                 message_type=Gtk.MessageType.INFO,
                 buttons=Gtk.ButtonsType.NONE,
                 text="Installing Extension...",
@@ -521,7 +522,7 @@ def offer_extension_installation(show_gui: bool = True) -> bool:
 
             if success[0]:
                 # Show success message
-                info = Gtk.MessageDialog(
+                info = message_dialog(
                     message_type=Gtk.MessageType.INFO,
                     buttons=Gtk.ButtonsType.OK,
                     text="Extension Installed and Enabled!",
@@ -541,7 +542,7 @@ def offer_extension_installation(show_gui: bool = True) -> bool:
                 return True
             else:
                 # Show error
-                error = Gtk.MessageDialog(
+                error = message_dialog(
                     message_type=Gtk.MessageType.ERROR,
                     buttons=Gtk.ButtonsType.OK,
                     text="Installation Failed",

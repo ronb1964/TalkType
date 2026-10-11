@@ -149,7 +149,7 @@ def _install_fake_dialog(monkeypatch, response):
         def destroy(self):
             pass
 
-    monkeypatch.setattr(prefs.Gtk, "MessageDialog", _FakeDialog)
+    monkeypatch.setattr(prefs, "message_dialog", _FakeDialog)
     return seen
 
 
@@ -193,7 +193,7 @@ def test_unchecking_needs_no_dialog_and_disables(monkeypatch):
     import types
     from talktype import prefs
     # If a dialog were constructed while unchecking, this would blow up.
-    monkeypatch.setattr(prefs.Gtk, "MessageDialog",
+    monkeypatch.setattr(prefs, "message_dialog",
                         lambda **k: (_ for _ in ()).throw(AssertionError("no dialog on uncheck")))
     saved = []
     self = types.SimpleNamespace(update_config=lambda k, v: saved.append((k, v)),

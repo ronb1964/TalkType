@@ -2,6 +2,13 @@
 
 All notable changes to TalkType are documented here.
 
+## [Unreleased]
+
+- TalkType's small message boxes, like "You're Up to Date!", had square
+  corners on KDE while every other TalkType window had KDE's rounded frame.
+  They get the desktop's own frame now, with rounded corners and a title bar,
+  on KDE, GNOME and X11 desktops alike.
+
 ## [0.14.4] - 2026-10-10
 
 Mostly things that came out of testing 0.14.3, plus a few older bugs that a

@@ -10,6 +10,7 @@ import threading
 import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, GLib
+from .ui_style import message_dialog
 
 from . import whisper_vulkan as wv
 from .logger import setup_logger
@@ -22,7 +23,7 @@ LIGHT, FULL = "vulkan", "cuda"
 
 def message(parent, kind, title, text, buttons=Gtk.ButtonsType.OK):
     """Show a message; returns the response."""
-    dialog = Gtk.MessageDialog(transient_for=parent, modal=True,
+    dialog = message_dialog(transient_for=parent, modal=True,
                                message_type=kind, buttons=buttons, text=title)
     dialog.format_secondary_text(text)
     dialog.set_keep_above(True)
@@ -35,7 +36,7 @@ def choose_light_or_full(parent, model):
     """NVIDIA without CUDA: Light (Vulkan) or Full (CUDA) for *model*?
     Returns LIGHT, FULL, or None for Cancel."""
     vulkan_size = wv.MODEL_FILES[model][1]
-    dialog = Gtk.MessageDialog(transient_for=parent, modal=True,
+    dialog = message_dialog(transient_for=parent, modal=True,
                                message_type=Gtk.MessageType.QUESTION,
                                buttons=Gtk.ButtonsType.NONE,
                                text=f"{model.title()} needs your graphics card")

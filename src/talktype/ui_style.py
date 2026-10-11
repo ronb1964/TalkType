@@ -228,3 +228,24 @@ def fit_dialog_to_screen(dialog, width, desired_height, min_height=320, margin=9
         except Exception:
             pass
     return dialog
+
+
+def message_dialog(**kwargs):
+    """A Gtk.MessageDialog in the desktop's own window frame. Takes the same
+    keyword arguments; use it instead of Gtk.MessageDialog everywhere.
+
+    Gtk.MessageDialog installs an empty titlebar of its own, which makes GTK
+    draw the frame instead of the desktop. On KDE that frame has square
+    corners while every other TalkType window gets KDE's rounded one. Without
+    the titlebar KDE (and X11 window managers) frame it like any window, and
+    GNOME gives it a normal title bar with rounded corners.
+    """
+    dialog = Gtk.MessageDialog(**kwargs)
+    dialog.set_titlebar(None)
+    if not dialog.get_title():
+        dialog.set_title("TalkType")
+    # A box with no buttons ("Checking for Updates...") closes itself when the
+    # work is done; don't offer an X to close it halfway.
+    if kwargs.get("buttons", Gtk.ButtonsType.NONE) == Gtk.ButtonsType.NONE:
+        dialog.set_deletable(False)
+    return dialog

@@ -12,6 +12,7 @@ import threading
 import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, GLib
+from .ui_style import message_dialog
 from .logger import setup_logger
 from .parakeet_engine import (
     PARAKEET_FILES, PARAKEET_MODEL, PARAKEET_REPO,
@@ -365,7 +366,7 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
 
     # Show confirmation dialog before starting download
     if show_confirmation:
-        confirm_dialog = Gtk.MessageDialog(
+        confirm_dialog = message_dialog(
             parent=parent,
             message_type=Gtk.MessageType.QUESTION,
             buttons=Gtk.ButtonsType.OK_CANCEL,
@@ -633,7 +634,7 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
 
     # Check for errors
     if download_error[0]:
-        msg = Gtk.MessageDialog(
+        msg = message_dialog(
             parent=parent,
             message_type=Gtk.MessageType.ERROR,
             buttons=Gtk.ButtonsType.OK,

@@ -12,6 +12,7 @@ import threading
 import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, GLib  # noqa: E402
+from .ui_style import message_dialog  # noqa: E402
 
 from . import update_checker  # noqa: E402
 
@@ -115,7 +116,7 @@ def _installed_restart_prompt(restart_callback=None):
 
 
 def _info(title, message):
-    dlg = Gtk.MessageDialog(message_type=Gtk.MessageType.INFO,
+    dlg = message_dialog(message_type=Gtk.MessageType.INFO,
                             buttons=Gtk.ButtonsType.OK, text=title)
     dlg.format_secondary_text(message)
     dlg.set_position(Gtk.WindowPosition.CENTER)
@@ -125,7 +126,7 @@ def _info(title, message):
 
 
 def _error(message):
-    err = Gtk.MessageDialog(message_type=Gtk.MessageType.ERROR,
+    err = message_dialog(message_type=Gtk.MessageType.ERROR,
                             buttons=Gtk.ButtonsType.OK, text="Update Failed")
     err.format_secondary_text(message)
     err.set_position(Gtk.WindowPosition.CENTER)

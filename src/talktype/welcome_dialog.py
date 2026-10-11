@@ -18,6 +18,7 @@ gi.require_version('Gtk', '3.0')
 gi.require_version('Gdk', '3.0')
 gi.require_version('GdkPixbuf', '2.0')
 from gi.repository import Gtk, Gdk, GLib, GdkPixbuf
+from .ui_style import message_dialog
 
 try:
     from talktype.logger import setup_logger
@@ -910,7 +911,7 @@ class WelcomeDialog:
                 self.needs_portaudio_install = False
 
                 # Show success message
-                msg = Gtk.MessageDialog(
+                msg = message_dialog(
                     transient_for=self.dialog,
                     modal=True,
                     message_type=Gtk.MessageType.INFO,
@@ -1477,7 +1478,7 @@ class WelcomeDialog:
                 )
 
                 # Show success dialog
-                msg = Gtk.MessageDialog(
+                msg = message_dialog(
                     transient_for=self.dialog,
                     modal=True,
                     message_type=Gtk.MessageType.INFO,
@@ -1506,7 +1507,7 @@ class WelcomeDialog:
                 )
 
                 # Show partial success dialog
-                msg = Gtk.MessageDialog(
+                msg = message_dialog(
                     transient_for=self.dialog,
                     modal=True,
                     message_type=Gtk.MessageType.INFO,
@@ -1578,7 +1579,7 @@ class WelcomeDialog:
                     )
 
                 # Show success message
-                msg = Gtk.MessageDialog(
+                msg = message_dialog(
                     transient_for=self.dialog,
                     modal=True,
                     message_type=Gtk.MessageType.INFO,
@@ -3437,7 +3438,7 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
     if needs_restart:
         def on_restart_now(_widget):
             # A reboot closes everything, so confirm first.
-            confirm = Gtk.MessageDialog(
+            confirm = message_dialog(
                 transient_for=dialog, modal=True,
                 message_type=Gtk.MessageType.QUESTION,
                 buttons=Gtk.ButtonsType.NONE,
@@ -3466,7 +3467,7 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
                 # re-run the whole wizard on next launch. Keep the working session
                 # and let the user restart manually once things are healthy.
                 logger.error(f"Could not mark first run complete; aborting reboot: {e}")
-                warn = Gtk.MessageDialog(
+                warn = message_dialog(
                     transient_for=dialog, modal=True,
                     message_type=Gtk.MessageType.WARNING,
                     buttons=Gtk.ButtonsType.OK,
@@ -3482,7 +3483,7 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
                 return
             from talktype.uinput_helper import reboot_system
             if not reboot_system():
-                warn = Gtk.MessageDialog(
+                warn = message_dialog(
                     transient_for=dialog, modal=True,
                     message_type=Gtk.MessageType.WARNING,
                     buttons=Gtk.ButtonsType.OK,

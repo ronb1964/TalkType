@@ -16,6 +16,7 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("AyatanaAppIndicator3", "0.1")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gtk, Gdk, GLib
+from .ui_style import message_dialog
 from gi.repository import AyatanaAppIndicator3 as AppIndicator3
 import subprocess
 import time
@@ -1054,7 +1055,7 @@ class DictationTray:
     def download_cuda(self, _):
         """Download CUDA libraries for GPU acceleration."""
         # Show confirmation dialog first
-        confirm_dialog = Gtk.MessageDialog(
+        confirm_dialog = message_dialog(
             message_type=Gtk.MessageType.QUESTION,
             buttons=Gtk.ButtonsType.YES_NO,
             text="Download CUDA Libraries?"
@@ -1252,7 +1253,7 @@ class DictationTray:
         from . import update_checker
 
         # Create progress dialog
-        progress_dialog = Gtk.MessageDialog(
+        progress_dialog = message_dialog(
             message_type=Gtk.MessageType.INFO,
             buttons=Gtk.ButtonsType.NONE,
             text="Checking for Updates..."
@@ -1285,7 +1286,7 @@ class DictationTray:
             result = result_holder[0]
             if not result or not result.get("success"):
                 # Error checking for updates
-                error_dialog = Gtk.MessageDialog(
+                error_dialog = message_dialog(
                     message_type=Gtk.MessageType.ERROR,
                     buttons=Gtk.ButtonsType.OK,
                     text="Update Check Failed"
@@ -1331,7 +1332,7 @@ class DictationTray:
 
         if not has_update:
             # No AppImage update available
-            dialog = Gtk.MessageDialog(
+            dialog = message_dialog(
                 message_type=Gtk.MessageType.INFO,
                 buttons=Gtk.ButtonsType.OK,
                 text="You're Up to Date!"
@@ -1462,7 +1463,7 @@ class DictationTray:
         filename = release.get("appimage_name", "TalkType-update.AppImage")
 
         if not url:
-            error_dialog = Gtk.MessageDialog(
+            error_dialog = message_dialog(
                 message_type=Gtk.MessageType.ERROR,
                 buttons=Gtk.ButtonsType.OK,
                 text="Download Error"
@@ -1523,7 +1524,7 @@ class DictationTray:
             if downloaded_path:
                 # Success - automatically install and restart
                 # Show brief status dialog
-                status_dialog = Gtk.MessageDialog(
+                status_dialog = message_dialog(
                     message_type=Gtk.MessageType.INFO,
                     buttons=Gtk.ButtonsType.NONE,
                     text="Installing Update..."
@@ -1551,7 +1552,7 @@ class DictationTray:
                 status_dialog.destroy()
                 logger.info(f"install_update_and_restart returned: success={success}, message={message}")
                 if not success:
-                    error_dialog = Gtk.MessageDialog(
+                    error_dialog = message_dialog(
                         message_type=Gtk.MessageType.ERROR,
                         buttons=Gtk.ButtonsType.OK,
                         text="Update Failed"
@@ -1563,7 +1564,7 @@ class DictationTray:
                     error_dialog.destroy()
             else:
                 # Download failed
-                error_dialog = Gtk.MessageDialog(
+                error_dialog = message_dialog(
                     message_type=Gtk.MessageType.ERROR,
                     buttons=Gtk.ButtonsType.OK,
                     text="Download Failed"
@@ -2009,7 +2010,7 @@ def main():
             previous_version = update_checker.check_just_updated()
             if previous_version:
                 # Show a brief notification that update completed
-                dialog = Gtk.MessageDialog(
+                dialog = message_dialog(
                     message_type=Gtk.MessageType.INFO,
                     buttons=Gtk.ButtonsType.OK,
                     text="Update Complete!"

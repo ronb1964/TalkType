@@ -10,6 +10,7 @@ import subprocess
 import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, GLib
+from .ui_style import message_dialog
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -577,7 +578,7 @@ def show_cuda_download_dialog(parent=None, on_success_callback=None):
                 logger.warning(f"Error in success callback: {e}")
 
         # Show success message
-        msg = Gtk.MessageDialog(
+        msg = message_dialog(
             parent=parent,
             message_type=Gtk.MessageType.INFO,
             buttons=Gtk.ButtonsType.OK,
@@ -598,7 +599,7 @@ def show_cuda_download_dialog(parent=None, on_success_callback=None):
         logger.info("CUDA libraries downloaded successfully")
     else:
         # Show error message
-        msg = Gtk.MessageDialog(
+        msg = message_dialog(
             parent=parent,
             message_type=Gtk.MessageType.ERROR,
             buttons=Gtk.ButtonsType.OK,

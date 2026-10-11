@@ -2,6 +2,7 @@ import gi
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gtk, Gdk, GLib
+from .ui_style import message_dialog
 import os
 import subprocess
 import sys
@@ -2275,7 +2276,7 @@ class PreferencesWindow:
 
     def _on_reset_stats(self, _button):
         from . import stats as stats_module
-        dialog = Gtk.MessageDialog(
+        dialog = message_dialog(
             transient_for=self.window, modal=True,
             message_type=Gtk.MessageType.WARNING, buttons=Gtk.ButtonsType.NONE,
             text="Reset your usage stats?")
@@ -2566,7 +2567,7 @@ class PreferencesWindow:
             return
 
         # Confirm with user
-        confirm_dialog = Gtk.MessageDialog(
+        confirm_dialog = message_dialog(
             transient_for=self.window,
             message_type=Gtk.MessageType.QUESTION,
             buttons=Gtk.ButtonsType.YES_NO,
@@ -2659,7 +2660,7 @@ class PreferencesWindow:
             )
 
             # Show error dialog
-            dialog = Gtk.MessageDialog(
+            dialog = message_dialog(
                 transient_for=self.window,
                 message_type=Gtk.MessageType.ERROR,
                 buttons=Gtk.ButtonsType.OK,
@@ -2734,7 +2735,7 @@ class PreferencesWindow:
 
             if success_holder[0]:
                 # Success dialog
-                success_dialog = Gtk.MessageDialog(
+                success_dialog = message_dialog(
                     transient_for=self.window,
                     message_type=Gtk.MessageType.INFO,
                     buttons=Gtk.ButtonsType.OK,
@@ -2755,7 +2756,7 @@ class PreferencesWindow:
                 )
             else:
                 # Error dialog
-                error_dialog = Gtk.MessageDialog(
+                error_dialog = message_dialog(
                     transient_for=self.window,
                     message_type=Gtk.MessageType.ERROR,
                     buttons=Gtk.ButtonsType.OK,
@@ -3054,7 +3055,7 @@ class PreferencesWindow:
             from talktype import cuda_helper
             if not cuda_helper.has_cuda_libraries():
                 # CUDA libraries not available - show error and revert to CPU
-                dialog = Gtk.MessageDialog(
+                dialog = message_dialog(
                     transient_for=self.window,
                     flags=0,
                     message_type=Gtk.MessageType.ERROR,
@@ -3196,7 +3197,7 @@ class PreferencesWindow:
                         self._switch_to_vulkan_for_model(combo, "large-v3", confirm=False)
                     return
                 else:
-                    _dlg = Gtk.MessageDialog(
+                    _dlg = message_dialog(
                         transient_for=self.window,
                         flags=0,
                         message_type=Gtk.MessageType.WARNING,
@@ -3216,7 +3217,7 @@ class PreferencesWindow:
         # downloaded (fast file check — no model loading on the main thread)
         from .model_helper import is_model_cached_fast
         if new_model == "large-v3" and not is_model_cached_fast("large-v3"):
-            dialog = Gtk.MessageDialog(
+            dialog = message_dialog(
                 transient_for=self.window,
                 flags=0,
                 message_type=Gtk.MessageType.WARNING,
@@ -3521,7 +3522,7 @@ class PreferencesWindow:
     
     def show_error_dialog(self, title, message):
         """Show an error dialog."""
-        dialog = Gtk.MessageDialog(
+        dialog = message_dialog(
             transient_for=self.window,
             flags=0,
             message_type=Gtk.MessageType.ERROR,
@@ -3682,7 +3683,7 @@ class PreferencesWindow:
             self.update_config("ai_corrections", True)
             return
 
-        confirm = Gtk.MessageDialog(
+        confirm = message_dialog(
             transient_for=self.window, modal=True,
             message_type=Gtk.MessageType.QUESTION,
             buttons=Gtk.ButtonsType.NONE,
@@ -3718,7 +3719,7 @@ class PreferencesWindow:
 
         self._untick_ai_corrections()
         if not any(r.get("cancelled") for r in results.values()):
-            err = Gtk.MessageDialog(
+            err = message_dialog(
                 transient_for=self.window, modal=True,
                 message_type=Gtk.MessageType.ERROR, buttons=Gtk.ButtonsType.OK,
                 text="The AI download did not finish")
@@ -3783,7 +3784,7 @@ class PreferencesWindow:
         return True
 
     def _message(self, kind, title, text, buttons=Gtk.ButtonsType.OK):
-        dialog = Gtk.MessageDialog(transient_for=self.window, modal=True,
+        dialog = message_dialog(transient_for=self.window, modal=True,
                                    message_type=kind, buttons=buttons, text=title)
         dialog.format_secondary_text(text)
         response = dialog.run()
@@ -3817,7 +3818,7 @@ class PreferencesWindow:
             self.update_config("log_transcripts", False)
             return
 
-        dialog = Gtk.MessageDialog(
+        dialog = message_dialog(
             transient_for=self.window,
             modal=True,
             message_type=Gtk.MessageType.WARNING,
@@ -3847,7 +3848,7 @@ class PreferencesWindow:
 
     def _on_clear_log_clicked(self, _button):
         """Erase the on-disk log after confirming — it can hold past dictation."""
-        dialog = Gtk.MessageDialog(
+        dialog = message_dialog(
             transient_for=self.window,
             modal=True,
             message_type=Gtk.MessageType.WARNING,
@@ -3869,7 +3870,7 @@ class PreferencesWindow:
         if response == Gtk.ResponseType.OK:
             from .logger import clear_log
             clear_log()
-            done = Gtk.MessageDialog(
+            done = message_dialog(
                 transient_for=self.window,
                 modal=True,
                 message_type=Gtk.MessageType.INFO,
@@ -3956,7 +3957,7 @@ class PreferencesWindow:
             return
 
         # Show confirmation dialog first
-        confirm_dialog = Gtk.MessageDialog(
+        confirm_dialog = message_dialog(
             parent=self.window,
             message_type=Gtk.MessageType.QUESTION,
             buttons=Gtk.ButtonsType.YES_NO,
@@ -4083,7 +4084,7 @@ class PreferencesWindow:
             from . import uinput_helper
             
             # Show confirmation dialog
-            dialog = Gtk.MessageDialog(
+            dialog = message_dialog(
                 transient_for=self.window,
                 flags=0,
                 message_type=Gtk.MessageType.QUESTION,
@@ -4119,7 +4120,7 @@ class PreferencesWindow:
             if success:
                 uinput_helper.ensure_ydotoold_running()   # one started without permission has exited
                 # Show success dialog
-                msg = Gtk.MessageDialog(
+                msg = message_dialog(
                     transient_for=self.window,
                     modal=True,
                     message_type=Gtk.MessageType.INFO,
@@ -4146,7 +4147,7 @@ class PreferencesWindow:
                 
                 if "cancelled" not in message.lower():
                     # Show error dialog
-                    msg = Gtk.MessageDialog(
+                    msg = message_dialog(
                         transient_for=self.window,
                         modal=True,
                         message_type=Gtk.MessageType.ERROR,
@@ -4236,7 +4237,7 @@ class PreferencesWindow:
             return
 
         # Show confirmation dialog
-        dialog = Gtk.MessageDialog(
+        dialog = message_dialog(
             transient_for=self.window,
             flags=0,
             message_type=Gtk.MessageType.QUESTION,
@@ -4312,7 +4313,7 @@ class PreferencesWindow:
                         self._check_extension_status()
 
                         # Show success dialog with restart instructions
-                        success_dialog = Gtk.MessageDialog(
+                        success_dialog = message_dialog(
                             transient_for=self.window,
                             flags=0,
                             message_type=Gtk.MessageType.INFO,
@@ -4336,7 +4337,7 @@ class PreferencesWindow:
                     else:
                         button.set_sensitive(True)
                         # Show error dialog
-                        error_dialog = Gtk.MessageDialog(
+                        error_dialog = message_dialog(
                             transient_for=self.window,
                             flags=0,
                             message_type=Gtk.MessageType.ERROR,
@@ -4366,7 +4367,7 @@ class PreferencesWindow:
             return
 
         # Show confirmation dialog
-        dialog = Gtk.MessageDialog(
+        dialog = message_dialog(
             transient_for=self.window,
             flags=0,
             message_type=Gtk.MessageType.WARNING,
@@ -4390,7 +4391,7 @@ class PreferencesWindow:
                 self._check_extension_status()
 
                 # Show success message
-                info = Gtk.MessageDialog(
+                info = message_dialog(
                     transient_for=self.window,
                     flags=0,
                     message_type=Gtk.MessageType.INFO,
@@ -4406,7 +4407,7 @@ class PreferencesWindow:
                 info.destroy()
             else:
                 # Show error
-                error = Gtk.MessageDialog(
+                error = message_dialog(
                     transient_for=self.window,
                     flags=0,
                     message_type=Gtk.MessageType.ERROR,
@@ -4419,7 +4420,7 @@ class PreferencesWindow:
 
     def _on_restart_info_clicked(self, button):
         """Show information about restarting GNOME Shell."""
-        dialog = Gtk.MessageDialog(
+        dialog = message_dialog(
             transient_for=self.window,
             flags=0,
             message_type=Gtk.MessageType.INFO,
@@ -4463,7 +4464,7 @@ class PreferencesWindow:
 
     def _show_save_error(self):
         """Error dialog for a failed config save (disk full, permissions…)."""
-        dialog = Gtk.MessageDialog(
+        dialog = message_dialog(
             transient_for=self.window,
             flags=0,
             message_type=Gtk.MessageType.ERROR,
@@ -4591,7 +4592,7 @@ class PreferencesWindow:
             print(f"✅ Model {model_name} downloaded successfully")
 
             # Show success dialog
-            success_dialog = Gtk.MessageDialog(
+            success_dialog = message_dialog(
                 transient_for=self.window,
                 flags=0,
                 message_type=Gtk.MessageType.INFO,
@@ -4728,7 +4729,7 @@ class PreferencesWindow:
             # dialog; just report failure so Apply/OK stops cleanly.
             return False
         if not success:
-            dialog = Gtk.MessageDialog(
+            dialog = message_dialog(
                 transient_for=self.window,
                 flags=0,
                 message_type=Gtk.MessageType.ERROR,
@@ -4802,7 +4803,7 @@ class PreferencesWindow:
             # the hotkey does nothing at all.
             if self._apply_or_restart(changed):
                 # Show confirmation
-                dialog = Gtk.MessageDialog(
+                dialog = message_dialog(
                     transient_for=self.window,
                     flags=0,
                     message_type=Gtk.MessageType.INFO,
@@ -4828,7 +4829,7 @@ class PreferencesWindow:
                 dialog.destroy()
             else:
                 # Show service restart error
-                dialog = Gtk.MessageDialog(
+                dialog = message_dialog(
                     transient_for=self.window,
                     flags=0,
                     message_type=Gtk.MessageType.WARNING,
@@ -4876,7 +4877,7 @@ class PreferencesWindow:
 
             # Show final status if service restart failed
             if not service_restarted:
-                dialog = Gtk.MessageDialog(
+                dialog = message_dialog(
                     transient_for=self.window,
                     flags=0,
                     message_type=Gtk.MessageType.WARNING,
@@ -4910,7 +4911,7 @@ class PreferencesWindow:
         from .config import unapplied_hotkeys, load_config
         pending = unapplied_hotkeys(self.config, load_config().__dict__)
         if pending:
-            warn = Gtk.MessageDialog(
+            warn = message_dialog(
                 transient_for=self.window, modal=True,
                 message_type=Gtk.MessageType.INFO, buttons=Gtk.ButtonsType.OK,
                 text="Apply your hotkey change first",
