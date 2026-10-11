@@ -1,6 +1,6 @@
 """Preferences warns about model settings that don't do what they say.
 
-Parakeet with Device "CUDA (GPU)" quietly runs on the processor, and Parakeet
+Parakeet with Device CUDA quietly runs on the processor, and Parakeet
 ignores a language it doesn't know. Both used to pass without a word.
 """
 import pytest

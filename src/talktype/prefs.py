@@ -275,6 +275,26 @@ def model_setting_warning(model, device, language_mode, language, language_name=
     return "\n".join(notes)
 
 
+def device_label(device, model, cuda_ready):
+    """What the Device dropdown calls *device* with *model* selected.
+
+    CUDA is listed on every NVIDIA computer, so until its files are
+    downloaded the label says how big they are. Parakeet can't use CUDA and
+    runs on the processor with it, and the label says that too instead of
+    promising the graphics card.
+    """
+    if device == "vulkan":
+        from .whisper_vulkan import DEVICE_LABEL
+        return DEVICE_LABEL
+    if device != "cuda":
+        return "CPU"
+    from .parakeet_engine import is_parakeet
+    if is_parakeet(model):
+        return ("CUDA (Parakeet runs on the processor)" if cuda_ready
+                else "CUDA (1.4 GB download, Parakeet runs on the processor)")
+    return "CUDA (NVIDIA)" if cuda_ready else "CUDA (NVIDIA, 1.4 GB download)"
+
+
 # What can need a download, and so is rolled back when it never finishes:
 # the model, and the device (the processor or Vulkan copy of a model).
 _DOWNLOAD_KEYS = ("model", "device")
@@ -417,25 +437,41 @@ class PreferencesWindow:
                 print(f"❌ CUDA availability check failed: {e}")
                 return False
     
+    def _has_nvidia(self):
+        """Whether this computer has an NVIDIA card, asked once per window."""
+        if not hasattr(self, "_nvidia_found"):
+            try:
+                from .cuda_helper import detect_nvidia_gpu
+                self._nvidia_found = bool(detect_nvidia_gpu())
+            except Exception:
+                self._nvidia_found = False
+        return self._nvidia_found
+
     def _refresh_device_options(self):
-        """Refresh the device dropdown options based on current CUDA availability."""
+        """Rebuild the Device dropdown.
+
+        CUDA is listed on every NVIDIA computer, like Vulkan, not only once
+        Advanced → Download CUDA Libraries has run: people looking for their
+        graphics card look here. Picking it before the download offers the
+        download (_on_device_changed).
+        """
         if not hasattr(self, 'device_combo'):
             return
-            
-        # Clear existing options except CPU
+
         self.device_combo.remove_all()
         self.device_combo.append("cpu", "CPU")
-        
-        # Check CUDA availability and add option if available
-        cuda_available = self._check_cuda_availability()
-        if cuda_available:
-            self.device_combo.append("cuda", "CUDA (GPU)")
-            tooltip_text = "Processing device for AI transcription:\n• CPU: works on all computers, slower\n• CUDA (GPU): much faster, requires NVIDIA graphics card"
-        else:
-            tooltip_text = "Processing device for AI transcription:\n• CPU: works on all computers\n• CUDA: not available (no NVIDIA GPU or missing CUDA libraries)"
-            # If config has CUDA but it's not available, reset to CPU
-            if self.config["device"] == "cuda":
-                self.config["device"] = "cpu"
+        tooltip_text = "Processing device for AI transcription:\n• CPU: works on all computers, slower"
+
+        self._cuda_ready = self._check_cuda_availability()
+        if self._cuda_ready or self._has_nvidia():
+            self.device_combo.append("cuda", device_label(
+                "cuda", self.config.get("model"), self._cuda_ready))
+            tooltip_text += ("\n• CUDA (NVIDIA): much faster for the Whisper models, a one-time "
+                             "1.4 GB download. Parakeet can't use it")
+        # Set to CUDA without its files, the service runs on the processor
+        # (4bb00a8), so the dropdown shows CPU rather than claim CUDA.
+        if self.config["device"] == "cuda" and not self._cuda_ready:
+            self.config["device"] = "cpu"
 
         # Any graphics card through Vulkan (whisper_vulkan.py): the only GPU
         # option on AMD / Intel, and the light one on NVIDIA. Offered when a
@@ -453,7 +489,17 @@ class PreferencesWindow:
         # Set active selection and tooltip
         self.device_combo.set_active_id(self.config["device"])
         self.device_combo.set_tooltip_text(tooltip_text)
-    
+
+    def _relabel_cuda_option(self, model):
+        """Retell the CUDA entry for *model*: with Parakeet it runs on the
+        processor. Only the text changes, so no 'changed' signal fires."""
+        combo = getattr(self, "device_combo", None)
+        if combo is None:
+            return
+        for row in combo.get_model():
+            if row[1] == "cuda":       # ComboBoxText rows are (text, id)
+                row[0] = device_label("cuda", model, getattr(self, "_cuda_ready", False))
+
     def save_config(self):
         """Save config to TOML file (merge-on-save).
 
@@ -1762,33 +1808,13 @@ class PreferencesWindow:
         grid.attach(self.gpu_status_label, 0, row, 2, 1)
         row += 1
 
-        # CUDA Status Label
+        # CUDA Status Label. Its download is no longer a button here: CUDA is
+        # chosen like Vulkan, in General → Device, which offers the download.
         self.cuda_status_label = Gtk.Label(label="", xalign=0)
+        self.cuda_status_label.set_line_wrap(True)
         self.cuda_status_label.set_margin_start(10)
         self.cuda_status_label.set_margin_bottom(10)
         grid.attach(self.cuda_status_label, 0, row, 2, 1)
-        row += 1
-
-        # Button box for GPU actions
-        gpu_button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        gpu_button_box.set_margin_start(10)
-
-        # Check GPU button
-        self.check_gpu_button = Gtk.Button(label="Check for NVIDIA GPU")
-        self.check_gpu_button.connect("clicked", self._on_check_gpu_clicked)
-        self.check_gpu_button.get_child().set_xalign(0.5)
-        self.check_gpu_button.set_tooltip_text("Check if an NVIDIA graphics card is present on your system")
-        gpu_button_box.pack_start(self.check_gpu_button, False, False, 0)
-
-        # Download CUDA button
-        self.download_cuda_button = Gtk.Button(label="Download CUDA Libraries")
-        self.download_cuda_button.connect("clicked", self._on_download_cuda_clicked)
-        self.download_cuda_button.get_child().set_xalign(0.5)
-        self.download_cuda_button.set_tooltip_text("Download CUDA libraries for GPU acceleration (~1.4GB download)")
-        self.download_cuda_button.set_sensitive(False)
-        gpu_button_box.pack_start(self.download_cuda_button, False, False, 0)
-
-        grid.attach(gpu_button_box, 0, row, 2, 1)
         row += 1
 
         # The light alternative to CUDA (and the only GPU route on AMD / Intel).
@@ -3055,30 +3081,8 @@ class PreferencesWindow:
         if value is None:
             return
 
-        # Special handling for device changes - verify CUDA is available
-        if key == "device" and value == "cuda":
-            from talktype import cuda_helper
-            if not cuda_helper.has_cuda_libraries():
-                # CUDA libraries not available - show error and revert to CPU
-                dialog = message_dialog(
-                    transient_for=self.window,
-                    flags=0,
-                    message_type=Gtk.MessageType.ERROR,
-                    buttons=Gtk.ButtonsType.OK,
-                    text="CUDA Libraries Not Available"
-                )
-                dialog.format_secondary_text(
-                    "GPU acceleration requires CUDA libraries to be downloaded first.\n\n"
-                    "Please download CUDA libraries from the Advanced tab before switching to GPU mode."
-                )
-                dialog.run()
-                dialog.destroy()
-
-                # Revert combo box to CPU
-                if hasattr(self, 'device_combo'):
-                    self.device_combo.set_active_id("cpu")
-                return  # Don't update config
-
+        # (CUDA picked before its files are downloaded never gets here: the
+        # Device dropdown offers the download instead, _on_device_changed.)
         self.config[key] = value
 
         # NOTE: launch_at_login used to write the autostart .desktop file right
@@ -3095,6 +3099,7 @@ class PreferencesWindow:
             return
         it = self.model_combo.get_active_iter()
         model = self.model_store.get_value(it, 0) if it is not None else ""
+        self._relabel_cuda_option(model)
         name = self.lang_combo.get_active_text() or ""
         message = model_setting_warning(
             model, self.device_combo.get_active_id() or "",
@@ -3102,7 +3107,9 @@ class PreferencesWindow:
             self.lang_combo.get_active_id() or "",
             name.split(" ", 1)[-1])     # "🇯🇵 Japanese" -> "Japanese"
         if message:
-            label.set_markup(f"⚠️ <i>{GLib.markup_escape_text(message)}</i>")
+            # Amber and bold: as grey italic it was easy to miss (Ron, 0.14.5).
+            label.set_markup(f'<span color="#e6aa3c" weight="bold">⚠️ '
+                             f'{GLib.markup_escape_text(message)}</span>')
             label.show()
         else:
             label.hide()
@@ -3737,10 +3744,15 @@ class PreferencesWindow:
 
     def _on_device_changed(self, combo):
         """Switching to Vulkan downloads what it needs and checks
-        it is actually faster than the processor before keeping it. Any other
-        device is simply saved."""
+        it is actually faster than the processor before keeping it. CUDA
+        without its files offers the download. Any other device is simply
+        saved."""
         device = combo.get_active_id()
         if device is None:
+            return
+        if device == "cuda" and not getattr(self, "_cuda_ready", False):
+            combo.popdown()     # or the list stays drawn over the dialogs
+            GLib.idle_add(self._finish_switch_to_cuda, combo)
             return
         if device != "vulkan":
             self.update_config("device", device)
@@ -3762,6 +3774,15 @@ class PreferencesWindow:
             combo.handler_block_by_func(self._on_device_changed)
             combo.set_active_id(self._device_before)
             combo.handler_unblock_by_func(self._on_device_changed)
+        return False        # run once
+
+    def _finish_switch_to_cuda(self, combo):
+        """CUDA picked before its files are downloaded. The dropdown goes back
+        to the device in use first: if the download is refused or fails, or
+        Parakeet is kept, nothing changed. Once downloaded,
+        _after_cuda_download() selects CUDA itself, through Apply."""
+        self._set_choice("device", self._device_before)
+        self._download_cuda()
         return False        # run once
 
     def _vulkan_offered(self):
@@ -3899,106 +3920,62 @@ class PreferencesWindow:
         return False  # Don't repeat
 
     def _check_gpu_status(self):
-        """Check GPU and CUDA status and update UI."""
+        """Show the NVIDIA card and whether CUDA's files are installed."""
         try:
-            # Import cuda_helper
-            try:
-                from . import cuda_helper
-            except ImportError:
-                # If cuda_helper doesn't exist, create stub
-                self.gpu_status_label.set_text("GPU detection not available in this build")
-                self.cuda_status_label.set_text("")
-                self.check_gpu_button.set_sensitive(False)
-                self.download_cuda_button.set_sensitive(False)
-                return
-            
-            # Check for NVIDIA GPU
-            has_gpu = cuda_helper.detect_nvidia_gpu()
-            # Use has_talktype_cuda_libraries() for UI display (not system CUDA)
+            from . import cuda_helper
+            gpu_name = cuda_helper.detect_nvidia_gpu()
+            # TalkType's own download only, not a system-wide CUDA install
             has_cuda = cuda_helper.has_talktype_cuda_libraries()
-            
-            if has_gpu:
-                gpu_name = cuda_helper.detect_nvidia_gpu()
+
+            if gpu_name:
                 if isinstance(gpu_name, str) and len(gpu_name) > 5:
-                    self.gpu_status_label.set_markup(f'<span color="#4CAF50">✓ NVIDIA GPU detected: {gpu_name}</span>')
+                    self.gpu_status_label.set_markup(
+                        f'<span color="#4CAF50">✓ NVIDIA GPU detected: '
+                        f'{GLib.markup_escape_text(gpu_name)}</span>')
                 else:
                     self.gpu_status_label.set_markup('<span color="#4CAF50">✓ NVIDIA GPU detected</span>')
-                
+
                 if has_cuda:
                     self.cuda_status_label.set_markup('<span color="#4CAF50">✓ CUDA libraries installed</span>')
-                    self.download_cuda_button.set_label("✓ CUDA Installed")
-                    self.download_cuda_button.set_sensitive(False)
                 else:
-                    self.cuda_status_label.set_markup('<span color="#FF9800">⚠ CUDA libraries not installed (using CPU mode)</span>')
-                    self.download_cuda_button.set_sensitive(True)
+                    self.cuda_status_label.set_markup(
+                        '<span color="#FF9800">CUDA libraries not installed. To download them '
+                        '(1.4 GB), choose CUDA as the Device on the General tab.</span>')
             else:
                 self.gpu_status_label.set_markup('<span color="#9E9E9E">⊘ No NVIDIA GPU detected</span>')
-                self.cuda_status_label.set_text("CPU mode only")
-                self.download_cuda_button.set_sensitive(False)
-                
+                self.cuda_status_label.set_text("CUDA needs an NVIDIA graphics card.")
+
         except Exception as e:
             self.gpu_status_label.set_text(f"Error checking GPU: {e}")
             self.cuda_status_label.set_text("")
             print(f"GPU check error: {e}")
 
-    def _on_check_gpu_clicked(self, button):
-        """Handle Check GPU button click."""
-        button.set_label("🔄 Checking...")
-        button.set_sensitive(False)
-        
-        def check_and_update():
-            self._check_gpu_status()
-            button.set_label("🔍 Check for NVIDIA GPU")
-            button.set_sensitive(True)
-            return False
-        
-        GLib.timeout_add(100, check_and_update)
+    def _download_cuda(self):
+        """Ask, then download CUDA's 1.4 GB of files with a progress bar.
 
-    def _on_download_cuda_clicked(self, button):
-        """Handle Download CUDA button click."""
+        Picking CUDA in General → Device before it's installed lands here. On
+        success the dropdowns are rebuilt and _after_cuda_download() switches
+        to CUDA (asking for a Whisper model first on Parakeet).
+        """
         try:
             from . import cuda_helper
         except ImportError:
             return
 
-        # Show confirmation dialog first
-        confirm_dialog = message_dialog(
-            parent=self.window,
-            message_type=Gtk.MessageType.QUESTION,
-            buttons=Gtk.ButtonsType.YES_NO,
-            text="Download CUDA Libraries?"
-        )
-
-        # Apply dark theme to dialog
-        settings = Gtk.Settings.get_default()
-        if settings:
-            settings.set_property("gtk-application-prefer-dark-theme", True)
-
         from talktype.config import get_data_dir
         cuda_path = os.path.join(get_data_dir(), "cuda")
-        confirm_dialog.format_secondary_text(
-            "This will download approximately 1.4GB of CUDA libraries for GPU acceleration.\n\n"
-            f"The files will be stored in {cuda_path} and may take several minutes to download.\n\n"
-            "Continue with download?"
-        )
-
-        response = confirm_dialog.run()
-        confirm_dialog.destroy()
-
-        # If user clicked No, cancel
-        if response != Gtk.ResponseType.YES:
+        if self._message(
+                Gtk.MessageType.QUESTION, "Download CUDA Libraries?",
+                "CUDA runs the Whisper models on your NVIDIA graphics card. It needs "
+                "about 1.4 GB of NVIDIA's files, a one-time download.\n\n"
+                f"The files will be stored in {cuda_path} and may take several minutes "
+                "to download.\n\nContinue with download?",
+                buttons=Gtk.ButtonsType.YES_NO) != Gtk.ResponseType.YES:
             return
 
-        # Disable button during download
-        button.set_sensitive(False)
-
-        # Define callback to refresh UI after successful download
         def on_success():
-            """Refresh UI elements after successful CUDA download"""
-            # Refresh GPU status
+            """Refresh the window now that CUDA is installed, then switch."""
             self._check_gpu_status()
-
-            # Refresh device dropdown to show CUDA option
             self._refresh_device_options()
 
             # Unlock large-v3 in the model dropdown now that CUDA is available
@@ -4011,15 +3988,10 @@ class PreferencesWindow:
 
             self._after_cuda_download()
 
-        # Show the modern download dialog
-        success = cuda_helper.show_cuda_download_dialog(
+        cuda_helper.show_cuda_download_dialog(
             parent=self.window,
             on_success_callback=on_success
         )
-
-        # Re-enable button if download failed
-        if not success:
-            button.set_sensitive(True)
 
     def _initial_typing_check(self):
         """Perform initial typing permission check when preferences window opens."""
@@ -4813,7 +4785,11 @@ class PreferencesWindow:
             finally:
                 self._updating_model = False
             self._last_selected_model = value
-        elif key == "device" and getattr(self, "device_combo", None) is not None:
+        elif key == "device":
+            # What _on_device_changed falls back to when a setup is refused.
+            self._device_before = value
+            if getattr(self, "device_combo", None) is None:
+                return
             self.device_combo.handler_block_by_func(self._on_device_changed)
             try:
                 self.device_combo.set_active_id(value)

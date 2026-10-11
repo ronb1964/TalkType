@@ -74,7 +74,8 @@ First run (since 0.14.2 it recommends one setup; CUDA is not offered here):
 
 Preferences and the rest:
 - [ ] Dictation works in CPU mode (Device → CPU downloads the processor copy of Parakeet with a progress bar)
-- [ ] CUDA: Preferences → Advanced → Download CUDA Libraries shows a progress bar, then "Downloaded!". On Parakeet it then asks which Whisper model to use on CUDA, Large-v3 preselected (Keep Parakeet changes nothing); on a Whisper model it switches to "cuda" by itself. Either switch restarts dictation onto CUDA (check the log)
+- [ ] CUDA: Preferences → General → Device lists "CUDA (1.4 GB download, …)" on NVIDIA before anything is downloaded. Picking it asks, then shows a progress bar, then "Downloaded!". On Parakeet it then asks which Whisper model to use on CUDA, Large-v3 preselected (Keep Parakeet changes nothing, and the dropdown goes back); on a Whisper model it switches to "cuda" by itself. Either switch restarts dictation onto CUDA (check the log). Advanced shows only the status line
+- [ ] With Parakeet selected, the CUDA entry reads "CUDA (Parakeet runs on the processor)" and the warning under the settings is amber and bold
 - [ ] Dictation works on CUDA with a Whisper model (e.g. small)
 - [ ] AI self-corrections: turning it on downloads the model; "meet at three, no wait, four" types "meet at four"
 - [ ] Auto-punctuation works consistently

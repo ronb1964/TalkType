@@ -356,8 +356,8 @@ Preferences → General → Device:
 • <b>Vulkan (any GPU):</b> AMD, Intel or NVIDIA, a 24 MB download. It's the only
   way to run Parakeet on the graphics card. TalkType checks your graphics card is
   really faster than your processor before it switches.
-• <b>CUDA (GPU):</b> NVIDIA only, for the Whisper models, a ~1.4 GB download
-  (Preferences → Advanced → "Download CUDA Libraries"). Parakeet can't use it.
+• <b>CUDA (NVIDIA):</b> NVIDIA only, for the Whisper models, a ~1.4 GB download
+  that starts when you choose it. Parakeet can't use it.
 • If the graphics card can't start, TalkType uses the processor instead and tells
   you, and the tray's Device line shows it, for example "CPU (Vulkan didn't start)".
 
