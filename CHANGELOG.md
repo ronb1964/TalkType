@@ -49,7 +49,8 @@ on KDE.
 - Downloading the CUDA libraries saved the switch to CUDA but never moved
   dictation onto it. Now it really switches. And since Parakeet can't use
   CUDA, switching it would have made it slower: on Parakeet you're asked
-  whether to move to Whisper Small on CUDA, or keep Parakeet as it is.
+  which Whisper model to use on CUDA, from Tiny to Large-v3 with their
+  download sizes, or you keep Parakeet as it is.
 
 ## [0.14.4] - 2026-10-10
 

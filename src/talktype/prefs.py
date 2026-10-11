@@ -4756,23 +4756,51 @@ class PreferencesWindow:
         """
         from .parakeet_engine import is_parakeet
         if is_parakeet(self.config.get("model")):
-            box = message_dialog(transient_for=self.window, modal=True,
-                                 message_type=Gtk.MessageType.QUESTION,
-                                 buttons=Gtk.ButtonsType.NONE, text="CUDA is ready")
-            box.format_secondary_text(
-                "CUDA speeds up the Whisper models. Parakeet can't use it, and it "
-                "stays as fast as it is now.\n\n"
-                "Switch to Whisper Small on CUDA now?")
-            box.add_button("Keep Parakeet", Gtk.ResponseType.NO)
-            box.add_button("Switch to Whisper Small", Gtk.ResponseType.YES)
-            box.set_default_response(Gtk.ResponseType.YES)
-            answer = box.run()
-            box.destroy()
-            if answer != Gtk.ResponseType.YES:
+            model = self._ask_whisper_model_for_cuda()
+            if model is None:
                 return
-            self._set_choice("model", "small")
+            self._set_choice("model", model)
         self._set_choice("device", "cuda")
         self.on_apply(None)
+
+    def _ask_whisper_model_for_cuda(self):
+        """Which Whisper model to use CUDA with, or None to keep Parakeet.
+
+        Every Whisper model, with its download, so nobody downloads Small
+        first only to want another one. Large-v3 is preselected: getting
+        CUDA for an NVIDIA card is usually about the best accuracy.
+        """
+        from .model_helper import MODEL_DISPLAY_SIZES
+        names = [("tiny", "Tiny", "fastest, least accurate"),
+                 ("base", "Base", "fast"),
+                 ("small", "Small", "a good balance"),
+                 ("medium", "Medium", "more accurate"),
+                 ("large-v3", "Large-v3", "most accurate")]
+        box = message_dialog(transient_for=self.window, modal=True,
+                             message_type=Gtk.MessageType.QUESTION,
+                             buttons=Gtk.ButtonsType.NONE, text="CUDA is ready")
+        box.format_secondary_text(
+            "CUDA speeds up the Whisper models. Parakeet can't use it, and it "
+            "stays as fast as it is now.\n\nSwitch to a Whisper model on CUDA?")
+        radios, group = {}, None
+        column = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        column.set_margin_start(24)
+        for model, name, what in names:
+            radio = Gtk.RadioButton.new_with_label_from_widget(
+                group, f"{name}, {what} ({MODEL_DISPLAY_SIZES[model]})")
+            group = group or radio
+            radios[model] = radio
+            column.pack_start(radio, False, False, 0)
+        radios["large-v3"].set_active(True)
+        box.get_content_area().pack_start(column, False, False, 6)
+        box.add_button("Keep Parakeet", Gtk.ResponseType.NO)
+        box.add_button("Switch", Gtk.ResponseType.YES)
+        box.set_default_response(Gtk.ResponseType.YES)
+        box.show_all()
+        answer = box.run()
+        chosen = next(m for m, r in radios.items() if r.get_active())
+        box.destroy()
+        return chosen if answer == Gtk.ResponseType.YES else None
 
     def _set_choice(self, key, value):
         """Set the model or device and its dropdown without the dropdown's
