@@ -621,11 +621,12 @@ class WelcomeDialog:
             self._build_unsupported_desktop_section(vbox, self.unsupported_desktop_name)
         else:
             self._build_base_content(vbox)
-            # Add optional features if applicable
-            if (self.has_gnome or self.has_nvidia or self.needs_uinput_fix
-                    or self.needs_ydotoold_setup or self.needs_portaudio_install
-                    or self.is_flatpak):
-                self._build_optional_features(vbox)
+            # Always: it holds the recommended-setup card, which every computer
+            # needs (language, model, graphics card). Its other parts check
+            # their own conditions. Gated on GNOME / NVIDIA / something to fix
+            # until 0.14.6, which hid the card on, say, KDE with AMD graphics
+            # and nothing to fix, so those users were never asked their language.
+            self._build_optional_features(vbox)
 
         # The footer ("Next:" and Set it up / Quit) sits below the scrolling part,
         # so it is always on screen whole. Inside the scroll, a title bar the
