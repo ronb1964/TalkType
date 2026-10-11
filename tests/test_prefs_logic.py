@@ -4,7 +4,10 @@ These cover the non-widget parts of the Preferences window: the
 update_config None guard, on-disk value type coercion, and that the
 window's own writer produces a file config.py can read back.
 """
-import tomllib
+try:
+    import tomllib
+except ImportError:     # Python 3.10, the AppImage's (the CI runs it)
+    import toml as tomllib
 from types import SimpleNamespace
 
 from talktype import prefs as P

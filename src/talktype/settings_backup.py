@@ -18,7 +18,6 @@ import json
 import os
 import re
 import tempfile
-import tomllib
 import zipfile
 from dataclasses import dataclass
 
@@ -36,6 +35,13 @@ _STATS = "stats.json"
 _COPY_NAME = re.compile(r"^settings-(\d{8}-\d{6})\.zip$")
 _DEVICE_LINE = re.compile(r'^device\s*=.*$', re.MULTILINE)
 _DEVICE_NAMES = {"cuda": "CUDA", "vulkan": "Vulkan"}
+
+
+def _parse_toml(text):
+    """config's TOML reader: tomllib from Python 3.11, the toml package on
+    3.10, which the AppImage runs. Importing tomllib here crashed the 0.14.6
+    test build at startup."""
+    return config._parse_toml_text(text)
 
 
 class BackupError(Exception):
@@ -233,8 +239,8 @@ def read_backup(path):
     for name in (_SETTINGS, _COMMANDS):
         if name in files:
             try:
-                tomllib.loads(files[name].decode("utf-8"))
-            except (UnicodeDecodeError, tomllib.TOMLDecodeError):
+                _parse_toml(files[name].decode("utf-8"))
+            except (UnicodeDecodeError, ValueError):
                 raise BackupError(f"The settings in this backup are damaged ({name}).")
     return Backup(version=str(manifest.get("version", "")),
                   created=str(manifest.get("created", "")), files=files)
@@ -260,15 +266,15 @@ def _fit_device(text, notes):
     computer's own when this computer can't use the one in the backup (a
     backup from an NVIDIA computer, loaded on one without). The rest of the
     settings come across unchanged."""
-    wanted = tomllib.loads(text).get("device")
+    wanted = _parse_toml(text).get("device")
     if not wanted or _device_works_here(wanted):
         return text
     current = _read_bytes(config.CONFIG_PATH)
     keep = "cpu"
     if current is not None:
         try:
-            keep = tomllib.loads(current.decode("utf-8")).get("device") or "cpu"
-        except (UnicodeDecodeError, tomllib.TOMLDecodeError):
+            keep = _parse_toml(current.decode("utf-8")).get("device") or "cpu"
+        except (UnicodeDecodeError, ValueError):
             pass
     if not _device_works_here(keep):
         keep = "cpu"

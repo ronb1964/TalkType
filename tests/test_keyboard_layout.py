@@ -72,8 +72,18 @@ def test_ordinary_dictation_types_correctly(layout, variant):
 
 def test_swiss_german_letters_and_symbols():
     planner = kl.KeyPlanner("ch", "")
-    text = "Zürich, Ärger, Öl, Übung, é à è, ç @ # € $ £"
+    text = "Zürich, Ärger, Öl, Übung, é à è, ç @ # $ £"
     assert replay(planner, planner.plan(text)) == text
+
+
+def test_swiss_german_euro_sign():
+    """AltGr+E. Ubuntu 22.04's keyboard data (xkb-data 2.33, which the CI
+    runs) has no € on the Swiss layout; newer data does. Without it the text
+    is untypable on keys and TalkType types it another way (UntypableText)."""
+    planner = kl.KeyPlanner("ch", "")
+    if planner.plan("€") is None:
+        pytest.skip("this system's keyboard data has no € on the Swiss layout")
+    assert replay(planner, planner.plan("Preis: 5 €")) == "Preis: 5 €"
 
 
 def test_y_and_z_use_the_keys_where_they_really_are():

@@ -14,7 +14,14 @@ on:
 
 jobs:
   tests:
-    runs-on: ubuntu-24.04
+    # 22.04 has Python 3.10, the AppImage's; 24.04 has 3.12. The dev version
+    # runs newer still, so a 3.11+ feature only shows up here (tomllib
+    # crashed a 0.14.6 test build at startup).
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
