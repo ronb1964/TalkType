@@ -277,6 +277,47 @@ def model_setting_warning(model, device, language_mode, language, language_name=
     return "\n".join(notes)
 
 
+# F-keys that apps already use, named in the hotkey dropdowns so nobody picks
+# one blind: dictating with F5 also reloaded the browser page (Ron, 0.14.6).
+HOTKEY_CLASHES = {
+    "F1": "opens Help in many apps",
+    "F5": "reloads the page in browsers",
+    "F11": "full screen in browsers",
+    "F12": "developer tools in browsers",
+}
+
+
+def hotkey_label(key):
+    """'F5 (reloads the page in browsers)', or just the key."""
+    clash = HOTKEY_CLASHES.get(key)
+    return f"{key} ({clash})" if clash else key
+
+
+def hotkey_change_message(cfg, changed, refused):
+    """(text, offer the test) for the question after OK or Apply, or None.
+
+    *changed*: the settings keys changed; *refused*: keys KDE already uses
+    (kwin_hotkeys.refused_since), None when unknown. First run tests the key;
+    a key changed in Preferences was simply accepted until 0.14.6.
+    """
+    roles = (("hotkey", "hold-to-talk key"), ("toggle_hotkey", "tap-to-start key"))
+    lines = [f"Your {what} is now {cfg.get(key)}." for key, what in roles
+             if key in changed and cfg.get(key)]
+    offer_test = bool(lines)
+    if offer_test:
+        lines.append("Try it once in the test to make sure it reaches TalkType. On some "
+                     "laptops the F-keys change the brightness or volume unless you hold Fn.")
+    # KDE reports keys in Qt's spelling (Super is "Meta"): map back to ours.
+    from .kwin_hotkeys import qt_key_sequence
+    all_keys = ("hotkey", "toggle_hotkey", "voice_commands_hotkey")
+    ours = {qt_key_sequence(cfg.get(k)): cfg.get(k) for k in all_keys if cfg.get(k)}
+    for key in refused or []:
+        if key in ours and changed & set(all_keys):
+            lines.append(f"KDE already uses {ours[key]} for one of its own shortcuts, so "
+                         f"pressing it does that too. Pick another key if that gets in the way.")
+    return ("\n\n".join(lines), offer_test) if lines else None
+
+
 def device_label(device, model, cuda_ready):
     """What the Device dropdown calls *device* with *model* selected.
 
@@ -1007,7 +1048,7 @@ class PreferencesWindow:
         hotkeys = ["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12"]
         
         for key in hotkeys:
-            self.hotkey_combo.append(key, key)
+            self.hotkey_combo.append(key, hotkey_label(key))
         
         # Selection for both combos is set once the toggle combo exists, by
         # _apply_hotkey_fallbacks — see there for why the fallback must also
@@ -1028,7 +1069,7 @@ class PreferencesWindow:
 
         # Add same options for toggle key
         for key in hotkeys:
-            self.toggle_combo.append(key, key)
+            self.toggle_combo.append(key, hotkey_label(key))
             
         # Both combos exist now, so set their selections together.
         self._apply_hotkey_fallbacks(hotkeys)
@@ -5184,6 +5225,8 @@ class PreferencesWindow:
         # Same reason: after the save this no longer names the live setup.
         previous = {k: self._config_at_open.get(k) for k in _DOWNLOAD_KEYS}
 
+        import time
+        saved_at = time.time()      # for KDE's verdict on a changed hotkey
         if self.save_config():
             # Check if model needs downloading
             if not self._download_selected_model():
@@ -5194,7 +5237,10 @@ class PreferencesWindow:
             # picks up everything else from the config file within a second,
             # which avoids a ~10s rebuild of the Whisper model during which
             # the hotkey does nothing at all.
-            if self._apply_or_restart(changed):
+            applied = self._apply_or_restart(changed)
+            if applied and self._after_hotkey_change(changed, saved_at):
+                pass    # its question stands in for "Settings applied"
+            elif applied:
                 # Show confirmation
                 dialog = message_dialog(
                     transient_for=self.window,
@@ -5235,6 +5281,57 @@ class PreferencesWindow:
         else:
             self._show_save_error()
     
+    def _kde_refused(self, since):
+        """Keys KDE already uses, once the service has registered the new
+        ones (kwin_hotkeys saves its verdict), or None: not KDE, dictation
+        off, or no answer within a few seconds."""
+        import time
+        from . import kwin_hotkeys
+        try:
+            from .service_launcher import find_service_pids
+            if not kwin_hotkeys.should_claim() or not find_service_pids():
+                return None
+        except Exception:
+            return None
+        deadline = time.monotonic() + 6
+        while time.monotonic() < deadline:
+            found = kwin_hotkeys.refused_since(since)
+            if found is not None:
+                return found
+            while Gtk.events_pending():
+                Gtk.main_iteration()
+            time.sleep(0.1)
+        return None
+
+    def _after_hotkey_change(self, changed, since):
+        """After OK or Apply with a changed hotkey: offer the hotkey test,
+        and say so if KDE already uses the key. True when it asked, so Apply
+        doesn't also say "Settings applied"."""
+        from .config import HOTKEY_KEYS
+        if not set(changed) & {*HOTKEY_KEYS, "voice_commands_hotkey"}:
+            return False
+        message = hotkey_change_message(self.config, set(changed), self._kde_refused(since))
+        if message is None:
+            return False
+        text, offer_test = message
+        dialog = message_dialog(transient_for=self.window, modal=True,
+                                message_type=Gtk.MessageType.QUESTION if offer_test
+                                else Gtk.MessageType.WARNING,
+                                buttons=Gtk.ButtonsType.NONE,
+                                text="Try your new hotkey?" if offer_test else "Heads up")
+        dialog.format_secondary_text(text)
+        if offer_test:
+            dialog.add_button("Not Now", Gtk.ResponseType.CANCEL)
+            dialog.add_button("Test Now", Gtk.ResponseType.OK)
+        else:
+            dialog.add_button("OK", Gtk.ResponseType.CANCEL)
+        dialog.set_default_response(Gtk.ResponseType.OK if offer_test else Gtk.ResponseType.CANCEL)
+        answer = dialog.run()
+        dialog.destroy()
+        if answer == Gtk.ResponseType.OK:
+            self._on_test_hotkeys(None)
+        return True
+
     def on_cancel(self, button):
         """Cancel and close without saving."""
         # Cancel/OK close via destroy(), which does NOT emit delete-event,
@@ -5255,6 +5352,8 @@ class PreferencesWindow:
         # Same reason: after the save this no longer names the live setup.
         previous = {k: self._config_at_open.get(k) for k in _DOWNLOAD_KEYS}
 
+        import time
+        saved_at = time.time()      # for KDE's verdict on a changed hotkey
         if self.save_config():
             # Check if model needs downloading
             if not self._download_selected_model():
@@ -5263,6 +5362,8 @@ class PreferencesWindow:
 
             # OK closes even after a download; Apply is the one that stays open.
             service_restarted = self._apply_or_restart(changed)
+            if service_restarted:
+                self._after_hotkey_change(changed, saved_at)
 
             # Stop the mic test (if running) and clean up PID file before closing
             self._stop_mic_test()

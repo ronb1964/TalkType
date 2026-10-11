@@ -56,6 +56,8 @@ class FakeBus:
 def on_kde(monkeypatch, tmp_path):
     monkeypatch.setattr(kh, "should_claim", lambda: True)
     monkeypatch.setattr(kh, "script_path", lambda: str(tmp_path / "kwin" / "hk.js"))
+    # claim() saves its result next to the settings: never the real ones.
+    monkeypatch.setattr(kh, "result_path", lambda: str(tmp_path / "kde-hotkeys.json"))
     monkeypatch.setattr(kh.time, "sleep", lambda s: None)   # tests never really wait
 
 
@@ -196,3 +198,33 @@ def test_stopping_the_service_releases_the_hotkeys(monkeypatch):
     monkeypatch.setattr(kh, "release", lambda *a: released.append(True))
     service_launcher.stop_dictation_service()
     assert released == [True]
+
+
+class TestRefusedKeysReachPreferences:
+    """The refused-key warning only reached the log. The service now saves
+    the result so Preferences can say it after a hotkey change (Ron, 0.14.6)."""
+
+    @pytest.fixture
+    def result_file(self, on_kde, monkeypatch, tmp_path):
+        path = tmp_path / "kde-hotkeys.json"
+        monkeypatch.setattr(kh, "result_path", lambda: str(path))
+        return path
+
+    def test_a_refused_key_is_saved(self, result_file):
+        before = kh.time.time() - 1
+        kh.claim(_cfg("F8", "F9", ""), FakeBus(refuse={"talktype-hold-F8"}))
+        assert kh.refused_since(before) == ["F8"]
+
+    def test_all_keys_held_is_saved_as_none_refused(self, result_file):
+        before = kh.time.time() - 1
+        kh.claim(_cfg(), FakeBus())
+        assert kh.refused_since(before) == []
+
+    def test_no_result_yet_or_an_old_one_is_unknown(self, result_file):
+        assert kh.refused_since(0) is None
+        kh.claim(_cfg(), FakeBus())
+        assert kh.refused_since(kh.time.time() + 60) is None    # checked before that
+
+    def test_a_broken_result_file_is_unknown_not_an_error(self, result_file):
+        result_file.write_text("{not json")
+        assert kh.refused_since(0) is None

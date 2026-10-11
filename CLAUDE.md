@@ -85,6 +85,7 @@ Preferences and the rest:
 - [ ] Preferences → General: off the recommended setup, the row says "Recommended for this computer: …" with Use Recommended, which sets Model and Device (Vulkan: download and speed check first) and turns into "✓ You're on the recommended setup". "What works with what?" shows the models-by-device grid and a line about this computer
 - [ ] Backup: Preferences → Updates & Backup fits without scrolling. Save Backup opens the desktop's file dialog, writes the .zip, and "Last saved" turns from amber "never" to the date. Change the hotkey, then Load Backup puts it back, restarts dictation (log) and closes Preferences. Earlier settings lists both "— your backup" files from the backup folder and "— automatic" copies, newest first, and Restore undoes the load. A second backup the same day gets its own name (the time is in it). A non-backup file is turned away with a message. Backup folder → Change… opens a folder browser; after picking one, Save Backup and Load Backup open in it. Tray → Check for Updates still opens this tab
 - [ ] F8 and F9 leave no stray character in a terminal (KDE and GNOME)
+- [ ] Hotkeys: the dropdowns label F1, F5, F11 and F12 with what apps use them for. Change the hold key and click Apply: "Try your new hotkey?" replaces "Settings applied", and Test Now opens the hotkey test. On KDE, pick a key KDE already uses and the question says so (log: "KDE already uses …")
 
 ### Step 9: Fix and Rebuild if Needed
 If ANY test fails: fix the issue, go back to Step 2, and repeat.

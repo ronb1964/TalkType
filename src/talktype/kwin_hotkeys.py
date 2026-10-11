@@ -182,8 +182,41 @@ def _unregister_ours(bus) -> None:
 _READBACK_WAITS = (0.1, 0.2, 0.3, 0.4)
 
 
-def _log_refused(bus, shortcuts) -> None:
-    """Say which hotkeys KDE would not give us (already another shortcut's)."""
+def result_path() -> str:
+    """Where the last claim's outcome is saved for Preferences, next to the
+    settings (so the dev and AppImage builds keep their own)."""
+    from .config import CONFIG_PATH
+    return os.path.join(os.path.dirname(CONFIG_PATH), "kde-hotkeys.json")
+
+
+def _save_result(refused) -> None:
+    """Record which keys KDE refused, and when. Preferences reads it after a
+    hotkey change; until 0.14.6 the warning only reached the log."""
+    import json
+    try:
+        with open(result_path(), "w") as f:
+            json.dump({"checked": time.time(), "refused": refused}, f)
+    except OSError as e:
+        logger.debug(f"Could not save the KDE hotkey result: {e}")
+
+
+def refused_since(since):
+    """Keys KDE refused at the last claim, if that was after *since* (a
+    time.time()); None when there's no such result yet."""
+    import json
+    try:
+        with open(result_path()) as f:
+            data = json.load(f)
+        if float(data["checked"]) < since:
+            return None
+        return [str(k) for k in data["refused"]]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def _log_refused(bus, shortcuts) -> list:
+    """Say which hotkeys KDE would not give us (already another shortcut's),
+    and return them."""
     waits = list(_READBACK_WAITS)
     while True:
         try:
@@ -193,7 +226,7 @@ def _log_refused(bus, shortcuts) -> None:
             got = {str(i[0]): list(i[6]) for i in infos}
         except Exception as e:
             logger.debug(f"Could not read back KWin shortcuts: {e}")
-            return
+            return []
         missing = [s for s in shortcuts if not got.get(s[0])]
         if not missing or not waits:
             break
@@ -202,6 +235,7 @@ def _log_refused(bus, shortcuts) -> None:
         logger.warning(
             f"KDE already uses {key} for another shortcut, so it will still "
             f"reach the focused app as well as starting dictation")
+    return [key for _name, _text, key in missing]
 
 
 def claim(cfg, bus=None) -> bool:
@@ -230,7 +264,7 @@ def claim(cfg, bus=None) -> bool:
     except Exception as e:
         logger.warning(f"Could not register the hotkeys with KWin: {e}")
         return False
-    _log_refused(bus, shortcuts)
+    _save_result(_log_refused(bus, shortcuts))
     logger.info("KWin now holds the hotkeys back from the focused app: "
                 + ", ".join(k for _n, _t, k in shortcuts))
     return True

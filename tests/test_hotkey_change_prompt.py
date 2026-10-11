@@ -1,0 +1,45 @@
+"""After a hotkey change, Preferences offers the hotkey test and says when
+KDE already uses the key (Ron, 0.14.6: first run tests the key, but a key
+changed later was simply accepted, and KDE's refusal only reached the log)."""
+import pytest
+
+pytest.importorskip("gi")
+from talktype.prefs import hotkey_change_message, hotkey_label  # noqa: E402
+
+CFG = {"hotkey": "F7", "toggle_hotkey": "F9", "voice_commands_hotkey": "Ctrl+Alt+V"}
+
+
+def test_a_new_hold_key_offers_the_test_and_warns_about_laptop_fn_keys():
+    text, offer_test = hotkey_change_message(CFG, {"hotkey"}, [])
+    assert offer_test and "hold-to-talk key is now F7" in text and "Fn" in text
+
+
+def test_both_keys_are_named():
+    text, _ = hotkey_change_message(CFG, {"hotkey", "toggle_hotkey"}, None)
+    assert "F7" in text and "F9" in text
+
+
+def test_a_key_kde_already_uses_is_said_on_screen():
+    text, offer_test = hotkey_change_message(CFG, {"hotkey"}, ["F7"])
+    assert offer_test and "KDE already uses F7" in text
+
+
+def test_only_the_voice_commands_key_changed_has_no_test_to_offer():
+    assert hotkey_change_message(CFG, {"voice_commands_hotkey"}, []) is None
+    text, offer_test = hotkey_change_message(CFG, {"voice_commands_hotkey"}, ["Ctrl+Alt+V"])
+    assert not offer_test and "KDE already uses Ctrl+Alt+V" in text
+
+
+def test_no_hotkey_change_says_nothing():
+    assert hotkey_change_message(CFG, {"model"}, ["F7"]) is None
+
+
+def test_keys_apps_already_use_are_labelled_in_the_dropdowns():
+    assert hotkey_label("F5") == "F5 (reloads the page in browsers)"
+    assert hotkey_label("F8") == "F8"
+
+
+def test_kdes_meta_spelling_maps_back_to_super():
+    cfg = dict(CFG, voice_commands_hotkey="Ctrl+Super+V")
+    text, _ = hotkey_change_message(cfg, {"voice_commands_hotkey"}, ["Ctrl+Meta+V"])
+    assert "KDE already uses Ctrl+Super+V" in text

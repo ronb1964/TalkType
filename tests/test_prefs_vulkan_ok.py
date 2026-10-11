@@ -47,6 +47,7 @@ def test_ok_closes_after_a_model_download(prefs_cls, monkeypatch):
         _changed_since_open=lambda: {"model"},
         _download_selected_model=lambda: True,  # downloaded fine
         _apply_or_restart=lambda changed: True,
+        _after_hotkey_change=lambda changed, since: False,
         _stop_mic_test=lambda: None,
         _release_pidfile=lambda: None,
         window=SimpleNamespace(destroy=lambda: closed.append(True)),
