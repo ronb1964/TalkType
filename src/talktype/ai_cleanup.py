@@ -100,8 +100,15 @@ _RE_CORRECTION = re.compile(
 # "Order two boxes of screws. No, wait, three boxes." Such a sentence is sent
 # to the AI together with the one before it.
 # Group 1 is the phrase; the match runs on over the punctuation after it.
+# People stack these: "No, actually, make that four", "Sorry, I mean blue".
+# Leading "no", "actually", "sorry" and "wait" may come before the phrase
+# itself, but never stand in for it, so "No problem" opens nothing. Without
+# the stack, the second sentence reached the AI alone and nothing was fixed
+# (Ron, 0.14.6 test). Not "oh": "Thanks. Oh, I mean it, it helped." was
+# joined and the AI dropped "I mean it" (real model, 2026-10-11).
 _RE_OPENS_WITH_CORRECTION = re.compile(
-    r"(?i)^\W*(no,? wait|wait,? no|i mean|make that|scratch that|or rather|actually(?=,)|sorry(?=,))"
+    r"(?i)^\W*((?:(?:no|actually|sorry|wait)[,.!]?\s+)*"
+    r"(?:no,? wait|wait,? no|i mean|make that|scratch that|or rather|actually(?=,)|sorry(?=,)))"
     r"[.,!?]*\s*")
 
 
@@ -542,8 +549,7 @@ def _join_split_correction(before: str, correction: str) -> str:
     if not m:                       # the value after a bare "No wait." sentence
         return f"{before} {correction}"
     cue = m.group(1).replace(",", "").lower()
-    if cue.startswith("i "):
-        cue = "I" + cue[1:]
+    cue = re.sub(r"\bi\b", "I", cue)        # "sorry I mean", not "sorry i mean"
     return f"{before.rstrip('.!? ')}, {cue}, {correction[m.end():]}".rstrip()
 
 

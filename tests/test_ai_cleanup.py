@@ -281,3 +281,31 @@ def test_an_unfixed_actually_keeps_its_original_punctuation():
     """No comma is ever added to what was spoken; the AI's join is its own."""
     text = "Paint it white. Actually paint it gray. "
     assert ai.fix_self_corrections(text, FakeEngine({})) == text
+
+
+@pytest.mark.parametrize("said,asked", [
+    # Ron, 0.14.6 test: two correction phrases in a row, and nothing was fixed.
+    ("Meet me at three o'clock. No, actually, make that four o'clock.",
+     "Meet me at three o'clock, no actually make that, four o'clock."),
+    ("Meet me at three o'clock. Actually make that four o'clock.",
+     "Meet me at three o'clock, actually make that, four o'clock."),
+    ("Pick up the red paint. Sorry, I mean the blue paint.",
+     "Pick up the red paint, sorry I mean, the blue paint."),
+])
+def test_stacked_correction_phrases_are_joined_too(said, asked):
+    """Measured on the real model (2026-10-11): fixed once joined, not
+    before, while ordinary sentences opening with "No," "Sorry," or
+    "Actually," stayed as spoken."""
+    engine = FakeEngine({})
+    ai.fix_self_corrections(said, engine)
+    assert engine.asked == [asked]
+
+
+@pytest.mark.parametrize("sentence", [
+    "I'll call you back. No problem at all.",      # "No" alone opens nothing
+    "That works. Oh, and bring the drill.",
+    # Joined, the real model dropped the "I mean it" that was meant.
+    "Thanks for coming. Oh, I mean it, it really helped.",
+])
+def test_a_plain_no_or_oh_is_not_a_correction_opener(sentence):
+    assert not ai._RE_OPENS_WITH_CORRECTION.match(sentence.split(". ", 1)[1])
