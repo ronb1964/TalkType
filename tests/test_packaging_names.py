@@ -43,7 +43,11 @@ def test_deb_and_rpm_replace_the_talktype_package():
                      '--provides "talktype"'):
             assert flag in s, (name, flag)
         assert 'ln -s tuxtalk "$STAGE/usr/bin/talktype"' in s, name
-        assert 'mv "$TREE" "$STAGE/opt/tuxtalk"' in s, name
+        # The install folder keeps its pre-rename name: upgrades then replace
+        # files in place, like every earlier one, instead of deleting the
+        # folder a running 0.14.x tray still imports from (review finding 6).
+        assert 'mv "$TREE" "$STAGE/opt/talktype"' in s, name
+        assert "exec /opt/talktype/AppRun" in s, name
 
 
 def test_aur_package_replaces_talktype_appimage():

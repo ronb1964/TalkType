@@ -11,14 +11,14 @@
 #   rather than maintaining a second, divergent build. Run build-release.sh FIRST.
 #
 # Layout produced:
-#   /opt/tuxtalk/            <- the whole extracted AppImage tree (AppRun + usr/)
-#   /usr/bin/tuxtalk         <- tiny launcher: exec /opt/tuxtalk/AppRun "$@"
+#   /opt/talktype/            <- the whole extracted AppImage tree (AppRun + usr/)
+#   /usr/bin/tuxtalk         <- tiny launcher: exec /opt/talktype/AppRun "$@"
 #   /usr/share/applications/  <- desktop entry (Exec=tuxtalk tray)
 #   /usr/share/pixmaps/       <- icon
 #
 # System deps are DECLARED (not bundled): the bundle relies on the host's GTK stack.
 #   libgtk-3-0, libayatana-appindicator3-1 (tray), libportaudio2 (mic).
-#   ydotool + wl-clipboard ARE bundled inside /opt/tuxtalk, so they are not declared.
+#   ydotool + wl-clipboard ARE bundled inside /opt/talktype, so they are not declared.
 #
 # Requires: fpm (gem install --user-install fpm) and ar/tar (binutils/coreutils).
 # Builds fine on a non-Debian host (Fedora/Nobara) — no dpkg-deb needed.
@@ -64,21 +64,24 @@ echo "🏗️  Staging the .deb filesystem..."
 STAGE="$WORK/stage"
 mkdir -p "$STAGE/opt" "$STAGE/usr/bin" "$STAGE/usr/share/applications" "$STAGE/usr/share/pixmaps"
 
-# The whole tree goes to /opt/tuxtalk. AppRun sits at /opt/tuxtalk/AppRun and derives
+# The whole tree goes to /opt/talktype. AppRun sits at /opt/talktype/AppRun and derives
 # its paths relative to itself (${HERE}/usr/...), so it works unchanged at this location.
-mv "$TREE" "$STAGE/opt/tuxtalk"
+# The folder keeps its name from before the 0.15.0 rename (nobody sees it):
+# upgrades then replace files in place, like every earlier one, instead of
+# deleting the folder a running 0.14.x tray still imports from.
+mv "$TREE" "$STAGE/opt/talktype"
 
 # Third-party licenses ride inside the AppImage's tree (packaging/collect-licenses.sh).
 # Refuse to package an AppImage built without them.
-LIC_SRC="$STAGE/opt/tuxtalk/usr/share/licenses"
+LIC_SRC="$STAGE/opt/talktype/usr/share/licenses"
 for f in tuxtalk/LICENSE tuxtalk/THIRD_PARTY_LICENSES.md ydotool/LICENSE wl-clipboard/COPYING; do
     [ -f "$LIC_SRC/$f" ] || { echo "❌ The AppImage has no $f: rebuild it with ./build-release.sh"; exit 1; }
 done
 # Debian keeps a package's license in /usr/share/doc/<package>/copyright.
 mkdir -p "$STAGE/usr/share/doc/tuxtalk"
 { cat "$LIC_SRC/tuxtalk/LICENSE"; echo
-  echo "TuxTalk bundles third-party software under /opt/tuxtalk. Its licenses are in"
-  echo "/opt/tuxtalk/usr/share/licenses/; THIRD_PARTY_LICENSES.md here lists them."
+  echo "TuxTalk bundles third-party software under /opt/talktype. Its licenses are in"
+  echo "/opt/talktype/usr/share/licenses/; THIRD_PARTY_LICENSES.md here lists them."
 } > "$STAGE/usr/share/doc/tuxtalk/copyright"
 cp "$LIC_SRC/tuxtalk/THIRD_PARTY_LICENSES.md" "$STAGE/usr/share/doc/tuxtalk/"
 
@@ -87,7 +90,7 @@ cat > "$STAGE/usr/bin/tuxtalk" <<'LAUNCHER'
 #!/bin/sh
 # TuxTalk system launcher — hands off to the bundled AppRun, which sets
 # PYTHONHOME/PYTHONPATH/LD_LIBRARY_PATH/GI_TYPELIB_PATH relative to itself.
-exec /opt/tuxtalk/AppRun "$@"
+exec /opt/talktype/AppRun "$@"
 LAUNCHER
 chmod +x "$STAGE/usr/bin/tuxtalk"
 # The command before the 0.15.0 rename: old shortcuts, scripts and a 0.14.x

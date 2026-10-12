@@ -10,15 +10,15 @@
 # Run ./build-release.sh FIRST.
 #
 # Layout produced (identical to the .deb):
-#   /opt/tuxtalk/            <- the whole extracted AppImage tree (AppRun + usr/)
-#   /usr/bin/tuxtalk         <- tiny launcher: exec /opt/tuxtalk/AppRun "$@"
+#   /opt/talktype/            <- the whole extracted AppImage tree (AppRun + usr/)
+#   /usr/bin/tuxtalk         <- tiny launcher: exec /opt/talktype/AppRun "$@"
 #   /usr/share/applications/  <- desktop entry (Exec=tuxtalk tray)
 #   /usr/share/icons/hicolor/scalable/apps/  <- crisp SVG icon
 #   /usr/share/pixmaps/       <- PNG icon fallback
 #
 # System deps are DECLARED (the bundle relies on the host's GTK stack). Fedora names:
 #   gtk3, libayatana-appindicator-gtk3 (tray), portaudio (mic).
-#   ydotool + wl-clipboard ARE bundled inside /opt/tuxtalk, so they are not declared.
+#   ydotool + wl-clipboard ARE bundled inside /opt/talktype, so they are not declared.
 #
 # Requires: fpm (gem install --user-install fpm) and rpmbuild (rpm-build package).
 
@@ -64,13 +64,16 @@ echo "🏗️  Staging the .rpm filesystem..."
 STAGE="$WORK/stage"
 mkdir -p "$STAGE/opt" "$STAGE/usr/bin" "$STAGE/usr/share/applications" "$STAGE/usr/share/pixmaps"
 
-# Whole tree -> /opt/tuxtalk. AppRun sits at /opt/tuxtalk/AppRun and derives its
+# Whole tree -> /opt/talktype. AppRun sits at /opt/talktype/AppRun and derives its
 # paths relative to itself, so it works unchanged at this location.
-mv "$TREE" "$STAGE/opt/tuxtalk"
+# The folder keeps its name from before the 0.15.0 rename (nobody sees it):
+# upgrades then replace files in place, like every earlier one, instead of
+# deleting the folder a running 0.14.x tray still imports from.
+mv "$TREE" "$STAGE/opt/talktype"
 
 # Third-party licenses ride inside the AppImage's tree (packaging/collect-licenses.sh).
 # Refuse to package an AppImage built without them.
-LIC_SRC="$STAGE/opt/tuxtalk/usr/share/licenses"
+LIC_SRC="$STAGE/opt/talktype/usr/share/licenses"
 for f in tuxtalk/LICENSE tuxtalk/THIRD_PARTY_LICENSES.md ydotool/LICENSE wl-clipboard/COPYING; do
     [ -f "$LIC_SRC/$f" ] || { echo "❌ The AppImage has no $f: rebuild it with ./build-release.sh"; exit 1; }
 done
@@ -83,7 +86,7 @@ cat > "$STAGE/usr/bin/tuxtalk" <<'LAUNCHER'
 #!/bin/sh
 # TuxTalk system launcher — hands off to the bundled AppRun, which sets
 # PYTHONHOME/PYTHONPATH/LD_LIBRARY_PATH/GI_TYPELIB_PATH relative to itself.
-exec /opt/tuxtalk/AppRun "$@"
+exec /opt/talktype/AppRun "$@"
 LAUNCHER
 chmod +x "$STAGE/usr/bin/tuxtalk"
 # The command before the 0.15.0 rename: old shortcuts, scripts and a 0.14.x

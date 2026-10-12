@@ -622,7 +622,7 @@ def get_install_type(*, appimage_env=None, flatpak_env=None,
       'flatpak'  — running inside a Flatpak sandbox
       'aur'      — pacman-managed AppImage at a system path (/opt, /usr)
       'appimage' — self-managed AppImage the app may swap in place
-      'rpm'/'deb'/'package' — extracted package tree under /opt/tuxtalk
+      'rpm'/'deb'/'package' — extracted package tree under /opt/talktype
       'dev'      — running from a source checkout
     All inputs are injectable for testing; by default they read the real env.
     """
