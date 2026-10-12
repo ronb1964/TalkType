@@ -630,3 +630,27 @@ def test_punctuation_after_a_line_break_command_goes_with_it(said):
 ])
 def test_a_spoken_address_is_lower_case(said, expected):
     assert normalize_text(said) == expected
+
+
+# --- hour and minutes run together ("641 p.m.") --------------------------------
+# Parakeet writes the same spoken time different ways: "6.41 p.m." one time,
+# "641 p.m." the next. The first became 6:41 PM; the second was typed as is.
+
+@pytest.mark.parametrize("heard, typed", [
+    ("So your 641 p.m. draft is what we sent.", "So your 6:41 PM draft is what we sent."),
+    ("meet at 1130 a.m. sharp", "Meet at 11:30 AM sharp."),
+    ("lunch at 115 p.m. today", "Lunch at 1:15 PM today."),
+    ("it starts at 1015 am", "It starts at 10:15 AM."),
+])
+def test_run_together_times_get_their_colon(heard, typed):
+    assert normalize_text(heard).rstrip() == typed
+
+
+@pytest.mark.parametrize("heard, number", [
+    ("we sold 2000 pm units", "2000"),         # not an hour and minutes
+    ("the 1365 a.m. broadcast", "1365"),
+    ("about 675 p.m. readings", "675"),       # 75 minutes is no time
+])
+def test_numbers_that_cannot_be_times_are_left_alone(heard, number):
+    out = normalize_text(heard)
+    assert number in out and ":" not in out

@@ -35,6 +35,9 @@ Also new in this one:
   into TuxTalk. Heads up, Parakeet can't be told about words ahead of time, so
   if it hears one as something else entirely, Fix a Word is still the way.
   Words you fix with Fix a Word get added to Your Words too.
+- Times like "6:41 p.m." sometimes came out as "641 p.m.", with no colon. Turns
+  out Parakeet writes the same time two different ways, and only one of them
+  was getting fixed. Both come out as 6:41 PM now.
 
 ## [0.14.6] - 2026-10-11
 

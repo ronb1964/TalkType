@@ -356,8 +356,11 @@ _FILE_EXTENSIONS = (
 )
 _RE_FILE_EXT = re.compile(rf"\.(?:{_FILE_EXTENSIONS})\b", re.IGNORECASE)
 
+# Minutes may also come run together with the hour: Parakeet writes a spoken
+# "six forty-one p.m." as "6.41 p.m." one time and "641 p.m." the next. Only an
+# hour of 1-12 and minutes of 00-59 count, so "2000 pm" is left alone.
 _RE_TIME_FORMAT = re.compile(
-    r'\b(1[0-2]|0?[1-9])(?:[.:]\s*([0-5][0-9]))?\s+([Pp]\.?\s*[Mm]\.?|[Aa]\.?\s*[Mm]\.?)(?![A-Za-z])',
+    r'\b(1[0-2]|0?[1-9])(?:[.:]\s*([0-5][0-9])|([0-5][0-9]))?\s+([Pp]\.?\s*[Mm]\.?|[Aa]\.?\s*[Mm]\.?)(?![A-Za-z])',
     re.IGNORECASE
 )
 
@@ -378,8 +381,8 @@ def _fix_time_ampm(m: re.Match) -> str:
     missing full stop between two sentences merely reads a little short.
     """
     hour = m.group(1)
-    minute = m.group(2)  # None if no minutes were present
-    raw_ampm = m.group(3)
+    minute = m.group(2) or m.group(3)  # "6.41" / "641"; None if no minutes
+    raw_ampm = m.group(4)
     ampm = re.sub(r'[\s.]', '', raw_ampm).upper()  # "p. m." / "p. M." → "PM"
 
     following = m.string[m.end():].strip()
