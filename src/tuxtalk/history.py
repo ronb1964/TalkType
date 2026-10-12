@@ -82,6 +82,12 @@ def clear():
         logger.warning(f"Could not clear dictation history: {e}")
 
 
+def paste_last_hint(hotkey):
+    """The Recent Dictations menu's line about the Paste Last Dictation
+    hotkey (config paste_last_hotkey), or None when it is turned off."""
+    return f"{hotkey} types the newest one again" if hotkey else None
+
+
 def full_text_lines(text, width=60, max_lines=10):
     """*text* wrapped into menu-sized lines, for the hover view in the tray.
 

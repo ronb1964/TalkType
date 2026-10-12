@@ -90,6 +90,7 @@ def test_failed_notice_names_the_cause_and_restarts_a_stopped_helper(monkeypatch
 
 def test_failed_notice_without_a_known_cause_is_unchanged(monkeypatch):
     from tuxtalk import app
+    monkeypatch.setattr(app, "_paste_last_hotkey", "")   # its hint is tested in test_paste_last
     shown = []
     monkeypatch.setattr(app, "_notify", lambda title, body: shown.append(body))
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)

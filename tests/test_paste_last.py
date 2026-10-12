@@ -139,3 +139,105 @@ def test_preferences_offers_it():
     prefs = (pathlib.Path(app.__file__).parent / "prefs.py").read_text()
     assert '"paste_last_hotkey"' in prefs
     assert "Paste Last Dictation" in prefs
+
+
+# --- telling people it exists ------------------------------------------------------
+# Where they'd need it: the "couldn't type that" notification, the Recent
+# Dictations menu, and the tips at the end of first-time setup.
+
+import pathlib
+
+SRC = pathlib.Path(app.__file__).parent
+
+
+@pytest.mark.parametrize("outcome", ["failed", "partial"])
+def test_the_undelivered_notice_offers_the_hotkey(outcome, monkeypatch):
+    told = []
+    monkeypatch.setattr(app, "_notify", lambda title, msg: told.append(msg))
+    monkeypatch.setattr(app, "_beep", lambda *a: None)
+    monkeypatch.setattr(app, "_paste_last_hotkey", "Ctrl+Alt+P")
+    import tuxtalk.uinput_helper as uh
+    monkeypatch.setattr(uh, "typing_blocked_reason", lambda: None)
+    app._report_undelivered(outcome, False)
+    assert "Or press Ctrl+Alt+P to type it again where your cursor is." in told[0]
+
+
+def test_no_hint_when_the_hotkey_is_off(monkeypatch):
+    told = []
+    monkeypatch.setattr(app, "_notify", lambda title, msg: told.append(msg))
+    monkeypatch.setattr(app, "_beep", lambda *a: None)
+    monkeypatch.setattr(app, "_paste_last_hotkey", "")
+    import tuxtalk.uinput_helper as uh
+    monkeypatch.setattr(uh, "typing_blocked_reason", lambda: None)
+    app._report_undelivered("failed", False)
+    assert "Ctrl+Alt+P" not in told[0]
+
+
+def test_the_hint_text():
+    assert history.paste_last_hint("Ctrl+Super+P") == "Ctrl+Super+P types the newest one again"
+    assert history.paste_last_hint("") is None
+
+
+def test_the_recent_dictations_menu_says_so_in_both_menus():
+    tray = (SRC / "tray.py").read_text()
+    assert "paste_last_hint(" in tray
+    ext = next((SRC.parent.parent / "gnome-extension").glob("*/extension.js")).read_text()
+    assert "GetPasteLastHotkey" in ext and "types the newest one again" in ext
+
+
+def test_the_tray_tells_the_extension_the_key(monkeypatch):
+    from tuxtalk import dbus_service
+    monkeypatch.setattr(config, "load_config", lambda: config.Settings(paste_last_hotkey="Ctrl+Super+P"))
+    assert dbus_service.TuxTalkDBusService.GetPasteLastHotkey(object()) == "Ctrl+Super+P"
+
+
+def test_the_setup_tips_mention_it():
+    welcome = (SRC / "welcome_dialog.py").read_text()
+    assert "to type it again" in welcome and "paste_last_hotkey" in welcome
+
+
+def _labels(widget):
+    """Every label's text inside a GTK widget or menu."""
+    from gi.repository import Gtk
+    out = []
+    if isinstance(widget, Gtk.Label):
+        out.append(widget.get_text())
+    if isinstance(widget, Gtk.MenuItem) and widget.get_label():
+        out.append(widget.get_label())
+    if isinstance(widget, Gtk.Container):
+        for child in widget.get_children():
+            out += _labels(child)
+    return out
+
+
+def test_the_tray_menu_line_really_appears(monkeypatch):
+    """Runs the real menu code: a missing import here only fails when a user
+    opens Recent Dictations."""
+    import types
+    import gi
+    gi.require_version("Gtk", "3.0")
+    from gi.repository import Gtk
+    from tuxtalk import tray
+    monkeypatch.setattr(config, "load_config", lambda: config.Settings(paste_last_hotkey="Ctrl+Alt+P"))
+    monkeypatch.setattr(history, "get_entries", lambda: ["Hello there."])
+    fake = types.SimpleNamespace(history_menu=Gtk.Menu(),
+                                 _build_history_entry_submenu=lambda text, i: Gtk.Menu(),
+                                 _clear_history=lambda: None)
+    tray.DictationTray._refresh_history_menu(fake)
+    assert "Ctrl+Alt+P types the newest one again" in _labels(fake.history_menu)
+
+
+def test_the_setup_tip_really_appears(monkeypatch):
+    import gi
+    gi.require_version("Gtk", "3.0")
+    from gi.repository import Gtk
+    from tuxtalk import welcome_dialog
+    monkeypatch.setattr(config, "load_config", lambda: config.Settings(paste_last_hotkey="Ctrl+Alt+P"))
+    seen = []
+
+    def fake_run(dialog):
+        seen.extend(_labels(dialog))
+        return Gtk.ResponseType.OK
+    monkeypatch.setattr(Gtk.Dialog, "run", fake_run)
+    welcome_dialog.show_tips_and_features_dialog()
+    assert any("Press Ctrl+Alt+P to type it again" in text for text in seen)

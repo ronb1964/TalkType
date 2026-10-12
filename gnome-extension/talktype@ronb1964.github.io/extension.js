@@ -66,6 +66,9 @@ const TuxTalkIface = `
     <method name="GetRecentDictations">
       <arg type="as" direction="out" name="entries"/>
     </method>
+    <method name="GetPasteLastHotkey">
+      <arg type="s" direction="out" name="hotkey"/>
+    </method>
     <method name="ClearRecentDictations"/>
     <method name="FixWordInDictation"/>
     <method name="OpenPreferences"/>
@@ -507,6 +510,15 @@ class TuxTalkIndicator extends PanelMenu.Button {
             }
             menu.addMenuItem(new PopupMenu.PopupMenuItem(
                 'Click one to copy it, then press Ctrl+V', {reactive: false}));
+            // The Paste Last Dictation hotkey, as in the tray's menu. Placed
+            // second when the answer comes; an older tray without the method
+            // just leaves it out.
+            this._proxy.GetPasteLastHotkeyRemote((res, err) => {
+                const key = (!err && res) ? res[0] : '';
+                if (key)
+                    menu.addMenuItem(new PopupMenu.PopupMenuItem(
+                        `${key} types the newest one again`, {reactive: false}), 1);
+            });
             for (const text of entries) {
                 // GNOME cannot nest a submenu inside this one (it unfolds in
                 // place), so instead of the tray's hover view each entry shows

@@ -2128,6 +2128,15 @@ def show_tips_and_features_dialog(extension_installed=False):
         ("🎤 <b>Voice Commands</b>", "Say \"period\", \"comma\", \"new paragraph\" and more to punctuate naturally"),
         ("⚙️ <b>Smart Features</b>", "Auto-punctuation and auto-spacing are enabled by default for smooth dictation"),
         ("🔧 <b>Customize Settings</b>", "Open the TuxTalk menu (tray icon) for Preferences - adjust models, hotkeys, and more"),
+    ]
+    # The Paste Last Dictation hotkey, unless it is turned off.
+    from .config import load_config
+    paste_key = getattr(load_config(), "paste_last_hotkey", "")
+    if paste_key:
+        tips.append(("📋 <b>Wrong Window?</b>",
+                     f"Dictation went to the wrong window? Press <b>{paste_key}</b> "
+                     "to type it again"))
+    tips += [
         ("📖 <b>Learn More</b>", "Click \"Help\" in the tray menu for full documentation and voice command list"),
         ("🚀 <b>Quick Start</b>", "Press your hotkey and start talking - TuxTalk does the rest!")
     ]

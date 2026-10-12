@@ -1824,6 +1824,13 @@ class DictationTray:
             hint = Gtk.MenuItem(label="Hover to read one, click it to copy, then press Ctrl+V")
             hint.set_sensitive(False)
             self.history_menu.append(hint)
+            from .config import load_config
+            from .history import paste_last_hint
+            paste_hint = paste_last_hint(getattr(load_config(), "paste_last_hotkey", ""))
+            if paste_hint:
+                hint2 = Gtk.MenuItem(label=paste_hint)
+                hint2.set_sensitive(False)
+                self.history_menu.append(hint2)
             for index, text in enumerate(entries):
                 # Each entry opens a submenu with the full text on hover. A
                 # tooltip would be simpler, but KDE draws this menu itself from

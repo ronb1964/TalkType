@@ -298,6 +298,13 @@ class TuxTalkDBusService(dbus.service.Object):
         from .history import get_entries
         return get_entries()
 
+    @dbus.service.method(DBUS_INTERFACE, out_signature='s')
+    def GetPasteLastHotkey(self):
+        """The Paste Last Dictation combo ("" when off), so the GNOME
+        extension's Recent Dictations menu can mention it like the tray's."""
+        from . import config
+        return getattr(config.load_config(), "paste_last_hotkey", "") or ""
+
     @dbus.service.method(DBUS_INTERFACE)
     def ClearRecentDictations(self):
         """Forget every recent dictation."""

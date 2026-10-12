@@ -45,6 +45,9 @@ _clipboard_keeper = None        # clipboard.ClipboardKeeper, created on the firs
 # start_recording never pause anyone's music; refreshed with the live settings.
 _pause_media = False
 _media_pauser = None            # media_pause.MediaPauser, created on the first pause
+# The Paste Last Dictation combo (config paste_last_hotkey), for the "couldn't
+# type that" notice; refreshed with the live settings. "" when turned off.
+_paste_last_hotkey = ""
 
 
 def _pause_media_players():
@@ -1088,6 +1091,9 @@ def _reload_live_settings(cfg, indicator):
 
         global _pause_media
         _pause_media = getattr(cfg, "pause_media", True)
+
+        global _paste_last_hotkey
+        _paste_last_hotkey = getattr(cfg, "paste_last_hotkey", "")
 
         _apply_cleanup_settings(cfg)
 
@@ -2698,6 +2704,8 @@ def _report_undelivered(outcome: str, beeps_on: bool):
                            "in the TuxTalk menu: click it to copy, then paste with Ctrl+V.")
         except Exception as e:
             logger.debug(f"Couldn't work out why typing failed: {e}")
+    if _paste_last_hotkey:
+        message += f" Or press {_paste_last_hotkey} to type it again where your cursor is."
     print(f"⚠️  {message}")
     logger.warning(f"Dictation not delivered ({outcome}); told the user")
     _beep(beeps_on, *CANCEL_BEEP)
@@ -3645,6 +3653,8 @@ def main():
     _restore_clipboard = getattr(cfg, 'restore_clipboard', False)
     global _pause_media
     _pause_media = getattr(cfg, 'pause_media', True)
+    global _paste_last_hotkey
+    _paste_last_hotkey = getattr(cfg, 'paste_last_hotkey', '')
 
     # Dictation cleanup; the AI engine (if on) loads in the background.
     _apply_cleanup_settings(cfg)
