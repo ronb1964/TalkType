@@ -1952,6 +1952,13 @@ def main():
     from . import MIGRATION_LOG
     for line in MIGRATION_LOG:
         logger.info(f"Rename to TuxTalk: {line}")
+    if not os.environ.get("FLATPAK_ID"):
+        from . import config, rename_migration
+        try:
+            for line in rename_migration.adopt_old_install(dev=config.DEV_MODE):
+                logger.info(f"Rename to TuxTalk: {line}")
+        except Exception as e:      # never stop the tray from starting
+            logger.warning(f"Rename to TuxTalk: could not move the launchers: {e}")
 
     # A copy of the settings to roll back to (Preferences → Advanced →
     # Restore Earlier Settings), taken before this version touches them.

@@ -87,3 +87,65 @@ def run_at_startup(environ=None, home=None):
         return migrate(home=home, dev=environ.get("DEV_MODE") == "1")
     except Exception as e:      # never stop the app from starting
         return [f"rename migration failed: {e}"]
+
+
+def _rewrite_entry(text, dev):
+    """A TalkType .desktop entry with TuxTalk's name, AppImage and description.
+    Everything else (launch-at-login on or off above all) is kept as it was."""
+    from .autostart import AUTOSTART_COMMENT, AUTOSTART_COMMENT_DEV, _OLD_COMMENTS
+    out = []
+    for line in text.splitlines(keepends=True):
+        if line.startswith("Name=TalkType"):
+            line = "Name=TuxTalk" + line[len("Name=TalkType"):]
+        elif line.startswith("Exec="):
+            line = line.replace("/TalkType.AppImage", "/TuxTalk.AppImage")
+        elif line.rstrip("\n") in (f"Comment={c}" for c in _OLD_COMMENTS):
+            line = f"Comment={AUTOSTART_COMMENT_DEV if dev else AUTOSTART_COMMENT}\n"
+        out.append(line)
+    return "".join(out)
+
+
+def adopt_old_install(home=None, dev=False):
+    """Move an installed TalkType's AppImage, menu launcher and launch-at-login
+    entry to TuxTalk's names. Called by the tray on start; returns log lines.
+
+    A 0.14.x updater saves the new version as ~/AppImages/TalkType.AppImage and
+    restarts it, so this is how an updated install ends up fully renamed. The
+    AppImage is renamed (safe while it runs) and a symlink keeps the old path
+    working; an existing TuxTalk.AppImage is never overwritten. The .desktop
+    entries are rewritten under the new name and the old ones removed, so the
+    menu never lists both and login never starts both.
+    """
+    home = home or os.path.expanduser("~")
+    done = []
+    if not dev:
+        old = os.path.join(home, "AppImages", "TalkType.AppImage")
+        new = os.path.join(home, "AppImages", "TuxTalk.AppImage")
+        if os.path.isfile(old) and not os.path.islink(old) and not os.path.lexists(new):
+            try:
+                os.rename(old, new)
+                os.symlink(new, old)
+                done.append("renamed ~/AppImages/TalkType.AppImage to TuxTalk.AppImage")
+            except OSError as e:
+                done.append(f"could not rename the AppImage: {e}")
+    suffix = "-dev" if dev else ""
+    for folder in (".config/autostart", ".local/share/applications"):
+        old = os.path.join(home, folder, f"talktype{suffix}.desktop")
+        new = os.path.join(home, folder, f"tuxtalk{suffix}.desktop")
+        if not os.path.isfile(old):
+            continue
+        try:
+            if not os.path.exists(new):
+                with open(old) as f:
+                    text = _rewrite_entry(f.read(), dev)
+                tmp = new + ".tmp"
+                with open(tmp, "w") as f:
+                    f.write(text)
+                os.replace(tmp, new)
+                done.append(f"moved {folder}/talktype{suffix}.desktop to tuxtalk{suffix}.desktop")
+            else:
+                done.append(f"removed {folder}/talktype{suffix}.desktop (tuxtalk{suffix}.desktop exists)")
+            os.remove(old)
+        except OSError as e:
+            done.append(f"could not move {folder}/talktype{suffix}.desktop: {e}")
+    return done

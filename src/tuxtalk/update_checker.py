@@ -18,24 +18,24 @@ from typing import Optional, Callable, Tuple
 logger = logging.getLogger(__name__)
 
 # GitHub API endpoint for latest release
-GITHUB_API_URL = "https://api.github.com/repos/ronb1964/TalkType/releases/latest"
+GITHUB_API_URL = "https://api.github.com/repos/ronb1964/TuxTalk/releases/latest"
 
 # GitHub raw content URL for fetching extension metadata from a specific tag
-GITHUB_RAW_URL = "https://raw.githubusercontent.com/ronb1964/TalkType"
+GITHUB_RAW_URL = "https://raw.githubusercontent.com/ronb1964/TuxTalk"
 
 # Extension UUID and path
 EXTENSION_UUID = "talktype@ronb1964.github.io"
 
 # Download directory for updates
-UPDATE_DIR = os.path.expanduser("~/.local/share/TalkType/updates")
+UPDATE_DIR = os.path.expanduser("~/.local/share/TuxTalk/updates")
 
 # Standard AppImage install location
 APPIMAGE_DIR = os.path.expanduser("~/AppImages")
-APPIMAGE_NAME = "TalkType.AppImage"
+APPIMAGE_NAME = "TuxTalk.AppImage"
 APPIMAGE_PATH = os.path.join(APPIMAGE_DIR, APPIMAGE_NAME)
 
 # Desktop launcher location
-DESKTOP_FILE_PATH = os.path.expanduser("~/.local/share/applications/talktype.desktop")
+DESKTOP_FILE_PATH = os.path.expanduser("~/.local/share/applications/tuxtalk.desktop")
 
 
 def get_current_version() -> str:
@@ -159,7 +159,7 @@ def fetch_extension_version_from_release(tag: str) -> Optional[int]:
     try:
         request = urllib.request.Request(
             metadata_url,
-            headers={"User-Agent": "TalkType-UpdateChecker"}
+            headers={"User-Agent": "TuxTalk-UpdateChecker"}
         )
 
         with urllib.request.urlopen(request, timeout=10) as response:
@@ -188,13 +188,13 @@ def fetch_release_by_tag(tag: str) -> Optional[dict]:
     if not tag.startswith("v"):
         tag = f"v{tag}"
 
-    url = f"https://api.github.com/repos/ronb1964/TalkType/releases/tags/{tag}"
+    url = f"https://api.github.com/repos/ronb1964/TuxTalk/releases/tags/{tag}"
 
     try:
         request = urllib.request.Request(
             url,
             headers={
-                "User-Agent": "TalkType-UpdateChecker",
+                "User-Agent": "TuxTalk-UpdateChecker",
                 "Accept": "application/vnd.github.v3+json"
             }
         )
@@ -241,7 +241,7 @@ def fetch_latest_release() -> Optional[dict]:
         request = urllib.request.Request(
             GITHUB_API_URL,
             headers={
-                "User-Agent": "TalkType-UpdateChecker",
+                "User-Agent": "TuxTalk-UpdateChecker",
                 "Accept": "application/vnd.github.v3+json"
             }
         )
@@ -381,7 +381,7 @@ def fetch_expected_sha256(checksums_url: str, filename: str) -> Optional[str]:
     try:
         request = urllib.request.Request(
             checksums_url,
-            headers={"User-Agent": "TalkType-UpdateChecker"}
+            headers={"User-Agent": "TuxTalk-UpdateChecker"}
         )
         with urllib.request.urlopen(request, timeout=10) as response:
             sums = parse_sha256sums(response.read().decode("utf-8"))
@@ -461,7 +461,7 @@ def download_update(
             timeout=60,
             progress_hook=progress_hook,
             expected_sha256=expected_sha256,
-            user_agent="TalkType-UpdateChecker",
+            user_agent="TuxTalk-UpdateChecker",
         ):
             if progress_callback:
                 progress_callback("Download failed or file was corrupted", 0)
@@ -582,25 +582,27 @@ def get_running_appimage_path() -> Optional[str]:
 
 def _detect_system_package_manager() -> Optional[str]:
     """Return 'rpm', 'deb', or None by asking the system package DB about
-    talktype, falling back to the distro family from /etc/os-release."""
+    tuxtalk (or talktype, its name before 0.15.0), falling back to the distro
+    family from /etc/os-release."""
     import shutil
     import subprocess
-    try:
-        if shutil.which("rpm"):
-            r = subprocess.run(["rpm", "-q", "talktype"],
-                               capture_output=True, timeout=5)
-            if r.returncode == 0:
-                return "rpm"
-    except Exception:
-        pass
-    try:
-        if shutil.which("dpkg-query"):
-            r = subprocess.run(["dpkg-query", "-W", "talktype"],
-                               capture_output=True, timeout=5)
-            if r.returncode == 0:
-                return "deb"
-    except Exception:
-        pass
+    for pkg in ("tuxtalk", "talktype"):
+        try:
+            if shutil.which("rpm"):
+                r = subprocess.run(["rpm", "-q", pkg],
+                                   capture_output=True, timeout=5)
+                if r.returncode == 0:
+                    return "rpm"
+        except Exception:
+            pass
+        try:
+            if shutil.which("dpkg-query"):
+                r = subprocess.run(["dpkg-query", "-W", pkg],
+                                   capture_output=True, timeout=5)
+                if r.returncode == 0:
+                    return "deb"
+        except Exception:
+            pass
     try:
         with open("/etc/os-release") as f:
             osr = f.read().lower()
@@ -620,7 +622,7 @@ def get_install_type(*, appimage_env=None, flatpak_env=None,
       'flatpak'  — running inside a Flatpak sandbox
       'aur'      — pacman-managed AppImage at a system path (/opt, /usr)
       'appimage' — self-managed AppImage the app may swap in place
-      'rpm'/'deb'/'package' — extracted package tree under /opt/talktype
+      'rpm'/'deb'/'package' — extracted package tree under /opt/tuxtalk
       'dev'      — running from a source checkout
     All inputs are injectable for testing; by default they read the real env.
     """
@@ -635,7 +637,7 @@ def get_install_type(*, appimage_env=None, flatpak_env=None,
         return "flatpak"
     if appimage_env:
         # A real, running AppImage. A system path means it is package-managed
-        # (AUR ships /opt/talktype/TalkType.AppImage); a home path means the
+        # (AUR ships /opt/tuxtalk/TuxTalk.AppImage); a home path means the
         # user manages it themselves and the app may swap it in place.
         if appimage_env.startswith("/opt/") or appimage_env.startswith("/usr/"):
             return "aur"
@@ -644,7 +646,7 @@ def get_install_type(*, appimage_env=None, flatpak_env=None,
         # Mounted AppImage without the APPIMAGE env — treat as self-managed.
         return "appimage"
     if module_path.startswith("/opt/"):
-        # .deb/.rpm ship the extracted tree under /opt/talktype.
+        # .deb/.rpm ship the extracted tree under /opt/tuxtalk.
         return pkg_query() or "package"
     return "dev"
 
@@ -677,7 +679,8 @@ def get_update_guidance(install_type: str, latest_version: str,
         msg = (f"TalkType {v} is available. You installed from the AUR — "
                f"update with your AUR helper:")
     elif install_type == "flatpak":
-        cmd = "flatpak update io.github.ronb1964.TalkType"
+        from .config import APP_ID
+        cmd = f"flatpak update {APP_ID}"
         msg = (f"TalkType {v} is available. Update through Flatpak (your software "
                f"center may also update it automatically):")
     elif install_type == "dev":
@@ -696,9 +699,9 @@ def get_update_guidance(install_type: str, latest_version: str,
 def get_package_asset(release: dict, install_type: str) -> Tuple[Optional[str], Optional[str]]:
     """(download_url, filename) of the .rpm/.deb asset for this install type."""
     if install_type == "rpm":
-        return (release.get("rpm_url"), release.get("rpm_name", "talktype-update.rpm"))
+        return (release.get("rpm_url"), release.get("rpm_name", "tuxtalk-update.rpm"))
     if install_type == "deb":
-        return (release.get("deb_url"), release.get("deb_name", "talktype-update.deb"))
+        return (release.get("deb_url"), release.get("deb_name", "tuxtalk-update.deb"))
     return (None, None)
 
 
@@ -780,10 +783,12 @@ def restart_via_launcher() -> Tuple[bool, str]:
     held, and the new instance wedged. The caller MUST quit cleanly afterwards
     (the tray's quit_app, which stops the service + releases the name/lock);
     this function does NOT exit the current process itself.
-    Only meaningful for package installs (/usr/bin/talktype present)."""
+    Only meaningful for package installs (/usr/bin/tuxtalk present; packages
+    from before 0.15.0 had /usr/bin/talktype)."""
     import shlex
     import subprocess
-    launcher = "/usr/bin/talktype"
+    launcher = next((p for p in ("/usr/bin/tuxtalk", "/usr/bin/talktype")
+                     if os.path.exists(p)), "/usr/bin/tuxtalk")
     if not os.path.exists(launcher):
         return (False, f"Launcher not found at {launcher}; please restart TalkType manually.")
     oldpid = os.getpid()
@@ -890,7 +895,7 @@ def install_update_and_restart(
         # Write a flag so the new version knows it just updated
         # This allows showing a "update complete" message after restart
         try:
-            just_updated_file = os.path.join(os.path.dirname(APPIMAGE_PATH), ".talktype_just_updated")
+            just_updated_file = os.path.join(os.path.dirname(APPIMAGE_PATH), ".tuxtalk_just_updated")
             with open(just_updated_file, "w") as f:
                 from . import __version__
                 f.write(__version__)
@@ -1020,12 +1025,12 @@ def _install_app_icon() -> Optional[str]:
     import sys
 
     icons_base = os.path.expanduser("~/.local/share/icons/hicolor")
-    primary_icon_path = os.path.join(icons_base, "256x256", "apps", "talktype.png")
+    primary_icon_path = os.path.join(icons_base, "256x256", "apps", "tuxtalk.png")
 
     # If icon already installed, just return the name
     if os.path.exists(primary_icon_path):
         logger.debug("TalkType icon already installed")
-        return "talktype"
+        return "tuxtalk"
 
     # Find the source icon
     icon_source = None
@@ -1038,8 +1043,8 @@ def _install_app_icon() -> Optional[str]:
         if appdir:
             possible_paths = [
                 os.path.join(appdir, "io.github.ronb1964.TuxTalk.png"),
-                os.path.join(appdir, "talktype.png"),
-                os.path.join(appdir, "usr", "share", "icons", "hicolor", "256x256", "apps", "talktype.png"),
+                os.path.join(appdir, "tuxtalk.png"),
+                os.path.join(appdir, "usr", "share", "icons", "hicolor", "256x256", "apps", "tuxtalk.png"),
             ]
             for p in possible_paths:
                 if os.path.exists(p):
@@ -1073,7 +1078,7 @@ def _install_app_icon() -> Optional[str]:
 
         for size in icon_sizes:
             icon_dir = os.path.join(icons_base, size, "apps")
-            icon_path = os.path.join(icon_dir, "talktype.png")
+            icon_path = os.path.join(icon_dir, "tuxtalk.png")
 
             # Create icon directory
             os.makedirs(icon_dir, exist_ok=True)
@@ -1103,7 +1108,7 @@ def _install_app_icon() -> Optional[str]:
         except Exception as e:
             logger.debug(f"XDG icon cache update failed (not critical): {e}")
 
-        return "talktype"
+        return "tuxtalk"
 
     except Exception as e:
         logger.warning(f"Could not install TalkType icon: {e}")
@@ -1269,9 +1274,12 @@ def check_just_updated() -> Optional[str]:
     Returns:
         str: Previous version string if just updated, None otherwise
     """
-    just_updated_file = os.path.join(APPIMAGE_DIR, ".talktype_just_updated")
-
-    if not os.path.exists(just_updated_file):
+    # A 0.14.x (TalkType) updater leaves the marker under the old name.
+    for marker in (".tuxtalk_just_updated", ".talktype_just_updated"):
+        just_updated_file = os.path.join(APPIMAGE_DIR, marker)
+        if os.path.exists(just_updated_file):
+            break
+    else:
         return None
 
     try:

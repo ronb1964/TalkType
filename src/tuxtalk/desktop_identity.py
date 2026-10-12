@@ -8,11 +8,11 @@ launcher (.desktop file). Without it every TalkType window reported itself as
 Each install type names its launcher differently, so the name follows the
 install:
 
-  AppImage   ~/.local/share/applications/talktype.desktop  (made at first run)
-  AUR        /usr/share/applications/talktype.desktop
+  AppImage   ~/.local/share/applications/tuxtalk.desktop  (made at first run)
+  AUR        /usr/share/applications/tuxtalk.desktop
   deb / rpm  /usr/share/applications/io.github.ronb1964.TuxTalk.desktop
   Flatpak    io.github.ronb1964.TuxTalk
-  dev        ~/.local/share/applications/talktype-dev.desktop
+  dev        ~/.local/share/applications/tuxtalk-dev.desktop
 
 Call apply() at the start of every process that opens windows (the tray,
 Preferences and the dictation service). It works even after Gtk has been
@@ -23,9 +23,9 @@ from gi.repository import GLib
 from .config import APP_ID  # noqa: E402  (one app ID, defined in config)
 
 _BY_INSTALL_TYPE = {
-    "appimage": "talktype",
-    "aur": "talktype",
-    "dev": "talktype-dev",
+    "appimage": "tuxtalk",
+    "aur": "tuxtalk",
+    "dev": "tuxtalk-dev",
 }
 
 

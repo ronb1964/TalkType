@@ -23,13 +23,13 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 
 @pytest.mark.parametrize("install_type,expected", [
-    ("appimage", "talktype"),
-    ("aur", "talktype"),
+    ("appimage", "tuxtalk"),
+    ("aur", "tuxtalk"),
     ("deb", "io.github.ronb1964.TuxTalk"),
     ("rpm", "io.github.ronb1964.TuxTalk"),
     ("package", "io.github.ronb1964.TuxTalk"),
     ("flatpak", "io.github.ronb1964.TuxTalk"),
-    ("dev", "talktype-dev"),
+    ("dev", "tuxtalk-dev"),
 ])
 def test_name_matches_the_launcher_of_each_install(install_type, expected):
     assert desktop_identity.desktop_id(install_type) == expected
@@ -40,10 +40,10 @@ def test_the_launchers_really_have_those_names():
     rpm = (ROOT / "build-rpm.sh").read_text()
     assert "applications/io.github.ronb1964.TuxTalk.desktop" in deb
     assert "applications/io.github.ronb1964.TuxTalk.desktop" in rpm
-    assert 'install -Dm644 talktype.desktop "${pkgdir}/usr/share/applications/talktype.desktop"' \
+    assert 'install -Dm644 tuxtalk.desktop "${pkgdir}/usr/share/applications/tuxtalk.desktop"' \
         in (ROOT / "aur" / "PKGBUILD").read_text()
     from tuxtalk.update_checker import DESKTOP_FILE_PATH
-    assert DESKTOP_FILE_PATH.endswith("/talktype.desktop")
+    assert DESKTOP_FILE_PATH.endswith("/tuxtalk.desktop")
 
 
 def test_apply_sets_the_program_name(monkeypatch):
@@ -51,7 +51,7 @@ def test_apply_sets_the_program_name(monkeypatch):
     monkeypatch.setattr("tuxtalk.update_checker.get_install_type", lambda: "appimage")
     monkeypatch.setattr(desktop_identity.GLib, "set_prgname", names.append)
     desktop_identity.apply()
-    assert names == ["talktype"]
+    assert names == ["tuxtalk"]
 
 
 def test_apply_never_raises(monkeypatch):

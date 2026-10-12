@@ -19,7 +19,7 @@ provides=('talktype')
 conflicts=('talktype')
 options=('!strip')
 source=("TalkType-v${pkgver}-x86_64.AppImage::https://github.com/ronb1964/TalkType/releases/download/v${pkgver}/TalkType-v${pkgver}-x86_64.AppImage"
-        "talktype.desktop")
+        "tuxtalk.desktop")
 sha256sums=('94f2d980518c4a3df0db28cc07144f1e553f3a7fdbbb80dc74de1f66e018df80'
             'SKIP')
 noextract=("TalkType-v${pkgver}-x86_64.AppImage")
@@ -37,7 +37,7 @@ EOF
     chmod 755 "${pkgdir}/usr/bin/talktype"
 
     # Install desktop file
-    install -Dm644 talktype.desktop "${pkgdir}/usr/share/applications/talktype.desktop"
+    install -Dm644 tuxtalk.desktop "${pkgdir}/usr/share/applications/tuxtalk.desktop"
 
     # Extract and install icon from AppImage.
     #
@@ -62,7 +62,7 @@ EOF
         return 1
     fi
 
-    # Installed as talktype.png to match Icon=talktype in talktype.desktop.
+    # Installed as talktype.png to match Icon=talktype in tuxtalk.desktop.
     install -Dm644 "${_icon}" "${pkgdir}/usr/share/pixmaps/talktype.png"
 
     rm -rf squashfs-root

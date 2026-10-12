@@ -1,0 +1,75 @@
+"""Install paths, launcher names and update URLs after the rename (0.15.0)."""
+import os
+
+from tuxtalk import autostart, config, desktop_identity, update_checker as uc
+
+
+def test_appimage_and_launchers_use_the_new_name(monkeypatch):
+    assert uc.APPIMAGE_NAME == "TuxTalk.AppImage"
+    assert autostart.INSTALLED_APPIMAGE.endswith("/AppImages/TuxTalk.AppImage")
+    assert uc.DESKTOP_FILE_PATH.endswith("/applications/tuxtalk.desktop")
+    monkeypatch.setattr(config, "DEV_MODE", False)
+    assert autostart._autostart_desktop_path().endswith("/autostart/tuxtalk.desktop")
+    monkeypatch.setattr(config, "DEV_MODE", True)
+    assert autostart._autostart_desktop_path().endswith("/autostart/tuxtalk-dev.desktop")
+
+
+def test_window_identity_matches_the_new_launchers():
+    assert desktop_identity.desktop_id("appimage") == "tuxtalk"
+    assert desktop_identity.desktop_id("aur") == "tuxtalk"
+    assert desktop_identity.desktop_id("dev") == "tuxtalk-dev"
+
+
+def test_updates_come_from_the_renamed_repo():
+    assert uc.GITHUB_API_URL == "https://api.github.com/repos/ronb1964/TuxTalk/releases/latest"
+    assert "/.local/share/TuxTalk/" in uc.UPDATE_DIR
+
+
+def test_update_message_shows_after_an_update_from_talktype(tmp_path, monkeypatch):
+    # A 0.14.x updater leaves .talktype_just_updated; the "Update complete"
+    # message must still appear the first time TuxTalk starts.
+    monkeypatch.setattr(uc, "APPIMAGE_DIR", str(tmp_path))
+    (tmp_path / ".talktype_just_updated").write_text("0.14.6")
+    assert uc.check_just_updated() == "0.14.6"
+    assert not (tmp_path / ".talktype_just_updated").exists()
+    (tmp_path / ".tuxtalk_just_updated").write_text("0.15.0")
+    assert uc.check_just_updated() == "0.15.0"
+
+
+def test_appimages_in_downloads_are_found_under_either_name(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("APPIMAGE", raising=False)
+    monkeypatch.setattr(autostart.sys, "executable", "/tmp/.mount_TuxTalk123/usr/bin/python3")
+    d = tmp_path / "Downloads"
+    d.mkdir()
+    a = d / "TuxTalk-v0.15.0-x86_64.AppImage"
+    a.write_text("x")
+    os.chmod(a, 0o755)
+    assert autostart.get_launch_command() == str(a)
+
+
+def test_package_detection_asks_for_tuxtalk_first(monkeypatch):
+    import shutil
+    import subprocess
+    asked = []
+
+    class R:
+        def __init__(self, rc):
+            self.returncode = rc
+
+    def fake_run(cmd, **k):
+        asked.append(cmd[-1])
+        return R(0 if cmd[-1] == "tuxtalk" else 1)
+    monkeypatch.setattr(shutil, "which", lambda n: "/usr/bin/" + n if n == "rpm" else None)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    assert uc._detect_system_package_manager() == "rpm"
+    assert asked[0] == "tuxtalk"
+
+
+def test_package_restart_uses_the_tuxtalk_launcher(monkeypatch):
+    import subprocess
+    started = []
+    monkeypatch.setattr(uc.os.path, "exists", lambda p: p == "/usr/bin/tuxtalk")
+    monkeypatch.setattr(subprocess, "Popen", lambda args, **k: started.append(args))
+    ok, _ = uc.restart_via_launcher()
+    assert ok and "/usr/bin/tuxtalk" in started[0][-1]

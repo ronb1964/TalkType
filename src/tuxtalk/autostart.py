@@ -29,7 +29,7 @@ def _project_root() -> str:
 
 # Where setup installs the AppImage; the Applications-menu launcher points here
 # too (update_checker.create_desktop_launcher).
-INSTALLED_APPIMAGE = os.path.expanduser("~/AppImages/TalkType.AppImage")
+INSTALLED_APPIMAGE = os.path.expanduser("~/AppImages/TuxTalk.AppImage")
 
 
 def get_launch_command(prefer_installed_appimage: bool = False) -> str:
@@ -65,7 +65,9 @@ def get_launch_command(prefer_installed_appimage: bool = False) -> str:
 
     # Inside an AppImage mount but APPIMAGE unset: find the AppImage on disk.
     if '/tmp/.mount_' in sys.executable or 'squashfs-root' in sys.executable:
-        for pattern in (os.path.expanduser('~/AppImages/TalkType-*.AppImage'),
+        for pattern in (os.path.expanduser('~/AppImages/TuxTalk-*.AppImage'),
+                        os.path.expanduser('~/Downloads/TuxTalk-*.AppImage'),
+                        os.path.expanduser('~/AppImages/TalkType-*.AppImage'),
                         os.path.expanduser('~/Downloads/TalkType-*.AppImage')):
             matches = glob.glob(pattern)
             if matches:
@@ -74,13 +76,13 @@ def get_launch_command(prefer_installed_appimage: bool = False) -> str:
                     return latest
 
     # Installed .deb/.rpm: prefer the KNOWN ABSOLUTE launcher, not `which`
-    # (a stray ~/.local/bin/talktype must never be written into autostart).
-    for launcher in ("/usr/bin/talktype", "/usr/bin/dictate-tray"):
+    # (a stray ~/.local/bin/tuxtalk must never be written into autostart).
+    for launcher in ("/usr/bin/tuxtalk", "/usr/bin/talktype", "/usr/bin/dictate-tray"):
         if os.path.isfile(launcher) and os.access(launcher, os.X_OK):
             return launcher
 
     # Non-standard packaged layout: PATH lookup, still preferring the wrapper.
-    for cmd in ("talktype", "dictate-tray"):
+    for cmd in ("tuxtalk", "talktype", "dictate-tray"):
         try:
             result = subprocess.run(['which', cmd], capture_output=True, text=True, timeout=5)
             if result.returncode == 0:
@@ -123,7 +125,7 @@ _OLD_COMMENTS = ("AI-powered dictation for Wayland using Faster-Whisper",
 def _autostart_desktop_path() -> str:
     from . import config
     autostart_dir = os.path.expanduser("~/.config/autostart")
-    filename = "talktype-dev.desktop" if config.DEV_MODE else "talktype.desktop"
+    filename = "tuxtalk-dev.desktop" if config.DEV_MODE else "tuxtalk.desktop"
     return os.path.join(autostart_dir, filename)
 
 
@@ -310,7 +312,7 @@ def repair_stale_appimage_autostart() -> bool:
     exec_cmd = next((line[len("Exec="):] for line in lines if line.startswith("Exec=")), "")
     target = exec_cmd.split()[0] if exec_cmd.split() else ""
     name = os.path.basename(target).lower()
-    if not (name.endswith(".appimage") and "talktype" in name):
+    if not (name.endswith(".appimage") and ("tuxtalk" in name or "talktype" in name)):
         return False
     if os.path.realpath(target) == os.path.realpath(INSTALLED_APPIMAGE):
         return False

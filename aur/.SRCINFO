@@ -16,7 +16,7 @@ pkgbase = talktype-appimage
 	options = !strip
 	noextract = TalkType-v0.14.6-x86_64.AppImage
 	source = TalkType-v0.14.6-x86_64.AppImage::https://github.com/ronb1964/TalkType/releases/download/v0.14.6/TalkType-v0.14.6-x86_64.AppImage
-	source = talktype.desktop
+	source = tuxtalk.desktop
 	sha256sums = 94f2d980518c4a3df0db28cc07144f1e553f3a7fdbbb80dc74de1f66e018df80
 	sha256sums = SKIP
 
