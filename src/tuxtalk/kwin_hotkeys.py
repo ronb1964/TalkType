@@ -97,6 +97,7 @@ def wanted_shortcuts(cfg):
         ("hold", "hold to talk", getattr(cfg, "hotkey", "")),
         ("toggle", "tap to start and stop", getattr(cfg, "toggle_hotkey", "")),
         ("voice-commands", "voice commands", getattr(cfg, "voice_commands_hotkey", "")),
+        ("paste-last", "paste last dictation", getattr(cfg, "paste_last_hotkey", "")),
     )
     out, seen = [], set()
     for role, what, name in roles:

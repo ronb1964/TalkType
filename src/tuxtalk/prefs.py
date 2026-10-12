@@ -312,7 +312,7 @@ def hotkey_change_message(cfg, changed, refused):
                      "the General tab.")
     # KDE reports keys in Qt's spelling (Super is "Meta"): map back to ours.
     from .kwin_hotkeys import qt_key_sequence
-    all_keys = ("hotkey", "toggle_hotkey", "voice_commands_hotkey")
+    all_keys = ("hotkey", "toggle_hotkey", "voice_commands_hotkey", "paste_last_hotkey")
     ours = {qt_key_sequence(cfg.get(k)): cfg.get(k) for k in all_keys if cfg.get(k)}
     for key in refused or []:
         if key in ours and changed & set(all_keys):
@@ -1217,6 +1217,35 @@ class PreferencesWindow:
         ))
 
         grid.attach(self.vc_hotkey_combo, 1, row, 1, 1)
+        row += 1
+
+        # Paste Last Dictation hotkey: types the last dictation again, for when
+        # it went to the wrong window (app._paste_last_dictation).
+        pl_label = Gtk.Label(label="Paste Last Dictation:", xalign=0)
+        pl_label.set_tooltip_text(
+            "Press this key combo to type your last dictation again where the cursor is,\n"
+            "for when it went to the wrong window. It types once you let go of the keys.\n"
+            "Leave set to 'None' to turn it off.")
+        grid.attach(pl_label, 0, row, 1, 1)
+
+        self.pl_hotkey_combo = Gtk.ComboBoxText()
+        self.pl_hotkey_combo.set_can_focus(True)
+        self.pl_hotkey_combo.connect("button-press-event", self._on_combo_button_press)
+        self._block_combo_scroll(self.pl_hotkey_combo)
+        pl_combos = [
+            ("", "None (disabled)"),
+            ("Ctrl+Alt+P", "Ctrl+Alt+P (recommended)"),
+            ("Ctrl+Super+P", "Ctrl+Super+P"),
+        ]
+        for combo_id, combo_label in pl_combos:
+            self.pl_hotkey_combo.append(combo_id, combo_label)
+        current_pl = self.config.get("paste_last_hotkey", "")
+        self.pl_hotkey_combo.set_active_id(
+            current_pl if current_pl in [c[0] for c in pl_combos] else "")
+        self.pl_hotkey_combo.connect("changed", lambda x: self.update_config(
+            "paste_last_hotkey", x.get_active_id() or ""
+        ))
+        grid.attach(self.pl_hotkey_combo, 1, row, 1, 1)
         row += 1
 
         # ===== STARTUP OPTIONS SECTION =====
@@ -5432,7 +5461,7 @@ class PreferencesWindow:
         and say so if KDE already uses the key. True when it asked, so Apply
         doesn't also say "Settings applied"."""
         from .config import HOTKEY_KEYS
-        if not set(changed) & {*HOTKEY_KEYS, "voice_commands_hotkey"}:
+        if not set(changed) & {*HOTKEY_KEYS, "voice_commands_hotkey", "paste_last_hotkey"}:
             return False
         message = hotkey_change_message(self.config, set(changed), self._kde_refused(since))
         if message is None:

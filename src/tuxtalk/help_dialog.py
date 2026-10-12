@@ -494,6 +494,8 @@ Names and terms TuxTalk should spell your way, in Preferences → Snippets → Y
 • {hotkey_hold}: push-to-talk (hold to record, release to stop)
 • {hotkey_toggle}: toggle recording (press once to start, again to stop)
 • <b>Voice Commands shortcut:</b> set in Preferences → General to pop up the cheat sheet
+• <b>Paste Last Dictation</b> (Ctrl+Alt+P): types your last dictation again where the cursor
+  is, for when it went to the wrong window. Change or turn it off in Preferences → General
 • Keys work globally in any application
 • Change your dictation keys in {keys_where}
 

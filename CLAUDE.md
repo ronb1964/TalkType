@@ -98,6 +98,7 @@ Preferences and the rest:
 - [ ] Start/stop beeps play
 - [ ] With a YouTube video playing, dictating pauses it and it plays again after (log: "Paused … while dictating", "Resumed …"). A video that was already paused stays paused. Preferences → "Pause music and videos while dictating" off: nothing pauses
 - [ ] Preferences mic test works (level meter, record, replay)
+- [ ] Paste Last Dictation: dictate, click into another window, press Ctrl+Alt+P. The same text is typed there once the keys are let go, with no stray Ctrl+Alt shortcut (log: "Paste last dictation"). Preferences → General → Paste Last Dictation: None turns it off
 - [ ] Your Words: Preferences → Snippets → Your Words..., add "TuxTalk", Save. On Parakeet, saying "tux talk" types TuxTalk. On a Whisper model (e.g. small) the name comes out right more often (log: "Loaded your words" / "Reloaded your words"). Saying nothing with a Whisper model types nothing
 - [ ] Tray → Performance shows Recommended / Lightest / Battery saver, with the dot on the active one
 - [ ] Preferences → General: off the recommended setup, the row says "Recommended for this computer: …" with Use Recommended, which sets Model and Device (Vulkan: download and speed check first) and turns into "✓ You're on the recommended setup". "What works with what?" shows the models-by-device grid and a line about this computer

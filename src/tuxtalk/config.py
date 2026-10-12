@@ -150,6 +150,7 @@ class Settings:
     indicator_backing: str = "medium"   # off / soft / medium / strong (soft dark backing)
     indicator_sensitivity: float = 1.0  # scales how strongly audio drives the animation (0.5-2.0)
     voice_commands_hotkey: str = "Ctrl+Alt+V"  # hotkey combo to open voice commands quick reference
+    paste_last_hotkey: str = "Ctrl+Alt+P"      # hotkey combo that types the last dictation again ("" = off)
     auto_check_updates: bool = True      # automatically check for updates on startup (once per day)
     last_update_check: str = ""          # ISO timestamp of last update check
     language_mode: str = "auto"          # "auto" (detect language) or "manual" (use `language`); UI state for prefs
@@ -710,6 +711,7 @@ LIVE_APPLIED_KEYS = {
     "hotkey",
     "toggle_hotkey",
     "voice_commands_hotkey",
+    "paste_last_hotkey",
     "mode",
     "typing_delay",
     "indicator_position",

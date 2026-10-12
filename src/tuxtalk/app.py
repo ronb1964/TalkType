@@ -223,6 +223,9 @@ class RecordingState:
     # When the toggle key started this recording (None for any other start),
     # so a quick second tap can be told apart from a stop.
     toggle_started_at: float = None
+    # Paste Last Dictation: {"key", "key_up", "at"} from the combo press until
+    # every key of it is let go, else None (see _handle_key_event).
+    paste_last: object = None
 
     def __post_init__(self):
         if self.frames is None:
@@ -954,6 +957,7 @@ class LiveSettings(NamedTuple):
     voice_cmds_combo: tuple | None
     voice_cmds_main_key: int | None
     mode: str
+    paste_last_combo: tuple | None = None
 
 
 def _config_file_changed() -> bool:
@@ -1110,6 +1114,7 @@ def _reload_live_settings(cfg, indicator):
             voice_cmds_combo=voice_cmds_combo,
             voice_cmds_main_key=voice_cmds_combo[1] if voice_cmds_combo else None,
             mode=cfg.mode.lower().strip(),
+            paste_last_combo=_parse_hotkey_combo(getattr(cfg, "paste_last_hotkey", "")),
         )
     except Exception as e:
         logger.warning(f"Could not apply reloaded settings: {e}", exc_info=True)
@@ -2874,9 +2879,32 @@ Right-click the tray icon \u2192 "Help..." for full documentation
         logger.error(f"Failed to show welcome dialog after hotkey change: {e}")
 
 
+# A combo press whose keys aren't all let go within this long is dropped, so a
+# missed key release can never make TuxTalk paste out of the blue later.
+PASTE_LAST_EXPIRY_S = 5.0
+
+
+def _paste_last_dictation(cfg) -> None:
+    """Type the newest Recent Dictations entry again, the way a dictation is
+    typed (line breaks, injection mode, the trailing space)."""
+    from .history import get_entries, _LINE_BREAK_MARKER
+    entries = get_entries()
+    if not entries:
+        logger.info("Paste last dictation: nothing dictated yet")
+        _beep(cfg.beeps, *CANCEL_BEEP)
+        return
+    text = entries[0].replace("\n", _LINE_BREAK_MARKER)
+    if getattr(cfg, "auto_space", True):
+        text += " "
+    logger.info("Paste last dictation")
+    outcome = _inject_text(text, cfg.injection_mode, time.time())
+    if outcome in _UNDELIVERED_NOTICES:
+        _report_undelivered(outcome, cfg.beeps)
+
+
 def _handle_key_event(event, mode, hold_key, toggle_key,
                       voice_cmds_combo, held_modifiers,
-                      devices, cfg, input_device_idx):
+                      devices, cfg, input_device_idx, paste_last_combo=None):
     """Handle a single keyboard event. Both hold (F8) and toggle (F9) are always active.
 
     Grabbed devices are tracked in module state (see _grab_all_devices), not
@@ -2893,6 +2921,30 @@ def _handle_key_event(event, mode, hold_key, toggle_key,
         if key_name:
             _notify_tray_hotkey_pressed(key_name)
         return  # Don't process hotkeys normally in test mode
+
+    # --- Paste Last Dictation combo (e.g. Ctrl+Alt+P) ---
+    # Typed only once every key of the combo is let go: typing while Ctrl and
+    # Alt are still down would turn each letter into a Ctrl+Alt shortcut.
+    pending = state.paste_last
+    if pending is not None:
+        if time.time() - pending["at"] > PASTE_LAST_EXPIRY_S:
+            state.paste_last = pending = None
+        elif event.value == 0:
+            if event.code == pending["key"]:
+                pending["key_up"] = True
+            if pending["key_up"] and not held_modifiers:
+                state.paste_last = None
+                _paste_last_dictation(cfg)
+            return
+    if paste_last_combo and event.value == 1 and not state.is_recording:
+        required_mods, main_key = paste_last_combo
+        if event.code == main_key and _check_modifiers_held(required_mods, held_modifiers):
+            # Same brief grab as the Voice Commands combo below, so the key
+            # press doesn't reach the focused app.
+            _grab_keyboards_hiding(devices, {main_key, *held_modifiers})
+            _release_all_grabs()
+            state.paste_last = {"key": main_key, "key_up": False, "at": time.time()}
+            return
 
     # --- Voice Commands combo hotkey (e.g. Ctrl+Shift+H) ---
     if voice_cmds_combo and event.value == 1:
@@ -3132,6 +3184,7 @@ def _loop_evdev(cfg: Settings, input_device_idx):
     vc_hotkey_str = getattr(cfg, 'voice_commands_hotkey', '')
     voice_cmds_combo = _parse_hotkey_combo(vc_hotkey_str)
     voice_cmds_main_key = voice_cmds_combo[1] if voice_cmds_combo else None
+    paste_last_combo = _parse_hotkey_combo(getattr(cfg, "paste_last_hotkey", ""))
 
     if hold_key is None:
         logger.info("No hotkey configured - service will not monitor any keys")
@@ -3196,6 +3249,7 @@ def _loop_evdev(cfg: Settings, input_device_idx):
             vc_hotkey_str = live.vc_hotkey_str
             voice_cmds_combo = live.voice_cmds_combo
             voice_cmds_main_key = live.voice_cmds_main_key
+            paste_last_combo = live.paste_last_combo
             mode = live.mode
             # Re-claim even if the hotkeys look unchanged: claim() is cheap,
             # and comparing would mean a second copy of the hotkey fields.
@@ -3224,7 +3278,8 @@ def _loop_evdev(cfg: Settings, input_device_idx):
                         _handle_key_event(
                             event, mode, hold_key, toggle_key,
                             voice_cmds_combo, held_modifiers,
-                            devices, cfg, svc.input_device_idx)
+                            devices, cfg, svc.input_device_idx,
+                            paste_last_combo=paste_last_combo)
             except BlockingIOError:
                 pass
             except OSError as e:
