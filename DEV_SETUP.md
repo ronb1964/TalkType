@@ -1,6 +1,6 @@
-# TalkType Development Environment - FINAL SETUP
+# TuxTalk Development Environment - FINAL SETUP
 
-**This is the ONLY way to run TalkType in development mode.**
+**This is the ONLY way to run TuxTalk in development mode.**
 
 ## Current Status
 
@@ -9,23 +9,23 @@
 ✅ Uses system PyGObject (can't be installed in venv without python3-devel)
 ✅ Run script created: `run-dev.sh`
 
-## How to Run TalkType (Dev Mode)
+## How to Run TuxTalk (Dev Mode)
 
 ### Option 1: Desktop Launcher (Primary Method)
 **The user has been using this from the beginning:**
 
-Click on "TalkType (Dev)" in your application launcher, or run:
+Click on "TuxTalk (Dev)" in your application launcher, or run:
 ```bash
-gtk-launch talktype-dev
+gtk-launch tuxtalk-dev
 ```
 
-Desktop file location: `~/.local/share/applications/talktype-dev.desktop`
+Desktop file location: `~/.local/share/applications/tuxtalk-dev.desktop`
 
 This launcher:
 - Sets `DEV_MODE=1` environment variable
 - Sets proper PYTHONPATH automatically
 - Uses the `.venv/bin/python` from the project
-- Runs `python -m talktype.tray` to start the tray icon
+- Runs `python -m tuxtalk.tray` to start the tray icon
 
 ### Option 2: Command Line Script
 ```bash
@@ -38,15 +38,15 @@ This script does the same thing as the desktop launcher but from command line
 
 - **Dependencies**: `.venv/` (faster-whisper, sounddevice, evdev, etc. — PyTorch was removed in 0.7.0; it was never used)
 - **PyGObject**: System package from `/usr/lib64/python3.13/site-packages`
-- **TalkType code**: `src/talktype/`
+- **TuxTalk code**: `src/tuxtalk/`
 - **Runner**: `run-dev.sh` sets up environment correctly
 
 ## If Something Breaks
 
-1. **Kill all TalkType processes**:
+1. **Kill all TuxTalk processes**:
    ```bash
-   pkill -f talktype
-   rm -f /run/user/$(id -u)/talktype-tray.lock
+   pkill -f tuxtalk
+   rm -f /run/user/$(id -u)/tuxtalk-tray.lock
    ```
 
 2. **Reinstall dependencies** (if needed):
@@ -72,18 +72,18 @@ This script does the same thing as the desktop launcher but from command line
 
 ## DO
 
-- ✅ Use `./run-dev.sh` to start TalkType
+- ✅ Use `./run-dev.sh` to start TuxTalk
 - ✅ Use `.venv/bin/pytest` to run tests
 - ✅ Use `.venv/bin/python` for Python scripts (with PYTHONPATH set)
 
 ## The service won't start from tray?
 
-The code in `src/talktype/tray.py` was fixed to detect dev mode and set PYTHONPATH automatically when starting the dictation service. It should work now.
+The code in `src/tuxtalk/tray.py` was fixed to detect dev mode and set PYTHONPATH automatically when starting the dictation service. It should work now.
 
 If it doesn't, check:
 ```bash
 # See if service starts manually
-PYTHONPATH=./src .venv/bin/python -m talktype.app
+PYTHONPATH=./src .venv/bin/python -m tuxtalk.app
 ```
 
 ---

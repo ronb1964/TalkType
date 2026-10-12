@@ -1,11 +1,11 @@
-# Third-party software in TalkType
+# Third-party software in TuxTalk
 
-TalkType itself is MIT-licensed (see [LICENSE](LICENSE)). The AppImage, .deb and
+TuxTalk itself is MIT-licensed (see [LICENSE](LICENSE)). The AppImage, .deb and
 .rpm also contain other people's open-source software, and each keeps its own
-license. All of their license texts are installed with TalkType:
+license. All of their license texts are installed with TuxTalk:
 
 - AppImage: `usr/share/licenses/` inside it
-- .deb and .rpm: `/opt/talktype/usr/share/licenses/`
+- .deb and .rpm: `/opt/tuxtalk/usr/share/licenses/`
 
 ## Programs built from source
 
@@ -14,14 +14,14 @@ license. All of their license texts are installed with TalkType:
 | ydotool | commit `708e96ff27e381a8c549418a9d34cdde12305317` | AGPL-3.0-or-later | https://github.com/ReimuNotMoe/ydotool |
 | wl-clipboard | `v2.3.0` | GPL-3.0-or-later | https://github.com/bugaevc/wl-clipboard |
 
-Both are built unmodified from the source at the version above, and TalkType
+Both are built unmodified from the source at the version above, and TuxTalk
 runs them as separate programs. ydotool types the dictated text; wl-clipboard
 handles the clipboard for paste mode. The complete source for those exact
 versions is at the addresses above, and backup copies are kept at
 https://github.com/ronb1964/ydotool and https://github.com/ronb1964/wl-clipboard.
 If it ever goes missing from all of those, open an issue at
-https://github.com/ronb1964/TalkType/issues and I'll provide a copy, for at
-least three years after the last TalkType release that includes it.
+https://github.com/ronb1964/TuxTalk/issues and I'll provide a copy, for at
+least three years after the last TuxTalk release that includes it.
 
 ## Python and Python packages
 
@@ -43,6 +43,6 @@ JACK client library, Berkeley DB 5.3 and libpython. Mostly LGPL, MIT or
 similar; each package's own copyright file is included.
 
 The exact package versions are listed in
-`usr/share/licenses/talktype/bundled-ubuntu-packages.txt`. Their source is in
+`usr/share/licenses/tuxtalk/bundled-ubuntu-packages.txt`. Their source is in
 Ubuntu's archive: `apt-get source <package>` on Ubuntu 22.04, or
 https://launchpad.net/ubuntu/jammy.

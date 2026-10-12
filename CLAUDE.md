@@ -1,4 +1,19 @@
-# TalkType Project Rules for Claude
+# TuxTalk Project Rules for Claude
+
+**The app was renamed from TalkType to TuxTalk in 0.15.0** ("TALKTYPE" is
+another company's registered trademark for dictation software). Some names
+deliberately stay TalkType because changing them would hurt users:
+- the project folder `/home/ron/Projects/TalkType` and its `.venv`;
+- the GNOME extension UUID `talktype@ronb1964.github.io` and its schema (a new
+  UUID is a new extension: a logout and enabling it again);
+- the D-Bus name, path and interface `io.github.ronb1964.TalkType` (an old,
+  still-loaded extension calls them until the next logout);
+- the runtime lock files (an old TalkType and TuxTalk must never run at once);
+- the Vulkan engine's `talktype-whisper-vulkan-*` release files (already published);
+- the compatibility copies in every release: `TalkType-vX.X.X-x86_64.AppImage.zsync`
+  and `talktype-gnome-extension.zip` (0.14.x installs look for those names).
+Old folders, launchers and KDE shortcuts are moved or cleaned on start by
+`src/tuxtalk/rename_migration.py`. Plan: `docs/superpowers/plans/2026-10-11-rename-to-tuxtalk.md`.
 
 **READ THIS ENTIRE FILE BEFORE DOING ANYTHING. THESE RULES ARE MANDATORY.**
 
@@ -25,12 +40,12 @@ cd /home/ron/Projects/TalkType
 
 ### Step 4: Copy to ~/AppImages/
 ```bash
-cp TalkType-v*.AppImage ~/AppImages/
-chmod +x ~/AppImages/TalkType-v*.AppImage
+cp TuxTalk-v*.AppImage ~/AppImages/
+chmod +x ~/AppImages/TuxTalk-v*.AppImage
 ```
 
 ### Step 5: Ask Permission for Fresh Start
-- Say: "I need to run `./fresh-start-for-testing.sh` which will kill all TalkType processes, remove AppImage config/data, CUDA libs, cached models, and the GNOME extension. Your dev environment stays untouched. Is that okay?"
+- Say: "I need to run `./fresh-start-for-testing.sh` which will kill all TuxTalk processes, remove AppImage config/data, CUDA libs, cached models, and the GNOME extension. Your dev environment stays untouched. Is that okay?"
 - WAIT for explicit "yes" or "go ahead"
 
 ### Step 6: Run Fresh Start and Verify
@@ -39,7 +54,7 @@ cd /home/ron/Projects/TalkType
 ./fresh-start-for-testing.sh
 ```
 - Check that ALL items show "✓ Removed" in the output, including
-  "✓ TalkType models removed". Since 0.14.2 the script clears Parakeet, the
+  "✓ TuxTalk models removed". Since 0.14.2 the script clears Parakeet, the
   Vulkan models and the AI model too, so first run really downloads them
 - Show Ron the AppImage file size (must be under 1GB)
 
@@ -49,18 +64,18 @@ cd /home/ron/Projects/TalkType
 - **ALWAYS launch to a log file AND monitor it** — this is a hard requirement, not optional
 - Launch in background and capture output:
 ```bash
-cd ~/AppImages && env -u GDK_BACKEND ./TalkType-vX.X.X-x86_64.AppImage > /tmp/talktype-output.log 2>&1 &
+cd ~/AppImages && env -u GDK_BACKEND ./TuxTalk-vX.X.X-x86_64.AppImage > /tmp/tuxtalk-output.log 2>&1 &
 ```
 - Then tail the log to confirm startup:
 ```bash
-sleep 3 && cat /tmp/talktype-output.log
+sleep 3 && cat /tmp/tuxtalk-output.log
 ```
 - Continue monitoring output as Ron tests — check the log after each reported issue
 
 ### Step 8: Ron Tests — WAIT for Results
 Ron tests against this checklist. Do NOT proceed until he reports back.
 Claude checks every item against the log too
-(`~/.config/talktype/talktype.log`), not only Ron's report. In 0.14.1 the
+(`~/.config/tuxtalk/tuxtalk.log`), not only Ron's report. In 0.14.1 the
 "GPU" test had really run on the processor.
 
 First run (since 0.14.2 it recommends one setup; CUDA is not offered here):
@@ -154,7 +169,7 @@ where people already have installing on their mind, so it converts far better
 than the README does. Use this line verbatim:
 
 ```
-Using TalkType on Arch? A [vote on the AUR page](https://aur.archlinux.org/packages/talktype-appimage) helps other Arch users find it.
+Using TuxTalk on Arch? A [vote on the AUR page](https://aur.archlinux.org/packages/tuxtalk-appimage) helps other Arch users find it.
 ```
 
 AUR votes only move when asked for — the package sat at zero from December
@@ -166,7 +181,7 @@ AUR votes only move when asked for — the package sat at zero from December
 
 The "Vulkan (any GPU)" device (config value `vulkan`; AMD, Intel and NVIDIA)
 runs whisper.cpp's whisper-server with its Vulkan backend (`src/tuxtalk/whisper_vulkan.py`). whisper.cpp publishes no
-Linux Vulkan build, so TalkType builds one. It is NOT part of the AppImage
+Linux Vulkan build, so TuxTalk builds one. It is NOT part of the AppImage
 and is NOT rebuilt for each release. It only changes when whisper.cpp does.
 
 To update it:
@@ -175,7 +190,7 @@ To update it:
 2. Upload it to a GitHub release tagged `whisper-vulkan-<ver>`, marked
    **pre-release** (`gh release create ... --prerelease`). A normal release
    would become "latest", and the in-app updater and the AppImage's update
-   information would treat it as a TalkType version.
+   information would treat it as a TuxTalk version.
 3. Put the version and SHA256 into `ENGINE_VERSION` / `ENGINE_SHA256` in
    `whisper_vulkan.py`.
 4. Ask Ron before uploading. It is public.
@@ -207,7 +222,7 @@ The setup dialogs (download, speed check, Light/Full choice) live in
 **Ron uses the DEVELOPMENT VERSION day-to-day, NOT the AppImage.**
 
 ### Development Version:
-- **Desktop launcher**: "TalkType (Dev)" in `~/.local/share/applications/talktype-dev.desktop`
+- **Desktop launcher**: "TuxTalk (Dev)" in `~/.local/share/applications/tuxtalk-dev.desktop`
 - **Autostart**: Launches the dev version, NOT the AppImage
 - **DEV_MODE=1**: Shows BOTH tray icons (GTK tray + GNOME extension)
 - **Source code**: `/home/ron/Projects/TalkType/src/tuxtalk/`
@@ -248,7 +263,7 @@ globally again.
 
 ## GTK TRAY AND GNOME EXTENSION — KEEP IN SYNC
 
-TalkType has TWO user interfaces that must stay synchronized:
+TuxTalk has TWO user interfaces that must stay synchronized:
 
 1. **GTK Tray Icon** (`src/tuxtalk/tray.py`) — For all Linux desktops
 2. **GNOME Shell Extension** (`gnome-extension/talktype@ronb1964.github.io/extension.js`) — For GNOME users
@@ -277,10 +292,10 @@ Preferences...
 Voice Commands...
 Your Stats...
 Help...
-About TalkType...
+About TuxTalk...
 Check for Updates...
 ─────────────────────
-Quit TalkType
+Quit TuxTalk
 ```
 
 ---

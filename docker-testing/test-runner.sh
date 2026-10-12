@@ -1,12 +1,12 @@
 #!/bin/bash
 #
 # Test Runner Script for Container Environments
-# Starts virtual display, launches TalkType, takes screenshots
+# Starts virtual display, launches TuxTalk, takes screenshots
 #
 
 set -e
 
-echo "🚀 Starting TalkType test environment..."
+echo "🚀 Starting TuxTalk test environment..."
 
 # Start D-Bus
 mkdir -p /run/dbus
@@ -30,7 +30,7 @@ for i in {1..10}; do
     sleep 1
 done
 
-# Set up environment variables for TalkType
+# Set up environment variables for TuxTalk
 export PYTHONPATH=/app/src
 export HOME=/tmp/home
 mkdir -p $HOME
@@ -39,16 +39,16 @@ mkdir -p $HOME
 if [ "$1" = "screenshot" ]; then
     echo "📸 Taking screenshot mode..."
 
-    # Launch TalkType preferences window
+    # Launch TuxTalk preferences window
     cd /app
-    python3 -m talktype.prefs &
+    python3 -m tuxtalk.prefs &
     APP_PID=$!
 
     # Wait for window to appear
     sleep 3
 
     # Take screenshot
-    SCREENSHOT_PATH="/screenshots/talktype-${DE_NAME:-unknown}-$(date +%Y%m%d_%H%M%S).png"
+    SCREENSHOT_PATH="/screenshots/tuxtalk-${DE_NAME:-unknown}-$(date +%Y%m%d_%H%M%S).png"
     gnome-screenshot -f "$SCREENSHOT_PATH" 2>/dev/null || \
         spectacle -b -o "$SCREENSHOT_PATH" 2>/dev/null || \
         xfce4-screenshooter -w -s "$SCREENSHOT_PATH" 2>/dev/null || \

@@ -1,12 +1,12 @@
-# TalkType Cross-Desktop Environment Testing
+# TuxTalk Cross-Desktop Environment Testing
 
-This directory contains the infrastructure for testing TalkType across different Linux desktop environments (GNOME, KDE, XFCE) using containerization.
+This directory contains the infrastructure for testing TuxTalk across different Linux desktop environments (GNOME, KDE, XFCE) using containerization.
 
 ## 🎯 Purpose
 
 Testing GTK applications across different desktop environments can be challenging. This suite provides:
 
-1. **Visual Verification** - Screenshots of TalkType UI in different DEs
+1. **Visual Verification** - Screenshots of TuxTalk UI in different DEs
 2. **Automated Testing** - Run pytest tests in each environment
 3. **Easy Comparison** - HTML report with side-by-side screenshots
 4. **Fast Iteration** - Containerized environments that start in seconds
@@ -16,13 +16,13 @@ Testing GTK applications across different desktop environments can be challengin
 ### One Command to Test Everything
 
 ```bash
-cd /home/ron/Dropbox/projects/TalkType
+cd /home/ron/Dropbox/projects/TuxTalk
 ./test-all-de.sh
 ```
 
 This will:
 1. Build container images for GNOME, KDE, and XFCE
-2. Take screenshots of TalkType in each environment
+2. Take screenshots of TuxTalk in each environment
 3. Generate an HTML comparison report
 4. Open the report in your browser
 
@@ -61,9 +61,9 @@ cd docker-testing
 ```
 
 This creates three Podman images:
-- `talktype-test:gnome`
-- `talktype-test:kde`
-- `talktype-test:xfce`
+- `tuxtalk-test:gnome`
+- `tuxtalk-test:kde`
+- `tuxtalk-test:xfce`
 
 ### Take Screenshots
 
@@ -95,7 +95,7 @@ Opens: `../test-screenshots/comparison-report.html`
 Each container:
 - Runs a virtual X server (Xvfb)
 - Loads the appropriate desktop environment theme
-- Launches TalkType preferences window
+- Launches TuxTalk preferences window
 - Takes a screenshot
 - Saves to shared volume
 
@@ -132,7 +132,7 @@ Each Dockerfile sets up:
     ┌────▼──────────┐
     │ test-runner   │ Inside each container:
     │   (in each    │ 1. Start Xvfb
-    │  container)   │ 2. Launch TalkType
+    │  container)   │ 2. Launch TuxTalk
     └────┬──────────┘ 3. Take screenshot
          │
     ┌────▼──────────┐
@@ -155,7 +155,7 @@ Each Dockerfile sets up:
 
 ### 1. Preferences Window (Default)
 
-Captures the TalkType preferences dialog in each DE.
+Captures the TuxTalk preferences dialog in each DE.
 
 ### 2. Custom Windows
 
@@ -163,10 +163,10 @@ Edit `test-runner.sh` to launch different windows:
 
 ```bash
 # Launch main tray icon
-python3 -m talktype.tray &
+python3 -m tuxtalk.tray &
 
 # Or launch specific dialog
-python3 -m talktype.welcome_dialog &
+python3 -m tuxtalk.welcome_dialog &
 ```
 
 ## 🧪 Running Pytest Tests
@@ -207,7 +207,7 @@ Run container interactively:
 podman run -it --rm \
   -v $PWD:/app:ro \
   -v $PWD/test-screenshots:/screenshots:rw \
-  talktype-test:gnome /bin/bash
+  tuxtalk-test:gnome /bin/bash
 ```
 
 Then manually run:
@@ -336,4 +336,4 @@ RUN dnf install -y --setopt=timeout=300 ...
 
 **Happy Testing! 🎉**
 
-For issues or questions, see the main TalkType repository README.
+For issues or questions, see the main TuxTalk repository README.

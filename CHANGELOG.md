@@ -1,6 +1,22 @@
 # Changelog
 
-All notable changes to TalkType are documented here.
+All notable changes to TuxTalk are documented here. It was called TalkType
+before 0.15.0, so older entries use that name.
+
+## [0.15.0] - unreleased
+
+TalkType is now TuxTalk.
+
+- Turns out another company already owns the TalkType name for dictation
+  software, so the app has a new one. Same app, just renamed.
+- Updating doesn't lose anything. Your settings, models, voice commands, stats
+  and backups move over on their own, and so do the menu entry and start at
+  login. Backups you saved with TalkType still load.
+- On KDE the old TalkType hotkeys get cleaned up, so F8 isn't grabbed twice.
+- The .deb and .rpm are called tuxtalk now and replace the old talktype package
+  when you install them. On Arch it's tuxtalk-appimage, which replaces
+  talktype-appimage. The talktype command still works.
+- If something still says TalkType somewhere, let me know.
 
 ## [0.14.6] - 2026-10-11
 

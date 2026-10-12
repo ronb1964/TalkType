@@ -1,19 +1,20 @@
 <p align="center">
-  <img src="io.github.ronb1964.TuxTalk.png" alt="TalkType" width="110">
+  <img src="io.github.ronb1964.TuxTalk.png" alt="TuxTalk" width="110">
 </p>
 
-<h1 align="center">TalkType</h1>
+<h1 align="center">TuxTalk</h1>
 
 <p align="center">
   <b>Hold a key, talk, let go. Your words show up wherever your cursor is.</b><br>
-  Free voice dictation for Linux. It runs offline, and it works on Wayland.
+  Free voice dictation for Linux. It runs offline, and it works on Wayland.<br>
+  <sub>TuxTalk used to be called TalkType. Same app, new name.</sub>
 </p>
 
 <p align="center">
-  <a href="https://github.com/ronb1964/TalkType/releases/latest"><img src="https://img.shields.io/github/v/release/ronb1964/TalkType?label=download&color=2ea44f" alt="Download"></a>
-  <a href="https://aur.archlinux.org/packages/talktype-appimage"><img src="https://img.shields.io/aur/version/talktype-appimage" alt="AUR version"></a>
+  <a href="https://github.com/ronb1964/TuxTalk/releases/latest"><img src="https://img.shields.io/github/v/release/ronb1964/TuxTalk?label=download&color=2ea44f" alt="Download"></a>
+  <a href="https://aur.archlinux.org/packages/tuxtalk-appimage"><img src="https://img.shields.io/aur/version/tuxtalk-appimage" alt="AUR version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license"></a>
-  <a href="https://github.com/ronb1964/TalkType/actions/workflows/tests.yml"><img src="https://img.shields.io/github/actions/workflow/status/ronb1964/TalkType/tests.yml?branch=main&label=tests" alt="Tests"></a>
+  <a href="https://github.com/ronb1964/TuxTalk/actions/workflows/tests.yml"><img src="https://img.shields.io/github/actions/workflow/status/ronb1964/TuxTalk/tests.yml?branch=main&label=tests" alt="Tests"></a>
   <img src="https://img.shields.io/badge/GNOME%20%C2%B7%20KDE%20%C2%B7%20Sway%20%C2%B7%20X11-supported-555" alt="GNOME, KDE, Sway and X11">
 </p>
 
@@ -25,14 +26,14 @@
 </p>
 
 <p align="center">
-  <img src="screenshots/demo.gif" alt="Dictating a letter: you hold the key and talk, the waveform shows TalkType listening, and the words appear. It fixes a 'no wait' correction and turns 'john at gmail dot com' into an email address." width="600">
+  <img src="screenshots/demo.gif" alt="Dictating a letter: you hold the key and talk, the waveform shows TuxTalk listening, and the words appear. It fixes a 'no wait' correction and turns 'john at gmail dot com' into an email address." width="600">
 </p>
 
 **Want to hear it too?** Here's the one-minute version, with sound (GitHub starts it muted, so click the speaker icon):
 
 https://github.com/user-attachments/assets/e2aa55f4-a4ff-482e-8884-cc92ac5809a9
 
-That works on GNOME, KDE, Sway, Hyprland and X11 with no setup, because TalkType reads the key straight from the keyboard instead of asking the desktop for it. Most Linux dictation tools can't do hold-to-talk on Wayland at all.
+That works on GNOME, KDE, Sway, Hyprland and X11 with no setup, because TuxTalk reads the key straight from the keyboard instead of asking the desktop for it. Most Linux dictation tools can't do hold-to-talk on Wayland at all.
 
 It's free, it runs completely offline, and nothing you say ever leaves your computer.
 
@@ -41,7 +42,7 @@ It's free, it runs completely offline, and nothing you say ever leaves your comp
 ## What it does
 
 <p align="center">
-  <img src="screenshots/you-say.png" alt="You say: Let's say three o'clock, no wait, make that four o'clock. TalkType types: Let's say four o'clock. You say: send the plans to john at gmail dot com. TalkType types: john@gmail.com. You say: new paragraph could we meet on Thursday question mark. TalkType types a new paragraph with Could we meet on Thursday?" width="760">
+  <img src="screenshots/you-say.png" alt="You say: Let's say three o'clock, no wait, make that four o'clock. TuxTalk types: Let's say four o'clock. You say: send the plans to john at gmail dot com. TuxTalk types: john@gmail.com. You say: new paragraph could we meet on Thursday question mark. TuxTalk types a new paragraph with Could we meet on Thursday?" width="760">
 </p>
 
 **It fixes it when you change your mind.** Say "no wait", "scratch that" or "actually" and correct yourself, and a small AI model on your own computer drops the wrong part. Every fix gets checked, and if the AI changed anything else, your words are typed exactly as you said them. It's optional, and it's off until you turn it on.
@@ -66,7 +67,7 @@ Want something else? One button shows every choice, with what it costs you in do
 
 ### Teach it your words
 
-Names, brands, the part numbers you use every day. If TalkType keeps getting one wrong, pick it out of a recent dictation with **Fix a Word**, type it the right way, and it's fixed from then on.
+Names, brands, the part numbers you use every day. If TuxTalk keeps getting one wrong, pick it out of a recent dictation with **Fix a Word**, type it the right way, and it's fixed from then on.
 
 You can also make your own shortcuts, like "my email" for your address.
 
@@ -99,7 +100,7 @@ Your Stats shows the words you've dictated today, this week and all time, and ho
 
 ### Take your setup with you
 
-Save your settings, voice commands, Fix a Word words and stats to one file, and load it on a new computer or after a reinstall. TalkType also keeps your last 10 settings on its own, so if a change or an update goes wrong you can just go back.
+Save your settings, voice commands, Fix a Word words and stats to one file, and load it on a new computer or after a reinstall. TuxTalk also keeps your last 10 settings on its own, so if a change or an update goes wrong you can just go back.
 
 </td>
 </tr>
@@ -112,41 +113,41 @@ Save your settings, voice commands, Fix a Word words and stats to one file, and 
 ### Arch Linux (AUR)
 
 ```bash
-yay -S talktype-appimage
+yay -S tuxtalk-appimage
 # or
-paru -S talktype-appimage
+paru -S tuxtalk-appimage
 ```
 
 Installed it and it works? A
-[vote on the AUR page](https://aur.archlinux.org/packages/talktype-appimage)
+[vote on the AUR page](https://aur.archlinux.org/packages/tuxtalk-appimage)
 helps other Arch users find it — one click if you're logged in.
 
 ### Debian / Ubuntu / Linux Mint (.deb)
 
-Download `talktype_*_amd64.deb` from [Releases](https://github.com/ronb1964/TalkType/releases):
+Download `tuxtalk_*_amd64.deb` from [Releases](https://github.com/ronb1964/TuxTalk/releases):
 
 ```bash
-sudo apt install ./talktype_*_amd64.deb
+sudo apt install ./tuxtalk_*_amd64.deb
 ```
 
 ### Fedora / RHEL / openSUSE (.rpm)
 
-Download `talktype-*.x86_64.rpm` from [Releases](https://github.com/ronb1964/TalkType/releases):
+Download `tuxtalk-*.x86_64.rpm` from [Releases](https://github.com/ronb1964/TuxTalk/releases):
 
 ```bash
-sudo dnf install ./talktype-*.x86_64.rpm
+sudo dnf install ./tuxtalk-*.x86_64.rpm
 ```
 
-Both packages install to `/opt/talktype`, add a `talktype` command and an
+Both packages install to `/opt/tuxtalk`, add a `tuxtalk` command and an
 Applications menu entry, and pull in the few system libraries they need.
 
 ### AppImage (All Distros)
 
-Download the latest AppImage from [Releases](https://github.com/ronb1964/TalkType/releases):
+Download the latest AppImage from [Releases](https://github.com/ronb1964/TuxTalk/releases):
 
 ```bash
-chmod +x TalkType-v*.AppImage
-./TalkType-v*.AppImage
+chmod +x TuxTalk-v*.AppImage
+./TuxTalk-v*.AppImage
 ```
 
 The AppImage includes everything needed - just download and run!
@@ -159,9 +160,9 @@ The AppImage includes everything needed - just download and run!
 
 ### Flatpak
 
-A sandboxed Flatpak build of TalkType already works, but it isn't published for
+A sandboxed Flatpak build of TuxTalk already works, but it isn't published for
 download yet. **Want a Flatpak version?**
-👉 **[Vote in the poll](https://github.com/ronb1964/TalkType/discussions/6)** —
+👉 **[Vote in the poll](https://github.com/ronb1964/TuxTalk/discussions/6)** —
 enough interest and I'll make it happen.
 
 ### System Requirements
@@ -169,8 +170,8 @@ enough interest and I'll make it happen.
 | Requirement | Details |
 |------------|---------|
 | **OS** | Linux, on Wayland or X11 (GNOME, KDE, Sway, Hyprland and more) |
-| **Dependencies** | None to install by hand — ydotool, ydotoold and wl-clipboard ship inside TalkType, and the ydotoold daemon starts automatically on first run |
-| **Permissions** | First run asks for your admin password once, to let TalkType read your keyboard and type into other apps. **Restart afterwards** for it to take effect |
+| **Dependencies** | None to install by hand — ydotool, ydotoold and wl-clipboard ship inside TuxTalk, and the ydotoold daemon starts automatically on first run |
+| **Permissions** | First run asks for your admin password once, to let TuxTalk read your keyboard and type into other apps. **Restart afterwards** for it to take effect |
 | **Audio** | Working microphone |
 | **GPU (optional)** | Any NVIDIA, AMD or Intel graphics chip (Vulkan), or CUDA on NVIDIA |
 
@@ -178,8 +179,8 @@ enough interest and I'll make it happen.
 
 ## Quick Start
 
-1. **Launch TalkType** - Run the AppImage or use your app launcher
-2. **First-run setup** - TalkType will guide you through initial configuration
+1. **Launch TuxTalk** - Run the AppImage or use your app launcher
+2. **First-run setup** - TuxTalk will guide you through initial configuration
 3. **Start dictating** - Press **F8** (hold to record) or **F9** (tap to toggle) — both always active
 4. **Speak naturally** - Text appears where your cursor is
 5. **Use voice commands** - Say "comma", "period", "new line", etc.
@@ -198,7 +199,7 @@ enough interest and I'll make it happen.
 - **Two hotkeys, both always on.** Hold F8 to talk, or tap F9 to start and tap again to stop. Pick any keys you like.
 - **Hands-free if you want it.** Double-tap F9, talk, and it stops by itself when you go quiet. A single tap still works as a plain on/off switch, so a long dictation with thinking pauses never gets cut off. Say nothing for 10 seconds and it stops without typing anything.
 - **Your choice of speech model.** NVIDIA's Parakeet is the default: fast on any processor, for English and 24 European languages. OpenAI's Whisper covers 99 languages, from Tiny up to Large-v3. Not sure which? **What works with what?** in Preferences lays it out.
-- **Any graphics card.** NVIDIA, AMD or Intel through Vulkan, a 24 MB download. On NVIDIA you can use CUDA instead. TalkType times your graphics chip against your processor first and only uses it if it's really faster.
+- **Any graphics card.** NVIDIA, AMD or Intel through Vulkan, a 24 MB download. On NVIDIA you can use CUDA instead. TuxTalk times your graphics chip against your processor first and only uses it if it's really faster.
 - **Corrections.** Say "no wait", "scratch that", "I mean" or "actually" and the optional AI fixes it. It also drops "um", "uh" and stutters.
 - **Voice commands.** "comma", "period", "new paragraph", "undo last word", "delete last three sentences" and more. See the full list below.
 - **Email and web addresses.** "john at gmail dot com" types john@gmail.com, and "github dot com" types github.com.
@@ -206,9 +207,9 @@ enough interest and I'll make it happen.
 - **Fix a Word.** Teach it a name or term it keeps getting wrong.
 - **Recent Dictations.** Your last 20, one click to copy. Kept in memory only.
 - **Your Stats.** Words dictated and typing time saved, at your own typing speed.
-- **Settings backup.** Save everything to one file and load it on another computer. TalkType also keeps your last 10 settings on its own, so you can roll back a change.
+- **Settings backup.** Save everything to one file and load it on another computer. TuxTalk also keeps your last 10 settings on its own, so you can roll back a change.
 - **A recording indicator you can style.** Orb, waveform, frequency bars or radial, any color, anywhere on screen. It reacts to your voice so you know it's listening.
-- **Tells you why when it can't type.** If a dictation can't be typed into the window, TalkType says why and what fixes it.
+- **Tells you why when it can't type.** If a dictation can't be typed into the window, TuxTalk says why and what fixes it.
 - **Private.** Everything runs on your computer, and what you dictate is never written to a log unless you turn that on for troubleshooting.
 - **GNOME extension.** A native panel menu on GNOME, and a tray icon everywhere else.
 - **Updates the right way.** Through your package manager for the .deb and .rpm, in place for the AppImage, or through your AUR helper on Arch.
@@ -221,9 +222,9 @@ enough interest and I'll make it happen.
 <summary><b>More screenshots</b></summary>
 
 <p align="center">
-  <img src="screenshots/dictating.png" alt="Dictating a letter in LibreOffice Writer, with TalkType's recording indicator showing" width="90%">
+  <img src="screenshots/dictating.png" alt="Dictating a letter in LibreOffice Writer, with TuxTalk's recording indicator showing" width="90%">
 </p>
-<p align="center"><em>Hold F8 and talk: the indicator shows TalkType is listening, and your words land wherever you're typing</em></p>
+<p align="center"><em>Hold F8 and talk: the indicator shows TuxTalk is listening, and your words land wherever you're typing</em></p>
 
 <p align="center">
   <img src="screenshots/welcome-recommended.png" alt="First run: the recommended setup for this computer" width="40%">
@@ -331,7 +332,7 @@ A graphics card makes the Whisper models much faster, and with Vulkan it speeds 
 
 On an RTX 4070 Super both were equally fast: half a second for 11 seconds of speech with the Large model. First run uses any graphics card through Vulkan. CUDA is set up from Preferences by choosing it as the Device.
 
-Before switching to Vulkan, TalkType times your graphics chip against your processor and only switches if the graphics chip is clearly faster. The graphics built into some desktop processors is too small to help, and in that case it tells you and keeps using the processor.
+Before switching to Vulkan, TuxTalk times your graphics chip against your processor and only switches if the graphics chip is clearly faster. The graphics built into some desktop processors is too small to help, and in that case it tells you and keeps using the processor.
 
 Parakeet doesn't need a graphics card, since it's already fast on the processor. With the device set to Vulkan it runs on the graphics card anyway: on an RTX 4070 Super, a minute of speech took 0.2 seconds instead of 2, with the same accuracy. That needs a second copy of Parakeet in the graphics engine's format (669 MB). The processor copy stays too, as a fallback. CUDA can't run Parakeet.
 
@@ -340,7 +341,7 @@ Parakeet doesn't need a graphics card, since it's already fast on the processor.
 <details>
 <summary><b>Settings file</b></summary>
 
-Settings are stored in `~/.config/talktype/config.toml`. To keep a copy, use **Save Backup** in Preferences → Updates & Backup.
+Settings are stored in `~/.config/tuxtalk/config.toml`. To keep a copy, use **Save Backup** in Preferences → Updates & Backup.
 
 ```toml
 model = "parakeet-v3"     # AI model: parakeet-v3, tiny, base, small, medium, large-v3
@@ -367,10 +368,10 @@ auto_period = true        # Add period at end of sentences
 
 ### Hotkey not working?
 - Another app may be using F8/F9 - try different keys in Preferences
-- Ensure TalkType service is running (check tray icon)
+- Ensure TuxTalk service is running (check tray icon)
 
 ### No hotkey works at all?
-TalkType reads your keyboard directly, which requires your account to be in the
+TuxTalk reads your keyboard directly, which requires your account to be in the
 system's `input` group. Without it no key can be detected, even though the app
 looks like it started fine.
 
@@ -388,7 +389,7 @@ permission to *read keys*, so typing can work while hotkeys do not.
 - Tray menu → Performance → Recommended for this computer
 
 ### Tray icon not visible (GNOME)?
-- TalkType offers to install its GNOME extension on first run
+- TuxTalk offers to install its GNOME extension on first run
 - Or manually: Preferences → Advanced → Install Extension
 
 </details>
@@ -404,8 +405,8 @@ sudo dnf install -y portaudio-devel ffmpeg ydotool wl-clipboard \
                     python3-gobject libayatana-appindicator-gtk3 libnotify
 
 # Clone and install
-git clone https://github.com/ronb1964/TalkType.git
-cd TalkType
+git clone https://github.com/ronb1964/TuxTalk.git
+cd TuxTalk
 poetry install
 
 # Run
@@ -414,7 +415,7 @@ poetry run dictate-tray
 
 ### ydotool Setup
 
-TalkType requires ydotool for text injection:
+TuxTalk requires ydotool for text injection:
 
 ```bash
 # Create systemd service
@@ -446,11 +447,11 @@ systemctl --user enable --now ydotoold.service
 
 MIT License. See [LICENSE](LICENSE) for details.
 
-TalkType's downloads also include other open-source software, like ydotool and wl-clipboard, each under its own license. [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) lists them.
+TuxTalk's downloads also include other open-source software, like ydotool and wl-clipboard, each under its own license. [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) lists them.
 
 <p align="center">
-  <a href="https://github.com/ronb1964/TalkType/releases/latest">Download</a> &bull;
+  <a href="https://github.com/ronb1964/TuxTalk/releases/latest">Download</a> &bull;
   <a href="CHANGELOG.md">Changelog</a> &bull;
-  <a href="https://github.com/ronb1964/TalkType/issues">Report a bug</a> &bull;
-  <a href="https://github.com/ronb1964/TalkType/discussions">Ideas and questions</a>
+  <a href="https://github.com/ronb1964/TuxTalk/issues">Report a bug</a> &bull;
+  <a href="https://github.com/ronb1964/TuxTalk/discussions">Ideas and questions</a>
 </p>

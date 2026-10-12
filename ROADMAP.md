@@ -1,4 +1,4 @@
-# TalkType Roadmap
+# TuxTalk Roadmap
 
 Future features, improvements, and expansion ideas. Check off items as they're implemented.
 
@@ -14,7 +14,7 @@ Status markers: `[x]` shipped · `[~]` partly done, see note · `[ ]` not starte
 
 ## Transcription & AI
 
-*The items marked (2026-09 research) come from a competitive and speech-engine survey done on 2026-09-25. The full write-up is in Obsidian: "TalkType/2026-09-25 - Competitive landscape and direction research". They are listed in priority order.*
+*The items marked (2026-09 research) come from a competitive and speech-engine survey done on 2026-09-25. The full write-up is in Obsidian: "TuxTalk/2026-09-25 - Competitive landscape and direction research". They are listed in priority order.*
 
 - [x] **(2026-09 research) Parakeet as an optional engine.** Priority 1. **Shipped in 0.8.0.** It is `parakeet-v3` in the model list; see `parakeet_engine.py`. Also a "Fast & Accurate" Performance preset in both the tray and the GNOME extension (extension version bumped to 10).
   - What: NVIDIA Parakeet TDT 0.6B v3, run through `onnx-asr`. Keep faster-whisper as the default.
@@ -22,7 +22,7 @@ Status markers: `[x]` shipped · `[~]` partly done, see note · `[ ]` not starte
   - Limits: 25 European languages only, so it can't replace Whisper. The license is CC-BY-4.0, so add an attribution line in About.
   - Size: `onnxruntime` 1.23.2 is already in the AppImage (faster-whisper depends on it), so the AppImage grows by only a few MB. onnx-asr supports Python 3.10 with onnxruntime < 1.24, which matches what we bundle.
   - Model: ~670 MB int8 (`istupakov/parakeet-tdt-0.6b-v3-onnx`), downloaded at runtime like the Whisper models.
-  - Nothing is lost: TalkType doesn't use Whisper's `initial_prompt`, which Parakeet lacks.
+  - Nothing is lost: TuxTalk doesn't use Whisper's `initial_prompt`, which Parakeet lacks.
 - [ ] **(2026-09 research) AMD/Intel GPU acceleration via Vulkan.** Priority 2.
   - What: whisper.cpp's Vulkan backend through `pywhispercpp`, built with `GGML_VULKAN=1`. The PyPI wheel is CPU-only, so we would ship our own build.
   - Why: GPU acceleration is NVIDIA-only today. Vulkan reports up to 12x on integrated AMD/Intel graphics, and Voxtype, Vocalinux and hyprwhspr already advertise it.
@@ -61,7 +61,7 @@ Status markers: `[x]` shipped · `[~]` partly done, see note · `[ ]` not starte
 
 - [ ] Session statistics — words transcribed, recording time, characters typed, average WPM
 - [ ] Waveform visualization during recording
-- [ ] Custom symbolic icon for TalkType branding (mic with "T" badge or speech bubble)
+- [ ] Custom symbolic icon for TuxTalk branding (mic with "T" badge or speech bubble)
 - [ ] Native Wayland positioning via gtk-layer-shell
 - [x] Keyboard shortcuts reference — hotkeys are documented in the Help dialog, reachable from both the tray and GNOME menus.
 - [~] Voice commands quick access with test feature — the quick-reference dialog exists (`voice_commands_dialog.py`, Ctrl+Alt+V). The **test feature** (try a command and see the result) is still outstanding.
@@ -75,7 +75,7 @@ Status markers: `[x]` shipped · `[~]` partly done, see note · `[ ]` not starte
   1. It is only used to *decline the AT-SPI insertion method* and fall back to typing — the text still gets typed into the password field.
   2. `_determine_injection_method()` returns `use_atspi=False` on every path, so the whole AT-SPI module is currently unreachable.
 
-  Worth raising in priority: TalkType types into whatever holds focus, with no exception for password inputs.
+  Worth raising in priority: TuxTalk types into whatever holds focus, with no exception for password inputs.
 - [ ] Auto-pause detection when switching apps
 - [ ] Temporary "pause dictation" mode via tray
 - [ ] Workspace awareness — only activate on certain workspaces
@@ -111,7 +111,7 @@ Status markers: `[x]` shipped · `[~]` partly done, see note · `[ ]` not starte
 
 ## Update System
 
-- [x] Auto-check for updates — once per day, via `should_check_today()`, five seconds after tray launch. Note: this is a one-shot at startup, so an always-on machine that never restarts TalkType won't re-check on its own until the next launch. Making the timer recurring (hourly, still date-gated to daily) would close that gap — deferred until someone asks.
+- [x] Auto-check for updates — once per day, via `should_check_today()`, five seconds after tray launch. Note: this is a one-shot at startup, so an always-on machine that never restarts TuxTalk won't re-check on its own until the next launch. Making the timer recurring (hourly, still date-gated to daily) would close that gap — deferred until someone asks.
 - [x] Install-type-aware updates (0.7.1) — `get_install_type()` picks the right update method: `.deb`/`.rpm` install the new package via `pkexec` (password prompt, through the system package manager), AppImage swaps in place, AUR points to the AUR helper, Flatpak/dev show instructions. Never downloads+runs an AppImage on a package install (the old `libfuse.so.2` failure). Clean detached restart after a package update.
 - [x] Update UX unified across the GTK tray and GNOME extension — both route to the same in-app result dialog; the extension no longer opens Preferences on top of it.
 
@@ -121,10 +121,10 @@ Status markers: `[x]` shipped · `[~]` partly done, see note · `[ ]` not starte
 
 ## Distribution & Packaging
 
-- [x] AUR — `talktype-appimage` is published and current. `aur/` holds the packaging sources; `aur-repo/` is the untracked publishing clone (`ssh://aur@aur.archlinux.org/talktype-appimage.git`). Updating a release means bumping `pkgver` and `sha256sums` in both, then committing and pushing `aur-repo`. Note there is no `makepkg` on this machine, so `.SRCINFO` is maintained by hand and must be kept in step with the PKGBUILD.
+- [x] AUR — `tuxtalk-appimage` is published and current. `aur/` holds the packaging sources; `aur-repo/` is the untracked publishing clone (`ssh://aur@aur.archlinux.org/tuxtalk-appimage.git`). Updating a release means bumping `pkgver` and `sha256sums` in both, then committing and pushing `aur-repo`. Note there is no `makepkg` on this machine, so `.SRCINFO` is maintained by hand and must be kept in step with the PKGBUILD.
 - [x] `.deb` packaging — `build-deb.sh`, validated on real Ubuntu 22.04 and 26.04 (GNOME).
 - [x] `.rpm` packaging — `build-rpm.sh`, validated on Fedora GNOME and Fedora KDE VMs. Both are built from the same AppDir the AppImage uses, so a fix in `container-build.sh` reaches all three.
-- [~] Flatpak packaging — builds and runs. A self-hosted manifest (`packaging/flatpak/io.github.ronb1964.TalkType.yml`) and a fully offline Flathub manifest (`packaging/flatpak/flathub/`) both exist, but nothing is published. The Flathub submission (flathub/flathub#9825) was closed and labeled "AI Slop", and no PR carrying that label has ever been merged there, so the realistic routes are a `.flatpak` bundle on GitHub Releases or a self-hosted Flatpak repo.
+- [~] Flatpak packaging — builds and runs. A self-hosted manifest (`packaging/flatpak/io.github.ronb1964.TuxTalk.yml`) and a fully offline Flathub manifest (`packaging/flatpak/flathub/`) both exist, but nothing is published. The Flathub submission (flathub/flathub#9825) was closed and labeled "AI Slop", and no PR carrying that label has ever been merged there, so the realistic routes are a `.flatpak` bundle on GitHub Releases or a self-hosted Flatpak repo.
 - [ ] Snap Store packaging
 - [ ] PyPI wheel
 - [~] Submit to AlternativeTo, Awesome Lists — AlternativeTo is live (2026-03-30). Submitted to awesome-voice-typing (primaprashant/awesome-voice-typing#27, opened 2026-08-27). The maintainer merged #15, #19, #21 and #22 on 2026-09-08 but skipped ours, which had a merge conflict because the "Browse by platform" section was removed. On 2026-09-25 the branch was rebased (now a single table row, mergeable) and a follow-up comment posted. Checked and ruled out: `rcalixte/awesome-wayland` (closed a Linux dictation tool as out of scope), `luong-komorebi/Awesome-Linux-Software` and `natpen/awesome-wayland` (both archived), `sindresorhus/awesome-whisper` (macOS-centric, weak fit).
@@ -158,7 +158,7 @@ Status markers: `[x]` shipped · `[~]` partly done, see note · `[ ]` not starte
 
 ## Marketing & Promotion
 
-*2026-09 research findings (see the Obsidian note). The problem is visibility, not quality: TalkType's Show HN (2026-04-03) got 2 points, and more than a dozen Linux dictation Show HNs in 2026 got 2–7 points each. Show HN is saturated for this category.*
+*2026-09 research findings (see the Obsidian note). The problem is visibility, not quality: TuxTalk's Show HN (2026-04-03) got 2 points, and more than a dozen Linux dictation Show HNs in 2026 got 2–7 points each. Show HN is saturated for this category.*
 
 - [x] **Lead with the Wayland hotkey.** README rewritten 2026-09-26 (commit 9ca7fc1); release notes still to follow the same lead. Make it the first line of the README and the release notes. The competition can't do it reliably:
   - Handy makes Linux users bind a desktop shortcut themselves, and its typing tool (wtype) fails on GNOME.
@@ -167,11 +167,11 @@ Status markers: `[x]` shipped · `[~]` partly done, see note · `[ ]` not starte
   - Suggested pitch: "Hold a key, talk, release. It works on GNOME and KDE Wayland out of the box."
 - [ ] **Target KDE, Fedora and Arch users.** Canonical's Myna ships built-in offline dictation in Ubuntu 26.10 (October 2026), covering GNOME/Ubuntu only. It has no voice commands in v1.
 - [x] Post in KDE Discuss → Community. Posted 2026-09-26 as Ron_Brand, tagged plasma and wayland; held for moderator approval (first post). Dictee, another offline dictation app, got a good reception there.
-- [ ] Post regular "what's new in vX" updates on r/linux, plus r/kde and r/Fedora. **Blocked for now (2026-09-26):** u/ronb1964 has 4 posts, all TalkType, and both r/linux posts (Aug 2025, Feb 2026) plus r/opensource were removed by moderators; r/linux rule 6 caps self-promotion at 10% of posts. Build normal history first, e.g. helpful answers in "Wayland dictation?" threads, before posting again. This is how Vocalinux built its following.
+- [ ] Post regular "what's new in vX" updates on r/linux, plus r/kde and r/Fedora. **Blocked for now (2026-09-26):** u/ronb1964 has 4 posts, all TuxTalk, and both r/linux posts (Aug 2025, Feb 2026) plus r/opensource were removed by moderators; r/linux rule 6 caps self-promotion at 10% of posts. Build normal history first, e.g. helpful answers in "Wayland dictation?" threads, before posting again. This is how Vocalinux built its following.
 - [~] Reply in the Ubuntu Myna thread (discourse.ubuntu.com/t/84251) and the GNOME "desktop-wide offline speech-to-text" proposal (discourse.gnome.org/t/35858). Myna reply posted 2026-09-26 as ronb1964, awaiting moderator approval. GNOME thread skipped (quiet since June). Both explicitly ask dictation users for input.
 - [ ] Pitch Phoronix, Hackaday "Linux Fu", It's FOSS and The Register (Liam Proven).
-- [ ] Get into the "best Linux dictation 2026" roundups (blabby.ai, spokenly.app, airtypes.com). TalkType is missing from most of them.
-- [ ] Name collision: search results for "TalkType" split with talk-type.com, talktype.app, an iOS app and two other GitHub projects. Consider always writing "TalkType for Linux" in posts.
+- [ ] Get into the "best Linux dictation 2026" roundups (blabby.ai, spokenly.app, airtypes.com). TuxTalk is missing from most of them.
+- [ ] Name collision: search results for "TuxTalk" split with talk-type.com, tuxtalk.app, an iOS app and two other GitHub projects. Consider always writing "TuxTalk for Linux" in posts.
 - [ ] Demo GIF/video creation
 - [ ] Reddit launch (r/linux, r/wayland, r/gnome, r/fedora, r/opensource)
 - [ ] Hacker News "Show HN" post
