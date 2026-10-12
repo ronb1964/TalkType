@@ -81,3 +81,42 @@ def test_no_installed_copy_means_no_repair(env):
     _entry(entry, str(home / "Downloads" / "TalkType-v0.10.0-x86_64.AppImage"))
 
     assert autostart.repair_stale_appimage_autostart() is False
+
+
+# --- The entry's description (0.14.7): the old one named Faster-Whisper ---
+
+@pytest.mark.parametrize("dev, old, new", [
+    (False, "AI-powered dictation for Wayland using Faster-Whisper", autostart.AUTOSTART_COMMENT),
+    (True, "AI-powered dictation - Development Version", autostart.AUTOSTART_COMMENT_DEV),
+])
+def test_old_description_is_refreshed_and_nothing_else_changes(tmp_path, monkeypatch, dev, old, new):
+    entry = tmp_path / "talktype.desktop"
+    before = ("[Desktop Entry]\nName=TalkType\nComment=" + old +
+              "\nExec=/home/u/AppImages/TalkType.AppImage\nX-GNOME-Autostart-enabled=false\n")
+    entry.write_text(before)
+    monkeypatch.setattr(autostart, "_autostart_desktop_path", lambda: str(entry))
+    monkeypatch.setattr(config, "DEV_MODE", dev)
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+    assert autostart.refresh_autostart_comment() is True
+    assert entry.read_text() == before.replace("Comment=" + old, "Comment=" + new)
+    assert autostart.refresh_autostart_comment() is False      # already current
+
+
+def test_a_custom_description_is_left_alone(tmp_path, monkeypatch):
+    entry = tmp_path / "talktype.desktop"
+    entry.write_text("[Desktop Entry]\nComment=My own words\nExec=talktype\n")
+    monkeypatch.setattr(autostart, "_autostart_desktop_path", lambda: str(entry))
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+    assert autostart.refresh_autostart_comment() is False
+    assert "My own words" in entry.read_text()
+
+
+def test_new_entries_get_the_current_description(tmp_path, monkeypatch):
+    entry = tmp_path / "autostart" / "talktype.desktop"
+    monkeypatch.setattr(autostart, "_autostart_desktop_path", lambda: str(entry))
+    monkeypatch.setattr(autostart, "get_launch_command", lambda *a, **k: "/usr/bin/talktype")
+    monkeypatch.setattr(autostart, "get_icon_path", lambda: "icon")
+    monkeypatch.setattr(config, "DEV_MODE", False)
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+    assert autostart.set_autostart(True)
+    assert f"Comment={autostart.AUTOSTART_COMMENT}\n" in entry.read_text()

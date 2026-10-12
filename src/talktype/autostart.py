@@ -111,6 +111,15 @@ def get_icon_path() -> str:
     return 'audio-input-microphone'
 
 
+# The description KDE's Autostart page (and other desktops) shows for the entry.
+# Same wording as the store listing's summary. The old text named Faster-Whisper
+# and Wayland only, both stale since Parakeet became the default and X11 works.
+AUTOSTART_COMMENT = "Hold a key, talk, and your words are typed for you"
+AUTOSTART_COMMENT_DEV = AUTOSTART_COMMENT + " (development version)"
+_OLD_COMMENTS = ("AI-powered dictation for Wayland using Faster-Whisper",
+                 "AI-powered dictation - Development Version")
+
+
 def _autostart_desktop_path() -> str:
     from . import config
     autostart_dir = os.path.expanduser("~/.config/autostart")
@@ -195,8 +204,7 @@ def set_autostart(enable: bool, prefer_installed_appimage: bool = False) -> bool
         exec_cmd = get_launch_command(prefer_installed_appimage)
         icon_path = get_icon_path()
         app_name = "TalkType (Dev)" if config.DEV_MODE else "TalkType"
-        comment = ("AI-powered dictation - Development Version" if config.DEV_MODE
-                   else "AI-powered dictation for Wayland using Faster-Whisper")
+        comment = AUTOSTART_COMMENT_DEV if config.DEV_MODE else AUTOSTART_COMMENT
         path_line = f"Path={_project_root()}\n" if config.DEV_MODE else ""
         content = f"""[Desktop Entry]
 Type=Application
@@ -230,6 +238,46 @@ X-GNOME-Autostart-enabled=true
     except Exception as e:
         logger.error(f"Failed to disable autostart file: {e}")
         return False
+
+
+def refresh_autostart_comment() -> bool:
+    """Swap an old description in an existing launch-at-login entry for the
+    current one.
+
+    Entries are only written when launch at login is switched on, so without
+    this every existing user would keep the stale "Faster-Whisper" text on
+    KDE's Autostart page for good. Only the Comment= line changes, and only
+    when it holds one of the old texts: Exec and everything else stay exactly
+    as they were. Flatpak entries come from the portal and are left alone.
+    Returns True if the entry was rewritten.
+    """
+    if os.environ.get("FLATPAK_ID"):
+        return False
+    from . import config
+    path = _autostart_desktop_path()
+    try:
+        with open(path) as f:
+            lines = f.read().splitlines(keepends=True)
+    except OSError:
+        return False
+    new = AUTOSTART_COMMENT_DEV if config.DEV_MODE else AUTOSTART_COMMENT
+    changed = False
+    for i, line in enumerate(lines):
+        if line.rstrip("\n") in (f"Comment={old}" for old in _OLD_COMMENTS):
+            lines[i] = f"Comment={new}\n"
+            changed = True
+    if not changed:
+        return False
+    try:
+        tmp = path + ".tmp"
+        with open(tmp, "w") as f:
+            f.writelines(lines)
+        os.replace(tmp, path)
+    except OSError as e:
+        logger.debug(f"Could not refresh the login entry's description: {e}")
+        return False
+    logger.info("Updated the launch-at-login description")
+    return True
 
 
 def repair_stale_appimage_autostart() -> bool:

@@ -1114,7 +1114,7 @@ class DictationTray:
 
         # Copyright and author
         copyright_label = Gtk.Label()
-        copyright_label.set_markup('<span size="small">© 2024-2025 Ron B. • MIT License</span>')
+        copyright_label.set_markup('<span size="small">© 2024-2026 Ron Brand • MIT License</span>')
         content.pack_start(copyright_label, False, False, 0)
 
         # CC-BY-4.0 requires crediting NVIDIA for the Parakeet model. The AI
@@ -2059,9 +2059,12 @@ def main():
             logger.info("Not first run - auto-starting service")
             # A login entry from setups before 0.10.1 may still launch an old
             # AppImage from Downloads; point it at the installed copy.
+            # Older entries also still carry a stale description.
             try:
-                from .autostart import repair_stale_appimage_autostart
+                from .autostart import (repair_stale_appimage_autostart,
+                                        refresh_autostart_comment)
                 repair_stale_appimage_autostart()
+                refresh_autostart_comment()
             except Exception as e:
                 logger.debug(f"Could not check the login entry: {e}")
             GLib.timeout_add(1000, tray._auto_start_service)

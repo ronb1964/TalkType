@@ -1,6 +1,6 @@
 [Desktop Entry]
 Name=TalkType
-Comment=AI-powered speech recognition and dictation
+Comment=Hold a key, talk, and your words are typed for you
 Exec=AppRun tray
 Icon=io.github.ronb1964.TalkType
 Type=Application

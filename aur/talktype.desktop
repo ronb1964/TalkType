@@ -1,6 +1,6 @@
 [Desktop Entry]
 Name=TalkType
-Comment=Voice dictation for Linux using Whisper AI
+Comment=Hold a key, talk, and your words are typed for you
 Exec=talktype
 Icon=talktype
 Terminal=false

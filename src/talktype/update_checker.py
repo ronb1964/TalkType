@@ -1143,7 +1143,7 @@ def create_desktop_launcher() -> Tuple[bool, str]:
         # Desktop file content
         desktop_content = f"""[Desktop Entry]
 Name=TalkType
-Comment=AI-powered speech recognition and dictation (v{version})
+Comment=Hold a key, talk, and your words are typed for you (v{version})
 Exec={appimage_exec_path}
 Icon={icon_name}
 Type=Application
