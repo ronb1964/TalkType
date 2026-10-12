@@ -1964,6 +1964,11 @@ def main():
         try:
             for line in rename_migration.adopt_old_install(dev=config.DEV_MODE):
                 logger.info(f"Rename to TuxTalk: {line}")
+            # A dock or favourites list that pinned the old menu entry would
+            # show a blank icon; rename those once (a marker file records it).
+            marker = os.path.join(os.path.dirname(config.CONFIG_PATH), ".launchers-renamed")
+            for line in rename_migration.repin_launchers(marker):
+                logger.info(f"Rename to TuxTalk: {line}")
         except Exception as e:      # never stop the tray from starting
             logger.warning(f"Rename to TuxTalk: could not move the launchers: {e}")
 

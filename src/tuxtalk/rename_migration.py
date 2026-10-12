@@ -149,3 +149,134 @@ def adopt_old_install(home=None, dev=False):
         except OSError as e:
             done.append(f"could not move {folder}/talktype{suffix}.desktop: {e}")
     return done
+
+
+# ---------------------------------------------------------------------------
+# Pinned dock and favourite entries
+# ---------------------------------------------------------------------------
+# The menu entries were renamed (adopt_old_install above; the .deb/.rpm and
+# AUR packages install the new names). A dock that had pinned the old name
+# then shows a blank, generic icon on KDE (Ron's own panel, 2026-10-11) and
+# GNOME silently drops it from the favourites, so those lists are rewritten.
+
+LAUNCHER_RENAMES = {
+    "talktype.desktop": "tuxtalk.desktop",
+    "talktype-dev.desktop": "tuxtalk-dev.desktop",
+    "io.github.ronb1964.TalkType.desktop": "io.github.ronb1964.TuxTalk.desktop",
+}
+
+
+def _renamed(item):
+    """'talktype.desktop' or 'applications:talktype.desktop' under its new name."""
+    prefix, _, rest = item.rpartition(":")
+    if rest in LAUNCHER_RENAMES:
+        return (prefix + ":" if prefix else "") + LAUNCHER_RENAMES[rest]
+    return item
+
+
+def renamed_launchers(items):
+    """(new list, changed) for a pinned list. A renamed entry already pinned
+    under its new name is dropped rather than listed twice."""
+    items = list(items)
+    out = []
+    for item in items:
+        new = _renamed(item)
+        if new != item and (new in out or new in items):
+            continue
+        out.append(new)
+    return out, out != items
+
+
+def _plasma_script():
+    """Plasma desktop script: rename the pinned launchers in every task manager."""
+    import json
+    renames = {f"applications:{a}": f"applications:{b}" for a, b in LAUNCHER_RENAMES.items()}
+    return ("var renames = " + json.dumps(renames) + ";\n" + r"""
+var changed = 0;
+function fix(w) {
+    if (w.type.indexOf("taskmanager") < 0 && w.type.indexOf("icontasks") < 0) return;
+    w.currentConfigGroup = ["General"];
+    var l = w.readConfig("launchers", []);
+    if (typeof l === "string") l = l.length ? l.split(",") : [];
+    var out = [], did = false;
+    for (var i = 0; i < l.length; i++) {
+        var n = renames[l[i]] || l[i];
+        if (n !== l[i]) {
+            did = true;
+            if (out.indexOf(n) >= 0 || l.indexOf(n) >= 0) continue;
+        }
+        out.push(n);
+    }
+    if (did) { w.writeConfig("launchers", out); changed++; }
+}
+panels().forEach(function (p) { p.widgets().forEach(fix); });
+desktops().forEach(function (d) { d.widgets().forEach(fix); });
+print(changed);
+""")
+
+
+def _default_plasma_runner():
+    """Runs a Plasma script on a KDE session; None anywhere else."""
+    if "KDE" not in os.environ.get("XDG_CURRENT_DESKTOP", "").upper():
+        return None
+
+    def run(script):
+        import dbus
+        shell = dbus.SessionBus().get_object("org.kde.plasmashell", "/PlasmaShell")
+        return str(shell.evaluateScript(script, dbus_interface="org.kde.PlasmaShell"))
+    return run
+
+
+def _default_gnome_favorites():
+    """(get, set) for GNOME's favourite apps; None when GNOME isn't there."""
+    try:
+        from gi.repository import Gio
+        source = Gio.SettingsSchemaSource.get_default()
+        if source is None or source.lookup("org.gnome.shell", True) is None:
+            return None
+        settings = Gio.Settings.new("org.gnome.shell")
+        return (lambda: list(settings.get_strv("favorite-apps")),
+                lambda value: settings.set_strv("favorite-apps", value))
+    except Exception:
+        return None
+
+
+_DEFAULT = object()
+
+
+def repin_launchers(marker_path, run_plasma_script=_DEFAULT, gnome_favorites=_DEFAULT):
+    """Rename pinned TalkType launchers on the KDE dock and in GNOME's
+    favourites, once. The marker file records success; after a failure (say
+    plasmashell wasn't up yet at login) the next start tries again."""
+    if os.path.exists(marker_path):
+        return []
+    if run_plasma_script is _DEFAULT:
+        run_plasma_script = _default_plasma_runner()
+    if gnome_favorites is _DEFAULT:
+        gnome_favorites = _default_gnome_favorites()
+    done, ok = [], True
+    if run_plasma_script:
+        try:
+            n = run_plasma_script(_plasma_script())
+            done.append(f"KDE: renamed pinned launchers in {n} task manager(s)")
+        except Exception as e:
+            ok = False
+            done.append(f"KDE: could not update pinned launchers yet: {e}")
+    if gnome_favorites:
+        get, put = gnome_favorites
+        try:
+            new, changed = renamed_launchers(get())
+            if changed:
+                put(new)
+                done.append("GNOME: renamed TuxTalk in the favourites")
+        except Exception as e:
+            ok = False
+            done.append(f"GNOME: could not update the favourites yet: {e}")
+    if ok:
+        try:
+            os.makedirs(os.path.dirname(marker_path), exist_ok=True)
+            with open(marker_path, "w") as f:
+                f.write("done\n")
+        except OSError:
+            pass
+    return done
