@@ -30,7 +30,7 @@ from . import desktop_detect
 from .dbus_service import DBUS_INTERFACE, DBUS_NAME, DBUS_PATH
 from .logger import setup_logger
 
-# setup_logger: a plain getLogger never reaches talktype.log, which hid this
+# setup_logger: a plain getLogger never reaches tuxtalk.log, which hid this
 # module's warnings entirely.
 logger = setup_logger(__name__)
 

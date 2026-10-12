@@ -67,3 +67,39 @@ def test_second_run_does_nothing(tmp_path):
 
 def test_nothing_old_nothing_done(tmp_path):
     assert rm.migrate(home=str(tmp_path)) == []
+
+
+def test_new_folder_holding_only_our_log_still_takes_the_old_one(tmp_path):
+    # The logger creates ~/.config/tuxtalk to write tuxtalk.log the moment any
+    # module loads. That must not count as "both exist", or settings look lost.
+    h = str(tmp_path)
+    _mk(f"{h}/.config/talktype", "config.toml")
+    _mk(f"{h}/.config/tuxtalk", "tuxtalk.log")
+    rm.migrate(home=h)
+    assert os.path.isfile(f"{h}/.config/tuxtalk/config.toml")
+    assert os.path.isfile(f"{h}/.config/tuxtalk/tuxtalk.log")
+    assert os.path.islink(f"{h}/.config/talktype")
+
+
+def test_startup_run_respects_the_off_switches(tmp_path):
+    h = str(tmp_path)
+    _mk(f"{h}/.config/talktype")
+    assert rm.run_at_startup({"TUXTALK_NO_MIGRATE": "1"}, home=h) == []
+    assert rm.run_at_startup({"FLATPAK_ID": "io.github.ronb1964.TuxTalk"}, home=h) == []
+    assert os.path.isdir(f"{h}/.config/talktype") and not os.path.islink(f"{h}/.config/talktype")
+    assert rm.run_at_startup({}, home=h) == ["moved .config/talktype to .config/tuxtalk"]
+
+
+def test_startup_run_picks_dev_folders_from_dev_mode(tmp_path):
+    h = str(tmp_path)
+    _mk(f"{h}/.config/talktype-dev")
+    rm.run_at_startup({"DEV_MODE": "1"}, home=h)
+    assert os.path.isdir(f"{h}/.config/tuxtalk-dev")
+
+
+def test_package_import_runs_the_migration_before_anything_else():
+    import pathlib
+    src = (pathlib.Path(rm.__file__).parent / "__init__.py").read_text()
+    body = src.split('"""', 2)[2]                      # after the docstring
+    first_code = [l for l in body.splitlines() if l.strip() and not l.startswith("#")]
+    assert "rename_migration" in "\n".join(first_code[:4])

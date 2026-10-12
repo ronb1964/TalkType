@@ -240,26 +240,26 @@ class SplashScreen:
         # Check AppImage mount point first (has PNG in root)
         appimage_mount = os.environ.get('APPDIR')
         if appimage_mount:
-            icon_paths.append(os.path.join(appimage_mount, "io.github.ronb1964.TalkType.png"))
-            icon_paths.append(os.path.join(appimage_mount, "io.github.ronb1964.TalkType.svg"))
-            icon_paths.append(os.path.join(appimage_mount, "usr", "share", "icons", "hicolor", "scalable", "apps", "io.github.ronb1964.TalkType.svg"))
+            icon_paths.append(os.path.join(appimage_mount, "io.github.ronb1964.TuxTalk.png"))
+            icon_paths.append(os.path.join(appimage_mount, "io.github.ronb1964.TuxTalk.svg"))
+            icon_paths.append(os.path.join(appimage_mount, "usr", "share", "icons", "hicolor", "scalable", "apps", "io.github.ronb1964.TuxTalk.svg"))
 
         # Development/system paths - prioritize SVG for splash (cleaner rendering)
         icon_paths.extend([
             os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "icons", "OFFICIAL_ICON_DO_NOT_CHANGE.svg"),
             os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "icons", "TT_retro_square_light_transparent.png"),
-            "/app/share/icons/hicolor/scalable/apps/io.github.ronb1964.TalkType.svg",
+            "/app/share/icons/hicolor/scalable/apps/io.github.ronb1964.TuxTalk.svg",
             # System install locations (.deb / .rpm) — crisp hicolor SVG first, then the
             # pixmaps PNG fallback. Without these the splash finds no icon on a packaged
             # install ($APPDIR is unset and the project icons/ dir isn't bundled) and
             # falls back to plain "TalkType" text.
-            "/usr/share/icons/hicolor/scalable/apps/io.github.ronb1964.TalkType.svg",
-            "/usr/share/icons/hicolor/256x256/apps/io.github.ronb1964.TalkType.png",
-            "/usr/share/pixmaps/io.github.ronb1964.TalkType.png",
+            "/usr/share/icons/hicolor/scalable/apps/io.github.ronb1964.TuxTalk.svg",
+            "/usr/share/icons/hicolor/256x256/apps/io.github.ronb1964.TuxTalk.png",
+            "/usr/share/pixmaps/io.github.ronb1964.TuxTalk.png",
             "../icons/OFFICIAL_ICON_DO_NOT_CHANGE.svg",
             "../icons/TT_retro_square_light_transparent.png",
             "icons/OFFICIAL_ICON_DO_NOT_CHANGE.svg",
-            os.path.expanduser("~/.local/share/icons/hicolor/scalable/apps/io.github.ronb1964.TalkType.svg"),
+            os.path.expanduser("~/.local/share/icons/hicolor/scalable/apps/io.github.ronb1964.TuxTalk.svg"),
         ])
 
         for path in icon_paths:

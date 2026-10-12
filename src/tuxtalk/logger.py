@@ -1,7 +1,10 @@
-"""Lightweight logging setup for TalkType."""
+"""Lightweight logging setup for TuxTalk."""
 import logging
 import os
 from pathlib import Path
+
+# The log file in the config folder (talktype.log before the 0.15.0 rename).
+LOG_FILE_NAME = "tuxtalk.log"
 
 # Roll the log over once it passes this size (checked at process startup).
 _MAX_LOG_BYTES = 5 * 1024 * 1024
@@ -10,8 +13,8 @@ _MAX_LOG_BYTES = 5 * 1024 * 1024
 def _log_dir() -> Path:
     """The dev or production config directory that holds the log.
 
-    DEV_MODE=1 (Ron's daily dev build) logs to ~/.config/talktype-dev/, the
-    AppImage to ~/.config/talktype/ — matching config.py's split so the two
+    DEV_MODE=1 (Ron's daily dev build) logs to ~/.config/tuxtalk-dev/, the
+    AppImage to ~/.config/tuxtalk/ — matching config.py's split so the two
     never interleave.
     """
     # TUXTALK_LOG_DIR overrides everything. The test suite sets it (see
@@ -20,7 +23,7 @@ def _log_dir() -> Path:
     override = os.environ.get("TUXTALK_LOG_DIR")
     if override:
         return Path(override)
-    config_dir = "talktype-dev" if os.environ.get("DEV_MODE") == "1" else "talktype"
+    config_dir = "tuxtalk-dev" if os.environ.get("DEV_MODE") == "1" else "tuxtalk"
     # Inside a Flatpak use the private per-app XDG_CONFIG_HOME so logs don't land
     # in (or read from) a HOST install when --filesystem=home is granted. Host
     # behavior is unchanged (FLATPAK_ID gate). Mirrors config._config_home().
@@ -33,11 +36,11 @@ def _log_dir() -> Path:
 
 def log_file_path() -> Path:
     """Absolute path of the active log file."""
-    return _log_dir() / "talktype.log"
+    return _log_dir() / LOG_FILE_NAME
 
 
 def clear_log(log_dir: Path = None) -> None:
-    """Empty the log: truncate talktype.log to zero and remove its .old backup.
+    """Empty the log: truncate the log to zero and remove its .old backup.
 
     Truncation rather than deletion is deliberate — the dictation service holds
     the file open in append mode, and on Linux O_APPEND writes always land at the
@@ -46,13 +49,13 @@ def clear_log(log_dir: Path = None) -> None:
     """
     d = log_dir or _log_dir()
     try:
-        main = d / "talktype.log"
+        main = d / LOG_FILE_NAME
         if main.exists():
             open(main, "w").close()  # truncate in place
     except OSError:
         pass
     try:
-        old = d / "talktype.log.old"
+        old = d / (LOG_FILE_NAME + ".old")
         if old.exists():
             old.unlink()
     except OSError:
@@ -79,7 +82,7 @@ def setup_logger(name: str, level: int = logging.INFO) -> logging.Logger:
     """Create a logger writing to the dev or production log file.
 
     Honours DEV_MODE so the dev version (DEV_MODE=1) logs to
-    ~/.config/talktype-dev/ and the AppImage logs to ~/.config/talktype/ —
+    ~/.config/tuxtalk-dev/ and the AppImage logs to ~/.config/tuxtalk/ —
     they no longer interleave into one shared file.
 
     The tray and the dictation service are SEPARATE processes sharing this
@@ -99,14 +102,14 @@ def setup_logger(name: str, level: int = logging.INFO) -> logging.Logger:
     # Match config.py's dev/prod directory split
     log_dir = _log_dir()
     log_dir.mkdir(parents=True, exist_ok=True)
-    log_file = log_dir / "talktype.log"
+    log_file = log_dir / LOG_FILE_NAME
 
     # Startup rollover: bound the log without a per-write rotation race.
     try:
         if log_file.exists() and log_file.stat().st_size > _MAX_LOG_BYTES:
             # os.replace is atomic; if another process already rolled over,
             # the source is gone and this raises (caught) — no double-rename.
-            os.replace(log_file, log_dir / "talktype.log.old")
+            os.replace(log_file, log_dir / (LOG_FILE_NAME + ".old"))
     except OSError:
         pass
 

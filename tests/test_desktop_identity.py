@@ -8,8 +8,8 @@ type names its launcher differently:
 
   AppImage   ~/.local/share/applications/talktype.desktop  (first run)
   AUR        /usr/share/applications/talktype.desktop
-  deb / rpm  /usr/share/applications/io.github.ronb1964.TalkType.desktop
-  Flatpak    io.github.ronb1964.TalkType
+  deb / rpm  /usr/share/applications/io.github.ronb1964.TuxTalk.desktop
+  Flatpak    io.github.ronb1964.TuxTalk
   dev        ~/.local/share/applications/talktype-dev.desktop
 """
 import pathlib
@@ -25,10 +25,10 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 @pytest.mark.parametrize("install_type,expected", [
     ("appimage", "talktype"),
     ("aur", "talktype"),
-    ("deb", "io.github.ronb1964.TalkType"),
-    ("rpm", "io.github.ronb1964.TalkType"),
-    ("package", "io.github.ronb1964.TalkType"),
-    ("flatpak", "io.github.ronb1964.TalkType"),
+    ("deb", "io.github.ronb1964.TuxTalk"),
+    ("rpm", "io.github.ronb1964.TuxTalk"),
+    ("package", "io.github.ronb1964.TuxTalk"),
+    ("flatpak", "io.github.ronb1964.TuxTalk"),
     ("dev", "talktype-dev"),
 ])
 def test_name_matches_the_launcher_of_each_install(install_type, expected):
@@ -38,8 +38,8 @@ def test_name_matches_the_launcher_of_each_install(install_type, expected):
 def test_the_launchers_really_have_those_names():
     deb = (ROOT / "build-deb.sh").read_text()
     rpm = (ROOT / "build-rpm.sh").read_text()
-    assert "applications/io.github.ronb1964.TalkType.desktop" in deb
-    assert "applications/io.github.ronb1964.TalkType.desktop" in rpm
+    assert "applications/io.github.ronb1964.TuxTalk.desktop" in deb
+    assert "applications/io.github.ronb1964.TuxTalk.desktop" in rpm
     assert 'install -Dm644 talktype.desktop "${pkgdir}/usr/share/applications/talktype.desktop"' \
         in (ROOT / "aur" / "PKGBUILD").read_text()
     from tuxtalk.update_checker import DESKTOP_FILE_PATH

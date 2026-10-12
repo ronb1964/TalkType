@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="io.github.ronb1964.TalkType.png" alt="TalkType" width="110">
+  <img src="io.github.ronb1964.TuxTalk.png" alt="TalkType" width="110">
 </p>
 
 <h1 align="center">TalkType</h1>

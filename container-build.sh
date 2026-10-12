@@ -369,9 +369,9 @@ chmod +x AppDir/usr/bin/dictate-tray
 
 # Copy desktop files and icons
 echo "   Adding desktop integration..."
-cp io.github.ronb1964.TalkType.png AppDir/
-cp io.github.ronb1964.TalkType.desktop AppDir/
-cp io.github.ronb1964.TalkType.appdata.xml AppDir/usr/share/metainfo/
+cp io.github.ronb1964.TuxTalk.png AppDir/
+cp io.github.ronb1964.TuxTalk.desktop AppDir/
+cp io.github.ronb1964.TuxTalk.appdata.xml AppDir/usr/share/metainfo/
 
 # Create AppRun
 cat > AppDir/AppRun << 'EOF'

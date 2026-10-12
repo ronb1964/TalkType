@@ -1,6 +1,6 @@
 """Privacy: transcribed text is kept out of the on-disk log by default.
 
-TalkType logs every raw/normalized transcription to ~/.config/talktype/talktype.log
+TalkType logs every raw/normalized transcription to ~/.config/tuxtalk/tuxtalk.log
 for troubleshooting. That is a standing plaintext record of everything the user
 dictates. It must be redacted by default and only revealed when the user opts in
 via the `log_transcripts` setting (which pops a warning before it turns on).
@@ -212,21 +212,21 @@ def test_log_file_path_follows_dev_mode(monkeypatch):
     # checks the normal rule, so switch that off. Only paths are computed.
     monkeypatch.delenv("TUXTALK_LOG_DIR", raising=False)
     monkeypatch.setenv("DEV_MODE", "1")
-    assert tlog.log_file_path().parent.name == "talktype-dev"
+    assert tlog.log_file_path().parent.name == "tuxtalk-dev"
     monkeypatch.delenv("DEV_MODE", raising=False)
-    assert tlog.log_file_path().parent.name == "talktype"
+    assert tlog.log_file_path().parent.name == "tuxtalk"
 
 
-def test_talktype_log_dir_overrides_the_location(monkeypatch, tmp_path):
+def test_log_dir_override_sets_the_location_the_location(monkeypatch, tmp_path):
     monkeypatch.setenv("DEV_MODE", "1")
     monkeypatch.setenv("TUXTALK_LOG_DIR", str(tmp_path))
-    assert tlog.log_file_path() == tmp_path / "talktype.log"
+    assert tlog.log_file_path() == tmp_path / "tuxtalk.log"
 
 
 def test_clear_log_empties_main_and_removes_backup(tmp_path):
-    main = tmp_path / "talktype.log"
+    main = tmp_path / "tuxtalk.log"
     main.write_text("secret dictation history\n")
-    old = tmp_path / "talktype.log.old"
+    old = tmp_path / "tuxtalk.log.old"
     old.write_text("older secrets\n")
 
     tlog.clear_log(tmp_path)

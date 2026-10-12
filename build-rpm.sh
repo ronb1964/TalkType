@@ -87,11 +87,11 @@ exec /opt/talktype/AppRun "$@"
 LAUNCHER
 chmod +x "$STAGE/usr/bin/talktype"
 
-sed 's/^Exec=.*/Exec=talktype tray/' "$PROJECT_DIR/io.github.ronb1964.TalkType.desktop" \
-    > "$STAGE/usr/share/applications/io.github.ronb1964.TalkType.desktop"
-cp "$PROJECT_DIR/io.github.ronb1964.TalkType.png" "$STAGE/usr/share/pixmaps/"
+sed 's/^Exec=.*/Exec=talktype tray/' "$PROJECT_DIR/io.github.ronb1964.TuxTalk.desktop" \
+    > "$STAGE/usr/share/applications/io.github.ronb1964.TuxTalk.desktop"
+cp "$PROJECT_DIR/io.github.ronb1964.TuxTalk.png" "$STAGE/usr/share/pixmaps/"
 install -Dm644 "$PROJECT_DIR/icons/OFFICIAL_ICON_DO_NOT_CHANGE.svg" \
-    "$STAGE/usr/share/icons/hicolor/scalable/apps/io.github.ronb1964.TalkType.svg"
+    "$STAGE/usr/share/icons/hicolor/scalable/apps/io.github.ronb1964.TuxTalk.svg"
 
 # Normalize permissions so nothing installs unreadable (same guard as the .deb).
 chmod -R a+rX "$STAGE"

@@ -180,15 +180,15 @@ modules:
     build-commands:
       - install -Dm755 packaging/flatpak/talktype-launcher /app/bin/talktype-launcher
       - mkdir -p /app/lib && cp -r src/tuxtalk /app/lib/talktype
-      - install -Dm644 io.github.ronb1964.TalkType.appdata.xml
-          /app/share/metainfo/io.github.ronb1964.TalkType.appdata.xml
+      - install -Dm644 io.github.ronb1964.TuxTalk.appdata.xml
+          /app/share/metainfo/io.github.ronb1964.TuxTalk.appdata.xml
       # App icon (square SVG copy; Flatpak rejects non-square icons on export).
-      - install -Dm644 packaging/flatpak/io.github.ronb1964.TalkType.svg
-          /app/share/icons/hicolor/scalable/apps/io.github.ronb1964.TalkType.svg
-      - install -Dm644 io.github.ronb1964.TalkType.desktop
-          /app/share/applications/io.github.ronb1964.TalkType.desktop
+      - install -Dm644 packaging/flatpak/io.github.ronb1964.TuxTalk.svg
+          /app/share/icons/hicolor/scalable/apps/io.github.ronb1964.TuxTalk.svg
+      - install -Dm644 io.github.ronb1964.TuxTalk.desktop
+          /app/share/applications/io.github.ronb1964.TuxTalk.desktop
       - sed -i 's|^Exec=.*|Exec=talktype-launcher|'
-          /app/share/applications/io.github.ronb1964.TalkType.desktop
+          /app/share/applications/io.github.ronb1964.TuxTalk.desktop
     sources:
       - type: git
         url: https://github.com/ronb1964/TalkType.git

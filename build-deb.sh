@@ -92,14 +92,14 @@ LAUNCHER
 chmod +x "$STAGE/usr/bin/talktype"
 
 # Desktop entry — same as the AppImage's, but Exec points at the system launcher.
-sed 's/^Exec=.*/Exec=talktype tray/' "$PROJECT_DIR/io.github.ronb1964.TalkType.desktop" \
-    > "$STAGE/usr/share/applications/io.github.ronb1964.TalkType.desktop"
-cp "$PROJECT_DIR/io.github.ronb1964.TalkType.png" "$STAGE/usr/share/pixmaps/"
+sed 's/^Exec=.*/Exec=talktype tray/' "$PROJECT_DIR/io.github.ronb1964.TuxTalk.desktop" \
+    > "$STAGE/usr/share/applications/io.github.ronb1964.TuxTalk.desktop"
+cp "$PROJECT_DIR/io.github.ronb1964.TuxTalk.png" "$STAGE/usr/share/pixmaps/"
 # Crisp scalable icon in the hicolor theme — used by the app menu AND the first-run
 # splash screen (which prefers SVG). Without it, a packaged install has no icon the
 # splash can find and shows plain "TalkType" text instead of the glowing logo.
 install -Dm644 "$PROJECT_DIR/icons/OFFICIAL_ICON_DO_NOT_CHANGE.svg" \
-    "$STAGE/usr/share/icons/hicolor/scalable/apps/io.github.ronb1964.TalkType.svg"
+    "$STAGE/usr/share/icons/hicolor/scalable/apps/io.github.ronb1964.TuxTalk.svg"
 
 # Post-install: refresh the icon + desktop caches (best-effort, never fail the install).
 POSTINST="$WORK/postinst.sh"

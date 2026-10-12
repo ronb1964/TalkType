@@ -1,7 +1,13 @@
-"""TalkType - voice dictation for Linux"""
+"""TuxTalk - voice dictation for Linux"""
 
-import ctypes.util
-import os
+# First of all: move a TalkType install's folders to TuxTalk's names, before
+# any module (the logger above all) creates the new ones. The lines are logged
+# by the tray once its logger exists. See rename_migration.py.
+from . import rename_migration as _rename_migration
+MIGRATION_LOG = _rename_migration.run_at_startup()
+
+import ctypes.util  # noqa: E402
+import os  # noqa: E402
 
 __version__ = "0.14.6"
 

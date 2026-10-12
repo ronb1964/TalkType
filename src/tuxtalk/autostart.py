@@ -100,10 +100,10 @@ def get_icon_path() -> str:
     root = _project_root()
     candidates = [
         os.path.join(root, 'icons', 'OFFICIAL_ICON_DO_NOT_CHANGE.svg'),
-        os.path.join(os.path.dirname(sys.executable), '..', 'io.github.ronb1964.TalkType.svg'),
-        os.path.join(root, 'AppDir', 'io.github.ronb1964.TalkType.svg'),
-        '/usr/share/icons/hicolor/scalable/apps/io.github.ronb1964.TalkType.svg',
-        '/usr/local/share/icons/hicolor/scalable/apps/io.github.ronb1964.TalkType.svg',
+        os.path.join(os.path.dirname(sys.executable), '..', 'io.github.ronb1964.TuxTalk.svg'),
+        os.path.join(root, 'AppDir', 'io.github.ronb1964.TuxTalk.svg'),
+        '/usr/share/icons/hicolor/scalable/apps/io.github.ronb1964.TuxTalk.svg',
+        '/usr/local/share/icons/hicolor/scalable/apps/io.github.ronb1964.TuxTalk.svg',
     ]
     for path in candidates:
         if os.path.isfile(path):

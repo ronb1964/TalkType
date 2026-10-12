@@ -1037,7 +1037,7 @@ def _install_app_icon() -> Optional[str]:
         appdir = os.environ.get("APPDIR", "")
         if appdir:
             possible_paths = [
-                os.path.join(appdir, "io.github.ronb1964.TalkType.png"),
+                os.path.join(appdir, "io.github.ronb1964.TuxTalk.png"),
                 os.path.join(appdir, "talktype.png"),
                 os.path.join(appdir, "usr", "share", "icons", "hicolor", "256x256", "apps", "talktype.png"),
             ]
@@ -1052,7 +1052,7 @@ def _install_app_icon() -> Optional[str]:
         module_dir = Path(__file__).parent
         project_root = module_dir.parent.parent
         possible_paths = [
-            project_root / "io.github.ronb1964.TalkType.png",
+            project_root / "io.github.ronb1964.TuxTalk.png",
             project_root / "icons" / "TT_square_light.png",
         ]
         for p in possible_paths:

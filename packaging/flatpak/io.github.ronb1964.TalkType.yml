@@ -75,8 +75,8 @@ modules:
     build-commands:
       - install -Dm755 talktype-launcher /app/bin/talktype-launcher
       - mkdir -p /app/lib && cp -r talktype /app/lib/talktype
-      - install -Dm644 io.github.ronb1964.TalkType.appdata.xml
-          /app/share/metainfo/io.github.ronb1964.TalkType.appdata.xml
+      - install -Dm644 io.github.ronb1964.TuxTalk.appdata.xml
+          /app/share/metainfo/io.github.ronb1964.TuxTalk.appdata.xml
       # App icon. The welcome splash searches for this exact path and falls back
       # to plain "TalkType" text (no blue logo) if it's absent — which is what
       # happened before this was added. It is also the icon GNOME/KDE show in the
@@ -84,25 +84,25 @@ modules:
       # librsvg so GdkPixbuf can render it. This is a square-canvas copy of
       # icons/OFFICIAL_ICON_DO_NOT_CHANGE.svg — Flatpak rejects non-square icons
       # on export ("Expected a square icon"), and the original is 782x769.
-      - install -Dm644 io.github.ronb1964.TalkType.svg
-          /app/share/icons/hicolor/scalable/apps/io.github.ronb1964.TalkType.svg
+      - install -Dm644 io.github.ronb1964.TuxTalk.svg
+          /app/share/icons/hicolor/scalable/apps/io.github.ronb1964.TuxTalk.svg
       # Desktop entry so the app appears in the launcher with its name and icon.
       # Exec is normalized to the in-sandbox launcher (the repo copy carries the
       # AppImage's "AppRun tray"); Flatpak rewrites the exported copy to
       # "flatpak run" regardless, but keep the in-sandbox file honest.
-      - install -Dm644 io.github.ronb1964.TalkType.desktop
-          /app/share/applications/io.github.ronb1964.TalkType.desktop
+      - install -Dm644 io.github.ronb1964.TuxTalk.desktop
+          /app/share/applications/io.github.ronb1964.TuxTalk.desktop
       - sed -i 's|^Exec=.*|Exec=talktype-launcher|'
-          /app/share/applications/io.github.ronb1964.TalkType.desktop
+          /app/share/applications/io.github.ronb1964.TuxTalk.desktop
     sources:
       - type: dir
         path: ../../src
         dest: .
       - type: file
-        path: ../../io.github.ronb1964.TalkType.appdata.xml
+        path: ../../io.github.ronb1964.TuxTalk.appdata.xml
       - type: file
         path: talktype-launcher
       - type: file
-        path: io.github.ronb1964.TalkType.svg
+        path: io.github.ronb1964.TuxTalk.svg
       - type: file
-        path: ../../io.github.ronb1964.TalkType.desktop
+        path: ../../io.github.ronb1964.TuxTalk.desktop

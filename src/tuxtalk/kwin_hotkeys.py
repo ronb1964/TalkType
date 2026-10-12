@@ -40,7 +40,7 @@ from .kwin_focus import (KWIN_SCRIPTING_INTERFACE, KWIN_SCRIPTING_PATH,
                          KWIN_SERVICE, load_and_start)
 from .logger import setup_logger
 
-# setup_logger, not logging.getLogger: only it reaches talktype.log, and the
+# setup_logger, not logging.getLogger: only it reaches tuxtalk.log, and the
 # "KDE already uses F8" warning is no use if the user can't find it.
 logger = setup_logger(__name__)
 

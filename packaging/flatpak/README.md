@@ -87,7 +87,7 @@ Build artifacts (`.flatpak-build/`, `.flatpak-builder/`, `.flatpak-repo/`, and t
 | File | Purpose |
 |------|---------|
 | `io.github.ronb1964.TalkType.yml` | flatpak-builder manifest (runtime, deps, finish-args) |
-| `io.github.ronb1964.TalkType.svg` | square app icon installed into the sandbox |
+| `io.github.ronb1964.TuxTalk.svg` | square app icon installed into the sandbox |
 | `talktype-launcher` | in-sandbox entry point (sets `PYTHONPATH`, runs `-m tuxtalk.tray`) |
 | `build-flatpak.sh` | build + install (+ optional `bundle`) wrapper |
 | `shared-modules/` | vendored Flathub modules — `libayatana-appindicator` (tray) + `intltool` |

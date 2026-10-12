@@ -1944,8 +1944,14 @@ class DictationTray:
 
 def main():
     from . import desktop_identity
-    desktop_identity.apply()        # TalkType's icon on its windows, not KDE's generic one
+    desktop_identity.apply()        # TuxTalk's icon on its windows, not KDE's generic one
     _acquire_tray_singleton()
+
+    # The TalkType -> TuxTalk folder move ran at package import, before any
+    # logger existed; record what it did now (see rename_migration.py).
+    from . import MIGRATION_LOG
+    for line in MIGRATION_LOG:
+        logger.info(f"Rename to TuxTalk: {line}")
 
     # A copy of the settings to roll back to (Preferences → Advanced →
     # Restore Earlier Settings), taken before this version touches them.

@@ -24,18 +24,18 @@ def _install_facts():
     """Format-specific strings the help text interpolates. One place to keep the
     Flatpak vs non-Flatpak differences straight."""
     is_flatpak = bool(os.environ.get("FLATPAK_ID"))
-    app_id = "io.github.ronb1964.TalkType"
+    from .config import APP_ID as app_id
     if is_flatpak:
-        cfg_dir = f"~/.var/app/{app_id}/config/talktype/"
+        cfg_dir = f"~/.var/app/{app_id}/config/tuxtalk/"
         cache_dir = f"~/.var/app/{app_id}/cache/huggingface/"
     else:
-        cfg_dir = "~/.config/talktype/"
+        cfg_dir = "~/.config/tuxtalk/"
         cache_dir = "~/.cache/huggingface/"
     return {
         "is_flatpak": is_flatpak,
         "cfg_dir": cfg_dir,
         "cache_dir": cache_dir,
-        "log_path": cfg_dir + "talktype.log",
+        "log_path": cfg_dir + "tuxtalk.log",
     }
 
 

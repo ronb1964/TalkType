@@ -41,7 +41,7 @@ EOF
 
     # Extract and install icon from AppImage.
     #
-    # The icon inside the AppImage is io.github.ronb1964.TalkType.png. It used
+    # The icon inside the AppImage is io.github.ronb1964.TuxTalk.png. It used
     # to be talktype.png, and this step hardcoded that old name behind
     # `2>/dev/null || true`, so after the rename it failed silently and the
     # package shipped with no icon at all for several releases. Glob for any
@@ -49,8 +49,8 @@ EOF
     # none is found rather than quietly producing a package without an icon.
     cd "${srcdir}"
     chmod +x "TalkType-v${pkgver}-x86_64.AppImage"
-    ./"TalkType-v${pkgver}-x86_64.AppImage" --appimage-extract 'io.github.ronb1964.TalkType.png' >/dev/null 2>&1 || true
-    if [[ ! -f squashfs-root/io.github.ronb1964.TalkType.png ]]; then
+    ./"TalkType-v${pkgver}-x86_64.AppImage" --appimage-extract 'io.github.ronb1964.TuxTalk.png' >/dev/null 2>&1 || true
+    if [[ ! -f squashfs-root/io.github.ronb1964.TuxTalk.png ]]; then
         # Fall back to a full extract in case the icon was renamed again.
         ./"TalkType-v${pkgver}-x86_64.AppImage" --appimage-extract >/dev/null 2>&1 || true
     fi

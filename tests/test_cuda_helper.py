@@ -13,7 +13,7 @@ from tuxtalk.cuda_helper import (
 def test_get_appdir_cuda_path():
     """Test CUDA path returns expected location"""
     path = get_appdir_cuda_path()
-    assert path.endswith(".local/share/TalkType/cuda")
+    assert path.endswith(".local/share/TuxTalk/cuda")
     assert os.path.expanduser("~") in path
 
 
@@ -54,7 +54,7 @@ def test_first_run_flag(tmp_path):
     flag_file = tmp_path / ".first_run_done"
 
     with patch('tuxtalk.cuda_helper.os.path.expanduser') as mock_expand:
-        mock_expand.return_value = str(tmp_path / ".local/share/TalkType/.first_run_done")
+        mock_expand.return_value = str(tmp_path / ".local/share/TuxTalk/.first_run_done")
 
         # Should be first run initially
         with patch('os.path.exists', return_value=False):

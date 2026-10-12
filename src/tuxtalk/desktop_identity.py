@@ -10,8 +10,8 @@ install:
 
   AppImage   ~/.local/share/applications/talktype.desktop  (made at first run)
   AUR        /usr/share/applications/talktype.desktop
-  deb / rpm  /usr/share/applications/io.github.ronb1964.TalkType.desktop
-  Flatpak    io.github.ronb1964.TalkType
+  deb / rpm  /usr/share/applications/io.github.ronb1964.TuxTalk.desktop
+  Flatpak    io.github.ronb1964.TuxTalk
   dev        ~/.local/share/applications/talktype-dev.desktop
 
 Call apply() at the start of every process that opens windows (the tray,
@@ -20,7 +20,7 @@ imported, as long as it runs before the first window is shown.
 """
 from gi.repository import GLib
 
-APP_ID = "io.github.ronb1964.TalkType"
+from .config import APP_ID  # noqa: E402  (one app ID, defined in config)
 
 _BY_INSTALL_TYPE = {
     "appimage": "talktype",

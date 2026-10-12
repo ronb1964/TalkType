@@ -13,6 +13,18 @@ the same settings and models. Nothing is ever deleted, copied or overwritten:
 import errno
 import os
 
+# Files TuxTalk creates on its own the moment it starts (the logger writes its
+# log before anything else). A new folder holding only these is not "in use".
+_AUTO_CREATED = {"tuxtalk.log", "tuxtalk.log.old"}
+
+
+def _only_auto_created(folder):
+    try:
+        names = os.listdir(folder)
+    except OSError:
+        return False
+    return all(n in _AUTO_CREATED and os.path.isfile(os.path.join(folder, n)) for n in names)
+
 
 def PAIRS(dev=False):
     """(old, new) folder paths relative to the home folder."""
@@ -32,6 +44,15 @@ def migrate(home=None, dev=False):
         old, new = os.path.join(home, old_rel), os.path.join(home, new_rel)
         if os.path.islink(old) or not os.path.isdir(old):
             continue                      # nothing old, or already migrated
+        if (os.path.isdir(new) and not os.path.islink(new) and _only_auto_created(new)):
+            # Fold the fresh log into the old folder, so the move below keeps it.
+            for n in os.listdir(new):
+                if not os.path.exists(os.path.join(old, n)):
+                    os.rename(os.path.join(new, n), os.path.join(old, n))
+            try:
+                os.rmdir(new)
+            except OSError:
+                pass
         if os.path.lexists(new):
             done.append(f"{old_rel} and {new_rel} both exist; "
                         f"using {new_rel}, left {old_rel} alone")
@@ -53,3 +74,16 @@ def migrate(home=None, dev=False):
             except OSError as e2:
                 done.append(f"could not link {new_rel}: {e2}")
     return done
+
+
+def run_at_startup(environ=None, home=None):
+    """The package-import entry point. Off in the test suite
+    (TUXTALK_NO_MIGRATE) and in the Flatpak, whose folders live in its own
+    sandbox and never had the old names on the host."""
+    environ = os.environ if environ is None else environ
+    if environ.get("TUXTALK_NO_MIGRATE") or environ.get("FLATPAK_ID"):
+        return []
+    try:
+        return migrate(home=home, dev=environ.get("DEV_MODE") == "1")
+    except Exception as e:      # never stop the app from starting
+        return [f"rename migration failed: {e}"]

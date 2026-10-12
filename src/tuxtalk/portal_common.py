@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 BUS_NAME = "org.freedesktop.portal.Desktop"
 OBJ_PATH = "/org/freedesktop/portal/desktop"
-APP_ID = "io.github.ronb1964.TalkType"
+from .config import APP_ID  # noqa: E402  (one app ID, defined in config)
 _counter = 0
 
 

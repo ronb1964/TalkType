@@ -18,8 +18,12 @@ logger = logging.getLogger(__name__)
 
 # Detect dev mode - use separate paths for dev vs production
 DEV_MODE = os.environ.get("DEV_MODE") == "1"
-CONFIG_DIR = "talktype-dev" if DEV_MODE else "talktype"
-DATA_DIR = "TalkType-dev" if DEV_MODE else "TalkType"
+CONFIG_DIR = "tuxtalk-dev" if DEV_MODE else "tuxtalk"
+DATA_DIR = "TuxTalk-dev" if DEV_MODE else "TuxTalk"
+# The desktop/AppStream/portal app ID. (The D-Bus name the tray, service and
+# GNOME extension talk on deliberately stays io.github.ronb1964.TalkType: see
+# dbus_service.py.)
+APP_ID = "io.github.ronb1964.TuxTalk"
 
 
 def _config_home():
@@ -780,7 +784,7 @@ def get_data_dir():
     Get the data directory path based on dev mode.
 
     Returns:
-        str: Path to ~/.local/share/TalkType (production) or ~/.local/share/TalkType-dev (dev mode).
+        str: Path to ~/.local/share/TuxTalk (production) or ~/.local/share/TuxTalk-dev (dev mode).
              Inside a Flatpak this is the private per-app XDG_DATA_HOME/<DATA_DIR>.
     """
     return os.path.join(_data_home(), DATA_DIR)

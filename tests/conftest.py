@@ -15,6 +15,9 @@ import pytest
 
 _LOG_DIR = tempfile.mkdtemp(prefix="talktype-test-logs-")
 os.environ["TUXTALK_LOG_DIR"] = _LOG_DIR
+# Never move the real ~/.config/talktype or ~/.local/share/TalkType while the
+# suite imports tuxtalk (the rename migration runs on package import).
+os.environ["TUXTALK_NO_MIGRATE"] = "1"
 atexit.register(shutil.rmtree, _LOG_DIR, ignore_errors=True)
 
 

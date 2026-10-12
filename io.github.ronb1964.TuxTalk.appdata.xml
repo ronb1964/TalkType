@@ -30,7 +30,7 @@
     </ul>
   </description>
 
-  <launchable type="desktop-id">io.github.ronb1964.TalkType.desktop</launchable>
+  <launchable type="desktop-id">io.github.ronb1964.TuxTalk.desktop</launchable>
 
   <url type="homepage">https://github.com/ronb1964/TalkType</url>
   <url type="bugtracker">https://github.com/ronb1964/TalkType/issues</url>
