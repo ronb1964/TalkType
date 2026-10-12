@@ -468,6 +468,7 @@ Names and terms TuxTalk should spell your way, in Preferences → Snippets → Y
   capitals: "tux talk" → TuxTalk
 • Parakeet can't be told about words ahead of time, so for a word it hears as
   something else entirely, use Fix a Word
+• Words you fix with Fix a Word are added here too
 
 <b>Undo Commands:</b>
 • Say <b>undo last word</b> to delete the last word you dictated

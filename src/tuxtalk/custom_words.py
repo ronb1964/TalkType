@@ -78,6 +78,43 @@ def save(words):
     config.write_text_atomic(path(), "\n".join(lines + list(words)) + "\n")
 
 
+# What Fix a Word may add: a word or a short name, not an email address, a
+# web address, a snippet-style block of text or a literal ("quoted") one.
+_NOT_A_WORD = ("@", "://", "\\", "\n", '"')
+MAX_WORD_PIECES = 3
+MAX_WORD_CHARS = 40
+
+
+def is_word_like(text):
+    text = text.strip()
+    if not text or len(text) > MAX_WORD_CHARS or any(m in text for m in _NOT_A_WORD):
+        return False
+    return len(text.split()) <= MAX_WORD_PIECES and len(_letters(text)) >= 2
+
+
+def learn_fix(word, previous=None, common=frozenset()):
+    """Fix a Word just saved a fix to *word* (it was *previous*, if it was
+    re-fixed): add *word* to Your Words and drop *previous*, so Whisper isn't
+    told the old spelling. *common* words are left out. A words file that
+    can't be read is left alone. Returns whether the list changed."""
+    try:
+        words = load(strict=True)
+    except (OSError, UnicodeDecodeError) as e:
+        logger.warning(f"Your words couldn't be read, so the fix wasn't added to them: {e}")
+        return False
+    changed = False
+    if previous and previous != word and previous in words:
+        words.remove(previous)
+        changed = True
+    if (is_word_like(word) and word.strip().casefold() not in common
+            and word.strip().casefold() not in {w.casefold() for w in words}):
+        words.append(word.strip())
+        changed = True
+    if changed:
+        save(words)
+    return changed
+
+
 def prompt(words):
     """The words as a Whisper prompt ("TuxTalk, BambuStudio."), or None."""
     text = ""

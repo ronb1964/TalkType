@@ -8,6 +8,8 @@ voice command, so:
 - it works for every engine. It rewrites the transcription after the model
   heard it; Parakeet has no way to be told about words beforehand.
 - it shows up (and can be edited or removed) in Preferences > Snippets.
+- the corrected word is also added to Your Words (custom_words.py), so
+  Whisper models are told about it before they listen.
 - the dictation service picks it up on the next dictation, because it
   reloads custom_commands.toml whenever the file changes.
 
@@ -123,4 +125,12 @@ def save_fix(phrase, replacement):
         del commands[k]
     commands[phrase] = replacement
     config.save_custom_commands(commands)
+    # Also one of Your Words, so Whisper is told about it before it listens.
+    # The fix itself is already saved; this part must never undo that.
+    try:
+        from . import custom_words
+        custom_words.learn_fix(replacement, previous, _COMMON_WORDS)
+    except Exception as e:
+        from .logger import setup_logger
+        setup_logger(__name__).warning(f"Fix saved, but not added to your words: {e}")
     return previous

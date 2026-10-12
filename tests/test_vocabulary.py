@@ -144,3 +144,45 @@ def test_word_range_is_none_when_nothing_is_under_the_click():
 def test_word_span_covers_the_picked_words():
     text = "I opened Bamboo Studio, then printed."
     assert vocabulary.word_span(text, 2, 3) == (9, 23)
+
+
+# --- Fix a Word also feeds Your Words -----------------------------------------
+
+def test_a_fixed_word_is_added_to_your_words(commands_file):
+    from tuxtalk import custom_words
+    vocabulary.save_fix("bamboo studio", "BambuStudio")
+    vocabulary.save_fix("tux talk", "TuxTalk")
+    assert custom_words.load() == ["BambuStudio", "TuxTalk"]
+
+
+def test_a_word_already_there_is_not_added_twice(commands_file):
+    from tuxtalk import custom_words
+    custom_words.save(["bambustudio"])
+    vocabulary.save_fix("bamboo studio", "BambuStudio")
+    assert custom_words.load() == ["bambustudio"]
+
+
+@pytest.mark.parametrize("replacement", [
+    "me@example.com", "https://example.com", '"literal text"',
+    "a whole sentence of text here", "line one\\nline two", "their", "",
+])
+def test_only_word_like_fixes_become_your_words(commands_file, replacement):
+    from tuxtalk import custom_words
+    vocabulary.save_fix("some phrase", replacement)
+    assert custom_words.load() == []
+
+
+def test_refixing_a_word_swaps_the_old_spelling_out(commands_file):
+    from tuxtalk import custom_words
+    vocabulary.save_fix("gift tarot", "Giftarot")
+    vocabulary.save_fix("gift tarot", "Giftara")
+    assert custom_words.load() == ["Giftara"]
+
+
+def test_an_unreadable_words_file_is_left_alone(commands_file):
+    from tuxtalk import custom_words
+    words = commands_file.parent / "custom_words.txt"
+    words.write_bytes(b"caf\xe9\n")
+    vocabulary.save_fix("bamboo studio", "BambuStudio")
+    assert config.load_custom_commands()["bamboo studio"] == "BambuStudio"
+    assert words.read_bytes() == b"caf\xe9\n"

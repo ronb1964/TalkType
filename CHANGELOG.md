@@ -34,6 +34,7 @@ Also new in this one:
   when they come out split up or with the wrong capitals, so "tux talk" turns
   into TuxTalk. Heads up, Parakeet can't be told about words ahead of time, so
   if it hears one as something else entirely, Fix a Word is still the way.
+  Words you fix with Fix a Word get added to Your Words too.
 
 ## [0.14.6] - 2026-10-11
 

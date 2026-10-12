@@ -245,8 +245,8 @@ class _FixWordDialog:
             vocabulary.save_fix(phrase, replacement)
         except ConfigNotLoadedError:
             self._show_warning(
-                "Your Voice Commands file couldn't be read, so nothing was saved. "
-                "Open Preferences, Voice Commands, to check it.")
+                "Your snippets file couldn't be read, so nothing was saved. "
+                "Open Preferences, Snippets, to check it.")
             return
         except Exception as e:
             logger.error(f"Could not save word fix: {e}")
