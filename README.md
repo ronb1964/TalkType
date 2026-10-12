@@ -446,6 +446,8 @@ systemctl --user enable --now ydotoold.service
 
 MIT License. See [LICENSE](LICENSE) for details.
 
+TalkType's downloads also include other open-source software, like ydotool and wl-clipboard, each under its own license. [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) lists them.
+
 <p align="center">
   <a href="https://github.com/ronb1964/TalkType/releases/latest">Download</a> &bull;
   <a href="CHANGELOG.md">Changelog</a> &bull;

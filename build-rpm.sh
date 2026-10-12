@@ -68,6 +68,17 @@ mkdir -p "$STAGE/opt" "$STAGE/usr/bin" "$STAGE/usr/share/applications" "$STAGE/u
 # paths relative to itself, so it works unchanged at this location.
 mv "$TREE" "$STAGE/opt/talktype"
 
+# Third-party licenses ride inside the AppImage's tree (packaging/collect-licenses.sh).
+# Refuse to package an AppImage built without them.
+LIC_SRC="$STAGE/opt/talktype/usr/share/licenses"
+for f in talktype/LICENSE talktype/THIRD_PARTY_LICENSES.md ydotool/LICENSE wl-clipboard/COPYING; do
+    [ -f "$LIC_SRC/$f" ] || { echo "❌ The AppImage has no $f: rebuild it with ./build-release.sh"; exit 1; }
+done
+# Fedora keeps a package's license in /usr/share/licenses/<package>/.
+mkdir -p "$STAGE/usr/share/licenses/talktype"
+cp "$LIC_SRC/talktype/LICENSE" "$LIC_SRC/talktype/THIRD_PARTY_LICENSES.md" \
+    "$STAGE/usr/share/licenses/talktype/"
+
 cat > "$STAGE/usr/bin/talktype" <<'LAUNCHER'
 #!/bin/sh
 # TalkType system launcher — hands off to the bundled AppRun, which sets

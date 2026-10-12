@@ -68,6 +68,20 @@ mkdir -p "$STAGE/opt" "$STAGE/usr/bin" "$STAGE/usr/share/applications" "$STAGE/u
 # its paths relative to itself (${HERE}/usr/...), so it works unchanged at this location.
 mv "$TREE" "$STAGE/opt/talktype"
 
+# Third-party licenses ride inside the AppImage's tree (packaging/collect-licenses.sh).
+# Refuse to package an AppImage built without them.
+LIC_SRC="$STAGE/opt/talktype/usr/share/licenses"
+for f in talktype/LICENSE talktype/THIRD_PARTY_LICENSES.md ydotool/LICENSE wl-clipboard/COPYING; do
+    [ -f "$LIC_SRC/$f" ] || { echo "❌ The AppImage has no $f: rebuild it with ./build-release.sh"; exit 1; }
+done
+# Debian keeps a package's license in /usr/share/doc/<package>/copyright.
+mkdir -p "$STAGE/usr/share/doc/talktype"
+{ cat "$LIC_SRC/talktype/LICENSE"; echo
+  echo "TalkType bundles third-party software under /opt/talktype. Its licenses are in"
+  echo "/opt/talktype/usr/share/licenses/; THIRD_PARTY_LICENSES.md here lists them."
+} > "$STAGE/usr/share/doc/talktype/copyright"
+cp "$LIC_SRC/talktype/THIRD_PARTY_LICENSES.md" "$STAGE/usr/share/doc/talktype/"
+
 # System launcher — reuses the tested AppRun rather than duplicating its env setup.
 cat > "$STAGE/usr/bin/talktype" <<'LAUNCHER'
 #!/bin/sh

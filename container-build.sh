@@ -222,8 +222,14 @@ fi
 # Build ydotool
 echo "   Building ydotool..."
 cd /tmp
+# Pinned to a commit so the license notice can say exactly which ydotool ships
+# (it was the latest code, 2025-12-22, when this was pinned for 0.14.7).
+# THIRD_PARTY_LICENSES.md names the same commit; a test keeps the two in step.
+YDOTOOL_COMMIT=708e96ff27e381a8c549418a9d34cdde12305317
+rm -rf /tmp/ydotool
 git clone -q https://github.com/ReimuNotMoe/ydotool.git
 cd ydotool
+git checkout -q "$YDOTOOL_COMMIT"
 mkdir build && cd build
 cmake -DCMAKE_BUILD_TYPE=Release .. > /dev/null 2>&1
 make -j$(nproc) > /dev/null 2>&1
@@ -392,6 +398,11 @@ else
 fi
 EOF
 chmod +x AppDir/AppRun
+
+# Every bundled program and library's license, after the last copy step and
+# before the AppImage is made. Fails the build if any license is missing.
+echo "   Collecting third-party licenses..."
+bash packaging/collect-licenses.sh AppDir /tmp/ydotool /tmp/wl-clipboard
 
 # The Cairo C libraries stay out of the bundle (see "Do NOT bundle" above).
 # Checked last, after every copy step. Fail the build if one got in: blank emoji is easy to miss.
