@@ -1713,7 +1713,7 @@ class PreferencesWindow:
         period_check = Gtk.CheckButton(label="Ensure period at end of sentences")
         period_check.set_active(bool(self.config.get("auto_period", True)))  # Ensure boolean, default True
         period_check.connect("toggled", lambda x: self.update_config("auto_period", x.get_active()))
-        period_check.set_tooltip_text("Ensure every sentence ends with punctuation.\n\nWhisper AI usually adds periods automatically, but sometimes misses them.\nThis option adds a period when Whisper forgets, ensuring consistent punctuation.\n\nUnchecked: You get whatever Whisper outputs (sometimes has periods, sometimes doesn't)\nChecked: Every sentence is guaranteed to end with punctuation")
+        period_check.set_tooltip_text("Ensure every sentence ends with punctuation.\n\nThe speech model usually adds periods by itself, but sometimes misses one.\nThis option adds the period when it does, so punctuation stays consistent.\n\nUnchecked: you get exactly what the speech model wrote\nChecked: every sentence ends with punctuation")
         grid.attach(period_check, 0, row, 2, 1)
         row += 1
         

@@ -1,4 +1,4 @@
-"""TalkType - AI-powered speech recognition and dictation for Wayland"""
+"""TalkType - voice dictation for Linux"""
 
 import ctypes.util
 import os

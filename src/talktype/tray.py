@@ -1108,7 +1108,7 @@ class DictationTray:
         version_label = Gtk.Label(label=f"Version {__version__}")
         content.pack_start(version_label, False, False, 0)
 
-        desc_label = Gtk.Label(label="AI-powered speech recognition and dictation for Linux")
+        desc_label = Gtk.Label(label="Voice dictation for Linux: hold a key, talk, and your words are typed for you.")
         desc_label.set_line_wrap(True)
         content.pack_start(desc_label, False, False, 5)
 

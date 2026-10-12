@@ -648,7 +648,7 @@ class WelcomeDialog:
 
         # Subtitle
         subtitle = Gtk.Label()
-        subtitle.set_markup('<span size="medium">AI-powered speech recognition for Linux</span>')
+        subtitle.set_markup('<span size="medium">Voice dictation for Linux</span>')
         subtitle.set_opacity(0.85)
         vbox.pack_start(subtitle, False, False, 0)
 
@@ -660,7 +660,7 @@ class WelcomeDialog:
         """Build the base content (shown in all scenarios)."""
         # Main description
         main_desc = Gtk.Label()
-        main_desc.set_markup('<span size="medium">Privacy-focused, AI-powered dictation that runs entirely on your computer.</span>')
+        main_desc.set_markup('<span size="medium">Private dictation that runs entirely on your computer.</span>')
         main_desc.set_line_wrap(False)
         main_desc.set_justify(Gtk.Justification.CENTER)
         vbox.pack_start(main_desc, False, False, 10)
