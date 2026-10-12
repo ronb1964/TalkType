@@ -17,9 +17,11 @@ license. All of their license texts are installed with TalkType:
 Both are built unmodified from the source at the version above, and TalkType
 runs them as separate programs. ydotool types the dictated text; wl-clipboard
 handles the clipboard for paste mode. The complete source for those exact
-versions is at the addresses above. If it ever goes missing there, open an
-issue at https://github.com/ronb1964/TalkType/issues and I'll provide a copy,
-for at least three years after the last TalkType release that includes it.
+versions is at the addresses above, and backup copies are kept at
+https://github.com/ronb1964/ydotool and https://github.com/ronb1964/wl-clipboard.
+If it ever goes missing from all of those, open an issue at
+https://github.com/ronb1964/TalkType/issues and I'll provide a copy, for at
+least three years after the last TalkType release that includes it.
 
 ## Python and Python packages
 
