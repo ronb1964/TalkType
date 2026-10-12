@@ -34,6 +34,7 @@ KEEP = 10                       # automatic copies kept
 LIST_MAX = 15                   # restore points listed; more opens as a grid on Wayland
 _SETTINGS = "config.toml"
 _COMMANDS = "custom_commands.toml"
+_WORDS = "custom_words.txt"          # Your Words (custom_words.py)
 _STATS = "stats.json"
 _COPY_NAME = re.compile(r"^settings-(\d{8}-\d{6})\.zip$")
 _DEVICE_LINE = re.compile(r'^device\s*=.*$', re.MULTILINE)
@@ -113,7 +114,9 @@ def suggested_name():
 def _setting_files():
     """The settings files by their name inside a backup. Read at call time,
     so the paths follow DEV_MODE and Flatpak like the rest of config."""
-    return {_SETTINGS: config.CONFIG_PATH, _COMMANDS: config.CUSTOM_COMMANDS_PATH}
+    from . import custom_words
+    return {_SETTINGS: config.CONFIG_PATH, _COMMANDS: config.CUSTOM_COMMANDS_PATH,
+            _WORDS: custom_words.path()}
 
 
 def snapshots_dir():
@@ -229,7 +232,7 @@ def read_backup(path):
             if MANIFEST not in names:
                 raise BackupError("This file isn't a TuxTalk settings backup.")
             manifest = json.loads(z.read(MANIFEST))
-            files = {n: z.read(n) for n in (_SETTINGS, _COMMANDS, _STATS) if n in names}
+            files = {n: z.read(n) for n in (_SETTINGS, _COMMANDS, _WORDS, _STATS) if n in names}
     except BackupError:
         raise
     except (zipfile.BadZipFile, OSError, ValueError, KeyError) as e:
@@ -245,6 +248,11 @@ def read_backup(path):
                 _parse_toml(files[name].decode("utf-8"))
             except (UnicodeDecodeError, ValueError):
                 raise BackupError(f"The settings in this backup are damaged ({name}).")
+    if _WORDS in files:
+        try:
+            files[_WORDS].decode("utf-8")
+        except UnicodeDecodeError:
+            raise BackupError(f"The settings in this backup are damaged ({_WORDS}).")
     return Backup(version=str(manifest.get("version", "")),
                   created=str(manifest.get("created", "")), files=files)
 
@@ -320,6 +328,9 @@ def restore(backup):
     if _COMMANDS in backup.files:
         config.write_text_atomic(config.CUSTOM_COMMANDS_PATH,
                                  backup.files[_COMMANDS].decode("utf-8"))
+    if _WORDS in backup.files:
+        from . import custom_words
+        config.write_text_atomic(custom_words.path(), backup.files[_WORDS].decode("utf-8"))
     if _STATS in backup.files:
         _merge_stats(backup.files[_STATS])
     logger.info(f"Settings restored from a backup made {backup.created} "

@@ -400,6 +400,11 @@ _typing_delay = 12  # milliseconds, default value
 
 # Global custom commands (loaded from config in main)
 _custom_commands: dict[str, str] = {}
+# Your Words (custom_words.py): names and terms to spell the user's way. Told
+# to Whisper before it listens, and fixed in every engine's output afterwards.
+# Empty until main() loads them; reloaded when custom_words.txt changes.
+_custom_words: list[str] = []
+_last_words_mtime = None
 
 
 def _expand_escapes(replacement: str) -> str:
@@ -507,9 +512,17 @@ def _apply_custom_commands(text: str) -> tuple[str, dict[str, str]]:
     if not _custom_commands or not text:
         return text, {}
 
+    # A trigger saved as "tux talk website" also fires on "TuxTalk website":
+    # with TuxTalk in Your Words, Whisper is steered to hear it joined.
+    commands = dict(_custom_commands)
+    if _custom_words:
+        from .custom_words import fix_spelling
+        for phrase, replacement in _custom_commands.items():
+            commands.setdefault(fix_spelling(phrase, _custom_words), replacement)
+
     # Longest phrase first, so "our brand customs llc" wins over the shorter
     # "our brand customs" that is also a prefix of it.
-    phrases = sorted((p for p in _custom_commands if p), key=len, reverse=True)
+    phrases = sorted((p for p in commands if p), key=len, reverse=True)
     if not phrases:
         return text, {}
 
@@ -519,7 +532,7 @@ def _apply_custom_commands(text: str) -> tuple[str, dict[str, str]]:
     # the longer one keeps it — the same rule the match order follows.
     lookup: dict[str, str] = {}
     for p in phrases:
-        lookup.setdefault(_canonical_command_key(p), _custom_commands[p])
+        lookup.setdefault(_canonical_command_key(p), commands[p])
     combined = "|".join(f"(?:{_command_pattern(p)})" for p in phrases)
 
     protected: dict[str, str] = {}  # placeholder → literal replacement text
@@ -1005,6 +1018,28 @@ def _reload_custom_commands() -> None:
         logger.info(f"Reloaded {len(_custom_commands)} custom voice command(s)")
     except Exception as e:
         logger.warning(f"Could not reload custom commands, keeping current: {e}")
+
+
+def _words_file_changed() -> bool:
+    """Whether custom_words.txt's mtime has moved since the last check.
+    Same contract as _commands_file_changed()."""
+    global _last_words_mtime
+    from . import custom_words
+    try:
+        mtime = os.path.getmtime(custom_words.path())
+    except OSError:
+        return False
+    if mtime == _last_words_mtime:
+        return False
+    _last_words_mtime = mtime
+    return True
+
+
+def _reload_custom_words() -> None:
+    global _custom_words
+    from . import custom_words
+    _custom_words = custom_words.load()
+    logger.info(f"Reloaded your words ({len(_custom_words)})")
 
 
 def _reload_live_settings(cfg, indicator):
@@ -2088,14 +2123,21 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
     transcribe_start = time.time()
 
     from .whisper_vulkan import VulkanWhisperModel
+    from . import custom_words
+    words_prompt = custom_words.prompt(_custom_words)
     if isinstance(model, VulkanWhisperModel):
-        raw, _no_speech = model.transcribe(audio_f32, language)
+        # Only pass a prompt when there is one, so nothing changes without words.
+        raw, _no_speech = model.transcribe(
+            audio_f32, language, **({"prompt": words_prompt} if words_prompt else {}))
         logger.info(f"TIMING: Transcription completed in {time.time() - transcribe_start:.2f}s (Vulkan GPU)")
         print(f"\U0001f4dd Raw (graphics): {_loggable(raw)}")
         logger.info(f"Raw transcription (Vulkan GPU): {_loggable(raw)}")
         # whisper.cpp's no-speech score isn't reliable (0.90 on clear speech,
         # 0.00 on silence, see whisper_vulkan.parse_result), so it isn't passed
         # on: the filter then only strips what it can recognise on its own.
+        if custom_words.is_echo(raw, _custom_words):
+            logger.info("Whisper read your words back with nothing said; dropped")
+            return None
         return _strip_hallucinations(raw) or None
 
     from .parakeet_engine import ParakeetModel
@@ -2128,6 +2170,9 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
         repetition_penalty=1.1,
         no_repeat_ngram_size=5,
         language=(language or None),
+        # Your Words, so Whisper spells them the user's way. faster-whisper
+        # puts them in the prompt of every 30-second window.
+        hotwords=words_prompt,
         # vad_filter is disabled: Silero VAD trims speech onsets at segment
         # boundaries (especially the start of recordings and after sentence
         # pauses), causing leading words to vanish from raw Whisper output.
@@ -2150,6 +2195,10 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
     max_no_speech_prob = max((seg.no_speech_prob for seg in seg_list), default=0.0)
     print(f"\U0001f4dd Raw (before filter): {_loggable(raw)}  [no_speech_prob={max_no_speech_prob:.2f}]")
     logger.info(f"Raw transcription (before hallucination filter): {_loggable(raw)}  [no_speech_prob={max_no_speech_prob:.2f}]")
+
+    if custom_words.is_echo(raw, _custom_words):
+        logger.info("Whisper read your words back with nothing said; dropped")
+        return None
 
     # Strip common Whisper hallucinations like "thank you" from the end
     raw = _strip_hallucinations(raw, no_speech_prob=max_no_speech_prob)
@@ -2261,6 +2310,13 @@ def _safe_to_lowercase_first_word(text: str) -> bool:
     if len(letters) > 1 and all(c.isupper() for c in letters):
         return False
 
+    # One of Your Words, already spelled the user's way ("TuxTalk",
+    # "New York", "TuxTalk's").
+    if _custom_words:
+        from .custom_words import starts_with_word
+        if starts_with_word(text, _custom_words):
+            return False
+
     return True
 
 
@@ -2272,6 +2328,11 @@ def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: b
     # Apply custom voice commands (phrase → replacement)
     # Quoted replacements come back as placeholder tokens in `protected`
     processed, protected = _apply_custom_commands(raw)
+    # Your Words, first pass: before tidying, a hyphen inside a word can only
+    # have come from the engine ("Tux-Talk"), so it may join here.
+    if _custom_words:
+        from .custom_words import fix_spelling
+        processed = fix_spelling(processed, _custom_words)
 
     # Normalize text (capitalization, punctuation, etc.). auto_period is passed
     # through because this pass ends every line with a full stop of its own \u2014
@@ -2291,6 +2352,15 @@ def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: b
     if _ai_engine is not None:
         from .ai_cleanup import fix_self_corrections
         text = fix_self_corrections(text, _ai_engine)
+
+    # Your Words, second pass: "tux talk" -> "TuxTalk" and iPhone's capitals
+    # back after a sentence start made it IPhone. After snippets, so a snippet
+    # whose phrase contains the split-up word still matches; while quoted
+    # snippets are still placeholders, so a literal one is never touched; and
+    # with no hyphen joins, since by now a hyphen means the user said "dash".
+    if _custom_words:
+        from .custom_words import fix_spelling
+        text = fix_spelling(text, _custom_words, hyphens=False)
 
     # Restore quoted (literal) custom command replacements before any further
     # processing so that auto-period/space checks see the real final text.
@@ -3008,6 +3078,8 @@ def _service_tick(cfg, svc: "_ServiceState") -> "LiveSettings | None":
         # a config change would be gating it on the thing that did not happen.
         if _commands_file_changed():
             _reload_custom_commands()
+        if _words_file_changed():
+            _reload_custom_words()
         if _config_file_changed():
             live = _reload_live_settings(cfg, recording_indicator)
             # cfg.mic is fresh now; the device number behind it may not be.
@@ -3039,6 +3111,7 @@ def _loop_evdev(cfg: Settings, input_device_idx):
     # for both backends.
     _config_file_changed()
     _commands_file_changed()
+    _words_file_changed()
 
     # First run check: exit early if onboarding not complete
     try:
@@ -3527,6 +3600,11 @@ def main():
     if _custom_commands:
         logger.info(f"Loaded {len(_custom_commands)} custom voice command(s)")
         print(f"✓ Loaded {len(_custom_commands)} custom voice command(s)")
+    global _custom_words
+    from . import custom_words
+    _custom_words = custom_words.load()
+    if _custom_words:
+        logger.info(f"Loaded your words ({len(_custom_words)})")
 
     # Input device selection
     input_device_idx = _pick_input_device(cfg.mic)

@@ -7,7 +7,7 @@ voice command, so:
 
 - it works for every engine. It rewrites the transcription after the model
   heard it; Parakeet has no way to be told about words beforehand.
-- it shows up (and can be edited or removed) in Preferences > Voice Commands.
+- it shows up (and can be edited or removed) in Preferences > Snippets.
 - the dictation service picks it up on the next dictation, because it
   reloads custom_commands.toml whenever the file changes.
 

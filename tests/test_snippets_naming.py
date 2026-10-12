@@ -47,3 +47,14 @@ def test_help_and_quick_reference_say_snippets():
         assert "Preferences → Snippets" in text, name
         assert "Commands tab" not in text, name
         assert "Preferences → Commands" not in text, name
+
+
+def test_the_snippets_tab_offers_your_words():
+    prefs = (SRC / "prefs.py").read_text()
+    assert 'Gtk.Button(label="Your Words...")' in prefs
+    assert "custom_words.save(custom_words.parse(text))" in prefs
+
+
+def test_your_words_never_opens_empty_over_an_unreadable_file():
+    prefs = (SRC / "prefs.py").read_text()
+    assert "custom_words.load(strict=True)" in prefs

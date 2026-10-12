@@ -28,6 +28,12 @@ Also new in this one:
 - The Commands tab in Preferences is called Snippets now. Same list, same
   entries. "Commands" kept getting mixed up with the built-in ones like "new
   line" and "period".
+- Your Words, in the Snippets tab. Put in the names and terms you use, like
+  TuxTalk or Kubernetes, one per line. Whisper models get told about them
+  before they listen, so they spell them your way. And every model fixes them
+  when they come out split up or with the wrong capitals, so "tux talk" turns
+  into TuxTalk. Heads up, Parakeet can't be told about words ahead of time, so
+  if it hears one as something else entirely, Fix a Word is still the way.
 
 ## [0.14.6] - 2026-10-11
 

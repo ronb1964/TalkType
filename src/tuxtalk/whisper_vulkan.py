@@ -365,6 +365,16 @@ def parse_result(reply):
     return text, no_speech
 
 
+def request_fields(language=None, prompt=None):
+    """The form fields of one /inference request. whisper-server reads
+    "prompt" as Whisper's initial prompt for that request alone."""
+    fields = {"response_format": "verbose_json", "temperature": "0.0",
+              "beam_size": "5", "language": language or "auto"}
+    if prompt:
+        fields["prompt"] = prompt
+    return fields
+
+
 class VulkanWhisperModel:
     """A whisper-server process running *model_name* on graphics chip
     *device_index*, kept running for the life of the dictation service."""
@@ -410,11 +420,10 @@ class VulkanWhisperModel:
         self.transcribe(np.zeros(16000, dtype=np.float32), "en")
         logger.info(f"Graphics engine ready (warm-up took {time.time() - started:.1f}s)")
 
-    def transcribe(self, audio_f32, language=None, timeout=120):
-        """(text, highest no-speech probability) for *audio_f32*."""
-        fields = {"response_format": "verbose_json", "temperature": "0.0",
-                  "beam_size": "5", "language": language or "auto"}
-        body, content_type = multipart(fields, wav_bytes(audio_f32))
+    def transcribe(self, audio_f32, language=None, timeout=120, prompt=None):
+        """(text, highest no-speech probability) for *audio_f32*. *prompt*
+        is Your Words (custom_words.prompt), to steer Whisper's spelling."""
+        body, content_type = multipart(request_fields(language, prompt), wav_bytes(audio_f32))
         with self._lock:
             if self._proc is None or self._proc.poll() is not None:
                 logger.warning("Graphics engine had stopped; starting it again")

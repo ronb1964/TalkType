@@ -337,3 +337,20 @@ def test_talktype_backups_are_listed_with_the_others(home, monkeypatch):
     sb.write_backup(str(dest))
     _as_talktype_backup(dest)
     assert str(dest) in [p.path for p in sb.restore_points()]
+
+
+def test_your_words_travel_with_the_backup(home):
+    """custom_words.txt (Preferences > Snippets > Your Words) is in the backup
+    and comes back with it. A backup from before Your Words leaves them be."""
+    from tuxtalk import custom_words
+    custom_words.save(["TuxTalk", "BambuStudio"])
+    dest = home / "b.zip"
+    sb.write_backup(str(dest))
+    custom_words.save(["Other"])
+    sb.restore(sb.read_backup(str(dest)))
+    assert custom_words.load() == ["TuxTalk", "BambuStudio"]
+
+    _zip(home / "old.zip", {sb.MANIFEST: json.dumps({"app": "TalkType"}),
+                            "config.toml": CONFIG_TEXT})
+    sb.restore(sb.read_backup(str(home / "old.zip")))
+    assert custom_words.load() == ["TuxTalk", "BambuStudio"]

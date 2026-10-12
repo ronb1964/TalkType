@@ -373,7 +373,7 @@ TuxTalk includes intelligent timeout to save system resources:
 
 <b>💾 Backup</b>
 In Preferences → Updates &amp; Backup:
-• <b>Save Backup:</b> your settings, voice commands, Fix a Word words and stats in
+• <b>Save Backup:</b> your settings, snippets, Your Words and stats in
   one file, to keep or to load on another computer with <b>Load Backup</b>. If that
   computer lacks the backup's graphics device, it keeps its own.
 • <b>Backup folder:</b> pick it once with <b>Change…</b>, and Save Backup and
@@ -460,6 +460,14 @@ Examples:
 
 To type a snippet exactly as written — bypassing auto-capitalization
 and punctuation — wrap its text in double quotes.
+
+<b>Your Words:</b>
+Names and terms TuxTalk should spell your way, in Preferences → Snippets → Your Words.
+• Whisper models are told about them before they listen
+• Every model fixes them when they come out split up or with the wrong
+  capitals: "tux talk" → TuxTalk
+• Parakeet can't be told about words ahead of time, so for a word it hears as
+  something else entirely, use Fix a Word
 
 <b>Undo Commands:</b>
 • Say <b>undo last word</b> to delete the last word you dictated

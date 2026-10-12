@@ -2075,7 +2075,7 @@ class PreferencesWindow:
 
         vbox.pack_start(separator(), False, False, 0)
         vbox.pack_start(header("💾 Backup"), False, False, 0)
-        vbox.pack_start(dim("Your settings, voice commands, Fix a Word words and stats in one "
+        vbox.pack_start(dim("Your settings, snippets, Your Words and stats in one "
                             "file, to keep or to load on another computer."), False, False, 0)
         row = indented(Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10))
         for text, handler in (("Save Backup…", self._on_save_backup_clicked),
@@ -2324,6 +2324,22 @@ class PreferencesWindow:
         fix_btn.connect("clicked", self._on_fix_word)
         fix_row.pack_start(fix_btn, False, False, 0)
         vbox.pack_start(fix_row, False, False, 5)
+
+        # Your Words (custom_words.py): spelled the user's way, in every engine.
+        words_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        words_label = Gtk.Label()
+        words_label.set_markup(
+            '<span>Names and terms TuxTalk should always spell your way, '
+            'like TuxTalk or Kubernetes.</span>')
+        words_label.set_xalign(0)
+        words_label.set_line_wrap(True)
+        words_row.pack_start(words_label, True, True, 0)
+        words_btn = Gtk.Button(label="Your Words...")
+        words_btn.set_valign(Gtk.Align.CENTER)
+        words_btn.set_tooltip_text("Names and terms to spell your way, one per line")
+        words_btn.connect("clicked", self._on_your_words)
+        words_row.pack_start(words_btn, False, False, 0)
+        vbox.pack_start(words_row, False, False, 5)
 
         # Buttons for add/remove (at the top for easy access)
         button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
@@ -3239,6 +3255,79 @@ class PreferencesWindow:
     def _on_fix_word(self, _button):
         from .fix_word_dialog import show_fix_word_dialog
         show_fix_word_dialog(0)
+
+    def _on_your_words(self, _button):
+        """Edit Your Words: one per line, saved straight to custom_words.txt
+        (like Fix a Word, not on Apply). The service reloads the file before
+        the next dictation."""
+        from . import custom_words
+        try:
+            words = custom_words.load(strict=True)
+        except (OSError, UnicodeDecodeError) as e:
+            # Opening it empty would let Save wipe the user's words.
+            err = message_dialog(
+                transient_for=self.window, modal=True,
+                message_type=Gtk.MessageType.ERROR, buttons=Gtk.ButtonsType.OK,
+                text="Couldn't read your words")
+            err.format_secondary_text(f"{custom_words.path()}\n\n{e}")
+            err.run()
+            err.destroy()
+            return
+        dialog = Gtk.Dialog(title="Your Words", transient_for=self.window, modal=True)
+        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        dialog.add_button("Save", Gtk.ResponseType.OK)
+        dialog.set_default_response(Gtk.ResponseType.OK)
+        box = dialog.get_content_area()
+        for side in ("start", "end", "top", "bottom"):
+            getattr(box, f"set_margin_{side}")(16)
+        box.set_spacing(10)
+
+        intro = Gtk.Label(xalign=0)
+        intro.set_markup("Names and terms you want spelled your way, <b>one per line</b>.")
+        box.pack_start(intro, False, False, 0)
+
+        view = Gtk.TextView()
+        view.set_wrap_mode(Gtk.WrapMode.NONE)
+        view.set_left_margin(6)
+        view.get_buffer().set_text("\n".join(words))
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        scrolled.set_min_content_height(180)
+        scrolled.set_min_content_width(420)
+        scrolled.set_shadow_type(Gtk.ShadowType.IN)
+        scrolled.add(view)
+        box.pack_start(scrolled, True, True, 0)
+
+        how = Gtk.Label(xalign=0)
+        how.set_line_wrap(True)
+        how.set_max_width_chars(60)
+        how.set_markup(
+            "<small>Whisper models are told about these before they listen, so "
+            "they spell them your way. Every model, Parakeet included, also fixes "
+            "them when they come out split up or with the wrong capitals: "
+            "\u201ctux talk\u201d becomes TuxTalk. Parakeet can\u2019t be told about "
+            "words ahead of time, so if it hears one as something else entirely, "
+            "use Fix a Word.</small>")
+        box.pack_start(how, False, False, 0)
+
+        dialog.show_all()
+        try:
+            if dialog.run() == Gtk.ResponseType.OK:
+                buf = view.get_buffer()
+                text = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
+                try:
+                    custom_words.save(custom_words.parse(text))
+                except OSError as e:
+                    print(f"Could not save your words: {e}")
+                    err = message_dialog(
+                        transient_for=self.window, modal=True,
+                        message_type=Gtk.MessageType.ERROR, buttons=Gtk.ButtonsType.OK,
+                        text="Couldn't save your words")
+                    err.format_secondary_text(str(e))
+                    err.run()
+                    err.destroy()
+        finally:
+            dialog.destroy()
 
     def _save_custom_commands(self):
         """Save custom commands from the list store.
