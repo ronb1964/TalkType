@@ -505,6 +505,20 @@ class DictationTray:
                 logger.info("Onboarding in progress - refusing to auto-start service")
                 return False
 
+            # A TalkType (pre-0.15.0) service left running by a 0.14.x in-app
+            # update is old code holding the shared lock: replace it, so the
+            # new version's service starts and the tray can control it.
+            from .service_launcher import pre_rename_service_pids, stop_dictation_service
+            if pre_rename_service_pids():
+                logger.info("Stopping the pre-0.15.0 dictation service left running by the update")
+                stop_dictation_service()
+                # SIGTERM returns at once; give it up to 3 s to exit and free
+                # the lock, or the check below would still see it running.
+                for _ in range(30):
+                    if not pre_rename_service_pids():
+                        break
+                    time.sleep(0.1)
+
             # Only start if not already running
             if not self.is_service_running():
                 logger.info("Auto-starting dictation service...")

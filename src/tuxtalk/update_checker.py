@@ -813,7 +813,7 @@ def install_update_and_restart(
 
     This function:
     1. Creates the AppImages directory if needed
-    2. Copies the downloaded AppImage to ~/AppImages/TalkType.AppImage
+    2. Copies the downloaded AppImage to APPIMAGE_PATH (~/AppImages/TuxTalk.AppImage)
     3. Makes it executable
     4. Restarts the application using the new AppImage
 
@@ -1121,7 +1121,7 @@ def create_desktop_launcher() -> Tuple[bool, str]:
     Create a desktop launcher (.desktop file) for TuxTalk.
 
     Creates a launcher in ~/.local/share/applications/ that points to
-    the standard AppImage location (~/AppImages/TalkType.AppImage).
+    the standard AppImage location (APPIMAGE_PATH, ~/AppImages/TuxTalk.AppImage).
 
     Returns:
         Tuple[bool, str]: (success, message)
@@ -1139,9 +1139,10 @@ def create_desktop_launcher() -> Tuple[bool, str]:
         # Get the current version for the comment
         version = get_current_version()
 
-        # IMPORTANT: Compute the AppImage path fresh at runtime to ensure
-        # it's correct for the current user (not baked in at build time)
-        appimage_exec_path = os.path.expanduser("~/AppImages/TalkType.AppImage")
+        # The file first-run setup and the updater install to. (It was
+        # hardcoded as TalkType.AppImage here, so after the rename a fresh
+        # install got a menu entry that started nothing.)
+        appimage_exec_path = APPIMAGE_PATH
         logger.info(f"Desktop launcher Exec path: {appimage_exec_path}")
         print(f"📍 Desktop launcher will use: {appimage_exec_path}")
 

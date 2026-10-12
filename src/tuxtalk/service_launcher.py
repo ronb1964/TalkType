@@ -59,7 +59,9 @@ def is_service_argv(argv) -> bool:
     """
     argv = list(argv)
     for i, arg in enumerate(argv[:-1]):
-        if arg == "-m" and argv[i + 1] == "tuxtalk.app":
+        # talktype.app: the service from before the 0.15.0 rename, which a
+        # 0.14.x in-app update leaves running (it holds the shared lock).
+        if arg == "-m" and argv[i + 1] in ("tuxtalk.app", "talktype.app"):
             return True
     if not argv:
         return False
@@ -70,6 +72,19 @@ def is_service_argv(argv) -> bool:
         return True
     return (len(argv) > 1 and os.path.basename(argv[0]).startswith("python")
             and os.path.basename(argv[1]) == "dictate")
+
+
+def is_pre_rename_service_argv(argv) -> bool:
+    """True for a dictation service from before the 0.15.0 rename
+    (``-m talktype.app``): old code that should give way to the new version."""
+    argv = list(argv)
+    return any(a == "-m" and b == "talktype.app" for a, b in zip(argv, argv[1:]))
+
+
+def pre_rename_service_pids():
+    """PIDs of running pre-rename (TalkType) dictation services."""
+    return [pid for pid in find_service_pids()
+            if is_pre_rename_service_argv(_read_argv(pid) or [])]
 
 
 def _read_argv(pid):
