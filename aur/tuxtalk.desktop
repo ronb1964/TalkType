@@ -1,8 +1,8 @@
 [Desktop Entry]
-Name=TalkType
+Name=TuxTalk
 Comment=Hold a key, talk, and your words are typed for you
-Exec=talktype
-Icon=talktype
+Exec=tuxtalk
+Icon=tuxtalk
 Terminal=false
 Type=Application
 Categories=Utility;Accessibility;AudioVideo;

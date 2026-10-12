@@ -1,5 +1,5 @@
 #!/bin/bash
-# TalkType Release Build Script
+# TuxTalk Release Build Script
 # Builds AppImage in Ubuntu 22.04 container for maximum compatibility
 # This is the ONLY build script you need for releases
 
@@ -7,7 +7,7 @@ set -e
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-echo "🚀 Building TalkType AppImage (Release)"
+echo "🚀 Building TuxTalk AppImage (Release)"
 echo "========================================"
 echo ""
 
@@ -52,15 +52,15 @@ echo "📦 Building in Ubuntu 22.04 container..."
 echo ""
 
 # Create pip cache directory if it doesn't exist
-mkdir -p "$HOME/.cache/pip-talktype-build"
+mkdir -p "$HOME/.cache/pip-tuxtalk-build"
 
-echo "💾 Using pip cache: $HOME/.cache/pip-talktype-build"
+echo "💾 Using pip cache: $HOME/.cache/pip-tuxtalk-build"
 echo ""
 
 # Run the container build script
 $CONTAINER_CMD run --rm \
     -v "$PROJECT_DIR:/build:Z" \
-    -v "$HOME/.cache/pip-talktype-build:/root/.cache/pip:Z" \
+    -v "$HOME/.cache/pip-tuxtalk-build:/root/.cache/pip:Z" \
     -w /build \
     -e HOME=/tmp \
     "${OWNER_ARGS[@]}" \
@@ -69,24 +69,28 @@ $CONTAINER_CMD run --rm \
 
 echo ""
 echo "📦 AppImage Details:"
-ls -lh TalkType-*.AppImage 2>/dev/null || echo "❌ No AppImage found - build failed"
+ls -lh TuxTalk-*.AppImage 2>/dev/null || echo "❌ No AppImage found - build failed"
 echo ""
 
 # Generate release checksums. The update checker downloads SHA256SUMS.txt
 # from the GitHub release and verifies the AppImage against it before
 # installing — include this file in every release (gh release create ...).
-APPIMAGE_FILE="TalkType-v${PYPROJECT_VERSION}-x86_64.AppImage"
+APPIMAGE_FILE="TuxTalk-v${PYPROJECT_VERSION}-x86_64.AppImage"
 cd "$PROJECT_DIR"
 # Remove any stale checksums from a previous release so a build failure
 # can't leave a wrong SHA256SUMS.txt lying around to be published.
 rm -f SHA256SUMS.txt
 if [ -f "$PROJECT_DIR/$APPIMAGE_FILE" ]; then
     sha256sum "$APPIMAGE_FILE" > SHA256SUMS.txt
-    # Include the extension zip when it has been packaged already
-    # (package-extension.sh also refreshes this entry when run afterwards)
-    if [ -f "talktype-gnome-extension.zip" ]; then
-        sha256sum "talktype-gnome-extension.zip" >> SHA256SUMS.txt
-    fi
+    # Include the extension zips when they have been packaged already
+    # (package-extension.sh also refreshes these entries when run afterwards).
+    # talktype-gnome-extension.zip is the same zip under its pre-0.15.0 name,
+    # which older installs download by exact name.
+    for zip in tuxtalk-gnome-extension.zip talktype-gnome-extension.zip; do
+        if [ -f "$zip" ]; then
+            sha256sum "$zip" >> SHA256SUMS.txt
+        fi
+    done
     echo "🔐 Checksums written to SHA256SUMS.txt:"
     cat SHA256SUMS.txt
     echo ""
@@ -103,6 +107,13 @@ if [ -f "$PROJECT_DIR/$APPIMAGE_FILE.zsync" ]; then
 else
     echo "⚠️  $APPIMAGE_FILE.zsync is missing: AppImageUpdate can't update from this release."
 fi
+# Installs from before the rename look for a TalkType-named .zsync.
+COMPAT_ZSYNC="TalkType-v${PYPROJECT_VERSION}-x86_64.AppImage.zsync"
+if [ -f "$PROJECT_DIR/$COMPAT_ZSYNC" ]; then
+    echo "🔄 Update file for pre-rename installs: $COMPAT_ZSYNC (upload it too)"
+else
+    echo "⚠️  $COMPAT_ZSYNC is missing: TalkType installs can't use AppImageUpdate."
+fi
 echo ""
 
-echo "🚀 To test: ./TalkType-v${PYPROJECT_VERSION}-x86_64.AppImage"
+echo "🚀 To test: ./TuxTalk-v${PYPROJECT_VERSION}-x86_64.AppImage"

@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>io.github.ronb1964.TalkType</id>
+  <id>io.github.ronb1964.TuxTalk</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
-  <name>TalkType</name>
+  <name>TuxTalk</name>
   <summary>Hold a key, talk, and your words are typed for you</summary>
 
   <description>
     <p>
-      TalkType is free voice dictation for Linux. Hold F8 and talk, let go, and your words
+      TuxTalk (formerly TalkType) is free voice dictation for Linux. Hold F8 and talk, let go, and your words
       are typed wherever your cursor is, in any app. Or tap F9 to start and tap again to stop.
       It works on Wayland and X11, on GNOME, KDE, Sway, Hyprland and more.
     </p>
@@ -32,9 +32,9 @@
 
   <launchable type="desktop-id">io.github.ronb1964.TuxTalk.desktop</launchable>
 
-  <url type="homepage">https://github.com/ronb1964/TalkType</url>
-  <url type="bugtracker">https://github.com/ronb1964/TalkType/issues</url>
-  <url type="help">https://github.com/ronb1964/TalkType#readme</url>
+  <url type="homepage">https://github.com/ronb1964/TuxTalk</url>
+  <url type="bugtracker">https://github.com/ronb1964/TuxTalk/issues</url>
+  <url type="help">https://github.com/ronb1964/TuxTalk#readme</url>
 
   <developer id="io.github.ronb1964">
     <name>Ron</name>
@@ -69,23 +69,23 @@
   <screenshots>
     <screenshot type="default">
       <caption>Hold a key and talk: your words are typed into any app</caption>
-      <image>https://raw.githubusercontent.com/ronb1964/TalkType/main/screenshots/dictating.png</image>
+      <image>https://raw.githubusercontent.com/ronb1964/TuxTalk/main/screenshots/dictating.png</image>
     </screenshot>
     <screenshot>
       <caption>First run recommends the best setup for your computer and language</caption>
-      <image>https://raw.githubusercontent.com/ronb1964/TalkType/main/screenshots/welcome-recommended.png</image>
+      <image>https://raw.githubusercontent.com/ronb1964/TuxTalk/main/screenshots/welcome-recommended.png</image>
     </screenshot>
     <screenshot>
       <caption>The tray menu, with one-click Performance presets</caption>
-      <image>https://raw.githubusercontent.com/ronb1964/TalkType/main/screenshots/tray-performance.png</image>
+      <image>https://raw.githubusercontent.com/ronb1964/TuxTalk/main/screenshots/tray-performance.png</image>
     </screenshot>
     <screenshot>
       <caption>Preferences: speech model, graphics card and hotkeys</caption>
-      <image>https://raw.githubusercontent.com/ronb1964/TalkType/main/screenshots/prefs-general.png</image>
+      <image>https://raw.githubusercontent.com/ronb1964/TuxTalk/main/screenshots/prefs-general.png</image>
     </screenshot>
     <screenshot>
       <caption>Voice commands for punctuation, formatting and corrections</caption>
-      <image>https://raw.githubusercontent.com/ronb1964/TalkType/main/screenshots/voice-commands.png</image>
+      <image>https://raw.githubusercontent.com/ronb1964/TuxTalk/main/screenshots/voice-commands.png</image>
     </screenshot>
   </screenshots>
 
@@ -96,7 +96,7 @@
         <ul>
           <li>The first run screen recommends a setup and asks your language on every computer, not only on GNOME or with an NVIDIA card</li>
           <li>Back up your settings, voice commands, Fix a Word words and stats to a file, and load it on another computer</li>
-          <li>TalkType keeps your last 10 settings, so a change or an update that went wrong can be undone</li>
+          <li>TuxTalk keeps your last 10 settings, so a change or an update that went wrong can be undone</li>
           <li>CUDA is listed under Device on NVIDIA computers, like Vulkan</li>
           <li>Use Recommended and "What works with what?" in Preferences</li>
           <li>A changed hotkey can be tested right away, and KDE's own shortcuts are pointed out</li>
@@ -111,7 +111,7 @@
         <ul>
           <li>Corrections handle saying the whole thing again ("scratch that, send it to Jim") and "actually" without a pause</li>
           <li>Say an email or web address with "dot" and it's written as an address</li>
-          <li>Message boxes have rounded corners on KDE, like every other TalkType window</li>
+          <li>Message boxes have rounded corners on KDE, like every other TuxTalk window</li>
           <li>The welcome screen's hotkey test reads your keyboard directly</li>
         </ul>
       </description>
@@ -120,7 +120,7 @@
       <description>
         <p>Clearer typing problems, faster start and better self-corrections</p>
         <ul>
-          <li>When a dictation can't be typed, TalkType says why and what fixes it</li>
+          <li>When a dictation can't be typed, TuxTalk says why and what fixes it</li>
           <li>Whisper models load once at start instead of twice</li>
           <li>Self-corrections work when a pause splits off "no wait"</li>
           <li>Performance has a Custom item that opens Preferences, in the GNOME menu too</li>
@@ -136,7 +136,7 @@
         <ul>
           <li>Dropdowns work on a second monitor under GNOME on Wayland, and open cleanly on KDE</li>
           <li>Ordinary sentences are no longer turned into email addresses</li>
-          <li>Windows show TalkType's icon on KDE instead of a generic one</li>
+          <li>Windows show TuxTalk's icon on KDE instead of a generic one</li>
           <li>Preferences highlights the tab it opened on</li>
           <li>Choosing the Performance preset already in use no longer restarts the service</li>
           <li>Current screenshots</li>
@@ -178,7 +178,7 @@
           <li>Ghostty, GNOME Console, Guake and other terminals get the right paste</li>
           <li>OK closes Preferences again when the device is Vulkan</li>
           <li>A quick accidental tap of the key no longer types a stray word</li>
-          <li>Help links to the TalkType Discussions page</li>
+          <li>Help links to the TuxTalk Discussions page</li>
         </ul>
       </description>
     </release>
@@ -217,7 +217,7 @@
         <p>Bug fixes</p>
         <ul>
           <li>Launch at login is repaired if it still points at an old downloaded AppImage</li>
-          <li>The GNOME panel menu keeps working when TalkType's tray restarts</li>
+          <li>The GNOME panel menu keeps working when TuxTalk's tray restarts</li>
         </ul>
       </description>
     </release>
@@ -228,7 +228,7 @@
     </release>
     <release version="0.11.0" date="2026-09-29">
       <description>
-        <p>Teach TalkType words it keeps getting wrong</p>
+        <p>Teach TuxTalk words it keeps getting wrong</p>
         <ul>
           <li>Fix a Word: pick a misheard word from a recent dictation and type the right spelling, and it's fixed in every dictation from then on</li>
           <li>Preferences comes to the front if it's already open behind another window</li>
@@ -261,7 +261,7 @@
           <li>Fixed the dictation key sometimes staying stuck down in VM windows, remote desktops and games</li>
           <li>Launch at login now uses the installed AppImage, not the copy in Downloads</li>
           <li>The Device line shows CPU when using Parakeet</li>
-          <li>The AI cleanup engine no longer keeps running after TalkType closes</li>
+          <li>The AI cleanup engine no longer keeps running after TuxTalk closes</li>
         </ul>
       </description>
     </release>
@@ -333,12 +333,12 @@
     </release>
     <release version="0.7.1" date="2026-08-16">
       <description>
-        <p>Fixes how TalkType updates itself, so updating works correctly however you installed it</p>
+        <p>Fixes how TuxTalk updates itself, so updating works correctly however you installed it</p>
         <ul>
           <li>.deb / .rpm installs now update through your package manager in one click (with a password prompt) instead of failing on a missing FUSE library</li>
           <li>Arch (AUR) installs are pointed to the AUR helper; AppImage installs keep updating in place</li>
           <li>"Check for Updates" shows one clear window; the GNOME panel and system-tray menus behave identically</li>
-          <li>TalkType now reliably restarts after an update</li>
+          <li>TuxTalk now reliably restarts after an update</li>
           <li>About, Help and Voice Commands windows now always open, and are no longer hidden behind the update window</li>
         </ul>
       </description>
@@ -377,7 +377,15 @@
     </release>
   </releases>
 
+  <!-- Called TalkType until 0.15.0; these keep software centres treating it
+       as the same app. -->
+  <replaces>
+    <id>io.github.ronb1964.TalkType</id>
+  </replaces>
+
   <provides>
+    <id>io.github.ronb1964.TalkType</id>
+    <binary>tuxtalk</binary>
     <binary>dictate</binary>
     <binary>dictate-tray</binary>
     <binary>dictate-prefs</binary>

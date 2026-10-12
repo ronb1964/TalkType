@@ -1,14 +1,19 @@
 #!/bin/bash
 # Package GNOME Extension for GitHub Release
 #
-# Creates talktype-gnome-extension.zip from the source extension directory
-# This zip is downloaded by the welcome dialog during first-run setup
+# Creates tuxtalk-gnome-extension.zip from the source extension directory
+# This zip is downloaded by the welcome dialog during first-run setup.
+# It also writes talktype-gnome-extension.zip, the same zip under its name
+# before the 0.15.0 rename: TalkType installs download it by that exact name.
+# The folder inside keeps the extension's UUID, talktype@ronb1964.github.io
+# (a new UUID would be a new extension: a logout and enabling it again).
 
 set -e  # Exit on error
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EXTENSION_DIR="$SCRIPT_DIR/gnome-extension/talktype@ronb1964.github.io"
-OUTPUT_ZIP="$SCRIPT_DIR/talktype-gnome-extension.zip"
+OUTPUT_ZIP="$SCRIPT_DIR/tuxtalk-gnome-extension.zip"
+COMPAT_ZIP="$SCRIPT_DIR/talktype-gnome-extension.zip"
 
 echo "📦 Packaging GNOME Extension..."
 echo "================================"
@@ -46,7 +51,7 @@ echo "📦 Creating zip file..."
 cd "$SCRIPT_DIR/gnome-extension"
 
 # Remove any existing zip in this directory
-rm -f talktype-gnome-extension.zip talktype@ronb1964.github.io.zip
+rm -f tuxtalk-gnome-extension.zip talktype@ronb1964.github.io.zip
 
 # Create fresh zip
 # NOTE: the exclude patterns must not match the extension's own UUID directory.
@@ -54,7 +59,7 @@ rm -f talktype-gnome-extension.zip talktype@ronb1964.github.io.zip
 # so a pattern of "*.git*" matches EVERY path in the archive and zip exits with
 # "Nothing to do!" — after the old zip has already been deleted above. Anchor the
 # git patterns on a leading slash so they only match real git metadata.
-zip -r talktype-gnome-extension.zip talktype@ronb1964.github.io \
+zip -r tuxtalk-gnome-extension.zip talktype@ronb1964.github.io \
     -x "*/.git/*" \
     -x "*/.gitignore" \
     -x "*~" \
@@ -62,7 +67,7 @@ zip -r talktype-gnome-extension.zip talktype@ronb1964.github.io \
 
 # The zip must contain exactly the three extension files plus its UUID directory.
 # A silently under-filled archive installs as a broken extension, so fail loudly.
-PACKAGED_COUNT=$(unzip -l talktype-gnome-extension.zip | grep -c "talktype@ronb1964.github.io/.\+")
+PACKAGED_COUNT=$(unzip -l tuxtalk-gnome-extension.zip | grep -c "talktype@ronb1964.github.io/.\+")
 if [ "$PACKAGED_COUNT" -lt 3 ]; then
     echo "❌ Error: only $PACKAGED_COUNT file(s) packaged; expected extension.js,"
     echo "   metadata.json and stylesheet.css. Check the -x exclude patterns."
@@ -70,7 +75,8 @@ if [ "$PACKAGED_COUNT" -lt 3 ]; then
 fi
 
 # Move to project root
-mv talktype-gnome-extension.zip "$OUTPUT_ZIP"
+mv tuxtalk-gnome-extension.zip "$OUTPUT_ZIP"
+cp "$OUTPUT_ZIP" "$COMPAT_ZIP"
 
 # Verify the zip was created
 if [ ! -f "$OUTPUT_ZIP" ]; then
@@ -91,7 +97,7 @@ if [ -f "SHA256SUMS.txt" ]; then
     # `|| _grep_status=$?` serves two purposes: it captures the real exit code,
     # and it keeps `set -e` from aborting on the legitimate exit-1 case.
     _grep_status=0
-    grep -v "talktype-gnome-extension.zip" SHA256SUMS.txt > SHA256SUMS.txt.tmp || _grep_status=$?
+    grep -v -e "tuxtalk-gnome-extension.zip" -e "talktype-gnome-extension.zip" SHA256SUMS.txt > SHA256SUMS.txt.tmp || _grep_status=$?
 
     if [ "$_grep_status" -le 1 ]; then
         # 0 = other entries kept, 1 = nothing else in the file. Both are fine.
@@ -103,8 +109,8 @@ if [ -f "SHA256SUMS.txt" ]; then
         exit 1
     fi
 fi
-sha256sum "talktype-gnome-extension.zip" >> SHA256SUMS.txt
-echo "🔐 Updated SHA256SUMS.txt entry for the extension zip"
+sha256sum "tuxtalk-gnome-extension.zip" "talktype-gnome-extension.zip" >> SHA256SUMS.txt
+echo "🔐 Updated SHA256SUMS.txt entries for the extension zips"
 
 # Show zip contents
 echo ""
@@ -122,7 +128,7 @@ echo "   1. Test the extension locally:"
 echo "      unzip -l $OUTPUT_ZIP"
 echo ""
 echo "   2. Upload to GitHub release:"
-echo "      gh release upload vX.X.X $OUTPUT_ZIP --clobber"
+echo "      gh release upload vX.X.X $OUTPUT_ZIP $COMPAT_ZIP --clobber"
 echo ""
 echo "   3. Verify download URL:"
-echo "      https://github.com/ronb1964/TalkType/releases/latest/download/talktype-gnome-extension.zip"
+echo "      https://github.com/ronb1964/TuxTalk/releases/latest/download/tuxtalk-gnome-extension.zip"

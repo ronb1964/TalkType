@@ -116,10 +116,12 @@ git add <changed files>
 git commit -m "..."
 git push
 gh release create vX.X.X \
-  TalkType-vX.X.X-x86_64.AppImage \
+  TuxTalk-vX.X.X-x86_64.AppImage \
+  TuxTalk-vX.X.X-x86_64.AppImage.zsync \
   TalkType-vX.X.X-x86_64.AppImage.zsync \
-  talktype_X.X.X_amd64.deb \
-  talktype-X.X.X-1.x86_64.rpm \
+  tuxtalk_X.X.X_amd64.deb \
+  tuxtalk-X.X.X-1.x86_64.rpm \
+  tuxtalk-gnome-extension.zip \
   talktype-gnome-extension.zip \
   SHA256SUMS.txt \
   --title "..." --notes "..."
@@ -163,7 +165,7 @@ AUR votes only move when asked for — the package sat at zero from December
 ## VULKAN GRAPHICS ENGINE — BUILT AND HOSTED SEPARATELY
 
 The "Vulkan (any GPU)" device (config value `vulkan`; AMD, Intel and NVIDIA)
-runs whisper.cpp's whisper-server with its Vulkan backend (`src/talktype/whisper_vulkan.py`). whisper.cpp publishes no
+runs whisper.cpp's whisper-server with its Vulkan backend (`src/tuxtalk/whisper_vulkan.py`). whisper.cpp publishes no
 Linux Vulkan build, so TalkType builds one. It is NOT part of the AppImage
 and is NOT rebuilt for each release. It only changes when whisper.cpp does.
 
@@ -208,11 +210,11 @@ The setup dialogs (download, speed check, Light/Full choice) live in
 - **Desktop launcher**: "TalkType (Dev)" in `~/.local/share/applications/talktype-dev.desktop`
 - **Autostart**: Launches the dev version, NOT the AppImage
 - **DEV_MODE=1**: Shows BOTH tray icons (GTK tray + GNOME extension)
-- **Source code**: `/home/ron/Projects/TalkType/src/talktype/`
+- **Source code**: `/home/ron/Projects/TalkType/src/tuxtalk/`
 
 ### Autostart Configuration:
 ```
-Exec=env DEV_MODE=1 PYTHONPATH=/home/ron/Projects/TalkType/src:/usr/lib64/python3.14/site-packages:/usr/lib/python3.14/site-packages /home/ron/Projects/TalkType/.venv/bin/python -m talktype.tray
+Exec=env DEV_MODE=1 PYTHONPATH=/home/ron/Projects/TalkType/src:/usr/lib64/python3.14/site-packages:/usr/lib/python3.14/site-packages /home/ron/Projects/TalkType/.venv/bin/python -m tuxtalk.tray
 ```
 
 ### NEVER set GDK_BACKEND when launching the tray
@@ -238,7 +240,7 @@ globally again.
 
 ### NEVER damage or delete:
 - The `.venv/` directory
-- The `src/talktype/` directory
+- The `src/tuxtalk/` directory
 - The development desktop launcher
 - Ron's config files without explicit permission
 
@@ -248,15 +250,15 @@ globally again.
 
 TalkType has TWO user interfaces that must stay synchronized:
 
-1. **GTK Tray Icon** (`src/talktype/tray.py`) — For all Linux desktops
+1. **GTK Tray Icon** (`src/tuxtalk/tray.py`) — For all Linux desktops
 2. **GNOME Shell Extension** (`gnome-extension/talktype@ronb1964.github.io/extension.js`) — For GNOME users
 
 **When adding/modifying menu items or features:**
 - Add to BOTH the GTK tray menu AND the GNOME extension menu
 - Keep menu order identical between both
 - If adding a D-Bus method, update:
-  1. `src/talktype/dbus_service.py` — Add the D-Bus method
-  2. `src/talktype/tray.py` — Add method to `TrayAppInstance` class
+  1. `src/tuxtalk/dbus_service.py` — Add the D-Bus method
+  2. `src/tuxtalk/tray.py` — Add method to `TrayAppInstance` class
   3. `gnome-extension/.../extension.js` — Add to D-Bus interface AND menu
 
 **Menu order (must match in both):**

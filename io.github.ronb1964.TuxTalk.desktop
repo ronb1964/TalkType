@@ -1,8 +1,8 @@
 [Desktop Entry]
-Name=TalkType
+Name=TuxTalk
 Comment=Hold a key, talk, and your words are typed for you
 Exec=AppRun tray
-Icon=io.github.ronb1964.TalkType
+Icon=io.github.ronb1964.TuxTalk
 Type=Application
 Categories=Utility;AudioVideo;Audio;Accessibility;
 Terminal=false

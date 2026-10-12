@@ -1,18 +1,18 @@
 #!/bin/bash
-# Put the license of everything TalkType bundles into the AppImage.
+# Put the license of everything TuxTalk bundles into the AppImage.
 #
 # Runs INSIDE the Ubuntu 22.04 build container, from container-build.sh, after
 # every file has been copied into AppDir. The .deb and .rpm repackage the
-# AppImage's tree, so they carry these too (under /opt/talktype).
+# AppImage's tree, so they carry these too (under /opt/tuxtalk).
 #
 #   packaging/collect-licenses.sh <AppDir> <ydotool source> <wl-clipboard source>
 #
 # What it writes, under <AppDir>/usr/share/licenses/:
-#   talktype/LICENSE, talktype/THIRD_PARTY_LICENSES.md  - ours, and the overview
+#   tuxtalk/LICENSE, tuxtalk/THIRD_PARTY_LICENSES.md  - ours, and the overview
 #   ydotool/, wl-clipboard/                             - built from source here
 #   ctranslate2/, tokenizers/                           - their wheels ship no license
 #   <ubuntu package>/copyright                          - every library copied from Ubuntu
-#   talktype/bundled-ubuntu-packages.txt                - those packages and exact versions
+#   tuxtalk/bundled-ubuntu-packages.txt                - those packages and exact versions
 #
 # It FAILS the build if a license can't be found, so a notice can never be
 # dropped silently. tests/test_third_party_licenses.py checks the wiring.
@@ -26,8 +26,8 @@ LIC="$APPDIR/usr/share/licenses"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 PROJECT="$(dirname "$HERE")"
 
-mkdir -p "$LIC/talktype" "$LIC/ydotool" "$LIC/wl-clipboard" "$LIC/ctranslate2" "$LIC/tokenizers"
-cp "$PROJECT/LICENSE" "$PROJECT/THIRD_PARTY_LICENSES.md" "$LIC/talktype/"
+mkdir -p "$LIC/tuxtalk" "$LIC/ydotool" "$LIC/wl-clipboard" "$LIC/ctranslate2" "$LIC/tokenizers"
+cp "$PROJECT/LICENSE" "$PROJECT/THIRD_PARTY_LICENSES.md" "$LIC/tuxtalk/"
 cp "$YDOTOOL_SRC/LICENSE" "$LIC/ydotool/LICENSE"
 cp "$WLCLIP_SRC/COPYING" "$LIC/wl-clipboard/COPYING"
 cp "$HERE/licenses/ctranslate2-LICENSE" "$LIC/ctranslate2/LICENSE"
@@ -71,9 +71,9 @@ for f in "${SYSTEM_FILES[@]}"; do
     PACKAGES[$pkg]=1
 done
 
-LIST="$LIC/talktype/bundled-ubuntu-packages.txt"
+LIST="$LIC/tuxtalk/bundled-ubuntu-packages.txt"
 {
-    echo "Libraries TalkType copies unmodified from Ubuntu 22.04, with exact versions."
+    echo "Libraries TuxTalk copies unmodified from Ubuntu 22.04, with exact versions."
     echo "Each package's copyright file is in the folder of the same name next to"
     echo "this one. Source: apt-get source <package> on Ubuntu 22.04, or"
     echo "https://launchpad.net/ubuntu/jammy/+source/<source package>"
@@ -88,4 +88,4 @@ for pkg in $(printf '%s\n' "${!PACKAGES[@]}" | sort); do
 done
 
 chmod -R a+rX "$LIC"
-echo "   ✅ Licenses: TalkType, ydotool, wl-clipboard, ctranslate2, tokenizers + ${#PACKAGES[@]} Ubuntu packages"
+echo "   ✅ Licenses: TuxTalk, ydotool, wl-clipboard, ctranslate2, tokenizers + ${#PACKAGES[@]} Ubuntu packages"

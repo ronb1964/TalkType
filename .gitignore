@@ -149,6 +149,7 @@ aur-repo/
 # Build artifacts & generated files
 # ============================================
 talktype-gnome-extension.zip
+tuxtalk-gnome-extension.zip
 test-screenshots/
 icons/
 *.svg.playwright-mcp/

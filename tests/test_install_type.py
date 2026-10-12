@@ -75,7 +75,7 @@ def test_guidance_aur_is_manual_with_helper_command():
     g = get_update_guidance("aur", "0.8.0")
     assert g["update_method"] == "manual"
     assert g["can_auto_update"] is False
-    assert "talktype-appimage" in g["command"]
+    assert "tuxtalk-appimage" in g["command"]
 
 
 def test_guidance_flatpak_is_manual_with_flatpak_command():

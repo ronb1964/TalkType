@@ -675,7 +675,7 @@ def get_update_guidance(install_type: str, latest_version: str,
                             f"password to complete the install."),
                 "command": None, "release_url": release_url}
     if install_type == "aur":
-        cmd = "yay -S talktype-appimage   # or: paru -S talktype-appimage"
+        cmd = "yay -S tuxtalk-appimage   # or: paru -S tuxtalk-appimage"
         msg = (f"TuxTalk {v} is available. You installed from the AUR — "
                f"update with your AUR helper:")
     elif install_type == "flatpak":

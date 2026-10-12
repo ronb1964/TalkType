@@ -1,5 +1,5 @@
 #!/bin/bash
-# TalkType .deb Build Script
+# TuxTalk .deb Build Script
 # ==========================
 # Repackages the release AppImage into a Debian/Ubuntu .deb.
 #
@@ -11,14 +11,14 @@
 #   rather than maintaining a second, divergent build. Run build-release.sh FIRST.
 #
 # Layout produced:
-#   /opt/talktype/            <- the whole extracted AppImage tree (AppRun + usr/)
-#   /usr/bin/talktype         <- tiny launcher: exec /opt/talktype/AppRun "$@"
-#   /usr/share/applications/  <- desktop entry (Exec=talktype tray)
+#   /opt/tuxtalk/            <- the whole extracted AppImage tree (AppRun + usr/)
+#   /usr/bin/tuxtalk         <- tiny launcher: exec /opt/tuxtalk/AppRun "$@"
+#   /usr/share/applications/  <- desktop entry (Exec=tuxtalk tray)
 #   /usr/share/pixmaps/       <- icon
 #
 # System deps are DECLARED (not bundled): the bundle relies on the host's GTK stack.
 #   libgtk-3-0, libayatana-appindicator3-1 (tray), libportaudio2 (mic).
-#   ydotool + wl-clipboard ARE bundled inside /opt/talktype, so they are not declared.
+#   ydotool + wl-clipboard ARE bundled inside /opt/tuxtalk, so they are not declared.
 #
 # Requires: fpm (gem install --user-install fpm) and ar/tar (binutils/coreutils).
 # Builds fine on a non-Debian host (Fedora/Nobara) — no dpkg-deb needed.
@@ -41,14 +41,14 @@ if [ -z "$VERSION" ]; then
     echo "❌ Could not read version from pyproject.toml"
     exit 1
 fi
-APPIMAGE="$PROJECT_DIR/TalkType-v${VERSION}-x86_64.AppImage"
+APPIMAGE="$PROJECT_DIR/TuxTalk-v${VERSION}-x86_64.AppImage"
 if [ ! -f "$APPIMAGE" ]; then
     echo "❌ AppImage not found: $APPIMAGE"
     echo "   Run ./build-release.sh first to produce it."
     exit 1
 fi
 
-echo "📦 Building TalkType .deb from $(basename "$APPIMAGE")"
+echo "📦 Building TuxTalk .deb from $(basename "$APPIMAGE")"
 echo "========================================"
 
 # Work in a temp dir so nothing litters the project tree.
@@ -64,40 +64,43 @@ echo "🏗️  Staging the .deb filesystem..."
 STAGE="$WORK/stage"
 mkdir -p "$STAGE/opt" "$STAGE/usr/bin" "$STAGE/usr/share/applications" "$STAGE/usr/share/pixmaps"
 
-# The whole tree goes to /opt/talktype. AppRun sits at /opt/talktype/AppRun and derives
+# The whole tree goes to /opt/tuxtalk. AppRun sits at /opt/tuxtalk/AppRun and derives
 # its paths relative to itself (${HERE}/usr/...), so it works unchanged at this location.
-mv "$TREE" "$STAGE/opt/talktype"
+mv "$TREE" "$STAGE/opt/tuxtalk"
 
 # Third-party licenses ride inside the AppImage's tree (packaging/collect-licenses.sh).
 # Refuse to package an AppImage built without them.
-LIC_SRC="$STAGE/opt/talktype/usr/share/licenses"
-for f in talktype/LICENSE talktype/THIRD_PARTY_LICENSES.md ydotool/LICENSE wl-clipboard/COPYING; do
+LIC_SRC="$STAGE/opt/tuxtalk/usr/share/licenses"
+for f in tuxtalk/LICENSE tuxtalk/THIRD_PARTY_LICENSES.md ydotool/LICENSE wl-clipboard/COPYING; do
     [ -f "$LIC_SRC/$f" ] || { echo "❌ The AppImage has no $f: rebuild it with ./build-release.sh"; exit 1; }
 done
 # Debian keeps a package's license in /usr/share/doc/<package>/copyright.
-mkdir -p "$STAGE/usr/share/doc/talktype"
-{ cat "$LIC_SRC/talktype/LICENSE"; echo
-  echo "TalkType bundles third-party software under /opt/talktype. Its licenses are in"
-  echo "/opt/talktype/usr/share/licenses/; THIRD_PARTY_LICENSES.md here lists them."
-} > "$STAGE/usr/share/doc/talktype/copyright"
-cp "$LIC_SRC/talktype/THIRD_PARTY_LICENSES.md" "$STAGE/usr/share/doc/talktype/"
+mkdir -p "$STAGE/usr/share/doc/tuxtalk"
+{ cat "$LIC_SRC/tuxtalk/LICENSE"; echo
+  echo "TuxTalk bundles third-party software under /opt/tuxtalk. Its licenses are in"
+  echo "/opt/tuxtalk/usr/share/licenses/; THIRD_PARTY_LICENSES.md here lists them."
+} > "$STAGE/usr/share/doc/tuxtalk/copyright"
+cp "$LIC_SRC/tuxtalk/THIRD_PARTY_LICENSES.md" "$STAGE/usr/share/doc/tuxtalk/"
 
 # System launcher — reuses the tested AppRun rather than duplicating its env setup.
-cat > "$STAGE/usr/bin/talktype" <<'LAUNCHER'
+cat > "$STAGE/usr/bin/tuxtalk" <<'LAUNCHER'
 #!/bin/sh
-# TalkType system launcher — hands off to the bundled AppRun, which sets
+# TuxTalk system launcher — hands off to the bundled AppRun, which sets
 # PYTHONHOME/PYTHONPATH/LD_LIBRARY_PATH/GI_TYPELIB_PATH relative to itself.
-exec /opt/talktype/AppRun "$@"
+exec /opt/tuxtalk/AppRun "$@"
 LAUNCHER
-chmod +x "$STAGE/usr/bin/talktype"
+chmod +x "$STAGE/usr/bin/tuxtalk"
+# The command before the 0.15.0 rename: old shortcuts, scripts and a 0.14.x
+# updater (which restarts /usr/bin/talktype after installing this) still use it.
+ln -s tuxtalk "$STAGE/usr/bin/talktype"
 
 # Desktop entry — same as the AppImage's, but Exec points at the system launcher.
-sed 's/^Exec=.*/Exec=talktype tray/' "$PROJECT_DIR/io.github.ronb1964.TuxTalk.desktop" \
+sed 's/^Exec=.*/Exec=tuxtalk tray/' "$PROJECT_DIR/io.github.ronb1964.TuxTalk.desktop" \
     > "$STAGE/usr/share/applications/io.github.ronb1964.TuxTalk.desktop"
 cp "$PROJECT_DIR/io.github.ronb1964.TuxTalk.png" "$STAGE/usr/share/pixmaps/"
 # Crisp scalable icon in the hicolor theme — used by the app menu AND the first-run
 # splash screen (which prefers SVG). Without it, a packaged install has no icon the
-# splash can find and shows plain "TalkType" text instead of the glowing logo.
+# splash can find and shows plain "TuxTalk" text instead of the glowing logo.
 install -Dm644 "$PROJECT_DIR/icons/OFFICIAL_ICON_DO_NOT_CHANGE.svg" \
     "$STAGE/usr/share/icons/hicolor/scalable/apps/io.github.ronb1964.TuxTalk.svg"
 
@@ -118,36 +121,39 @@ POST
 chmod -R a+rX "$STAGE"
 
 echo "🔧 Packaging with fpm..."
-rm -f "$PROJECT_DIR/talktype_${VERSION}_amd64.deb"
+rm -f "$PROJECT_DIR/tuxtalk_${VERSION}_amd64.deb"
 fpm -s dir -t deb \
-    -n talktype \
+    -n tuxtalk \
     -v "$VERSION" \
     --architecture amd64 \
     --maintainer "Ron Brand <ronb1964@gmail.com>" \
-    --url "https://github.com/ronb1964/TalkType" \
-    --description "TalkType — AI-powered offline speech-to-text dictation for Linux.
+    --url "https://github.com/ronb1964/TuxTalk" \
+    --description "TuxTalk (formerly TalkType) — voice dictation for Linux.
  Hold a hotkey, speak, and your words are typed into any application. Runs fully
- offline using faster-whisper; optional NVIDIA GPU acceleration." \
+ offline, on the processor or an NVIDIA, AMD or Intel graphics card." \
     --license "MIT" \
     --category "sound" \
     --depends "libgtk-3-0" \
     --depends "libayatana-appindicator3-1" \
     --depends "libportaudio2" \
     --after-install "$POSTINST" \
+    --replaces "talktype < 0.15.0" \
+    --conflicts "talktype < 0.15.0" \
+    --provides "talktype" \
     --deb-no-default-config-files \
     -C "$STAGE" \
-    -p "$PROJECT_DIR/talktype_${VERSION}_amd64.deb" \
+    -p "$PROJECT_DIR/tuxtalk_${VERSION}_amd64.deb" \
     opt usr
 
 echo ""
 echo "📦 .deb Details:"
-ls -lh "$PROJECT_DIR/talktype_${VERSION}_amd64.deb"
+ls -lh "$PROJECT_DIR/tuxtalk_${VERSION}_amd64.deb"
 
 # Add this .deb to SHA256SUMS.txt so the in-app updater can verify the download
 # before installing it with pkexec. build-release.sh created the file first, so
 # we append here (dropping any stale entry from a previous build). fail-closed:
 # the updater aborts a package download whose hash is missing from this file.
-DEB_BASENAME="talktype_${VERSION}_amd64.deb"
+DEB_BASENAME="tuxtalk_${VERSION}_amd64.deb"
 if [ -f "$PROJECT_DIR/SHA256SUMS.txt" ]; then
     grep -v " ${DEB_BASENAME}\$" "$PROJECT_DIR/SHA256SUMS.txt" \
         > "$PROJECT_DIR/SHA256SUMS.txt.tmp" 2>/dev/null || true
@@ -157,4 +163,4 @@ fi
 echo "🔐 Added ${DEB_BASENAME} to SHA256SUMS.txt"
 
 echo ""
-echo "🚀 To test on Debian/Ubuntu:  sudo apt install ./talktype_${VERSION}_amd64.deb"
+echo "🚀 To test on Debian/Ubuntu:  sudo apt install ./tuxtalk_${VERSION}_amd64.deb"
