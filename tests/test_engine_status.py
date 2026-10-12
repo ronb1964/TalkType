@@ -8,7 +8,7 @@ import types
 
 import pytest
 
-from tuxtalk.dbus_service import TalkTypeDBusService
+from tuxtalk.dbus_service import TuxTalkDBusService
 from tuxtalk.tray import engine_status, preset_notice
 
 
@@ -43,7 +43,7 @@ def test_gpu_preset_says_which_engine():
 def svc(monkeypatch):
     # Parakeet's Vulkan files "downloaded", so the setting alone says vulkan.
     monkeypatch.setattr("tuxtalk.whisper_vulkan.is_installed", lambda m: True)
-    s = TalkTypeDBusService.__new__(TalkTypeDBusService)    # no real bus
+    s = TuxTalkDBusService.__new__(TuxTalkDBusService)    # no real bus
     s.app = types.SimpleNamespace(config=types.SimpleNamespace(model="parakeet-v3", device="vulkan"))
     s.running_engine = None
     s.claimed_hotkeys = []

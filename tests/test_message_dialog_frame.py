@@ -28,7 +28,7 @@ def test_the_desktop_draws_the_frame(Gtk):
                             buttons=Gtk.ButtonsType.OK, text="You're Up to Date!")
     assert isinstance(dialog, Gtk.MessageDialog)
     assert dialog.get_titlebar() is None
-    assert dialog.get_title() == "TalkType"  # the frame shows a title now
+    assert dialog.get_title() == "TuxTalk"  # the frame shows a title now
     assert dialog.get_deletable()  # an X, like Escape, answers the box
 
 

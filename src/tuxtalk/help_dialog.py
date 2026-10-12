@@ -1,10 +1,10 @@
 """
-TalkType Help Dialog - Shared help window for tray and preferences.
+TuxTalk Help Dialog - Shared help window for tray and preferences.
 
-The content is format-aware: TalkType ships as a Flatpak, an AppImage, and
+The content is format-aware: TuxTalk ships as a Flatpak, an AppImage, and
 .deb/.rpm/AUR packages, and some instructions differ (hotkeys, typing method,
 file paths, updates, troubleshooting). Rather than maintain separate help files,
-this one dialog branches on how TalkType is installed — the same runtime
+this one dialog branches on how TuxTalk is installed — the same runtime
 detection (FLATPAK_ID / get_install_type) that onboarding, Preferences, and the
 updater use. Change it once, every format stays correct.
 """
@@ -16,8 +16,8 @@ from gi.repository import Gtk
 
 # Where the Help window's feedback link goes; the Setup Complete screen
 # points to the same page.
-FEEDBACK_URL = "https://github.com/ronb1964/TalkType/discussions"
-ISSUES_URL = "https://github.com/ronb1964/TalkType/issues"
+FEEDBACK_URL = "https://github.com/ronb1964/TuxTalk/discussions"
+ISSUES_URL = "https://github.com/ronb1964/TuxTalk/issues"
 
 
 def _install_facts():
@@ -40,7 +40,7 @@ def _install_facts():
 
 
 def show_help_dialog():
-    """Show help dialog with TalkType features and instructions."""
+    """Show help dialog with TuxTalk features and instructions."""
     from gi.repository import Gdk
 
     f = _install_facts()
@@ -51,7 +51,7 @@ def show_help_dialog():
         keys_line = ("the two keys you assigned during setup — one to "
                      "<b>Hold to talk</b>, one to <b>Toggle dictation</b>")
         keys_where = ("your desktop's <b>System Settings → Keyboard → Shortcuts</b> "
-                      "(find <b>TalkType</b> under Applications)")
+                      "(find <b>TuxTalk</b> under Applications)")
         hotkey_hold = "your <b>Hold-to-talk</b> key"
         hotkey_toggle = "your <b>Toggle-dictation</b> key"
     else:
@@ -62,7 +62,7 @@ def show_help_dialog():
 
     if is_flatpak:
         typing_para = (
-            "TalkType types straight into the focused app through your desktop's "
+            "TuxTalk types straight into the focused app through your desktop's "
             "secure input portal (libei) — there's no typing setup to configure, "
             "and clipboard paste isn't used.")
     else:
@@ -77,22 +77,22 @@ def show_help_dialog():
     if is_flatpak:
         no_hotkey_block = (
             "<b>No hotkey works at all (dictation never starts):</b>\n"
-            "• On the Flatpak your keys are assigned by the desktop, not by TalkType.\n"
+            "• On the Flatpak your keys are assigned by the desktop, not by TuxTalk.\n"
             f"• Open {keys_where} and make sure a key is set for both "
             "<b>Hold to talk</b> and <b>Toggle dictation</b>.\n"
-            "• If the assign prompt never appeared on first run, restart TalkType "
+            "• If the assign prompt never appeared on first run, restart TuxTalk "
             "(tray → Restart Service) and it will ask again.")
     else:
         no_hotkey_block = (
             "<b>No hotkey works at all (dictation never starts):</b>\n"
-            "• TalkType reads your keyboard directly, which requires your user "
+            "• TuxTalk reads your keyboard directly, which requires your user "
             "account to be in the system's \"input\" group. Without it, no key can "
             "be detected.\n"
             "• Go to <b>Preferences → Advanced → Typing Setup</b> and click "
             "<b>\"Fix Typing Permissions\"</b>. You'll be asked for your admin password.\n"
             "• <b>Then restart your computer.</b> Logging out and back in is often "
             "not enough — a background session keeps the old permissions alive.\n"
-            "• Most common on Fedora, where the setting that lets TalkType type is "
+            "• Most common on Fedora, where the setting that lets TuxTalk type is "
             "granted separately from the one that lets it read your keys.")
 
     # KDE-on-Flatpak: the per-dictation "remote control" popup.
@@ -100,7 +100,7 @@ def show_help_dialog():
     if is_flatpak and "KDE" in os.environ.get("XDG_CURRENT_DESKTOP", ""):
         kde_notice = (
             "\n\n<b>Turning off KDE's per-dictation popup:</b>\n"
-            "KDE shows a \"Remote control session started\" popup each time TalkType "
+            "KDE shows a \"Remote control session started\" popup each time TuxTalk "
             "types. To stop it, use the <b>🔔</b> button in <b>Preferences → General</b>, "
             "or: click the sliders icon on that popup → under <b>Started Remote "
             "Desktop</b> uncheck <b>Show a message in a pop-up</b> → Apply.")
@@ -108,12 +108,12 @@ def show_help_dialog():
     # Update guidance per install type.
     if is_flatpak:
         update_block = (
-            "TalkType updates through Flatpak. Run <tt>flatpak update "
+            "TuxTalk updates through Flatpak. Run <tt>flatpak update "
             "io.github.ronb1964.TalkType</tt>, or use your software center — the "
             "built-in \"Check for Updates\" points you at the same command.")
     else:
         update_block = (
-            "Updating matches how you installed TalkType:\n"
+            "Updating matches how you installed TuxTalk:\n"
             "   – <b>.deb / .rpm:</b> click \"Download &amp; Install\" — it downloads "
             "the new package and installs it through your system package manager "
             "(you'll be asked for your password once), then offers to restart.\n"
@@ -126,7 +126,7 @@ def show_help_dialog():
         "" if is_flatpak
         else "• Tests your hotkeys (F8 and F9) to ensure they work\n")
 
-    dialog = Gtk.Dialog(title="TalkType Help")
+    dialog = Gtk.Dialog(title="TuxTalk Help")
     dialog.set_default_size(650, 550)
 
     # Set minimum size but allow resizing larger
@@ -175,11 +175,11 @@ def show_help_dialog():
     # Tab 1: Getting Started
     create_tab("🚀 Getting Started", f'''<span size="large"><b>Quick Start Guide</b></span>
 
-<b>✨ TalkType is ready to use!</b>
-The dictation service starts automatically when you launch TalkType.
+<b>✨ TuxTalk is ready to use!</b>
+The dictation service starts automatically when you launch TuxTalk.
 
 <b>🎉 First-Run Setup</b>
-On first launch, TalkType shows a welcome dialog that:
+On first launch, TuxTalk shows a welcome dialog that:
 • Recommends a setup for your computer: the speech model, and whether to use
   your graphics card (NVIDIA, AMD or Intel), for the language you dictate in.
   "Change language, model or graphics card" lets you change any of it,
@@ -192,7 +192,7 @@ Both keys work at the same time: {keys_line}.
   (choose its style and color in Preferences → Audio).
 
 <b>2. Configure Settings</b>
-Open the TalkType menu → "Preferences" to customize the AI model, language, GPU acceleration,
+Open the TuxTalk menu → "Preferences" to customize the AI model, language, GPU acceleration,
 beeps, and more. (Dictation keys are set in {keys_where}.)
 
 <b>3. Dictate!</b>
@@ -219,7 +219,7 @@ system resources. Adjust this in Preferences → Advanced.
 
 <b>Performance Mode Presets</b>
 Quick changes from the tray menu (Performance):
-• <b>Recommended for this computer:</b> the setup TalkType picks for your graphics card
+• <b>Recommended for this computer:</b> the setup TuxTalk picks for your graphics card
   and language, usually Parakeet on your graphics card
 • <b>Lightest:</b> Whisper Base on the processor, the smallest download and the least work
 • <b>Battery saver:</b> Whisper Tiny on the processor, stops after 2 idle minutes
@@ -249,11 +249,11 @@ After choosing one, the tray's Device line shows where it really runs.
 • Choose "Vulkan (any GPU)" to run Whisper or Parakeet on an AMD, Intel or NVIDIA graphics chip
 • On NVIDIA it's a light alternative to CUDA: about the same speed, a 24 MB download instead of 1.4 GB
 • A one-time download, then a quick test against your processor
-• TalkType only uses the graphics chip if it's clearly faster, and tells you the result
+• TuxTalk only uses the graphics chip if it's clearly faster, and tells you the result
 • Parakeet is already fast on the processor, and about 10 times faster again on a graphics card
 • With any other device, Parakeet runs on the processor (CUDA can't run it)
 
-<b>Fix a Word</b> (teach TalkType a word it keeps getting wrong)
+<b>Fix a Word</b> (teach TuxTalk a word it keeps getting wrong)
 • Tray menu → Fix a Word..., or Preferences → Commands → Fix a Word...
 • Pick a recent dictation, click the wrong word (or drag across a few),
   type the right spelling, then click Always fix this
@@ -265,7 +265,7 @@ After choosing one, the tray's Device line shows where it really runs.
 • How many words you've dictated today, this week and all time
 • How long you spent dictating, and roughly how much typing time that saved
 • A chart of the last two weeks, and how fast you talk compared to typing
-• Only the numbers are kept, on your computer. TalkType never saves what you said
+• Only the numbers are kept, on your computer. TuxTalk never saves what you said
 • Set your own typing speed there, so time saved fits you
 • Turn it off or reset it from the same tab
 
@@ -357,15 +357,15 @@ For any other language, use Whisper: "small" on the processor, or
 A graphics card makes transcription several times faster. Choose it in
 Preferences → General → Device:
 • <b>Vulkan (any GPU):</b> AMD, Intel or NVIDIA, a 24 MB download. It's the only
-  way to run Parakeet on the graphics card. TalkType checks your graphics card is
+  way to run Parakeet on the graphics card. TuxTalk checks your graphics card is
   really faster than your processor before it switches.
 • <b>CUDA (NVIDIA):</b> NVIDIA only, for the Whisper models, a ~1.4 GB download
   that starts when you choose it. Parakeet can't use it.
-• If the graphics card can't start, TalkType uses the processor instead and tells
+• If the graphics card can't start, TuxTalk uses the processor instead and tells
   you, and the tray's Device line shows it, for example "CPU (Vulkan didn't start)".
 
 <b>🔋 Power Management</b>
-TalkType includes intelligent timeout to save system resources:
+TuxTalk includes intelligent timeout to save system resources:
 • <b>Auto-timeout:</b> Service stops automatically after inactivity
 • <b>Configurable:</b> Set duration in Preferences → Advanced
 • <b>Smart detection:</b> Timer resets when you use hotkeys
@@ -379,7 +379,7 @@ In Preferences → Updates &amp; Backup:
 • <b>Backup folder:</b> pick it once with <b>Change…</b>, and Save Backup and
   Load Backup open there.
 • <b>Earlier settings:</b> one list of your backups in the backup folder and the
-  copies TalkType saves by itself when it starts (your last 10 settings changes),
+  copies TuxTalk saves by itself when it starts (your last 10 settings changes),
   so a change or an update that went wrong can be undone. Going back to an
   automatic copy leaves your stats as they are.
 
@@ -530,19 +530,19 @@ and punctuation — wrap the replacement text in double quotes.
 <b>Bug Reports &amp; Feedback:</b>
 Found a bug or have a feature request? We'd love to hear from you!
 
-• <b>Report bugs:</b> <a href="{ISSUES_URL}">TalkType issues on GitHub</a>
-• <b>Questions, ideas, or just how it's working for you:</b> <a href="{FEEDBACK_URL}">TalkType Discussions</a>
-• <b>Include:</b> your Linux distro, desktop environment, and TalkType version
+• <b>Report bugs:</b> <a href="{ISSUES_URL}">TuxTalk issues on GitHub</a>
+• <b>Questions, ideas, or just how it's working for you:</b> <a href="{FEEDBACK_URL}">TuxTalk Discussions</a>
+• <b>Include:</b> your Linux distro, desktop environment, and TuxTalk version
 • <b>Log file:</b> {f["log_path"]}
 
-Your feedback helps make TalkType better for everyone!''')
+Your feedback helps make TuxTalk better for everyone!''')
 
     # A passive feedback link under the tabs, so it's there whichever tab is
     # open. Help never asks for feedback on its own; this is only for people
     # who go looking. Not an action-area button: those emit a response, and
     # the response handler below closes Help.
     feedback_link = Gtk.LinkButton.new_with_label(
-        FEEDBACK_URL, "Questions or feedback? Leave a note on TalkType Discussions")
+        FEEDBACK_URL, "Questions or feedback? Leave a note on TuxTalk Discussions")
     feedback_link.set_halign(Gtk.Align.START)
     feedback_link.set_margin_top(6)
     content.pack_start(feedback_link, False, False, 0)

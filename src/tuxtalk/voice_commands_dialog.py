@@ -1,5 +1,5 @@
 """
-TalkType Voice Commands Quick Reference — a compact cheat sheet popup.
+TuxTalk Voice Commands Quick Reference — a compact cheat sheet popup.
 
 Triggered via tray menu → "Voice Commands..." or a configurable hotkey.
 Designed to be glanceable: organized by category with clear formatting.

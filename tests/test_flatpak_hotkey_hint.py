@@ -9,14 +9,14 @@ def test_hint_kde_points_to_system_settings(monkeypatch):
     monkeypatch.setenv("XDG_CURRENT_DESKTOP", "KDE")
     hint = flatpak_hotkey_hint()
     assert "System Settings" in hint
-    assert "TalkType" in hint
+    assert "TuxTalk" in hint
 
 
 def test_hint_gnome_points_to_keyboard_settings(monkeypatch):
     monkeypatch.setenv("XDG_CURRENT_DESKTOP", "GNOME")
     hint = flatpak_hotkey_hint()
     assert "Keyboard" in hint
-    assert "TalkType" in hint
+    assert "TuxTalk" in hint
 
 
 def test_hint_unknown_desktop_is_generic(monkeypatch):

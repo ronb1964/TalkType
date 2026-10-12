@@ -6,7 +6,7 @@ nothing focused at all) can be copied again instead of being spoken twice.
 Privacy: the list lives in the user's runtime directory (XDG_RUNTIME_DIR,
 normally /run/user/<uid>). That is RAM-backed tmpfs, readable only by the
 user, and wiped at logout, so dictated text is never written to disk. This
-matches TalkType's promise that dictated text stays out of the log.
+matches TuxTalk's promise that dictated text stays out of the log.
 
 The dictation service writes the list; the tray and the GNOME extension (via
 D-Bus) read it. A small file is the simplest way to share it between those

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Desktop environment detection for TalkType
+Desktop environment detection for TuxTalk
 """
 
 import os
@@ -45,16 +45,16 @@ def get_desktop_environment() -> str:
 def flatpak_hotkey_hint() -> str:
     """One-line, desktop-aware instruction for changing the dictation keys on the
     Flatpak, where they're owned by the global-shortcuts portal rather than
-    TalkType's own config. Preferences shows this instead of an editable combo so
+    TuxTalk's own config. Preferences shows this instead of an editable combo so
     the user is sent to the place the keys actually live."""
     de = get_desktop_environment()
     if de == 'kde':
-        return ("Open System Settings → Keyboard → Shortcuts, find TalkType under "
+        return ("Open System Settings → Keyboard → Shortcuts, find TuxTalk under "
                 "Applications, and set “Hold to talk” and “Toggle dictation”.")
     if de == 'gnome':
         return ("Open Settings → Keyboard → View and Customize Shortcuts, find "
-                "TalkType, and set “Hold to talk” and “Toggle dictation”.")
-    return ("Open your desktop's global keyboard shortcut settings, find TalkType, "
+                "TuxTalk, and set “Hold to talk” and “Toggle dictation”.")
+    return ("Open your desktop's global keyboard shortcut settings, find TuxTalk, "
             "and set “Hold to talk” and “Toggle dictation”.")
 
 
@@ -189,7 +189,7 @@ def _read_enabled_extensions():
     Returns None (NOT []) when the value can't be read or parsed. That distinction
     matters: the caller read-modify-writes this list, so treating a transient read
     failure as "empty" would overwrite the user's entire enabled-extensions list
-    with only TalkType — silently disabling every other GNOME extension they have.
+    with only TuxTalk — silently disabling every other GNOME extension they have.
     None means "don't touch it".
     """
     try:
@@ -261,7 +261,7 @@ def enable_extension(uuid: str) -> bool:
     # Persist into the enabled list so it survives to the next shell start even
     # when the live enable above could not take effect. Only touch the setting if
     # we could actually READ it — a None means the read failed, and writing then
-    # would clobber the user's other enabled extensions with just TalkType.
+    # would clobber the user's other enabled extensions with just TuxTalk.
     enabled = _read_enabled_extensions()
     if enabled is not None and uuid not in enabled:
         enabled.append(uuid)

@@ -1,7 +1,7 @@
 """
-Keeping TalkType's helper engines on a short leash.
+Keeping TuxTalk's helper engines on a short leash.
 
-TalkType runs two optional background engines as separate programs: the AI
+TuxTalk runs two optional background engines as separate programs: the AI
 cleanup engine (llama-server, ai_cleanup.py) and the Vulkan graphics
 engine (whisper-server, whisper_vulkan.py). Each can hold a gigabyte or more
 of memory, so neither may outlive the dictation service that started it.
@@ -60,7 +60,7 @@ def is_talktype_process(pid) -> bool:
 
 
 def kill_orphans(processes, is_talktype, label) -> int:
-    """Kill the engines in *processes* whose parent is no longer TalkType.
+    """Kill the engines in *processes* whose parent is no longer TuxTalk.
     A self-healing backstop for the parent-death signal. Returns how many."""
     killed = 0
     for pid, ppid in processes:

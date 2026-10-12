@@ -24,10 +24,10 @@ pytestmark = pytest.mark.skipif(not shutil.which("dbus-run-session"),
 ROLE = textwrap.dedent("""
     import sys
     from gi.repository import GLib
-    from tuxtalk.dbus_service import TalkTypeDBusService
+    from tuxtalk.dbus_service import TuxTalkDBusService
     class App: pass
     try:
-        TalkTypeDBusService(App(), primary=(sys.argv[1] == "tray"))
+        TuxTalkDBusService(App(), primary=(sys.argv[1] == "tray"))
         print("registered", flush=True)
     except Exception as e:
         print(type(e).__name__, flush=True)   # the service keeps running anyway

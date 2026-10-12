@@ -1,6 +1,6 @@
 {
-  "name": "TalkType",
-  "description": "AI-powered speech recognition and dictation for Wayland - GNOME integration",
+  "name": "TuxTalk",
+  "description": "TuxTalk (formerly TalkType): hold a key, talk, and your words are typed for you. Menu and hotkey integration for GNOME.",
   "uuid": "talktype@ronb1964.github.io",
   "shell-version": [
     "45",
@@ -11,7 +11,7 @@
     "50",
     "51"
   ],
-  "version": 16,
-  "url": "https://github.com/ronb1964/TalkType",
+  "version": 17,
+  "url": "https://github.com/ronb1964/TuxTalk",
   "settings-schema": "org.gnome.shell.extensions.talktype"
 }

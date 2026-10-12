@@ -1,6 +1,6 @@
 """Hotkey/input backends.
 
-TalkType starts and stops recording from a global hotkey. Outside a Flatpak it
+TuxTalk starts and stops recording from a global hotkey. Outside a Flatpak it
 reads the key directly with evdev (Backend A); inside a Flatpak that is blocked,
 so it registers a shortcut with the GlobalShortcuts portal and reacts to the
 desktop's press/release signals (Backend B). Both backends drive the SAME
@@ -114,7 +114,7 @@ class PortalInputBackend(InputBackend):
             # Register BOTH keys, always live (Backend A parity): hold-to-talk and
             # tap-to-toggle. The desktop lets the user assign a key to each.
             # Descriptions are short: desktops group these under the app name
-            # ("TalkType"), so a "TalkType:" prefix would read redundantly.
+            # ("TuxTalk"), so a "TuxTalk:" prefix would read redundantly.
             shortcuts = [
                 ("dictate_hold",
                  {"description": GLib.Variant("s", "Hold to talk (push-to-talk)")}),

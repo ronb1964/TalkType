@@ -1,5 +1,5 @@
 """
-"Fix a Word" window: teach TalkType a word from a recent dictation.
+"Fix a Word" window: teach TuxTalk a word from a recent dictation.
 
 Opened from Recent Dictations in the tray menu (or the GNOME panel menu via
 D-Bus). The user clicks the misheard word(s), types the right spelling, and
@@ -45,8 +45,8 @@ def show_fix_word_dialog(index=0, copy_text=None):
             message_type=Gtk.MessageType.INFO, buttons=Gtk.ButtonsType.OK,
             text="No recent dictations to fix yet")
         msg.format_secondary_text(
-            "Dictate something first. Then, if TalkType gets a word wrong, "
-            "choose Fix a Word in the TalkType menu to teach it.")
+            "Dictate something first. Then, if TuxTalk gets a word wrong, "
+            "choose Fix a Word in the TuxTalk menu to teach it.")
         msg.set_keep_above(True)
         msg.run()
         msg.destroy()
@@ -211,7 +211,7 @@ class _FixWordDialog:
         if phrase and vocabulary.is_risky(phrase):
             warnings.append(
                 f"“{phrase}” is a common word. Saving this changes it every "
-                "time you say it, not just when TalkType mishears you.")
+                "time you say it, not just when TuxTalk mishears you.")
         if phrase:
             try:
                 previous = vocabulary.existing_fix(phrase)
@@ -264,7 +264,7 @@ class _FixWordDialog:
             text=f"Always change “{phrase}” to “{replacement}”?")
         msg.format_secondary_text(
             f"“{phrase}” is a common word, so this will change it in every "
-            "dictation, even when TalkType heard you right.")
+            "dictation, even when TuxTalk heard you right.")
         msg.add_button("Cancel", Gtk.ResponseType.CANCEL)
         msg.add_button("Fix it anyway", Gtk.ResponseType.OK)
         answer = msg.run()

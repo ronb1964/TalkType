@@ -32,7 +32,7 @@ def download_file(
     cancel_event=None,
     progress_hook=None,
     expected_sha256: str | None = None,
-    user_agent: str = "TalkType",
+    user_agent: str = "TuxTalk",
 ) -> bool:
     """Download *url* to *dest_path* safely. Returns True on success.
 

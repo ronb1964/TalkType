@@ -1,7 +1,7 @@
-/* TalkType Preferences Stylesheet
+/* TuxTalk Preferences Stylesheet
  *
  * Accent colours come from the desktop theme via @theme_selected_bg_color,
- * so TalkType follows the user's system accent instead of imposing its own.
+ * so TuxTalk follows the user's system accent instead of imposing its own.
  * They were hardcoded to a slate blue (#5a8fb8), which looked wrong on any
  * desktop not using a blue accent — on KDE Breeze with a green accent, every
  * highlight in this window disagreed with the rest of the system.

@@ -91,7 +91,7 @@ try:
     import gi
     gi.require_version("Notify", "0.7")
     from gi.repository import Notify
-    Notify.init("TalkType")
+    Notify.init("TuxTalk")
     _notify_ready = True
 except Exception:
     _notify_ready = False
@@ -881,7 +881,7 @@ def _resample_audio(audio, orig_sr, target_sr):
 #
 # While recording we take an exclusive grab on the keyboard so the hotkey
 # doesn't leak through to whatever app has focus. A grab that is taken and
-# never released leaves the user's keyboard dead SYSTEM-WIDE until TalkType
+# never released leaves the user's keyboard dead SYSTEM-WIDE until TuxTalk
 # exits, so the grabbed devices are tracked in module state rather than being
 # threaded through return values — that way every exit path (normal stop,
 # cancel, toggle, ESC, or an exception) can release them with one call.
@@ -1077,7 +1077,7 @@ def _is_keyboard_device(dev) -> bool:
        and all 12 F-keys just like a keyboard does. What separates them is real
        pointer motion (REL_X) combined with mouse buttons — the same test
        libinput uses. This also excludes ydotoold's virtual device, which is how
-       TalkType types and must never be grabbed.
+       TuxTalk types and must never be grabbed.
 
     Note the check is REL_X specifically, not the EV_REL event type: the K800
     keyboard declares EV_REL while exposing no motion axis, so testing the type
@@ -1204,7 +1204,7 @@ def _rediscover_devices(devices) -> int:
     dropped by _drop_dead_devices — after a wireless receiver blip, a USB
     reset or a resume from suspend — was gone for the life of the process.
     On a single-keyboard machine that means the hotkey silently stops working
-    until TalkType is restarted, with only a log line the user never sees.
+    until TuxTalk is restarted, with only a log line the user never sees.
 
     Matched on the device node path, which is what identifies a device across
     reconnects here. Non-keyboards are ignored so this never grows the poll
@@ -1246,7 +1246,7 @@ def _input_access_diagnosis() -> str:
     import pwd
 
     head = ("No readable keyboard devices found - hotkeys cannot work. "
-            "TalkType reads keys from /dev/input, which needs the 'input' group. ")
+            "TuxTalk reads keys from /dev/input, which needs the 'input' group. ")
     try:
         group = grp.getgrnam("input")
     except KeyError:
@@ -1384,13 +1384,13 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
             _release_all_grabs()
             _beep(beeps_on, *CANCEL_BEEP)
             if notify_on:
-                _notify("TalkType", "Microphone unavailable — check that no other app is using it")
+                _notify("TuxTalk", "Microphone unavailable — check that no other app is using it")
             return False
 
     print("🎙️  Recording…")
     logger.debug("Recording started")
     _beep(beeps_on, *START_BEEP)
-    if notify_on: _notify("TalkType", "Recording… (speak now)")
+    if notify_on: _notify("TuxTalk", "Recording… (speak now)")
 
     # Notify GNOME extension that recording started (turns icon red)
     _notify_tray_recording_state(True)
@@ -1421,7 +1421,7 @@ def cancel_recording(beeps_on: bool, notify_on: bool, reason="Cancelled"):
     _beep(beeps_on, *CANCEL_BEEP)
     print(f"⏸️  {reason}")
     logger.debug(f"Recording cancelled: {reason}")
-    if notify_on: _notify("TalkType", reason)
+    if notify_on: _notify("TuxTalk", reason)
 
     # Hide recording indicator
     if recording_indicator:
@@ -1489,7 +1489,7 @@ def _send_select_all_delete():
     """Send Ctrl+A then Backspace to clear the entire input field.
 
     Used by the 'delete everything' voice command — wipes the whole textarea
-    regardless of whether the contents came from TalkType, manual typing, or
+    regardless of whether the contents came from TuxTalk, manual typing, or
     pasting from elsewhere.
     """
     # KEY_LEFTCTRL (29) + KEY_A (30), then KEY_BACKSPACE (14)
@@ -2145,24 +2145,24 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
 
     # 'everything' clears the entire input field via Ctrl+A + Backspace.
     # No tracked dictation required \u2014 wipes whatever is in the textarea,
-    # including text that wasn't typed by TalkType.
+    # including text that wasn't typed by TuxTalk.
     if undo_type == 'everything':
         if _output_backend().select_all_delete():
             state.last_inserted_text = ""
             state.continue_mid_sentence = False
             _beep(beeps_on, *READY_BEEP)
-            if notify_on: _notify("TalkType", "Cleared input field")
+            if notify_on: _notify("TuxTalk", "Cleared input field")
         else:
             print("\u26a0\ufe0f  Could not clear input field (text injection unavailable)")
             _beep(beeps_on, *CANCEL_BEEP)
-            if notify_on: _notify("TalkType", "Could not clear field")
+            if notify_on: _notify("TuxTalk", "Could not clear field")
         return True
 
     if not state.last_inserted_text:
         print("\u2139\ufe0f  Nothing to undo (no previous dictation)")
         logger.info("Undo requested but no previous text to undo")
         _beep(beeps_on, *CANCEL_BEEP)
-        if notify_on: _notify("TalkType", "Nothing to undo")
+        if notify_on: _notify("TuxTalk", "Nothing to undo")
         return True
 
     # Calculate how many characters to delete (iterates `count` times)
@@ -2172,7 +2172,7 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
 
     if delete_count > 0:
         # Only shrink the buffer once the deletion is confirmed. Assuming it
-        # worked meant TalkType played the success beep while nothing had been
+        # worked meant TuxTalk played the success beep while nothing had been
         # deleted, leaving the buffer out of step with the document — so the
         # next undo backspaced over text the user had typed themselves.
         if not _output_backend().backspaces(delete_count):
@@ -2180,7 +2180,7 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
             logger.error("Undo failed: backspaces were not delivered; buffer left unchanged")
             _beep(beeps_on, *CANCEL_BEEP)
             if notify_on:
-                _notify("TalkType", "Undo failed — text couldn't be deleted")
+                _notify("TuxTalk", "Undo failed — text couldn't be deleted")
             return True
 
         # Update last_inserted_text to reflect what remains
@@ -2196,7 +2196,7 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
             else:
                 state.continue_mid_sentence = False
         _beep(beeps_on, *READY_BEEP)
-        if notify_on: _notify("TalkType", f"Undid last {label}")
+        if notify_on: _notify("TuxTalk", f"Undid last {label}")
     else:
         print("\u2139\ufe0f  Nothing to undo for this scope")
         _beep(beeps_on, *CANCEL_BEEP)
@@ -2563,9 +2563,9 @@ def _finish_capture(beeps_on: bool, notify_on: bool):
 # always in Recent Dictations by then (it's saved before injection starts).
 _UNDELIVERED_NOTICES = {
     "failed": "Couldn't type that dictation into the window. It's saved in Recent "
-              "Dictations in the TalkType menu: click it to copy, then paste with Ctrl+V.",
+              "Dictations in the TuxTalk menu: click it to copy, then paste with Ctrl+V.",
     "partial": "Only part of that dictation reached the window. The whole text is saved "
-               "in Recent Dictations in the TalkType menu: click it to copy, then paste "
+               "in Recent Dictations in the TuxTalk menu: click it to copy, then paste "
                "with Ctrl+V.",
 }
 
@@ -2589,13 +2589,13 @@ def _report_undelivered(outcome: str, beeps_on: bool):
                 uinput_helper.ensure_ydotoold_running()
             if reason:
                 message = (f"{reason} The dictation is saved in Recent Dictations "
-                           "in the TalkType menu: click it to copy, then paste with Ctrl+V.")
+                           "in the TuxTalk menu: click it to copy, then paste with Ctrl+V.")
         except Exception as e:
             logger.debug(f"Couldn't work out why typing failed: {e}")
     print(f"⚠️  {message}")
     logger.warning(f"Dictation not delivered ({outcome}); told the user")
     _beep(beeps_on, *CANCEL_BEEP)
-    _notify("TalkType", message)
+    _notify("TuxTalk", message)
 
 
 def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
@@ -2643,7 +2643,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         # Beep to confirm transcription is done
         _beep(beeps_on, *READY_BEEP)
         _ellipsis = "…"  # Must be outside f-string for Python 3.10 compat
-        if notify_on: _notify("TalkType", f"Transcribed: {text[:80]}{_ellipsis if len(text)>80 else ''}")
+        if notify_on: _notify("TuxTalk", f"Transcribed: {text[:80]}{_ellipsis if len(text)>80 else ''}")
 
         # Stage 4: Inject text into the active application. It goes into the
         # Recent Dictations list first, so it can be recovered even if the
@@ -2672,7 +2672,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         print(f"❌ Transcription error: {e}")
         _beep(beeps_on, *READY_BEEP)
         _ellipsis = "…"  # Must be outside f-string for Python 3.10 compat
-        if notify_on: _notify("TalkType", f"Transcription failed: {str(e)[:60]}{_ellipsis if len(str(e))>60 else ''}")
+        if notify_on: _notify("TuxTalk", f"Transcription failed: {str(e)[:60]}{_ellipsis if len(str(e))>60 else ''}")
 
 
 def stop_recording(
@@ -2958,7 +2958,7 @@ def _service_tick(cfg, svc: "_ServiceState") -> "LiveSettings | None":
             print(f"⏰ Auto-timeout: No activity for {svc.timeout_minutes} "
                   f"minutes, shutting down...")
             if cfg.notify:
-                _notify("TalkType Auto-Timeout",
+                _notify("TuxTalk Auto-Timeout",
                         f"Service stopped after {svc.timeout_minutes} minutes of inactivity")
             sys.exit(0)
 
@@ -3159,7 +3159,7 @@ _QUALITY_ORDER = ("large-v3", "parakeet-v3", "medium", "small", "base", "tiny")
 
 
 def _guard_large_v3_without_cuda(cfg):
-    """large-v3 on CUDA without TalkType's CUDA libraries runs as medium.
+    """large-v3 on CUDA without TuxTalk's CUDA libraries runs as medium.
 
     It keeps the service usable for someone who set up large-v3 with CUDA and
     later lost the libraries (a fresh profile, a cleaned data folder). It must
@@ -3238,8 +3238,8 @@ def _build_model_or_exit(settings: Settings):
             save_config(saved)
         except Exception as save_error:
             logger.warning(f"Could not save the fallback model to settings: {save_error}")
-        _notify("TalkType",
-                f"{model_display_name(wanted)} wasn't downloaded, so TalkType is using "
+        _notify("TuxTalk",
+                f"{model_display_name(wanted)} wasn't downloaded, so TuxTalk is using "
                 f"{model_display_name(fallback)} for now. You can choose "
                 f"{model_display_name(wanted)} again in Preferences.")
         return model
@@ -3267,7 +3267,7 @@ def _build_vulkan_model(settings: Settings):
         except Exception as e:
             reason = f"the graphics engine failed to start ({e})"
     logger.warning(f"Vulkan GPU not used for {settings.model}: {reason}; using the processor")
-    _notify("TalkType", "Couldn't use your graphics card through Vulkan, so TalkType is using the "
+    _notify("TuxTalk", "Couldn't use your graphics card through Vulkan, so TuxTalk is using the "
                         "processor for now. Choose the device again in Preferences to set it up.")
     return None
 
@@ -3299,7 +3299,7 @@ def _build_parakeet_gpu_model(settings: Settings):
     except Exception as e:
         reason = f"the graphics helper failed to start ({e})"
     logger.warning(f"Vulkan GPU not used for Parakeet: {reason}; using the processor")
-    _notify("TalkType", "Couldn't run Parakeet on your graphics card, so TalkType is using the "
+    _notify("TuxTalk", "Couldn't run Parakeet on your graphics card, so TuxTalk is using the "
                         "processor for now. Choose the device again in Preferences to set it up.")
     return None
 
@@ -3353,7 +3353,7 @@ def build_model(settings: Settings):
             # past every fallback below. Processor for this run; the setting
             # stays, since downloading CUDA again in Preferences fixes it.
             logger.warning("Device is CUDA but the CUDA libraries are missing; using the processor")
-            _notify("TalkType", "The CUDA files are missing, so TalkType is using the processor "
+            _notify("TuxTalk", "The CUDA files are missing, so TuxTalk is using the processor "
                                 "for now. Download them again in Preferences, Advanced.")
             settings = Settings(**{**vars(settings), "device": "cpu"})
 
@@ -3406,7 +3406,7 @@ def build_model(settings: Settings):
                 _record_engine(settings.model, "cpu")
                 # This switches the saved device to the processor (below), so
                 # say so: it used to happen with only a console line.
-                _notify("TalkType", "Couldn't use your NVIDIA graphics card (CUDA), so TalkType "
+                _notify("TuxTalk", "Couldn't use your NVIDIA graphics card (CUDA), so TuxTalk "
                                     "switched to the processor. Choose the device again in "
                                     "Preferences to try the graphics card.")
 
@@ -3448,7 +3448,7 @@ def parse_args():
 
 def main():
     from . import desktop_identity
-    desktop_identity.apply()        # TalkType's icon on its windows, not KDE's generic one
+    desktop_identity.apply()        # TuxTalk's icon on its windows, not KDE's generic one
     # The loaded speech model. Usually built after the GTK loop starts; built
     # earlier when it must first be downloaded (see the GTK section below).
     global model
@@ -3518,7 +3518,7 @@ def main():
 
             # Initialize D-Bus service for GNOME extension integration
             try:
-                from .dbus_service import TalkTypeDBusService
+                from .dbus_service import TuxTalkDBusService
 
                 # Create a simple app instance with necessary attributes for D-Bus
                 class AppInstance:
@@ -3596,7 +3596,7 @@ def main():
                         other writer uses. This used to hand-roll JSON into
                         ~/.config/talktype/settings.json — a file this app has
                         never read or written; the real settings are TOML at
-                        ~/.config/TalkType/config.toml. The change therefore
+                        ~/.config/TuxTalk/config.toml. The change therefore
                         landed nowhere and was gone by the restart it asked
                         the user to perform.
                         """
@@ -3636,8 +3636,8 @@ def main():
 
                 app_instance = AppInstance(cfg)
                 # A stand-in only: the tray owns the bus name (see
-                # TalkTypeDBusService). This succeeds only with no tray running.
-                dbus_service = TalkTypeDBusService(app_instance, primary=False)
+                # TuxTalkDBusService). This succeeds only with no tray running.
+                dbus_service = TuxTalkDBusService(app_instance, primary=False)
                 app_instance.dbus_service = dbus_service
 
                 # Emit initial state so extension syncs properly

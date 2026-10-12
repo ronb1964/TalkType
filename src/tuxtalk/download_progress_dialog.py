@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Unified Download Progress Dialog for TalkType
+Unified Download Progress Dialog for TuxTalk
 Handles CUDA libraries and GNOME extension downloads with individual progress tracking
 """
 
@@ -73,7 +73,7 @@ class UnifiedDownloadDialog:
 
     def _build_dialog(self):
         """Build the GTK dialog with progress bars for each task."""
-        self.dialog = Gtk.Dialog(title=self._title or "Setting up TalkType")
+        self.dialog = Gtk.Dialog(title=self._title or "Setting up TuxTalk")
         # Height: base 200px + 120px per task + 100px extra if we have a long description
         _extra = 100 if self._description else 0
         self.dialog.set_modal(True)
@@ -131,7 +131,7 @@ class UnifiedDownloadDialog:
         content.set_spacing(15)
 
         # Main title
-        title_text = self._title or "Setting up TalkType"
+        title_text = self._title or "Setting up TuxTalk"
         title_label = Gtk.Label()
         title_label.set_markup(f'<span size="x-large"><b>{title_text}</b></span>')
         content.pack_start(title_label, False, False, 0)
@@ -370,7 +370,7 @@ def show_unified_download_dialog(cuda=False, extension=False, model=None, parent
         from tuxtalk.model_helper import MODEL_DISPLAY_SIZES
         model_size = MODEL_DISPLAY_SIZES.get(model, "~3 GB")
         description = (
-            f"To run {model} on your NVIDIA graphics card with CUDA, TalkType needs two things:\n\n"
+            f"To run {model} on your NVIDIA graphics card with CUDA, TuxTalk needs two things:\n\n"
             f"  • <b>CUDA GPU Libraries</b> (~1.4GB) — unlocks GPU acceleration on your NVIDIA card\n"
             f"  • <b>{model} AI Model</b> ({model_size}) — the highest-accuracy speech recognition model\n\n"
             f"Both are one-time downloads. This may take several minutes depending on your connection."

@@ -1,7 +1,7 @@
 /* extension.js
  *
- * TalkType GNOME Shell Extension
- * Provides native GNOME integration for TalkType speech recognition
+ * TuxTalk GNOME Shell Extension
+ * Provides native GNOME integration for TuxTalk speech recognition
  */
 
 import GLib from 'gi://GLib';
@@ -17,8 +17,8 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
-// D-Bus interface for TalkType
-const TalkTypeIface = `
+// D-Bus interface for TuxTalk
+const TuxTalkIface = `
 <node>
   <interface name="io.github.ronb1964.TalkType">
     <!-- Properties/Status -->
@@ -114,13 +114,13 @@ const TalkTypeIface = `
   </interface>
 </node>`;
 
-const TalkTypeProxy = Gio.DBusProxy.makeProxyWrapper(TalkTypeIface);
+const TuxTalkProxy = Gio.DBusProxy.makeProxyWrapper(TuxTalkIface);
 
-// Panel indicator for TalkType
-const TalkTypeIndicator = GObject.registerClass(
-class TalkTypeIndicator extends PanelMenu.Button {
+// Panel indicator for TuxTalk
+const TuxTalkIndicator = GObject.registerClass(
+class TuxTalkIndicator extends PanelMenu.Button {
     _init() {
-        super._init(0.0, 'TalkType');
+        super._init(0.0, 'TuxTalk');
 
         // Create icon
         this._icon = new St.Icon({
@@ -139,10 +139,10 @@ class TalkTypeIndicator extends PanelMenu.Button {
         this._currentInjectionMode = 'auto';
         this._dbusAvailable = false;
 
-        // TalkType reads its hotkeys below the desktop, so GNOME Shell also
+        // TuxTalk reads its hotkeys below the desktop, so GNOME Shell also
         // hands F8 to the focused app and a terminal prints "~". While the
         // service runs we grab the hotkeys here, which keeps them from the
-        // app; TalkType still sees them. The list comes from the service via
+        // app; TuxTalk still sees them. The list comes from the service via
         // the tray (HotkeysChanged / GetStatus) in accelerator syntax.
         // accelerator -> action id from grab_accelerator.
         this._hotkeys = [];
@@ -167,7 +167,7 @@ class TalkTypeIndicator extends PanelMenu.Button {
 
     _connectDBus() {
         try {
-            this._proxy = new TalkTypeProxy(
+            this._proxy = new TuxTalkProxy(
                 Gio.DBus.session,
                 'io.github.ronb1964.TalkType',
                 '/io/github/ronb1964/TalkType'
@@ -214,14 +214,14 @@ class TalkTypeIndicator extends PanelMenu.Button {
             }));
 
             this._dbusAvailable = true;
-            console.log('TalkType: Connected to D-Bus service');
+            console.log('TuxTalk: Connected to D-Bus service');
 
-            // Track focused window class so TalkType can pick the right
+            // Track focused window class so TuxTalk can pick the right
             // paste keystroke (Ctrl+V for normal apps, Ctrl+Shift+V for terminals).
             this._setupFocusTracking();
         } catch (e) {
             this._dbusAvailable = false;
-            console.error('TalkType: Failed to connect to D-Bus:', e);
+            console.error('TuxTalk: Failed to connect to D-Bus:', e);
         }
     }
 
@@ -243,12 +243,12 @@ class TalkTypeIndicator extends PanelMenu.Button {
             const wmClass = (win && win.get_wm_class()) || '';
             this._proxy.SetFocusedWindowClassRemote(wmClass, () => {});
         } catch (e) {
-            console.error('TalkType: focus push failed:', e);
+            console.error('TuxTalk: focus push failed:', e);
         }
     }
 
     _watchDBusService() {
-        // Watch for D-Bus name owner changes (detects when TalkType quits)
+        // Watch for D-Bus name owner changes (detects when TuxTalk quits)
         this._nameWatcherId = Gio.DBus.session.watch_name(
             'io.github.ronb1964.TalkType',
             Gio.BusNameWatcherFlags.NONE,
@@ -260,16 +260,16 @@ class TalkTypeIndicator extends PanelMenu.Button {
                 // Re-push current focus so a freshly restarted Python service
                 // doesn't sit at class=None until the user changes windows.
                 this._pushFocusedWindowClass();
-                console.log('TalkType: D-Bus service appeared - showing indicator');
+                console.log('TuxTalk: D-Bus service appeared - showing indicator');
             },
             () => {
-                // Service vanished (TalkType quit) - hide the indicator
+                // Service vanished (TuxTalk quit) - hide the indicator
                 this._dbusAvailable = false;
                 this._isServiceRunning = false;
                 this._isRecording = false;
-                this._syncHotkeyGrabs();  // TalkType quit: give the keys back
+                this._syncHotkeyGrabs();  // TuxTalk quit: give the keys back
                 this.hide();
-                console.log('TalkType: D-Bus service vanished (app quit) - hiding indicator');
+                console.log('TuxTalk: D-Bus service vanished (app quit) - hiding indicator');
             }
         );
     }
@@ -390,7 +390,7 @@ class TalkTypeIndicator extends PanelMenu.Button {
         this.menu.addMenuItem(helpItem);
 
         // About
-        let aboutItem = new PopupMenu.PopupMenuItem('About TalkType...');
+        let aboutItem = new PopupMenu.PopupMenuItem('About TuxTalk...');
         aboutItem.connect('activate', () => {
             this._proxy.ShowAboutRemote();
         });
@@ -405,8 +405,8 @@ class TalkTypeIndicator extends PanelMenu.Button {
 
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
-        // Quit TalkType
-        let quitItem = new PopupMenu.PopupMenuItem('Quit TalkType');
+        // Quit TuxTalk
+        let quitItem = new PopupMenu.PopupMenuItem('Quit TuxTalk');
         quitItem.connect('activate', () => {
             this._proxy.QuitRemote();
         });
@@ -415,7 +415,7 @@ class TalkTypeIndicator extends PanelMenu.Button {
 
     _checkForUpdates() {
         // Show checking notification
-        Main.notify('TalkType', 'Checking for updates...');
+        Main.notify('TuxTalk', 'Checking for updates...');
         this._updatesItem.label.text = 'Checking...';
         this._updatesItem.setSensitive(false);
 
@@ -459,7 +459,7 @@ class TalkTypeIndicator extends PanelMenu.Button {
                extCurrent, extLatest, extUpdate, releaseUrl, error] = params;
 
         if (!success) {
-            Main.notify('TalkType', `Update check failed: ${error || 'Unknown error'}`);
+            Main.notify('TuxTalk', `Update check failed: ${error || 'Unknown error'}`);
             return;
         }
 
@@ -473,7 +473,7 @@ class TalkTypeIndicator extends PanelMenu.Button {
         } else if (extUpdate) {
             // App is up to date but the GNOME extension has an update — the app
             // dialog can't offer that, so send the user to the Updates tab.
-            Main.notify('TalkType', 'Extension update available — opening Updates…');
+            Main.notify('TuxTalk', 'Extension update available — opening Updates…');
             this._proxy.OpenPreferencesUpdatesRemote();
         }
         // else: nothing — the app already showed the "up to date" window.
@@ -502,7 +502,7 @@ class TalkTypeIndicator extends PanelMenu.Button {
             const entries = result ? result[0] : null;
             if (error || !entries || entries.length === 0) {
                 menu.addMenuItem(new PopupMenu.PopupMenuItem(
-                    error ? 'TalkType Not Running' : 'No dictations yet', {reactive: false}));
+                    error ? 'TuxTalk Not Running' : 'No dictations yet', {reactive: false}));
                 return;
             }
             menu.addMenuItem(new PopupMenu.PopupMenuItem(
@@ -535,7 +535,7 @@ class TalkTypeIndicator extends PanelMenu.Button {
         // Get current status
         this._proxy.GetStatusRemote((result, error) => {
             if (error) {
-                console.error('TalkType: Failed to get status:', error);
+                console.error('TuxTalk: Failed to get status:', error);
                 return;
             }
 
@@ -548,7 +548,7 @@ class TalkTypeIndicator extends PanelMenu.Button {
             // The tray works out which preset is active (recommend.match_preset).
             this._currentPreset = status.preset ? status.preset.deep_unpack() : 'custom';
             this._currentInjectionMode = status.injection_mode ? status.injection_mode.deep_unpack() : 'auto';
-            // Absent from a TalkType older than 0.14.1: then nothing is grabbed,
+            // Absent from a TuxTalk older than 0.14.1: then nothing is grabbed,
             // which is how it always behaved.
             this._hotkeys = status.hotkeys ? status.hotkeys.deep_unpack() : [];
 
@@ -576,7 +576,7 @@ class TalkTypeIndicator extends PanelMenu.Button {
             if (action === Meta.KeyBindingAction.NONE) {
                 // Usually another shortcut already has it. Dictation still
                 // works; the key just reaches the app too, as before.
-                console.warn(`TalkType: could not hold ${accel} back from apps (already in use?)`);
+                console.warn(`TuxTalk: could not hold ${accel} back from apps (already in use?)`);
                 continue;
             }
             // ALL: also while the overview or a system modal is up, or the key
@@ -603,7 +603,7 @@ class TalkTypeIndicator extends PanelMenu.Button {
             const presets = result ? result[0] : null;
             if (error || !presets || presets.length === 0) {
                 menu.addMenuItem(new PopupMenu.PopupMenuItem(
-                    'Update TalkType to use presets', {reactive: false}));
+                    'Update TuxTalk to use presets', {reactive: false}));
                 return;
             }
             for (const [id, label, description] of presets) {
@@ -627,7 +627,7 @@ class TalkTypeIndicator extends PanelMenu.Button {
     _updateIcon() {
         // Update icon based on state
         if (!this._dbusAvailable) {
-            // TalkType not running: very dimmed with slash
+            // TuxTalk not running: very dimmed with slash
             this._icon.icon_name = 'microphone-sensitivity-muted-symbolic';
             this._icon.style_class = 'system-status-icon';
             this._icon.style = 'opacity: 0.3;';
@@ -662,7 +662,7 @@ class TalkTypeIndicator extends PanelMenu.Button {
 
         // Update active model display
         if (!this._dbusAvailable) {
-            this._modelDisplayItem.label.text = 'TalkType Not Running';
+            this._modelDisplayItem.label.text = 'TuxTalk Not Running';
             this._deviceDisplayItem.label.text = 'Device: Unknown';
         } else {
             const modelNames = {
@@ -736,24 +736,24 @@ class TalkTypeIndicator extends PanelMenu.Button {
     }
 });
 
-export default class TalkTypeExtension extends Extension {
+export default class TuxTalkExtension extends Extension {
     enable() {
-        console.log('TalkType Extension: Enabling...');
+        console.log('TuxTalk Extension: Enabling...');
 
-        this._indicator = new TalkTypeIndicator();
+        this._indicator = new TuxTalkIndicator();
         Main.panel.addToStatusArea('talktype', this._indicator);
 
-        console.log('TalkType Extension: Enabled');
+        console.log('TuxTalk Extension: Enabled');
     }
 
     disable() {
-        console.log('TalkType Extension: Disabling...');
+        console.log('TuxTalk Extension: Disabling...');
 
         if (this._indicator) {
             this._indicator.destroy();
             this._indicator = null;
         }
 
-        console.log('TalkType Extension: Disabled');
+        console.log('TuxTalk Extension: Disabled');
     }
 }

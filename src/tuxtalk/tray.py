@@ -55,7 +55,7 @@ separator {
 
 # D-Bus service import (optional - only needed for GNOME extension)
 try:
-    from .dbus_service import TalkTypeDBusService
+    from .dbus_service import TuxTalkDBusService
     DBUS_AVAILABLE = True
 except ImportError:
     DBUS_AVAILABLE = False
@@ -173,7 +173,7 @@ def recommend_notice_text(setup):
     """The one-time notice for an existing user whose setup isn't the
     recommended one. *setup* is recommend.Setup; its title says what and where."""
     return (f"There's a better setup for this computer: {setup.title}. Choose Performance "
-            "→ Recommended for this computer in the TalkType menu to switch.")
+            "→ Recommended for this computer in the TuxTalk menu to switch.")
 
 
 def maybe_show_recommend_notice():
@@ -197,7 +197,7 @@ def maybe_show_recommend_notice():
         better = recommend.differs_from_recommendation(cfg, recommend.detect_hardware(cfg))
         if better is not None:
             from .app import _notify
-            _notify("TalkType", recommend_notice_text(better))
+            _notify("TuxTalk", recommend_notice_text(better))
             logger.info(f"Told the user about the recommended setup: {better.title}")
         cfg.recommend_notice_shown = True
         save_config(cfg)
@@ -208,7 +208,7 @@ def maybe_show_recommend_notice():
 
 class DictationTray:
     def __init__(self):
-        # TalkType is a dark-themed app: Preferences and the onboarding windows
+        # TuxTalk is a dark-themed app: Preferences and the onboarding windows
         # each set gtk-application-prefer-dark-theme individually. The dialogs the
         # TRAY spawns (About, "Check for Updates" result) did not, so they rendered
         # in the light system GTK theme on a dark desktop. This is a global Gtk
@@ -239,7 +239,7 @@ class DictationTray:
             self.indicator.set_status(AppIndicator3.IndicatorStatus.PASSIVE)
             logger.info("GTK tray hidden (GNOME extension is active)")
 
-        self.indicator.set_title("TalkType")  # Set the app name
+        self.indicator.set_title("TuxTalk")  # Set the app name
 
         # Track subprocess windows
         self.preferences_process = None
@@ -426,7 +426,7 @@ class DictationTray:
                         return MinimalConfig()
 
             app_instance = TrayAppInstance(self)
-            self.dbus_service = TalkTypeDBusService(app_instance)
+            self.dbus_service = TuxTalkDBusService(app_instance)
             logger.info("D-Bus service initialized for GNOME extension integration")
         except Exception as e:
             logger.warning(f"Failed to initialize D-Bus service: {e}")
@@ -488,7 +488,7 @@ class DictationTray:
 
     @staticmethod
     def _check_pid_is_service(pid):
-        """Check if a given PID is a TalkType dictation service process.
+        """Check if a given PID is a TuxTalk dictation service process.
 
         The PID cached here is the target of toggle_recording's SIGUSR1, so a
         false match isn't cosmetic: it signals an unrelated process. The rule
@@ -525,9 +525,9 @@ class DictationTray:
         if is_running is None:
             is_running = self.is_service_running()
         if is_running:
-            self.indicator.set_icon_full("microphone-sensitivity-high", "TalkType: Active")
+            self.indicator.set_icon_full("microphone-sensitivity-high", "TuxTalk: Active")
         else:
-            self.indicator.set_icon_full("microphone-sensitivity-muted", "TalkType: Stopped")
+            self.indicator.set_icon_full("microphone-sensitivity-muted", "TuxTalk: Stopped")
         return True  # Continue the timer
 
     def _emit_service_state_after_check(self, expected_state):
@@ -792,7 +792,7 @@ class DictationTray:
             }
             mode_name = mode_names.get(mode, mode)
             logger.info(f"Switched to {mode_name} mode")
-            _notify("TalkType", f"Input mode: {mode_name}")
+            _notify("TuxTalk", f"Input mode: {mode_name}")
 
             # Notify GNOME extension of mode change via D-Bus signal
             if self.dbus_service:
@@ -890,7 +890,7 @@ class DictationTray:
             except Exception:
                 _gpu_offered = False
             logger.info(f"Applied performance preset: {preset.label} ({model} on {device})")
-            _notify("TalkType", preset_notice(preset.label, cfg.model, cfg.device, _gpu_offered))
+            _notify("TuxTalk", preset_notice(preset.label, cfg.model, cfg.device, _gpu_offered))
             self.update_menu_display()
             self._emit_model_changed(cfg.model)
             self.restart_service(None)
@@ -1053,7 +1053,7 @@ class DictationTray:
             logger.error(f"Failed to open preferences updates tab: {e}")
 
     def show_help(self, _):
-        """Show help dialog with TalkType features and instructions."""
+        """Show help dialog with TuxTalk features and instructions."""
         from .help_dialog import show_help_dialog
         show_help_dialog()
 
@@ -1070,7 +1070,7 @@ class DictationTray:
 
         # Create custom dialog for more flexibility
         dialog = Gtk.Dialog(
-            title="About TalkType",
+            title="About TuxTalk",
             flags=Gtk.DialogFlags.MODAL
         )
         dialog.set_default_size(500, 450)
@@ -1102,11 +1102,18 @@ class DictationTray:
 
         # App name and version
         title_label = Gtk.Label()
-        title_label.set_markup(f'<span size="x-large"><b>TalkType</b></span>')
+        title_label.set_markup(f'<span size="x-large"><b>TuxTalk</b></span>')
         content.pack_start(title_label, False, False, 0)
 
         version_label = Gtk.Label(label=f"Version {__version__}")
         content.pack_start(version_label, False, False, 0)
+
+        # Renamed in 0.15.0 (TALKTYPE is another company's trademark); this
+        # line lets people who knew the old name know they have the right app.
+        formerly_label = Gtk.Label()
+        formerly_label.set_markup('<span size="small"><i>Formerly TalkType</i></span>')
+        formerly_label.set_opacity(0.75)
+        content.pack_start(formerly_label, False, False, 0)
 
         desc_label = Gtk.Label(label="Voice dictation for Linux: hold a key, talk, and your words are typed for you.")
         desc_label.set_line_wrap(True)
@@ -1159,7 +1166,7 @@ class DictationTray:
 
         # GitHub link
         github_btn = Gtk.LinkButton.new_with_label(
-            "https://github.com/ronb1964/TalkType",
+            "https://github.com/ronb1964/TuxTalk",
             "GitHub Repository"
         )
         links_box.pack_start(github_btn, False, False, 0)
@@ -1272,7 +1279,7 @@ class DictationTray:
         latest = result.get("latest_version", "unknown")
         release = result.get("release", {})
 
-        # How TalkType was installed decides HOW to update. Only a self-managed
+        # How TuxTalk was installed decides HOW to update. Only a self-managed
         # AppImage can be swapped in place; .deb/.rpm/AUR/Flatpak users must use
         # their package manager, so we show instructions instead of downloading
         # and running an AppImage (which fails, e.g. missing libfuse.so.2).
@@ -1287,7 +1294,7 @@ class DictationTray:
                 buttons=Gtk.ButtonsType.OK,
                 text="You're Up to Date!"
             )
-            message = f"<b>TalkType {current}</b> is the latest version."
+            message = f"<b>TuxTalk {current}</b> is the latest version."
             dialog.format_secondary_markup(message)
             dialog.set_position(Gtk.WindowPosition.CENTER)
             dialog.set_keep_above(True)
@@ -1324,7 +1331,7 @@ class DictationTray:
         # Version info
         version_label = Gtk.Label()
         version_label.set_markup(
-            f"<b>TalkType:</b> {current} → <b>{latest}</b>"
+            f"<b>TuxTalk:</b> {current} → <b>{latest}</b>"
         )
         version_label.set_halign(Gtk.Align.START)
         content.pack_start(version_label, False, False, 5)
@@ -1410,7 +1417,7 @@ class DictationTray:
         from . import update_checker
 
         url = release.get("appimage_url")
-        filename = release.get("appimage_name", "TalkType-update.AppImage")
+        filename = release.get("appimage_name", "TuxTalk-update.AppImage")
 
         if not url:
             error_dialog = message_dialog(
@@ -1480,7 +1487,7 @@ class DictationTray:
                     text="Installing Update..."
                 )
                 status_dialog.format_secondary_text(
-                    "TalkType will restart automatically with the new version."
+                    "TuxTalk will restart automatically with the new version."
                 )
                 status_dialog.set_position(Gtk.WindowPosition.CENTER)
                 status_dialog.set_keep_above(True)
@@ -1608,11 +1615,11 @@ class DictationTray:
             import subprocess
 
             if has_app_update and has_ext_update:
-                title = "TalkType Updates Available"
-                body = f"TalkType {latest_version} and extension update available"
+                title = "TuxTalk Updates Available"
+                body = f"TuxTalk {latest_version} and extension update available"
             elif has_app_update:
-                title = "TalkType Update Available"
-                body = f"TalkType {latest_version} is now available"
+                title = "TuxTalk Update Available"
+                body = f"TuxTalk {latest_version} is now available"
             else:
                 title = "Extension Update Available"
                 body = "A new GNOME extension version is available"
@@ -1620,7 +1627,7 @@ class DictationTray:
             # Show notification using notify-send
             subprocess.run([
                 "notify-send",
-                "--app-name=TalkType",
+                "--app-name=TuxTalk",
                 "--icon=software-update-available",
                 title,
                 body + "\nClick 'Check for Updates' in menu for details."
@@ -1904,9 +1911,9 @@ class DictationTray:
         voice_cmds_item = Gtk.MenuItem(label="Voice Commands...")
         stats_item = Gtk.MenuItem(label="Your Stats...")
         help_item = Gtk.MenuItem(label="Help...")
-        about_item = Gtk.MenuItem(label="About TalkType...")
+        about_item = Gtk.MenuItem(label="About TuxTalk...")
         updates_item = Gtk.MenuItem(label="Check for Updates...")
-        quit_item = Gtk.MenuItem(label="Quit TalkType")
+        quit_item = Gtk.MenuItem(label="Quit TuxTalk")
         prefs_item.connect("activate", self.open_preferences)
         voice_cmds_item.connect("activate", self.show_voice_commands)
         stats_item.connect("activate", self.open_preferences_stats)
@@ -1984,9 +1991,9 @@ def main():
                     text="Update Complete!"
                 )
                 dialog.format_secondary_markup(
-                    f"TalkType has been updated to <b>v{__version__}</b>\n\n"
+                    f"TuxTalk has been updated to <b>v{__version__}</b>\n\n"
                     f"The update was installed automatically and "
-                    f"TalkType has restarted with the new version."
+                    f"TuxTalk has restarted with the new version."
                 )
                 dialog.set_position(Gtk.WindowPosition.CENTER)
                 dialog.set_keep_above(True)
@@ -2048,7 +2055,7 @@ def main():
                 tray.onboarding_in_progress = False
                 logger.info("Onboarding complete - starting service")
 
-                # Refresh KDE menu cache so TalkType shows in start menu immediately
+                # Refresh KDE menu cache so TuxTalk shows in start menu immediately
                 # This must run AFTER the .desktop file is created by the welcome dialog
                 try:
                     subprocess.run(["kbuildsycoca6"], capture_output=True, timeout=15)

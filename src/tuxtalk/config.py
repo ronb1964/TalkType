@@ -153,7 +153,7 @@ class Settings:
     auto_check_updates: bool = True      # automatically check for updates on startup (once per day)
     last_update_check: str = ""          # ISO timestamp of last update check
     language_mode: str = "auto"          # "auto" (detect language) or "manual" (use `language`); UI state for prefs
-    launch_at_login: bool = False        # start TalkType automatically at login (prefs manages the autostart file)
+    launch_at_login: bool = False        # start TuxTalk automatically at login (prefs manages the autostart file)
     log_transcripts: bool = False        # write full transcribed text to the log (off = redacted); opt-in for troubleshooting only
     remove_fillers: bool = False         # drop "um"/"uh" and accidental repeated words (cleanup.py; rules, no download)
     ai_corrections: bool = False         # fix "3, no wait, 4" with a local AI model (ai_cleanup.py; downloads ~1.1 GB)
@@ -395,7 +395,7 @@ def _persist_recovered_config(recovered: Settings) -> None:
     _repair_attempted = True
 
     try:
-        lines = ["# TalkType config"]
+        lines = ["# TuxTalk config"]
         for fld in fields(recovered):
             lines.append(f"{fld.name} = {_toml_value(getattr(recovered, fld.name))}")
         text = "\n".join(lines) + "\n"
@@ -556,7 +556,7 @@ def write_text_atomic(path: str, text: str, keep_backup: bool = True) -> None:
     directory = os.path.dirname(path) or "."
     os.makedirs(directory, exist_ok=True)
 
-    # A UNIQUE temp file per writer. TalkType runs three processes that all save
+    # A UNIQUE temp file per writer. TuxTalk runs three processes that all save
     # settings — the tray, the dictation service and Preferences — and a shared
     # temp name let them truncate each other's half-written file and then fail
     # the rename with FileNotFoundError, raising out of save_config().
@@ -600,7 +600,7 @@ def save_config(s: Settings) -> None:
             f"settings in memory are defaults rather than the user's own."
         )
 
-    lines = ["# TalkType config"]
+    lines = ["# TuxTalk config"]
     for fld in fields(s):
         lines.append(f"{fld.name} = {_toml_value(getattr(s, fld.name))}")
     write_text_atomic(CONFIG_PATH, "\n".join(lines) + "\n")
@@ -954,7 +954,7 @@ def save_custom_commands(commands: dict[str, str]) -> None:
         )
 
     lines = [
-        "# TalkType Custom Voice Commands",
+        "# TuxTalk Custom Voice Commands",
         '# Format: "spoken phrase" = "replacement text"',
         "# Use \\n for line breaks in replacements",
         "",

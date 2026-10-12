@@ -144,7 +144,7 @@ def test_parakeet_is_on_the_graphics_chip_only_once_its_vulkan_files_are_there(m
     assert effective_device("parakeet-v3", "vulkan") == "vulkan"
     assert effective_device("parakeet-v3", "cuda") == "cpu"     # CUDA has no Parakeet
 
-    from tuxtalk.dbus_service import TalkTypeDBusService
-    svc = TalkTypeDBusService.__new__(TalkTypeDBusService)
+    from tuxtalk.dbus_service import TuxTalkDBusService
+    svc = TuxTalkDBusService.__new__(TuxTalkDBusService)
     svc.app = SimpleNamespace(config=SimpleNamespace(model="parakeet-v3", device="cuda"))
-    assert TalkTypeDBusService.GetDeviceType(svc) == "cpu"
+    assert TuxTalkDBusService.GetDeviceType(svc) == "cpu"

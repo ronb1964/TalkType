@@ -40,7 +40,7 @@ def test_large_v3_is_shown_needing_a_graphics_card():
     (r.Hardware(None, False), True, "graphics chip was slower than the processor"),
     (r.Hardware(None, True), True, "NVIDIA card, but your processor was faster"),
     (r.Hardware(None, True), False, "Vulkan isn't working on it"),
-    (r.Hardware(None, False), False, "no graphics chip TalkType can use"),
+    (r.Hardware(None, False), False, "no graphics chip TuxTalk can use"),
 ])
 def test_the_computer_line_fits_every_kind_of_computer(hw, slower, says):
     """Ron asked how the line reads on other computers: "graphics card" read

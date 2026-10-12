@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-GNOME Extension installer for TalkType
+GNOME Extension installer for TuxTalk
 """
 
 import logging
@@ -19,11 +19,11 @@ logger = logging.getLogger(__name__)
 
 EXTENSION_UUID = 'talktype@ronb1964.github.io'
 EXTENSION_ZIP_NAME = 'talktype-gnome-extension.zip'
-EXTENSION_DOWNLOAD_URL = f'https://github.com/ronb1964/TalkType/releases/latest/download/{EXTENSION_ZIP_NAME}'
+EXTENSION_DOWNLOAD_URL = f'https://github.com/ronb1964/TuxTalk/releases/latest/download/{EXTENSION_ZIP_NAME}'
 # The release publishes SHA256SUMS.txt alongside the zip. The extension
 # contains JavaScript that runs in GNOME Shell, so verifying the download
 # closes a code-execution vector (a corrupted or tampered zip).
-EXTENSION_CHECKSUMS_URL = 'https://github.com/ronb1964/TalkType/releases/latest/download/SHA256SUMS.txt'
+EXTENSION_CHECKSUMS_URL = 'https://github.com/ronb1964/TuxTalk/releases/latest/download/SHA256SUMS.txt'
 
 
 class ChecksumUnavailableError(Exception):
@@ -50,7 +50,7 @@ def _fetch_extension_sha256() -> Optional[str]:
     from .download_utils import parse_sha256sums
     try:
         request = urllib.request.Request(
-            EXTENSION_CHECKSUMS_URL, headers={"User-Agent": "TalkType"})
+            EXTENSION_CHECKSUMS_URL, headers={"User-Agent": "TuxTalk"})
         with urllib.request.urlopen(request, timeout=10) as response:
             sums = parse_sha256sums(response.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
@@ -83,12 +83,12 @@ def is_extension_available() -> bool:
 
 
 def is_extension_installed() -> bool:
-    """Check if TalkType GNOME extension is installed"""
+    """Check if TuxTalk GNOME extension is installed"""
     return desktop_detect.is_extension_installed(EXTENSION_UUID)
 
 
 def is_extension_enabled() -> bool:
-    """Check if TalkType GNOME extension is enabled"""
+    """Check if TuxTalk GNOME extension is enabled"""
     return desktop_detect.is_extension_enabled(EXTENSION_UUID)
 
 
@@ -343,7 +343,7 @@ def download_and_install_extension(progress_callback: Optional[Callable] = None)
 
 def enable_extension() -> bool:
     """
-    Enable the TalkType GNOME extension
+    Enable the TuxTalk GNOME extension
 
     Returns:
         bool: True if successful
@@ -353,7 +353,7 @@ def enable_extension() -> bool:
 
 def uninstall_extension() -> bool:
     """
-    Uninstall the TalkType GNOME extension
+    Uninstall the TuxTalk GNOME extension
 
     Returns:
         bool: True if successful
@@ -403,14 +403,14 @@ To activate the extension:
     LOG OUT and LOG BACK IN to load the extension
 
 After logging back in:
-    • The TalkType icon will appear in your top panel
+    • The TuxTalk icon will appear in your top panel
     • Click it to start/stop dictation service
     • View active model and device mode
     • Access preferences
     • The extension will STAY ENABLED across future logins
 
-Note: The extension communicates with the TalkType Python app via D-Bus.
-Make sure the TalkType service is running for full functionality.
+Note: The extension communicates with the TuxTalk Python app via D-Bus.
+Make sure the TuxTalk service is running for full functionality.
 """.strip()
 
 
@@ -424,7 +424,7 @@ def offer_extension_installation_cli() -> bool:
     print("\n" + "="*60)
     print("🎨 GNOME DESKTOP DETECTED!")
     print("="*60)
-    print("\nTalkType has a native GNOME Shell extension that provides:")
+    print("\nTuxTalk has a native GNOME Shell extension that provides:")
     print("\n✨ Enhanced Features:")
     print("  🎯 Panel indicator with recording status")
     print("  🔄 Quick model switcher in top panel")
@@ -472,7 +472,7 @@ def offer_extension_installation(show_gui: bool = True) -> bool:
                 text="Install GNOME Extension?",
             )
             dialog.format_secondary_markup(
-                "<b>TalkType has a native GNOME Shell extension!</b>\n\n"
+                "<b>TuxTalk has a native GNOME Shell extension!</b>\n\n"
                 "✨ <b>Features:</b>\n"
                 "  • Panel indicator with recording status\n"
                 "  • Active model and device display (read-only)\n"
@@ -532,10 +532,10 @@ def offer_extension_installation(show_gui: bool = True) -> bool:
                     "<b>To activate it:</b>\n"
                     "  <b>Log out and log back in</b> to load the extension\n\n"
                     "After logging back in:\n"
-                    "  • The TalkType icon will appear in your top panel\n"
+                    "  • The TuxTalk icon will appear in your top panel\n"
                     "  • Click it to control the service and see status\n"
                     "  • The extension will <b>stay enabled</b> across logins\n\n"
-                    "<b>Note:</b> The extension communicates with TalkType via D-Bus."
+                    "<b>Note:</b> The extension communicates with TuxTalk via D-Bus."
                 )
                 info.run()
                 info.destroy()

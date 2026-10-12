@@ -10,7 +10,7 @@ phrase, and nothing else is ever sent to it.
 Engine: llama.cpp's own prebuilt llama-server (the Vulkan build, which also
 carries every CPU variant: it uses the graphics card when there is one and
 the processor otherwise). Model: Qwen2.5-1.5B-Instruct (Apache 2.0), Q4_K_M.
-Both are downloaded only when the user turns the feature on, so TalkType's
+Both are downloaded only when the user turns the feature on, so TuxTalk's
 package does not grow.
 
 Safety: the model is never trusted. Its answer is used only if it passes
@@ -429,7 +429,7 @@ def _engine_processes():
 
 
 def kill_orphaned_engines() -> int:
-    """Kill engines whose TalkType service is gone. Returns how many."""
+    """Kill engines whose TuxTalk service is gone. Returns how many."""
     return engine_process.kill_orphans(_engine_processes(), _is_talktype_process,
                                        "AI cleanup engine")
 

@@ -1,4 +1,4 @@
-"""What TalkType should run on this computer.
+"""What TuxTalk should run on this computer.
 
 How fast and accurate dictation is depends on the model, the device and the
 language, and they only work in some combinations: Parakeet knows 25
@@ -107,7 +107,7 @@ def _vulkan_facts():
 
 
 def detect_hardware(cfg=None):
-    """The graphics chip TalkType should use, if any. Never raises.
+    """The graphics chip TuxTalk should use, if any. Never raises.
 
     No chip on the Flatpak (no Vulkan engine in the sandbox), and none once
     the speed check found the processor faster (cfg.vulkan_slower), so a
@@ -288,13 +288,13 @@ def this_computer(hw, slower=False):
                 f"CUDA needs an NVIDIA card.")
     if slower and hw.has_nvidia:
         return ("Your computer: an NVIDIA card, but your processor was faster through "
-                "Vulkan in TalkType's speed check, so the processor and CUDA columns "
+                "Vulkan in TuxTalk's speed check, so the processor and CUDA columns "
                 "apply here.")
     if slower:
         return ("Your computer: its graphics chip was slower than the processor in "
-                "TalkType's speed check, so the processor column applies here.")
+                "TuxTalk's speed check, so the processor column applies here.")
     if hw.has_nvidia:
         return ("Your computer: an NVIDIA card, but Vulkan isn't working on it, so the "
                 "processor and CUDA columns apply here.")
-    return ("Your computer: no graphics chip TalkType can use, so the processor "
+    return ("Your computer: no graphics chip TuxTalk can use, so the processor "
             "column applies here.")

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Welcome Dialog for TalkType - First Launch Experience
+Welcome Dialog for TuxTalk - First Launch Experience
 
 Displays adaptive welcome screen based on detected system capabilities:
 - Base welcome for all users
@@ -169,14 +169,14 @@ def detect_portaudio_status():
 
 class SplashScreen:
     """
-    Simple splash screen showing TalkType icon.
+    Simple splash screen showing TuxTalk icon.
     Fades in, shows briefly, then fades out before showing welcome dialog.
     """
 
     def __init__(self):
         """Create the splash screen window."""
         self.window = Gtk.Window(type=Gtk.WindowType.TOPLEVEL)
-        self.window.set_title("TalkType")
+        self.window.set_title("TuxTalk")
         self.window.set_default_size(400, 400)
         self.window.set_position(Gtk.WindowPosition.CENTER)
         self.window.set_decorated(False)  # No title bar
@@ -252,7 +252,7 @@ class SplashScreen:
             # System install locations (.deb / .rpm) — crisp hicolor SVG first, then the
             # pixmaps PNG fallback. Without these the splash finds no icon on a packaged
             # install ($APPDIR is unset and the project icons/ dir isn't bundled) and
-            # falls back to plain "TalkType" text.
+            # falls back to plain "TuxTalk" text.
             "/usr/share/icons/hicolor/scalable/apps/io.github.ronb1964.TuxTalk.svg",
             "/usr/share/icons/hicolor/256x256/apps/io.github.ronb1964.TuxTalk.png",
             "/usr/share/pixmaps/io.github.ronb1964.TuxTalk.png",
@@ -284,15 +284,15 @@ class SplashScreen:
             except Exception as e:
                 logger.warning(f"Could not load splash icon from {icon_path}: {e}")
                 # Fallback to text
-                label = Gtk.Label(label="TalkType")
-                label.set_markup('<span size="xx-large" weight="bold">TalkType</span>')
+                label = Gtk.Label(label="TuxTalk")
+                label.set_markup('<span size="xx-large" weight="bold">TuxTalk</span>')
                 box.pack_start(label, False, False, 0)
                 self.image_widget = None
         else:
             # No icon found, use text
             logger.warning("No icon path found for splash screen")
-            label = Gtk.Label(label="TalkType")
-            label.set_markup('<span size="xx-large" weight="bold">TalkType</span>')
+            label = Gtk.Label(label="TuxTalk")
+            label.set_markup('<span size="xx-large" weight="bold">TuxTalk</span>')
             box.pack_start(label, False, False, 0)
             self.image_widget = None
 
@@ -482,7 +482,7 @@ class WelcomeDialog:
 
     def _build_dialog(self):
         """Build the GTK dialog with appropriate content."""
-        self.dialog = Gtk.Dialog(title="Welcome to TalkType!")
+        self.dialog = Gtk.Dialog(title="Welcome to TuxTalk!")
         # Cap height to the screen and allow resizing so the footer (Set it up
         # button) is always reachable. The content below is in a ScrolledWindow, so
         # overflow scrolls instead of being cut off. See fit_dialog_to_screen.
@@ -643,7 +643,7 @@ class WelcomeDialog:
         """Build the header section."""
         # Header
         header = Gtk.Label()
-        header.set_markup('<span size="x-large"><b>🎙️ Welcome to TalkType!</b></span>')
+        header.set_markup('<span size="x-large"><b>🎙️ Welcome to TuxTalk!</b></span>')
         vbox.pack_start(header, False, False, 0)
 
         # Subtitle
@@ -810,7 +810,7 @@ class WelcomeDialog:
         # Explanation
         explain_label = Gtk.Label()
         explain_label.set_markup(
-            '<span>TalkType needs PortAudio to record audio from your microphone.\n'
+            '<span>TuxTalk needs PortAudio to record audio from your microphone.\n'
             'This library is not installed on your system.</span>'
         )
         explain_label.set_halign(Gtk.Align.START)
@@ -921,7 +921,7 @@ class WelcomeDialog:
                 )
                 msg.format_secondary_text(
                     "PortAudio has been installed successfully.\n\n"
-                    "TalkType can now record audio from your microphone for speech recognition."
+                    "TuxTalk can now record audio from your microphone for speech recognition."
                 )
                 msg.run()
                 msg.destroy()
@@ -1020,7 +1020,7 @@ class WelcomeDialog:
 
         msg = Gtk.Label()
         msg.set_markup(
-            '<span size="medium" foreground="#ffffff">TalkType’s hotkey relies on '
+            '<span size="medium" foreground="#ffffff">TuxTalk’s hotkey relies on '
             f'your desktop’s <b>global-shortcut</b> system, and <b>{esc(desktop_name)}'
             '</b> doesn’t provide it. The Flatpak will open, but the Hold-to-talk and '
             'Toggle keys can’t be registered — so there is no key to press.</span>'
@@ -1036,7 +1036,7 @@ class WelcomeDialog:
         fix = Gtk.Label()
         fix.set_markup(
             '<span size="medium" foreground="#ffffff"><b>Good news — another '
-            'TalkType package works on your desktop.</b></span> '
+            'TuxTalk package works on your desktop.</b></span> '
             '<span size="medium">Pick the one for your system; they all use a '
             'method that works everywhere:</span>'
         )
@@ -1080,9 +1080,9 @@ class WelcomeDialog:
         vbox.pack_start(frame, False, False, 0)
 
     def _on_download_appimage(self, button):
-        """Open the TalkType releases page. Opening a URL from a Flatpak goes
+        """Open the TuxTalk releases page. Opening a URL from a Flatpak goes
         through the OpenURI portal — no special sandbox permission needed."""
-        url = "https://github.com/ronb1964/TalkType/releases"
+        url = "https://github.com/ronb1964/TuxTalk/releases"
         try:
             Gtk.show_uri_on_window(self.dialog, url, Gdk.CURRENT_TIME)
         except Exception as e:
@@ -1094,7 +1094,7 @@ class WelcomeDialog:
         Inside the sandbox typing works via the portal + libei path with no
         ydotool/uinput/input-group setup, so the host "Typing Setup Required"
         step does not apply. The one thing the user must do is let their desktop
-        bind a key to the TalkType dictate shortcuts. Desktops without the
+        bind a key to the TuxTalk dictate shortcuts. Desktops without the
         GlobalShortcuts portal never reach here — _build_dialog shows them the
         unsupported screen instead.
         """
@@ -1115,7 +1115,7 @@ class WelcomeDialog:
         must_do.set_markup(
             '<span size="x-large">⚠️</span>  '
             '<span size="medium" foreground="#ffffff"><b>You’ll set your key at '
-            'the end: once you finish these setup screens, TalkType starts and '
+            'the end: once you finish these setup screens, TuxTalk starts and '
             'your desktop pops up a window to bind it (about 30 seconds). It '
             'won’t dictate until you do.</b></span>'
         )
@@ -1134,7 +1134,7 @@ class WelcomeDialog:
         explain.set_markup(
             '<span size="medium">Typing into your apps then works automatically — no '
             'drivers, groups, or reboot needed. You just pick which key(s) start '
-            'dictation. TalkType offers <b>two</b>, and you can set either or both:</span>'
+            'dictation. TuxTalk offers <b>two</b>, and you can set either or both:</span>'
         )
         explain.set_halign(Gtk.Align.START)
         explain.set_line_wrap(True)
@@ -1163,7 +1163,7 @@ class WelcomeDialog:
         if "KDE" in desktop:
             how_title = "To set your keys on KDE Plasma:"
             steps = (
-                "When TalkType starts, KDE pops up a <b>“Global Shortcuts "
+                "When TuxTalk starts, KDE pops up a <b>“Global Shortcuts "
                 "Requested”</b> window for <b>Hold to talk</b> and "
                 "<b>Toggle dictation</b>. Click the button next to each, press "
                 "the key you want (for example F8, then F9), and confirm.\n"
@@ -1173,7 +1173,7 @@ class WelcomeDialog:
         elif self.has_gnome or "GNOME" in desktop:
             how_title = "To set your keys on GNOME:"
             steps = (
-                "When TalkType starts, GNOME pops up an <b>Add Keyboard "
+                "When TuxTalk starts, GNOME pops up an <b>Add Keyboard "
                 "Shortcuts</b> window listing <b>Hold to talk</b> and "
                 "<b>Toggle dictation</b>. For each one you want to use:\n"
                 "1. Click the <b>pencil</b> icon on that row.\n"
@@ -1187,12 +1187,12 @@ class WelcomeDialog:
         else:
             how_title = "To set your keys:"
             steps = (
-                "When TalkType starts (after you finish these screens), your "
+                "When TuxTalk starts (after you finish these screens), your "
                 "desktop’s global-shortcuts prompt lets you bind <b>Hold to "
                 "talk</b> and <b>Toggle dictation</b> — press the key you want "
                 "for each when it appears.\n"
                 "<i>If no prompt shows, you can assign them later in your "
-                "desktop’s keyboard-shortcut settings, under <b>TalkType</b>.</i>"
+                "desktop’s keyboard-shortcut settings, under <b>TuxTalk</b>.</i>"
             )
 
         how_label = Gtk.Label()
@@ -1274,7 +1274,7 @@ class WelcomeDialog:
 
         # Explanation - make it VERY clear this is mandatory
         explain_text = (
-            '<span><b>This step is required for TalkType to work.</b>\n'
+            '<span><b>This step is required for TuxTalk to work.</b>\n'
             'Without this setup, dictated text cannot be typed into your applications.\n'
             'Click "Fix Typing" below, then restart your computer.</span>'
         )
@@ -1392,8 +1392,8 @@ class WelcomeDialog:
         # same ydotool, so it needs these permissions too.
         alt_note = Gtk.Label()
         alt_note.set_markup(
-            '<span><i>💡 If you skip this, TalkType can\'t type into other apps, but every\n'
-            '   dictation is kept in Recent Dictations in the TalkType menu to copy and paste.</i></span>'
+            '<span><i>💡 If you skip this, TuxTalk can\'t type into other apps, but every\n'
+            '   dictation is kept in Recent Dictations in the TuxTalk menu to copy and paste.</i></span>'
         )
         alt_note.set_halign(Gtk.Align.START)
         alt_note.set_margin_start(10)
@@ -1487,11 +1487,11 @@ class WelcomeDialog:
                     text="Typing Setup Complete!"
                 )
                 msg.format_secondary_text(
-                    "TalkType is configured for keystroke injection.\n\n"
+                    "TuxTalk is configured for keystroke injection.\n\n"
                     + ("A restart will be needed to activate this — but finish "
                        "setup first. You'll be reminded at the end.\n\n"
                        if needs_logout else "")
-                    + "TalkType can now type directly into your applications!"
+                    + "TuxTalk can now type directly into your applications!"
                 )
                 msg.run()
                 msg.destroy()
@@ -1749,7 +1749,7 @@ class WelcomeDialog:
         if self.hardware.gpu:
             self.gpu_check = Gtk.CheckButton(label=f"Use my graphics card ({self.hardware.gpu_name})")
             self.gpu_check.set_active(True)
-            self.gpu_check.set_tooltip_text("Several times faster. TalkType checks it really is "
+            self.gpu_check.set_tooltip_text("Several times faster. TuxTalk checks it really is "
                                             "faster than your processor before using it.")
             self.gpu_check.connect("toggled", lambda *_: self._refresh_recommendation())
             other.pack_start(self.gpu_check, False, False, 0)
@@ -1839,7 +1839,7 @@ class WelcomeDialog:
             next_label.set_margin_top(10)
             vbox.pack_start(next_label, False, False, 0)
 
-            quit_btn = Gtk.Button(label="Quit TalkType")
+            quit_btn = Gtk.Button(label="Quit TuxTalk")
             quit_btn.set_size_request(200, 40)
             # Neutral secondary style: a clear button, but understated so it
             # doesn't fight the red warning or the blue primary download button.
@@ -1850,12 +1850,12 @@ class WelcomeDialog:
             return
 
         # Next steps note. On the Flatpak there is no evdev hotkey test; instead,
-        # finishing here starts TalkType and the desktop pops up its own window to
+        # finishing here starts TuxTalk and the desktop pops up its own window to
         # bind the key — so tell the user that's what's coming, not a test.
         next_label = Gtk.Label()
         if self.is_flatpak:
             next_label.set_markup(
-                '<span><b>Next:</b> TalkType downloads your speech model, then starts '
+                '<span><b>Next:</b> TuxTalk downloads your speech model, then starts '
                 'and prompts you to set your dictation key.</span>')
         else:
             next_label.set_markup('<span><b>Next:</b> You\'ll test your hotkeys to ensure they work correctly</span>')
@@ -1948,7 +1948,7 @@ class WelcomeDialog:
             GLib.source_remove(pulse_timer)
 
         result = {'continue': response == Gtk.ResponseType.OK}
-        # On an unsupported desktop the only footer action is "Quit TalkType"
+        # On an unsupported desktop the only footer action is "Quit TuxTalk"
         # (ResponseType.CLOSE): the app cannot function, so signal a real quit.
         result['quit'] = (response == Gtk.ResponseType.CLOSE) or self.hotkey_unsupported
 
@@ -2014,12 +2014,12 @@ def show_welcome_dialog(parent=None):
 def show_tips_and_features_dialog(extension_installed=False):
     """
     Show tips and features dialog after hotkey testing.
-    Encourages users to explore TalkType's capabilities.
+    Encourages users to explore TuxTalk's capabilities.
 
     Args:
         extension_installed: Whether GNOME extension was installed (requires logout reminder)
     """
-    dialog = Gtk.Dialog(title="TalkType - Setup Complete!")
+    dialog = Gtk.Dialog(title="TuxTalk - Setup Complete!")
     dialog.set_border_width(0)
     # Cap height to the screen + allow resizing so the "Continue" button is always
     # reachable; the content is wrapped in a ScrolledWindow below for overflow.
@@ -2092,7 +2092,7 @@ def show_tips_and_features_dialog(extension_installed=False):
     vbox.pack_start(title_label, False, False, 0)
 
     subtitle_label = Gtk.Label()
-    subtitle_label.set_markup('<span>TalkType is ready to use. Here are some tips to get you started:</span>')
+    subtitle_label.set_markup('<span>TuxTalk is ready to use. Here are some tips to get you started:</span>')
     subtitle_label.set_line_wrap(True)
     subtitle_label.set_max_width_chars(50)
     subtitle_label.set_justify(Gtk.Justification.CENTER)
@@ -2127,9 +2127,9 @@ def show_tips_and_features_dialog(extension_installed=False):
     tips += [
         ("🎤 <b>Voice Commands</b>", "Say \"period\", \"comma\", \"new paragraph\" and more to punctuate naturally"),
         ("⚙️ <b>Smart Features</b>", "Auto-punctuation and auto-spacing are enabled by default for smooth dictation"),
-        ("🔧 <b>Customize Settings</b>", "Open the TalkType menu (tray icon) for Preferences - adjust models, hotkeys, and more"),
+        ("🔧 <b>Customize Settings</b>", "Open the TuxTalk menu (tray icon) for Preferences - adjust models, hotkeys, and more"),
         ("📖 <b>Learn More</b>", "Click \"Help\" in the tray menu for full documentation and voice command list"),
-        ("🚀 <b>Quick Start</b>", "Press your hotkey and start talking - TalkType does the rest!")
+        ("🚀 <b>Quick Start</b>", "Press your hotkey and start talking - TuxTalk does the rest!")
     ]
 
     for title, description in tips:
@@ -2215,7 +2215,7 @@ def show_tips_and_features_dialog(extension_installed=False):
     def on_get_started_clicked(button):
         """Handle Continue button - show animated feedback then close dialog"""
 
-        # Gray out button and start animated "Setting up TalkType" dots
+        # Gray out button and start animated "Setting up TuxTalk" dots
         button.set_sensitive(False)
         label_widget = button.get_child()
         if label_widget and hasattr(label_widget, 'set_xalign'):
@@ -2225,14 +2225,14 @@ def show_tips_and_features_dialog(extension_installed=False):
         dot_phase = [0]
         def animate_dots():
             dots = "." * (dot_phase[0] % 4)
-            button.set_label(f"Setting up TalkType{dots}")
+            button.set_label(f"Setting up TuxTalk{dots}")
             lbl = button.get_child()
             if lbl and hasattr(lbl, 'set_xalign'):
                 lbl.set_xalign(0.5)
             dot_phase[0] += 1
             return True
 
-        button.set_label("Setting up TalkType")
+        button.set_label("Setting up TuxTalk")
         anim_id = GLib.timeout_add(350, animate_dots)
 
         def close_dialog():
@@ -2294,7 +2294,7 @@ def _restore_gnome_keybindings(begin_resize, begin_move):
 
     Leaving these disabled is not a transient glitch: gsettings persists, so
     the user's Alt+F8 and Alt+F7 stay dead across reboots with nothing to
-    connect it back to TalkType.
+    connect it back to TuxTalk.
     """
     for key, value in (("begin-resize", begin_resize), ("begin-move", begin_move)):
         if value is None:
@@ -2613,7 +2613,7 @@ def show_hotkey_test_dialog():
         print(f"🎹 Monitoring {len(keyboards)} keyboard(s) via evdev")
 
         # Flush any stale events buffered in the kernel queue before we start
-        # monitoring. Without this, a prior F8 press (e.g. from using TalkType
+        # monitoring. Without this, a prior F8 press (e.g. from using TuxTalk
         # just before onboarding) would appear as "Working!" immediately.
         _flush_pending_events(keyboards)
 
@@ -3181,7 +3181,7 @@ def show_welcome_and_install():
 
     # Turn on launch-at-login by default for new users. A dictation tool is only
     # useful when it's already running, and a fresh install almost always reboots
-    # once (for the input-group permission), so this is what makes TalkType simply
+    # once (for the input-group permission), so this is what makes TuxTalk simply
     # "be there" afterwards instead of the user hunting for it in the app menu.
     # The Ready screen tells them it's on and that it's toggleable in Preferences.
     try:
@@ -3275,7 +3275,7 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
             and "Restart Now" button shown — this is the deferred, end-of-setup
             reminder that replaces the old mid-onboarding "restart now" popup.
     """
-    dialog = Gtk.Dialog(title="TalkType - Ready!")
+    dialog = Gtk.Dialog(title="TuxTalk - Ready!")
     dialog.set_border_width(0)
     from .ui_style import fit_dialog_to_screen
     fit_dialog_to_screen(dialog, 450, -1)  # auto-height, resizable, screen-capped
@@ -3301,7 +3301,7 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
     vbox.pack_start(header_label, False, False, 0)
 
     subtitle_label = Gtk.Label()
-    subtitle_label.set_markup('TalkType is ready to use.')
+    subtitle_label.set_markup('TuxTalk is ready to use.')
     subtitle_label.set_halign(Gtk.Align.CENTER)
     subtitle_label.set_justify(Gtk.Justification.CENTER)
     subtitle_label.set_margin_top(4)
@@ -3371,7 +3371,7 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
 
     settings_label = Gtk.Label()
     settings_label.set_markup(
-        '<span><i>⚙️ Open the TalkType menu (tray icon) for settings</i></span>'
+        '<span><i>⚙️ Open the TuxTalk menu (tray icon) for settings</i></span>'
     )
     settings_label.set_halign(Gtk.Align.START)
     settings_label.set_margin_top(2)
@@ -3383,7 +3383,7 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
     # startup setting without telling the user is exactly the kind of surprise to avoid.
     autostart_label = Gtk.Label()
     autostart_label.set_markup(
-        '<span><i>🔁 TalkType will start automatically when you log in '
+        '<span><i>🔁 TuxTalk will start automatically when you log in '
         '(turn this off in Preferences → General)</i></span>'
     )
     autostart_label.set_halign(Gtk.Align.START)
@@ -3399,8 +3399,8 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
     feedback_label.set_markup(
         '<span>Once you\'ve tried it out, I\'d love to hear how it\'s '
         'working for you, good or bad. Leave a note on the '
-        '<a href="https://github.com/ronb1964/TalkType/discussions">'
-        'TalkType Discussions page</a>.</span>'
+        '<a href="https://github.com/ronb1964/TuxTalk/discussions">'
+        'TuxTalk Discussions page</a>.</span>'
     )
     feedback_label.set_halign(Gtk.Align.START)
     feedback_label.set_xalign(0)
@@ -3432,7 +3432,7 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
         vbox.pack_start(restart_reminder, False, False, 0)
 
     # Bottom actions. When a restart is owed, the choice IS restart-now vs later
-    # (dictation won't work until the reboot, so "Start Using TalkType!" would
+    # (dictation won't work until the reboot, so "Start Using TuxTalk!" would
     # mislead). Otherwise, the normal start/settings choice.
     button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
     button_box.set_halign(Gtk.Align.CENTER)
@@ -3477,7 +3477,7 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
                     text="Couldn't finish setup",
                 )
                 warn.format_secondary_text(
-                    "TalkType couldn't save its setup state, so it won't restart "
+                    "TuxTalk couldn't save its setup state, so it won't restart "
                     "automatically. Please restart your computer yourself in a "
                     "moment to finish."
                 )
@@ -3528,7 +3528,7 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
         prefs_button.connect("clicked", on_open_prefs_clicked)
         button_box.pack_start(prefs_button, False, False, 0)
 
-        start_button = Gtk.Button(label="Start Using TalkType!")
+        start_button = Gtk.Button(label="Start Using TuxTalk!")
         start_button.set_size_request(180, 35)
         start_button.get_style_context().add_class("suggested-action")
         start_button.connect("clicked", lambda w: dialog.response(Gtk.ResponseType.OK))

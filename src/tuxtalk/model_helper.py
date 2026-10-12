@@ -1,5 +1,5 @@
 """
-Model Download Helper for TalkType
+Model Download Helper for TuxTalk
 Handles Whisper and Parakeet model downloads with progress UI
 """
 import os
@@ -379,7 +379,7 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
             settings.set_property("gtk-application-prefer-dark-theme", True)
 
         confirm_dialog.format_secondary_text(
-            f"TalkType needs to download the {model_display_name(model_name)} AI model ({size_str}) for speech recognition.\n\n"
+            f"TuxTalk needs to download the {model_display_name(model_name)} AI model ({size_str}) for speech recognition.\n\n"
             f"This is a one-time download that will be cached for future use.\n\n"
             "Continue with download?"
         )

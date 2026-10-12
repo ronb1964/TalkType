@@ -47,8 +47,8 @@ class TestAccelerators:
 class TestTheTrayRelaysThem:
     @pytest.fixture
     def svc(self):
-        from tuxtalk.dbus_service import TalkTypeDBusService
-        s = TalkTypeDBusService.__new__(TalkTypeDBusService)  # no real bus
+        from tuxtalk.dbus_service import TuxTalkDBusService
+        s = TuxTalkDBusService.__new__(TuxTalkDBusService)  # no real bus
         s.claimed_hotkeys = []
         s.sent = []
         s.HotkeysChanged = lambda accels: s.sent.append(list(accels))

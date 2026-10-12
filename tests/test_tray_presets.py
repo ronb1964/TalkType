@@ -142,8 +142,8 @@ def test_current_preset_uses_match_preset(env):
 
 
 def test_dbus_exposes_presets_and_the_active_one():
-    from tuxtalk.dbus_service import TalkTypeDBusService
-    svc = TalkTypeDBusService.__new__(TalkTypeDBusService)
+    from tuxtalk.dbus_service import TuxTalkDBusService
+    svc = TuxTalkDBusService.__new__(TuxTalkDBusService)
     svc.running_engine = None
     svc.claimed_hotkeys = []
     svc.app = types.SimpleNamespace(
@@ -195,8 +195,8 @@ def test_choosing_the_active_preset_again_changes_nothing(env, monkeypatch):
 
 
 def test_dbus_presets_failure_is_an_empty_list_not_an_error(caplog):
-    from tuxtalk.dbus_service import TalkTypeDBusService
-    svc = TalkTypeDBusService.__new__(TalkTypeDBusService)
+    from tuxtalk.dbus_service import TuxTalkDBusService
+    svc = TuxTalkDBusService.__new__(TuxTalkDBusService)
 
     def broken():
         raise RuntimeError("no presets")

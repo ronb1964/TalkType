@@ -1,5 +1,5 @@
 """
-AT-SPI (Assistive Technology Service Provider Interface) integration for TalkType.
+AT-SPI (Assistive Technology Service Provider Interface) integration for TuxTalk.
 
 This module provides intelligent context detection and text insertion using the
 AT-SPI accessibility framework. It enables:

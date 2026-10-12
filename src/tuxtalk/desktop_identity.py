@@ -1,9 +1,9 @@
-"""Tell the desktop which launcher TalkType's windows belong to.
+"""Tell the desktop which launcher TuxTalk's windows belong to.
 
 The desktop finds a window's icon (title bar, taskbar, Alt+Tab) by matching
 the program name, which becomes the Wayland app_id or the X11 WM_CLASS, to a
-launcher (.desktop file). Without it every TalkType window reported itself as
-"python3", and KDE showed its generic "W" icon instead of TalkType's.
+launcher (.desktop file). Without it every TuxTalk window reported itself as
+"python3", and KDE showed its generic "W" icon instead of TuxTalk's.
 
 Each install type names its launcher differently, so the name follows the
 install:

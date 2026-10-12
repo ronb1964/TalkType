@@ -1,9 +1,9 @@
 """
 Usage stats: how much you've dictated, and roughly how much typing it saved.
 
-Privacy: TalkType promises that what you say never reaches the disk, so this
+Privacy: TuxTalk promises that what you say never reaches the disk, so this
 keeps numbers only. Per day: how many dictations, how many words, and how many
-seconds of speech. Never the words themselves. The file lives in TalkType's
+seconds of speech. Never the words themselves. The file lives in TuxTalk's
 data folder on this computer and nothing sends it anywhere.
 
 The dictation service records each dictation (app.py); Preferences reads the

@@ -1,6 +1,6 @@
 """Shared GTK styling that must be installed screen-wide.
 
-Kept in one place because TalkType draws dropdowns from two different processes
+Kept in one place because TuxTalk draws dropdowns from two different processes
 — the tray (welcome dialog) and Preferences — and neither inherits the other's
 CSS. Duplicating the rule invites fixing it in one and forgetting the other.
 """
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 #
 # X11 only. On Wayland GTK3 clamps the window-relative list position against
 # the monitor's global work area, which pushes the popup off screen on a second
-# monitor (GTK #6105, TalkType #9). Wayland gets _drop_down_below() instead.
+# monitor (GTK #6105, TuxTalk #9). Wayland gets _drop_down_below() instead.
 _DROPDOWN_CSS = b"""
 combobox {
     -GtkComboBox-appears-as-list: 1;
@@ -236,14 +236,14 @@ def message_dialog(**kwargs):
 
     Gtk.MessageDialog installs an empty titlebar of its own, which makes GTK
     draw the frame instead of the desktop. On KDE that frame has square
-    corners while every other TalkType window gets KDE's rounded one. Without
+    corners while every other TuxTalk window gets KDE's rounded one. Without
     the titlebar KDE (and X11 window managers) frame it like any window, and
     GNOME gives it a normal title bar with rounded corners.
     """
     dialog = Gtk.MessageDialog(**kwargs)
     dialog.set_titlebar(None)
     if not dialog.get_title():
-        dialog.set_title("TalkType")
+        dialog.set_title("TuxTalk")
     # A box with no buttons ("Checking for Updates...") closes itself when the
     # work is done; don't offer an X to close it halfway.
     if kwargs.get("buttons", Gtk.ButtonsType.NONE) == Gtk.ButtonsType.NONE:

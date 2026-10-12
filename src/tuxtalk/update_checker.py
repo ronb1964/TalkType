@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Update checker for TalkType
+Update checker for TuxTalk
 
 Checks for updates to AppImage and GNOME extension via GitHub API.
 """
@@ -40,7 +40,7 @@ DESKTOP_FILE_PATH = os.path.expanduser("~/.local/share/applications/tuxtalk.desk
 
 def get_current_version() -> str:
     """
-    Get current TalkType version.
+    Get current TuxTalk version.
 
     Tries to read from __version__ first, then falls back to pyproject.toml.
 
@@ -219,7 +219,7 @@ def fetch_release_by_tag(tag: str) -> Optional[dict]:
 
 def get_releases_url() -> str:
     """Get the URL to the GitHub releases page."""
-    return "https://github.com/ronb1964/TalkType/releases"
+    return "https://github.com/ronb1964/TuxTalk/releases"
 
 
 def fetch_latest_release() -> Optional[dict]:
@@ -618,7 +618,7 @@ def _detect_system_package_manager() -> Optional[str]:
 
 def get_install_type(*, appimage_env=None, flatpak_env=None,
                      module_path=None, pkg_query=None) -> str:
-    """How TalkType is installed. One of:
+    """How TuxTalk is installed. One of:
       'flatpak'  — running inside a Flatpak sandbox
       'aur'      — pacman-managed AppImage at a system path (/opt, /usr)
       'appimage' — self-managed AppImage the app may swap in place
@@ -665,31 +665,31 @@ def get_update_guidance(install_type: str, latest_version: str,
     if install_type == "appimage":
         return {"update_method": "appimage_swap", "can_auto_update": True,
                 "title": "Update Available",
-                "message": f"TalkType {v} is available.",
+                "message": f"TuxTalk {v} is available.",
                 "command": None, "release_url": release_url}
     if install_type in ("rpm", "deb"):
         return {"update_method": "pkexec_package", "can_auto_update": True,
                 "title": "Update Available",
-                "message": (f"TalkType {v} is available. TalkType can download and "
+                "message": (f"TuxTalk {v} is available. TuxTalk can download and "
                             f"install it for you — your system will ask for your "
                             f"password to complete the install."),
                 "command": None, "release_url": release_url}
     if install_type == "aur":
         cmd = "yay -S talktype-appimage   # or: paru -S talktype-appimage"
-        msg = (f"TalkType {v} is available. You installed from the AUR — "
+        msg = (f"TuxTalk {v} is available. You installed from the AUR — "
                f"update with your AUR helper:")
     elif install_type == "flatpak":
         from .config import APP_ID
         cmd = f"flatpak update {APP_ID}"
-        msg = (f"TalkType {v} is available. Update through Flatpak (your software "
+        msg = (f"TuxTalk {v} is available. Update through Flatpak (your software "
                f"center may also update it automatically):")
     elif install_type == "dev":
-        cmd = "git pull   # in your TalkType project folder"
-        msg = (f"TalkType {v} is available. You're running the development "
+        cmd = "git pull   # in your TuxTalk project folder"
+        msg = (f"TuxTalk {v} is available. You're running the development "
                f"version — update with git:")
     else:  # 'package' / unknown
         cmd = None
-        msg = (f"TalkType {v} is available. Please update using your system's "
+        msg = (f"TuxTalk {v} is available. Please update using your system's "
                f"package manager, or download it from the release page.")
     return {"update_method": "manual", "can_auto_update": False,
             "title": "Update Available",
@@ -731,14 +731,14 @@ def package_install_argv(install_type: str, package_path: str,
 
 
 # Installing a package can legitimately take minutes: the package manager may be
-# waiting on another transaction's lock. This bounds only how long TalkType WAITS
+# waiting on another transaction's lock. This bounds only how long TuxTalk WAITS
 # — it never interrupts the installer. See install_package_update().
 PACKAGE_INSTALL_TIMEOUT_S = 300.0
 
 
 def install_package_update(package_path: str, install_type: str) -> Tuple[bool, str]:
     """Install a downloaded .rpm/.deb as root via pkexec (PolicyKit prompts for
-    the password). Returns (success, message). Does NOT restart TalkType."""
+    the password). Returns (success, message). Does NOT restart TuxTalk."""
     argv = package_install_argv(install_type, package_path)
     if not argv:
         return (False, "No supported package manager was found to install the update.")
@@ -766,7 +766,7 @@ def install_package_update(package_path: str, install_type: str) -> Tuple[bool, 
                        "running in the background; check again in a few minutes.")
     proc.stdout_text, proc.stderr_text = out, err
     if proc.returncode == 0:
-        return (True, "Update installed. Restart TalkType to use the new version.")
+        return (True, "Update installed. Restart TuxTalk to use the new version.")
     if proc.returncode == 126:
         return (False, "Authorization was cancelled — the update was not installed.")
     if proc.returncode == 127:
@@ -776,7 +776,7 @@ def install_package_update(package_path: str, install_type: str) -> Tuple[bool, 
 
 
 def restart_via_launcher() -> Tuple[bool, str]:
-    """Spawn a fresh, DETACHED TalkType that waits for THIS process to fully
+    """Spawn a fresh, DETACHED TuxTalk that waits for THIS process to fully
     exit before starting. That clean-slate start is essential: an in-place
     os.execv restart brought the new tray up while the old process's
     dictation-service child, D-Bus name and single-instance lock were still
@@ -790,7 +790,7 @@ def restart_via_launcher() -> Tuple[bool, str]:
     launcher = next((p for p in ("/usr/bin/tuxtalk", "/usr/bin/talktype")
                      if os.path.exists(p)), "/usr/bin/tuxtalk")
     if not os.path.exists(launcher):
-        return (False, f"Launcher not found at {launcher}; please restart TalkType manually.")
+        return (False, f"Launcher not found at {launcher}; please restart TuxTalk manually.")
     oldpid = os.getpid()
     # Poll (up to ~10s) until the old PID is gone, then exec the launcher.
     # start_new_session detaches it so it survives this process exiting.
@@ -888,7 +888,7 @@ def install_update_and_restart(
             pass
 
         if progress_callback:
-            progress_callback("Restarting TalkType...", 90)
+            progress_callback("Restarting TuxTalk...", 90)
 
         logger.info(f"Update installed to {APPIMAGE_PATH}, restarting...")
 
@@ -1011,7 +1011,7 @@ def _refresh_desktop_menu_cache():
 
 def _install_app_icon() -> Optional[str]:
     """
-    Install the TalkType icon to the user's icon directory.
+    Install the TuxTalk icon to the user's icon directory.
 
     Copies the app icon from the AppImage or source to ~/.local/share/icons/
     so it can be referenced by the desktop launcher.
@@ -1029,7 +1029,7 @@ def _install_app_icon() -> Optional[str]:
 
     # If icon already installed, just return the name
     if os.path.exists(primary_icon_path):
-        logger.debug("TalkType icon already installed")
+        logger.debug("TuxTalk icon already installed")
         return "tuxtalk"
 
     # Find the source icon
@@ -1067,8 +1067,8 @@ def _install_app_icon() -> Optional[str]:
                 break
 
     if not icon_source:
-        logger.warning("Could not find TalkType icon to install")
-        print("⚠️ Could not find TalkType icon source")
+        logger.warning("Could not find TuxTalk icon to install")
+        print("⚠️ Could not find TuxTalk icon source")
         return None
 
     try:
@@ -1087,8 +1087,8 @@ def _install_app_icon() -> Optional[str]:
             shutil.copy2(icon_source, icon_path)
             logger.debug(f"Installed icon to {icon_path}")
 
-        logger.info(f"Installed TalkType icon to {icons_base} ({len(icon_sizes)} sizes)")
-        print(f"✅ Installed TalkType icon ({len(icon_sizes)} sizes)")
+        logger.info(f"Installed TuxTalk icon to {icons_base} ({len(icon_sizes)} sizes)")
+        print(f"✅ Installed TuxTalk icon ({len(icon_sizes)} sizes)")
 
         # Update icon cache (for GTK-based desktops)
         import subprocess
@@ -1111,14 +1111,14 @@ def _install_app_icon() -> Optional[str]:
         return "tuxtalk"
 
     except Exception as e:
-        logger.warning(f"Could not install TalkType icon: {e}")
+        logger.warning(f"Could not install TuxTalk icon: {e}")
         print(f"⚠️ Failed to install icon: {e}")
         return None
 
 
 def create_desktop_launcher() -> Tuple[bool, str]:
     """
-    Create a desktop launcher (.desktop file) for TalkType.
+    Create a desktop launcher (.desktop file) for TuxTalk.
 
     Creates a launcher in ~/.local/share/applications/ that points to
     the standard AppImage location (~/AppImages/TalkType.AppImage).
@@ -1131,7 +1131,7 @@ def create_desktop_launcher() -> Tuple[bool, str]:
         apps_dir = os.path.dirname(DESKTOP_FILE_PATH)
         os.makedirs(apps_dir, exist_ok=True)
 
-        # Install the TalkType icon and get the icon name to use
+        # Install the TuxTalk icon and get the icon name to use
         icon_name = _install_app_icon()
         if not icon_name:
             icon_name = "audio-input-microphone"  # Fallback to system icon
@@ -1147,7 +1147,7 @@ def create_desktop_launcher() -> Tuple[bool, str]:
 
         # Desktop file content
         desktop_content = f"""[Desktop Entry]
-Name=TalkType
+Name=TuxTalk
 Comment=Hold a key, talk, and your words are typed for you (v{version})
 Exec={appimage_exec_path}
 Icon={icon_name}
@@ -1169,7 +1169,7 @@ Terminal=false
         _refresh_desktop_menu_cache()
 
         logger.info(f"Desktop launcher created at {DESKTOP_FILE_PATH}")
-        return (True, f"Desktop launcher created!\n\nTalkType is now in your Applications menu.")
+        return (True, f"Desktop launcher created!\n\nTuxTalk is now in your Applications menu.")
 
     except Exception as e:
         logger.error(f"Failed to create desktop launcher: {e}")

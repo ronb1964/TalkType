@@ -45,7 +45,7 @@ def choose_light_or_full(parent, model):
         f"  • Light (Vulkan): a {wv.ENGINE_SIZE_TEXT} graphics engine plus {model.title()} in its\n"
         f"    format ({vulkan_size}). About as fast as CUDA in our tests.\n\n"
         "  • Full (CUDA): NVIDIA's CUDA libraries (1.4 GB) plus the model.\n"
-        "    TalkType's long-standing NVIDIA setup.\n\n"
+        "    TuxTalk's long-standing NVIDIA setup.\n\n"
         "Either is a one-time download.")
     dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
     dialog.add_button("Light (Vulkan)", Gtk.ResponseType.APPLY)
@@ -77,8 +77,8 @@ def ensure_files(parent, model, confirm):
     if confirm:
         answer = message(
             parent, Gtk.MessageType.QUESTION, "Set up your graphics card with Vulkan?",
-            f"TalkType needs a one-time download: {' and '.join(needed)}.\n\n"
-            "Afterwards TalkType checks whether your graphics chip is really faster than "
+            f"TuxTalk needs a one-time download: {' and '.join(needed)}.\n\n"
+            "Afterwards TuxTalk checks whether your graphics chip is really faster than "
             "your processor, and only uses it if it is. Everything runs on this computer.",
             buttons=Gtk.ButtonsType.OK_CANCEL)
         if answer != Gtk.ResponseType.OK:
@@ -149,7 +149,7 @@ def run_speed_check(parent, model):
         try:
             device = wv.find_device()
             if device is None:
-                result["error"] = "TalkType couldn't find a graphics chip it can use."
+                result["error"] = "TuxTalk couldn't find a graphics chip it can use."
             else:
                 result["times"] = wv.speed_check(model, device)
         except Exception as e:
@@ -165,18 +165,18 @@ def run_speed_check(parent, model):
         _remember_speed_result(False)
         message(parent, Gtk.MessageType.INFO, "Your graphics chip is faster",
                 f"It transcribed the test in {gpu:.1f} seconds, your processor in {cpu:.1f}, "
-                f"about {cpu / gpu:.0f} times faster. TalkType will use your graphics chip.")
+                f"about {cpu / gpu:.0f} times faster. TuxTalk will use your graphics chip.")
         return True
     _remember_speed_result(True)
     message(parent, Gtk.MessageType.INFO, "Your processor is faster here",
             f"Your processor transcribed the test in {cpu:.1f} seconds and your graphics chip "
             f"in {gpu:.1f}. The graphics built into some processors is too small to help, so "
-            "TalkType will keep using the processor.")
+            "TuxTalk will keep using the processor.")
     return False
 
 
 def set_up(parent, model, confirm=True):
-    """Download and speed-check the Vulkan engine for *model*. True if TalkType
+    """Download and speed-check the Vulkan engine for *model*. True if TuxTalk
     should use the graphics chip."""
     if not wv.supports_model(model):
         # English-only and older Whisper variants (small.en, large-v2, ...) have

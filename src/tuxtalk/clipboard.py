@@ -1,5 +1,5 @@
 """
-Put text on the clipboard from TalkType's own windows and menus.
+Put text on the clipboard from TuxTalk's own windows and menus.
 
 Shared by the tray's Recent Dictations (Copy) and the Fix a Word window,
 which can be opened from the tray or from Preferences.

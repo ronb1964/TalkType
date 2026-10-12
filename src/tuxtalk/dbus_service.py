@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-D-Bus service for TalkType - enables GNOME extension integration
+D-Bus service for TuxTalk - enables GNOME extension integration
 """
 
 from gi.repository import GLib
@@ -37,9 +37,9 @@ def get_focused_window_class() -> str | None:
     return _focused_window_class
 
 
-class TalkTypeDBusService(dbus.service.Object):
+class TuxTalkDBusService(dbus.service.Object):
     """
-    D-Bus service interface for TalkType
+    D-Bus service interface for TuxTalk
 
     Bus Name: io.github.ronb1964.TalkType
     Object Path: /io/github/ronb1964/TalkType
@@ -47,7 +47,7 @@ class TalkTypeDBusService(dbus.service.Object):
     """
 
     # Module-level constants above are the single definition; these keep the
-    # long-standing TalkTypeDBusService.DBUS_* attribute names working.
+    # long-standing TuxTalkDBusService.DBUS_* attribute names working.
     DBUS_NAME = DBUS_NAME
     DBUS_PATH = DBUS_PATH
     DBUS_INTERFACE = DBUS_INTERFACE
@@ -97,12 +97,12 @@ class TalkTypeDBusService(dbus.service.Object):
             logger.info(f"D-Bus service started: {self.DBUS_NAME}")
         else:
             # Only possible for the tray, behind something that won't let go
-            # of the name (a TalkType older than this fix).
+            # of the name (a TuxTalk older than this fix).
             logger.warning(f"D-Bus name {self.DBUS_NAME} is held by another process; "
                            "waiting in line for it")
 
     def owns_name(self):
-        """Whether this process currently owns the TalkType bus name."""
+        """Whether this process currently owns the TuxTalk bus name."""
         try:
             return self.bus.get_name_owner(self.DBUS_NAME) == self.bus.get_unique_name()
         except Exception:

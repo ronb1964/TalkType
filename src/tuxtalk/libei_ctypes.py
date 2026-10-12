@@ -32,7 +32,7 @@ KEY_A = 30
 KEY_SPACE = 57
 KEY_ENTER = 28
 
-# Soft-line-break marker used across TalkType (§SHIFT_ENTER§): type Shift+Enter,
+# Soft-line-break marker used across TuxTalk (§SHIFT_ENTER§): type Shift+Enter,
 # not plain Enter, so it doesn't submit in chat apps.
 SHIFT_ENTER_MARKER = "\xa7SHIFT_ENTER\xa7"
 

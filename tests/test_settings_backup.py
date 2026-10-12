@@ -281,7 +281,7 @@ def test_suggested_file_names_differ_within_a_day(monkeypatch):
     monkeypatch.setattr(sb, "_now", lambda: datetime.datetime(2026, 10, 11, 9, 15))
     first = sb.suggested_name()
     monkeypatch.setattr(sb, "_now", lambda: datetime.datetime(2026, 10, 11, 9, 41))
-    assert first == "TalkType-settings-2026-10-11-0915.zip" != sb.suggested_name()
+    assert first == "TuxTalk-settings-2026-10-11-0915.zip" != sb.suggested_name()
 
 
 def test_times_follow_a_24_hour_clock_where_people_use_one():
@@ -303,3 +303,37 @@ def test_the_clock_is_read_from_the_region_setting(monkeypatch, fmt, expected):
     monkeypatch.setattr(locale, "nl_langinfo", lambda item: fmt)
     monkeypatch.setattr(locale, "setlocale", lambda *a: "")
     assert sb._uses_24_hour_clock() is expected
+
+
+# --- backups made before the rename (TalkType, up to 0.14.x) -----------------
+
+def _as_talktype_backup(path):
+    """Rewrite a fresh backup's manifest the way TalkType wrote it."""
+    with zipfile.ZipFile(path) as z:
+        files = {n: z.read(n) for n in z.namelist()}
+    manifest = json.loads(files[sb.MANIFEST])
+    manifest["app"] = "TalkType"
+    files[sb.MANIFEST] = json.dumps(manifest).encode()
+    with zipfile.ZipFile(path, "w") as z:
+        for n, data in files.items():
+            z.writestr(n, data)
+
+
+def test_a_backup_saved_by_talktype_still_loads(home):
+    dest = home / "TalkType-settings-2026-10-11-1200.zip"
+    sb.write_backup(str(dest))
+    _as_talktype_backup(dest)
+    with open(config.CONFIG_PATH, "w") as f:
+        f.write('hotkey = "F9"\n')
+    sb.restore(sb.read_backup(str(dest)))
+    assert read(config.CONFIG_PATH) == CONFIG_TEXT
+
+
+def test_talktype_backups_are_listed_with_the_others(home, monkeypatch):
+    folder = home / "backups"
+    folder.mkdir()
+    monkeypatch.setattr(sb, "backup_folder", lambda: str(folder))
+    dest = folder / "TalkType-settings-2026-10-11-1200.zip"
+    sb.write_backup(str(dest))
+    _as_talktype_backup(dest)
+    assert str(dest) in [p.path for p in sb.restore_points()]

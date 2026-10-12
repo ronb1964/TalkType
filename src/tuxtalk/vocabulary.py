@@ -1,5 +1,5 @@
 """
-Teach TalkType a word it keeps getting wrong, from a recent dictation.
+Teach TuxTalk a word it keeps getting wrong, from a recent dictation.
 
 The user picks the misheard words in a dictation ("bamboo studio") and types
 what they should be ("BambuStudio"). The fix is saved as an ordinary custom

@@ -33,14 +33,14 @@ def run_package_update(release, install_type, restart_callback=None):
     restart_callback: called when the user clicks "Restart Now". The tray passes
     its restart_app (clean detached relaunch + quit_app). If None (e.g. the
     separate Preferences process, which can't cleanly restart the tray), the
-    dialog tells the user to reopen TalkType instead."""
+    dialog tells the user to reopen TuxTalk instead."""
     url, filename = update_checker.get_package_asset(release, install_type)
     if not url:
         _error("This release has no package for your install type.\n"
                "Please update from the GitHub release page.")
         return
 
-    progress = Gtk.Dialog(title="Updating TalkType", flags=Gtk.DialogFlags.MODAL)
+    progress = Gtk.Dialog(title="Updating TuxTalk", flags=Gtk.DialogFlags.MODAL)
     progress.set_default_size(440, 130)
     progress.set_position(Gtk.WindowPosition.CENTER)
     progress.set_keep_above(True)
@@ -91,7 +91,7 @@ def _installed_restart_prompt(restart_callback=None):
     _set_margins(dc, 20)
     lbl = Gtk.Label()
     lbl.set_markup("<b>Update installed!</b>\n"
-                   "Restart TalkType to use the new version.")
+                   "Restart TuxTalk to use the new version.")
     lbl.set_halign(Gtk.Align.START)
     lbl.set_line_wrap(True)
     dc.pack_start(lbl, False, False, 0)
@@ -108,7 +108,7 @@ def _installed_restart_prompt(restart_callback=None):
                 # No clean-restart path here (e.g. the separate Preferences
                 # process can't restart the tray). Ask the user to reopen.
                 _info("Update installed",
-                      "Please quit TalkType from the tray icon and open it "
+                      "Please quit TuxTalk from the tray icon and open it "
                       "again to finish updating.")
     done.connect("response", _resp)
     done.show_all()

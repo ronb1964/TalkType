@@ -25,9 +25,9 @@ def test_menu_is_built_from_the_tray():
     assert "status.preset" in JS
 
 
-def test_version_is_16():
-    """16: the Custom item (opens Preferences, shows the dot for custom settings)."""
-    assert json.loads((EXT / "metadata.json").read_text())["version"] == 16
+def test_version_is_17():
+    """17: TuxTalk (formerly TalkType) in the name and description. 16: the Custom item."""
+    assert json.loads((EXT / "metadata.json").read_text())["version"] == 17
 
 
 CUSTOM_LABEL = "Custom (opens Preferences)"

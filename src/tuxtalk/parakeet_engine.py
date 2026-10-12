@@ -1,9 +1,9 @@
 """
-NVIDIA Parakeet speech engine for TalkType.
+NVIDIA Parakeet speech engine for TuxTalk.
 
 Parakeet TDT 0.6B v3 is an alternative to Whisper for English and 24 other
 European languages. On a plain CPU it is several times faster than Whisper and
-more accurate than Whisper large-v3, which TalkType cannot offer CPU users at
+more accurate than Whisper large-v3, which TuxTalk cannot offer CPU users at
 all. It adds its own punctuation and capitalisation, and it detects the
 language by itself.
 
@@ -14,7 +14,7 @@ model itself (~670 MB) is downloaded at runtime like the Whisper models.
 The model is published by NVIDIA under CC-BY-4.0, which requires attribution;
 see PARAKEET_ATTRIBUTION, shown in the About dialog.
 
-The rest of TalkType treats "parakeet-v3" as just another model name, so the
+The rest of TuxTalk treats "parakeet-v3" as just another model name, so the
 model pickers, config validation and download dialogs all work unchanged.
 
 With the device set to "Vulkan (any GPU)", Parakeet runs on the graphics chip
@@ -24,7 +24,7 @@ downloaded as the fallback.
 import os
 
 # The 25 languages Parakeet TDT 0.6B v3 knows (ISO 639-1), from NVIDIA's model
-# card. It detects which one is spoken by itself and ignores TalkType's
+# card. It detects which one is spoken by itself and ignores TuxTalk's
 # language setting, so for any other language the user needs a Whisper model.
 PARAKEET_LANGUAGES = frozenset({
     "bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de", "el", "hu", "it",

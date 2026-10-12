@@ -6,12 +6,12 @@ RTX 4070 Super it transcribed 66 s of speech in 0.17 s, against 2.15 s for the
 processor engine (parakeet_engine.py), with no loss of accuracy (2026-10-03).
 
 whisper.cpp has no Parakeet server, so the model runs in a helper process of
-TalkType's own (parakeet_gpu_worker.py) that the dictation service starts and
+TuxTalk's own (parakeet_gpu_worker.py) that the dictation service starts and
 talks to over pipes. Like the other engines (engine_process.py) it dies with
 the service.
 
 If the helper fails twice in a row, transcription moves to the processor
-engine for the rest of the session, when that model is downloaded. TalkType
+engine for the rest of the session, when that model is downloaded. TuxTalk
 keeps both downloads for exactly this.
 """
 import json

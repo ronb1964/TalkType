@@ -1,5 +1,5 @@
 """
-Bring one of TalkType's already-open windows to the front.
+Bring one of TuxTalk's already-open windows to the front.
 
 Plain Gtk.Window.present() is not enough on Wayland: a window may only take
 focus with an activation token from recent user input, and a tray-menu click

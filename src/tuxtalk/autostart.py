@@ -2,7 +2,7 @@
 
 Both the Preferences "Launch at login" toggle and first-run onboarding need to
 write the same autostart .desktop file with the same launch command. Keeping the
-logic here means there is exactly one definition of how TalkType relaunches
+logic here means there is exactly one definition of how TuxTalk relaunches
 itself — the command that a fresh install writes and the command Preferences
 writes can never drift apart.
 
@@ -42,7 +42,7 @@ def get_launch_command(prefer_installed_appimage: bool = False) -> str:
     From an AppImage, the installed copy (~/AppImages/TalkType.AppImage) wins
     over the file actually running, which on first run is usually the one in
     ~/Downloads. Pointing autostart at the download meant cleaning up Downloads
-    silently stopped TalkType starting at login. Setup copies the AppImage in
+    silently stopped TuxTalk starting at login. Setup copies the AppImage in
     the background, so it passes *prefer_installed_appimage* rather than
     relying on the copy having finished.
     """
@@ -97,7 +97,7 @@ def get_launch_command(prefer_installed_appimage: bool = False) -> str:
 
 
 def get_icon_path() -> str:
-    """Absolute path to the TalkType icon, or a system icon name as fallback."""
+    """Absolute path to the TuxTalk icon, or a system icon name as fallback."""
     here = os.path.dirname(os.path.abspath(__file__))
     root = _project_root()
     candidates = [
@@ -156,7 +156,7 @@ def _set_autostart_flatpak(enable: bool) -> bool:
             opts = {
                 "handle_token": GLib.Variant("s", token),
                 "reason": GLib.Variant(
-                    "s", "Start TalkType automatically when you log in"),
+                    "s", "Start TuxTalk automatically when you log in"),
                 "autostart": GLib.Variant("b", enable),
                 "background": GLib.Variant("b", False),
                 # Command to run inside the sandbox at login; the portal wraps it
@@ -205,7 +205,7 @@ def set_autostart(enable: bool, prefer_installed_appimage: bool = False) -> bool
     if enable:
         exec_cmd = get_launch_command(prefer_installed_appimage)
         icon_path = get_icon_path()
-        app_name = "TalkType (Dev)" if config.DEV_MODE else "TalkType"
+        app_name = "TuxTalk (Dev)" if config.DEV_MODE else "TuxTalk"
         comment = AUTOSTART_COMMENT_DEV if config.DEV_MODE else AUTOSTART_COMMENT
         path_line = f"Path={_project_root()}\n" if config.DEV_MODE else ""
         content = f"""[Desktop Entry]
@@ -219,7 +219,7 @@ Terminal=false
 Categories=Utility;
 Keywords=dictation;voice;speech;whisper;ai;transcription;
 StartupNotify=true
-StartupWMClass=TalkType
+StartupWMClass=TuxTalk
 X-GNOME-Autostart-enabled=true
 {path_line}"""
         try:
@@ -234,7 +234,7 @@ X-GNOME-Autostart-enabled=true
     # Disable: Hidden=true stub.
     try:
         with open(desktop_file, "w") as f:
-            f.write("[Desktop Entry]\nType=Application\nName=TalkType\nHidden=true\n")
+            f.write("[Desktop Entry]\nType=Application\nName=TuxTalk\nHidden=true\n")
         logger.info(f"Autostart disabled: {desktop_file}")
         return True
     except Exception as e:
@@ -289,11 +289,11 @@ def repair_stale_appimage_autostart() -> bool:
     it from, usually the one in ~/Downloads. 0.10.1 fixed that for new setups
     only. Existing entries kept launching that copy: an old version, or one
     that was deleted when Downloads got cleaned, and on Ubuntu 26.04 an old
-    one that needs libfuse2 and never starts. TalkType just silently stopped
+    one that needs libfuse2 and never starts. TuxTalk just silently stopped
     starting at login.
 
     Only the AppImage repairs, only when the installed copy exists, and only
-    an enabled entry that launches some other TalkType AppImage. Disabled
+    an enabled entry that launches some other TuxTalk AppImage. Disabled
     entries, the dev version, .deb/.rpm and Flatpak installs are never
     touched. Returns True if the entry was rewritten.
     """

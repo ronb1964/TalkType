@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-CUDA Helper Module for TalkType AppImage
+CUDA Helper Module for TuxTalk AppImage
 Handles NVIDIA GPU detection and CUDA library downloads
 """
 
@@ -95,14 +95,14 @@ def has_cuda_libraries():
     """
     Check if CUDA libraries are available for running GPU-accelerated models.
     This checks:
-    1. Downloaded CUDA in TalkType data dir (respects DEV_MODE)
+    1. Downloaded CUDA in TuxTalk data dir (respects DEV_MODE)
     2. System-wide CUDA installation (standard /usr paths)
     3. CUDA toolkit installation (/usr/local/cuda, /opt/cuda)
     """
-    # First check for downloaded CUDA libraries in TalkType data dir.
+    # First check for downloaded CUDA libraries in TuxTalk data dir.
     # Uses get_appdir_cuda_path() which respects DEV_MODE, so dev version
-    # checks ~/.local/share/TalkType-dev/cuda and AppImage checks
-    # ~/.local/share/TalkType/cuda — they never interfere with each other.
+    # checks ~/.local/share/TuxTalk-dev/cuda and AppImage checks
+    # ~/.local/share/TuxTalk/cuda — they never interfere with each other.
     cuda_path = get_appdir_cuda_path()
     lib_path = os.path.join(cuda_path, "lib")
     
@@ -184,13 +184,13 @@ def get_appdir_cuda_path():
 
 def has_talktype_cuda_libraries():
     """
-    Check if TalkType's own downloaded CUDA libraries are installed.
-    This ONLY checks ~/.local/share/TalkType/cuda, not system CUDA.
+    Check if TuxTalk's own downloaded CUDA libraries are installed.
+    This ONLY checks ~/.local/share/TuxTalk/cuda, not system CUDA.
 
     Use this in UI to show download status (not for runtime detection).
 
     Returns:
-        bool: True if TalkType CUDA libraries exist, False otherwise
+        bool: True if TuxTalk CUDA libraries exist, False otherwise
     """
     cuda_path = get_appdir_cuda_path()
     lib_path = os.path.join(cuda_path, "lib")
@@ -277,7 +277,7 @@ def download_cuda_libraries(progress_callback=None, cancel_event=None):
                 try:
                     api_url = f"https://pypi.org/pypi/{pkg_name}/json"
                     request = urllib.request.Request(
-                        api_url, headers={"User-Agent": "TalkType"})
+                        api_url, headers={"User-Agent": "TuxTalk"})
                     # timeout is required — without it a stalled PyPI
                     # connection hung this thread forever
                     with urllib.request.urlopen(request, timeout=30) as response:
@@ -657,7 +657,7 @@ def show_cuda_progress_dialog():
 def show_cuda_welcome_dialog():
     """Show GTK welcome dialog for CUDA setup."""
     try:
-        dialog = Gtk.Dialog(title="Welcome to TalkType!")
+        dialog = Gtk.Dialog(title="Welcome to TuxTalk!")
         dialog.set_default_size(600, 450)
         dialog.set_modal(True)
         dialog.set_position(Gtk.WindowPosition.CENTER)
@@ -681,7 +681,7 @@ def show_cuda_welcome_dialog():
         
         # Main message
         msg = Gtk.Label()
-        msg.set_markup('Your system has an NVIDIA graphics card that can significantly accelerate TalkType speech recognition.')
+        msg.set_markup('Your system has an NVIDIA graphics card that can significantly accelerate TuxTalk speech recognition.')
         msg.set_line_wrap(True)
         msg.set_max_width_chars(60)
         msg.set_margin_bottom(15)
@@ -749,7 +749,7 @@ def show_cuda_welcome_dialog():
 def show_initial_help_dialog():
     """Show initial help dialog for first-time users who skip CUDA download."""
     try:
-        dialog = Gtk.Dialog(title="Welcome to TalkType")
+        dialog = Gtk.Dialog(title="Welcome to TuxTalk")
         from .ui_style import fit_dialog_to_screen
         fit_dialog_to_screen(dialog, 520, 320)
         dialog.set_modal(True)
@@ -764,7 +764,7 @@ def show_initial_help_dialog():
 
         # Main instructions
         instructions = Gtk.Label()
-        instructions.set_markup('''<span size="large"><b>🎙️ Welcome to TalkType!</b></span>
+        instructions.set_markup('''<span size="large"><b>🎙️ Welcome to TuxTalk!</b></span>
 
 <b>🚀 Next Steps:</b>
 
@@ -817,7 +817,7 @@ def offer_cuda_download_cli():
     print("🎮 NVIDIA GPU DETECTED!")
     print("="*60)
     print("\nYour system has an NVIDIA graphics card that can significantly")
-    print("accelerate TalkType speech recognition.")
+    print("accelerate TuxTalk speech recognition.")
     print("\n🚀 GPU Acceleration Benefits:")
     print("  ⚡ 3-5x faster transcription speed")
     print("  🎯 Better accuracy for longer recordings")

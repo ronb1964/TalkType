@@ -1,6 +1,6 @@
 """Text-injection backends.
 
-TalkType needs to type transcribed text into whatever app is focused. Outside a
+TuxTalk needs to type transcribed text into whatever app is focused. Outside a
 Flatpak it uses ydotool (Backend A); inside a Flatpak the uinput path is blocked,
 so it types through the RemoteDesktop portal + libei (Backend B). The backend is
 chosen once at startup by FLATPAK_ID and hidden behind a single method so the
@@ -76,7 +76,7 @@ class LibeiOutputBackend(OutputBackend):
         import os
         path = self._token_path()
         try:
-            # Create data/TalkType/ if it doesn't exist yet. On a fresh CPU-only
+            # Create data/TuxTalk/ if it doesn't exist yet. On a fresh CPU-only
             # Flatpak install nothing else has written there (no CUDA libs, and
             # the first-run flag may land elsewhere), so without this the write
             # fails silently, the restore token never persists, and GNOME

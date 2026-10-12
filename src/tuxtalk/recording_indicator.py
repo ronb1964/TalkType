@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Visual recording indicator for TalkType
+Visual recording indicator for TuxTalk
 Shows an animated orb with satellites near the cursor during dictation
 """
 
@@ -62,7 +62,7 @@ class RecordingIndicator(Gtk.Window):
     def __init__(self, position="center", offset_x=0, offset_y=0, size="medium",
                  style="orb", color_mode="custom", custom_color="#4db3ff",
                  backing="medium", sensitivity=1.0):
-        super().__init__(title="TalkType Recording")
+        super().__init__(title="TuxTalk Recording")
 
         # Style + appearance. The orb keeps its own draw path; the other styles
         # are drawn by indicator_styles from the data fed below. color_mode

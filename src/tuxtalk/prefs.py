@@ -17,7 +17,7 @@ from .config import (CONFIG_PATH, ConfigNotLoadedError, Settings, merge_changed_
                      merge_custom_command_edits, CUSTOM_COMMANDS_PATH,
                      _toml_value, CLASSIC_CYAN_HEX)
 
-# D-Bus interface for communicating with the TalkType service
+# D-Bus interface for communicating with the TuxTalk service
 # Set on the Preferences window so prefs_style.css — which must be installed
 # screen-wide to reach child widgets — matches only this window's widgets.
 # Every selector in that file is prefixed with it; keep the two in step.
@@ -28,7 +28,7 @@ DBUS_OBJECT = "/io/github/ronb1964/TalkType"
 DBUS_INTERFACE = "io.github.ronb1964.TalkType"
 
 def _get_dbus_interface():
-    """Get the D-Bus interface for TalkType service, or None if not available."""
+    """Get the D-Bus interface for TuxTalk service, or None if not available."""
     try:
         bus = dbus.SessionBus()
         proxy = bus.get_object(DBUS_SERVICE, DBUS_OBJECT)
@@ -305,7 +305,7 @@ def hotkey_change_message(cfg, changed, refused):
              if key in changed and cfg.get(key)]
     offer_test = bool(lines)
     if offer_test:
-        lines.append("Try it once in the test to make sure it reaches TalkType. On some "
+        lines.append("Try it once in the test to make sure it reaches TuxTalk. On some "
                      "laptops the F-keys change the brightness or volume unless you hold Fn.")
         # So Not Now isn't a dead end (Ron, 0.14.6: the button was below the fold).
         lines.append("You can also test it later with Test Hotkeys, under the hotkeys on "
@@ -360,7 +360,7 @@ class PreferencesWindow:
             settings.set_property("gtk-application-prefer-dark-theme", True)
 
         # Create window FIRST
-        self.window = Gtk.Window(title="TalkType Preferences")
+        self.window = Gtk.Window(title="TuxTalk Preferences")
         self.window.set_name("preferences_window")  # Give window a name for CSS targeting
         self.window.set_default_size(500, 600)
         self.window.set_position(Gtk.WindowPosition.CENTER)
@@ -605,7 +605,7 @@ class PreferencesWindow:
             # named 'Blue Yeti "Nano" USB' produced a file that would not
             # parse — and the next load quarantined it and reset every
             # setting, hotkey included. One writer, one escaping rule.
-            lines = ["# TalkType config"]
+            lines = ["# TuxTalk config"]
             for key, value in merged.items():
                 lines.append(f"{key} = {_toml_value(value)}")
             write_text_atomic(CONFIG_PATH, "\n".join(lines) + "\n")
@@ -645,7 +645,7 @@ class PreferencesWindow:
 
         # Title
         title = Gtk.Label()
-        title.set_markup("<big><b>TalkType Preferences</b></big>")
+        title.set_markup("<big><b>TuxTalk Preferences</b></big>")
         vbox.pack_start(title, False, False, 0)
 
         # Notebook for tabs
@@ -684,7 +684,7 @@ class PreferencesWindow:
         # Version footer
         from . import __version__
         version_label = Gtk.Label()
-        version_label.set_markup(f'<span size="small" color="#888888">TalkType v{__version__}</span>')
+        version_label.set_markup(f'<span size="small" color="#888888">TuxTalk v{__version__}</span>')
         version_label.set_halign(Gtk.Align.END)
         version_label.set_margin_top(5)
         version_label.set_margin_end(5)
@@ -703,7 +703,7 @@ class PreferencesWindow:
         help_btn = Gtk.Button(label="Help")
         help_btn.connect("clicked", self.on_help)
         help_btn.get_child().set_xalign(0.5)
-        help_btn.set_tooltip_text("Open TalkType help documentation")
+        help_btn.set_tooltip_text("Open TuxTalk help documentation")
         button_box.pack_start(help_btn, False, False, 0)
 
         # Add spacing to push other buttons to the right
@@ -1234,10 +1234,10 @@ class PreferencesWindow:
         row += 1
 
         # Launch at login checkbox
-        self.launch_at_login_check = Gtk.CheckButton(label="Launch TalkType at login")
+        self.launch_at_login_check = Gtk.CheckButton(label="Launch TuxTalk at login")
         self.launch_at_login_check.set_active(self.config.get("launch_at_login", False))
         self.launch_at_login_check.connect("toggled", lambda x: self.update_config("launch_at_login", x.get_active()))
-        self.launch_at_login_check.set_tooltip_text("Automatically start TalkType when you log in to your desktop.\nUseful for having dictation always available.")
+        self.launch_at_login_check.set_tooltip_text("Automatically start TuxTalk when you log in to your desktop.\nUseful for having dictation always available.")
         grid.attach(self.launch_at_login_check, 0, row, 2, 1)
         row += 1
         
@@ -1516,7 +1516,7 @@ class PreferencesWindow:
         reset_btn = Gtk.Button(label="Reset to classic cyan")
         reset_btn.set_relief(Gtk.ReliefStyle.NONE)
         reset_btn.get_style_context().add_class("dim-label")
-        reset_btn.set_tooltip_text("Set the color back to TalkType's original cyan")
+        reset_btn.set_tooltip_text("Set the color back to TuxTalk's original cyan")
         reset_btn.connect("clicked", self._reset_color_to_classic)
         color_box.pack_start(reset_btn, False, False, 0)
 
@@ -1719,7 +1719,7 @@ class PreferencesWindow:
         
         # Injection mode
         inject_label = Gtk.Label(label="Text Injection 💡:", xalign=0)
-        inject_label.set_tooltip_text("How to insert transcribed text:\n• Auto (Smart Detection): chooses paste or typing based on the focused app\n• Keystroke Typing: simulates typing character-by-character (most reliable)\n• Clipboard Paste: uses clipboard + Ctrl+V / Shift+Ctrl+V (much faster for long text)\n\nAuto mode uses paste for terminals and normal text fields, and falls back to\ntyping where paste is unreliable.\n\nNote: TalkType types wherever your cursor is — it cannot detect password fields\n(no Linux app reliably can on Wayland), so avoid dictating into them.\n\nClipboard Paste works in most applications:\n✓ Text editors, word processors, terminals\n✓ Web browsers, email clients\n✓ Most standard text input fields\n\nUse Keystroke Typing if paste doesn't work in specialized applications.")
+        inject_label.set_tooltip_text("How to insert transcribed text:\n• Auto (Smart Detection): chooses paste or typing based on the focused app\n• Keystroke Typing: simulates typing character-by-character (most reliable)\n• Clipboard Paste: uses clipboard + Ctrl+V / Shift+Ctrl+V (much faster for long text)\n\nAuto mode uses paste for terminals and normal text fields, and falls back to\ntyping where paste is unreliable.\n\nNote: TuxTalk types wherever your cursor is — it cannot detect password fields\n(no Linux app reliably can on Wayland), so avoid dictating into them.\n\nClipboard Paste works in most applications:\n✓ Text editors, word processors, terminals\n✓ Web browsers, email clients\n✓ Most standard text input fields\n\nUse Keystroke Typing if paste doesn't work in specialized applications.")
         inject_combo = Gtk.ComboBoxText()
         inject_combo.set_can_focus(True)
         inject_combo.connect("button-press-event", self._on_combo_button_press)
@@ -1746,7 +1746,7 @@ class PreferencesWindow:
             restore_check.connect("toggled", lambda x: self.update_config("restore_clipboard", x.get_active()))
             restore_check.set_tooltip_text(
                 "Pasting a dictation puts it on the clipboard, replacing whatever you'd copied.\n"
-                "With this on, TalkType puts your copied item back half a second after pasting.\n\n"
+                "With this on, TuxTalk puts your copied item back half a second after pasting.\n\n"
                 "Leave it off if you like to re-paste a dictation that went into the wrong window.\n"
                 "Recent Dictations in the tray menu keeps your last 20 either way.\n\n"
                 "Dictations are always kept out of clipboard history (like KDE's Klipper).")
@@ -1824,9 +1824,9 @@ class PreferencesWindow:
         self.log_transcripts_check = Gtk.CheckButton(label="Log transcribed text (for troubleshooting)")
         self.log_transcripts_check.set_active(bool(self.config.get("log_transcripts", False)))
         self.log_transcripts_check.set_tooltip_text(
-            "Off by default for your privacy — TalkType does not write what you dictate to its log.\n"
+            "Off by default for your privacy — TuxTalk does not write what you dictate to its log.\n"
             "Turn this on only when troubleshooting a dictation problem: it saves the full text of\n"
-            "everything you dictate to TalkType's log file on disk, in plain text, until you turn it off."
+            "everything you dictate to TuxTalk's log file on disk, in plain text, until you turn it off."
         )
         self.log_transcripts_check.connect("toggled", self._on_log_transcripts_toggled)
         grid.attach(self.log_transcripts_check, 0, row, 2, 1)
@@ -1837,7 +1837,7 @@ class PreferencesWindow:
         clear_log_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         clear_log_btn = Gtk.Button(label="Clear log now")
         clear_log_btn.set_halign(Gtk.Align.START)
-        clear_log_btn.set_tooltip_text("Erase the current TalkType log file (and its backup) from disk.")
+        clear_log_btn.set_tooltip_text("Erase the current TuxTalk log file (and its backup) from disk.")
         clear_log_btn.connect("clicked", self._on_clear_log_clicked)
         clear_log_box.pack_start(clear_log_btn, False, False, 0)
         grid.attach(clear_log_box, 0, row, 2, 1)
@@ -2094,7 +2094,7 @@ class PreferencesWindow:
 
         vbox.pack_start(separator(), False, False, 0)
         vbox.pack_start(header("🕘 Earlier settings"), False, False, 0)
-        vbox.pack_start(dim(f"Your backups in the backup folder, and the copies TalkType "
+        vbox.pack_start(dim(f"Your backups in the backup folder, and the copies TuxTalk "
                             f"saves by itself when it starts (the last "
                             f"{settings_backup.KEEP}). Go back to one if a change or an "
                             f"update went wrong."), False, False, 0)
@@ -2153,7 +2153,7 @@ class PreferencesWindow:
             chooser.set_current_folder(folder)
         if not folder_only:
             zips = Gtk.FileFilter()
-            zips.set_name("TalkType backups (*.zip)")
+            zips.set_name("TuxTalk backups (*.zip)")
             zips.add_pattern("*.zip")
             chooser.add_filter(zips)
         if save_name:
@@ -2179,7 +2179,7 @@ class PreferencesWindow:
     def _on_change_backup_folder_clicked(self, _button):
         """Browse to a folder; saved straight away, like Save Backup itself."""
         from .settings_backup import set_backup_folder
-        folder = self._pick_file("Choose the Folder for TalkType Backups", folder_only=True)
+        folder = self._pick_file("Choose the Folder for TuxTalk Backups", folder_only=True)
         if not folder:
             return
         try:
@@ -2193,7 +2193,7 @@ class PreferencesWindow:
     def _on_save_backup_clicked(self, _button):
         from . import settings_backup
         name = settings_backup.suggested_name()
-        path = self._pick_file("Save TalkType Backup", save_name=name)
+        path = self._pick_file("Save TuxTalk Backup", save_name=name)
         if not path:
             return
         if not path.lower().endswith(".zip"):
@@ -2210,7 +2210,7 @@ class PreferencesWindow:
 
     def _on_load_backup_clicked(self, _button):
         from . import settings_backup
-        path = self._pick_file("Load TalkType Backup")
+        path = self._pick_file("Load TuxTalk Backup")
         if not path:
             return
         try:
@@ -2225,7 +2225,7 @@ class PreferencesWindow:
             pass
         if self._message(
                 Gtk.MessageType.QUESTION, "Load these settings?",
-                f"This backup was made {made} by TalkType {backup.version or '(unknown version)'}.\n\n"
+                f"This backup was made {made} by TuxTalk {backup.version or '(unknown version)'}.\n\n"
                 "It replaces your settings, voice commands and Fix a Word words. Its stats "
                 "are added to yours. Your current settings are kept as a copy first, so "
                 "Earlier settings, on this tab, can undo this.",
@@ -2304,7 +2304,7 @@ class PreferencesWindow:
         fix_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         fix_label = Gtk.Label()
         fix_label.set_markup(
-            '<span>Does TalkType keep getting a word wrong? Pick it out of a '
+            '<span>Does TuxTalk keep getting a word wrong? Pick it out of a '
             'recent dictation and type the right spelling. The fix shows up in this list, '
             'where you can edit or remove it.</span>')
         fix_label.set_xalign(0)
@@ -2312,7 +2312,7 @@ class PreferencesWindow:
         fix_row.pack_start(fix_label, True, True, 0)
         fix_btn = Gtk.Button(label="Fix a Word...")
         fix_btn.set_valign(Gtk.Align.CENTER)
-        fix_btn.set_tooltip_text("Teach TalkType a word from one of your recent dictations")
+        fix_btn.set_tooltip_text("Teach TuxTalk a word from one of your recent dictations")
         fix_btn.connect("clicked", self._on_fix_word)
         fix_row.pack_start(fix_btn, False, False, 0)
         vbox.pack_start(fix_row, False, False, 5)
@@ -2508,7 +2508,7 @@ class PreferencesWindow:
         privacy = Gtk.Label(xalign=0)
         privacy.set_line_wrap(True)
         privacy.set_text("Only these numbers are kept, on this computer. "
-                         "TalkType never saves what you said.")
+                         "TuxTalk never saves what you said.")
         vbox.pack_start(privacy, False, False, 0)
 
         self._refresh_stats()
@@ -2601,7 +2601,7 @@ class PreferencesWindow:
                 h = max(2, plot_h * words / most)
                 is_today = i == len(daily) - 1
                 if is_today:
-                    cr.set_source_rgb(0.30, 0.69, 0.31)      # TalkType green
+                    cr.set_source_rgb(0.30, 0.69, 0.31)      # TuxTalk green
                 else:
                     cr.set_source_rgba(0.30, 0.69, 0.31, 0.55)
                 cr.rectangle(x, top + plot_h - h, bar_w, h)
@@ -2676,7 +2676,7 @@ class PreferencesWindow:
         vbox.pack_start(header("🔄 Updates"), False, False, 0)
 
         version_row = indented(Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10))
-        versions = f"TalkType {update_checker.get_current_version()}"
+        versions = f"TuxTalk {update_checker.get_current_version()}"
         if _on_gnome():
             ext_version = update_checker.get_extension_version()
             versions += (f"  ·  GNOME extension {ext_version}" if ext_version
@@ -2704,7 +2704,7 @@ class PreferencesWindow:
         self.download_btn = Gtk.Button(label="Download & Install")
         self.download_btn.connect("clicked", self._on_download_update_clicked)
         self.download_btn.set_no_show_all(True)
-        self.download_btn.set_tooltip_text("Download the update and automatically install & restart TalkType")
+        self.download_btn.set_tooltip_text("Download the update and automatically install & restart TuxTalk")
         self.update_actions_box.pack_start(self.download_btn, False, False, 0)
 
         self.view_release_btn = Gtk.Button(label="View on GitHub")
@@ -2726,20 +2726,20 @@ class PreferencesWindow:
         # Store release info for download button
         self._current_release = None
 
-        auto_check_toggle = Gtk.CheckButton(label="Check automatically when TalkType starts")
+        auto_check_toggle = Gtk.CheckButton(label="Check automatically when TuxTalk starts")
         auto_check_toggle.set_active(self.config.get("auto_check_updates", True))
         auto_check_toggle.connect("toggled", lambda x: self.update_config("auto_check_updates", x.get_active()))
         auto_check_toggle.set_tooltip_text(
-            "When enabled, TalkType will check for updates once per day when it starts.\n"
+            "When enabled, TuxTalk will check for updates once per day when it starts.\n"
             "If an update is found, you'll be notified and this tab will open."
         )
         vbox.pack_start(indented(auto_check_toggle), False, False, 0)
 
-        # How TalkType was installed decides how it updates. One line, with
+        # How TuxTalk was installed decides how it updates. One line, with
         # the changelog link at its end.
         install_type = update_checker.get_install_type()
         how = {
-            "appimage": "Updates install and TalkType restarts by itself.",
+            "appimage": "Updates install and TuxTalk restarts by itself.",
             "rpm": ("Check for Updates installs the new .deb or .rpm through your package "
                     "manager, with your password."),
             "aur": "Installed from the AUR: update with your AUR helper (yay -S talktype-appimage).",
@@ -2808,12 +2808,12 @@ class PreferencesWindow:
         if has_update:
             status_lines = [
                 f"<span color='#4CAF50'><b>Update available!</b></span>",
-                f"TalkType: {current} → <b>{latest}</b>"
+                f"TuxTalk: {current} → <b>{latest}</b>"
             ]
         else:
             status_lines = [
                 f"<span color='#4CAF50'>You're up to date!</span>",
-                f"TalkType {current} is the latest version."
+                f"TuxTalk {current} is the latest version."
             ]
 
         # Add extension status
@@ -2826,7 +2826,7 @@ class PreferencesWindow:
 
         self.update_status_label.set_markup("\n".join(status_lines))
 
-        # How TalkType was installed decides whether it can auto-update. Only a
+        # How TuxTalk was installed decides whether it can auto-update. Only a
         # self-managed AppImage can be swapped in place; package/AUR/Flatpak
         # users get instructions + the release link, never an AppImage download
         # (which fails on package installs, e.g. missing libfuse.so.2).
@@ -2873,7 +2873,7 @@ class PreferencesWindow:
         if not self._current_release:
             return
 
-        # Route by how TalkType was installed. Package installs go through the
+        # Route by how TuxTalk was installed. Package installs go through the
         # shared pkexec flow; AUR/Flatpak/dev open the release page; only a
         # self-managed AppImage falls through to the AppImage download below.
         install_type = update_checker.get_install_type()
@@ -2887,7 +2887,7 @@ class PreferencesWindow:
             return
 
         url = self._current_release.get("appimage_url")
-        filename = self._current_release.get("appimage_name", "TalkType-update.AppImage")
+        filename = self._current_release.get("appimage_name", "TuxTalk-update.AppImage")
 
         if not url:
             return
@@ -2900,7 +2900,7 @@ class PreferencesWindow:
             text="Download & Install Update?"
         )
         confirm_dialog.format_secondary_text(
-            "TalkType will:\n"
+            "TuxTalk will:\n"
             "1. Download the new version\n"
             "2. Install it to ~/AppImages/TalkType.AppImage\n"
             "3. Restart automatically\n\n"
@@ -2917,7 +2917,7 @@ class PreferencesWindow:
 
         # Create progress dialog
         progress_dialog = Gtk.Dialog(
-            title="Updating TalkType",
+            title="Updating TuxTalk",
             transient_for=self.window,
             flags=Gtk.DialogFlags.MODAL
         )
@@ -3339,7 +3339,7 @@ class PreferencesWindow:
             label.set_sensitive(applies)
 
     def _reset_color_to_classic(self, _button=None):
-        """Return the indicator color to TalkType's classic cyan.
+        """Return the indicator color to TuxTalk's classic cyan.
 
         Because the resolved color is then the classic cyan, the orb falls back
         to its original hand-tuned gradient — the out-of-box look — with no need
@@ -3546,7 +3546,7 @@ class PreferencesWindow:
             try:
                 from .cuda_helper import has_cuda_libraries, detect_nvidia_gpu
                 # Same runtime check the Device dropdown uses (accepts a
-                # system-wide CUDA install, not just TalkType's own download)
+                # system-wide CUDA install, not just TuxTalk's own download)
                 _has_cuda = has_cuda_libraries()
                 _has_nvidia = bool(detect_nvidia_gpu())
             except Exception:
@@ -3563,7 +3563,7 @@ class PreferencesWindow:
                 if _has_nvidia:
                     # Two ways to run large-v3 on the card: Vulkan (light, about
                     # the same speed measured on an RTX 4070 Super) or CUDA
-                    # (TalkType's long-standing NVIDIA setup).
+                    # (TuxTalk's long-standing NVIDIA setup).
                     from .vulkan_setup_dialogs import choose_light_or_full, LIGHT, FULL
                     if self._vulkan_offered():
                         _choice = choose_light_or_full(self.window, "large-v3")
@@ -3615,7 +3615,7 @@ class PreferencesWindow:
                     )
                     _dlg.format_secondary_text(
                         "The 'large-v3' model needs a graphics card to run at a usable speed.\n\n"
-                        "TalkType didn't find one it can use on this computer."
+                        "TuxTalk didn't find one it can use on this computer."
                     )
                     _dlg.set_keep_above(True)
                     _dlg.run()
@@ -4235,7 +4235,7 @@ class PreferencesWindow:
 
     def _setup_vulkan(self, model, confirm=True):
         """Download and speed-check Vulkan for *model* (vulkan_setup_dialogs).
-        True if TalkType should use the graphics chip."""
+        True if TuxTalk should use the graphics chip."""
         from .vulkan_setup_dialogs import set_up
         return set_up(self.window, model, confirm=confirm)
 
@@ -4268,7 +4268,7 @@ class PreferencesWindow:
             text="Log all transcribed text?",
         )
         dialog.format_secondary_text(
-            "This saves the full text of EVERYTHING you dictate to TalkType's log "
+            "This saves the full text of EVERYTHING you dictate to TuxTalk's log "
             "file on disk, in plain text, and keeps it there until you turn this "
             "setting back off.\n\n"
             "Only enable it if you are troubleshooting a dictation problem."
@@ -4295,7 +4295,7 @@ class PreferencesWindow:
             modal=True,
             message_type=Gtk.MessageType.WARNING,
             buttons=Gtk.ButtonsType.NONE,
-            text="Clear the TalkType log?",
+            text="Clear the TuxTalk log?",
         )
         dialog.format_secondary_text(
             "This permanently deletes the current log file and its backup from "
@@ -4340,7 +4340,7 @@ class PreferencesWindow:
         try:
             from . import cuda_helper
             gpu_name = cuda_helper.detect_nvidia_gpu()
-            # TalkType's own download only, not a system-wide CUDA install
+            # TuxTalk's own download only, not a system-wide CUDA install
             has_cuda = cuda_helper.has_talktype_cuda_libraries()
 
             if gpu_name:
@@ -4479,7 +4479,7 @@ class PreferencesWindow:
                 text="Configure Typing Permissions?"
             )
             dialog.format_secondary_text(
-                "This will configure system permissions to allow TalkType to type "
+                "This will configure system permissions to allow TuxTalk to type "
                 "directly into applications.\n\n"
                 "What this does:\n"
                 "• Adds a udev rule for /dev/uinput access\n"
@@ -4519,7 +4519,7 @@ class PreferencesWindow:
                     "IMPORTANT: Restart your computer to apply the changes.\n"
                     "(Logging out and back in is often not enough.)\n"
                     "(Some systems may require a full reboot instead.)\n\n"
-                    "After that, TalkType will be able to type "
+                    "After that, TuxTalk will be able to type "
                     "directly into your applications."
                 )
                 msg.run()
@@ -4632,7 +4632,7 @@ class PreferencesWindow:
             text="Install GNOME Extension?"
         )
         dialog.format_secondary_markup(
-            "<b>TalkType GNOME Shell Extension</b>\n\n"
+            "<b>TuxTalk GNOME Shell Extension</b>\n\n"
             "✨ <b>Features:</b>\n"
             "  • Panel indicator with recording status\n"
             "  • Active model and device display (read-only)\n"
@@ -4713,7 +4713,7 @@ class PreferencesWindow:
                             "   • Press <b>Alt+F2</b>\n"
                             "   • Type <b>r</b> and press <b>Enter</b>\n"
                             "   • OR log out and log back in\n\n"
-                            "2. The TalkType icon will appear in your top panel\n\n"
+                            "2. The TuxTalk icon will appear in your top panel\n\n"
                             "3. Click the icon to:\n"
                             "   • Start/stop dictation service\n"
                             "   • Switch Whisper models\n"
@@ -4762,8 +4762,8 @@ class PreferencesWindow:
             text="Uninstall GNOME Extension?"
         )
         dialog.format_secondary_text(
-            "This will remove the TalkType GNOME Shell extension.\n\n"
-            "The main TalkType application will continue to work normally.\n\n"
+            "This will remove the TuxTalk GNOME Shell extension.\n\n"
+            "The main TuxTalk application will continue to work normally.\n\n"
             "Uninstall?"
         )
 
@@ -5568,7 +5568,7 @@ class PreferencesWindow:
                 print(f"[hotkey-test] Could not resume hotkeys: {e}", flush=True)
 
     def on_help(self, button):
-        """Show help dialog with TalkType features and instructions."""
+        """Show help dialog with TuxTalk features and instructions."""
         from .help_dialog import show_help_dialog
         show_help_dialog()
 
@@ -5576,9 +5576,9 @@ class PreferencesWindow:
 
 def main():
     from . import desktop_identity
-    desktop_identity.apply()        # TalkType's icon on its windows, not KDE's generic one
+    desktop_identity.apply()        # TuxTalk's icon on its windows, not KDE's generic one
     import argparse
-    parser = argparse.ArgumentParser(description="TalkType Preferences")
+    parser = argparse.ArgumentParser(description="TuxTalk Preferences")
     parser.add_argument("--tab", choices=["general", "audio", "advanced", "commands", "stats", "updates", "backup"],
                         help="Tab to open initially")
     args = parser.parse_args()

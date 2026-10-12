@@ -64,13 +64,13 @@ KGLOBALACCEL_COMPONENT_INTERFACE = "org.kde.kglobalaccel.Component"
 # KWin answers in milliseconds; this only bounds a wedged compositor.
 _DBUS_TIMEOUT_S = 3.0
 
-# TalkType's modifier names -> Qt's.
+# TuxTalk's modifier names -> Qt's.
 _QT_MODIFIERS = {"CTRL": "Ctrl", "SHIFT": "Shift", "ALT": "Alt", "SUPER": "Meta"}
 _FKEYS = {f"F{i}" for i in range(1, 13)}
 
 
 def qt_key_sequence(name):
-    """TalkType's hotkey name ("F8", "Ctrl+Alt+V") as a Qt key sequence, or None.
+    """TuxTalk's hotkey name ("F8", "Ctrl+Alt+V") as a Qt key sequence, or None.
 
     A bare key is only claimed if it's an F-key. Claiming a bare letter would
     stop the user typing that letter anywhere while the service runs.

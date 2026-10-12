@@ -1,4 +1,4 @@
-"""Back up and restore TalkType's settings.
+"""Back up and restore TuxTalk's settings.
 
 Two uses:
 - A backup file the user saves and loads from Preferences → Updates & Backup, to move
@@ -27,6 +27,9 @@ from .logger import setup_logger
 logger = setup_logger(__name__)
 
 MANIFEST = "talktype-backup.json"
+# The app names a backup may carry: TuxTalk, and TalkType for backups saved
+# before the 0.15.0 rename (they must keep loading).
+_OUR_APP_NAMES = ("TuxTalk", "TalkType")
 KEEP = 10                       # automatic copies kept
 LIST_MAX = 15                   # restore points listed; more opens as a grid on Wayland
 _SETTINGS = "config.toml"
@@ -45,13 +48,13 @@ def _parse_toml(text):
 
 
 class BackupError(Exception):
-    """A file that isn't a TalkType backup, or is damaged. The message is
+    """A file that isn't a TuxTalk backup, or is damaged. The message is
     written for the user."""
 
 
 @dataclass
 class Backup:
-    version: str                # the TalkType version that made it
+    version: str                # the TuxTalk version that made it
     created: str                # ISO date and time
     files: dict                 # name in the zip -> bytes
 
@@ -60,7 +63,7 @@ class Backup:
 class Snapshot:
     path: str
     when: datetime.datetime
-    kind: str = "auto"          # "auto": a copy TalkType took; "file": the user's backup
+    kind: str = "auto"          # "auto": a copy TuxTalk took; "file": the user's backup
 
 
 def _now():
@@ -96,7 +99,7 @@ def when_label(when, now=None, twenty_four=None):
     if when.date() == now.date() - datetime.timedelta(days=1):
         return f"Yesterday {clock}"
     # English month names whatever the region: %b would give "Okt 2" next to
-    # the English "Today" on a German computer, and TalkType is in English.
+    # the English "Today" on a German computer, and TuxTalk is in English.
     month = ("Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec").split()[when.month - 1]
     return f"{month} {when.day}, {when.year}, {clock}"
 
@@ -104,7 +107,7 @@ def when_label(when, now=None, twenty_four=None):
 def suggested_name():
     """Save Backup's file name. With the time, so a second backup the same
     day doesn't ask to replace the first."""
-    return f"TalkType-settings-{_now():%Y-%m-%d-%H%M}.zip"
+    return f"TuxTalk-settings-{_now():%Y-%m-%d-%H%M}.zip"
 
 
 def _setting_files():
@@ -146,7 +149,7 @@ def _write_zip(path, files):
     from . import __version__
     folder = os.path.dirname(os.path.abspath(path))
     os.makedirs(folder, exist_ok=True)
-    manifest = {"app": "TalkType", "version": __version__,
+    manifest = {"app": "TuxTalk", "version": __version__,
                 "created": _now().isoformat(timespec="seconds")}
     fd, tmp = tempfile.mkstemp(dir=folder, prefix=".talktype-backup-", suffix=".tmp")
     try:
@@ -224,16 +227,16 @@ def read_backup(path):
         with zipfile.ZipFile(path) as z:
             names = set(z.namelist())
             if MANIFEST not in names:
-                raise BackupError("This file isn't a TalkType settings backup.")
+                raise BackupError("This file isn't a TuxTalk settings backup.")
             manifest = json.loads(z.read(MANIFEST))
             files = {n: z.read(n) for n in (_SETTINGS, _COMMANDS, _STATS) if n in names}
     except BackupError:
         raise
     except (zipfile.BadZipFile, OSError, ValueError, KeyError) as e:
-        raise BackupError(f"This file isn't a TalkType settings backup, or it's damaged ({e}).")
+        raise BackupError(f"This file isn't a TuxTalk settings backup, or it's damaged ({e}).")
 
-    if not isinstance(manifest, dict) or manifest.get("app") != "TalkType":
-        raise BackupError("This file isn't a TalkType settings backup.")
+    if not isinstance(manifest, dict) or manifest.get("app") not in _OUR_APP_NAMES:
+        raise BackupError("This file isn't a TuxTalk settings backup.")
     if _SETTINGS not in files:
         raise BackupError("This backup has no settings in it.")
     for name in (_SETTINGS, _COMMANDS):
@@ -320,7 +323,7 @@ def restore(backup):
     if _STATS in backup.files:
         _merge_stats(backup.files[_STATS])
     logger.info(f"Settings restored from a backup made {backup.created} "
-                f"by TalkType {backup.version}")
+                f"by TuxTalk {backup.version}")
     return notes
 
 
@@ -341,12 +344,12 @@ def list_snapshots():
 
 def _made_at(path):
     """When the backup file *path* was made, from its manifest, or None when
-    it isn't a TalkType backup. Reads only the manifest, so a folder of
+    it isn't a TuxTalk backup. Reads only the manifest, so a folder of
     backups lists quickly."""
     try:
         with zipfile.ZipFile(path) as z:
             manifest = json.loads(z.read(MANIFEST))
-        if manifest.get("app") != "TalkType":
+        if manifest.get("app") not in _OUR_APP_NAMES:
             return None
         return datetime.datetime.fromisoformat(manifest["created"])
     except (zipfile.BadZipFile, OSError, KeyError, ValueError, AttributeError, TypeError):
@@ -370,14 +373,14 @@ def restore_points():
                 when = _made_at(path)
                 if when:
                     points.append(Snapshot(path, when, "file"))
-    # On a tie (a backup saved the second TalkType started), the user's file first.
+    # On a tie (a backup saved the second TuxTalk started), the user's file first.
     return sorted(points, key=lambda p: (p.when, p.kind == "file"), reverse=True)[:LIST_MAX]
 
 
 def snapshot_if_changed():
     """Save the settings and commands as an automatic copy, unless they are
     the same as in the newest copy. Keeps the last KEEP. Returns the new
-    copy's path, or None. Never raises: a missed copy mustn't stop TalkType
+    copy's path, or None. Never raises: a missed copy mustn't stop TuxTalk
     starting."""
     try:
         files = _current_files(with_stats=False)

@@ -36,7 +36,7 @@ def dialog(monkeypatch):
 def test_help_has_a_feedback_link_to_discussions(dialog):
     links = [w for w in _widgets(dialog) if isinstance(w, Gtk.LinkButton)]
     assert [l.get_uri() for l in links] == [help_dialog.FEEDBACK_URL]
-    assert help_dialog.FEEDBACK_URL == "https://github.com/ronb1964/TalkType/discussions"
+    assert help_dialog.FEEDBACK_URL == "https://github.com/ronb1964/TuxTalk/discussions"
 
 
 def test_the_link_is_outside_the_tabs_so_every_tab_shows_it(dialog):
@@ -54,7 +54,7 @@ def test_clicking_the_link_does_not_close_help(dialog):
 
 def test_troubleshooting_links_can_be_clicked(dialog):
     markup = " ".join(w.get_label() or "" for w in _widgets(dialog) if isinstance(w, Gtk.Label))
-    assert '<a href="https://github.com/ronb1964/TalkType/issues"' in markup
+    assert '<a href="https://github.com/ronb1964/TuxTalk/issues"' in markup
     assert f'<a href="{help_dialog.FEEDBACK_URL}"' in markup
 
 

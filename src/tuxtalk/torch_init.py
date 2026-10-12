@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-PyTorch CUDA Library Initialization for TalkType AppImage
+PyTorch CUDA Library Initialization for TuxTalk AppImage
 
 This module MUST be imported before any PyTorch imports.
 It solves PyTorch's limitation of only searching sys.path (not LD_LIBRARY_PATH).
@@ -21,9 +21,9 @@ from pathlib import Path
 #      where CUDA libs live in the venv via LD_LIBRARY_PATH). If yes, don't disable.
 #   3. Only if neither exists do we set CUDA_VISIBLE_DEVICES='' for CPU-only mode.
 #
-# The old code used a hardcoded path (~/.local/share/TalkType/cuda) which always
+# The old code used a hardcoded path (~/.local/share/TuxTalk/cuda) which always
 # failed in the dev environment, silently killing GPU access every time.
-_appimage_cuda_path = Path.home() / ".local" / "share" / "TalkType" / "cuda" / "lib"
+_appimage_cuda_path = Path.home() / ".local" / "share" / "TuxTalk" / "cuda" / "lib"
 _dev_cuda_path = Path.home() / ".local" / "share" / "talktype-dev" / "cuda" / "lib"
 
 if not _appimage_cuda_path.exists() and not _dev_cuda_path.exists():
@@ -57,7 +57,7 @@ def init_cuda_for_pytorch():
     {sys.path}/nvidia/{lib_folder}/lib/{lib_name}
 
     However, our cuda_helper.py strips the 'nvidia/' prefix when extracting,
-    so libraries are at: ~/.local/share/TalkType[-dev]/cuda/lib/{lib_folder}/lib/
+    so libraries are at: ~/.local/share/TuxTalk[-dev]/cuda/lib/{lib_folder}/lib/
     We need to create the 'nvidia' directory structure PyTorch expects.
 
     Returns:

@@ -1,13 +1,13 @@
 """
 Whisper on any graphics card, through Vulkan.
 
-TalkType's usual Whisper engine (faster-whisper / CTranslate2) can only use
+TuxTalk's usual Whisper engine (faster-whisper / CTranslate2) can only use
 NVIDIA graphics, through CUDA. This runs whisper.cpp built with its Vulkan
 backend instead, which works on AMD, Intel and NVIDIA alike. For AMD and
 Intel it's the only way to use the graphics chip. For NVIDIA it's the light
 option: measured on an RTX 4070 Super it matched CUDA's speed (large-v3,
 0.51 s vs 0.53 s for 11 s of speech) for a 24 MB download instead of 1.4 GB. whisper.cpp
-publishes no Linux Vulkan build, so TalkType builds one (build-vulkan-engine.sh)
+publishes no Linux Vulkan build, so TuxTalk builds one (build-vulkan-engine.sh)
 and hosts it as a GitHub pre-release.
 
 Nothing here is downloaded unless the user picks "Vulkan (any GPU)" as the
@@ -65,8 +65,8 @@ ENGINE_VERSION = "1.9.4"                           # whisper.cpp release it is b
 ENGINE_BUILD = 2
 ENGINE_NAME = f"talktype-whisper-vulkan-{ENGINE_VERSION}"
 ENGINE_ASSET = f"{ENGINE_NAME}-b{ENGINE_BUILD}-x64.tar.gz"
-ENGINE_TAG = f"whisper-vulkan-{ENGINE_VERSION}-b{ENGINE_BUILD}"     # TalkType GitHub pre-release
-ENGINE_URL = f"https://github.com/ronb1964/TalkType/releases/download/{ENGINE_TAG}/{ENGINE_ASSET}"
+ENGINE_TAG = f"whisper-vulkan-{ENGINE_VERSION}-b{ENGINE_BUILD}"     # TuxTalk GitHub pre-release
+ENGINE_URL = f"https://github.com/ronb1964/TuxTalk/releases/download/{ENGINE_TAG}/{ENGINE_ASSET}"
 # From build-vulkan-engine.sh's .sha256; the download is refused if it doesn't
 # match, so a tampered or truncated engine is never run.
 ENGINE_SHA256 = "deb77b2912a90a584ecdec1017f14e75d0037ca78db601f030017a66f7b10b92"

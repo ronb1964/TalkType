@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-uinput Helper Module for TalkType
+uinput Helper Module for TuxTalk
 
 Handles detection and fixing of /dev/uinput permissions required for
 keystroke injection via ydotool on Wayland.
@@ -35,7 +35,7 @@ logger = setup_logger(__name__)
 # It reuses the EXISTING 'input' group rather than creating a new one. That is
 # deliberate: /dev/input/event* is already owned by 'input', so a single
 # `usermod -a -G input` grants both keystroke injection and hotkey reading.
-UDEV_RULE_CONTENT = '''# TalkType: Allow users in the 'input' group to access uinput
+UDEV_RULE_CONTENT = '''# TuxTalk: Allow users in the 'input' group to access uinput
 # This enables ydotool keystroke injection on Wayland
 KERNEL=="uinput", GROUP="input", MODE="0660", OPTIONS+="static_node=uinput"
 '''
@@ -136,7 +136,7 @@ def _readable_input_devices():
 
 def check_input_read_permission():
     """
-    Check whether TalkType can read hotkeys from /dev/input.
+    Check whether TuxTalk can read hotkeys from /dev/input.
 
     Returns:
         tuple: (has_access: bool, reason: str)
@@ -150,7 +150,7 @@ def check_input_read_permission():
 
 def check_all_device_permissions():
     """
-    Check BOTH device permissions TalkType needs, not just one.
+    Check BOTH device permissions TuxTalk needs, not just one.
 
     Typing keystrokes needs /dev/uinput; reading hotkeys needs /dev/input.
     They are granted by different mechanisms — logind hands out a per-user ACL
@@ -264,7 +264,7 @@ def test_ydotool_works():
                 ydotool_path = candidate
     
     if not ydotool_path:
-        return (False, "ydotool not found. It should be bundled with TalkType.")
+        return (False, "ydotool not found. It should be bundled with TuxTalk.")
     
     # Check if ydotoold is running
     try:
@@ -272,7 +272,7 @@ def test_ydotool_works():
                               capture_output=True, timeout=2)
         if result.returncode != 0:
             return (False, "ydotoold daemon is not running. "
-                          "TalkType should start it automatically.")
+                          "TuxTalk should start it automatically.")
     except Exception as e:
         logger.warning(f"Could not check ydotoold status: {e}")
     
@@ -289,7 +289,7 @@ def test_ydotool_works():
 
 # ydotoold systemd service template - {ydotoold_path} will be replaced with actual path
 YDOTOOLD_SERVICE_TEMPLATE = '''[Unit]
-Description=ydotool daemon (TalkType keystroke injection)
+Description=ydotool daemon (TuxTalk keystroke injection)
 After=graphical-session.target
 
 [Service]
@@ -444,12 +444,12 @@ def setup_ydotoold_service():
         # Find ydotoold binary path (it's the daemon, not the CLI tool)
         ydotoold_path = find_ydotoold_path()
         if not ydotoold_path:
-            # No system ydotoold, but TalkType's own copy is on PATH. A systemd
+            # No system ydotoold, but TuxTalk's own copy is on PATH. A systemd
             # unit can't point at the AppImage's mount, which goes away when
             # the app exits, so the tray starts this copy itself instead.
             if shutil.which("ydotoold"):
                 ensure_ydotoold_running()
-                return (True, "Using TalkType's built-in typing helper; it starts with TalkType")
+                return (True, "Using TuxTalk's built-in typing helper; it starts with TuxTalk")
             return (False, "ydotoold daemon not found. The ydotool package may be incomplete.\n"
                           "Try reinstalling: sudo apt install --reinstall ydotool")
 
@@ -537,11 +537,11 @@ def ensure_ydotoold_running():
 
 
 # Why a dictation couldn't be typed, for the "didn't reach the window" notice.
-TYPING_RESTART_PENDING = ("TalkType can't type yet: restart your computer to finish "
+TYPING_RESTART_PENDING = ("TuxTalk can't type yet: restart your computer to finish "
                           "the typing setup.")
-TYPING_NO_PERMISSION = ("TalkType doesn't have permission to type. Open Preferences, "
+TYPING_NO_PERMISSION = ("TuxTalk doesn't have permission to type. Open Preferences, "
                         "Advanced, Fix Typing Permissions, then restart your computer.")
-TYPING_HELPER_STOPPED = ("TalkType's typing helper had stopped. It's been started "
+TYPING_HELPER_STOPPED = ("TuxTalk's typing helper had stopped. It's been started "
                          "again, so try that dictation once more.")
 
 
@@ -770,7 +770,7 @@ def install_portaudio_with_pkexec(parent_window=None):
                 return (True, "PortAudio installed successfully!")
             else:
                 return (False, "Installation appeared to succeed but PortAudio not found. "
-                              "You may need to restart TalkType.")
+                              "You may need to restart TuxTalk.")
         elif result.returncode == 126:
             # User cancelled authentication
             logger.info("User cancelled pkexec authentication for PortAudio install")
@@ -901,15 +901,15 @@ def get_fix_script_content():
     quoted_user = shlex.quote(username)
 
     return f'''#!/bin/bash
-# TalkType uinput permission fix script
+# TuxTalk uinput permission fix script
 # This script is run with administrator privileges via pkexec
 
 set -e
 
-# Username resolved and shell-quoted by TalkType; used only via "$TALKTYPE_USER"
-TALKTYPE_USER={quoted_user}
+# Username resolved and shell-quoted by TuxTalk; used only via "$TUXTALK_USER"
+TUXTALK_USER={quoted_user}
 
-echo "Setting up uinput access for TalkType..."
+echo "Setting up uinput access for TuxTalk..."
 
 # Create the udev rule
 cat > {UDEV_RULE_PATH} << 'RULE'
@@ -918,11 +918,11 @@ cat > {UDEV_RULE_PATH} << 'RULE'
 echo "Created udev rule at {UDEV_RULE_PATH}"
 
 # Add user to input group if not already
-if ! groups "$TALKTYPE_USER" | grep -q '\\binput\\b'; then
-    usermod -a -G input "$TALKTYPE_USER"
-    echo "Added $TALKTYPE_USER to input group"
+if ! groups "$TUXTALK_USER" | grep -q '\\binput\\b'; then
+    usermod -a -G input "$TUXTALK_USER"
+    echo "Added $TUXTALK_USER to input group"
 else
-    echo "$TALKTYPE_USER is already in input group"
+    echo "$TUXTALK_USER is already in input group"
 fi
 
 # Reload udev rules
@@ -1046,7 +1046,7 @@ def show_uinput_fix_dialog(parent=None):
         dialog.format_secondary_markup(
             f"<b>Issue:</b> {reason}\n\n"
             "<b>What this means:</b>\n"
-            "TalkType uses the Linux input system to type text into applications. "
+            "TuxTalk uses the Linux input system to type text into applications. "
             "This requires permission to access /dev/uinput.\n\n"
             "<b>The fix:</b>\n"
             "We'll add a system rule that grants your user account access to the "
