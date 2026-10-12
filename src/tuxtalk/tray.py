@@ -1963,6 +1963,34 @@ class DictationTray:
         self.indicator.set_menu(self.build_menu())
 
 
+def _show_rename_notice_once():
+    """'TalkType is now TuxTalk', once, after this start converted an old
+    TalkType install (rename_migration leaves a marker for it). It is cleared
+    only once the message has been seen, so quitting first just shows it on
+    the next start. Never during dictation: only here, at startup."""
+    from . import config, rename_migration
+    folder = os.path.dirname(config.CONFIG_PATH)
+    if not rename_migration.notice_pending(folder):
+        return
+    dialog = message_dialog(
+        message_type=Gtk.MessageType.INFO,
+        buttons=Gtk.ButtonsType.NONE,
+        text="TalkType is now TuxTalk",
+    )
+    dialog.format_secondary_text("\n\n".join((
+        "Same app, new name. Your settings, models, snippets and stats all came "
+        "across. Look for TuxTalk in your app menu from now on.",
+        "Why the change: another company owns the name TalkType for dictation "
+        "software.")))
+    dialog.add_button("Got it", Gtk.ResponseType.OK)
+    dialog.set_position(Gtk.WindowPosition.CENTER)
+    dialog.set_keep_above(True)
+    dialog.run()
+    dialog.destroy()
+    rename_migration.notice_shown(folder)
+    logger.info("Rename to TuxTalk: showed the one-time notice")
+
+
 def main():
     from . import desktop_identity
     desktop_identity.apply()        # TuxTalk's icon on its windows, not KDE's generic one
@@ -2020,6 +2048,11 @@ def main():
                 dialog.destroy()
         except Exception as e:
             logger.debug(f"Error checking for update notification: {e}")
+        # After "Update Complete!", never on top of it.
+        try:
+            _show_rename_notice_once()
+        except Exception as e:
+            logger.warning(f"Could not show the rename notice: {e}")
         return False  # Don't repeat
 
     # Schedule update notification check after tray is up

@@ -103,3 +103,65 @@ def test_package_import_runs_the_migration_before_anything_else():
     body = src.split('"""', 2)[2]                      # after the docstring
     first_code = [l for l in body.splitlines() if l.strip() and not l.startswith("#")]
     assert "rename_migration" in "\n".join(first_code[:4])
+
+
+# --- the one-time "TalkType is now TuxTalk" notice ----------------------------
+# Shown once by the tray when this start converted an old TalkType install, on
+# whichever TuxTalk version that happens to be (users skip releases).
+
+def test_converting_the_settings_asks_for_the_notice(tmp_path):
+    h = str(tmp_path)
+    _mk(f"{h}/.config/talktype", "config.toml")
+    rm.migrate(home=h)
+    assert rm.notice_pending(f"{h}/.config/tuxtalk")
+
+
+def test_a_settings_folder_on_another_disk_asks_too(tmp_path, monkeypatch):
+    h = str(tmp_path)
+    _mk(f"{h}/.config/talktype", "config.toml")
+
+    def exdev(a, b):
+        raise OSError(18, "Invalid cross-device link")
+    monkeypatch.setattr(rm.os, "rename", exdev)
+    rm.migrate(home=h)
+    assert rm.notice_pending(f"{h}/.config/tuxtalk")
+
+
+def test_dev_settings_ask_in_the_dev_folder(tmp_path):
+    h = str(tmp_path)
+    _mk(f"{h}/.config/talktype-dev", "config.toml")
+    rm.migrate(home=h, dev=True)
+    assert rm.notice_pending(f"{h}/.config/tuxtalk-dev")
+
+
+def test_a_new_install_never_sees_it(tmp_path):
+    h = str(tmp_path)
+    _mk(f"{h}/.config/tuxtalk", "config.toml")
+    rm.migrate(home=h)
+    assert not rm.notice_pending(f"{h}/.config/tuxtalk")
+
+
+def test_only_models_moving_is_not_a_conversion(tmp_path):
+    """Settings are what make it someone's install; a stray models folder alone
+    is not worth a message."""
+    h = str(tmp_path)
+    _mk(f"{h}/.local/share/TalkType", "m.bin")
+    rm.migrate(home=h)
+    assert not rm.notice_pending(f"{h}/.config/tuxtalk")
+
+
+def test_the_notice_is_shown_once(tmp_path):
+    h = str(tmp_path)
+    _mk(f"{h}/.config/talktype", "config.toml")
+    rm.migrate(home=h)
+    rm.notice_shown(f"{h}/.config/tuxtalk")
+    assert not rm.notice_pending(f"{h}/.config/tuxtalk")
+    rm.migrate(home=h)                                  # the next start
+    assert not rm.notice_pending(f"{h}/.config/tuxtalk")
+
+
+def test_the_tray_shows_it():
+    import pathlib
+    tray = (pathlib.Path(rm.__file__).parent / "tray.py").read_text()
+    assert "rename_migration.notice_pending(" in tray
+    assert "TalkType is now TuxTalk" in tray

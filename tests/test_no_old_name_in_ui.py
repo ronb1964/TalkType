@@ -27,6 +27,11 @@ ALLOWED_WHOLE = {"io.github.ronb1964.TalkType", "/io/github/ronb1964/TalkType"}
 # Whole strings that are the old name on purpose, per file.
 ALLOWED_EXACT = {
     "settings_backup.py": {"TalkType"},     # backups saved before the rename still load
+    # The one-time notice after an old TalkType install is converted.
+    "tray.py": {
+        "TalkType is now TuxTalk",
+        "Why the change: another company owns the name TalkType for dictation software.",
+    },
 }
 
 

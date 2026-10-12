@@ -26,6 +26,32 @@ def _only_auto_created(folder):
     return all(n in _AUTO_CREATED and os.path.isfile(os.path.join(folder, n)) for n in names)
 
 
+# Left in the new settings folder when this start converted an old TalkType
+# install; the tray then shows "TalkType is now TuxTalk" once and removes it.
+# Tied to the conversion, not to a version, so someone who skips releases
+# still sees it on whichever TuxTalk version first finds their settings.
+NOTICE_FILE = ".rename-notice-pending"
+
+
+def notice_pending(config_dir):
+    return os.path.isfile(os.path.join(config_dir, NOTICE_FILE))
+
+
+def notice_shown(config_dir):
+    try:
+        os.remove(os.path.join(config_dir, NOTICE_FILE))
+    except OSError:
+        pass
+
+
+def _ask_for_notice(folder):
+    try:
+        with open(os.path.join(folder, NOTICE_FILE), "w"):
+            pass
+    except OSError:
+        pass                              # a missed message never stops startup
+
+
 def PAIRS(dev=False):
     """(old, new) folder paths relative to the home folder."""
     s = "-dev" if dev else ""
@@ -42,6 +68,8 @@ def migrate(home=None, dev=False):
     done = []
     for old_rel, new_rel in PAIRS(dev):
         old, new = os.path.join(home, old_rel), os.path.join(home, new_rel)
+        # The settings folder is what makes it someone's install.
+        settings = old_rel.startswith(".config/")
         if os.path.islink(old):
             # Either our own link from an earlier run (old -> new), or the
             # user's: e.g. the models moved to a bigger disk with a symlink.
@@ -52,6 +80,8 @@ def migrate(home=None, dev=False):
                     os.symlink(new, old)
                     done.append(f"{old_rel} is a link to {os.readlink(new)}; "
                                 f"{new_rel} now leads there too")
+                    if settings:
+                        _ask_for_notice(new)
                 except OSError as e:
                     done.append(f"could not follow the link {old_rel}: {e}")
             continue
@@ -75,6 +105,8 @@ def migrate(home=None, dev=False):
             os.rename(old, new)
             os.symlink(new, old)
             done.append(f"moved {old_rel} to {new_rel}")
+            if settings:
+                _ask_for_notice(new)
         except OSError as e:
             # EXDEV: another disk; EBUSY: the old path is a mount point.
             if e.errno not in (errno.EXDEV, errno.EBUSY):
@@ -85,6 +117,8 @@ def migrate(home=None, dev=False):
             try:
                 os.symlink(old, new)
                 done.append(f"{old_rel} can't be moved ({e.strerror}); {new_rel} now points to it")
+                if settings:
+                    _ask_for_notice(new)
             except OSError as e2:
                 done.append(f"could not link {new_rel}: {e2}")
     return done

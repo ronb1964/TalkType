@@ -12,6 +12,8 @@ TalkType is now TuxTalk.
 - Updating doesn't lose anything. Your settings, models, voice commands, stats
   and backups move over on their own, and so do the menu entry and start at
   login. Backups you saved with TalkType still load.
+- The first time TuxTalk starts after updating from TalkType, a short message
+  says so, once, so the new name in your menu doesn't come out of nowhere.
 - On KDE the old TalkType hotkeys get cleaned up, so F8 isn't grabbed twice.
 - The .deb and .rpm are called tuxtalk now and replace the old talktype package
   when you install them. On Arch it's tuxtalk-appimage, which replaces
