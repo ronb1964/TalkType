@@ -40,6 +40,31 @@ _usage_stats = True
 # restore_clipboard, issue #7); refreshed with the other live settings.
 _restore_clipboard = False
 _clipboard_keeper = None        # clipboard.ClipboardKeeper, created on the first paste that needs it
+# Pause music and videos while recording (config pause_media, media_pause.py).
+# Off until the service reads config at startup, so tests that call the real
+# start_recording never pause anyone's music; refreshed with the live settings.
+_pause_media = False
+_media_pauser = None            # media_pause.MediaPauser, created on the first pause
+
+
+def _pause_media_players():
+    """Pause playing music and videos, in the background (the keyboard is grabbed)."""
+    global _media_pauser
+    if not _pause_media:
+        return
+    if _media_pauser is None:
+        from .media_pause import MediaPauser
+        _media_pauser = MediaPauser()
+        # Quitting mid-dictation would otherwise leave the music paused.
+        atexit.register(_media_pauser.resume_now)
+    _media_pauser.pause()
+
+
+def _resume_media_players():
+    """Resume what _pause_media_players paused. Runs even if the option was
+    switched off mid-recording, so nothing is left paused."""
+    if _media_pauser is not None:
+        _media_pauser.resume()
 
 
 def _loggable(text):
@@ -1022,6 +1047,9 @@ def _reload_live_settings(cfg, indicator):
         global _restore_clipboard
         _restore_clipboard = getattr(cfg, "restore_clipboard", False)
 
+        global _pause_media
+        _pause_media = getattr(cfg, "pause_media", True)
+
         _apply_cleanup_settings(cfg)
 
         if indicator is not None:
@@ -1387,6 +1415,7 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
                 _notify("TuxTalk", "Microphone unavailable — check that no other app is using it")
             return False
 
+    _pause_media_players()
     print("🎙️  Recording…")
     logger.debug("Recording started")
     _beep(beeps_on, *START_BEEP)
@@ -1418,6 +1447,7 @@ def cancel_recording(beeps_on: bool, notify_on: bool, reason="Cancelled"):
     state.is_recording = False
     state.was_cancelled = True
     _stop_stream_safely()
+    _resume_media_players()
     _beep(beeps_on, *CANCEL_BEEP)
     print(f"⏸️  {reason}")
     logger.debug(f"Recording cancelled: {reason}")
@@ -2549,6 +2579,7 @@ def _finish_capture(beeps_on: bool, notify_on: bool):
     rec_sr = getattr(state, 'recording_samplerate', SAMPLE_RATE)
     state.is_recording = False
     _stop_stream_safely()
+    _resume_media_players()
     _notify_tray_recording_state(False)  # Tell GNOME extension recording stopped
     _trim_auto_stop_tail(frames)
     if state.was_cancelled:
@@ -3484,6 +3515,8 @@ def main():
     _usage_stats = getattr(cfg, 'usage_stats', True)
     global _restore_clipboard
     _restore_clipboard = getattr(cfg, 'restore_clipboard', False)
+    global _pause_media
+    _pause_media = getattr(cfg, 'pause_media', True)
 
     # Dictation cleanup; the AI engine (if on) loads in the background.
     _apply_cleanup_settings(cfg)

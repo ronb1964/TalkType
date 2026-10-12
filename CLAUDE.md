@@ -96,6 +96,7 @@ Preferences and the rest:
 - [ ] Auto-punctuation works consistently
 - [ ] Hands-free: double-tap F9 and say nothing. It stops by itself after 10 seconds with the cancel beep and types nothing (log: "Auto-stop: nothing said"). With the bars indicator, the bars stay low while it's quiet
 - [ ] Start/stop beeps play
+- [ ] With a YouTube video playing, dictating pauses it and it plays again after (log: "Paused … while dictating", "Resumed …"). A video that was already paused stays paused. Preferences → "Pause music and videos while dictating" off: nothing pauses
 - [ ] Preferences mic test works (level meter, record, replay)
 - [ ] Tray → Performance shows Recommended / Lightest / Battery saver, with the dot on the active one
 - [ ] Preferences → General: off the recommended setup, the row says "Recommended for this computer: …" with Use Recommended, which sets Model and Device (Vulkan: download and speed check first) and turns into "✓ You're on the recommended setup". "What works with what?" shows the models-by-device grid and a line about this computer

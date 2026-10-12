@@ -59,3 +59,18 @@ def _no_real_kwin(monkeypatch):
         raise RuntimeError("tests must not talk to the real KWin")
 
     monkeypatch.setattr(kwin_hotkeys, "session_bus", _refuse)
+
+
+@pytest.fixture(autouse=True)
+def _no_real_media_players(monkeypatch):
+    """Never let a test pause the user's music.
+
+    Tests that run the service's settings reload turn pause_media on, and later
+    tests call the real start_recording. Tests of media_pause pass a fake bus.
+    """
+    from tuxtalk import media_pause
+
+    def _refuse(self):
+        raise RuntimeError("tests must not talk to real media players")
+
+    monkeypatch.setattr(media_pause.SessionBus, "_bus", _refuse)

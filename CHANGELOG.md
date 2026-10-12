@@ -18,6 +18,14 @@ TalkType is now TuxTalk.
   talktype-appimage. The talktype command still works.
 - If something still says TalkType somewhere, let me know.
 
+Also new in this one:
+
+- Music and videos pause while you dictate. I had a YouTube video going and it
+  turned "isn't it" into "Venezuela". So now anything that's playing pauses when
+  you start talking, and when you're done only what TuxTalk paused starts back
+  up. If you hit play yourself in the middle, it leaves that alone. It's on by
+  default, and you can turn it off in Preferences under Audio & Visual Feedback.
+
 ## [0.14.6] - 2026-10-11
 
 Settings backup, CUDA where you'd look for it, and a first run fix for AMD and

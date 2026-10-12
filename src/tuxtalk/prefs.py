@@ -1397,6 +1397,14 @@ class PreferencesWindow:
         beeps_check.set_tooltip_text("Play audio beeps to confirm when recording starts, stops, and when transcription is ready.\nHelps you know the system is responding.")
         grid.attach(beeps_check, 0, row, 2, 1)
         row += 1
+
+        # Pause music and videos while dictating (media_pause.py)
+        pause_media_check = Gtk.CheckButton(label="Pause music and videos while dictating")
+        pause_media_check.set_active(self.config.get("pause_media", True))
+        pause_media_check.connect("toggled", lambda x: self.update_config("pause_media", x.get_active()))
+        pause_media_check.set_tooltip_text("Pauses YouTube, Spotify and other players while you talk, so the microphone hears only you.\nOnly what TuxTalk paused starts again when you finish.")
+        grid.attach(pause_media_check, 0, row, 2, 1)
+        row += 1
         
         # Notifications
         notify_check = Gtk.CheckButton(label="Show desktop notifications")

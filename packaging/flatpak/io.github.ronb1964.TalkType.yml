@@ -24,6 +24,8 @@ finish-args:
   - --talk-name=org.kde.StatusNotifierWatcher
   - --talk-name=com.canonical.AppMenu.Registrar
   - --talk-name=org.freedesktop.Notifications
+  # Pause music and videos while dictating (media_pause.py)
+  - --talk-name=org.mpris.MediaPlayer2.*
   - --filesystem=xdg-run/tray-icon:create
   # Query GNOME Shell (org.gnome.Shell.Extensions.GetExtensionInfo) to detect
   # whether the TalkType extension is enabled. Inside the sandbox the
