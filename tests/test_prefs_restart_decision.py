@@ -12,14 +12,14 @@ import types
 
 import pytest
 
-from talktype import config
+from tuxtalk import config
 
 
 @pytest.fixture
 def prefs_cls():
     gi = pytest.importorskip("gi")
     gi.require_version("Gtk", "3.0")
-    from talktype.prefs import PreferencesWindow
+    from tuxtalk.prefs import PreferencesWindow
 
     return PreferencesWindow
 

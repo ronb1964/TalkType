@@ -10,7 +10,7 @@ import os
 
 import pytest
 
-from talktype import config
+from tuxtalk import config
 
 
 @pytest.fixture

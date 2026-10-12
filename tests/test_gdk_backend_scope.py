@@ -56,7 +56,7 @@ def test_tray_launchers_do_not_force_x11_globally(script):
 def _load_tray_module():
     """Import tray.py, skipping if the GTK stack isn't importable."""
     try:
-        from talktype import tray
+        from tuxtalk import tray
     except (ImportError, ValueError) as exc:  # missing gi / typelib
         pytest.skip(f"GTK stack unavailable: {exc}")
     return tray

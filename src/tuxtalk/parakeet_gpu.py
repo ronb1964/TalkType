@@ -48,7 +48,7 @@ class ParakeetGpuModel:
         self.device_index = device_index
         threads = threads or max(1, (os.cpu_count() or 2) // 2)
         self._command = command or [
-            sys.executable, "-m", "talktype.parakeet_gpu_worker",
+            sys.executable, "-m", "tuxtalk.parakeet_gpu_worker",
             wv._engine_dir(), wv.model_path(PARAKEET_MODEL), str(device_index), str(threads)]
         self._proc = None
         self._stderr = None

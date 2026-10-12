@@ -347,11 +347,11 @@ echo "   ✅ PortAudio fallback bundled"
 
 # Copy TalkType source
 echo "   Copying TalkType source..."
-cp -r src/talktype AppDir/usr/src/
+cp -r src/tuxtalk AppDir/usr/src/
 # Normalize source permissions so no owner-only file (e.g. a 0600 .py) rides into the
 # bundle unreadable. The AppImage's FUSE mount hides this, but a .deb/.rpm built from the
 # same tree installs real files and a 0600 module then fails to import for the user.
-chmod -R a+rX AppDir/usr/src/talktype
+chmod -R a+rX AppDir/usr/src/tuxtalk
 
 # NOTE: GNOME extension is NOT bundled - it's downloaded from GitHub releases during onboarding
 # This allows users to update the extension independently of the AppImage
@@ -363,7 +363,7 @@ DIR="$(dirname "$(readlink -f "$0")")"
 export PYTHONPATH="$DIR/../src:$DIR/../lib/python3.10/site-packages"
 export LD_LIBRARY_PATH="$DIR/../lib:$LD_LIBRARY_PATH"
 export GI_TYPELIB_PATH="$DIR/../lib/girepository-1.0"
-exec "$DIR/python3" -m talktype.tray "$@"
+exec "$DIR/python3" -m tuxtalk.tray "$@"
 EOF
 chmod +x AppDir/usr/bin/dictate-tray
 
@@ -392,9 +392,9 @@ export PYTHONHOME="${HERE}/usr"
 export HF_HUB_DISABLE_XET=1
 cd "$HOME"
 if [ "$1" = "prefs" ]; then
-    exec "${HERE}/usr/bin/python3" -m talktype.prefs
+    exec "${HERE}/usr/bin/python3" -m tuxtalk.prefs
 else
-    exec "${HERE}/usr/bin/python3" -m talktype.tray "$@"
+    exec "${HERE}/usr/bin/python3" -m tuxtalk.tray "$@"
 fi
 EOF
 chmod +x AppDir/AppRun

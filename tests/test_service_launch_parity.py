@@ -25,14 +25,14 @@ import re
 import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-SRC = ROOT / "src/talktype"
+SRC = ROOT / "src/tuxtalk"
 
 # Modules that start the dictation service.
 LAUNCHERS = ["tray.py", "prefs.py"]
 
 
 def test_service_launcher_module_exists():
-    from talktype import service_launcher
+    from tuxtalk import service_launcher
 
     assert hasattr(service_launcher, "launch_dictation_service"), (
         "service_launcher must expose launch_dictation_service()"
@@ -41,7 +41,7 @@ def test_service_launcher_module_exists():
 
 def test_launcher_requests_xwayland_first_with_a_fallback():
     """XWayland for indicator positioning; fallback so it still starts without it."""
-    from talktype.service_launcher import build_service_env
+    from tuxtalk.service_launcher import build_service_env
 
     env = build_service_env({})
     backends = env.get("GDK_BACKEND", "").split(",")
@@ -58,7 +58,7 @@ def test_launcher_requests_xwayland_first_with_a_fallback():
 
 def test_launcher_does_not_inherit_a_stale_backend(monkeypatch):
     """Preferences runs on native Wayland; its env must not leak into the service."""
-    from talktype.service_launcher import build_service_env
+    from tuxtalk.service_launcher import build_service_env
 
     env = build_service_env({"GDK_BACKEND": "wayland"})
     assert env["GDK_BACKEND"].split(",")[0] == "x11", (
@@ -77,7 +77,7 @@ def test_no_module_spawns_the_service_on_its_own(module):
     offenders = [
         line.strip()
         for line in text.splitlines()
-        if "Popen" in line and ("talktype.app" in line or "dictate_script" in line)
+        if "Popen" in line and ("tuxtalk.app" in line or "dictate_script" in line)
     ]
     assert not offenders, (
         f"{module} spawns the dictation service directly ({offenders}). Use "

@@ -5,7 +5,7 @@ and run an AppImage on a .deb/.rpm/AUR/Flatpak install (that fails, e.g. missing
 libfuse.so.2 on Fedora). get_install_type() is fully injectable so these tests
 never touch the real environment.
 """
-from talktype.update_checker import (
+from tuxtalk.update_checker import (
     get_install_type, get_update_guidance, get_package_asset,
     package_install_argv,
 )
@@ -19,36 +19,36 @@ def test_flatpak_detected_from_env():
 def test_aur_is_appimage_under_opt():
     # AUR ships the AppImage to /opt/talktype/TalkType.AppImage (pacman-managed)
     assert get_install_type(appimage_env="/opt/talktype/TalkType.AppImage",
-                            module_path="/tmp/.mount_abc/usr/src/talktype/u.py") == "aur"
+                            module_path="/tmp/.mount_abc/usr/src/tuxtalk/u.py") == "aur"
 
 
 def test_self_managed_appimage_under_home():
     assert get_install_type(appimage_env="/home/ron/AppImages/TalkType.AppImage",
-                            module_path="/tmp/.mount_abc/usr/src/talktype/u.py") == "appimage"
+                            module_path="/tmp/.mount_abc/usr/src/tuxtalk/u.py") == "appimage"
 
 
 def test_rpm_package_from_opt_tree():
     # .deb/.rpm ship the EXTRACTED tree; APPIMAGE is unset, source lives in /opt/talktype
     assert get_install_type(appimage_env="", flatpak_env="",
-                            module_path="/opt/talktype/usr/src/talktype/update_checker.py",
+                            module_path="/opt/talktype/usr/src/tuxtalk/update_checker.py",
                             pkg_query=lambda: "rpm") == "rpm"
 
 
 def test_deb_package_from_opt_tree():
     assert get_install_type(appimage_env="", flatpak_env="",
-                            module_path="/opt/talktype/usr/src/talktype/update_checker.py",
+                            module_path="/opt/talktype/usr/src/tuxtalk/update_checker.py",
                             pkg_query=lambda: "deb") == "deb"
 
 
 def test_generic_package_when_manager_unknown():
     assert get_install_type(appimage_env="", flatpak_env="",
-                            module_path="/opt/talktype/usr/src/talktype/update_checker.py",
+                            module_path="/opt/talktype/usr/src/tuxtalk/update_checker.py",
                             pkg_query=lambda: None) == "package"
 
 
 def test_dev_checkout():
     assert get_install_type(appimage_env="", flatpak_env="",
-                            module_path="/home/ron/Projects/TalkType/src/talktype/update_checker.py",
+                            module_path="/home/ron/Projects/TalkType/src/tuxtalk/update_checker.py",
                             pkg_query=lambda: None) == "dev"
 
 

@@ -2,7 +2,7 @@
 import os
 import logging
 from pathlib import Path
-from talktype.logger import setup_logger
+from tuxtalk.logger import setup_logger
 
 
 def test_logger_creation():

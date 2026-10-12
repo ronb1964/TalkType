@@ -9,7 +9,7 @@ reached the monitoring loop below it, so the hotkey test detected nothing.
 
 import pytest
 
-from talktype.welcome_dialog import _flush_pending_events
+from tuxtalk.welcome_dialog import _flush_pending_events
 
 
 class FakeDevice:

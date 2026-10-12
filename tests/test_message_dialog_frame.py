@@ -11,7 +11,7 @@ import re
 
 import pytest
 
-SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "talktype"
+SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tuxtalk"
 
 
 @pytest.fixture
@@ -23,7 +23,7 @@ def Gtk():
 
 
 def test_the_desktop_draws_the_frame(Gtk):
-    from talktype.ui_style import message_dialog
+    from tuxtalk.ui_style import message_dialog
     dialog = message_dialog(message_type=Gtk.MessageType.INFO,
                             buttons=Gtk.ButtonsType.OK, text="You're Up to Date!")
     assert isinstance(dialog, Gtk.MessageDialog)
@@ -35,14 +35,14 @@ def test_the_desktop_draws_the_frame(Gtk):
 def test_a_box_without_buttons_has_no_close_button(Gtk):
     """'Checking for Updates...' style boxes close themselves when the work
     is done. Closing one early isn't something to invite with an X."""
-    from talktype.ui_style import message_dialog
+    from tuxtalk.ui_style import message_dialog
     dialog = message_dialog(buttons=Gtk.ButtonsType.NONE, text="Working...")
     assert not dialog.get_deletable()
     assert not message_dialog(text="Working...").get_deletable()
 
 
 def test_an_explicit_title_is_kept(Gtk):
-    from talktype.ui_style import message_dialog
+    from tuxtalk.ui_style import message_dialog
     assert message_dialog(title="Fix a Word", text="x").get_title() == "Fix a Word"
 
 

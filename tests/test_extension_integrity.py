@@ -17,7 +17,7 @@ import urllib.error
 
 import pytest
 
-from talktype import extension_helper as E
+from tuxtalk import extension_helper as E
 
 
 def _http_error(code):

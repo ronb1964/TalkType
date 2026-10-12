@@ -3,7 +3,7 @@ import hashlib
 import os
 import threading
 
-from talktype.download_utils import (
+from tuxtalk.download_utils import (
     download_file,
     sha256_of_file,
     parse_sha256sums,

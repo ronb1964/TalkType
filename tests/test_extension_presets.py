@@ -37,7 +37,7 @@ def test_both_menus_end_the_presets_with_the_same_custom_item():
     """The GTK tray had a greyed-out "Custom (via Preferences)" that did
     nothing, and the GNOME menu had no Custom item at all, so a custom setup
     showed no dot there. Both now offer it, and it opens Preferences."""
-    tray = (EXT.parent.parent / "src/talktype/tray.py").read_text()
+    tray = (EXT.parent.parent / "src/tuxtalk/tray.py").read_text()
     assert f'"{CUSTOM_LABEL}"' in tray and "Custom (via Preferences)" not in tray
     assert f"'{CUSTOM_LABEL}'" in JS
     assert "this._presetItems['custom']" in JS

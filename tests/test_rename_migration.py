@@ -6,7 +6,7 @@ when both names exist or the folder is on another disk nothing is overwritten.
 """
 import os
 
-from talktype import rename_migration as rm
+from tuxtalk import rename_migration as rm
 
 
 def _mk(p, f="x"):

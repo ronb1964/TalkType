@@ -8,7 +8,7 @@ import time
 import numpy as np
 import pytest
 
-from talktype.silence import SilenceDetector
+from tuxtalk.silence import SilenceDetector
 
 SR = 16000
 BLOCK = 320   # 20 ms
@@ -104,7 +104,7 @@ def test_talking_the_instant_recording_starts_still_counts_as_speech():
 # --- Wiring into the service -------------------------------------------------
 
 def _start(monkeypatch, from_toggle=True, seconds=1.0):
-    from talktype import app
+    from tuxtalk import app
     monkeypatch.setattr(app, "_auto_stop_seconds", seconds)
     monkeypatch.setattr(app, "_open_input_stream", lambda idx: setattr(app.state, "recording_samplerate", SR))
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
@@ -169,7 +169,7 @@ def test_a_hold_recording_cannot_become_hands_free(monkeypatch):
 
 
 def test_the_silent_tail_is_trimmed_and_speech_is_kept(monkeypatch):
-    from talktype import app
+    from tuxtalk import app
     monkeypatch.setattr(app, "_stop_stream_safely", lambda: None)
     monkeypatch.setattr(app, "_notify_tray_recording_state", lambda *a: None)
     monkeypatch.setattr(app, "recording_indicator", None, raising=False)
@@ -194,13 +194,13 @@ def test_the_silent_tail_is_trimmed_and_speech_is_kept(monkeypatch):
 
 
 def test_auto_stop_settings_apply_without_a_restart():
-    from talktype.config import LIVE_APPLIED_KEYS
+    from tuxtalk.config import LIVE_APPLIED_KEYS
     assert {"auto_stop_silence", "auto_stop_seconds"} <= LIVE_APPLIED_KEYS
 
 
 def test_setting_follows_config(monkeypatch):
     from types import SimpleNamespace
-    from talktype import app
+    from tuxtalk import app
     monkeypatch.setattr(app, "_ai_engine", None)
     app._apply_cleanup_settings(SimpleNamespace(auto_stop_silence=True, auto_stop_seconds=3.0))
     assert app._auto_stop_seconds == 3.0
@@ -213,7 +213,7 @@ def test_setting_follows_config(monkeypatch):
 # noise and the key's click, and Parakeet can "hear" a word in that: "Thank
 # you." was typed into Konsole while testing 0.14.0 (2026-10-03).
 
-from talktype.silence import is_speechless_tap  # noqa: E402
+from tuxtalk.silence import is_speechless_tap  # noqa: E402
 
 
 def f32(int16_audio):
@@ -273,7 +273,7 @@ def test_anything_longer_than_a_tap_is_never_judged():
 
 
 def test_the_service_skips_a_speechless_tap(monkeypatch):
-    from talktype import app
+    from tuxtalk import app
     monkeypatch.setattr(app, "_transcribe_audio",
                         lambda *a: pytest.fail("a speechless tap was transcribed"))
     app._transcribe_and_inject([click().tobytes()], SR, False, False, False)

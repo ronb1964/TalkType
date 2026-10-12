@@ -111,7 +111,7 @@ def _pid_running(pid: int) -> bool:
     try:
         with open(os.path.join(proc, "cmdline"), "rb") as f:
             cmd = f.read().decode(errors="ignore")
-        return ("dictate-prefs" in cmd) or ("talktype.prefs" in cmd)
+        return ("dictate-prefs" in cmd) or ("tuxtalk.prefs" in cmd)
     except Exception:
         return True
 
@@ -1783,7 +1783,7 @@ class PreferencesWindow:
         # Shown ticked only if its download is actually present. If the files
         # went missing, an unticked box is the truth, and ticking it downloads
         # them again (see _on_ai_corrections_toggled).
-        from talktype import ai_cleanup
+        from tuxtalk import ai_cleanup
         self.ai_corrections_check.set_active(
             bool(self.config.get("ai_corrections", False)) and ai_cleanup.is_installed())
         self.ai_corrections_check.set_tooltip_text(
@@ -3690,18 +3690,18 @@ class PreferencesWindow:
 
     def _handle_autostart(self, enable):
         """Create or remove the autostart desktop file. Delegates to
-        talktype.autostart so onboarding and Preferences stay in lock-step."""
+        tuxtalk.autostart so onboarding and Preferences stay in lock-step."""
         from . import autostart
         autostart.set_autostart(enable)
 
     def _get_launch_command(self):
-        """Launch command for the autostart file. Delegates to talktype.autostart
+        """Launch command for the autostart file. Delegates to tuxtalk.autostart
         so onboarding and Preferences write the exact same command."""
         from . import autostart
         return autostart.get_launch_command()
 
     def _get_icon_path(self):
-        """Icon path for the autostart file. Delegates to talktype.autostart."""
+        """Icon path for the autostart file. Delegates to tuxtalk.autostart."""
         from . import autostart
         return autostart.get_icon_path()
 
@@ -4087,7 +4087,7 @@ class PreferencesWindow:
             self.update_config("ai_corrections", False)
             return
 
-        from talktype import ai_cleanup
+        from tuxtalk import ai_cleanup
         if ai_cleanup.is_installed():
             self.update_config("ai_corrections", True)
             return
@@ -4112,7 +4112,7 @@ class PreferencesWindow:
             self._untick_ai_corrections()
             return
 
-        from talktype.download_progress_dialog import DownloadTask, UnifiedDownloadDialog
+        from tuxtalk.download_progress_dialog import DownloadTask, UnifiedDownloadDialog
         dialog = UnifiedDownloadDialog(
             parent=self.window, title="Downloading AI Cleanup",
             description="One-time download. Everything runs on this computer.")
@@ -4378,7 +4378,7 @@ class PreferencesWindow:
         except ImportError:
             return
 
-        from talktype.config import get_data_dir
+        from tuxtalk.config import get_data_dir
         cuda_path = os.path.join(get_data_dir(), "cuda")
         if self._message(
                 Gtk.MessageType.QUESTION, "Download CUDA Libraries?",
@@ -5444,7 +5444,7 @@ class PreferencesWindow:
             warn.destroy()
             return
 
-        # Find the dictation service's PID. This used `pgrep -f talktype.app`,
+        # Find the dictation service's PID. This used `pgrep -f tuxtalk.app`,
         # which also matches any shell or editor whose command line merely
         # mentions it, and SIGUSR2 kills a process that doesn't handle it.
         app_pid = None

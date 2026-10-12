@@ -11,7 +11,7 @@ import types
 
 
 def test_detect_nvidia_uses_device_node_in_flatpak(monkeypatch):
-    from talktype import cuda_helper
+    from tuxtalk import cuda_helper
 
     monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TalkType")
     monkeypatch.setattr(cuda_helper.os.path, "exists", lambda p: p == "/dev/nvidiactl")
@@ -23,7 +23,7 @@ def test_detect_nvidia_uses_device_node_in_flatpak(monkeypatch):
 
 def test_detect_nvidia_does_not_shell_out_in_flatpak(monkeypatch):
     """In a Flatpak it must NOT call nvidia-smi (it isn't there and would error)."""
-    from talktype import cuda_helper
+    from tuxtalk import cuda_helper
 
     monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TalkType")
     monkeypatch.setattr(cuda_helper.os.path, "exists", lambda p: False)
@@ -36,7 +36,7 @@ def test_detect_nvidia_does_not_shell_out_in_flatpak(monkeypatch):
 
 
 def test_detect_nvidia_uses_nvidia_smi_on_host(monkeypatch):
-    from talktype import cuda_helper
+    from tuxtalk import cuda_helper
 
     monkeypatch.delenv("FLATPAK_ID", raising=False)
     seen = {}

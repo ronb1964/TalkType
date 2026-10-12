@@ -24,7 +24,7 @@ class _RecordingCairo:
 def _draw(words_per_day):
     gi = pytest.importorskip("gi")
     gi.require_version("Gtk", "3.0")
-    from talktype.prefs import PreferencesWindow
+    from tuxtalk.prefs import PreferencesWindow
     start = datetime.date(2026, 10, 1)
     owner = SimpleNamespace(_stats_daily=[(start + datetime.timedelta(days=i), w)
                                           for i, w in enumerate(words_per_day)])

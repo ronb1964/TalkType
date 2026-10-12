@@ -12,7 +12,7 @@ These tests pin down the invariant that makes that impossible:
 import pytest
 from evdev import ecodes
 
-from talktype import app
+from tuxtalk import app
 
 
 class FakeDevice:

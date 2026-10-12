@@ -7,7 +7,7 @@ import zipfile
 
 import pytest
 
-from talktype import config, settings_backup as sb, stats
+from tuxtalk import config, settings_backup as sb, stats
 
 
 CONFIG_TEXT = '# TalkType config\nhotkey = "F8"\nmodel = "parakeet-v3"\ndevice = "vulkan"\n'

@@ -45,21 +45,21 @@ def is_service_argv(argv) -> bool:
     """True if *argv* (a process's argument list) is the dictation service.
 
     The service only ever runs one of two ways:
-      * ``<python> -m talktype.app`` — dev checkouts, the AppImage, the .deb and
+      * ``<python> -m tuxtalk.app`` — dev checkouts, the AppImage, the .deb and
         .rpm (which repackage the AppImage) and the Flatpak.
       * the ``dictate`` console script from a pip install, which the kernel
         runs as ``<python> /path/bin/dictate`` (or ``/path/bin/dictate``).
 
     So this compares whole arguments, never substrings of the command line.
-    A substring match ("talktype.app" anywhere) is how a shell running
-    ``bash -c "pgrep -f talktype.app"`` once passed for the service: the tray
+    A substring match ("tuxtalk.app" anywhere) is how a shell running
+    ``bash -c "pgrep -f tuxtalk.app"`` once passed for the service: the tray
     cached that shell's PID, and toggle_recording would have sent SIGUSR1 to
     it, which kills a process that doesn't handle it. Exact arguments also keep
-    the tray safe: "-m talktype.tray" and bin/dictate-tray never match.
+    the tray safe: "-m tuxtalk.tray" and bin/dictate-tray never match.
     """
     argv = list(argv)
     for i, arg in enumerate(argv[:-1]):
-        if arg == "-m" and argv[i + 1] == "talktype.app":
+        if arg == "-m" and argv[i + 1] == "tuxtalk.app":
             return True
     if not argv:
         return False
@@ -159,7 +159,7 @@ def build_service_env(base_env=None, dev_pythonpath=None):
 def _dictate_script_path():
     """Path to the AppImage's bin/dictate, or None outside an AppImage.
 
-    __file__ is usr/src/talktype/service_launcher.py → usr/bin/dictate
+    __file__ is usr/src/tuxtalk/service_launcher.py → usr/bin/dictate
     """
     src_dir = os.path.dirname(__file__)
     usr_dir = os.path.dirname(os.path.dirname(src_dir))
@@ -192,6 +192,6 @@ def launch_dictation_service():
 
     # Dev mode: run the module directly with src/ and system PyGObject on the path.
     env = build_service_env(dev_pythonpath=dev_pythonpath())
-    proc = subprocess.Popen([sys.executable, "-m", "talktype.app"], env=env)
-    logger.info(f"Started dictation service via python -m talktype.app (PID {proc.pid})")
+    proc = subprocess.Popen([sys.executable, "-m", "tuxtalk.app"], env=env)
+    logger.info(f"Started dictation service via python -m tuxtalk.app (PID {proc.pid})")
     return proc

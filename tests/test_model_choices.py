@@ -17,12 +17,12 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 # First run no longer has a full picker: its card offers three models chosen
 # by recommend.py, and points to Preferences for the rest.
 SCREENS_WITH_MODEL_PICKERS = [
-    "src/talktype/prefs.py",
+    "src/tuxtalk/prefs.py",
 ]
 
 
 def test_offered_models_matches_what_can_actually_be_downloaded():
-    from talktype.model_helper import MODEL_REPOS, OFFERED_MODELS
+    from tuxtalk.model_helper import MODEL_REPOS, OFFERED_MODELS
 
     assert set(OFFERED_MODELS) == set(MODEL_REPOS), (
         f"OFFERED_MODELS {sorted(OFFERED_MODELS)} does not match the models that "
@@ -33,7 +33,7 @@ def test_offered_models_matches_what_can_actually_be_downloaded():
 
 
 def test_offered_models_has_no_duplicates():
-    from talktype.model_helper import OFFERED_MODELS
+    from tuxtalk.model_helper import OFFERED_MODELS
 
     assert len(OFFERED_MODELS) == len(set(OFFERED_MODELS)), (
         f"OFFERED_MODELS contains duplicates: {OFFERED_MODELS}"

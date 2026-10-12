@@ -5,7 +5,7 @@ grounds that nobody dictates "thanks for watching". That reasoning holds for
 multi-word sign-offs. It does not hold for a bare verb.
 """
 
-from talktype.app import _strip_hallucinations
+from tuxtalk.app import _strip_hallucinations
 
 
 # --- ordinary sentences must survive ---------------------------------------

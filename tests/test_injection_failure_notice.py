@@ -16,7 +16,7 @@ is saved before injection is even attempted.
 import numpy as np
 import pytest
 
-from talktype import app
+from tuxtalk import app
 
 MARKER = "\xa7SHIFT_ENTER\xa7"
 
@@ -100,7 +100,7 @@ def dictation(monkeypatch):
     monkeypatch.setattr(app, "_prepare_text", lambda raw, *a: "Hello there. ")
     monkeypatch.setattr(app, "_notify", lambda title, body: notes.append(body))
     monkeypatch.setattr(app, "_beep", lambda enabled, *tone, **k: enabled and beeps.append(tone))
-    monkeypatch.setattr("talktype.history.add_entry", lambda text: None)
+    monkeypatch.setattr("tuxtalk.history.add_entry", lambda text: None)
     monkeypatch.setattr(app, "_usage_stats", False, raising=False)
 
     def run(outcome, beeps_on=True, notify_on=False):

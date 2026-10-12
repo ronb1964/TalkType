@@ -5,8 +5,8 @@ ignores a language it doesn't know. Both used to pass without a word.
 """
 import pytest
 
-from talktype.parakeet_engine import PARAKEET_LANGUAGES
-from talktype.prefs import model_setting_warning
+from tuxtalk.parakeet_engine import PARAKEET_LANGUAGES
+from tuxtalk.prefs import model_setting_warning
 
 
 def test_parakeet_has_its_25_languages():

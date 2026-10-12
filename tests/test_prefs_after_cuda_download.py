@@ -16,7 +16,7 @@ import pytest
 def prefs():
     gi = pytest.importorskip("gi")
     gi.require_version("Gtk", "3.0")
-    from talktype import prefs
+    from tuxtalk import prefs
     return prefs
 
 
@@ -55,7 +55,7 @@ def test_parakeet_can_stay_put(prefs, monkeypatch):
 
 def test_the_download_no_longer_writes_the_config_itself():
     import pathlib
-    src = (pathlib.Path(__file__).resolve().parent.parent / "src/talktype/cuda_helper.py").read_text()
+    src = (pathlib.Path(__file__).resolve().parent.parent / "src/tuxtalk/cuda_helper.py").read_text()
     assert "Automatically enable GPU mode" not in src
 
 

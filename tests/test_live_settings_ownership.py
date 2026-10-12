@@ -24,7 +24,7 @@ import types
 
 import pytest
 
-from talktype import app
+from tuxtalk import app
 
 
 def _idle(monkeypatch):

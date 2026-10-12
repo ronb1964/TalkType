@@ -7,8 +7,8 @@ after pasting" on, whatever the user had copied comes back after the paste.
 """
 import pytest
 
-from talktype import clipboard as cb
-from talktype import config as C
+from tuxtalk import clipboard as cb
+from tuxtalk import config as C
 
 
 class FakeClipboard:
@@ -143,7 +143,7 @@ def test_the_setting_applies_without_a_restart():
 
 
 def test_paste_uses_the_keeper_only_when_the_setting_is_on(monkeypatch):
-    from talktype import app
+    from tuxtalk import app
     events = []
 
     class Keeper:

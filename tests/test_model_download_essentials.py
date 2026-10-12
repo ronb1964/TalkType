@@ -10,7 +10,7 @@ What faster-whisper actually needs is already spelled out in this module:
 model.bin, config.json, tokenizer.json.
 """
 
-from talktype.model_helper import ESSENTIAL_MODEL_FILES, _download_is_usable
+from tuxtalk.model_helper import ESSENTIAL_MODEL_FILES, _download_is_usable
 
 
 def test_a_missing_readme_does_not_fail_the_download():
@@ -57,7 +57,7 @@ def test_a_file_asked_for_by_name_is_never_optional(monkeypatch):
     """The AI model is fetched as one named file, which isn't on the Whisper
     list, so a failed download of it used to count as a success."""
     import huggingface_hub
-    from talktype import model_helper as M
+    from tuxtalk import model_helper as M
 
     def fails(**kwargs):
         raise OSError("connection reset")

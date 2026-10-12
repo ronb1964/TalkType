@@ -11,7 +11,7 @@ import types
 
 import pytest
 
-from talktype import uinput_helper as U
+from tuxtalk import uinput_helper as U
 
 @pytest.fixture
 def host(monkeypatch):
@@ -74,7 +74,7 @@ def test_no_input_group_does_not_crash(host, monkeypatch):
 
 
 def test_failed_notice_names_the_cause_and_restarts_a_stopped_helper(monkeypatch):
-    from talktype import app
+    from tuxtalk import app
     shown, started = [], []
     monkeypatch.setattr(app, "_notify", lambda title, body: shown.append(body))
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
@@ -89,7 +89,7 @@ def test_failed_notice_names_the_cause_and_restarts_a_stopped_helper(monkeypatch
 
 
 def test_failed_notice_without_a_known_cause_is_unchanged(monkeypatch):
-    from talktype import app
+    from tuxtalk import app
     shown = []
     monkeypatch.setattr(app, "_notify", lambda title, body: shown.append(body))
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)

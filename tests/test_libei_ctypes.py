@@ -5,7 +5,7 @@ import ctypes
 
 import pytest
 
-from talktype import libei_ctypes as L
+from tuxtalk import libei_ctypes as L
 
 
 def test_keycode_map_covers_punctuated_output():

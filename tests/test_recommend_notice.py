@@ -3,8 +3,8 @@ import types
 
 import pytest
 
-from talktype import recommend as r
-from talktype import tray
+from tuxtalk import recommend as r
+from tuxtalk import tray
 
 NVIDIA = r.Hardware("NVIDIA GeForce RTX 4070 SUPER", True)
 
@@ -15,11 +15,11 @@ def env(monkeypatch):
                                 dictation_language="en", language_mode="auto", language="",
                                 vulkan_slower=False)
     notes, saved = [], []
-    monkeypatch.setattr("talktype.config.load_config", lambda: cfg)
-    monkeypatch.setattr("talktype.config.save_config", lambda c: saved.append(c.recommend_notice_shown))
-    monkeypatch.setattr("talktype.app._notify", lambda t, b: notes.append(b))
-    monkeypatch.setattr("talktype.cuda_helper.is_first_run", lambda: False)
-    monkeypatch.setattr("talktype.service_launcher.find_service_pids", lambda: [4242])
+    monkeypatch.setattr("tuxtalk.config.load_config", lambda: cfg)
+    monkeypatch.setattr("tuxtalk.config.save_config", lambda c: saved.append(c.recommend_notice_shown))
+    monkeypatch.setattr("tuxtalk.app._notify", lambda t, b: notes.append(b))
+    monkeypatch.setattr("tuxtalk.cuda_helper.is_first_run", lambda: False)
+    monkeypatch.setattr("tuxtalk.service_launcher.find_service_pids", lambda: [4242])
     monkeypatch.setattr(r, "detect_hardware", lambda cfg=None: NVIDIA)
     monkeypatch.delenv("FLATPAK_ID", raising=False)
     return cfg, notes, saved
@@ -44,9 +44,9 @@ def test_silent_when_already_on_the_recommendation(env):
 
 def test_never_on_first_run_or_flatpak(env, monkeypatch):
     cfg, notes, saved = env
-    monkeypatch.setattr("talktype.cuda_helper.is_first_run", lambda: True)
+    monkeypatch.setattr("tuxtalk.cuda_helper.is_first_run", lambda: True)
     tray.maybe_show_recommend_notice()
-    monkeypatch.setattr("talktype.cuda_helper.is_first_run", lambda: False)
+    monkeypatch.setattr("tuxtalk.cuda_helper.is_first_run", lambda: False)
     monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TalkType")
     tray.maybe_show_recommend_notice()
     assert notes == []
@@ -63,9 +63,9 @@ def test_notice_wording():
 def test_waits_for_the_dictation_service(env, monkeypatch):
     """Spec: the notice comes once the service is up, not on a fixed timer."""
     cfg, notes, saved = env
-    monkeypatch.setattr("talktype.service_launcher.find_service_pids", lambda: [])
+    monkeypatch.setattr("tuxtalk.service_launcher.find_service_pids", lambda: [])
     assert tray.maybe_show_recommend_notice() is True       # ask again later
     assert notes == [] and saved == []
-    monkeypatch.setattr("talktype.service_launcher.find_service_pids", lambda: [4242])
+    monkeypatch.setattr("tuxtalk.service_launcher.find_service_pids", lambda: [4242])
     assert tray.maybe_show_recommend_notice() is False
     assert len(notes) == 1

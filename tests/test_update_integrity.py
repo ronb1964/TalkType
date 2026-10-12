@@ -12,7 +12,7 @@ That is the only case where skipping the hash is legitimate.
 
 import pytest
 
-from talktype import update_checker
+from tuxtalk import update_checker
 
 
 @pytest.fixture
@@ -26,7 +26,7 @@ def no_real_downloads(monkeypatch, tmp_path):
             f.write("pretend AppImage")
         return True
 
-    monkeypatch.setattr("talktype.download_utils.download_file", fake_download_file)
+    monkeypatch.setattr("tuxtalk.download_utils.download_file", fake_download_file)
     monkeypatch.setattr(update_checker, "UPDATE_DIR", str(tmp_path))
     return calls
 

@@ -13,7 +13,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from talktype import history
+from tuxtalk import history
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -78,7 +78,7 @@ def test_preview_is_one_short_line():
 
 def test_dictation_is_recorded_before_it_is_typed(monkeypatch):
     """Even if typing goes to the wrong place or fails, the text is recoverable."""
-    from talktype import app
+    from tuxtalk import app
 
     order = []
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, language: "hello there")
@@ -98,7 +98,7 @@ def test_dictation_is_recorded_before_it_is_typed(monkeypatch):
 
 def test_tray_and_gnome_extension_place_recent_dictations_after_restart():
     """CLAUDE.md menu order: Restart Service, Recent Dictations, Fix a Word, in both."""
-    tray = (ROOT / "src/talktype/tray.py").read_text()
+    tray = (ROOT / "src/tuxtalk/tray.py").read_text()
     assert re.search(
         r"restart_item,\s*history_menu_item,\s*fix_word_item,\s*Gtk\.SeparatorMenuItem\(\)", tray)
 
@@ -125,7 +125,7 @@ def test_each_tray_entry_opens_a_hover_view_with_copy():
     import types
     import gi
     gi.require_version("Gtk", "3.0")
-    from talktype.tray import DictationTray
+    from tuxtalk.tray import DictationTray
 
     tray = types.SimpleNamespace()
     tray._copy_history_entry = lambda text: copied.append(text)

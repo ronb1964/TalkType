@@ -14,7 +14,7 @@ import tempfile
 import pytest
 
 _LOG_DIR = tempfile.mkdtemp(prefix="talktype-test-logs-")
-os.environ["TALKTYPE_LOG_DIR"] = _LOG_DIR
+os.environ["TUXTALK_LOG_DIR"] = _LOG_DIR
 atexit.register(shutil.rmtree, _LOG_DIR, ignore_errors=True)
 
 
@@ -50,7 +50,7 @@ def _no_real_kwin(monkeypatch):
     machine running the suite would hand the dev service's F8 back to whatever
     app has focus. Tests of kwin_hotkeys pass their own fake bus.
     """
-    from talktype import kwin_hotkeys
+    from tuxtalk import kwin_hotkeys
 
     def _refuse():
         raise RuntimeError("tests must not talk to the real KWin")

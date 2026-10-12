@@ -7,7 +7,7 @@ after the model heard it, which Parakeet has no other way to take.
 
 import pytest
 
-from talktype import config, vocabulary
+from tuxtalk import config, vocabulary
 
 
 # --- which words were picked -------------------------------------------------
@@ -111,7 +111,7 @@ def test_save_refuses_when_the_commands_file_is_unreadable(commands_file):
 
 def test_saved_fix_is_applied_to_the_next_dictation(commands_file, monkeypatch):
     """End to end with the dictation service's own matcher."""
-    from talktype import app
+    from tuxtalk import app
 
     vocabulary.save_fix("bamboo studio", "BambuStudio")
     monkeypatch.setattr(app, "_custom_commands", config.load_custom_commands())

@@ -3,7 +3,7 @@
 A packaged install ships python at /opt/talktype/usr/bin/python3, but that
 interpreter has no PYTHONPATH/LD_LIBRARY_PATH/GI_TYPELIB_PATH of its own — the
 /usr/bin/talktype wrapper (via AppRun) sets those before launching. Writing the
-raw `python3 -m talktype.tray` into the autostart .desktop therefore produces a
+raw `python3 -m tuxtalk.tray` into the autostart .desktop therefore produces a
 command that dies silently at login while a terminal `talktype` works. This bit
 a real .deb install: "Launch at login" was on, but nothing started.
 
@@ -26,14 +26,14 @@ def _make_prefs(
     appimage=None,
     dev_mode=False,
 ):
-    """Return the talktype.autostart module with a fake filesystem + which patched in.
+    """Return the tuxtalk.autostart module with a fake filesystem + which patched in.
 
     exists:    absolute paths that are present AND executable on this fake FS.
     which_map: name -> path the `which` fallback should resolve (must also be in
                `exists`, since the code re-checks isfile/access on the result).
     """
-    from talktype import autostart as mod
-    from talktype import config as config_mod
+    from tuxtalk import autostart as mod
+    from tuxtalk import config as config_mod
 
     # `from . import config` inside get_launch_command resolves to the real module.
     monkeypatch.setattr(config_mod, "DEV_MODE", dev_mode, raising=False)
@@ -64,7 +64,7 @@ def test_prefers_usr_bin_talktype(monkeypatch):
     mod = _make_prefs(monkeypatch, exists={"/usr/bin/talktype", "/usr/bin/dictate-tray"})
     cmd = mod.get_launch_command()
     assert cmd == "/usr/bin/talktype"
-    assert "python3 -m talktype.tray" not in cmd
+    assert "python3 -m tuxtalk.tray" not in cmd
 
 
 def test_talktype_wins_over_dictate_tray(monkeypatch):
@@ -115,7 +115,7 @@ def test_appimage_env_takes_precedence_over_usr_bin(monkeypatch):
 def test_raw_python_only_as_last_resort(monkeypatch):
     """No launcher anywhere — the bare interpreter is the last resort."""
     mod = _make_prefs(monkeypatch, exists=set())
-    assert mod.get_launch_command() == "/opt/talktype/usr/bin/python3 -m talktype.tray"
+    assert mod.get_launch_command() == "/opt/talktype/usr/bin/python3 -m tuxtalk.tray"
 
 
 DOWNLOAD = "/home/ron/Downloads/TalkType-v0.10.0-x86_64.AppImage"
@@ -143,5 +143,5 @@ def test_without_an_installed_copy_the_running_appimage_is_used(monkeypatch):
 
 def test_onboarding_asks_for_the_installed_copy():
     from pathlib import Path
-    src = (Path(__file__).resolve().parent.parent / "src/talktype/welcome_dialog.py").read_text()
+    src = (Path(__file__).resolve().parent.parent / "src/tuxtalk/welcome_dialog.py").read_text()
     assert "set_autostart(True, prefer_installed_appimage=appimage_installed)" in src

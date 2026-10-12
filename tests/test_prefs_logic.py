@@ -10,8 +10,8 @@ except ImportError:     # Python 3.10, the AppImage's (the CI runs it)
     import toml as tomllib
 from types import SimpleNamespace
 
-from talktype import prefs as P
-from talktype.prefs import PreferencesWindow, _coerce_config_types
+from tuxtalk import prefs as P
+from tuxtalk.prefs import PreferencesWindow, _coerce_config_types
 
 
 def _dummy(config=None):
@@ -106,7 +106,7 @@ def test_save_config_escapes_backslashes(tmp_path, monkeypatch):
 def test_save_config_roundtrips_through_config_loader(tmp_path, monkeypatch):
     """The file Preferences writes must be readable by config.load_config,
     not merely by tomllib — the two must agree on the same escaping."""
-    from talktype import config as C
+    from tuxtalk import config as C
 
     d = _saveable(tmp_path, monkeypatch,
                   {"mic": 'Blue Yeti "Nano" USB', "hotkey": "F8",
@@ -139,7 +139,7 @@ def test_saving_commands_over_a_damaged_file_does_not_raise(tmp_path, monkeypatc
     letting that propagate would make clicking OK do nothing at all — the
     window would not even close. It must degrade, not wedge.
     """
-    from talktype import config as C
+    from tuxtalk import config as C
 
     path = tmp_path / "custom_commands.toml"
     path.write_text('[commands]\nbroken {{{\n')
@@ -156,7 +156,7 @@ def test_saving_commands_over_a_damaged_file_does_not_raise(tmp_path, monkeypatc
 
 
 def test_saving_commands_normally_reports_success(tmp_path, monkeypatch):
-    from talktype import config as C
+    from tuxtalk import config as C
 
     path = tmp_path / "custom_commands.toml"
     monkeypatch.setattr(C, "CUSTOM_COMMANDS_PATH", str(path))
@@ -170,7 +170,7 @@ def test_saving_commands_normally_reports_success(tmp_path, monkeypatch):
 def test_apply_keeps_a_word_fixed_from_the_tray_while_prefs_was_open(tmp_path, monkeypatch):
     """Preferences used to write back the list it loaded at open, deleting a
     Fix a Word fix saved from the tray in the meantime."""
-    from talktype import config as C
+    from tuxtalk import config as C
 
     path = tmp_path / "custom_commands.toml"
     monkeypatch.setattr(C, "CUSTOM_COMMANDS_PATH", str(path))

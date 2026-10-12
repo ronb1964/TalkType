@@ -7,10 +7,10 @@ via the `log_transcripts` setting (which pops a warning before it turns on).
 """
 import pathlib
 
-from talktype import config
-from talktype import logger as tlog
+from tuxtalk import config
+from tuxtalk import logger as tlog
 
-PREFS = pathlib.Path(__file__).resolve().parent.parent / "src/talktype/prefs.py"
+PREFS = pathlib.Path(__file__).resolve().parent.parent / "src/tuxtalk/prefs.py"
 
 
 # --- config flag -----------------------------------------------------------
@@ -44,12 +44,12 @@ def test_redact_is_robust_to_non_strings():
 # --- app wiring: the service's live flag gates redaction -------------------
 
 def test_app_defaults_to_not_logging_transcripts():
-    from talktype import app
+    from tuxtalk import app
     assert app._log_transcripts is False
 
 
 def test_app_loggable_respects_the_live_flag(monkeypatch):
-    from talktype import app
+    from tuxtalk import app
     monkeypatch.setattr(app, "_log_transcripts", False)
     assert app._loggable("secret words") == "[hidden, 12 chars]"
     monkeypatch.setattr(app, "_log_transcripts", True)
@@ -63,11 +63,11 @@ def test_custom_command_log_line_redacts_the_text(monkeypatch, caplog):
     must not contain the dictated words, only the redacted breadcrumb. Guards
     against a future edit reverting `{_loggable(x)}` back to `{x!r}`."""
     import logging
-    from talktype import app
+    from tuxtalk import app
     monkeypatch.setattr(app, "_log_transcripts", False)
     monkeypatch.setattr(app, "_custom_commands", {"banana": "apple"})
     secret = "my banana passphrase"
-    with caplog.at_level(logging.INFO, logger="talktype.app"):
+    with caplog.at_level(logging.INFO, logger="tuxtalk.app"):
         app._apply_custom_commands(secret)
     logged = "\n".join(r.getMessage() for r in caplog.records)
     assert "Custom commands applied" in logged   # the line did fire
@@ -117,7 +117,7 @@ def _fake_check(active):
 
 
 def _install_fake_dialog(monkeypatch, response):
-    from talktype import prefs
+    from tuxtalk import prefs
     seen = {}
 
     class _FakeStyle:
@@ -155,7 +155,7 @@ def _install_fake_dialog(monkeypatch, response):
 
 def test_checking_the_box_without_confirming_does_not_enable_logging(monkeypatch):
     import types
-    from talktype import prefs
+    from tuxtalk import prefs
     seen = _install_fake_dialog(monkeypatch, prefs.Gtk.ResponseType.CANCEL)
     saved = []
     window = object()  # stands in for the real Gtk.Window at self.window
@@ -176,7 +176,7 @@ def test_checking_the_box_without_confirming_does_not_enable_logging(monkeypatch
 
 def test_confirming_the_warning_enables_logging(monkeypatch):
     import types
-    from talktype import prefs
+    from tuxtalk import prefs
     _install_fake_dialog(monkeypatch, prefs.Gtk.ResponseType.OK)
     saved = []
     self = types.SimpleNamespace(update_config=lambda k, v: saved.append((k, v)),
@@ -191,7 +191,7 @@ def test_confirming_the_warning_enables_logging(monkeypatch):
 
 def test_unchecking_needs_no_dialog_and_disables(monkeypatch):
     import types
-    from talktype import prefs
+    from tuxtalk import prefs
     # If a dialog were constructed while unchecking, this would blow up.
     monkeypatch.setattr(prefs, "message_dialog",
                         lambda **k: (_ for _ in ()).throw(AssertionError("no dialog on uncheck")))
@@ -208,9 +208,9 @@ def test_unchecking_needs_no_dialog_and_disables(monkeypatch):
 # --- clearing the log ------------------------------------------------------
 
 def test_log_file_path_follows_dev_mode(monkeypatch):
-    # The suite redirects logs via TALKTYPE_LOG_DIR (tests/conftest.py); this
+    # The suite redirects logs via TUXTALK_LOG_DIR (tests/conftest.py); this
     # checks the normal rule, so switch that off. Only paths are computed.
-    monkeypatch.delenv("TALKTYPE_LOG_DIR", raising=False)
+    monkeypatch.delenv("TUXTALK_LOG_DIR", raising=False)
     monkeypatch.setenv("DEV_MODE", "1")
     assert tlog.log_file_path().parent.name == "talktype-dev"
     monkeypatch.delenv("DEV_MODE", raising=False)
@@ -219,7 +219,7 @@ def test_log_file_path_follows_dev_mode(monkeypatch):
 
 def test_talktype_log_dir_overrides_the_location(monkeypatch, tmp_path):
     monkeypatch.setenv("DEV_MODE", "1")
-    monkeypatch.setenv("TALKTYPE_LOG_DIR", str(tmp_path))
+    monkeypatch.setenv("TUXTALK_LOG_DIR", str(tmp_path))
     assert tlog.log_file_path() == tmp_path / "talktype.log"
 
 

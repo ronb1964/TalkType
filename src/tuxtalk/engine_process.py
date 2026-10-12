@@ -49,9 +49,12 @@ def processes_of(binary):
 
 
 def is_talktype_process(pid) -> bool:
+    """True when *pid* is our app, under its current name (TuxTalk) or the
+    old one (TalkType: an older copy, or the dev folder ~/Projects/TalkType)."""
     try:
         with open(f"/proc/{pid}/cmdline", "rb") as f:
-            return b"talktype" in f.read().lower()
+            cmdline = f.read().lower()
+        return b"tuxtalk" in cmdline or b"talktype" in cmdline
     except OSError:
         return False
 

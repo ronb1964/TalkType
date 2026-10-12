@@ -22,7 +22,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 
 def test_positioning_available_follows_the_x_display(monkeypatch):
-    from talktype.recording_indicator import positioning_available
+    from tuxtalk.recording_indicator import positioning_available
 
     monkeypatch.setenv("DISPLAY", ":0")
     assert positioning_available() is True, (
@@ -39,7 +39,7 @@ def test_positioning_available_follows_the_x_display(monkeypatch):
 
 def test_positioning_does_not_depend_on_the_gnome_extension(monkeypatch):
     """The extension never had anything to do with window positioning."""
-    from talktype.recording_indicator import positioning_available
+    from tuxtalk.recording_indicator import positioning_available
 
     monkeypatch.setenv("DISPLAY", ":0")
     monkeypatch.setenv("XDG_SESSION_TYPE", "wayland")
@@ -52,7 +52,7 @@ def test_positioning_does_not_depend_on_the_gnome_extension(monkeypatch):
 
 def test_prefs_uses_the_helper_rather_than_guessing_from_the_session():
     """Guards against the old `is_wayland and not has_extension` condition."""
-    text = (ROOT / "src/talktype/prefs.py").read_text()
+    text = (ROOT / "src/tuxtalk/prefs.py").read_text()
     assert "positioning_available" in text, (
         "prefs.py must ask whether positioning actually works instead of "
         "inferring it from the session type and the GNOME extension."

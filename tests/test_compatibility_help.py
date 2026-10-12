@@ -5,9 +5,9 @@ many choices to know which work together.
 """
 import pytest
 
-from talktype import recommend as r
-from talktype import whisper_vulkan as wv
-from talktype.model_helper import OFFERED_MODELS
+from tuxtalk import recommend as r
+from tuxtalk import whisper_vulkan as wv
+from tuxtalk.model_helper import OFFERED_MODELS
 
 
 def test_every_offered_model_is_in_the_table_once():

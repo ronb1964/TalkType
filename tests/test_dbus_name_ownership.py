@@ -24,7 +24,7 @@ pytestmark = pytest.mark.skipif(not shutil.which("dbus-run-session"),
 ROLE = textwrap.dedent("""
     import sys
     from gi.repository import GLib
-    from talktype.dbus_service import TalkTypeDBusService
+    from tuxtalk.dbus_service import TalkTypeDBusService
     class App: pass
     try:
         TalkTypeDBusService(App(), primary=(sys.argv[1] == "tray"))

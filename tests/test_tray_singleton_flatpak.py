@@ -12,7 +12,7 @@ import importlib
 
 
 def _tray():
-    return importlib.import_module("talktype.tray")
+    return importlib.import_module("tuxtalk.tray")
 
 
 def test_runtime_dir_is_app_private_inside_flatpak(monkeypatch, tmp_path):
@@ -57,7 +57,7 @@ def test_runtime_dir_unchanged_on_host(monkeypatch, tmp_path):
 
 
 def _app():
-    return importlib.import_module("talktype.app")
+    return importlib.import_module("tuxtalk.app")
 
 
 def test_app_runtime_dir_is_app_private_inside_flatpak(monkeypatch, tmp_path):

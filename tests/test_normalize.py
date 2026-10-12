@@ -1,5 +1,5 @@
 import pytest
-from talktype.normalize import normalize_text
+from tuxtalk.normalize import normalize_text
 
 def test_basic_punct():
     s = "thank you comma this is great exclamation point"
@@ -228,7 +228,7 @@ def test_tab_command_still_works():
 
 # --- append_auto_punct: auto-period/space placement around line-break markers ---
 
-from talktype.normalize import append_auto_punct
+from tuxtalk.normalize import append_auto_punct
 
 _M = "§SHIFT_ENTER§"
 
@@ -451,7 +451,7 @@ def test_a_time_ending_the_sentence_keeps_its_period():
 
 # --- append_auto_punct edge cases ------------------------------------------
 
-from talktype.normalize import append_auto_punct
+from tuxtalk.normalize import append_auto_punct
 
 
 def test_auto_punct_leaves_a_trailing_colon_alone():

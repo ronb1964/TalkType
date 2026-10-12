@@ -9,7 +9,7 @@ import types
 
 import pytest
 
-from talktype import kwin_hotkeys as kh
+from tuxtalk import kwin_hotkeys as kh
 
 
 def _cfg(hotkey="F8", toggle="F9", vc="Ctrl+Alt+V"):
@@ -192,7 +192,7 @@ class TestShouldClaim:
 
 def test_stopping_the_service_releases_the_hotkeys(monkeypatch):
     """SIGTERM skips the service's exit hooks, so the stop path must do it."""
-    from talktype import service_launcher
+    from tuxtalk import service_launcher
     released = []
     monkeypatch.setattr(service_launcher, "find_service_pids", lambda: [])
     monkeypatch.setattr(kh, "release", lambda *a: released.append(True))

@@ -7,7 +7,7 @@ by live prototyping; see the design spec dated 2026-08-14.
 import numpy as np
 import pytest
 
-from talktype import indicator_styles as S
+from tuxtalk import indicator_styles as S
 
 
 def test_backing_alpha_endpoints_and_monotonic():

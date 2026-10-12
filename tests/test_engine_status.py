@@ -8,8 +8,8 @@ import types
 
 import pytest
 
-from talktype.dbus_service import TalkTypeDBusService
-from talktype.tray import engine_status, preset_notice
+from tuxtalk.dbus_service import TalkTypeDBusService
+from tuxtalk.tray import engine_status, preset_notice
 
 
 @pytest.mark.parametrize("cfg_model,cfg_device,running,expected", [
@@ -42,7 +42,7 @@ def test_gpu_preset_says_which_engine():
 @pytest.fixture
 def svc(monkeypatch):
     # Parakeet's Vulkan files "downloaded", so the setting alone says vulkan.
-    monkeypatch.setattr("talktype.whisper_vulkan.is_installed", lambda m: True)
+    monkeypatch.setattr("tuxtalk.whisper_vulkan.is_installed", lambda m: True)
     s = TalkTypeDBusService.__new__(TalkTypeDBusService)    # no real bus
     s.app = types.SimpleNamespace(config=types.SimpleNamespace(model="parakeet-v3", device="vulkan"))
     s.running_engine = None
@@ -68,6 +68,6 @@ def test_a_stopped_service_falls_back_to_the_settings(svc):
 def test_the_service_records_every_load_path():
     """Each "Model loaded" point records the engine, and main reports it."""
     import pathlib
-    src = (pathlib.Path(__file__).resolve().parent.parent / "src" / "talktype" / "app.py").read_text()
+    src = (pathlib.Path(__file__).resolve().parent.parent / "src" / "tuxtalk" / "app.py").read_text()
     assert src.count("_record_engine(") >= 5        # def + 4 load points
     assert "_notify_tray_running_engine()" in src

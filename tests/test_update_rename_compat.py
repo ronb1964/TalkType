@@ -6,7 +6,7 @@ every installed TalkType finds, and checksum-verifies, a TuxTalk release.
 import io
 import json
 
-from talktype import update_checker as uc
+from tuxtalk import update_checker as uc
 
 RELEASE = {
     "tag_name": "v0.15.0", "name": "TuxTalk 0.15.0", "body": "", "published_at": "",

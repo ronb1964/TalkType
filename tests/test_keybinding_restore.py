@@ -11,9 +11,9 @@ gsettings value that survives reboots, with nothing pointing at TalkType.
 import ast
 import pathlib
 
-from talktype import welcome_dialog as W
+from tuxtalk import welcome_dialog as W
 
-SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "talktype"
+SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tuxtalk"
 
 
 def test_restore_sets_both_bindings_back(monkeypatch):

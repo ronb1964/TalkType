@@ -13,7 +13,7 @@ then stopped dead on 2026-07-20 — the day before the change — and never fire
 again.
 """
 
-from talktype import app
+from tuxtalk import app
 
 
 # The app ids Claude Desktop has been observed reporting, oldest first. Both

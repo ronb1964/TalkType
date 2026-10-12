@@ -6,8 +6,8 @@ words whatever language you dictate in.
 """
 import re
 
-from talktype import ai_cleanup, normalize, undo
-from talktype.voice_commands_dialog import _build_markup
+from tuxtalk import ai_cleanup, normalize, undo
+from tuxtalk.voice_commands_dialog import _build_markup
 
 TEXT = re.sub(r"<[^>]+>", "", _build_markup()).lower()
 

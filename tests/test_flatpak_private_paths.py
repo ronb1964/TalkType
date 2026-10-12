@@ -12,7 +12,7 @@ import importlib
 
 
 def _config():
-    return importlib.import_module("talktype.config")
+    return importlib.import_module("tuxtalk.config")
 
 
 def test_data_home_is_xdg_inside_flatpak(monkeypatch, tmp_path):

@@ -9,7 +9,7 @@ libfuse2, so on Ubuntu 26.04 TalkType silently never started at login
 """
 import pytest
 
-from talktype import autostart, config
+from tuxtalk import autostart, config
 
 
 @pytest.fixture

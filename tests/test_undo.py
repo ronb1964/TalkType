@@ -1,4 +1,4 @@
-from talktype.undo import (
+from tuxtalk.undo import (
     detect_undo_command,
     calculate_undo_length,
     single_unit_length,

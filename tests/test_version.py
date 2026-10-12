@@ -8,7 +8,7 @@ checker offers the app an 'update' to itself forever. This happened once
 import re
 from pathlib import Path
 
-from talktype import __version__
+from tuxtalk import __version__
 
 
 def test_versions_match():

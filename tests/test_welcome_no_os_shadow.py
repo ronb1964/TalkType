@@ -8,7 +8,7 @@ leaving the tray icon slashed and nothing else happening.
 
 If `os` ever becomes a local in that function again, this fails.
 """
-from talktype import welcome_dialog
+from tuxtalk import welcome_dialog
 
 
 def test_show_welcome_and_install_uses_module_level_os():

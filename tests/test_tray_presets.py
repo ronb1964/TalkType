@@ -8,8 +8,8 @@ import types
 
 import pytest
 
-from talktype import recommend as r
-from talktype import tray as tray_mod
+from tuxtalk import recommend as r
+from tuxtalk import tray as tray_mod
 
 NVIDIA = r.Hardware("NVIDIA GeForce RTX 4070 SUPER", has_nvidia=True)
 
@@ -43,12 +43,12 @@ def env(monkeypatch):
                                 auto_timeout_minutes=5, dictation_language="en",
                                 language_mode="auto", language="", vulkan_slower=False)
     saved = []
-    monkeypatch.setattr("talktype.config.load_config", lambda: cfg)
-    monkeypatch.setattr("talktype.config.save_config", lambda c: saved.append((c.model, c.device)))
+    monkeypatch.setattr("tuxtalk.config.load_config", lambda: cfg)
+    monkeypatch.setattr("tuxtalk.config.save_config", lambda c: saved.append((c.model, c.device)))
     monkeypatch.setattr(r, "detect_hardware", lambda cfg=None: NVIDIA)
-    monkeypatch.setattr("talktype.model_helper.is_model_cached_fast", lambda m: True)
-    monkeypatch.setattr("talktype.app._notify", lambda t, b: None)
-    monkeypatch.setattr("talktype.whisper_vulkan.is_offered", lambda: True)
+    monkeypatch.setattr("tuxtalk.model_helper.is_model_cached_fast", lambda m: True)
+    monkeypatch.setattr("tuxtalk.app._notify", lambda t, b: None)
+    monkeypatch.setattr("tuxtalk.whisper_vulkan.is_offered", lambda: True)
     return cfg, saved
 
 
@@ -59,9 +59,9 @@ def test_three_presets_in_order(env):
 def test_recommended_runs_the_vulkan_setup_then_saves(env, monkeypatch):
     cfg, saved = env
     calls = []
-    monkeypatch.setattr("talktype.vulkan_setup_dialogs.ensure_files",
+    monkeypatch.setattr("tuxtalk.vulkan_setup_dialogs.ensure_files",
                         lambda p, m, confirm: calls.append(("files", m)) or True)
-    monkeypatch.setattr("talktype.vulkan_setup_dialogs.run_speed_check",
+    monkeypatch.setattr("tuxtalk.vulkan_setup_dialogs.run_speed_check",
                         lambda p, m: calls.append(("speed", m)) or True)
     t = FakeTray()
     t.set_performance_preset("recommended")
@@ -71,8 +71,8 @@ def test_recommended_runs_the_vulkan_setup_then_saves(env, monkeypatch):
 
 def test_recommended_falls_back_to_the_processor_when_it_is_faster(env, monkeypatch):
     cfg, saved = env
-    monkeypatch.setattr("talktype.vulkan_setup_dialogs.ensure_files", lambda p, m, confirm: True)
-    monkeypatch.setattr("talktype.vulkan_setup_dialogs.run_speed_check", lambda p, m: False)
+    monkeypatch.setattr("tuxtalk.vulkan_setup_dialogs.ensure_files", lambda p, m, confirm: True)
+    monkeypatch.setattr("tuxtalk.vulkan_setup_dialogs.run_speed_check", lambda p, m: False)
     FakeTray().set_performance_preset("recommended")
     assert saved == [("parakeet-v3", "cpu")]
 
@@ -83,8 +83,8 @@ def test_large_v3_becomes_small_when_the_processor_is_faster(env, monkeypatch):
     greys out ("Needs a graphics card")."""
     cfg, saved = env
     cfg.dictation_language = "ja"
-    monkeypatch.setattr("talktype.vulkan_setup_dialogs.ensure_files", lambda p, m, confirm: True)
-    monkeypatch.setattr("talktype.vulkan_setup_dialogs.run_speed_check", lambda p, m: False)
+    monkeypatch.setattr("tuxtalk.vulkan_setup_dialogs.ensure_files", lambda p, m, confirm: True)
+    monkeypatch.setattr("tuxtalk.vulkan_setup_dialogs.run_speed_check", lambda p, m: False)
     FakeTray().set_performance_preset("recommended")
     assert saved == [("small", "cpu")]
 
@@ -92,7 +92,7 @@ def test_large_v3_becomes_small_when_the_processor_is_faster(env, monkeypatch):
 def test_cancelling_the_download_changes_nothing(env, monkeypatch):
     """Review focus 4."""
     cfg, saved = env
-    monkeypatch.setattr("talktype.vulkan_setup_dialogs.ensure_files", lambda p, m, confirm: False)
+    monkeypatch.setattr("tuxtalk.vulkan_setup_dialogs.ensure_files", lambda p, m, confirm: False)
     t = FakeTray()
     t.set_performance_preset("recommended")
     assert saved == [] and t.reverted == 1 and t.restarted == 0
@@ -110,8 +110,8 @@ def test_leaving_battery_saver_puts_the_timeout_back_to_5_minutes(env, monkeypat
     """Ron, 2026-10-06: after Battery saver, the other presets used to keep
     its 2-minute auto-stop."""
     cfg, saved = env
-    monkeypatch.setattr("talktype.vulkan_setup_dialogs.ensure_files", lambda p, m, confirm: True)
-    monkeypatch.setattr("talktype.vulkan_setup_dialogs.run_speed_check", lambda p, m: True)
+    monkeypatch.setattr("tuxtalk.vulkan_setup_dialogs.ensure_files", lambda p, m, confirm: True)
+    monkeypatch.setattr("tuxtalk.vulkan_setup_dialogs.run_speed_check", lambda p, m: True)
     FakeTray().set_performance_preset("battery")
     FakeTray().set_performance_preset(preset_id)
     assert (cfg.auto_timeout_enabled, cfg.auto_timeout_minutes) == (True, 5)
@@ -142,7 +142,7 @@ def test_current_preset_uses_match_preset(env):
 
 
 def test_dbus_exposes_presets_and_the_active_one():
-    from talktype.dbus_service import TalkTypeDBusService
+    from tuxtalk.dbus_service import TalkTypeDBusService
     svc = TalkTypeDBusService.__new__(TalkTypeDBusService)
     svc.running_engine = None
     svc.claimed_hotkeys = []
@@ -185,9 +185,9 @@ def test_choosing_the_active_preset_again_changes_nothing(env, monkeypatch):
     cfg, saved = env
     cfg.model, cfg.device = "parakeet-v3", "vulkan"     # Recommended on NVIDIA
     checks = []
-    monkeypatch.setattr("talktype.vulkan_setup_dialogs.ensure_files",
+    monkeypatch.setattr("tuxtalk.vulkan_setup_dialogs.ensure_files",
                         lambda p, m, confirm: checks.append(m) or True)
-    monkeypatch.setattr("talktype.vulkan_setup_dialogs.run_speed_check",
+    monkeypatch.setattr("tuxtalk.vulkan_setup_dialogs.run_speed_check",
                         lambda p, m: checks.append(("speed", m)) or True)
     t = FakeTray()
     t.set_performance_preset("recommended")
@@ -195,7 +195,7 @@ def test_choosing_the_active_preset_again_changes_nothing(env, monkeypatch):
 
 
 def test_dbus_presets_failure_is_an_empty_list_not_an_error(caplog):
-    from talktype.dbus_service import TalkTypeDBusService
+    from tuxtalk.dbus_service import TalkTypeDBusService
     svc = TalkTypeDBusService.__new__(TalkTypeDBusService)
 
     def broken():

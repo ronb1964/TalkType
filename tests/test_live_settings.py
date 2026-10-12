@@ -18,7 +18,7 @@ import dataclasses
 
 import pytest
 
-from talktype import config
+from tuxtalk import config
 
 
 class TestChangedKeys:

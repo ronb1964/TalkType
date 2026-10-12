@@ -12,8 +12,8 @@ import textwrap
 import numpy as np
 import pytest
 
-from talktype import parakeet_gpu
-from talktype import parakeet_gpu_worker as worker
+from tuxtalk import parakeet_gpu
+from tuxtalk import parakeet_gpu_worker as worker
 
 # A stand-in helper. Behaviour is picked by its first argument:
 #   ok      answers "<n> samples" for each request

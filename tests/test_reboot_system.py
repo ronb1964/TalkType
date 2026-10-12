@@ -9,7 +9,7 @@ import types
 
 import pytest
 
-from talktype import uinput_helper as uh
+from tuxtalk import uinput_helper as uh
 
 
 def test_reboot_invokes_systemctl_reboot(monkeypatch):

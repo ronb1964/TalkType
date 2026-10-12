@@ -13,7 +13,7 @@ import json
 
 import pytest
 
-from talktype import keyboard_layout as kl
+from tuxtalk import keyboard_layout as kl
 
 xkb = pytest.importorskip("ctypes").CDLL("libxkbcommon.so.0")
 P = C.c_void_p
@@ -242,7 +242,7 @@ def test_a_detection_failure_means_unknown(monkeypatch):
 
 @pytest.fixture
 def typing(monkeypatch):
-    from talktype import app
+    from tuxtalk import app
     calls = []
     monkeypatch.setattr(app, "_which", lambda name: name == "ydotool")
     monkeypatch.setattr(app, "_ydotool_key", lambda keys, **kw: calls.append(("key", list(keys))) or True)

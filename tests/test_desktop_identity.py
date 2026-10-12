@@ -17,7 +17,7 @@ import re
 
 import pytest
 
-from talktype import desktop_identity
+from tuxtalk import desktop_identity
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -42,13 +42,13 @@ def test_the_launchers_really_have_those_names():
     assert "applications/io.github.ronb1964.TalkType.desktop" in rpm
     assert 'install -Dm644 talktype.desktop "${pkgdir}/usr/share/applications/talktype.desktop"' \
         in (ROOT / "aur" / "PKGBUILD").read_text()
-    from talktype.update_checker import DESKTOP_FILE_PATH
+    from tuxtalk.update_checker import DESKTOP_FILE_PATH
     assert DESKTOP_FILE_PATH.endswith("/talktype.desktop")
 
 
 def test_apply_sets_the_program_name(monkeypatch):
     names = []
-    monkeypatch.setattr("talktype.update_checker.get_install_type", lambda: "appimage")
+    monkeypatch.setattr("tuxtalk.update_checker.get_install_type", lambda: "appimage")
     monkeypatch.setattr(desktop_identity.GLib, "set_prgname", names.append)
     desktop_identity.apply()
     assert names == ["talktype"]
@@ -57,7 +57,7 @@ def test_apply_sets_the_program_name(monkeypatch):
 def test_apply_never_raises(monkeypatch):
     def broken():
         raise RuntimeError("no idea how this is installed")
-    monkeypatch.setattr("talktype.update_checker.get_install_type", broken)
+    monkeypatch.setattr("tuxtalk.update_checker.get_install_type", broken)
     desktop_identity.apply()
 
 
@@ -65,7 +65,7 @@ def test_apply_never_raises(monkeypatch):
 def test_every_program_with_windows_names_itself_first(module):
     """The tray (and its dialogs), Preferences and the dictation service (the
     recording indicator) each run as their own process."""
-    src = (ROOT / "src" / "talktype" / f"{module}.py").read_text()
+    src = (ROOT / "src" / "tuxtalk" / f"{module}.py").read_text()
     body = re.search(r"\ndef main\(\):\n(.*?)(?=\ndef |\nif __name__)", src, re.S).group(1)
     first_lines = [l for l in body.splitlines() if l.strip() and not l.strip().startswith("#")][:3]
     assert any("desktop_identity.apply()" in l for l in first_lines), first_lines

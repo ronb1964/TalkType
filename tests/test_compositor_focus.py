@@ -12,7 +12,7 @@ import threading
 
 import pytest
 
-from talktype import compositor_focus as cf
+from tuxtalk import compositor_focus as cf
 
 
 def _serve(path, handler):
@@ -185,14 +185,14 @@ def test_a_compositor_that_never_answers_is_given_up_on_quickly(tmp_path, monkey
 # --- where the dictation service uses it ---------------------------------------------
 
 def test_the_service_asks_the_compositor_when_nobody_reported_focus(monkeypatch):
-    from talktype import app
+    from tuxtalk import app
     monkeypatch.setattr(app, "_get_tray_dbus_proxy", lambda: (_ for _ in ()).throw(RuntimeError()))
     monkeypatch.setattr(cf, "focused_class", lambda: "foot")
     assert app._query_focused_window_class() == "foot"
 
 
 def test_a_reported_window_wins_over_asking_the_compositor(monkeypatch):
-    from talktype import app
+    from tuxtalk import app
 
     class Tray:
         def GetFocusedWindowClass(self, **kw):
@@ -208,7 +208,7 @@ def test_a_reported_window_wins_over_asking_the_compositor(monkeypatch):
     "com.system76.CosmicTerm", "Kitty", "foot",
 ])
 def test_terminals_common_on_tiling_desktops_get_terminal_paste(app_id):
-    from talktype.app import is_terminal_class
+    from tuxtalk.app import is_terminal_class
     assert is_terminal_class(app_id)
 
 
@@ -290,5 +290,5 @@ def test_no_x_server_at_all_is_unknown_not_an_error(monkeypatch):
 
 @pytest.mark.parametrize("wm_class", ["Guake", "Tilda", "Roxterm", "cool-retro-term", "Mate-terminal"])
 def test_x11_terminals_get_terminal_paste(wm_class):
-    from talktype.app import is_terminal_class
+    from tuxtalk.app import is_terminal_class
     assert is_terminal_class(wm_class)

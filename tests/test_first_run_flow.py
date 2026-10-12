@@ -3,7 +3,7 @@ import types
 
 import pytest
 
-from talktype import welcome_dialog as wd
+from tuxtalk import welcome_dialog as wd
 
 
 @pytest.fixture
@@ -11,13 +11,13 @@ def env(monkeypatch):
     cfg = types.SimpleNamespace(model="parakeet-v3", device="cpu", dictation_language="",
                                 recommend_notice_shown=False)
     calls = []
-    monkeypatch.setattr("talktype.config.load_config", lambda: cfg)
-    monkeypatch.setattr("talktype.config.save_config", lambda c: calls.append(("save", c.model, c.device)))
+    monkeypatch.setattr("tuxtalk.config.load_config", lambda: cfg)
+    monkeypatch.setattr("tuxtalk.config.save_config", lambda c: calls.append(("save", c.model, c.device)))
     monkeypatch.setattr(wd, "_setup_vulkan_engine_first_run", lambda: calls.append(("engine",)), raising=False)
     monkeypatch.setattr(wd, "_download_vulkan_model_first_run", lambda m: calls.append(("vk", m)) or True)
     monkeypatch.setattr(wd, "_vulkan_speed_check_first_run", lambda m: calls.append(("speed", m)) or True)
-    monkeypatch.setattr("talktype.model_helper.is_model_cached_fast", lambda m: False)
-    monkeypatch.setattr("talktype.model_helper.download_model_with_progress",
+    monkeypatch.setattr("tuxtalk.model_helper.is_model_cached_fast", lambda m: False)
+    monkeypatch.setattr("tuxtalk.model_helper.download_model_with_progress",
                         lambda m, **k: calls.append(("cpu", m)) or object())
     return cfg, calls
 
@@ -62,18 +62,18 @@ def store(monkeypatch):
     saved = {"model": "parakeet-v3", "device": "cpu", "dictation_language": "",
              "recommend_notice_shown": False, "vulkan_slower": False}
     calls = []
-    monkeypatch.setattr("talktype.config.load_config", lambda: types.SimpleNamespace(**saved))
-    monkeypatch.setattr("talktype.config.save_config", lambda c: saved.update(vars(c)))
+    monkeypatch.setattr("tuxtalk.config.load_config", lambda: types.SimpleNamespace(**saved))
+    monkeypatch.setattr("tuxtalk.config.save_config", lambda c: saved.update(vars(c)))
     monkeypatch.setattr(wd, "_download_vulkan_model_first_run", lambda m: True)
-    monkeypatch.setattr("talktype.model_helper.is_model_cached_fast", lambda m: False)
-    monkeypatch.setattr("talktype.model_helper.download_model_with_progress",
+    monkeypatch.setattr("tuxtalk.model_helper.is_model_cached_fast", lambda m: False)
+    monkeypatch.setattr("tuxtalk.model_helper.download_model_with_progress",
                         lambda m, **k: calls.append(m) or object())
     return saved, calls
 
 
 def _processor_wins(monkeypatch):
     """The real speed check records the loss in its own load/save."""
-    from talktype.config import load_config, save_config
+    from tuxtalk.config import load_config, save_config
 
     def check(model):
         cfg = load_config()

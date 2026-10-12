@@ -18,7 +18,7 @@ import grp
 import os
 import pytest
 
-from talktype.app import _input_access_diagnosis
+from tuxtalk.app import _input_access_diagnosis
 
 
 def _input_gid():

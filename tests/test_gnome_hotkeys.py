@@ -12,7 +12,7 @@ import types
 
 import pytest
 
-from talktype import gnome_hotkeys as gh
+from tuxtalk import gnome_hotkeys as gh
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 EXTENSION = ROOT / "gnome-extension" / "talktype@ronb1964.github.io" / "extension.js"
@@ -47,7 +47,7 @@ class TestAccelerators:
 class TestTheTrayRelaysThem:
     @pytest.fixture
     def svc(self):
-        from talktype.dbus_service import TalkTypeDBusService
+        from tuxtalk.dbus_service import TalkTypeDBusService
         s = TalkTypeDBusService.__new__(TalkTypeDBusService)  # no real bus
         s.claimed_hotkeys = []
         s.sent = []

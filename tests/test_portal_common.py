@@ -1,6 +1,6 @@
 """Basic checks for the portal GDBus helper. The live D-Bus calls need a running
 portal and are exercised by the Flatpak integration test (BB-9)."""
-from talktype import portal_common as pc
+from tuxtalk import portal_common as pc
 
 
 def test_request_tokens_are_unique_and_prefixed():

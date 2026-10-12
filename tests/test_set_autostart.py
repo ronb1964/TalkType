@@ -8,7 +8,7 @@ leaving a live entry behind.
 
 import pytest
 
-from talktype import autostart
+from tuxtalk import autostart
 
 
 @pytest.fixture
@@ -27,7 +27,7 @@ def test_enable_writes_wrapper_launch_command(desktop):
     assert "X-GNOME-Autostart-enabled=true" in text
     assert "Hidden=true" not in text
     # Must NOT be the bare-Python line that fails at login.
-    assert "python3 -m talktype.tray" not in text
+    assert "python3 -m tuxtalk.tray" not in text
 
 
 def test_disable_writes_hidden_stub(desktop):

@@ -7,7 +7,7 @@ disagree: pressing the new key hits the service's old toggle key, and the dialog
 lights the wrong row — which read as an off-by-one bug during Ubuntu testing.
 """
 
-from talktype.config import unapplied_hotkeys
+from tuxtalk.config import unapplied_hotkeys
 
 
 def test_no_pending_changes_when_shown_matches_saved():

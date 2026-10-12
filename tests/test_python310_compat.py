@@ -8,7 +8,7 @@ as config.py and prefs.py do. The CI also runs on Ubuntu 22.04's Python 3.10.
 import pathlib
 import re
 
-SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "talktype"
+SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tuxtalk"
 
 
 def test_no_module_imports_tomllib_without_a_fallback():

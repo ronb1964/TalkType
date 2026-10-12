@@ -2,7 +2,7 @@
 portal, not TalkType's config — so Preferences must point the user at the right
 place to change them instead of showing an editable (and wrong) F8/F9 combo."""
 
-from talktype.desktop_detect import flatpak_hotkey_hint
+from tuxtalk.desktop_detect import flatpak_hotkey_hint
 
 
 def test_hint_kde_points_to_system_settings(monkeypatch):

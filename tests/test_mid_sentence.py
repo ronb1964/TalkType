@@ -12,7 +12,7 @@ as sentence starts and as names — so those are left as-is by design.
 
 import pytest
 
-from talktype import app
+from tuxtalk import app
 
 
 @pytest.fixture

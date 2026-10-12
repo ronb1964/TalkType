@@ -9,14 +9,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from talktype import whisper_vulkan as wv
+from tuxtalk import whisper_vulkan as wv
 
 
 @pytest.fixture
 def prefs_cls():
     gi = pytest.importorskip("gi")
     gi.require_version("Gtk", "3.0")
-    from talktype.prefs import PreferencesWindow
+    from tuxtalk.prefs import PreferencesWindow
     return PreferencesWindow
 
 
@@ -35,7 +35,7 @@ def test_a_vulkan_model_download_reports_success(prefs_cls, monkeypatch):
 
 def test_ok_closes_after_a_model_download(prefs_cls, monkeypatch):
     """Pick Small, click OK, it downloads: the window then closes by itself."""
-    from talktype import prefs
+    from tuxtalk import prefs
     quit_calls = []
     monkeypatch.setattr(prefs.Gtk, "main_quit", lambda: quit_calls.append(True))
 

@@ -10,7 +10,7 @@ broken is still downloaded again.
 
 import pytest
 
-from talktype import model_helper as M
+from tuxtalk import model_helper as M
 
 
 @pytest.fixture

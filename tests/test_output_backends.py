@@ -3,8 +3,8 @@ typing path is behaviorally unchanged."""
 
 
 def test_ydotool_backend_delegates_to_type_text(monkeypatch):
-    from talktype import app
-    from talktype.output_backends import YdotoolOutputBackend
+    from tuxtalk import app
+    from tuxtalk.output_backends import YdotoolOutputBackend
     calls = []
     monkeypatch.setattr(app, "_type_text", lambda t: calls.append(t) or True)
     assert YdotoolOutputBackend().type_text("hello") is True
@@ -13,7 +13,7 @@ def test_ydotool_backend_delegates_to_type_text(monkeypatch):
 
 def test_libei_backend_returns_false_when_handshake_fails(monkeypatch):
     # type_text must never raise — it returns False so the caller can notify.
-    from talktype.output_backends import LibeiOutputBackend
+    from tuxtalk.output_backends import LibeiOutputBackend
     b = LibeiOutputBackend()
     monkeypatch.setattr(b, "_run_handshake", lambda: (None, None))
     assert b.type_text("hi") is False
@@ -22,8 +22,8 @@ def test_libei_backend_returns_false_when_handshake_fails(monkeypatch):
 def test_libei_backend_types_via_fresh_session(monkeypatch):
     # A fresh RemoteDesktop/EIS session per call: handshake -> LibeiSession ->
     # pump_until_ready -> type_string, then the session is closed.
-    import talktype.libei_ctypes as libei_ctypes
-    from talktype.output_backends import LibeiOutputBackend
+    import tuxtalk.libei_ctypes as libei_ctypes
+    from tuxtalk.output_backends import LibeiOutputBackend
     b = LibeiOutputBackend()
     typed = []
     closed = []
@@ -54,7 +54,7 @@ def test_save_token_creates_missing_data_dir(tmp_path, monkeypatch):
     # _save_token can't create it, the RemoteDesktop restore token never
     # persists and GNOME re-prompts "Allow remote interaction?" on every single
     # dictation. It must create its parent dir like every other data-dir writer.
-    from talktype.output_backends import LibeiOutputBackend
+    from tuxtalk.output_backends import LibeiOutputBackend
     b = LibeiOutputBackend()
     token_path = tmp_path / "TalkType" / "remote_desktop_token"  # parent missing
     monkeypatch.setattr(b, "_token_path", lambda: str(token_path))
@@ -69,9 +69,9 @@ def test_save_token_creates_missing_data_dir(tmp_path, monkeypatch):
 def test_output_backend_accessor_returns_ydotool_on_host(monkeypatch):
     # No FLATPAK_ID on the host -> ydotool backend.
     monkeypatch.delenv("FLATPAK_ID", raising=False)
-    from talktype import app
+    from tuxtalk import app
     app._OUTPUT_BACKEND = None  # reset the process cache for the test
-    from talktype.output_backends import YdotoolOutputBackend
+    from tuxtalk.output_backends import YdotoolOutputBackend
     assert isinstance(app._output_backend(), YdotoolOutputBackend)
 
 
@@ -81,8 +81,8 @@ def test_output_backend_accessor_returns_ydotool_on_host(monkeypatch):
 # Flatpak sandbox (no ydotoold), so the commands silently failed there.
 
 def test_ydotool_backend_select_all_delete_delegates(monkeypatch):
-    from talktype import app
-    from talktype.output_backends import YdotoolOutputBackend
+    from tuxtalk import app
+    from tuxtalk.output_backends import YdotoolOutputBackend
     calls = []
     monkeypatch.setattr(app, "_send_select_all_delete", lambda: calls.append("clear") or True)
     assert YdotoolOutputBackend().select_all_delete() is True
@@ -90,8 +90,8 @@ def test_ydotool_backend_select_all_delete_delegates(monkeypatch):
 
 
 def test_ydotool_backend_backspaces_delegates(monkeypatch):
-    from talktype import app
-    from talktype.output_backends import YdotoolOutputBackend
+    from tuxtalk import app
+    from tuxtalk.output_backends import YdotoolOutputBackend
     calls = []
     monkeypatch.setattr(app, "_send_backspaces", lambda n: calls.append(n) or True)
     assert YdotoolOutputBackend().backspaces(5) is True
@@ -99,8 +99,8 @@ def test_ydotool_backend_backspaces_delegates(monkeypatch):
 
 
 def test_libei_backend_select_all_delete_via_fresh_session(monkeypatch):
-    import talktype.libei_ctypes as libei_ctypes
-    from talktype.output_backends import LibeiOutputBackend
+    import tuxtalk.libei_ctypes as libei_ctypes
+    from tuxtalk.output_backends import LibeiOutputBackend
     b = LibeiOutputBackend()
     called, closed = [], []
 
@@ -125,8 +125,8 @@ def test_libei_backend_select_all_delete_via_fresh_session(monkeypatch):
 
 
 def test_libei_backend_backspaces_via_fresh_session(monkeypatch):
-    import talktype.libei_ctypes as libei_ctypes
-    from talktype.output_backends import LibeiOutputBackend
+    import tuxtalk.libei_ctypes as libei_ctypes
+    from tuxtalk.output_backends import LibeiOutputBackend
     b = LibeiOutputBackend()
     got, closed = [], []
 
@@ -153,7 +153,7 @@ def test_libei_backend_backspaces_via_fresh_session(monkeypatch):
 def test_handle_undo_everything_routes_through_backend(monkeypatch):
     # 'delete everything' must call the backend's select_all_delete, so it works
     # on the Flatpak (libei) exactly like on the host (ydotool).
-    from talktype import app
+    from tuxtalk import app
     monkeypatch.setattr(app, "detect_undo_command", lambda raw: ("everything", 1))
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
     monkeypatch.setattr(app, "_notify", lambda *a, **k: None)
@@ -171,7 +171,7 @@ def test_handle_undo_everything_routes_through_backend(monkeypatch):
 
 def test_handle_undo_char_undo_routes_backspaces_through_backend(monkeypatch):
     # Character-level undo must send its backspaces through the backend too.
-    from talktype import app
+    from tuxtalk import app
     monkeypatch.setattr(app, "detect_undo_command", lambda raw: ("word", 1))
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
     monkeypatch.setattr(app, "_notify", lambda *a, **k: None)
@@ -193,7 +193,7 @@ def test_flatpak_electron_app_types_via_libei_not_ydotool_fasttype(monkeypatch):
     # attempt the ydotool fast-type path (dead in the sandbox). It types through
     # the libei backend directly, keeping only the tab→spaces safety (a real Tab
     # jumps focus to Claude Desktop's Send button).
-    from talktype import app
+    from tuxtalk import app
     monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TalkType")
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "Claude")
     fast_calls = []

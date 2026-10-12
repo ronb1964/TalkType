@@ -8,7 +8,7 @@ import types
 
 import pytest
 
-from talktype import app
+from tuxtalk import app
 
 
 def _cfg(device):
@@ -17,7 +17,7 @@ def _cfg(device):
 
 @pytest.fixture
 def no_cuda(monkeypatch):
-    monkeypatch.setattr("talktype.cuda_helper.has_talktype_cuda_libraries", lambda: False)
+    monkeypatch.setattr("tuxtalk.cuda_helper.has_talktype_cuda_libraries", lambda: False)
 
 
 def test_vulkan_keeps_large_v3(no_cuda):
@@ -34,7 +34,7 @@ def test_without_cuda_libraries_it_still_falls_back(no_cuda, device):
 
 
 def test_with_cuda_libraries_nothing_changes(monkeypatch):
-    monkeypatch.setattr("talktype.cuda_helper.has_talktype_cuda_libraries", lambda: True)
+    monkeypatch.setattr("tuxtalk.cuda_helper.has_talktype_cuda_libraries", lambda: True)
     cfg = _cfg("cuda")
     app._guard_large_v3_without_cuda(cfg)
     assert cfg.model == "large-v3"

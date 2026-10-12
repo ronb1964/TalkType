@@ -13,8 +13,8 @@ gi = pytest.importorskip("gi")
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk  # noqa: E402
 
-from talktype import recommend as r  # noqa: E402
-from talktype import welcome_dialog as wd  # noqa: E402
+from tuxtalk import recommend as r  # noqa: E402
+from tuxtalk import welcome_dialog as wd  # noqa: E402
 
 SRC = (pathlib.Path(wd.__file__)).read_text()
 

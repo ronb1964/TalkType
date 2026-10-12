@@ -227,7 +227,7 @@ def _get_ydotool_env():
 # Hotkey options offered in the setup dialogs (F-keys, listed in preferred order)
 HOTKEY_OPTIONS = ["F8", "F9", "F10", "F11", "F12", "F1", "F2", "F3", "F4", "F5", "F6", "F7"]
 
-# Undo voice-command parsing/length logic lives in talktype.undo so it can
+# Undo voice-command parsing/length logic lives in tuxtalk.undo so it can
 # be unit-tested without dragging in heavy audio/CUDA imports.
 
 # D-Bus proxy for notifying the tray process of recording state changes.
@@ -3011,7 +3011,7 @@ def _loop_evdev(cfg: Settings, input_device_idx):
 
     # First run check: exit early if onboarding not complete
     try:
-        from talktype.cuda_helper import is_first_run
+        from tuxtalk.cuda_helper import is_first_run
         first_run = is_first_run()
     except Exception:
         first_run = False
@@ -3535,7 +3535,7 @@ def main():
                     def show_preferences(self):
                         """Open preferences window"""
                         import subprocess
-                        subprocess.Popen([sys.executable, "-m", "talktype.prefs"])
+                        subprocess.Popen([sys.executable, "-m", "tuxtalk.prefs"])
 
                     def start_recording(self):
                         """Signal the evdev loop to start recording (thread-safe)."""
@@ -3559,7 +3559,7 @@ def main():
                         import subprocess
                         try:
                             # Find the dictate script
-                            src_dir = os.path.dirname(__file__)  # usr/src/talktype
+                            src_dir = os.path.dirname(__file__)  # usr/src/tuxtalk
                             usr_dir = os.path.dirname(os.path.dirname(src_dir))  # usr
                             dictate_script = os.path.join(usr_dir, "bin", "dictate")
 
@@ -3567,7 +3567,7 @@ def main():
                                 subprocess.Popen([dictate_script], env=os.environ.copy())
                                 logger.info(f"Started dictation service via {dictate_script}")
                             else:
-                                subprocess.Popen([sys.executable, "-m", "talktype.app"],
+                                subprocess.Popen([sys.executable, "-m", "tuxtalk.app"],
                                                env=os.environ.copy())
                                 logger.info("Started dictation service via Python module")
 
@@ -3719,22 +3719,22 @@ def main():
     get_input_backend(cfg=cfg, input_device_idx=input_device_idx).start()
 
 def _run_service_entry():
-    """Entry for `python -m talktype.app` (the dictation service).
+    """Entry for `python -m tuxtalk.app` (the dictation service).
 
-    `-m talktype.app` executes this file as the module "__main__", but the input
-    backends reach the app via `from . import app` — module "talktype.app", a
+    `-m tuxtalk.app` executes this file as the module "__main__", but the input
+    backends reach the app via `from . import app` — module "tuxtalk.app", a
     DIFFERENT object with its own globals. If main() ran here in "__main__"
-    while the recording loop ran over in "talktype.app", every global main()
+    while the recording loop ran over in "tuxtalk.app", every global main()
     sets (model, _custom_commands, dbus_service, _typing_delay, ...) would be
     invisible there and transcription would crash with
     `NameError: name 'model'`.
 
     Delegate to the package module's main() so the whole service shares ONE
     namespace — exactly what the AppImage's bin/dictate console script already
-    does with `from talktype.app import main`. This also keeps BB-9's Flatpak
-    (`python3 -m talktype.app`) on the same single-module path.
+    does with `from tuxtalk.app import main`. This also keeps BB-9's Flatpak
+    (`python3 -m tuxtalk.app`) on the same single-module path.
     """
-    from talktype.app import main
+    from tuxtalk.app import main
     main()
 
 

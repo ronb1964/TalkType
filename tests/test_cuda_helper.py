@@ -1,7 +1,7 @@
 """Tests for cuda_helper module"""
 import os
 from unittest.mock import patch, Mock
-from talktype.cuda_helper import (
+from tuxtalk.cuda_helper import (
     detect_nvidia_gpu,
     has_cuda_libraries,
     get_appdir_cuda_path,
@@ -53,7 +53,7 @@ def test_first_run_flag(tmp_path):
     """Test first run flag management"""
     flag_file = tmp_path / ".first_run_done"
 
-    with patch('talktype.cuda_helper.os.path.expanduser') as mock_expand:
+    with patch('tuxtalk.cuda_helper.os.path.expanduser') as mock_expand:
         mock_expand.return_value = str(tmp_path / ".local/share/TalkType/.first_run_done")
 
         # Should be first run initially

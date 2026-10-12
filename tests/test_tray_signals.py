@@ -7,7 +7,7 @@ on a stale model indefinitely while the GTK tray showed the new one.
 
 import pytest
 
-from talktype import tray
+from tuxtalk import tray
 
 
 class FakeDBusService:

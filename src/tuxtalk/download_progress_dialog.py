@@ -12,7 +12,7 @@ gi.require_version('Gdk', '3.0')
 from gi.repository import Gtk, Gdk, GLib
 
 try:
-    from talktype.logger import setup_logger
+    from tuxtalk.logger import setup_logger
     logger = setup_logger(__name__)
 except ImportError:
     import logging
@@ -367,7 +367,7 @@ def show_unified_download_dialog(cuda=False, extension=False, model=None, parent
     if title is None and cuda and model:
         title = f"Downloading {model} and CUDA"
     if description is None and cuda and model:
-        from talktype.model_helper import MODEL_DISPLAY_SIZES
+        from tuxtalk.model_helper import MODEL_DISPLAY_SIZES
         model_size = MODEL_DISPLAY_SIZES.get(model, "~3 GB")
         description = (
             f"To run {model} on your NVIDIA graphics card with CUDA, TalkType needs two things:\n\n"
@@ -379,7 +379,7 @@ def show_unified_download_dialog(cuda=False, extension=False, model=None, parent
     dialog = UnifiedDownloadDialog(parent=parent, title=title, description=description)
 
     if cuda:
-        from talktype import cuda_helper
+        from tuxtalk import cuda_helper
         task = DownloadTask(
             name="CUDA Libraries",
             description="GPU acceleration libraries",
@@ -389,7 +389,7 @@ def show_unified_download_dialog(cuda=False, extension=False, model=None, parent
         dialog.add_task(task)
 
     if model:
-        from talktype.model_helper import make_model_download_func, MODEL_DISPLAY_SIZES
+        from tuxtalk.model_helper import make_model_download_func, MODEL_DISPLAY_SIZES
         model_size = MODEL_DISPLAY_SIZES.get(model, "unknown size")
         task = DownloadTask(
             name=f"{model} AI Model",
@@ -400,7 +400,7 @@ def show_unified_download_dialog(cuda=False, extension=False, model=None, parent
         dialog.add_task(task)
 
     if extension:
-        from talktype import extension_helper
+        from tuxtalk import extension_helper
 
         def extension_download(progress_callback, cancel_event):
             """Wrapper for extension installation with progress tracking."""

@@ -7,8 +7,8 @@ patterns, and they disagreed:
     Preferences, and any shell command that merely mentions the project path.
     Measured live during a review: six matching processes, including the dev
     tray the user runs all day.
-  * tray.py and welcome_dialog.py used "-m talktype", which matches
-    "-m talktype.tray" — the tray's own command line. It has never actually run:
+  * tray.py and welcome_dialog.py used "-m tuxtalk", which matches
+    "-m tuxtalk.tray" — the tray's own command line. It has never actually run:
     pkill reads a pattern starting with a dash as an option and aborts. The
     obvious repair (adding "--") would make the tray SIGKILL itself, so the
     pattern has to be narrowed rather than merely made parseable.
@@ -20,7 +20,7 @@ it hits the service, and nothing else, above all not the tray.
 
 The rule compares whole arguments, not substrings. pkill/pgrep -f match a regex
 against the joined command line, so a shell running
-`bash -c "pgrep -f talktype.app"` passed for the service. The tray cached that
+`bash -c "pgrep -f tuxtalk.app"` passed for the service. The tray cached that
 PID and toggle_recording would have sent it SIGUSR1; the Preferences hotkey test
 sent SIGUSR2 to the first pgrep hit. Both signals kill a process that doesn't
 handle them.
@@ -32,19 +32,19 @@ import signal
 
 import pytest
 
-from talktype import service_launcher
+from tuxtalk import service_launcher
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 # Real argument lists, as they appear in /proc/<pid>/cmdline. The AppImage ones
 # were taken from an extracted v0.7.2: usr/bin/dictate-tray execs
-# "python3 -m talktype.tray", and usr/bin/dictate does not ship at all, so the
+# "python3 -m tuxtalk.tray", and usr/bin/dictate does not ship at all, so the
 # service runs as the module. A pip install's `dictate` console script is run
 # by the kernel as "<python> /path/bin/dictate".
 SERVICE_ARGVS = [
-    ["/home/ron/Projects/TalkType/.venv/bin/python", "-m", "talktype.app"],
-    ["/tmp/.mount_TalkTyabc/usr/bin/python3", "-m", "talktype.app"],
-    ["python3", "-X", "faulthandler", "-m", "talktype.app"],
+    ["/home/ron/Projects/TalkType/.venv/bin/python", "-m", "tuxtalk.app"],
+    ["/tmp/.mount_TalkTyabc/usr/bin/python3", "-m", "tuxtalk.app"],
+    ["python3", "-X", "faulthandler", "-m", "tuxtalk.app"],
     ["/opt/talktype/usr/bin/dictate"],
     ["/opt/talktype/usr/bin/dictate", "--verbose"],
     ["/usr/bin/python3", "/home/u/.local/bin/dictate"],
@@ -53,16 +53,16 @@ SERVICE_ARGVS = [
 # Anything here being matched is a bug. The tray is the parent process: killing
 # it takes down the menu, the D-Bus service and the user's only way to quit.
 NOT_THE_SERVICE_ARGVS = [
-    ["/home/ron/Projects/TalkType/.venv/bin/python", "-m", "talktype.tray"],
-    ["/tmp/.mount_TalkTyabc/usr/bin/python3", "-m", "talktype.tray"],
+    ["/home/ron/Projects/TalkType/.venv/bin/python", "-m", "tuxtalk.tray"],
+    ["/tmp/.mount_TalkTyabc/usr/bin/python3", "-m", "tuxtalk.tray"],
     ["/tmp/.mount_TalkTyabc/usr/bin/dictate-tray"],
-    ["/tmp/.mount_TalkTyabc/usr/bin/python3", "-m", "talktype.prefs"],
+    ["/tmp/.mount_TalkTyabc/usr/bin/python3", "-m", "tuxtalk.prefs"],
     ["/bin/bash", "-c", "cd /home/ron/Projects/TalkType && ./build-release.sh"],
     ["node", "/home/ron/.local/share/talktype-notes/index.js"],
     # The ones the old substring match got wrong:
-    ["/bin/bash", "-c", "pgrep -af talktype.app"],
-    ["grep", "-rn", "talktype.app", "src/"],
-    ["less", "/tmp/talktype.app.log"],
+    ["/bin/bash", "-c", "pgrep -af tuxtalk.app"],
+    ["grep", "-rn", "tuxtalk.app", "src/"],
+    ["less", "/tmp/tuxtalk.app.log"],
     ["vim", "/opt/talktype/usr/bin/dictate"],
     ["/bin/bash", "-c", "/opt/talktype/usr/bin/dictate"],
     [],
@@ -85,9 +85,9 @@ class TestTheRuleSparesEverythingElse:
         )
 
     def test_the_tray_is_spared_specifically(self):
-        """The regression that mattered: '-m talktype' matches '-m talktype.tray'."""
+        """The regression that mattered: '-m tuxtalk' matches '-m tuxtalk.tray'."""
         assert not service_launcher.is_service_argv(
-            ["/usr/bin/python3", "-m", "talktype.tray"]
+            ["/usr/bin/python3", "-m", "tuxtalk.tray"]
         )
 
     def test_dictate_tray_is_spared(self):
@@ -129,18 +129,18 @@ class TestFindingTheServiceInProc:
         return procs
 
     def test_finds_only_the_service(self, fake_proc):
-        fake_proc[10] = (1000, ["python", "-m", "talktype.tray"])
-        fake_proc[11] = (1000, ["python", "-m", "talktype.app"])
-        fake_proc[12] = (1000, ["/bin/bash", "-c", "pgrep -f talktype.app"])
+        fake_proc[10] = (1000, ["python", "-m", "tuxtalk.tray"])
+        fake_proc[11] = (1000, ["python", "-m", "tuxtalk.app"])
+        fake_proc[12] = (1000, ["/bin/bash", "-c", "pgrep -f tuxtalk.app"])
         assert service_launcher.find_service_pids() == [11]
 
     def test_ignores_other_users(self, fake_proc):
         """Another user's service is not ours to signal (and os.kill would fail)."""
-        fake_proc[20] = (1001, ["python", "-m", "talktype.app"])
+        fake_proc[20] = (1001, ["python", "-m", "tuxtalk.app"])
         assert service_launcher.find_service_pids() == []
 
     def test_skips_itself(self, fake_proc):
-        fake_proc[1] = (1000, ["python", "-m", "talktype.app"])
+        fake_proc[1] = (1000, ["python", "-m", "tuxtalk.app"])
         assert service_launcher.find_service_pids() == []
 
     def test_a_process_that_vanished_is_skipped(self, fake_proc):
@@ -200,7 +200,7 @@ class TestNobodyHandRollsItAnyMore:
         """Six call sites with four patterns is how they drifted apart, and the
         substring matching pkill/pgrep -f do is the bug in its own right."""
         offenders = []
-        for path in (ROOT / "src" / "talktype").glob("*.py"):
+        for path in (ROOT / "src" / "tuxtalk").glob("*.py"):
             if path.name == "service_launcher.py":
                 continue
             for line in path.read_text().splitlines():

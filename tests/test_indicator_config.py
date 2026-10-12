@@ -7,7 +7,7 @@ LIVE_APPLIED_KEYS.
 
 See docs/superpowers/specs/2026-08-14-recording-indicator-styles-design.md.
 """
-from talktype import config
+from tuxtalk import config
 
 
 def test_new_indicator_fields_have_approved_defaults():

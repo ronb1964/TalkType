@@ -41,8 +41,8 @@ class _FakeButton:
 
 
 def _prefs_with_perms(monkeypatch, *, all_ok, udev, in_group):
-    from talktype import prefs as prefs_mod
-    from talktype import uinput_helper as uh
+    from tuxtalk import prefs as prefs_mod
+    from tuxtalk import uinput_helper as uh
 
     monkeypatch.setattr(uh, "check_all_device_permissions",
                         lambda: (all_ok, "reason"))

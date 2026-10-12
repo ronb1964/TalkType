@@ -19,7 +19,7 @@ data directory must cost the paste hint, never the tray.
 
 import pytest
 
-from talktype import kwin_focus as K
+from tuxtalk import kwin_focus as K
 
 
 class FakeBus:
@@ -68,7 +68,7 @@ class TestWhenItRuns:
 
 class TestTheScript:
     def test_it_targets_the_same_dbus_method_the_extension_uses(self):
-        from talktype import dbus_service
+        from tuxtalk import dbus_service
 
         script = K.build_script()
 

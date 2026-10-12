@@ -1,6 +1,6 @@
 """Tests for config module validation logic"""
 import pytest
-from talktype.config import Settings, validate_config, ConfigError
+from tuxtalk.config import Settings, validate_config, ConfigError
 
 
 def test_valid_config():
@@ -135,7 +135,7 @@ def test_settings_has_language_mode_and_launch_at_login():
 
 
 def test_save_config_includes_language_mode(tmp_path, monkeypatch):
-    import talktype.config as cfg
+    import tuxtalk.config as cfg
     monkeypatch.setattr(cfg, "CONFIG_PATH", str(tmp_path / "config.toml"))
     cfg.save_config(Settings(language_mode="manual"))
     text = (tmp_path / "config.toml").read_text()
@@ -146,7 +146,7 @@ def test_save_config_includes_language_mode(tmp_path, monkeypatch):
 def test_merge_changed_keys_preserves_external_changes():
     """Keys the user did NOT touch keep the on-disk value (e.g. a model
     switch made from the tray while Preferences was open)."""
-    from talktype.config import merge_changed_keys
+    from tuxtalk.config import merge_changed_keys
     original = {"model": "small", "device": "cpu", "beeps": True}
     current = {"model": "small", "device": "cpu", "beeps": False}  # user toggled beeps
     base = {"model": "medium", "device": "cpu", "beeps": True}     # tray changed model meanwhile
@@ -156,13 +156,13 @@ def test_merge_changed_keys_preserves_external_changes():
 
 
 def test_merge_changed_keys_user_wins_on_conflict():
-    from talktype.config import merge_changed_keys
+    from tuxtalk.config import merge_changed_keys
     merged = merge_changed_keys({"model": "small"}, {"model": "large-v3"}, {"model": "medium"})
     assert merged["model"] == "large-v3"
 
 
 def test_merge_changed_keys_adds_new_keys():
-    from talktype.config import merge_changed_keys
+    from tuxtalk.config import merge_changed_keys
     merged = merge_changed_keys({}, {"language_mode": "manual"}, {"model": "small"})
     assert merged["language_mode"] == "manual"
     assert merged["model"] == "small"
@@ -171,7 +171,7 @@ def test_merge_changed_keys_adds_new_keys():
 def test_model_cache_check_fast_unknown_model():
     """Lightweight cache check must not load model weights and must return
     False for unknown models (used on every Apply/OK click in prefs)."""
-    from talktype.model_helper import is_model_cached_fast
+    from tuxtalk.model_helper import is_model_cached_fast
     assert is_model_cached_fast("no-such-model") is False
 
 
@@ -179,7 +179,7 @@ def test_parakeet_is_the_default_model():
     """New installs start on Parakeet: more accurate than any Whisper model on
     English (Open ASR Leaderboard) and fast on a processor. Existing configs
     keep whatever model they saved."""
-    from talktype.config import Settings
+    from tuxtalk.config import Settings
     assert Settings().model == "parakeet-v3"
     assert Settings().device == "cpu"   # the graphics card is chosen at setup
 
@@ -188,9 +188,9 @@ def test_first_run_and_preferences_recommend_parakeet():
     """Both pickers used to call Small "recommended" and preselect it.
     First run now recommends through recommend.py (the welcome card)."""
     import pathlib
-    from talktype import recommend
+    from tuxtalk import recommend
     assert recommend.recommend("en", recommend.Hardware(None)).model == "parakeet-v3"
-    src = pathlib.Path(__file__).resolve().parent.parent / "src" / "talktype"
+    src = pathlib.Path(__file__).resolve().parent.parent / "src" / "tuxtalk"
     prefs = (src / "prefs.py").read_text()
     assert '"small":    "small — recommended balance"' not in prefs
     assert "Parakeet — recommended" in prefs

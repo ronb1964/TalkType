@@ -1,11 +1,11 @@
 [tool.poetry]
-name = "talktype"
+name = "tuxtalk"
 version = "0.14.6"
-description = "Press-and-hold dictation for Wayland (F8), Faster-Whisper + ydotool, with smart punctuation."
+description = "Voice dictation for Linux: hold a key, talk, and your words are typed for you."
 authors = ["Ron"]
 license = "MIT"
 readme = "README.md"
-packages = [{ include = "talktype", from = "src" }]
+packages = [{ include = "tuxtalk", from = "src" }]
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.15"  # Dev: 3.14 (Nobara 42), AppImage: 3.10 (Ubuntu 22.04)
@@ -26,9 +26,9 @@ toml = "*"
 # GPU (RTX 4070 SUPER). Removing it cut the packaged size by ~170 MB (.deb 302 MB → 133 MB).
 
 [tool.poetry.scripts]
-dictate-tray = "talktype.tray:main"
-dictate = "talktype.app:main"
-dictate-prefs = "talktype.prefs:main"
+dictate-tray = "tuxtalk.tray:main"
+dictate = "tuxtalk.app:main"
+dictate-prefs = "tuxtalk.prefs:main"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.4.1"

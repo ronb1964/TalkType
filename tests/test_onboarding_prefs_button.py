@@ -20,7 +20,7 @@ import pathlib
 import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-WELCOME = ROOT / "src/talktype/welcome_dialog.py"
+WELCOME = ROOT / "src/tuxtalk/welcome_dialog.py"
 
 
 def _function_source(name):
@@ -60,6 +60,6 @@ def test_preferences_launcher_handles_appimage_and_dev():
         "The launcher does not try the AppImage's bin/dictate-prefs, so the "
         "button would do nothing for AppImage users."
     )
-    assert "talktype.prefs" in body, (
-        "The launcher has no dev-mode fallback (python -m talktype.prefs)."
+    assert "tuxtalk.prefs" in body, (
+        "The launcher has no dev-mode fallback (python -m tuxtalk.prefs)."
     )

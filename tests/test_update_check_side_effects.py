@@ -23,7 +23,7 @@ import subprocess
 
 import pytest
 
-from talktype import config as config_module
+from tuxtalk import config as config_module
 
 
 class TestRecordingTheUpdateCheck:
@@ -62,7 +62,7 @@ class TestRecordingTheUpdateCheck:
 
 class TestPackageInstallIsBounded:
     def _checker(self):
-        from talktype import update_checker
+        from tuxtalk import update_checker
         return update_checker
 
     def test_a_hung_package_manager_returns_instead_of_blocking(self, monkeypatch):
@@ -119,7 +119,7 @@ class TestPackageInstallIsBounded:
 
 class TestWtypeIsBounded:
     def test_a_stalled_wtype_is_killed_and_reported(self, monkeypatch):
-        from talktype import app
+        from tuxtalk import app
 
         monkeypatch.setattr(app, "_which", lambda name: name == "wtype")
 

@@ -569,7 +569,7 @@ class DictationTray:
 
         Finds the dictate script (AppImage) or falls back to python -m (dev mode).
         """
-        # AppImage path: __file__ → usr/src/talktype/tray.py → usr/bin/dictate
+        # AppImage path: __file__ → usr/src/tuxtalk/tray.py → usr/bin/dictate
         # Delegated so the tray and Preferences start the service identically.
         # They used to spawn it separately and only this copy set GDK_BACKEND,
         # so a restart from Preferences ran the service on native Wayland and
@@ -1006,7 +1006,7 @@ class DictationTray:
 
         tab_desc = f" ({tab} tab)" if tab else ""
 
-        # AppImage path: __file__ → usr/src/talktype/tray.py → usr/bin/dictate-prefs
+        # AppImage path: __file__ → usr/src/tuxtalk/tray.py → usr/bin/dictate-prefs
         src_dir = os.path.dirname(__file__)
         usr_dir = os.path.dirname(os.path.dirname(src_dir))
         prefs_script = os.path.join(usr_dir, "bin", "dictate-prefs")
@@ -1025,7 +1025,7 @@ class DictationTray:
                 # Prefs also needs Python 3.13 paths for GTK bindings
                 pythonpath += ":/usr/lib64/python3.13/site-packages:/usr/lib/python3.13/site-packages"
                 env["PYTHONPATH"] = pythonpath
-            cmd = [sys.executable, "-m", "talktype.prefs"]
+            cmd = [sys.executable, "-m", "tuxtalk.prefs"]
             if tab:
                 cmd.append(f"--tab={tab}")
             self.preferences_process = subprocess.Popen(cmd, env=env)
@@ -1988,8 +1988,8 @@ def main():
 
     # Check for first run and show welcome dialog if applicable
     try:
-        import talktype.cuda_helper as cuda_helper
-        from talktype.welcome_dialog import show_welcome_and_install
+        import tuxtalk.cuda_helper as cuda_helper
+        from tuxtalk.welcome_dialog import show_welcome_and_install
 
         # Only show welcome dialog on first tray launch (not for prefs)
         if cuda_helper.is_first_run():
@@ -1999,9 +1999,9 @@ def main():
 
             # Kill any existing service that might be running - use SIGKILL for
             # immediate termination. The patterns live in service_launcher so
-            # this can never again include one ("-m talktype") that matches the
+            # this can never again include one ("-m tuxtalk") that matches the
             # tray's own command line.
-            from talktype.service_launcher import stop_dictation_service
+            from tuxtalk.service_launcher import stop_dictation_service
             stop_dictation_service(force=True)
             time.sleep(0.5)  # Give processes time to die
 

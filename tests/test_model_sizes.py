@@ -15,9 +15,9 @@ the processor models, since TalkType downloads all of it):
 import pathlib
 import re
 
-from talktype import recommend as r
-from talktype.model_helper import MODEL_DISPLAY_SIZES
-from talktype.whisper_vulkan import MODEL_FILES
+from tuxtalk import recommend as r
+from tuxtalk.model_helper import MODEL_DISPLAY_SIZES
+from tuxtalk.whisper_vulkan import MODEL_FILES
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -56,7 +56,7 @@ def test_option_rows_follow_the_graphics_card_choice():
 
 def test_help_readme_and_preferences_show_the_real_sizes():
     texts = [(ROOT / p).read_text() for p in
-             ("src/talktype/help_dialog.py", "README.md", "src/talktype/prefs.py")]
+             ("src/tuxtalk/help_dialog.py", "README.md", "src/tuxtalk/prefs.py")]
     for text in texts:
         for old in ("39 MB", "74 MB", "244 MB", "769 MB"):
             assert not re.search(rf"\b{old}\b", text), old

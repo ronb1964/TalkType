@@ -12,7 +12,7 @@ import types
 
 import pytest
 
-from talktype import desktop_detect as dd
+from tuxtalk import desktop_detect as dd
 
 UUID = "talktype@ronb1964.github.io"
 

@@ -21,7 +21,7 @@ def indicator():
     if not Gtk.init_check(None)[0]:
         pytest.skip("no display available")
 
-    from talktype.recording_indicator import RecordingIndicator
+    from tuxtalk.recording_indicator import RecordingIndicator
 
     ind = RecordingIndicator(position="center", size="medium", style="waveform")
     yield ind
@@ -48,7 +48,7 @@ def test_waveform_window_is_block_size_independent(indicator):
         indicator.set_waveform([0.2] * 384)     # big uniform blocks (Flatpak-like)
     big = len(indicator.waveform)
 
-    from talktype.recording_indicator import RecordingIndicator
+    from tuxtalk.recording_indicator import RecordingIndicator
     ind2 = RecordingIndicator(position="center", size="medium", style="waveform")
     try:
         for _ in range(20 * 6):

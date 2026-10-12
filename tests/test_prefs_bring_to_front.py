@@ -7,7 +7,7 @@ import inspect
 import os
 import signal
 
-from talktype import prefs_ipc
+from tuxtalk import prefs_ipc
 
 
 def test_running_pid_reads_a_live_pid(tmp_path, monkeypatch):
@@ -46,13 +46,13 @@ def test_bring_to_front_reports_a_vanished_window(monkeypatch):
 def test_prefs_handles_the_signal_before_it_announces_its_pid():
     """SIGUSR1 terminates a process that doesn't handle it. The pidfile is how
     others find Preferences, so the handlers must be installed first."""
-    from talktype import prefs
+    from tuxtalk import prefs
     src = inspect.getsource(prefs.main)
     assert src.index("unix_signal_add") < src.index("_acquire_prefs_singleton(")
 
 
 def test_a_second_launch_forwards_and_exits(tmp_path, monkeypatch):
-    from talktype import prefs
+    from tuxtalk import prefs
     pidfile = tmp_path / "talktype-prefs.pid"
     pidfile.write_text("4242")
     monkeypatch.setattr(prefs, "_PREFS_PIDFILE", str(pidfile))

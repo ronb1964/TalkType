@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from talktype import app, model_helper
+from tuxtalk import app, model_helper
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -23,7 +23,7 @@ def _settings(model="small", device="cuda"):
 @pytest.fixture(autouse=True)
 def cuda_installed(monkeypatch):
     """These tests are about downloads and load failures with CUDA present."""
-    from talktype import cuda_helper
+    from tuxtalk import cuda_helper
     monkeypatch.setattr(cuda_helper, "has_cuda_libraries", lambda: True)
 
 
@@ -32,7 +32,7 @@ def test_missing_cuda_files_use_the_processor_instead_of_crashing(monkeypatch):
     then the first dictation crashes the service inside the speech library
     (libcudnn_ops.so.9 not found), past every Python fallback. Ron, 0.14.5
     test. Use the processor for this run and say why; keep the setting."""
-    from talktype import cuda_helper
+    from tuxtalk import cuda_helper
     monkeypatch.setattr(cuda_helper, "has_cuda_libraries", lambda: False)
     loaded, notes = [], []
     monkeypatch.setattr(model_helper, "download_model_with_progress",
@@ -84,7 +84,7 @@ def test_a_real_cuda_failure_still_falls_back_to_cpu(monkeypatch):
         return object()
 
     monkeypatch.setattr(model_helper, "download_model_with_progress", load)
-    monkeypatch.setattr("talktype.config.save_config", lambda cfg: None)
+    monkeypatch.setattr("tuxtalk.config.save_config", lambda cfg: None)
     assert app.build_model(_settings(device="cuda")) is not None
     assert calls == ["cuda", "cpu"]
 
@@ -92,7 +92,7 @@ def test_a_real_cuda_failure_still_falls_back_to_cpu(monkeypatch):
 def test_a_needed_download_happens_before_the_gtk_thread_starts():
     """Only one thread may drive GTK: the download dialogs must run before
     Gtk.main() starts on its background thread."""
-    main_src = (ROOT / "src/talktype/app.py").read_text().split("\ndef main():", 1)[1]
+    main_src = (ROOT / "src/tuxtalk/app.py").read_text().split("\ndef main():", 1)[1]
     early_build = main_src.index("if not is_model_cached_fast(cfg.model):")
     thread_start = main_src.index("gtk_thread.start()")
     assert early_build < thread_start
@@ -112,8 +112,8 @@ def test_fallback_picks_the_nearest_downloaded_model(wanted, downloaded, cuda, e
 
 
 def test_cancel_falls_back_to_a_downloaded_model_and_saves_it(monkeypatch):
-    import talktype.config as config
-    from talktype import cuda_helper
+    import tuxtalk.config as config
+    from tuxtalk import cuda_helper
 
     def download(name, **k):
         return None if name == "parakeet-v3" else f"model:{name}"

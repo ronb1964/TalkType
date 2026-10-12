@@ -10,7 +10,7 @@ def indicator():
     from gi.repository import Gtk
     if not Gtk.init_check(None)[0]:
         pytest.skip("no display")
-    from talktype.recording_indicator import RecordingIndicator
+    from tuxtalk.recording_indicator import RecordingIndicator
     ind = RecordingIndicator(style="bars", size="medium")
     yield ind
     ind.destroy()

@@ -31,7 +31,7 @@ def get_focused_window_class() -> str | None:
 
     NOTE: This reads the in-memory cache local to *this* process. It only works
     inside the tray process, where the D-Bus service receives push updates.
-    The dictation engine (talktype.app) runs in a separate subprocess and must
+    The dictation engine (tuxtalk.app) runs in a separate subprocess and must
     query via D-Bus instead — see _query_focused_window_class() in app.py.
     """
     return _focused_window_class
@@ -263,7 +263,7 @@ class TalkTypeDBusService(dbus.service.Object):
     def GetFocusedWindowClass(self):
         """Return the currently focused window's wm_class (empty string if unknown).
 
-        Used by the dictation engine subprocess (talktype.app) to read the cache
+        Used by the dictation engine subprocess (tuxtalk.app) to read the cache
         that the GNOME extension pushes into this tray-side service.
         """
         return _focused_window_class or ''

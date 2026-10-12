@@ -1,7 +1,7 @@
 """Preferences exposes the new indicator controls and writes their config keys."""
 import pathlib
 
-PREFS = pathlib.Path(__file__).resolve().parent.parent / "src/talktype/prefs.py"
+PREFS = pathlib.Path(__file__).resolve().parent.parent / "src/tuxtalk/prefs.py"
 
 
 def test_controls_write_the_new_config_keys():
@@ -98,7 +98,7 @@ def test_offset_boxes_show_up_and_right_as_positive():
     backwards. The vertical box flips the sign it shows; the saved value keeps
     screen coordinates (positive = down) so old settings and backups still
     mean the same place."""
-    from talktype.prefs import OFFSET_DISPLAY_SIGN
+    from tuxtalk.prefs import OFFSET_DISPLAY_SIGN
     assert OFFSET_DISPLAY_SIGN == {"indicator_offset_x": 1, "indicator_offset_y": -1}
     # Showing +30 ("up 30") saves -30, which the indicator reads as 30 px up.
     shown_up = 30

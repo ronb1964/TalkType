@@ -17,7 +17,7 @@ import time
 import pytest
 from evdev import ecodes
 
-from talktype import app
+from tuxtalk import app
 
 F8 = ecodes.KEY_F8
 

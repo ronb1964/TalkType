@@ -8,7 +8,7 @@ import types
 
 import pytest
 
-from talktype import recommend as r
+from tuxtalk import recommend as r
 
 NVIDIA = r.Hardware("NVIDIA GeForce RTX 4070 SUPER", has_nvidia=True)
 AMD = r.Hardware("AMD graphics")
@@ -153,7 +153,7 @@ def test_hardware_facts_are_cached():
 
 
 def test_new_settings_exist_and_are_live():
-    from talktype.config import LIVE_APPLIED_KEYS, Settings
+    from tuxtalk.config import LIVE_APPLIED_KEYS, Settings
     s = Settings()
     assert (s.dictation_language, s.recommend_notice_shown, s.vulkan_slower) == ("", False, False)
     assert {"dictation_language", "recommend_notice_shown", "vulkan_slower"} <= LIVE_APPLIED_KEYS

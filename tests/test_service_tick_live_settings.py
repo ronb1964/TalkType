@@ -8,7 +8,7 @@ without restart". This regression test pins the reload into _service_tick.
 
 import types
 
-from talktype import app
+from tuxtalk import app
 
 
 def test_service_tick_reloads_live_settings_when_config_changed(monkeypatch):

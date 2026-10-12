@@ -23,7 +23,7 @@ import pytest
 def prefs_cls():
     gi = pytest.importorskip("gi")
     gi.require_version("Gtk", "3.0")
-    from talktype.prefs import PreferencesWindow
+    from tuxtalk.prefs import PreferencesWindow
 
     return PreferencesWindow
 
@@ -53,18 +53,18 @@ class StubPrefs:
     def _changed_since_open(self):
         # The real implementation — this is the baseline behaviour the bug
         # corrupts, so it must not be stubbed out with something simpler.
-        from talktype.prefs import PreferencesWindow
+        from tuxtalk.prefs import PreferencesWindow
 
         return PreferencesWindow._changed_since_open(self)
 
     def _rollback_download(self, previous):
         # The code under test — delegate, never reimplement.
-        from talktype.prefs import PreferencesWindow
+        from tuxtalk.prefs import PreferencesWindow
 
         return PreferencesWindow._rollback_download(self, previous)
 
     def _set_choice(self, key, value):
-        from talktype.prefs import PreferencesWindow
+        from tuxtalk.prefs import PreferencesWindow
 
         return PreferencesWindow._set_choice(self, key, value)
 
@@ -87,7 +87,7 @@ class StubPrefs:
 
 
 def _changed_since_open(stub):
-    from talktype.config import changed_keys
+    from tuxtalk.config import changed_keys
 
     return changed_keys(stub._config_at_open, stub.config)
 

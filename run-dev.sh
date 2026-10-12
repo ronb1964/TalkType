@@ -21,4 +21,4 @@ export PYTHONPATH="./src:/usr/lib64/python3.14/site-packages:/usr/lib/python3.14
 export LD_LIBRARY_PATH=".venv/lib64/python3.14/site-packages/ctranslate2.libs:.venv/lib/python3.14/site-packages/nvidia/cudnn/lib"
 
 # Run with venv Python
-exec .venv/bin/python -m talktype.tray "$@"
+exec .venv/bin/python -m tuxtalk.tray "$@"

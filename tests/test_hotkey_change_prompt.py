@@ -4,7 +4,7 @@ changed later was simply accepted, and KDE's refusal only reached the log)."""
 import pytest
 
 pytest.importorskip("gi")
-from talktype.prefs import hotkey_change_message, hotkey_label  # noqa: E402
+from tuxtalk.prefs import hotkey_change_message, hotkey_label  # noqa: E402
 
 CFG = {"hotkey": "F7", "toggle_hotkey": "F9", "voice_commands_hotkey": "Ctrl+Alt+V"}
 

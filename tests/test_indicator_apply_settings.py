@@ -25,7 +25,7 @@ def indicator():
     if not Gtk.init_check(None)[0]:
         pytest.skip("no display available")
 
-    from talktype.recording_indicator import RecordingIndicator
+    from tuxtalk.recording_indicator import RecordingIndicator
 
     ind = RecordingIndicator(position="center", offset_x=0, offset_y=0, size="medium")
     yield ind
@@ -76,7 +76,7 @@ class TestWindowSizeMatchesPositioningMaths:
         if not Gtk.init_check(None)[0]:
             pytest.skip("no display available")
 
-        from talktype.recording_indicator import RecordingIndicator
+        from tuxtalk.recording_indicator import RecordingIndicator
 
         ind = RecordingIndicator(size=size)
         try:

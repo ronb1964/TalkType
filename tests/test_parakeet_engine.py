@@ -16,9 +16,9 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def test_parakeet_is_offered_valid_and_downloadable():
-    from talktype.config import VALID_MODELS
-    from talktype.model_helper import MODEL_REPOS, MODEL_DISPLAY_SIZES, OFFERED_MODELS
-    from talktype.parakeet_engine import PARAKEET_MODEL
+    from tuxtalk.config import VALID_MODELS
+    from tuxtalk.model_helper import MODEL_REPOS, MODEL_DISPLAY_SIZES, OFFERED_MODELS
+    from tuxtalk.parakeet_engine import PARAKEET_MODEL
 
     assert PARAKEET_MODEL in OFFERED_MODELS
     assert PARAKEET_MODEL in VALID_MODELS
@@ -29,9 +29,9 @@ def test_parakeet_is_offered_valid_and_downloadable():
 def test_every_offered_model_has_a_label_on_every_picker():
     """The picker indexes a label dict by model id; a missing key crashes the
     screen as it opens. (First run's card has no full picker any more.)"""
-    from talktype.model_helper import OFFERED_MODELS
+    from tuxtalk.model_helper import OFFERED_MODELS
 
-    for path, dict_name in (("src/talktype/prefs.py", "_MODEL_DISPLAY"),):
+    for path, dict_name in (("src/tuxtalk/prefs.py", "_MODEL_DISPLAY"),):
         source = (ROOT / path).read_text()
         body = re.search(dict_name + r" = \{(.*?)\n\s*\}", source, re.S).group(1)
         keys = set(re.findall(r'"([^"]+)":', body))
@@ -42,8 +42,8 @@ def test_every_offered_model_has_a_label_on_every_picker():
 def test_only_the_int8_files_are_downloaded(monkeypatch):
     """The repo also holds a 2.4 GB full-precision copy that must never be fetched."""
     import huggingface_hub
-    from talktype import model_helper
-    from talktype.parakeet_engine import PARAKEET_FILES, PARAKEET_MODEL, PARAKEET_REPO
+    from tuxtalk import model_helper
+    from tuxtalk.parakeet_engine import PARAKEET_FILES, PARAKEET_MODEL, PARAKEET_REPO
 
     repo_files = [
         (".gitattributes", 1579), ("README.md", 1207), ("config.json", 97),
@@ -67,7 +67,7 @@ def test_only_the_int8_files_are_downloaded(monkeypatch):
 
 def test_whisper_downloads_are_not_filtered(monkeypatch):
     import huggingface_hub
-    from talktype import model_helper
+    from tuxtalk import model_helper
 
     monkeypatch.setattr(
         huggingface_hub, "list_repo_tree",
@@ -79,7 +79,7 @@ def test_whisper_downloads_are_not_filtered(monkeypatch):
 
 
 def test_cache_checks_use_parakeet_files(monkeypatch):
-    from talktype import model_helper
+    from tuxtalk import model_helper
 
     monkeypatch.setattr(model_helper, "_parakeet_cached_dir", lambda: None)
     assert model_helper.is_model_cached_fast("parakeet-v3") is False
@@ -89,15 +89,15 @@ def test_cache_checks_use_parakeet_files(monkeypatch):
 
 
 def test_missing_parakeet_file_makes_the_download_unusable():
-    from talktype import model_helper
+    from tuxtalk import model_helper
 
     assert model_helper._download_is_usable(["README.md"], "parakeet-v3")
     assert not model_helper._download_is_usable(["encoder-model.int8.onnx"], "parakeet-v3")
 
 
 def test_dictation_audio_goes_to_parakeet(monkeypatch):
-    from talktype import app
-    from talktype.parakeet_engine import ParakeetModel
+    from tuxtalk import app
+    from tuxtalk.parakeet_engine import ParakeetModel
 
     received = []
     fake = ParakeetModel.__new__(ParakeetModel)  # skip loading the real model
@@ -110,8 +110,8 @@ def test_dictation_audio_goes_to_parakeet(monkeypatch):
 
 
 def test_parakeet_silence_returns_none(monkeypatch):
-    from talktype import app
-    from talktype.parakeet_engine import ParakeetModel
+    from tuxtalk import app
+    from tuxtalk.parakeet_engine import ParakeetModel
 
     fake = ParakeetModel.__new__(ParakeetModel)
     fake.recognize = lambda audio: ""
@@ -121,7 +121,7 @@ def test_parakeet_silence_returns_none(monkeypatch):
 
 
 def test_display_name_is_friendly():
-    from talktype.model_helper import model_display_name
+    from tuxtalk.model_helper import model_display_name
     assert model_display_name("parakeet-v3") == "Parakeet"
     assert model_display_name("small") == "Small"
 
@@ -129,22 +129,22 @@ def test_display_name_is_friendly():
 def test_menus_show_the_device_parakeet_really_uses():
     """Picking Parakeet in Preferences can leave device = "cuda" in the config;
     both the tray and the GNOME extension (via GetDeviceType) must say CPU."""
-    from talktype.parakeet_engine import effective_device
+    from tuxtalk.parakeet_engine import effective_device
     assert effective_device("parakeet-v3", "cuda") == "cpu"
     assert effective_device("large-v3", "cuda") == "cuda"
     assert effective_device("small", "cpu") == "cpu"
 
 
 def test_parakeet_is_on_the_graphics_chip_only_once_its_vulkan_files_are_there(monkeypatch):
-    from talktype import whisper_vulkan as wv
-    from talktype.parakeet_engine import effective_device
+    from tuxtalk import whisper_vulkan as wv
+    from tuxtalk.parakeet_engine import effective_device
     monkeypatch.setattr(wv, "is_installed", lambda m: False)
     assert effective_device("parakeet-v3", "vulkan") == "cpu"
     monkeypatch.setattr(wv, "is_installed", lambda m: True)
     assert effective_device("parakeet-v3", "vulkan") == "vulkan"
     assert effective_device("parakeet-v3", "cuda") == "cpu"     # CUDA has no Parakeet
 
-    from talktype.dbus_service import TalkTypeDBusService
+    from tuxtalk.dbus_service import TalkTypeDBusService
     svc = TalkTypeDBusService.__new__(TalkTypeDBusService)
     svc.app = SimpleNamespace(config=SimpleNamespace(model="parakeet-v3", device="cuda"))
     assert TalkTypeDBusService.GetDeviceType(svc) == "cpu"

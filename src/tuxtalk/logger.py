@@ -14,10 +14,10 @@ def _log_dir() -> Path:
     AppImage to ~/.config/talktype/ — matching config.py's split so the two
     never interleave.
     """
-    # TALKTYPE_LOG_DIR overrides everything. The test suite sets it (see
+    # TUXTALK_LOG_DIR overrides everything. The test suite sets it (see
     # tests/conftest.py): without it, every test run appended fake entries,
     # made-up AppImage paths and simulated timeouts, to the user's real log.
-    override = os.environ.get("TALKTYPE_LOG_DIR")
+    override = os.environ.get("TUXTALK_LOG_DIR")
     if override:
         return Path(override)
     config_dir = "talktype-dev" if os.environ.get("DEV_MODE") == "1" else "talktype"

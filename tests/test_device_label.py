@@ -7,7 +7,7 @@ Parakeet it said "CUDA (GPU)" while Parakeet ran on the processor.
 """
 import pytest
 
-from talktype.prefs import device_label
+from tuxtalk.prefs import device_label
 
 
 def test_cuda_not_downloaded_names_the_download():
@@ -29,6 +29,6 @@ def test_cuda_with_parakeet_still_names_the_download():
 
 
 def test_other_devices_keep_their_names():
-    from talktype.whisper_vulkan import DEVICE_LABEL
+    from tuxtalk.whisper_vulkan import DEVICE_LABEL
     assert device_label("cpu", "parakeet-v3", True) == "CPU"
     assert device_label("vulkan", "parakeet-v3", True) == DEVICE_LABEL

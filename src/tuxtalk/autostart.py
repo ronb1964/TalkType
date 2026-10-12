@@ -7,7 +7,7 @@ itself — the command that a fresh install writes and the command Preferences
 writes can never drift apart.
 
 The launch command specifically must resolve to the env-setting wrapper
-(`/usr/bin/talktype` → AppRun), not a bare `python3 -m talktype.tray`: the bundled
+(`/usr/bin/talktype` → AppRun), not a bare `python3 -m tuxtalk.tray`: the bundled
 interpreter has no PYTHONPATH/LD_LIBRARY_PATH/GI_TYPELIB_PATH, so a raw-Python
 autostart line dies silently at login with ModuleNotFoundError.
 """
@@ -23,7 +23,7 @@ logger = setup_logger(__name__)
 
 
 def _project_root() -> str:
-    """Repo root, for dev-mode paths. autostart.py is src/talktype/autostart.py."""
+    """Repo root, for dev-mode paths. autostart.py is src/tuxtalk/autostart.py."""
     return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
@@ -54,7 +54,7 @@ def get_launch_command(prefer_installed_appimage: bool = False) -> str:
             return run_dev
         return (f'/bin/bash -c "cd {root} && DEV_MODE=1 '
                 f'PYTHONPATH=./src:/usr/lib64/python3.13/site-packages:'
-                f'/usr/lib/python3.13/site-packages {sys.executable} -m talktype.tray"')
+                f'/usr/lib/python3.13/site-packages {sys.executable} -m tuxtalk.tray"')
 
     # Running from an AppImage: relaunch the AppImage itself (defaults to tray).
     appimage_path = os.environ.get('APPIMAGE')
@@ -91,7 +91,7 @@ def get_launch_command(prefer_installed_appimage: bool = False) -> str:
             pass
 
     # Last resort — may lack the bundled environment.
-    return f'{sys.executable} -m talktype.tray'
+    return f'{sys.executable} -m tuxtalk.tray'
 
 
 def get_icon_path() -> str:

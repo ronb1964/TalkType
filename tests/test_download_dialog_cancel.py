@@ -9,7 +9,7 @@ reported to the caller as failures.
 
 import threading
 
-from talktype.download_progress_dialog import DownloadTask, UnifiedDownloadDialog
+from tuxtalk.download_progress_dialog import DownloadTask, UnifiedDownloadDialog
 
 
 def _task(name="CUDA Libraries"):

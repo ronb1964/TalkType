@@ -16,7 +16,7 @@ import pathlib
 
 import pytest
 
-SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "talktype"
+SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tuxtalk"
 
 # Modules whose code runs on the tray's GTK main loop.
 MAIN_LOOP_MODULES = ["tray.py"]

@@ -25,8 +25,8 @@ import re
 import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-CSS = ROOT / "src/talktype/prefs_style.css"
-PREFS = ROOT / "src/talktype/prefs.py"
+CSS = ROOT / "src/tuxtalk/prefs_style.css"
+PREFS = ROOT / "src/tuxtalk/prefs.py"
 
 SCOPE_CLASS = "talktype-prefs"
 

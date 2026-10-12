@@ -5,7 +5,7 @@ whole list back on Apply/OK. A word fixed from the tray (Fix a Word) while
 Preferences was open was therefore deleted by the next Apply. It now applies
 only the user's own edits on top of what is on disk at save time.
 """
-from talktype.config import merge_custom_command_edits as merge
+from tuxtalk.config import merge_custom_command_edits as merge
 
 
 def test_fix_saved_elsewhere_survives_an_unrelated_apply():

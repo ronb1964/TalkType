@@ -11,7 +11,7 @@ import wave
 import numpy as np
 import pytest
 
-from talktype import whisper_vulkan as wv
+from tuxtalk import whisper_vulkan as wv
 
 # Exactly what the engine printed on the development machine (NVIDIA card plus
 # the Ryzen's built-in AMD graphics).
@@ -70,13 +70,13 @@ def test_offered_with_any_graphics_chip_and_vulkan(monkeypatch):
 
 def test_every_offered_model_has_a_file_in_whisper_cpp_format():
     """Parakeet included: whisper.cpp 1.9.4 runs it too (libparakeet)."""
-    from talktype.model_helper import OFFERED_MODELS
+    from tuxtalk.model_helper import OFFERED_MODELS
     for model in OFFERED_MODELS:
         assert wv.supports_model(model), model
 
 
 def test_parakeet_comes_from_its_own_repo_and_whisper_from_whisper_cpps():
-    from talktype.parakeet_engine import PARAKEET_MODEL
+    from tuxtalk.parakeet_engine import PARAKEET_MODEL
     assert wv.model_repo(PARAKEET_MODEL) == "ggml-org/parakeet-GGUF"
     assert wv.MODEL_FILES[PARAKEET_MODEL][0] == "ggml-parakeet-tdt-0.6b-v3-q8_0.bin"
     assert wv.model_repo("small") == "ggerganov/whisper.cpp"
@@ -94,7 +94,7 @@ def _engine(tmp_path, monkeypatch, *names):
 def test_parakeet_needs_an_engine_built_with_parakeet(tmp_path, monkeypatch):
     """Engine build 1 (TalkType 0.12.0 to 0.13.1) has no Parakeet in it. It
     still counts as installed for Whisper, so nobody re-downloads it."""
-    from talktype.parakeet_engine import PARAKEET_MODEL
+    from tuxtalk.parakeet_engine import PARAKEET_MODEL
     _engine(tmp_path, monkeypatch, "whisper-server")
     assert wv.is_engine_installed() and wv.is_engine_installed("small")
     assert not wv.is_engine_installed(PARAKEET_MODEL)
@@ -103,10 +103,10 @@ def test_parakeet_needs_an_engine_built_with_parakeet(tmp_path, monkeypatch):
 
 
 def test_engine_download_fetches_again_when_parakeet_is_missing(tmp_path, monkeypatch):
-    from talktype.parakeet_engine import PARAKEET_MODEL
+    from tuxtalk.parakeet_engine import PARAKEET_MODEL
     _engine(tmp_path, monkeypatch, "whisper-server")
     fetched = []
-    monkeypatch.setattr("talktype.download_utils.download_file",
+    monkeypatch.setattr("tuxtalk.download_utils.download_file",
                         lambda url, *a, **k: fetched.append(url) or False)
     assert wv.make_engine_download_func("small")(lambda *a: None, None) is True
     assert fetched == []
@@ -179,7 +179,7 @@ def test_parakeet_speed_check_uses_parakeet_cli_without_its_load_time(monkeypatc
     """Loading onto a graphics card takes longer than onto the processor, and
     Parakeet transcribes the sample so fast that counting the load would hide
     most of the difference."""
-    from talktype.parakeet_engine import PARAKEET_MODEL
+    from tuxtalk.parakeet_engine import PARAKEET_MODEL
     runs = []
 
     class Done:
@@ -221,12 +221,12 @@ class FakeEngine(wv.VulkanWhisperModel):
 
 
 def _settings(**kw):
-    from talktype.config import Settings
+    from tuxtalk.config import Settings
     return Settings(**{"model": "small", "device": "vulkan", **kw})
 
 
 def test_service_runs_whisper_on_the_amd_or_intel_chip(monkeypatch):
-    from talktype import app
+    from tuxtalk import app
     monkeypatch.setattr(wv, "is_installed", lambda m: True)
     monkeypatch.setattr(wv, "find_device", lambda: 1)
     monkeypatch.setattr(wv, "VulkanWhisperModel", FakeEngine)
@@ -235,11 +235,11 @@ def test_service_runs_whisper_on_the_amd_or_intel_chip(monkeypatch):
 
 
 def test_service_falls_back_to_the_processor_when_the_engine_is_missing(monkeypatch):
-    from talktype import app
+    from tuxtalk import app
     loaded, told = [], []
     monkeypatch.setattr(wv, "is_installed", lambda m: False)
     monkeypatch.setattr(app, "_notify", lambda *a: told.append(a))
-    monkeypatch.setattr("talktype.model_helper.download_model_with_progress",
+    monkeypatch.setattr("tuxtalk.model_helper.download_model_with_progress",
                         lambda model, device, compute_type, **k: loaded.append(device) or "cpu-model")
     settings = _settings()
     assert app.build_model(settings) == "cpu-model"
@@ -248,11 +248,11 @@ def test_service_falls_back_to_the_processor_when_the_engine_is_missing(monkeypa
 
 
 def test_parakeet_never_uses_the_whisper_engine(monkeypatch):
-    from talktype import app
-    from talktype.parakeet_engine import PARAKEET_MODEL
+    from tuxtalk import app
+    from tuxtalk.parakeet_engine import PARAKEET_MODEL
     monkeypatch.setattr(wv, "VulkanWhisperModel", lambda *a: pytest.fail("used the Whisper engine"))
     monkeypatch.setattr(wv, "is_installed", lambda m: False)
-    monkeypatch.setattr("talktype.model_helper.download_model_with_progress",
+    monkeypatch.setattr("tuxtalk.model_helper.download_model_with_progress",
                         lambda model, device, compute_type, **k: "parakeet-model")
     assert app.build_model(_settings(model=PARAKEET_MODEL)) == "parakeet-model"
 
@@ -266,8 +266,8 @@ class FakeParakeetGpu:
 
 
 def test_service_runs_parakeet_on_the_graphics_chip(monkeypatch):
-    from talktype import app, parakeet_gpu
-    from talktype.parakeet_engine import PARAKEET_MODEL
+    from tuxtalk import app, parakeet_gpu
+    from tuxtalk.parakeet_engine import PARAKEET_MODEL
     monkeypatch.setattr(wv, "is_installed", lambda m: True)
     monkeypatch.setattr(wv, "find_device", lambda: 0)
     monkeypatch.setattr(parakeet_gpu, "ParakeetGpuModel", FakeParakeetGpu)
@@ -279,21 +279,21 @@ def test_parakeet_on_vulkan_without_its_files_quietly_uses_the_processor(monkeyp
     """Someone on 0.13.1 with Vulkan as the device and Parakeet as the model
     has never downloaded Parakeet's graphics files. They keep the processor,
     as before, without a warning at every start."""
-    from talktype import app, parakeet_gpu
-    from talktype.parakeet_engine import PARAKEET_MODEL
+    from tuxtalk import app, parakeet_gpu
+    from tuxtalk.parakeet_engine import PARAKEET_MODEL
     told = []
     monkeypatch.setattr(wv, "is_installed", lambda m: False)
     monkeypatch.setattr(parakeet_gpu, "ParakeetGpuModel", lambda *a: pytest.fail("started the helper"))
     monkeypatch.setattr(app, "_notify", lambda *a: told.append(a))
-    monkeypatch.setattr("talktype.model_helper.download_model_with_progress",
+    monkeypatch.setattr("tuxtalk.model_helper.download_model_with_progress",
                         lambda model, device, compute_type, **k: f"parakeet-on-{device}")
     assert app.build_model(_settings(model=PARAKEET_MODEL)) == "parakeet-on-cpu"
     assert told == []
 
 
 def test_parakeet_falls_back_to_the_processor_when_the_helper_fails(monkeypatch):
-    from talktype import app, parakeet_gpu
-    from talktype.parakeet_engine import PARAKEET_MODEL
+    from tuxtalk import app, parakeet_gpu
+    from tuxtalk.parakeet_engine import PARAKEET_MODEL
     told = []
 
     def broken(device_index):
@@ -303,7 +303,7 @@ def test_parakeet_falls_back_to_the_processor_when_the_helper_fails(monkeypatch)
     monkeypatch.setattr(wv, "find_device", lambda: 0)
     monkeypatch.setattr(parakeet_gpu, "ParakeetGpuModel", broken)
     monkeypatch.setattr(app, "_notify", lambda *a: told.append(a))
-    monkeypatch.setattr("talktype.model_helper.download_model_with_progress",
+    monkeypatch.setattr("tuxtalk.model_helper.download_model_with_progress",
                         lambda model, device, compute_type, **k: f"parakeet-on-{device}")
     settings = _settings(model=PARAKEET_MODEL)
     assert app.build_model(settings) == "parakeet-on-cpu"
@@ -311,7 +311,7 @@ def test_parakeet_falls_back_to_the_processor_when_the_helper_fails(monkeypatch)
 
 
 def test_parakeet_on_the_graphics_chip_transcribes(monkeypatch):
-    from talktype import app, parakeet_gpu
+    from tuxtalk import app, parakeet_gpu
     gpu = parakeet_gpu.ParakeetGpuModel.__new__(parakeet_gpu.ParakeetGpuModel)
     monkeypatch.setattr(parakeet_gpu.ParakeetGpuModel, "recognize", lambda self, a: "Hello there.")
     monkeypatch.setattr(app, "model", gpu, raising=False)
@@ -320,7 +320,7 @@ def test_parakeet_on_the_graphics_chip_transcribes(monkeypatch):
 
 def test_transcription_ignores_the_engines_no_speech_score(monkeypatch):
     """A real "Thank you." must survive even though the engine scored it 0.95."""
-    from talktype import app
+    from tuxtalk import app
     monkeypatch.setattr(app, "model", FakeEngine("small", 1), raising=False)
     assert app._transcribe_audio(np.zeros(16000, dtype=np.float32), "en") == "Thank you."
 
@@ -328,7 +328,7 @@ def test_transcription_ignores_the_engines_no_speech_score(monkeypatch):
 # --- first-run setup: the light choice for NVIDIA ---------------------------------
 
 def test_first_run_model_download_is_skipped_when_already_there(monkeypatch):
-    from talktype import welcome_dialog as wd
+    from tuxtalk import welcome_dialog as wd
     monkeypatch.setattr(wv, "is_engine_installed", lambda *a: True)
     monkeypatch.setattr(wv, "model_path", lambda m: "/models/x.bin")
     assert wd._download_vulkan_model_first_run("small") is True
@@ -336,8 +336,8 @@ def test_first_run_model_download_is_skipped_when_already_there(monkeypatch):
 
 def test_first_run_parakeet_on_vulkan_fetches_an_engine_that_can_run_it(monkeypatch):
     """Engine build 1 can't run Parakeet, so it's fetched again with the model."""
-    from talktype import welcome_dialog as wd
-    import talktype.download_progress_dialog as dpd
+    from tuxtalk import welcome_dialog as wd
+    import tuxtalk.download_progress_dialog as dpd
     added = []
 
     class Dialog:
@@ -355,35 +355,35 @@ def test_first_run_parakeet_on_vulkan_fetches_an_engine_that_can_run_it(monkeypa
 def test_first_run_vulkan_uses_the_preferences_speed_check(monkeypatch):
     """First run switched to Vulkan without timing it, so weak built-in
     graphics could end up slower than the processor."""
-    from talktype import welcome_dialog as wd
+    from tuxtalk import welcome_dialog as wd
     seen = []
-    monkeypatch.setattr("talktype.vulkan_setup_dialogs.run_speed_check",
+    monkeypatch.setattr("tuxtalk.vulkan_setup_dialogs.run_speed_check",
                         lambda parent, model: seen.append(model) or False)
     assert wd._vulkan_speed_check_first_run("parakeet-v3") is False
     assert seen == ["parakeet-v3"]
 
 
 def test_first_run_speed_check_error_keeps_the_processor(monkeypatch):
-    from talktype import welcome_dialog as wd
+    from tuxtalk import welcome_dialog as wd
 
     def boom(parent, model):
         raise RuntimeError("no Vulkan device")
 
-    monkeypatch.setattr("talktype.vulkan_setup_dialogs.run_speed_check", boom)
+    monkeypatch.setattr("tuxtalk.vulkan_setup_dialogs.run_speed_check", boom)
     assert wd._vulkan_speed_check_first_run("small") is False
 
 
 @pytest.mark.parametrize("times,slower", [((1.0, 5.0), False), ((5.0, 1.0), True)])
 def test_speed_check_remembers_which_won(monkeypatch, times, slower):
     """Review focus 1: recommend.py must not keep proposing a slower chip."""
-    from talktype import vulkan_setup_dialogs as vsd
+    from tuxtalk import vulkan_setup_dialogs as vsd
     saved = {}
     cfg = types.SimpleNamespace(vulkan_slower=not slower)
     monkeypatch.setattr(vsd.wv, "find_device", lambda: 0)
     monkeypatch.setattr(vsd.wv, "speed_check", lambda model, dev: times)
     monkeypatch.setattr(vsd, "message", lambda *a, **k: None)
-    monkeypatch.setattr("talktype.config.load_config", lambda: cfg)
-    monkeypatch.setattr("talktype.config.save_config", lambda c: saved.update(slower=c.vulkan_slower))
+    monkeypatch.setattr("tuxtalk.config.load_config", lambda: cfg)
+    monkeypatch.setattr("tuxtalk.config.save_config", lambda c: saved.update(slower=c.vulkan_slower))
     monkeypatch.setattr(vsd, "_wait_dialog", lambda parent, work: work())
     vsd.run_speed_check(None, "small")
     assert saved == {"slower": slower}

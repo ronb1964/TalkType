@@ -14,7 +14,7 @@ import subprocess
 
 import pytest
 
-from talktype import app
+from tuxtalk import app
 
 
 class FakeCompleted:
@@ -293,7 +293,7 @@ def test_type_text_still_reports_failure_when_a_text_part_fails(monkeypatch):
 def test_injection_method_forces_type_in_flatpak(monkeypatch):
     """Inside a Flatpak there is no wl-copy, and libei types directly — so the
     method must be 'type', never 'paste', regardless of the configured mode."""
-    from talktype import app
+    from tuxtalk import app
     monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TalkType")
     for mode in ("auto", "paste", "type"):
         actual, use_atspi, _reason = app._determine_injection_method(mode)
@@ -302,7 +302,7 @@ def test_injection_method_forces_type_in_flatpak(monkeypatch):
 
 
 def test_injection_method_respects_user_choice_on_host(monkeypatch):
-    from talktype import app
+    from tuxtalk import app
     monkeypatch.delenv("FLATPAK_ID", raising=False)
     assert app._determine_injection_method("paste")[0] == "paste"
     assert app._determine_injection_method("type")[0] == "type"

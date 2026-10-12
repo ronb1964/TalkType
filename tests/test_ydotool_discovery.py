@@ -26,7 +26,7 @@ import subprocess
 
 import pytest
 
-from talktype.uinput_helper import check_ydotool_available
+from tuxtalk.uinput_helper import check_ydotool_available
 
 
 class _Result:
@@ -86,7 +86,7 @@ def test_lookup_failure_is_not_fatal(monkeypatch):
 
 def test_ydotoold_lookup_still_rejects_appimage_paths(monkeypatch):
     """The other half of the asymmetry must not drift into matching this one."""
-    from talktype import uinput_helper
+    from tuxtalk import uinput_helper
 
     monkeypatch.setenv("APPDIR", "/tmp/.mount_TalkTyabc123")
 

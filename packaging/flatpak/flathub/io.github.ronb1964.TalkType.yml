@@ -179,7 +179,7 @@ modules:
     buildsystem: simple
     build-commands:
       - install -Dm755 packaging/flatpak/talktype-launcher /app/bin/talktype-launcher
-      - mkdir -p /app/lib && cp -r src/talktype /app/lib/talktype
+      - mkdir -p /app/lib && cp -r src/tuxtalk /app/lib/talktype
       - install -Dm644 io.github.ronb1964.TalkType.appdata.xml
           /app/share/metainfo/io.github.ronb1964.TalkType.appdata.xml
       # App icon (square SVG copy; Flatpak rejects non-square icons on export).

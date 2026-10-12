@@ -6,7 +6,7 @@ because a person meant it.
 """
 import pytest
 
-from talktype.cleanup import clean_fillers_and_repeats as clean
+from tuxtalk.cleanup import clean_fillers_and_repeats as clean
 
 CLEANED = [
     ("Um, so I think we should, uh, go with the blue one. ", "So I think we should go with the blue one. "),
@@ -61,7 +61,7 @@ def test_literal_command_placeholders_are_never_collapsed():
 
 
 def test_cleanup_runs_in_prepare_text_only_when_enabled(monkeypatch):
-    from talktype import app
+    from tuxtalk import app
     monkeypatch.setattr(app, "_ai_engine", None)
     monkeypatch.setattr(app, "_remove_fillers", False)
     assert "um" in app._prepare_text("um so the the van is ready", False, True, False).lower()

@@ -10,7 +10,7 @@ gi = pytest.importorskip("gi")
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk  # noqa: E402
 
-from talktype import help_dialog  # noqa: E402
+from tuxtalk import help_dialog  # noqa: E402
 
 
 def _widgets(widget):
@@ -77,7 +77,7 @@ def test_every_help_tab_is_valid_markup(dialog):
 
 def test_help_lists_every_tray_preset(dialog):
     """Help listed 5 of the 7 old presets; it must name each of today's."""
-    from talktype import recommend
+    from tuxtalk import recommend
     text = "\n".join(l.get_text() for l in _help_labels(dialog))
     for preset in recommend.presets("en", recommend.Hardware(None)):
         assert f"{preset.label}:" in text, f"Help doesn't mention the {preset.label} preset"

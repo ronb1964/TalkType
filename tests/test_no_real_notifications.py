@@ -9,7 +9,7 @@ import gi
 gi.require_version("Notify", "0.7")
 from gi.repository import Notify  # noqa: E402
 
-from talktype import app  # noqa: E402
+from tuxtalk import app  # noqa: E402
 
 
 def test_notifications_are_held_back_during_tests():

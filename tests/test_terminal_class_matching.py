@@ -13,7 +13,7 @@ hardening rather than a repair.
 
 import pytest
 
-from talktype import app
+from tuxtalk import app
 
 
 class TestKnownTerminalsAreRecognized:

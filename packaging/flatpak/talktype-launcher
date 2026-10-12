@@ -4,4 +4,4 @@
 # package lives at /app/lib/talktype. Backend B (portal hotkey + libei typing) is
 # selected automatically because FLATPAK_ID is set.
 export PYTHONPATH="/app/lib:/app/lib/python3.13/site-packages:${PYTHONPATH}"
-exec python3 -m talktype.tray "$@"
+exec python3 -m tuxtalk.tray "$@"

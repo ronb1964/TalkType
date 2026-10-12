@@ -21,7 +21,7 @@ from gi.repository import Gtk, Gdk, GLib, GdkPixbuf
 from .ui_style import message_dialog
 
 try:
-    from talktype.logger import setup_logger
+    from tuxtalk.logger import setup_logger
     logger = setup_logger(__name__)
 except ImportError:
     import logging
@@ -78,7 +78,7 @@ def detect_uinput_access():
         # hotkeys (/dev/input). Checking uinput alone skipped setup entirely on
         # Fedora, where logind's per-user ACL already grants uinput but nothing
         # grants 'input' group membership — so hotkeys could never be read.
-        from talktype.uinput_helper import check_all_device_permissions
+        from tuxtalk.uinput_helper import check_all_device_permissions
         return check_all_device_permissions()
     except ImportError as e:
         logger.warning(f"Could not import uinput_helper: {e}")
@@ -103,7 +103,7 @@ def detect_ydotoold_status():
             - message: str - human-readable status
     """
     try:
-        from talktype.uinput_helper import get_ydotoold_status
+        from tuxtalk.uinput_helper import get_ydotoold_status
         return get_ydotoold_status()
     except ImportError as e:
         logger.warning(f"Could not import uinput_helper: {e}")
@@ -141,7 +141,7 @@ def detect_portaudio_status():
             - message: str - human-readable status
     """
     try:
-        from talktype.uinput_helper import get_portaudio_status
+        from tuxtalk.uinput_helper import get_portaudio_status
         return get_portaudio_status()
     except ImportError as e:
         logger.warning(f"Could not import uinput_helper for PortAudio check: {e}")
@@ -883,7 +883,7 @@ class WelcomeDialog:
     def _on_install_portaudio_clicked(self, button):
         """Handle the Install PortAudio button click."""
         try:
-            from talktype.uinput_helper import install_portaudio_with_pkexec, check_portaudio_installed
+            from tuxtalk.uinput_helper import install_portaudio_with_pkexec, check_portaudio_installed
 
             # Disable button while processing
             button.set_sensitive(False)
@@ -1408,7 +1408,7 @@ class WelcomeDialog:
     def _on_fix_typing_clicked(self, button):
         """Handle the Fix Typing button click - sets up both ydotoold and uinput permissions."""
         try:
-            from talktype.uinput_helper import (
+            from tuxtalk.uinput_helper import (
                 install_udev_rule_with_pkexec,
                 setup_ydotoold_service,
                 check_ydotoold_running
@@ -1453,7 +1453,7 @@ class WelcomeDialog:
                     self.uinput_fixed = True
                     logger.info("uinput permissions setup successful")
                     # A daemon started without the permission has exited.
-                    from talktype.uinput_helper import ensure_ydotoold_running
+                    from tuxtalk.uinput_helper import ensure_ydotoold_running
                     ensure_ydotoold_running()
                 else:
                     if "cancelled" not in uinput_msg.lower():
@@ -1545,7 +1545,7 @@ class WelcomeDialog:
     def _on_install_ydotool_clicked(self, button):
         """Handle the Install ydotool button click."""
         try:
-            from talktype.uinput_helper import install_ydotool_with_pkexec, check_ydotool_available
+            from tuxtalk.uinput_helper import install_ydotool_with_pkexec, check_ydotool_available
 
             # Disable button while processing
             button.set_sensitive(False)
@@ -2349,7 +2349,7 @@ def show_hotkey_test_dialog():
     import threading
     import time
     import select
-    from talktype.config import load_config, save_config
+    from tuxtalk.config import load_config, save_config
 
     # CRITICAL: Kill any running dictation service IMMEDIATELY
     # The service would intercept F8/F9 before we can detect them
@@ -2357,17 +2357,17 @@ def show_hotkey_test_dialog():
         """Kill any running dictation service processes with extreme prejudice."""
         try:
             # SIGKILL for immediate termination - no chance to respawn.
-            # The pattern list used to live here and included "-m talktype",
-            # which matches "-m talktype.tray": had pkill ever accepted it, the
+            # The pattern list used to live here and included "-m tuxtalk",
+            # which matches "-m tuxtalk.tray": had pkill ever accepted it, the
             # tray would have killed itself in front of a first-run user.
-            from talktype.service_launcher import stop_dictation_service
+            from tuxtalk.service_launcher import stop_dictation_service
             stop_dictation_service(force=True)
 
             # Give processes time to die
             time.sleep(0.3)
 
             # Verify no processes remain
-            from talktype.service_launcher import find_service_pids
+            from tuxtalk.service_launcher import find_service_pids
             if find_service_pids():
                 # Still running! Try again
                 print("⚠️ Service still running, killing again...")
@@ -2866,7 +2866,7 @@ def _vulkan_speed_check_first_run(model):
     nothing to say so. Any error keeps the processor, as Preferences does.
     """
     try:
-        from talktype import vulkan_setup_dialogs
+        from tuxtalk import vulkan_setup_dialogs
         return vulkan_setup_dialogs.run_speed_check(None, model)
     except Exception as e:
         logger.warning(f"First-run speed check failed, using the processor: {e}")
@@ -2877,9 +2877,9 @@ def _download_vulkan_model_first_run(model):
     """Download *model* in whisper.cpp's format (and an engine that can run
     it, if the one there can't). True when both are on disk."""
     try:
-        from talktype import whisper_vulkan as wv
-        from talktype.download_progress_dialog import DownloadTask, UnifiedDownloadDialog
-        from talktype.model_helper import model_display_name
+        from tuxtalk import whisper_vulkan as wv
+        from tuxtalk.download_progress_dialog import DownloadTask, UnifiedDownloadDialog
+        from tuxtalk.model_helper import model_display_name
         if wv.is_installed(model):
             return True
         dialog = UnifiedDownloadDialog(
@@ -2902,7 +2902,7 @@ def _processor_model(model, result):
     """The model to use when setup ends up on the processor after all. Large-v3
     needs a graphics card (the card greys it out without one), so it becomes
     what the card recommends there: Whisper Small."""
-    from talktype import recommend
+    from tuxtalk import recommend
     return recommend.recommend(result.get("dictation_language") or "en",
                                recommend.Hardware(None), model=model).model
 
@@ -2917,7 +2917,7 @@ def _apply_first_run_setup(result):
     here (it lives in Preferences). The update notice is marked shown, since
     a new install starts on the recommendation already.
     """
-    from talktype.config import load_config, save_config
+    from tuxtalk.config import load_config, save_config
     selected_model = result["model"]
     try:
         config = load_config()
@@ -2931,8 +2931,8 @@ def _apply_first_run_setup(result):
 
     logger.info(f"Setting up {selected_model} on {result['device']}")
     try:
-        from talktype.model_helper import download_model_with_progress, is_model_cached_fast
-        from talktype import whisper_vulkan
+        from tuxtalk.model_helper import download_model_with_progress, is_model_cached_fast
+        from tuxtalk import whisper_vulkan
 
         # Check if model is already cached
         already_cached = is_model_cached_fast(selected_model)
@@ -3050,8 +3050,8 @@ def _apply_first_run_setup(result):
         logger.warning(f"Error downloading {selected_model} model: {e}")
         # Try to ensure SOME model is available (tiny as last resort)
         try:
-            from talktype.model_helper import is_model_cached_fast, download_model_with_progress
-            from talktype.config import load_config, save_config
+            from tuxtalk.model_helper import is_model_cached_fast, download_model_with_progress
+            from tuxtalk.config import load_config, save_config
 
             config = load_config()
 
@@ -3097,7 +3097,7 @@ def show_welcome_and_install():
 
     if install_extension:
         try:
-            from talktype.download_progress_dialog import show_unified_download_dialog
+            from tuxtalk.download_progress_dialog import show_unified_download_dialog
             download_results = show_unified_download_dialog(
                 cuda=False,
                 extension=True,
@@ -3133,7 +3133,7 @@ def show_welcome_and_install():
     appimage_installed = False
     launcher_created = False
     try:
-        from talktype.update_checker import (
+        from tuxtalk.update_checker import (
             is_running_from_appimage,
             ensure_appimage_in_standard_location,
             copy_appimage_to_standard_location,
@@ -3185,8 +3185,8 @@ def show_welcome_and_install():
     # "be there" afterwards instead of the user hunting for it in the app menu.
     # The Ready screen tells them it's on and that it's toggleable in Preferences.
     try:
-        from talktype import autostart
-        from talktype.config import load_config, save_config
+        from tuxtalk import autostart
+        from tuxtalk.config import load_config, save_config
         # Only record autostart as enabled in config if the .desktop file was
         # actually written — otherwise config and reality disagree, and the Ready
         # screen would promise a startup that never happens.
@@ -3249,14 +3249,14 @@ def _open_preferences():
     dismissing the final screen and getting on with dictating.
     """
     try:
-        # AppImage path: __file__ → usr/src/talktype/ → usr/bin/dictate-prefs
+        # AppImage path: __file__ → usr/src/tuxtalk/ → usr/bin/dictate-prefs
         src_dir = os.path.dirname(__file__)
         usr_dir = os.path.dirname(os.path.dirname(src_dir))
         prefs_script = os.path.join(usr_dir, "bin", "dictate-prefs")
         if os.path.exists(prefs_script):
             subprocess.Popen([prefs_script], env=os.environ.copy())
         else:
-            subprocess.Popen([sys.executable, "-m", "talktype.prefs"], env=os.environ.copy())
+            subprocess.Popen([sys.executable, "-m", "tuxtalk.prefs"], env=os.environ.copy())
     except Exception as e:
         logger.warning(f"Could not open Preferences: {e}")
 
@@ -3463,7 +3463,7 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
             # — without this the machine reboots mid-completion and the next
             # launch starts onboarding all over again.
             try:
-                from talktype.cuda_helper import mark_first_run_complete
+                from tuxtalk.cuda_helper import mark_first_run_complete
                 mark_first_run_complete()
             except Exception as e:
                 # If we can't mark completion, DON'T reboot — a reboot now would
@@ -3484,7 +3484,7 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
                 warn.run()
                 warn.destroy()
                 return
-            from talktype.uinput_helper import reboot_system
+            from tuxtalk.uinput_helper import reboot_system
             if not reboot_system():
                 warn = message_dialog(
                     transient_for=dialog, modal=True,

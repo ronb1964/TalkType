@@ -21,7 +21,7 @@
 # Output: talktype-whisper-vulkan-<version>[-b<build>]-x64.tar.gz and its
 # .sha256. The folder inside is always talktype-whisper-vulkan-<version>, so
 # a later build unpacks over an earlier one. Afterwards put the version, build
-# and SHA256 into src/talktype/whisper_vulkan.py.
+# and SHA256 into src/tuxtalk/whisper_vulkan.py.
 set -e
 WHISPER_CPP_VERSION="${1:-1.9.4}"
 ENGINE_BUILD="${2:-1}"

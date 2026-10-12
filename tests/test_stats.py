@@ -8,7 +8,7 @@ import json
 
 import pytest
 
-from talktype import stats
+from tuxtalk import stats
 
 D = datetime.date
 
@@ -152,14 +152,14 @@ def _dictate(monkeypatch, app, seconds=2.0):
     monkeypatch.setattr(app, "_prepare_text", lambda raw, *a: "Hello there, friend. ")
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
     monkeypatch.setattr(app, "_inject_text", lambda text, mode, t0: None)
-    monkeypatch.setattr("talktype.history.add_entry", lambda text: None)
+    monkeypatch.setattr("tuxtalk.history.add_entry", lambda text: None)
     frames = [np.ones(int(app.SAMPLE_RATE * seconds), dtype=np.int16).tobytes()]
     app._transcribe_and_inject(frames, app.SAMPLE_RATE, beeps_on=False,
                                smart_quotes=False, notify_on=False)
 
 
 def test_a_dictation_is_counted_with_its_words_and_speaking_time(stats_file, monkeypatch):
-    from talktype import app
+    from tuxtalk import app
     monkeypatch.setattr(app, "_usage_stats", True)
     _dictate(monkeypatch, app, seconds=2.0)
 
@@ -169,14 +169,14 @@ def test_a_dictation_is_counted_with_its_words_and_speaking_time(stats_file, mon
 
 
 def test_turning_stats_off_stops_counting(stats_file, monkeypatch):
-    from talktype import app
+    from tuxtalk import app
     monkeypatch.setattr(app, "_usage_stats", False)
     _dictate(monkeypatch, app)
     assert not stats_file.exists()
 
 
 def test_usage_stats_setting_applies_without_a_restart():
-    from talktype import config
+    from tuxtalk import config
     assert config.Settings().usage_stats is True
     assert "usage_stats" in config.LIVE_APPLIED_KEYS
 
@@ -188,7 +188,7 @@ def test_preferences_finds_tabs_by_name_not_position():
     import gi
     gi.require_version("Gtk", "3.0")
     from gi.repository import Gtk
-    from talktype.prefs import PreferencesWindow
+    from tuxtalk.prefs import PreferencesWindow
 
     notebook = Gtk.Notebook()
     for name in ("General", "Audio", "Advanced", "Commands", "Stats", "Updates & Backup"):
@@ -227,13 +227,13 @@ def test_a_damaged_file_is_reported_not_shown_as_empty(stats_file):
 def test_stats_are_saved_after_the_text_is_typed(stats_file, monkeypatch):
     """Saving the counts must never delay the dictated text."""
     import numpy as np
-    from talktype import app
+    from tuxtalk import app
     order = []
     monkeypatch.setattr(app, "_usage_stats", True)
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, language: "hello there")
     monkeypatch.setattr(app, "_prepare_text", lambda raw, *a: "Hello there. ")
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
-    monkeypatch.setattr("talktype.history.add_entry", lambda text: None)
+    monkeypatch.setattr("tuxtalk.history.add_entry", lambda text: None)
     monkeypatch.setattr(app, "_inject_text", lambda text, mode, t0: order.append("typed"))
     monkeypatch.setattr(stats, "record", lambda words, seconds: order.append("counted"))
     # A full second: a near-silent 0.1 s would be dropped as an accidental tap
@@ -249,7 +249,7 @@ def test_your_stats_sits_between_voice_commands_and_help_in_both_menus():
     import pathlib
     import re
     root = pathlib.Path(__file__).resolve().parent.parent
-    tray = (root / "src/talktype/tray.py").read_text()
+    tray = (root / "src/tuxtalk/tray.py").read_text()
     assert re.search(r"prefs_item, voice_cmds_item, stats_item, help_item", tray)
 
     js = (root / "gnome-extension/talktype@ronb1964.github.io/extension.js").read_text()
@@ -282,7 +282,7 @@ def test_summary_works_out_time_saved_at_the_chosen_speed(stats_file):
 
 
 def test_typing_speed_setting_needs_no_service_restart():
-    from talktype import config
+    from tuxtalk import config
     assert config.Settings().typing_wpm == 40
     assert "typing_wpm" in config.LIVE_APPLIED_KEYS
 
@@ -292,7 +292,7 @@ def test_the_tray_still_finds_updates_after_the_tab_became_updates_and_backup():
     import gi
     gi.require_version("Gtk", "3.0")
     from gi.repository import Gtk
-    from talktype.prefs import PreferencesWindow
+    from tuxtalk.prefs import PreferencesWindow
 
     notebook = Gtk.Notebook()
     for name in ("General", "Stats", "Updates & Backup"):

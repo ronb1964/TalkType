@@ -72,13 +72,13 @@ def _display_named(name):
     ],
 )
 def test_list_mode_only_on_x11(class_name, expected):
-    from talktype.ui_style import _wants_list_mode
+    from tuxtalk.ui_style import _wants_list_mode
 
     assert _wants_list_mode(_display_named(class_name)) is expected
 
 
 def test_list_mode_never_raises_on_odd_input():
-    from talktype.ui_style import _wants_list_mode
+    from tuxtalk.ui_style import _wants_list_mode
 
     assert _wants_list_mode(None) is False
 
@@ -86,7 +86,7 @@ def test_list_mode_never_raises_on_odd_input():
 def test_helper_sets_the_right_mode_for_this_display(gtk):
     """A real ComboBox must end up in list mode on X11 and menu mode elsewhere."""
     from gi.repository import Gdk
-    from talktype.ui_style import apply_dropdown_list_style, _wants_list_mode
+    from tuxtalk.ui_style import apply_dropdown_list_style, _wants_list_mode
 
     combo = gtk.ComboBoxText()
     combo.append_text("CPU")
@@ -122,7 +122,7 @@ def _pump(gtk):
 
 def test_drop_down_below_uses_the_wrap_path_and_full_width(gtk):
     """The Wayland treatment for one combo: wrap path, menu as wide as it."""
-    from talktype.ui_style import _drop_down_below
+    from tuxtalk.ui_style import _drop_down_below
 
     combo = gtk.ComboBoxText()
     for t in ("CPU", "CUDA (GPU)", "Vulkan (any GPU)"):
@@ -148,7 +148,7 @@ def test_drop_down_below_uses_the_wrap_path_and_full_width(gtk):
 
 
 def test_drop_down_below_leaves_an_explicit_wrap_width_alone(gtk):
-    from talktype.ui_style import _drop_down_below
+    from tuxtalk.ui_style import _drop_down_below
 
     combo = gtk.ComboBoxText()
     combo.set_wrap_width(3)
@@ -161,7 +161,7 @@ def test_long_lists_open_as_a_grid(gtk, items, columns):
     """On Wayland the list hangs below the button and starts at the top, and
     the 33 languages ran off the screen with the current one out of sight.
     In three columns they fit, all visible, the current one highlighted."""
-    from talktype.ui_style import _drop_down_below
+    from tuxtalk.ui_style import _drop_down_below
 
     combo = gtk.ComboBoxText()
     for i in range(items):
@@ -173,7 +173,7 @@ def test_long_lists_open_as_a_grid(gtk, items, columns):
 def test_helper_gives_combos_the_right_popup_for_this_display(gtk):
     """Combos realised after the helper runs: wrap path on Wayland only."""
     from gi.repository import Gdk
-    from talktype.ui_style import apply_dropdown_list_style, _wants_list_mode
+    from tuxtalk.ui_style import apply_dropdown_list_style, _wants_list_mode
 
     apply_dropdown_list_style()
     combo = gtk.ComboBoxText()
@@ -190,7 +190,7 @@ def test_helper_gives_combos_the_right_popup_for_this_display(gtk):
 
 def test_helper_is_idempotent(gtk):
     """The tray calls it once and Preferences calls it again in-process."""
-    from talktype.ui_style import apply_dropdown_list_style
+    from tuxtalk.ui_style import apply_dropdown_list_style
 
     apply_dropdown_list_style()
     apply_dropdown_list_style()  # must not raise or stack providers unboundedly
@@ -199,9 +199,9 @@ def test_helper_is_idempotent(gtk):
 @pytest.mark.parametrize(
     "module",
     [
-        "src/talktype/prefs.py",           # Model, Device, Language, hotkeys
-        "src/talktype/welcome_dialog.py",  # first-run model picker
-        "src/talktype/fix_word_dialog.py", # which recent dictation
+        "src/tuxtalk/prefs.py",           # Model, Device, Language, hotkeys
+        "src/tuxtalk/welcome_dialog.py",  # first-run model picker
+        "src/tuxtalk/fix_word_dialog.py", # which recent dictation
     ],
 )
 def test_every_window_with_dropdowns_applies_the_style(module):

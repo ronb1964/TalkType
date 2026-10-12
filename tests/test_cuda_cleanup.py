@@ -11,7 +11,7 @@ import os
 
 import pytest
 
-from talktype import cuda_helper
+from tuxtalk import cuda_helper
 
 
 @pytest.fixture

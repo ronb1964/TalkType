@@ -8,7 +8,7 @@ can't clobber the audio being transcribed.
 """
 import time
 
-from talktype import app
+from tuxtalk import app
 
 
 def test_finish_capture_snapshots_frames_surviving_next_recording(monkeypatch):

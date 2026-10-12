@@ -33,7 +33,7 @@ import re
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 BUILD = ROOT / "container-build.sh"
-SRC = ROOT / "src/talktype"
+SRC = ROOT / "src/tuxtalk"
 
 
 def _require_version_calls(tree):
@@ -81,7 +81,7 @@ def test_build_verifies_every_unguarded_typelib():
     unguarded, _ = _classify_source()
     missing = unguarded - _verified_by_build()
     assert not missing, (
-        f"src/talktype imports {sorted(missing)} without a try/except, but "
+        f"src/tuxtalk imports {sorted(missing)} without a try/except, but "
         f"container-build.sh does not verify they were bundled. The AppImage "
         f"would build successfully and then fail to start. Add them to "
         f"REQUIRED_TYPELIBS in container-build.sh."

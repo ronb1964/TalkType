@@ -18,13 +18,13 @@ import types
 
 import pytest
 
-from talktype import config
+from tuxtalk import config
 
 
 @pytest.fixture
 def app():
     """Import app.py, skipping when its heavy dependencies are unavailable."""
-    return pytest.importorskip("talktype.app")
+    return pytest.importorskip("tuxtalk.app")
 
 
 class StubIndicator:

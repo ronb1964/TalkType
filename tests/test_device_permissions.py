@@ -18,14 +18,14 @@ membership was fixed as a SIDE EFFECT. That accident is why this shipped.
 
 import pytest
 
-from talktype.uinput_helper import (
+from tuxtalk.uinput_helper import (
     check_input_read_permission,
     check_all_device_permissions,
 )
 
 
 def test_reports_failure_when_no_input_device_is_readable(monkeypatch):
-    monkeypatch.setattr("talktype.uinput_helper._readable_input_devices", lambda: [])
+    monkeypatch.setattr("tuxtalk.uinput_helper._readable_input_devices", lambda: [])
     ok, reason = check_input_read_permission()
 
     assert ok is False
@@ -34,7 +34,7 @@ def test_reports_failure_when_no_input_device_is_readable(monkeypatch):
 
 def test_reports_success_when_a_device_is_readable(monkeypatch):
     monkeypatch.setattr(
-        "talktype.uinput_helper._readable_input_devices",
+        "tuxtalk.uinput_helper._readable_input_devices",
         lambda: ["/dev/input/event3"],
     )
     ok, _ = check_input_read_permission()
@@ -47,10 +47,10 @@ def test_setup_is_required_when_only_hotkey_reading_is_broken(monkeypatch):
     This is the exact case the old gate got wrong.
     """
     monkeypatch.setattr(
-        "talktype.uinput_helper.check_uinput_permission",
+        "tuxtalk.uinput_helper.check_uinput_permission",
         lambda: (True, "uinput is fine"),
     )
-    monkeypatch.setattr("talktype.uinput_helper._readable_input_devices", lambda: [])
+    monkeypatch.setattr("tuxtalk.uinput_helper._readable_input_devices", lambda: [])
 
     ok, reason = check_all_device_permissions()
 
@@ -60,11 +60,11 @@ def test_setup_is_required_when_only_hotkey_reading_is_broken(monkeypatch):
 
 def test_setup_is_required_when_only_typing_is_broken(monkeypatch):
     monkeypatch.setattr(
-        "talktype.uinput_helper.check_uinput_permission",
+        "tuxtalk.uinput_helper.check_uinput_permission",
         lambda: (False, "Cannot write to /dev/uinput."),
     )
     monkeypatch.setattr(
-        "talktype.uinput_helper._readable_input_devices",
+        "tuxtalk.uinput_helper._readable_input_devices",
         lambda: ["/dev/input/event3"],
     )
 
@@ -76,11 +76,11 @@ def test_setup_is_required_when_only_typing_is_broken(monkeypatch):
 
 def test_no_setup_needed_when_both_halves_work(monkeypatch):
     monkeypatch.setattr(
-        "talktype.uinput_helper.check_uinput_permission",
+        "tuxtalk.uinput_helper.check_uinput_permission",
         lambda: (True, "uinput is fine"),
     )
     monkeypatch.setattr(
-        "talktype.uinput_helper._readable_input_devices",
+        "tuxtalk.uinput_helper._readable_input_devices",
         lambda: ["/dev/input/event3"],
     )
 

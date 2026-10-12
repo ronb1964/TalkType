@@ -12,7 +12,7 @@ that happened:
 
 import pytest
 
-from talktype import app
+from tuxtalk import app
 
 
 @pytest.fixture
@@ -27,7 +27,7 @@ def commands(monkeypatch):
 @pytest.fixture
 def pipeline(monkeypatch):
     """Run the full path a dictation takes: commands → normalize → restore."""
-    from talktype.normalize import normalize_text
+    from tuxtalk.normalize import normalize_text
 
     def install(mapping):
         monkeypatch.setattr(app, "_custom_commands", mapping)

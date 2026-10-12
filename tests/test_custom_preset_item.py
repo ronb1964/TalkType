@@ -8,8 +8,8 @@ import types
 
 import pytest
 
-from talktype import tray as tray_module
-from talktype.tray import DictationTray
+from tuxtalk import tray as tray_module
+from tuxtalk.tray import DictationTray
 
 
 @pytest.fixture(autouse=True)

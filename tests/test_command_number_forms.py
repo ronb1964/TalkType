@@ -13,7 +13,7 @@ gets typed still comes out exactly as Whisper and the normalizer produced it.
 
 import pytest
 
-from talktype import app
+from tuxtalk import app
 
 
 @pytest.fixture

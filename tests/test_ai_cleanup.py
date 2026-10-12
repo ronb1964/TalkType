@@ -5,7 +5,7 @@ returns chosen answers, good and bad, and check that only safe edits land.
 """
 import pytest
 
-from talktype import ai_cleanup as ai
+from tuxtalk import ai_cleanup as ai
 
 
 SAFE = [
@@ -189,7 +189,7 @@ def test_download_is_pinned_to_a_checksum():
 
 def test_settings_start_and_stop_the_engine(monkeypatch):
     from types import SimpleNamespace
-    from talktype import app
+    from tuxtalk import app
 
     events = []
 
@@ -209,7 +209,7 @@ def test_settings_start_and_stop_the_engine(monkeypatch):
 
 
 def test_cleanup_settings_apply_without_a_restart():
-    from talktype.config import LIVE_APPLIED_KEYS
+    from tuxtalk.config import LIVE_APPLIED_KEYS
     assert {"remove_fillers", "ai_corrections"} <= LIVE_APPLIED_KEYS
 
 

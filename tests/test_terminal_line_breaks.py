@@ -22,7 +22,7 @@ that a terminal was indistinguishable from anything else.
 
 import pytest
 
-from talktype import app
+from tuxtalk import app
 
 
 @pytest.fixture

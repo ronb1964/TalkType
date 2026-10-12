@@ -3,7 +3,7 @@ sandboxed app writing ~/.config/autostart only reaches its private config, which
 the desktop never reads, so the app would never start at login (the bug a user
 hit). Off Flatpak it must still write the XDG autostart .desktop directly.
 """
-from talktype import autostart
+from tuxtalk import autostart
 
 
 def test_set_autostart_uses_background_portal_on_flatpak(monkeypatch):

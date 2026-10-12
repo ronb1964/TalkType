@@ -11,7 +11,7 @@ import pathlib
 import re
 
 CSS = (pathlib.Path(__file__).resolve().parent.parent
-       / "src" / "talktype" / "prefs_style.css").read_text()
+       / "src" / "tuxtalk" / "prefs_style.css").read_text()
 
 
 def _rules(selector_part):

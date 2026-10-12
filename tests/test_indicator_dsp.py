@@ -6,7 +6,7 @@ nothing while speech transients pop. Pure numpy — tested without a display.
 """
 import numpy as np
 
-from talktype.indicator_dsp import SpectrumProcessor
+from tuxtalk.indicator_dsp import SpectrumProcessor
 
 SR = 16000
 
@@ -51,7 +51,7 @@ def test_steady_dc_offset_is_removed():
 
 
 def _bars_over(make_block, seconds, proc=None):
-    from talktype.indicator_dsp import SpectrumProcessor
+    from tuxtalk.indicator_dsp import SpectrumProcessor
     import numpy as np
     proc = proc or SpectrumProcessor(bins=20)
     out = [proc.process(make_block(i)) for i in range(int(seconds * 100))]

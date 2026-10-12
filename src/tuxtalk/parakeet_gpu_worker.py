@@ -3,7 +3,7 @@ The helper process that runs Parakeet on the graphics chip.
 
 Started by parakeet_gpu.py as
 
-    python -m talktype.parakeet_gpu_worker <engine dir> <model> <device> <threads>
+    python -m tuxtalk.parakeet_gpu_worker <engine dir> <model> <device> <threads>
 
 It loads whisper.cpp's libparakeet (part of the Vulkan engine, build 2 and
 later) through ctypes, keeps the model on the graphics chip, and transcribes

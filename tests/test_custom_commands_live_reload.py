@@ -15,13 +15,13 @@ import types
 
 import pytest
 
-from talktype import app
+from tuxtalk import app
 
 
 @pytest.fixture
 def commands_file(tmp_path, monkeypatch):
     """Point the loader at a throwaway commands file."""
-    from talktype import config as config_module
+    from tuxtalk import config as config_module
 
     path = tmp_path / "custom_commands.toml"
     monkeypatch.setattr(config_module, "CUSTOM_COMMANDS_PATH", str(path))

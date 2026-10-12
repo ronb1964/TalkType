@@ -15,7 +15,7 @@ So the method existed, was advertised, and did nothing on either side.
 
 from types import SimpleNamespace
 
-from talktype.tray import DictationTray
+from tuxtalk.tray import DictationTray
 
 
 def test_the_tray_exposes_set_model_to_dbus():
@@ -30,8 +30,8 @@ def test_set_model_writes_the_model_and_restarts(monkeypatch):
     emitted = []
 
     cfg = SimpleNamespace(model="small", device="cpu")
-    monkeypatch.setattr("talktype.config.load_config", lambda: cfg)
-    monkeypatch.setattr("talktype.config.save_config",
+    monkeypatch.setattr("tuxtalk.config.load_config", lambda: cfg)
+    monkeypatch.setattr("tuxtalk.config.save_config",
                         lambda c: saved.update(model=c.model))
 
     tray = SimpleNamespace(
@@ -51,8 +51,8 @@ def test_set_model_rejects_an_unknown_model(monkeypatch):
     """A typo over D-Bus must not write a model the service cannot load."""
     saved = {}
     cfg = SimpleNamespace(model="small", device="cpu")
-    monkeypatch.setattr("talktype.config.load_config", lambda: cfg)
-    monkeypatch.setattr("talktype.config.save_config",
+    monkeypatch.setattr("tuxtalk.config.load_config", lambda: cfg)
+    monkeypatch.setattr("tuxtalk.config.save_config",
                         lambda c: saved.update(model=c.model))
 
     tray = SimpleNamespace(
@@ -82,7 +82,7 @@ def test_the_service_does_not_write_a_phantom_settings_json():
     import pathlib
 
     src = (pathlib.Path(__file__).resolve().parent.parent
-           / "src" / "talktype" / "app.py").read_text()
+           / "src" / "tuxtalk" / "app.py").read_text()
     tree = ast.parse(src)
 
     # Docstrings may legitimately mention the old path when explaining the

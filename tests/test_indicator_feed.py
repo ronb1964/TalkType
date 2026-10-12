@@ -5,7 +5,7 @@ import pytest
 
 @pytest.fixture
 def app():
-    return pytest.importorskip("talktype.app")
+    return pytest.importorskip("tuxtalk.app")
 
 
 class StubInd:
@@ -50,7 +50,7 @@ def test_radial_style_gets_samples(app):
 
 
 def test_bars_style_gets_spectrum(app):
-    from talktype.indicator_dsp import SpectrumProcessor
+    from tuxtalk.indicator_dsp import SpectrumProcessor
     ind = StubInd("bars")
     app._feed_indicator(ind, _samples(), SpectrumProcessor(bins=20))
     assert ind.spectrum is not None and len(ind.spectrum) == 20

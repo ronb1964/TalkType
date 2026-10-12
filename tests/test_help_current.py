@@ -9,7 +9,7 @@ recording indicator (it's a cyan orb by default), Fix a Word under a
 import pathlib
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-HELP = (ROOT / "src" / "talktype" / "help_dialog.py").read_text()
+HELP = (ROOT / "src" / "tuxtalk" / "help_dialog.py").read_text()
 README = (ROOT / "README.md").read_text()
 
 
@@ -55,7 +55,7 @@ def test_voice_commands_tab_mentions_english_and_self_corrections():
 
 
 def test_readme_config_example_uses_real_setting_names():
-    from talktype.config import Settings
+    from tuxtalk.config import Settings
     block = README.split("```toml", 1)[1].split("```", 1)[0]
     for line in block.splitlines():
         key = line.split("=", 1)[0].strip()

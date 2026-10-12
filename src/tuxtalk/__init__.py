@@ -6,7 +6,7 @@ import os
 __version__ = "0.14.6"
 
 # Where the AppImage (and the .deb/.rpm made from it) keeps its own PortAudio:
-# <root>/usr/src/talktype/ -> <root>/usr/lib/portaudio/. In a dev checkout or
+# <root>/usr/src/tuxtalk/ -> <root>/usr/lib/portaudio/. In a dev checkout or
 # the Flatpak this folder doesn't exist and nothing changes.
 _BUNDLED_PORTAUDIO_DIR = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), os.pardir, os.pardir, "lib", "portaudio")

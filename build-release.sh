@@ -12,19 +12,19 @@ echo "========================================"
 echo ""
 
 # Version consistency check — the AppImage filename comes from pyproject.toml
-# while the running app reports src/talktype/__init__.py's __version__.
+# while the running app reports src/tuxtalk/__init__.py's __version__.
 # Drift between them makes the update checker offer the app an "update" to
 # itself forever (happened once before). Fail the build instead.
 PYPROJECT_VERSION=$(grep -E "^version = " "$PROJECT_DIR/pyproject.toml" | sed 's/version = "\(.*\)"/\1/')
-INIT_VERSION=$(grep -E "^__version__ = " "$PROJECT_DIR/src/talktype/__init__.py" | sed 's/__version__ = "\(.*\)"/\1/')
+INIT_VERSION=$(grep -E "^__version__ = " "$PROJECT_DIR/src/tuxtalk/__init__.py" | sed 's/__version__ = "\(.*\)"/\1/')
 if [ -z "$PYPROJECT_VERSION" ] || [ -z "$INIT_VERSION" ]; then
     echo "❌ Could not read version from pyproject.toml ('$PYPROJECT_VERSION') or"
-    echo "   src/talktype/__init__.py ('$INIT_VERSION'). Check the 'version =' lines."
+    echo "   src/tuxtalk/__init__.py ('$INIT_VERSION'). Check the 'version =' lines."
     exit 1
 fi
 if [ "$PYPROJECT_VERSION" != "$INIT_VERSION" ]; then
     echo "❌ VERSION MISMATCH: pyproject.toml says $PYPROJECT_VERSION but"
-    echo "   src/talktype/__init__.py says $INIT_VERSION"
+    echo "   src/tuxtalk/__init__.py says $INIT_VERSION"
     echo "   Bump BOTH files to the same version, then rebuild."
     exit 1
 fi
