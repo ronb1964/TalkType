@@ -97,7 +97,7 @@ class TestStartAndStop:
 
         assert K.start(bus) is True
         assert (tmp_path / "focus.js").exists()
-        assert bus.methods() == ["unloadScript", "loadScript", "start"]
+        assert bus.methods() == ["unloadScript", "unloadScript", "loadScript", "start"]
 
     def test_a_stale_copy_is_unloaded_before_loading(self, tmp_path, monkeypatch, on_kde):
         """KWin keeps a script loaded across tray restarts; two would double-report."""
@@ -170,3 +170,20 @@ class TestItIsNeverFatal:
 
         assert K.start(None) is False
         K.stop(None)
+
+
+class TestRenameToTuxTalk:
+    def test_a_talktype_focus_script_is_unloaded_too(self, tmp_path, monkeypatch, on_kde):
+        """A TalkType run left 'talktype-focus' loaded; with ours it would
+        report every focus change twice."""
+        monkeypatch.setattr(K, "script_path", lambda: str(tmp_path / "focus.js"))
+        bus = FakeBus()
+        K.start(bus)
+        unloaded = [c[1][0] for c in bus.calls if c[0] == "unloadScript"]
+        assert "talktype-focus" in unloaded and "tuxtalk-focus" in unloaded
+
+    def test_stopping_unloads_both_names(self, on_kde):
+        bus = FakeBus()
+        K.stop(bus)
+        unloaded = [c[1][0] for c in bus.calls if c[0] == "unloadScript"]
+        assert "talktype-focus" in unloaded and "tuxtalk-focus" in unloaded

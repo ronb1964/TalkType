@@ -18,7 +18,7 @@ def _cfg(hotkey="F8", toggle="F9", vc="Ctrl+Alt+V"):
 
 
 class FakeBus:
-    """Records calls; keeps a set of registered talktype-* names like KWin."""
+    """Records calls; keeps a set of registered tuxtalk-* names like KWin."""
 
     def __init__(self, existing=(), refuse=(), fail=()):
         self.calls = []
@@ -107,15 +107,15 @@ class TestClaim:
         bus = FakeBus()
         kh.claim(_cfg("F8", "", ""), bus)
         kh.claim(_cfg("F10", "", ""), bus)
-        assert bus.names == ["talktype-hold-F10"]
+        assert bus.names == ["tuxtalk-hold-F10"]
 
     def test_clears_leftovers_from_an_older_run(self, on_kde):
         bus = FakeBus(existing=["talktype-hold-F3", "Window Close"])
         kh.claim(_cfg("F8", "", ""), bus)
-        assert sorted(bus.names) == ["Window Close", "talktype-hold-F8"]
+        assert sorted(bus.names) == ["Window Close", "tuxtalk-hold-F8"]
 
     def test_a_key_kde_refuses_is_logged(self, on_kde, caplog):
-        bus = FakeBus(refuse={"talktype-hold-F8"})
+        bus = FakeBus(refuse={"tuxtalk-hold-F8"})
         kh.claim(_cfg("F8", "", ""), bus)
         assert "KDE already uses F8" in caplog.text
 
@@ -142,7 +142,7 @@ class TestClaim:
     def test_a_refused_key_is_reported_after_waiting(self, on_kde, caplog, monkeypatch):
         waits = []
         monkeypatch.setattr(kh.time, "sleep", waits.append)
-        kh.claim(_cfg("F8", "", ""), FakeBus(refuse={"talktype-hold-F8"}))
+        kh.claim(_cfg("F8", "", ""), FakeBus(refuse={"tuxtalk-hold-F8"}))
         assert "KDE already uses F8" in caplog.text
         assert 0 < sum(waits) <= 1.5          # it waits a little, never long
 
@@ -212,7 +212,7 @@ class TestRefusedKeysReachPreferences:
 
     def test_a_refused_key_is_saved(self, result_file):
         before = kh.time.time() - 1
-        kh.claim(_cfg("F8", "F9", ""), FakeBus(refuse={"talktype-hold-F8"}))
+        kh.claim(_cfg("F8", "F9", ""), FakeBus(refuse={"tuxtalk-hold-F8"}))
         assert kh.refused_since(before) == ["F8"]
 
     def test_all_keys_held_is_saved_as_none_refused(self, result_file):
@@ -228,3 +228,25 @@ class TestRefusedKeysReachPreferences:
     def test_a_broken_result_file_is_unknown_not_an_error(self, result_file):
         result_file.write_text("{not json")
         assert kh.refused_since(0) is None
+
+
+class TestRenameToTuxTalk:
+    """0.15.0: TalkType became TuxTalk. Shortcuts left by a TalkType run must
+    go, or KDE would hold F8 twice (once per name) and stray keys could leak."""
+
+    def test_new_shortcuts_carry_the_new_name(self):
+        for name, text, _key in kh.wanted_shortcuts(_cfg()):
+            assert name.startswith("tuxtalk-")
+            assert text.startswith("TuxTalk: ") and text.endswith("managed by TuxTalk")
+
+    def test_release_removes_talktype_and_tuxtalk_shortcuts_only(self, on_kde):
+        bus = FakeBus(existing=["talktype-hold-F8", "talktype-toggle-F9",
+                                "tuxtalk-hold-F8", "Window Close"])
+        kh.release(bus)
+        assert bus.names == ["Window Close"]
+
+    def test_release_unloads_the_old_script_too(self, on_kde):
+        bus = FakeBus()
+        kh.release(bus)
+        unloaded = [c[1] for c in bus.calls if c[0] == "unloadScript"]
+        assert "talktype-hotkeys" in unloaded and "tuxtalk-hotkeys" in unloaded
