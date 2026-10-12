@@ -346,6 +346,12 @@ def device_label(device, model, cuda_ready):
 _DOWNLOAD_KEYS = ("model", "device")
 
 
+# How each indicator offset box shows its saved value. The vertical box shows
+# UP as positive, the way people expect, while indicator_offset_y keeps screen
+# coordinates (positive = down) so no saved setting or backup changes meaning.
+OFFSET_DISPLAY_SIGN = {"indicator_offset_x": 1, "indicator_offset_y": -1}
+
+
 class PreferencesWindow:
     def __init__(self):
         # Set GTK theme to prefer dark mode
@@ -1620,34 +1626,50 @@ class PreferencesWindow:
             grid.attach(warning_label, 0, row, 2, 1)
             row += 1
 
-        # Custom offset X
-        offset_x_label = Gtk.Label(label="  Horizontal offset (pixels):", xalign=0)
-        grid.attach(offset_x_label, 0, row, 1, 1)
+        # Offsets. Which way each box moves the indicator is written right
+        # under it: it used to be only a tooltip on the box, which Ron looked
+        # for on the label and never found (0.14.7). Vertical shows up as
+        # positive; see OFFSET_DISPLAY_SIGN.
+        can_move = positioning_available()
 
-        offset_x_adj = Gtk.Adjustment(value=self.config.get("indicator_offset_x", 0), lower=-1000, upper=1000, step_increment=10)
-        offset_x_spin = Gtk.SpinButton(adjustment=offset_x_adj)
-        offset_x_spin.set_value(self.config.get("indicator_offset_x", 0))
-        offset_x_spin.connect("value-changed", lambda x: self.update_config("indicator_offset_x", int(x.get_value())))
-        offset_x_spin.connect("scroll-event", lambda *a: True)  # Disable scroll wheel to prevent accidental changes
-        offset_x_spin.set_tooltip_text("Fine-tune horizontal position.\nPositive = right, Negative = left")
-        if not positioning_available():
-            offset_x_spin.set_sensitive(False)
-        grid.attach(offset_x_spin, 1, row, 1, 1)
+        def _offset_row(row, label, key, hint):
+            # Line the label up with the box, not with the box-plus-hint.
+            name = Gtk.Label(label=label, xalign=0, valign=Gtk.Align.START)
+            name.set_margin_top(6)
+            grid.attach(name, 0, row, 1, 1)
+            sign = OFFSET_DISPLAY_SIGN[key]
+            value = sign * int(self.config.get(key, 0))
+            spin = Gtk.SpinButton(adjustment=Gtk.Adjustment(
+                value=value, lower=-1000, upper=1000, step_increment=10))
+            spin.set_value(value)
+            spin.connect("value-changed",
+                         lambda w: self.update_config(key, sign * int(w.get_value())))
+            spin.connect("scroll-event", lambda *a: True)  # no accidental scroll-wheel changes
+            spin.set_sensitive(can_move)
+            hint_label = Gtk.Label(label=hint, xalign=0)
+            hint_label.get_style_context().add_class("dim-label")
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+            box.pack_start(spin, False, False, 0)
+            box.pack_start(hint_label, False, False, 0)
+            box.set_halign(Gtk.Align.START)
+            grid.attach(box, 1, row, 1, 1)
+            return spin
+
+        offset_x_spin = _offset_row(row, "  Horizontal offset (pixels):",
+                                    "indicator_offset_x", "+ moves it right, − moves it left")
+        row += 1
+        offset_y_spin = _offset_row(row, "  Vertical offset (pixels):",
+                                    "indicator_offset_y", "+ moves it up, − moves it down")
         row += 1
 
-        # Custom offset Y
-        offset_y_label = Gtk.Label(label="  Vertical offset (pixels):", xalign=0)
-        grid.attach(offset_y_label, 0, row, 1, 1)
-
-        offset_y_adj = Gtk.Adjustment(value=self.config.get("indicator_offset_y", 0), lower=-1000, upper=1000, step_increment=10)
-        offset_y_spin = Gtk.SpinButton(adjustment=offset_y_adj)
-        offset_y_spin.set_value(self.config.get("indicator_offset_y", 0))
-        offset_y_spin.connect("value-changed", lambda x: self.update_config("indicator_offset_y", int(x.get_value())))
-        offset_y_spin.connect("scroll-event", lambda *a: True)  # Disable scroll wheel to prevent accidental changes
-        offset_y_spin.set_tooltip_text("Fine-tune vertical position.\nPositive = down, Negative = up")
-        if not positioning_available():
-            offset_y_spin.set_sensitive(False)
-        grid.attach(offset_y_spin, 1, row, 1, 1)
+        # Setting both spins fires their value-changed handlers, which save.
+        reset_button = Gtk.Button(label="Reset to 0")
+        reset_button.set_tooltip_text("Put the indicator back exactly at the chosen position.")
+        reset_button.set_halign(Gtk.Align.START)
+        reset_button.set_sensitive(can_move)
+        reset_button.connect("clicked", lambda _b: (offset_x_spin.set_value(0),
+                                                    offset_y_spin.set_value(0)))
+        grid.attach(reset_button, 1, row, 1, 1)
         row += 1
 
         return grid

@@ -91,3 +91,25 @@ def test_backing_control_greys_out_for_the_orb():
     irrelevance is visible at a glance without hovering."""
     text = PREFS.read_text()
     assert "_sync_backing_sensitivity" in text
+
+
+def test_offset_boxes_show_up_and_right_as_positive():
+    """Ron (0.14.7): typing a negative number to move the indicator UP felt
+    backwards. The vertical box flips the sign it shows; the saved value keeps
+    screen coordinates (positive = down) so old settings and backups still
+    mean the same place."""
+    from talktype.prefs import OFFSET_DISPLAY_SIGN
+    assert OFFSET_DISPLAY_SIGN == {"indicator_offset_x": 1, "indicator_offset_y": -1}
+    # Showing +30 ("up 30") saves -30, which the indicator reads as 30 px up.
+    shown_up = 30
+    assert OFFSET_DISPLAY_SIGN["indicator_offset_y"] * shown_up == -30
+
+
+def test_offset_direction_is_shown_beside_the_boxes_with_a_reset():
+    """The direction was only in a hover tooltip on the box; Ron hovered the
+    label and never saw it. It's now written under each box."""
+    text = PREFS.read_text()
+    assert '"+ moves it right, − moves it left"' in text
+    assert '"+ moves it up, − moves it down"' in text
+    assert "orientation=Gtk.Orientation.VERTICAL, spacing=2" in text
+    assert 'Gtk.Button(label="Reset to 0")' in text

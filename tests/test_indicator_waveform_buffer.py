@@ -65,3 +65,16 @@ def test_stop_recording_clears_waveform_and_spectrum(indicator):
     indicator.stop_recording()
     assert not indicator.waveform, "waveform must clear on stop (no lingering dash)"
     assert not indicator.spectrum, "spectrum must clear on stop"
+
+
+def test_hide_indicator_also_clears_the_buffers(indicator):
+    # The app only ever calls hide_indicator(), so hiding must clear them too,
+    # or the last dictation's sound flashes up when the next one starts.
+    from gi.repository import Gtk
+    indicator.set_waveform([0.5] * 200)
+    indicator.set_spectrum([0.5] * 24)
+    indicator.hide_indicator()
+    while Gtk.events_pending():
+        Gtk.main_iteration()
+    assert not indicator.waveform
+    assert not indicator.spectrum

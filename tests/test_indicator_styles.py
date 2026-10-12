@@ -105,3 +105,88 @@ def test_empty_data_does_not_crash():
     _has_ink(lambda cr: S.draw_waveform(cr, 200, 120, [], 0.0, (0.3, 0.7, 0.96), 0.5, 1.0))
     _has_ink(lambda cr: S.draw_bars(cr, 200, 120, [], (0.3, 0.7, 0.96), 0.5))
     _has_ink(lambda cr: S.draw_radial(cr, 200, 120, [], 0.0, (0.3, 0.7, 0.96), 0.5, 1.0))
+
+
+# --- Radial (reworked for 0.14.7: too small, and barely moved with speech) ---
+
+def _speech(peak, n=1024):
+    """A speech-like window: a 220 Hz tone whose loudness swells to `peak`."""
+    t = np.arange(n) / 16000
+    return list(np.sin(2 * np.pi * 220 * t) * peak * (0.5 + 0.5 * np.sin(2 * np.pi * 7 * t)))
+
+
+def test_radial_moves_well_for_normal_speech_at_default_sensitivity():
+    # Speech peaks around 0.15. The old ring moved ~15% of its range for that,
+    # so Ron had to turn sensitivity almost all the way up (0.14.6 testing).
+    offs = S.radial_offsets(_speech(0.15), 1.0)
+    assert len(offs) == S.RADIAL_BINS
+    assert sum(offs) / len(offs) > 0.35
+
+
+def test_radial_rests_in_silence_and_stays_in_range():
+    assert max(S.radial_offsets([0.0] * 1024, 1.0)) == 0.0
+    loud = S.radial_offsets(_speech(0.9), 2.0)
+    assert all(0.0 <= d <= 1.0 for d in loud)
+
+
+def test_radial_short_window_does_not_crash():
+    # Fewer samples than points on the ring, e.g. the first audio block.
+    assert len(S.radial_offsets([0.1] * 10, 1.0)) == S.RADIAL_BINS
+
+
+def test_radial_fills_its_window():
+    # The old ring reached only 22% of the window's shorter side, so "small"
+    # was a speck. Loud speech should now reach well past a third of it.
+    import cairo
+    w, h = 200, 180
+    surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, w, h)
+    cr = cairo.Context(surf)
+    S.draw_radial(cr, w, h, _speech(0.4), 1.0, (0.3, 0.7, 0.96), 0.0, 1.0)
+    a = np.frombuffer(surf.get_data(), np.uint8).reshape(h, surf.get_stride() // 4, 4)[:, :w, 3]
+    ys, xs = np.nonzero(a > 40)
+    reach = np.max(np.hypot(xs - w / 2, ys - h / 2))
+    assert reach > 0.35 * min(w, h)
+    assert reach <= 0.5 * min(w, h)   # and never past the window's edge
+
+
+def _run_gain(scale, seconds=2.0):
+    """Feed a gain ~64 ms blocks of speech-like audio (with gaps) at `scale`."""
+    g = S.RadialGain()
+    t = 0.0
+    for k in range(int(seconds / 0.064)):
+        talking = (k % 8) < 6                      # short gaps, like between words
+        block = np.array(_speech(scale if talking else scale * 0.02))
+        g.update(block, t)
+        t += 0.064
+    return g
+
+
+def test_radial_gain_makes_a_quiet_mic_move_like_a_loud_one():
+    # Ron's mic: at sensitivity 1.9 he had to almost yell (2026-10-11).
+    quiet, loud = _run_gain(0.03), _run_gain(0.3)
+    avg = lambda g, pk: sum(S.radial_offsets(_speech(pk), 1.0, gain=g)) / S.RADIAL_BINS
+    q, l = avg(quiet, 0.03), avg(loud, 0.3)
+    assert q > 0.35
+    assert abs(q - l) < 0.05
+
+
+def test_radial_gain_keeps_a_silent_room_still():
+    g = S.RadialGain()
+    for k in range(40):
+        g.update(np.random.default_rng(k).normal(0, 0.002, 1024), k * 0.064)
+    room = np.random.default_rng(99).normal(0, 0.002, 1024)
+    assert sum(S.radial_offsets(list(room), 1.0, gain=g)) / S.RADIAL_BINS < 0.15
+
+
+def test_radial_gain_summary_reports_and_resets():
+    g = _run_gain(0.05)
+    assert g.summary().startswith("Radial levels:")
+    assert g.summary() is None
+
+
+def test_radial_gain_recovers_when_dictation_starts_mid_word():
+    # The first block can already be speech; it must not leave the ring dull.
+    g = S.RadialGain()
+    g.update(np.array(_speech(0.03)), 0.0)
+    g.update(np.array(_speech(0.03 * 0.02)), 0.064)   # first gap between words
+    assert g.normalize(0.03) > 0.9

@@ -19,6 +19,11 @@ import math
 import os
 import time
 
+from .indicator_styles import RadialGain
+from .logger import setup_logger
+
+logger = setup_logger(__name__)
+
 
 # Unscaled window size. show_at_position() positions the window as
 # BASE_WIDTH * scale, so the window itself must be created at that size or
@@ -71,6 +76,7 @@ class RecordingIndicator(Gtk.Window):
         self._wave_history = []          # accumulated rolling window (see set_waveform)
         self._wave_history_max = 1024    # ~23 ms at 44.1 kHz; spans the display
         self.spectrum = None   # band magnitudes for bars
+        self._radial_gain = RadialGain()   # learns this mic's range for the radial
 
         # Position configuration
         self.position = position.lower()
@@ -223,8 +229,16 @@ class RecordingIndicator(Gtk.Window):
             if self.animation_timeout_id is not None:
                 GLib.source_remove(self.animation_timeout_id)
                 self.animation_timeout_id = None
-            self.is_recording = False
-            self.audio_level = 0.0
+            # The app only ever calls hide_indicator(), never stop_recording(),
+            # so the buffer clearing in there never ran and the last dictation's
+            # sound could flash up briefly when the next one began.
+            self.stop_recording()
+            # One line per dictation of what this mic delivered, for tuning
+            # the radial.
+            if self.style == "radial":
+                line = self._radial_gain.summary()
+                if line:
+                    logger.info(line)
             return False
 
         GLib.idle_add(_do_hide)
@@ -298,6 +312,8 @@ class RecordingIndicator(Gtk.Window):
         while the system PortAudio hands smaller varied blocks ~193x/sec (measured).
         Drawing only the latest block made the same code render a lively wave on
         one and a stretched sine on the other. A rolling window normalizes both."""
+        if self.style == "radial":
+            self._radial_gain.update(samples, time.monotonic())
         self._wave_history.extend(samples)
         excess = len(self._wave_history) - self._wave_history_max
         if excess > 0:
@@ -364,7 +380,8 @@ class RecordingIndicator(Gtk.Window):
             elif self.style == "radial":
                 st.draw_radial(cr, width, height,
                                self.waveform if self.waveform is not None else [],
-                               self.audio_level, color, core, self.sensitivity)
+                               self.audio_level, color, core, self.sensitivity,
+                               gain=self._radial_gain)
             return
 
         # Calculate orb position (center-left area)
