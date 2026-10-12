@@ -42,8 +42,21 @@ def migrate(home=None, dev=False):
     done = []
     for old_rel, new_rel in PAIRS(dev):
         old, new = os.path.join(home, old_rel), os.path.join(home, new_rel)
-        if os.path.islink(old) or not os.path.isdir(old):
-            continue                      # nothing old, or already migrated
+        if os.path.islink(old):
+            # Either our own link from an earlier run (old -> new), or the
+            # user's: e.g. the models moved to a bigger disk with a symlink.
+            # Follow the user's link, never skip it, or TuxTalk starts empty.
+            if os.path.isdir(old) and not os.path.lexists(new):
+                try:
+                    os.rename(old, new)       # moves the link itself
+                    os.symlink(new, old)
+                    done.append(f"{old_rel} is a link to {os.readlink(new)}; "
+                                f"{new_rel} now leads there too")
+                except OSError as e:
+                    done.append(f"could not follow the link {old_rel}: {e}")
+            continue
+        if not os.path.isdir(old):
+            continue                      # nothing old
         if (os.path.isdir(new) and not os.path.islink(new) and _only_auto_created(new)):
             # Fold the fresh log into the old folder, so the move below keeps it.
             for n in os.listdir(new):
@@ -63,14 +76,15 @@ def migrate(home=None, dev=False):
             os.symlink(new, old)
             done.append(f"moved {old_rel} to {new_rel}")
         except OSError as e:
-            if e.errno != errno.EXDEV:
+            # EXDEV: another disk; EBUSY: the old path is a mount point.
+            if e.errno not in (errno.EXDEV, errno.EBUSY):
                 done.append(f"could not move {old_rel}: {e}")
                 continue
             # A rename can't cross disks, and copying gigabytes of models at
             # startup is not acceptable. Let the new name lead to the old folder.
             try:
                 os.symlink(old, new)
-                done.append(f"{old_rel} is on another disk; {new_rel} now points to it")
+                done.append(f"{old_rel} can't be moved ({e.strerror}); {new_rel} now points to it")
             except OSError as e2:
                 done.append(f"could not link {new_rel}: {e2}")
     return done
@@ -89,6 +103,26 @@ def run_at_startup(environ=None, home=None):
         return [f"rename migration failed: {e}"]
 
 
+# Where an old TalkType AppImage path now lives, best match first: the AUR
+# package moved /opt/talktype/TalkType.AppImage to /opt/tuxtalk/TuxTalk.AppImage.
+def _new_appimage_paths(old_path):
+    if old_path == "/opt/talktype/TalkType.AppImage":
+        yield "/opt/tuxtalk/TuxTalk.AppImage"
+    if old_path.endswith("/TalkType.AppImage"):
+        yield old_path[: -len("TalkType.AppImage")] + "TuxTalk.AppImage"
+
+
+def _rewrite_exec(line):
+    """Point Exec at the TuxTalk AppImage only where that file exists; an
+    entry that would start nothing is worse than one with the old name."""
+    cmd = line[len("Exec="):].rstrip("\n")
+    target, _, rest = cmd.partition(" ")
+    for new in _new_appimage_paths(target):
+        if os.path.exists(new):
+            return "Exec=" + new + ((" " + rest) if rest else "") + "\n"
+    return line
+
+
 def _rewrite_entry(text, dev):
     """A TalkType .desktop entry with TuxTalk's name, AppImage and description.
     Everything else (launch-at-login on or off above all) is kept as it was."""
@@ -98,30 +132,38 @@ def _rewrite_entry(text, dev):
         if line.startswith("Name=TalkType"):
             line = "Name=TuxTalk" + line[len("Name=TalkType"):]
         elif line.startswith("Exec="):
-            line = line.replace("/TalkType.AppImage", "/TuxTalk.AppImage")
+            line = _rewrite_exec(line)
         elif line.rstrip("\n") in (f"Comment={c}" for c in _OLD_COMMENTS):
             line = f"Comment={AUTOSTART_COMMENT_DEV if dev else AUTOSTART_COMMENT}\n"
         out.append(line)
     return "".join(out)
 
 
-def adopt_old_install(home=None, dev=False):
+def adopt_old_install(home=None, dev=False, running_appimage=None):
     """Move an installed TalkType's AppImage, menu launcher and launch-at-login
     entry to TuxTalk's names. Called by the tray on start; returns log lines.
 
     A 0.14.x updater saves the new version as ~/AppImages/TalkType.AppImage and
     restarts it, so this is how an updated install ends up fully renamed. The
     AppImage is renamed (safe while it runs) and a symlink keeps the old path
-    working; an existing TuxTalk.AppImage is never overwritten. The .desktop
+    working; an existing TuxTalk.AppImage is never overwritten, and only the
+    AppImage that is actually running is renamed (*running_appimage*, the
+    APPIMAGE variable): a downloaded TuxTalk run beside an installed 0.14.6
+    must not turn that old file into the installed TuxTalk. The .desktop
     entries are rewritten under the new name and the old ones removed, so the
     menu never lists both and login never starts both.
     """
     home = home or os.path.expanduser("~")
+    if running_appimage is None:
+        running_appimage = os.environ.get("APPIMAGE", "")
     done = []
     if not dev:
         old = os.path.join(home, "AppImages", "TalkType.AppImage")
         new = os.path.join(home, "AppImages", "TuxTalk.AppImage")
-        if os.path.isfile(old) and not os.path.islink(old) and not os.path.lexists(new):
+        is_running = bool(running_appimage) and os.path.exists(old) and \
+            os.path.realpath(running_appimage) == os.path.realpath(old)
+        if (is_running and os.path.isfile(old) and not os.path.islink(old)
+                and not os.path.lexists(new)):
             try:
                 os.rename(old, new)
                 os.symlink(new, old)

@@ -33,3 +33,81 @@ def test_the_tray_replaces_a_pre_rename_service_on_start():
     body = src[src.index("def _auto_start_service(self):"):]
     body = body[:body.index("\n    def ")]
     assert "pre_rename_service_pids(" in body and "stop_dictation_service(" in body
+
+
+# --- rename_migration: review findings 3, 4 and 5 ----------------------------
+import errno  # noqa: E402
+
+from tuxtalk import rename_migration as rm  # noqa: E402
+
+
+def _mk(p, f="x"):
+    os.makedirs(p, exist_ok=True)
+    with open(os.path.join(p, f), "w") as fh:
+        fh.write("1")
+
+
+def test_a_user_link_to_another_disk_is_followed_not_skipped(tmp_path):
+    # Models moved to a bigger disk with a symlink is common. Skipping it as
+    # "already migrated" gave an empty new install and re-downloaded everything.
+    h = str(tmp_path / "home")
+    _mk(str(tmp_path / "bigdisk" / "TalkType" / "models"), "m.bin")
+    os.makedirs(f"{h}/.local/share")
+    os.symlink(str(tmp_path / "bigdisk" / "TalkType"), f"{h}/.local/share/TalkType")
+    rm.migrate(home=h)
+    assert os.path.isfile(f"{h}/.local/share/TuxTalk/models/m.bin")
+    assert os.path.isfile(f"{h}/.local/share/TalkType/models/m.bin")    # old path still works
+    assert os.path.isfile(str(tmp_path / "bigdisk" / "TalkType" / "models" / "m.bin"))  # never moved
+
+
+def test_a_mount_point_at_the_old_path_is_linked_not_lost(tmp_path, monkeypatch):
+    h = str(tmp_path)
+    _mk(f"{h}/.local/share/TalkType", "m.bin")
+
+    def busy(a, b):
+        raise OSError(errno.EBUSY, "Device or resource busy")
+    monkeypatch.setattr(rm.os, "rename", busy)
+    rm.migrate(home=h)
+    assert os.path.isfile(f"{h}/.local/share/TuxTalk/m.bin")
+
+
+def _old_entry(h, exec_path, enabled="true"):
+    os.makedirs(f"{h}/.config/autostart", exist_ok=True)
+    with open(f"{h}/.config/autostart/talktype.desktop", "w") as f:
+        f.write(f"[Desktop Entry]\nName=TalkType\nExec={exec_path}\nX-GNOME-Autostart-enabled={enabled}\n")
+
+
+def test_only_the_running_appimage_is_renamed(tmp_path):
+    # Running a downloaded TuxTalk while 0.14.6 is installed must not turn the
+    # old 0.14.6 file into "the installed TuxTalk".
+    h = str(tmp_path)
+    _mk(f"{h}/AppImages")
+    with open(f"{h}/AppImages/TalkType.AppImage", "w") as f:
+        f.write("0.14.6")
+    _old_entry(h, f"{h}/AppImages/TalkType.AppImage")
+    rm.adopt_old_install(home=h, running_appimage=f"{h}/Downloads/TuxTalk-v0.15.0-x86_64.AppImage")
+    assert open(f"{h}/AppImages/TalkType.AppImage").read() == "0.14.6"
+    assert not os.path.exists(f"{h}/AppImages/TuxTalk.AppImage")
+    # ...and the login entry keeps starting a file that exists.
+    assert f"Exec={h}/AppImages/TalkType.AppImage\n" in open(f"{h}/.config/autostart/tuxtalk.desktop").read()
+
+
+def test_the_updated_appimage_renames_itself(tmp_path):
+    h = str(tmp_path)
+    _mk(f"{h}/AppImages")
+    with open(f"{h}/AppImages/TalkType.AppImage", "w") as f:
+        f.write("0.15.0")
+    _old_entry(h, f"{h}/AppImages/TalkType.AppImage")
+    rm.adopt_old_install(home=h, running_appimage=f"{h}/AppImages/TalkType.AppImage")
+    assert open(f"{h}/AppImages/TuxTalk.AppImage").read() == "0.15.0"
+    assert f"Exec={h}/AppImages/TuxTalk.AppImage\n" in open(f"{h}/.config/autostart/tuxtalk.desktop").read()
+
+
+def test_an_aur_login_entry_points_at_the_new_opt_path(tmp_path, monkeypatch):
+    h = str(tmp_path)
+    _old_entry(h, "/opt/talktype/TalkType.AppImage")
+    real_exists = os.path.exists
+    monkeypatch.setattr(rm.os.path, "exists",
+                        lambda p: p == "/opt/tuxtalk/TuxTalk.AppImage" or real_exists(p))
+    rm.adopt_old_install(home=h, running_appimage="/opt/tuxtalk/TuxTalk.AppImage")
+    assert "Exec=/opt/tuxtalk/TuxTalk.AppImage\n" in open(f"{h}/.config/autostart/tuxtalk.desktop").read()

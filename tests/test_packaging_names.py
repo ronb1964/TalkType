@@ -58,3 +58,10 @@ def test_aur_package_replaces_talktype_appimage():
 def test_licenses_are_filed_under_tuxtalk():
     s = _read("packaging/collect-licenses.sh")
     assert 'cp "$PROJECT/LICENSE" "$PROJECT/THIRD_PARTY_LICENSES.md" "$LIC/tuxtalk/"' in s
+
+
+def test_aur_keeps_the_old_appimage_path_working_for_the_first_login():
+    # A 0.14.x launch-at-login entry starts /opt/talktype/TalkType.AppImage;
+    # TuxTalk rewrites it on its first start, but the first login comes before.
+    s = _read("aur/PKGBUILD")
+    assert 'ln -s /opt/tuxtalk/TuxTalk.AppImage "${pkgdir}/opt/talktype/TalkType.AppImage"' in s

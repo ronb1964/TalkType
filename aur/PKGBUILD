@@ -31,6 +31,11 @@ noextract=("TuxTalk-v${pkgver}-x86_64.AppImage")
 package() {
     # Install AppImage
     install -Dm755 "TuxTalk-v${pkgver}-x86_64.AppImage" "${pkgdir}/opt/tuxtalk/TuxTalk.AppImage"
+    # The path before the 0.15.0 rename: a TalkType launch-at-login entry
+    # still starts it at the first login after this update (TuxTalk rewrites
+    # the entry once it runs).
+    install -dm755 "${pkgdir}/opt/talktype"
+    ln -s /opt/tuxtalk/TuxTalk.AppImage "${pkgdir}/opt/talktype/TalkType.AppImage"
 
     # Create wrapper script
     install -dm755 "${pkgdir}/usr/bin"

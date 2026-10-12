@@ -33,7 +33,8 @@ def _old_appimage_install(h, enabled="true"):
 def test_appimage_launcher_and_autostart_move_to_tuxtalk(tmp_path):
     h = str(tmp_path)
     _old_appimage_install(h)
-    rm.adopt_old_install(home=h)
+    # A 0.14.x updater saved the new version under the old name and started it.
+    rm.adopt_old_install(home=h, running_appimage=f"{h}/AppImages/TalkType.AppImage")
     assert open(f"{h}/AppImages/TuxTalk.AppImage").read() == "ELF"
     assert os.path.islink(f"{h}/AppImages/TalkType.AppImage")
     auto = open(f"{h}/.config/autostart/tuxtalk.desktop").read()
