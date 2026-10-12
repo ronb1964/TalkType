@@ -3314,7 +3314,7 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
 
         if appimage_installed:
             path_label = Gtk.Label()
-            path_label.set_markup('<span>📁 Installed to: <b>~/AppImages/TalkType.AppImage</b></span>')
+            path_label.set_markup('<span>📁 Installed to: <b>~/AppImages/TuxTalk.AppImage</b></span>')
             path_label.set_halign(Gtk.Align.CENTER)
             install_box.pack_start(path_label, False, False, 0)
 

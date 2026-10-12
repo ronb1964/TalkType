@@ -2742,7 +2742,7 @@ class PreferencesWindow:
             "appimage": "Updates install and TuxTalk restarts by itself.",
             "rpm": ("Check for Updates installs the new .deb or .rpm through your package "
                     "manager, with your password."),
-            "aur": "Installed from the AUR: update with your AUR helper (yay -S talktype-appimage).",
+            "aur": "Installed from the AUR: update with your AUR helper (yay -S tuxtalk-appimage).",
             "flatpak": "Installed as a Flatpak: update with flatpak update or your software center.",
         }
         how["deb"] = how["package"] = how["rpm"]
@@ -2902,7 +2902,7 @@ class PreferencesWindow:
         confirm_dialog.format_secondary_text(
             "TuxTalk will:\n"
             "1. Download the new version\n"
-            "2. Install it to ~/AppImages/TalkType.AppImage\n"
+            "2. Install it to ~/AppImages/TuxTalk.AppImage\n"
             "3. Restart automatically\n\n"
             "Any unsaved preferences changes will be saved first."
         )

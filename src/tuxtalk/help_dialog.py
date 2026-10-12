@@ -109,7 +109,7 @@ def show_help_dialog():
     if is_flatpak:
         update_block = (
             "TuxTalk updates through Flatpak. Run <tt>flatpak update "
-            "io.github.ronb1964.TalkType</tt>, or use your software center — the "
+            "io.github.ronb1964.TuxTalk</tt>, or use your software center — the "
             "built-in \"Check for Updates\" points you at the same command.")
     else:
         update_block = (
@@ -120,7 +120,7 @@ def show_help_dialog():
             "   – <b>AppImage:</b> click \"Download &amp; Install\" — it swaps in the "
             "new version and restarts automatically.\n"
             "   – <b>Arch (AUR):</b> update with your AUR helper, e.g. "
-            "<tt>yay -S talktype-appimage</tt>.")
+            "<tt>yay -S tuxtalk-appimage</tt>.")
 
     first_run_hotkey_bullet = (
         "" if is_flatpak

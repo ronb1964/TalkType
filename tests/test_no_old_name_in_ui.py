@@ -14,13 +14,14 @@ SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tuxtalk"
 EXT = (pathlib.Path(__file__).resolve().parent.parent / "gnome-extension"
        / "talktype@ronb1964.github.io" / "extension.js")
 
+# Substrings allowed anywhere in a string.
 ALLOWED = (
     "Formerly TalkType",
-    "io.github.ronb1964.TalkType",      # D-Bus name and interface (kept)
-    "/io/github/ronb1964/TalkType",      # D-Bus object path (kept)
-    "TalkType-*.AppImage",              # finds an old downloaded AppImage
-    "TalkType.AppImage",                # the old installed path, adopted on start
+    "TalkType-*.AppImage",              # glob patterns that find an old download
 )
+# Strings allowed only when they are the WHOLE string: the kept D-Bus names.
+# (A message like "flatpak update io.github.ronb1964.TalkType" is not one.)
+ALLOWED_WHOLE = {"io.github.ronb1964.TalkType", "/io/github/ronb1964/TalkType"}
 
 
 # Whole strings that are the old name on purpose, per file.
@@ -48,12 +49,13 @@ def test_python_ui_text_says_tuxtalk():
         if f.name == "rename_migration.py":
             continue
         for line, s in _strings(ast.parse(f.read_text())):
-            if s in ALLOWED_EXACT.get(f.name, ()):
+            if s in ALLOWED_EXACT.get(f.name, ()) or s in ALLOWED_WHOLE:
                 continue
             rest = s
             for ok in ALLOWED:
                 rest = rest.replace(ok, "")
-            if "TalkType" in rest:
+            # The old AUR package name, in a command users are told to run.
+            if "TalkType" in rest or "talktype-appimage" in rest:
                 bad.append(f"{f.name}:{line}: {s[:80]!r}")
     assert not bad, "\n".join(bad)
 
@@ -63,6 +65,8 @@ def test_extension_ui_text_says_tuxtalk():
     bad = []
     for m in re.finditer(r"(['\"`])((?:\\.|(?!\1).)*?)\1", text):
         s = m.group(2)
+        if s in ALLOWED_WHOLE:
+            continue
         rest = s
         for ok in ALLOWED:
             rest = rest.replace(ok, "")
