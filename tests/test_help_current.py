@@ -34,7 +34,7 @@ def test_no_red_indicator_or_dimmed_icon():
 
 def test_fix_a_word_lives_on_the_commands_tab():
     assert "Preferences → Voice Commands" not in HELP
-    assert "Preferences → Commands → Fix a Word" in HELP
+    assert "Preferences → Snippets → Fix a Word" in HELP
 
 
 def test_quote_lines_show_curly_quotes():

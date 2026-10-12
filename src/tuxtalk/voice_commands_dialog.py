@@ -154,7 +154,7 @@ to type the word itself:
   <b>literal period</b> → "period"    <b>the word comma</b> → "comma"
   <b>literal new line</b> → "new line"
 
-<b>Custom Commands</b>
-Define your own in Preferences → Commands tab.
-  Wrap replacement in <b>"quotes"</b> to inject exactly as typed
+<b>Snippets</b>
+Say a short phrase, get the full text. Add your own in Preferences → Snippets.
+  Wrap the text in <b>"quotes"</b> to type it exactly as written
   (bypasses auto-capitalization and punctuation).'''

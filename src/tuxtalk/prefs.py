@@ -667,9 +667,9 @@ class PreferencesWindow:
         advanced_tab = self.create_advanced_tab()
         notebook.append_page(self._scrollable_tab(advanced_tab), Gtk.Label(label="Advanced"))
 
-        # Commands tab (custom voice commands) — keeps its own internal list scroll
+        # Snippets tab (custom voice commands) — keeps its own internal list scroll
         commands_tab = self.create_commands_tab()
-        notebook.append_page(commands_tab, Gtk.Label(label="Commands"))
+        notebook.append_page(commands_tab, Gtk.Label(label="Snippets"))
 
         # Stats tab (usage stats: words dictated, time saved)
         stats_tab = self.create_stats_tab()
@@ -2284,7 +2284,7 @@ class PreferencesWindow:
         self.on_cancel(None)
     
     def create_commands_tab(self):
-        """Create the Custom Voice Commands tab."""
+        """Create the Snippets tab (custom voice commands, saved in custom_commands.toml)."""
         vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         vbox.set_margin_start(20)
         vbox.set_margin_end(20)
@@ -2293,15 +2293,15 @@ class PreferencesWindow:
         
         # Header
         header = Gtk.Label()
-        header.set_markup('<span size="large"><b>Custom Voice Commands</b></span>')
+        header.set_markup('<span size="large"><b>Snippets</b></span>')
         header.set_xalign(0)
         vbox.pack_start(header, False, False, 0)
         
         # Description
         desc = Gtk.Label()
         desc.set_markup(
-            '<span>Define custom phrases that will be replaced during dictation.\n'
-            'For example: say "my email" → inserts "user@example.com"</span>'
+            '<span>Say a short phrase and TuxTalk types the full text. For example, '
+            'say "my email" and it types user@example.com.</span>'
         )
         desc.set_xalign(0)
         desc.set_line_wrap(True)
@@ -2330,16 +2330,16 @@ class PreferencesWindow:
         button_box.set_margin_top(5)
         button_box.set_margin_bottom(5)
 
-        add_btn = Gtk.Button(label="Add Command")
+        add_btn = Gtk.Button(label="Add Snippet")
         add_btn.connect("clicked", self._on_add_command)
         add_btn.get_child().set_xalign(0.5)
-        add_btn.set_tooltip_text("Add a new custom voice command")
+        add_btn.set_tooltip_text("Add a new snippet")
         button_box.pack_start(add_btn, False, False, 0)
 
         remove_btn = Gtk.Button(label="Remove Selected")
         remove_btn.connect("clicked", self._on_remove_command)
         remove_btn.get_child().set_xalign(0.5)
-        remove_btn.set_tooltip_text("Remove the selected command")
+        remove_btn.set_tooltip_text("Remove the selected snippet")
         button_box.pack_start(remove_btn, False, False, 0)
 
         vbox.pack_start(button_box, False, False, 0)
@@ -2367,7 +2367,7 @@ class PreferencesWindow:
         phrase_renderer.set_property("editable", True)
         phrase_renderer.connect("edited", self._on_phrase_edited)
         phrase_renderer.connect("editing-started", self._on_cell_editing_started, 0)
-        phrase_column = Gtk.TreeViewColumn("Spoken Phrase", phrase_renderer, text=0)
+        phrase_column = Gtk.TreeViewColumn("You Say", phrase_renderer, text=0)
         phrase_column.set_expand(True)
         phrase_column.set_min_width(150)
         self.commands_tree.append_column(phrase_column)
@@ -2377,7 +2377,7 @@ class PreferencesWindow:
         replacement_renderer.set_property("editable", True)
         replacement_renderer.connect("edited", self._on_replacement_edited)
         replacement_renderer.connect("editing-started", self._on_cell_editing_started, 1)
-        replacement_column = Gtk.TreeViewColumn("Replacement Text", replacement_renderer, text=1)
+        replacement_column = Gtk.TreeViewColumn("TuxTalk Types", replacement_renderer, text=1)
         replacement_column.set_expand(True)
         replacement_column.set_min_width(200)
         self.commands_tree.append_column(replacement_column)
@@ -2391,8 +2391,8 @@ class PreferencesWindow:
             '<span><b>Tips:</b>\n'
             '• Click on a cell to edit it directly\n'
             '• Phrases are matched case-insensitively\n'
-            '• Use \\n in replacement for line breaks\n'
-            '• Wrap replacement in "quotes" to inject it exactly as typed (no auto-capitalization or punctuation changes)\n'
+            '• Use \\n in the text for line breaks\n'
+            '• Wrap the text in "quotes" to type it exactly as written (no auto-capitalization or punctuation changes)\n'
             '• Changes are saved when you click Apply or OK\n'
             '• Changes take effect on your next dictation — no restart needed</span>'
         )
@@ -2405,6 +2405,8 @@ class PreferencesWindow:
     def select_tab(self, name):
         """Show the tab whose label is *name* (case-insensitive). Looked up by
         label so adding a tab can't make --tab or bring_to_front open the wrong one."""
+        # The Snippets tab was called Commands until 0.15.0.
+        name = {"commands": "snippets"}.get(name.lower(), name)
         for i in range(self.notebook.get_n_pages()):
             label = self.notebook.get_tab_label_text(self.notebook.get_nth_page(i)) or ""
             # Any word of the label: "updates" (the tray's --tab) and
@@ -5587,7 +5589,7 @@ def main():
     desktop_identity.apply()        # TuxTalk's icon on its windows, not KDE's generic one
     import argparse
     parser = argparse.ArgumentParser(description="TuxTalk Preferences")
-    parser.add_argument("--tab", choices=["general", "audio", "advanced", "commands", "stats", "updates", "backup"],
+    parser.add_argument("--tab", choices=["general", "audio", "advanced", "snippets", "commands", "stats", "updates", "backup"],
                         help="Tab to open initially")
     args = parser.parse_args()
 

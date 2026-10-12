@@ -254,11 +254,11 @@ After choosing one, the tray's Device line shows where it really runs.
 • With any other device, Parakeet runs on the processor (CUDA can't run it)
 
 <b>Fix a Word</b> (teach TuxTalk a word it keeps getting wrong)
-• Tray menu → Fix a Word..., or Preferences → Commands → Fix a Word...
+• Tray menu → Fix a Word..., or Preferences → Snippets → Fix a Word...
 • Pick a recent dictation, click the wrong word (or drag across a few),
   type the right spelling, then click Always fix this
 • From then on it's fixed in every dictation, with any speech model
-• Your fixes live in Preferences → Commands, where you can edit or remove them
+• Your fixes live in Preferences → Snippets, where you can edit or remove them
 • Handy for names, brands and technical terms, like "bamboo studio" → BambuStudio
 
 <b>Your Stats</b> (tray menu → Your Stats..., or Preferences → Stats)
@@ -451,15 +451,15 @@ Say: <i>First sentence period new line Second sentence exclamation point</i>
 Result: First sentence.
 Second sentence!
 
-<b>Custom Voice Commands:</b>
-Define your own phrase → replacement shortcuts in Preferences → Commands tab.
+<b>Snippets:</b>
+Say a short phrase and TuxTalk types the full text. Add your own in Preferences → Snippets.
 
 Examples:
 • "my email" → "user@example.com"
 • "my address" → "123 Main Street, City, ST 12345"
 
-To inject a replacement exactly as typed — bypassing auto-capitalization
-and punctuation — wrap the replacement text in double quotes.
+To type a snippet exactly as written — bypassing auto-capitalization
+and punctuation — wrap its text in double quotes.
 
 <b>Undo Commands:</b>
 • Say <b>undo last word</b> to delete the last word you dictated

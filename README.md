@@ -72,7 +72,7 @@ Names, brands, the part numbers you use every day. If TuxTalk keeps getting one 
 You can also make your own shortcuts, like "my email" for your address.
 
 </td>
-<td width="50%"><img src="screenshots/prefs-commands.png" alt="Preferences, Commands tab: custom voice commands and Fix a Word"></td>
+<td width="50%"><img src="screenshots/prefs-commands.png" alt="Preferences, Snippets tab: your own phrases and Fix a Word"></td>
 </tr>
 <tr>
 <td width="50%"><img src="screenshots/tray-performance.png" alt="Tray menu with the Performance presets"></td>

@@ -25,6 +25,9 @@ Also new in this one:
   you start talking, and when you're done only what TuxTalk paused starts back
   up. If you hit play yourself in the middle, it leaves that alone. It's on by
   default, and you can turn it off in Preferences under Audio & Visual Feedback.
+- The Commands tab in Preferences is called Snippets now. Same list, same
+  entries. "Commands" kept getting mixed up with the built-in ones like "new
+  line" and "period".
 
 ## [0.14.6] - 2026-10-11
 
