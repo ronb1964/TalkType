@@ -190,3 +190,41 @@ def test_the_label_says_it_short_and_the_notification_in_full(monkeypatch):
         app._edit_problem(kind, False)
         assert len(shown[0].split()) <= 7, (kind, shown[0])
         assert notified[0] == app._EDIT_NOTICES[kind]
+
+
+# --- with no tray, the service answers itself --------------------------------------------------
+
+class _FakeBus:
+    def __init__(self, owner, me):
+        self.owner, self.me, self.asked = owner, me, []
+
+    def get_name_owner(self, name):
+        return self.owner
+
+    def get_unique_name(self):
+        return self.me
+
+    def get_object(self, *a, **k):
+        self.asked.append(a)
+        raise AssertionError("should not call over D-Bus")
+
+
+def test_the_service_holding_the_name_reads_its_own_cache(monkeypatch):
+    """Calling its own bus name from the GTK thread waited out the timeout
+    every time the indicator followed a window."""
+    import sys
+    import types
+    from tuxtalk import dbus_service
+    bus = _FakeBus(":1.5", ":1.5")
+    monkeypatch.setitem(sys.modules, "dbus", types.SimpleNamespace(SessionBus=lambda: bus))
+    monkeypatch.setattr(dbus_service, "_focused_window_geometry", "1,2,3,4|DP-6|0,0,10,10")
+    assert wg._reported() == "1,2,3,4|DP-6|0,0,10,10"
+    assert bus.asked == []
+
+
+def test_the_tray_is_asked_when_it_holds_the_name(monkeypatch):
+    import sys
+    import types
+    bus = _FakeBus(":1.2", ":1.5")
+    monkeypatch.setitem(sys.modules, "dbus", types.SimpleNamespace(SessionBus=lambda: bus))
+    assert wg._reported() is None and len(bus.asked) == 1

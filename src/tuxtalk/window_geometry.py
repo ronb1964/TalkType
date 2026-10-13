@@ -95,8 +95,15 @@ def _reported():
     """What the KWin script or GNOME extension last told the tray, or None."""
     try:
         import dbus
+        from . import dbus_service
         from .dbus_service import DBUS_INTERFACE, DBUS_NAME, DBUS_PATH
-        proxy = dbus.SessionBus().get_object(DBUS_NAME, DBUS_PATH, introspect=False)
+        bus = dbus.SessionBus()
+        if bus.get_name_owner(DBUS_NAME) == bus.get_unique_name():
+            # With no tray running, the dictation service holds the name
+            # itself; a call to its own name would wait on the GTK loop that
+            # is making it, and time out.
+            return dbus_service._focused_window_geometry or None
+        proxy = bus.get_object(DBUS_NAME, DBUS_PATH, introspect=False)
         return str(proxy.GetFocusedWindowGeometry(dbus_interface=DBUS_INTERFACE,
                                                   timeout=_DBUS_TIMEOUT_S)) or None
     except Exception as e:
