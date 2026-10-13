@@ -2705,7 +2705,11 @@ def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = Fa
         # runs a terminal's half-typed command. A snippet's line breaks are real
         # newlines, so they go in as Shift+Enter like a spoken "new line".
         text = text.replace("\n", "\xa7SHIFT_ENTER\xa7")
-        inject_ok = _output_backend().type_text(text)
+        backend = _output_backend()
+        # The Flatpak's keyboard path types "…" as "..." and "café" as "cafe";
+        # recording that form below keeps undo's backspace count right.
+        text = backend.typeable(text)
+        inject_ok = backend.type_text(text)
         injection_time = time.time() - injection_start
         logger.info(f"TIMING: Typing injection completed in {injection_time:.2f}s")
         logger.info(f"Text injected via typing: {len(text)} chars in {injection_time:.2f}s")

@@ -224,8 +224,9 @@ def test_flatpak_electron_app_types_via_libei_not_ydotool_fasttype(monkeypatch):
     fast_calls = []
     monkeypatch.setattr(app, "_type_text_fast", lambda *a, **k: fast_calls.append(a) or True)
     typed = []
+    from tuxtalk.output_backends import OutputBackend
 
-    class FakeBackend:
+    class FakeBackend(OutputBackend):
         def type_text(self, t):
             typed.append(t)
             return True
@@ -310,3 +311,22 @@ def test_a_portal_that_never_answers_times_out(monkeypatch):
     assert fd is None
     assert session == "/s/1"                 # returned so the caller closes it
     assert bus.subs == {}
+
+
+def test_flatpak_typing_records_what_libei_types_for_undo(monkeypatch):
+    """libei types "…" as "..." (three keys), so undo must count three."""
+    from tuxtalk import app
+    from tuxtalk.output_backends import LibeiOutputBackend
+    monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TalkType")
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "org.kde.kwrite")
+    typed = []
+
+    class FakeLibei(LibeiOutputBackend):
+        def type_text(self, t):
+            typed.append(t)
+            return True
+
+    monkeypatch.setattr(app, "_output_backend", lambda: FakeLibei())
+    assert app._inject_text("Wait… café", "auto", 0.0) == "ok"
+    assert typed == ["Wait... cafe"]
+    assert app.state.last_inserted_text == "Wait... cafe"

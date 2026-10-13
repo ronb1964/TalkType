@@ -121,8 +121,22 @@ def test_text_with_an_untypable_character_types_nothing(monkeypatch):
     """Characters libei can't type were skipped while type_string still said
     it had typed everything, so undo later deleted the user's own text."""
     s = _fake_ready_session(monkeypatch)
-    assert s.type_string("café time") is False
+    assert s.type_string("5€ time") is False
     assert s.ei.events == []
+
+
+def test_ellipses_and_accents_are_typed_as_their_plain_forms():
+    """Dictation turns "..." into "…", and an accented word is common; both
+    have a plain form, so refusing the whole dictation over them lost far
+    more than it saved."""
+    assert L.typeable_text("Wait… café, naïve “ok”") == 'Wait... cafe, naive "ok"'
+    assert L.plan_keys("Wait… café") == L.plan_keys("Wait... cafe")
+
+
+def test_characters_without_a_plain_form_are_left_for_plan_keys_to_refuse():
+    assert L.typeable_text("m² 5€ 日本") == "m² 5€ 日本"
+    assert L.plan_keys("m²") is None
+    assert L.typeable_text("a" + L.SHIFT_ENTER_MARKER + "b") == "a" + L.SHIFT_ENTER_MARKER + "b"
 
 
 def test_line_breaks_are_planned_as_enter_keys():

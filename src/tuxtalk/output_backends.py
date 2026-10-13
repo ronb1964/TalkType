@@ -23,6 +23,11 @@ class OutputBackend:
     def type_text(self, text: str) -> bool:
         raise NotImplementedError
 
+    def typeable(self, text: str) -> str:
+        """*text* as type_text will actually type it. The caller types and
+        records this form, so undo deletes exactly what was typed."""
+        return text
+
     def select_all_delete(self) -> bool:
         """Clear the focused field (Ctrl+A + Backspace)."""
         raise NotImplementedError
@@ -253,6 +258,10 @@ class LibeiOutputBackend(OutputBackend):
 
     def type_text(self, text: str) -> bool:
         return self._with_session(lambda s: s.type_string(text))
+
+    def typeable(self, text: str) -> str:
+        from . import libei_ctypes
+        return libei_ctypes.typeable_text(text)
 
     def select_all_delete(self) -> bool:
         return self._with_session(lambda s: s.select_all_delete())

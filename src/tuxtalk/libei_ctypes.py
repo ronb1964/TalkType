@@ -13,6 +13,7 @@ import ctypes as C
 import os
 import select
 import time
+import unicodedata
 
 from .logger import setup_logger
 
@@ -69,12 +70,11 @@ for _c, _k in list(_LETTERS.items()):
 # Characters that require holding Shift while the base key is pressed.
 SHIFT_CHARS: set[str] = set(_SHIFTED) | {c.upper() for c in _LETTERS}
 
-# Typographic characters dictation produces (smart quotes are on by default),
-# typed as their plain one-key look-alikes. One character each, so undo's
-# backspace count still matches what was typed.
+# Typographic characters dictation produces (smart quotes are on by default,
+# and "..." becomes an ellipsis), typed as their plain look-alikes.
 _PLAIN_LOOKALIKE = {
     "\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"',
-    "\u2013": "-", "\u2014": "-", "\u00a0": " ",
+    "\u2013": "-", "\u2014": "-", "\u00a0": " ", "\u2026": "...",
 }
 
 
@@ -125,11 +125,33 @@ def load_libei() -> C.CDLL:
     return ei
 
 
+def typeable_text(text: str) -> str:
+    """*text* as this keyboard path will type it: typographic characters
+    become their plain look-alikes and accented letters lose the accent
+    ("café" -> "cafe"). The caller records this form for undo, since "…" is
+    three keystrokes. Characters with no ASCII equivalent are left as they
+    are, and plan_keys refuses them."""
+    out = []
+    for ch in text:
+        if ch in CHAR_TO_KEYCODE or ch in "\n\t":
+            out.append(ch)
+        elif ch in _PLAIN_LOOKALIKE:
+            out.append(_PLAIN_LOOKALIKE[ch])
+        else:
+            # Canonical decomposition only, so "²" stays "²" rather than
+            # silently becoming "2".
+            base = "".join(c for c in unicodedata.normalize("NFD", ch)
+                           if not unicodedata.combining(c))
+            out.append(base if base and all(c in CHAR_TO_KEYCODE for c in base) else ch)
+    return "".join(out)
+
+
 def plan_keys(text: str):
     """[(keycode, shift)] that type *text*, or None if any character can't be
     typed. Planned before anything is sent, so a dictation is typed whole or
     not at all: a character skipped silently left undo deleting more than had
     been typed."""
+    text = typeable_text(text)
     keys = []
     i, n = 0, len(text)
     while i < n:
@@ -137,7 +159,7 @@ def plan_keys(text: str):
             keys.append((KEY_ENTER, True))          # soft line break
             i += len(SHIFT_ENTER_MARKER)
             continue
-        ch = _PLAIN_LOOKALIKE.get(text[i], text[i])
+        ch = text[i]
         if ch == "\n":
             keys.append((KEY_ENTER, False))         # hard newline
         else:

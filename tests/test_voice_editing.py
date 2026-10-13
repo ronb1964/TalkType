@@ -643,7 +643,9 @@ def injection(monkeypatch):
     monkeypatch.setattr(app, "_paste_text", lambda t: seen["pasted"].append(t) or True)
     monkeypatch.setattr(app, "_send_shift_enter", lambda: seen.__setitem__("shift_enter", seen["shift_enter"] + 1) or True)
 
-    class Backend:
+    from tuxtalk.output_backends import OutputBackend
+
+    class Backend(OutputBackend):
         def type_text(self, t):
             seen["typed"].append(t)
             return True
