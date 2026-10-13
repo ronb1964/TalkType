@@ -13,7 +13,7 @@ deliberately stay TalkType because changing them would hurt users:
 - the compatibility copies in every release: `TalkType-vX.X.X-x86_64.AppImage.zsync`
   and `talktype-gnome-extension.zip` (0.14.x installs look for those names).
 Old folders, launchers and KDE shortcuts are moved or cleaned on start by
-`src/tuxtalk/rename_migration.py`. Plan: `docs/superpowers/plans/2026-10-11-rename-to-tuxtalk.md`.
+`src/tuxtalk/rename_migration.py`.
 
 **READ THIS ENTIRE FILE BEFORE DOING ANYTHING. THESE RULES ARE MANDATORY.**
 
@@ -189,17 +189,23 @@ AUR votes only move when asked for — the package sat at zero from December
 The "Vulkan (any GPU)" device (config value `vulkan`; AMD, Intel and NVIDIA)
 runs whisper.cpp's whisper-server with its Vulkan backend (`src/tuxtalk/whisper_vulkan.py`). whisper.cpp publishes no
 Linux Vulkan build, so TuxTalk builds one. It is NOT part of the AppImage
-and is NOT rebuilt for each release. It only changes when whisper.cpp does.
+and is NOT rebuilt for each release. It only changes when whisper.cpp does,
+or when its contents change (a new build number for the same version).
 
 To update it:
-1. `./build-vulkan-engine.sh 1.9.4` (the whisper.cpp version). It builds in
-   Ubuntu 22.04 and writes `talktype-whisper-vulkan-<ver>-x64.tar.gz` + `.sha256`.
-2. Upload it to a GitHub release tagged `whisper-vulkan-<ver>`, marked
+1. `./build-vulkan-engine.sh <whisper.cpp version> <build number>`, e.g.
+   `./build-vulkan-engine.sh 1.9.4 3`. Both are required. The build number
+   must be higher than `ENGINE_BUILD` for the same version: a published
+   build is never replaced (released versions check its SHA256), and the
+   script refuses one that is. It builds in Ubuntu 22.04 and writes
+   `talktype-whisper-vulkan-<ver>-b<build>-x64.tar.gz` + `.sha256`.
+2. Upload it to a GitHub release tagged `whisper-vulkan-<ver>-b<build>`, marked
    **pre-release** (`gh release create ... --prerelease`). A normal release
    would become "latest", and the in-app updater and the AppImage's update
    information would treat it as a TuxTalk version.
-3. Put the version and SHA256 into `ENGINE_VERSION` / `ENGINE_SHA256` in
-   `whisper_vulkan.py`.
+3. Put the version, build number and SHA256 into `ENGINE_VERSION`,
+   `ENGINE_BUILD` and `ENGINE_SHA256` in `whisper_vulkan.py` (and
+   `ENGINE_SIZE_TEXT` if the download size changed).
 4. Ask Ron before uploading. It is public.
 
 The setup dialogs (download, speed check, Light/Full choice) live in
