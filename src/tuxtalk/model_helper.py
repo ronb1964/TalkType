@@ -1,11 +1,8 @@
-"""
-Model Download Helper for TuxTalk
-Handles Whisper and Parakeet model downloads with progress UI
-"""
+"""Downloading and loading the speech models (Whisper and Parakeet), with progress UI."""
 import os
 
-# CRITICAL: Disable XET downloads BEFORE huggingface_hub is imported anywhere
-# XET bypasses tqdm_class progress tracking, breaking our progress UI
+# Must be set before huggingface_hub is imported anywhere: XET downloads bypass
+# tqdm_class, so the progress bars would never move.
 os.environ["HF_HUB_DISABLE_XET"] = "1"
 
 import threading
@@ -88,7 +85,7 @@ def model_display_name(model_name):
     return model_name.title()
 
 
-# Model repository names on HuggingFace
+# Hugging Face repository for each model.
 MODEL_REPOS = {
     "tiny": "Systran/faster-whisper-tiny",
     "base": "Systran/faster-whisper-base",
@@ -99,18 +96,15 @@ MODEL_REPOS = {
 }
 
 # The models offered in the UI, smallest first. Every screen with a model picker
-# must build from this rather than keeping its own list: Preferences and the
-# first-run setup screen each hardcoded one and drifted, leaving "base" off the
-# setup screen entirely. A model is only offerable if MODEL_REPOS can fetch it,
-# which tests/test_model_choices.py enforces.
+# builds from this so their lists can't drift apart. A model is only offerable
+# if MODEL_REPOS can fetch it (tests/test_model_choices.py).
 #
 # Parakeet comes last: it is not part of Whisper's size ladder, it is a
 # different engine (see parakeet_engine.py).
 OFFERED_MODELS = ("tiny", "base", "small", "medium", "large-v3", PARAKEET_MODEL)
 
 # What each model really downloads for the processor (and CUDA), in decimal
-# MB as Hugging Face lists it. Until 0.14.2 these were the models' sizes in
-# millions of parameters, about half the real download (tests/test_model_sizes.py).
+# MB as Hugging Face lists it, not its parameter count (tests/test_model_sizes.py).
 MODEL_DISPLAY_SIZES = {
     "tiny": "78 MB",
     "base": "148 MB",
@@ -146,11 +140,10 @@ def is_model_cached_fast(model_name):
         if not repo_id:
             return False
         snapshot_path = snapshot_download(repo_id, local_files_only=True)
-        # snapshot_download does NOT verify completeness offline (verified
-        # empirically: it happily returns a snapshot containing only
-        # config.json). Check the files faster-whisper actually loads —
-        # hf_hub_download links a file into the snapshot only after its
-        # download fully completes, so presence implies completeness.
+        # Offline, snapshot_download does not check completeness: it returns a
+        # snapshot holding only config.json just as happily. hf_hub_download
+        # links a file into the snapshot only once it has fully downloaded, so
+        # the presence of the files faster-whisper loads means they are complete.
         def has(name):
             return os.path.isfile(os.path.join(snapshot_path, name))
         return all(map(has, ESSENTIAL_MODEL_FILES)) and any(map(has, VOCABULARY_FILES))
@@ -160,11 +153,8 @@ def is_model_cached_fast(model_name):
 
 def make_model_download_func(model_name, repo_id=None, only_files=None):
     """
-    Create a DownloadTask-compatible function that downloads model files to the
-    HuggingFace cache without loading them into memory.
-
-    This is used with UnifiedDownloadDialog so the model download can run
-    alongside a CUDA libraries download in the same progress window.
+    Build a DownloadTask function that fetches model files into the Hugging Face
+    cache without loading them, for UnifiedDownloadDialog.
 
     Args:
         model_name: Model size (e.g., "large-v3"), or a label for logs when
@@ -184,7 +174,6 @@ def make_model_download_func(model_name, repo_id=None, only_files=None):
             from huggingface_hub.utils import disable_progress_bars
             import tqdm as tqdm_lib
 
-            # Disable huggingface_hub's own console progress bars
             disable_progress_bars()
 
             repo = repo_id or MODEL_REPOS.get(model_name)
@@ -194,7 +183,6 @@ def make_model_download_func(model_name, repo_id=None, only_files=None):
 
             progress_callback("Getting file list...", 1)
 
-            # Get all file names + sizes from the HuggingFace repo
             try:
                 files_with_sizes = _files_to_download(model_name, repo)
                 if only_files:
@@ -214,7 +202,7 @@ def make_model_download_func(model_name, repo_id=None, only_files=None):
                 files_with_sizes = [(name, 0) for name in (only_files or PARAKEET_FILES)]
 
             if not files_with_sizes:
-                # Fallback: load via WhisperModel (triggers its own download)
+                # Without a file list, let WhisperModel download it (no byte progress).
                 progress_callback("Downloading model files...", 5)
                 from faster_whisper import WhisperModel
                 model = WhisperModel(model_name, device="cpu", local_files_only=False)
@@ -222,11 +210,10 @@ def make_model_download_func(model_name, repo_id=None, only_files=None):
                 progress_callback("Download complete!", 100)
                 return True
 
-            # Disk-space check before committing to a multi-GB download —
-            # otherwise the failure surfaces later as a confusing per-file
-            # error instead of a clear message.
-            # HF_HUB_CACHE follows HF_HOME, HF_HUB_CACHE and XDG_CACHE_HOME (set
-            # inside the Flatpak), so this measures the disk the files land on.
+            # Check disk space up front, so a full disk gives a clear message
+            # rather than a per-file error halfway through. HF_HUB_CACHE follows
+            # HF_HOME, HF_HUB_CACHE and XDG_CACHE_HOME (set inside the Flatpak),
+            # so this measures the disk the files land on.
             from huggingface_hub.constants import HF_HUB_CACHE
             from .download_utils import free_space_bytes
             free = free_space_bytes(HF_HUB_CACHE)
@@ -239,22 +226,19 @@ def make_model_download_func(model_name, repo_id=None, only_files=None):
                 progress_callback(msg, 0)
                 return False
 
-            # Track bytes downloaded across all files
-            downloaded_bytes = [0]
+            downloaded_bytes = [0]  # across all files
 
-            # Custom tqdm class that relays byte-level progress to our callback
             class ProgressTqdm(tqdm_lib.tqdm):
                 """Tqdm subclass that updates the unified download dialog progress bar."""
 
                 def __init__(self, *args, **kwargs):
                     import io
-                    # Store the current filename from tqdm 'desc' kwarg
                     self._current_file = kwargs.get('desc', 'file')
-                    # Remove kwargs that tqdm doesn't accept from huggingface_hub
+                    # huggingface_hub passes 'name', which tqdm rejects.
                     kwargs.pop('name', None)
-                    # Force enabled even when stdout is not a TTY
+                    # tqdm disables itself without a TTY; this one feeds a
+                    # progress bar, so keep it on and send its text nowhere.
                     kwargs['disable'] = False
-                    # Suppress all console output
                     kwargs['file'] = io.StringIO()
                     super().__init__(*args, **kwargs)
 
@@ -270,7 +254,6 @@ def make_model_download_func(model_name, repo_id=None, only_files=None):
                             percent
                         )
 
-            # Download each file one by one
             failed_files = []
             for filename, file_size in files_with_sizes:
                 if cancel_event.is_set():
@@ -283,7 +266,7 @@ def make_model_download_func(model_name, repo_id=None, only_files=None):
                         filename=filename,
                         tqdm_class=ProgressTqdm,
                     )
-                    # If no progress fired, the file was already cached — count it anyway
+                    # No progress means the file was already cached; count it anyway.
                     if downloaded_bytes[0] == bytes_before:
                         downloaded_bytes[0] += file_size
                         if total_bytes > 0:
@@ -293,8 +276,8 @@ def make_model_download_func(model_name, repo_id=None, only_files=None):
                     return False
                 except Exception as e:
                     logger.warning(f"Error downloading {filename}: {e}")
-                    # Keep the progress bar moving, but remember the failure —
-                    # a model with missing files must NOT be reported as
+                    # Keep the progress bar moving, but remember the failure:
+                    # a model missing essential files must not be reported as
                     # downloaded (the service would stall loading it).
                     failed_files.append(filename)
                     downloaded_bytes[0] += file_size
@@ -312,9 +295,8 @@ def make_model_download_func(model_name, repo_id=None, only_files=None):
 
             if failed_files:
                 # Only non-essential files (README, .gitattributes, alternative
-                # formats). Discarding a finished multi-gigabyte download over
-                # one of those, and telling the user it failed, was worse than
-                # the missing file.
+                # formats) failed: not worth discarding a finished
+                # multi-gigabyte download over.
                 logger.warning(
                     f"Model {model_name}: {len(failed_files)} non-essential file(s) "
                     f"could not be downloaded, model is still usable: {failed_files[:3]}"
@@ -339,7 +321,7 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
                                  show_confirmation=True, redownload_broken=True,
                                  result_info=None):
     """
-    Download a Whisper model with progress dialog.
+    Load a model, first downloading it behind a progress dialog if needed.
 
     Args:
         model_name: Model size (e.g., "tiny", "small", "medium", "large-v3")
@@ -359,11 +341,11 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
     """
     cached = is_model_cached_fast(model_name)
     logger.info(f"Model cache check: {model_name} cached={cached}")
-    print(f"📦 Model cache check: {model_name} cached={cached}")
+    print(f"Model cache check: {model_name} cached={cached}")
 
     if cached:
         logger.info(f"Model {model_name} already cached, loading directly (no download window)")
-        print(f"✅ Model {model_name} already cached - loading without download")
+        print(f"Model {model_name} already cached - loading without download")
         try:
             return load_model(model_name, device=device, compute_type=compute_type)
         except Exception as e:
@@ -378,11 +360,10 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
                            f"({e}); downloading it again")
 
     logger.info(f"Model {model_name} NOT cached - showing download progress dialog")
-    print(f"📥 Model {model_name} NOT cached - will download and show progress")
+    print(f"Model {model_name} NOT cached - will download and show progress")
 
     size_str = MODEL_DISPLAY_SIZES.get(model_name, "unknown size")
 
-    # Show confirmation dialog before starting download
     if show_confirmation:
         confirm_dialog = message_dialog(
             parent=parent,
@@ -391,7 +372,6 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
             text=f"Download {model_display_name(model_name)} Model?"
         )
 
-        # Apply dark theme to dialog
         settings = Gtk.Settings.get_default()
         if settings:
             settings.set_property("gtk-application-prefer-dark-theme", True)
@@ -411,13 +391,11 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
                 result_info["cancelled"] = True
             return None
 
-    # Show progress dialog with dark theme
     progress_dialog = Gtk.Dialog(title=f"Downloading Model: {model_display_name(model_name)}")
     progress_dialog.set_default_size(500, 150)
     progress_dialog.set_modal(True)
     progress_dialog.set_position(Gtk.WindowPosition.CENTER)
 
-    # Apply dark theme to dialog
     settings = Gtk.Settings.get_default()
     if settings:
         settings.set_property("gtk-application-prefer-dark-theme", True)
@@ -432,39 +410,32 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
     content.set_margin_end(30)
     content.set_spacing(15)
 
-    # Title
     title_label = Gtk.Label()
     title_label.set_markup(f'<span size="large"><b>Downloading {model_display_name(model_name)} Model</b></span>')
     content.pack_start(title_label, False, False, 0)
 
-    # Status label
     status_label = Gtk.Label()
     status_label.set_markup(f'<span>Downloading from Hugging Face... ({size_str})</span>')
     status_label.set_line_wrap(True)
     content.pack_start(status_label, False, False, 0)
 
-    # Progress bar with percentage text
     progress_bar = Gtk.ProgressBar()
     progress_bar.set_show_text(True)
     progress_bar.set_text("0%")
     content.pack_start(progress_bar, False, False, 0)
 
-    # Info label
     info_label = Gtk.Label()
     info_label.set_markup('<span size="small"><i>This may take several minutes on first download...</i></span>')
     info_label.set_opacity(0.7)
     content.pack_start(info_label, False, False, 0)
 
-    # Add Cancel button to action area
     cancel_button = Gtk.Button(label="Cancel")
     cancel_button.set_can_default(True)
-    cancel_button.show()  # Explicitly show the button
+    cancel_button.show()
     progress_dialog.add_action_widget(cancel_button, Gtk.ResponseType.CANCEL)
 
-    # Show all widgets
     progress_dialog.show_all()
 
-    # Download state
     cancel_event = threading.Event()
     download_result = [None]
     download_error = [None]
@@ -477,8 +448,7 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
     }
 
     def update_ui_progress(percent, file_info=""):
-        """Update progress bar from main thread"""
-        # Only update if percent changed (reduces UI updates)
+        """Update the progress bar on the GTK thread, only when the whole percent changes."""
         if int(percent) == progress_state['last_percent']:
             return
         progress_state['last_percent'] = int(percent)
@@ -494,10 +464,9 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
     def close_dialog():
         if cancel_event.is_set():
             return False       # the dialog is already gone
-        # Set to 100% before closing
+        # Show 100% briefly before closing.
         progress_bar.set_fraction(1.0)
         progress_bar.set_text("100%")
-        # Small delay so user sees 100%
         GLib.timeout_add(200, lambda: progress_dialog.response(Gtk.ResponseType.OK) or False)
         return False
 
@@ -509,19 +478,16 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
 
             logger.info(f"Downloading model {model_name} using huggingface_hub")
 
-            # Import huggingface_hub
             from huggingface_hub import hf_hub_download
             from huggingface_hub.utils import disable_progress_bars
             import tqdm
 
-            # Disable huggingface_hub's console progress bars
             disable_progress_bars()
 
             repo_id = MODEL_REPOS.get(model_name)
             if not repo_id:
                 raise ValueError(f"Unknown model: {model_name}")
 
-            # Get list of files with sizes
             try:
                 files_with_sizes = _files_to_download(model_name, repo_id)
                 total_bytes = sum(size for _, size in files_with_sizes)
@@ -537,7 +503,7 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
                 files_with_sizes = [(name, 0) for name in PARAKEET_FILES]
 
             if not files_with_sizes:
-                # Fallback - just load the model directly
+                # Without a file list, let WhisperModel download it (no byte progress).
                 from faster_whisper import WhisperModel
                 update_ui_progress(50, "Downloading model...")
                 model = WhisperModel(
@@ -549,39 +515,29 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
                 download_result[0] = model
                 return
 
-            # Create custom tqdm class that updates our progress bar
             class GtkProgressTqdm(tqdm.tqdm):
-                """Custom tqdm that updates GTK progress bar"""
+                """Tqdm subclass that drives this dialog's GTK progress bar."""
                 def __init__(self, *args, **kwargs):
                     import io
-                    # Store the file being downloaded
                     self._current_file = kwargs.get('desc', 'file')
-                    # Pop 'name' kwarg that huggingface_hub passes but tqdm doesn't accept
+                    # huggingface_hub passes 'name', which tqdm rejects.
                     kwargs.pop('name', None)
-                    # CRITICAL: Force disable=False - tqdm sets disable=True when no TTY,
-                    # but we're updating a GTK progress bar, not a terminal!
+                    # tqdm disables itself without a TTY; this one feeds a
+                    # progress bar, so keep it on and send its text nowhere.
                     kwargs['disable'] = False
-                    # Suppress console output - redirect to null device
                     kwargs['file'] = io.StringIO()
                     super().__init__(*args, **kwargs)
 
                 def update(self, n=1):
                     if cancel_event.is_set():
                         raise InterruptedError("Download cancelled")
-
-                    # Call parent update
                     super().update(n)
-
-                    # Update downloaded bytes
                     progress_state['downloaded_bytes'] += n
-
-                    # Calculate overall progress
                     if progress_state['total_bytes'] > 0:
                         percent = (progress_state['downloaded_bytes'] / progress_state['total_bytes']) * 95
-                        percent = min(95, percent)  # Cap at 95% until model loads
+                        percent = min(95, percent)  # the last 5% is loading the model
                         update_ui_progress(percent, f"Downloading {self._current_file}...")
 
-            # Download each file with progress tracking
             for filename, file_size in files_with_sizes:
                 if cancel_event.is_set():
                     raise InterruptedError("Download cancelled")
@@ -589,13 +545,12 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
                 bytes_before = progress_state['downloaded_bytes']
 
                 try:
-                    # Download with our custom tqdm class
                     hf_hub_download(
                         repo_id=repo_id,
                         filename=filename,
                         tqdm_class=GtkProgressTqdm,
                     )
-                    # If no progress updates happened, file was cached - update manually
+                    # No progress means the file was already cached; count it anyway.
                     if progress_state['downloaded_bytes'] == bytes_before:
                         progress_state['downloaded_bytes'] += file_size
                         if progress_state['total_bytes'] > 0:
@@ -605,19 +560,17 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
                 except InterruptedError:
                     raise
                 except Exception as e:
-                    # Some files might already be cached or optional
+                    # Keep the bar moving; a missing essential file shows up
+                    # when the model fails to load below.
                     logger.warning(f"Error downloading {filename}: {e}")
-                    # Add file size to downloaded bytes anyway (might be cached)
                     progress_state['downloaded_bytes'] += file_size
 
             if cancel_event.is_set():
                 return
 
-            # Final progress update
             update_ui_progress(95, "Loading model...")
             logger.info(f"All files downloaded, loading model {model_name}")
 
-            # Now load the model from cache
             model = load_model(model_name, device=device, compute_type=compute_type)
 
             if not cancel_event.is_set():
@@ -635,16 +588,13 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
             # throws the finished model away.
             GLib.idle_add(close_dialog)
 
-    # Start download thread
     download_thread = threading.Thread(target=do_download)
     download_thread.daemon = True
     download_thread.start()
 
-    # Run dialog
     response = progress_dialog.run()
     progress_dialog.destroy()
 
-    # Check if cancelled
     if response == Gtk.ResponseType.CANCEL or response == Gtk.ResponseType.DELETE_EVENT:
         logger.info(f"User cancelled model download: {model_name}")
         cancel_event.set()
@@ -652,10 +602,8 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
             result_info["cancelled"] = True
         return None
 
-    # Wait for download to complete
     download_thread.join()
 
-    # Check for errors
     if download_error[0]:
         msg = message_dialog(
             parent=parent,
@@ -664,7 +612,6 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
             text="Model Download Failed"
         )
 
-        # Apply dark theme
         settings = Gtk.Settings.get_default()
         if settings:
             settings.set_property("gtk-application-prefer-dark-theme", True)
