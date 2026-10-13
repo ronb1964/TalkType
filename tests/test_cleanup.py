@@ -23,6 +23,8 @@ CLEANED = [
     ("Yes, uh, that works.", "Yes, that works."),
     ("if nothing is selected, um what you can do", "if nothing is selected, what you can do"),
     ("Ummm, maybe.", "Maybe."),
+    ("so I I think so", "so I think so"),
+    ("Hello. The the end.", "Hello. The end."),
 ]
 
 LEFT_ALONE = [
@@ -36,6 +38,14 @@ LEFT_ALONE = [
     "You know, I think it's, like, pretty good.",
     "Our humble road van.",
     "First line.\xa7SHIFT_ENTER\xa7\xa7SHIFT_ENTER\xa7Second line.",
+    # Numbers read out digit by digit are phone numbers and PINs, not stutters.
+    "my number is five five five one two one two",
+    "my PIN is 4 4 7 1",
+    "call 555 555 1234",
+    "it was a 50 50 chance",
+    # A capitalized repeat in mid-sentence is a name.
+    "We went to Walla Walla.",
+    "We flew to Bora Bora today.",
 ]
 
 

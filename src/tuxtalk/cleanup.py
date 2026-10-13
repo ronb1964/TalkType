@@ -1,8 +1,9 @@
 """
 Dictation cleanup: remove "um"/"uh" and accidental repeated words.
 
-Deterministic rules, no AI and no download: instant, and it can only ever
-delete hesitation sounds and exact repeats, never change a word you meant.
+Deterministic rules, no AI and no download: instant, and it only ever
+deletes hesitation sounds and exact repeats. Repeats that are usually meant
+(numbers, names like "Walla Walla", "had had") are left alone.
 Self-corrections ("3, no wait, 4") need to understand the sentence, so those
 are handled separately by the optional AI step (ai_cleanup.py).
 
@@ -21,6 +22,19 @@ _FILLER = r"(?:u+m+|u+h+m*|erm)"
 # Words that are correctly doubled in ordinary English: "I know that that is
 # true", "she had had enough", "what it is is...", "very very", "so so".
 _LEGIT_DOUBLES = {"that", "had", "is", "do", "very", "so", "bye", "no", "yeah", "ha", "really", "far", "long"}
+
+# Numbers are read out digit by digit ("five five five", "4 4 7 1"), so a
+# repeated number is a phone number or PIN, never a stutter.
+_NUMBER_WORDS = {
+    "zero", "oh", "one", "two", "three", "four", "five", "six", "seven",
+    "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen",
+    "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty",
+    "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety",
+    "hundred", "thousand", "million", "billion", "point", "double", "triple",
+}
+
+# Pronouns that are capitalized anywhere, so a capital says nothing about them.
+_ALWAYS_CAPITAL = {"i", "i'm", "i'll", "i've", "i'd"}
 
 # Words that keep their own comma when a filler after them is removed.
 _COMMA_WORDS = {"okay", "ok", "yes", "yeah", "no", "well", "so", "alright", "right",
@@ -61,10 +75,24 @@ def _remove_fillers(text: str) -> str:
     return out.replace("\x00", "")
 
 
+def _is_name(m) -> bool:
+    """A capitalized repeat in mid-sentence is a name ("Walla Walla")."""
+    first = m.group(1).split()[0]
+    if not first[0].isupper() or first.lower() in _ALWAYS_CAPITAL:
+        return False
+    before = m.string[:m.start()].rstrip(" \t\"'“‘([{")
+    return bool(before) and not before.endswith((".", "?", "!", "…", "\xa7", "\n"))
+
+
 def _collapse_repeats(text: str) -> str:
     def repl(m):
         phrase = m.group(1)
         if phrase.lower() in _LEGIT_DOUBLES:
+            return m.group(0)
+        words = phrase.lower().split()
+        if any(c.isdigit() for c in phrase) or any(w in _NUMBER_WORDS for w in words):
+            return m.group(0)
+        if _is_name(m):
             return m.group(0)
         return phrase
     return _RE_REPEAT.sub(repl, text)
