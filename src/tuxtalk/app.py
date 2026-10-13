@@ -15,6 +15,7 @@ import subprocess
 import atexit
 import argparse
 import fcntl
+import select
 import signal
 from dataclasses import dataclass
 import numpy as np
@@ -983,8 +984,29 @@ _grabbed_devices = []
 
 # How often to look for input devices that have appeared or come back.
 # Frequent enough that a reconnected keyboard starts working on its own,
-# rare enough that it costs nothing in a loop running ~200 times a second.
+# rare enough that it costs nothing.
 DEVICE_RESCAN_SECONDS = 3.0
+
+# How long the input loop sleeps waiting for a key event before it does its
+# other work: D-Bus start/stop commands, the auto-timeout, settings changes.
+# Waiting on the devices instead of reading each one every few milliseconds
+# lets an idle service sleep; a key press still wakes it at once.
+INPUT_WAIT_S = 0.05
+
+# The shortest pass through the input loop. A mouse sending 1000 events a
+# second must not spin the loop faster than the old fixed-rate polling did.
+INPUT_MIN_PASS_S = 0.005
+
+
+def _devices_with_input(devices, timeout):
+    """The devices with events waiting, after sleeping up to *timeout* for one."""
+    try:
+        ready, _, _ = select.select(devices, [], [], timeout)
+    except (OSError, ValueError):
+        # A device closed under us. Reading every device finds it, and the
+        # loop's error handling drops it.
+        return list(devices)
+    return ready
 
 # How often to check whether the config file changed on disk. Preferences no
 # longer restarts the service for settings that can be applied live, so this
@@ -1114,7 +1136,7 @@ def _reload_live_settings(cfg, indicator):
     try:
         fresh = load_config()
     except Exception as e:
-        # Runs from a loop iterating ~200x a second; log once per change, and
+        # Runs from the input loop; log once per change, and
         # never let anything escape into the loop.
         logger.warning(f"Could not reload settings, keeping current ones: {e}")
         return None
@@ -1340,6 +1362,9 @@ def _rediscover_devices(devices) -> int:
         try:
             dev = InputDevice(path)
             if not _is_keyboard_device(dev):
+                # Closed now, not whenever it is garbage-collected: every
+                # mouse and button node is opened again on each scan.
+                dev.close()
                 continue
             devices.append(dev)  # evdev opens it non-blocking already
             added += 1
@@ -3586,8 +3611,8 @@ def _loop_evdev(cfg: Settings, input_device_idx):
             _claim_desktop_hotkeys(cfg)
             logger.info("Applied settings change without restarting")
 
-        # Poll all input devices for key events
-        for dev in devices:
+        # Read the devices that have key events waiting.
+        for dev in _devices_with_input(devices, INPUT_WAIT_S):
             try:
                 for event in dev.read():
                     if event.type == ecodes.EV_KEY:
@@ -3629,8 +3654,8 @@ def _loop_evdev(cfg: Settings, input_device_idx):
 
         # Pick up keyboards that have (re)appeared. Only while idle: rescanning
         # mid-recording would add an ungrabbed device to a grabbed set, letting
-        # the hotkey leak into the focused app. Throttled because it stats
-        # every node under /dev/input and this loop runs ~200x a second.
+        # the hotkey leak into the focused app. Throttled because it opens
+        # every node under /dev/input.
         if not state.is_recording and current_time - last_device_scan >= DEVICE_RESCAN_SECONDS:
             last_device_scan = current_time
             _rediscover_devices(devices)
@@ -3638,7 +3663,9 @@ def _loop_evdev(cfg: Settings, input_device_idx):
         # Backstop: we must never hold a keyboard grab while not recording.
         _release_grabs_if_not_recording()
 
-        time.sleep(0.005)
+        pass_time = time.time() - current_time
+        if pass_time < INPUT_MIN_PASS_S:
+            time.sleep(INPUT_MIN_PASS_S - pass_time)
 
 class ModelUnavailable(Exception):
     """The speech model is not downloaded and the user cancelled the download,

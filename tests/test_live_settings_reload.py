@@ -110,7 +110,7 @@ class TestReloadLiveSettings:
         assert cfg.auto_period is True, "previous settings must survive"
 
     def test_survives_any_unexpected_error(self, app, monkeypatch):
-        """The loop runs ~200x a second; nothing here may escape."""
+        """The input loop calls this; nothing here may escape into it."""
         cfg = _settings()
         monkeypatch.setattr(app, "load_config", lambda: (_ for _ in ()).throw(RuntimeError("boom")))
 

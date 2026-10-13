@@ -42,6 +42,9 @@ class FakeDevice:
     def capabilities(self, absinfo=True):
         return self._caps
 
+    def close(self):
+        self.closed = True
+
 
 def keyboard(name="Keyboard"):
     return FakeDevice(name, {ecodes.EV_KEY: [ecodes.KEY_A, ecodes.KEY_M, ecodes.KEY_Z]})
@@ -676,6 +679,7 @@ def test_rediscovery_ignores_non_keyboards(monkeypatch):
 
     assert app._rediscover_devices(devices) == 0
     assert devices == []
+    assert getattr(mx, "closed", False), "a rejected device was left open"
 
 
 def test_rediscovery_survives_an_unreadable_device(monkeypatch):
