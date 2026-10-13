@@ -1,21 +1,20 @@
-"""Three cleanup fixes that share a theme: a slow operation holding stale state.
+"""Three rules that share a theme: a slow operation must not act on stale state
+or wait forever.
 
-1. The daily update check snapshotted the whole Settings object, spent up to
-   ~30s on a network call, then wrote all 36 fields back just to record a
-   timestamp. Anything the user changed in Preferences during that window was
-   silently reverted. config.py is otherwise careful — atomic writes, fsync,
-   backups, a refusal to save after a failed read — but atomic writing prevents
-   corruption, not clobbering by a stale snapshot.
+1. The daily update check spends up to ~30s on a network call, so it records
+   its timestamp alone rather than writing back a Settings snapshot taken
+   before the call, which would silently revert anything the user changed in
+   Preferences meanwhile. Atomic writing prevents corruption, not clobbering by
+   a stale snapshot.
 
-2. Installing a .deb/.rpm through pkexec had no timeout, so a package lock
-   (routine on Ubuntu with unattended-upgrades) hung the update dialog forever
-   with no cancel path. The repair has to be careful: the child runs as root,
-   a user process cannot kill it, and killing a package manager mid-transaction
-   is far worse than waiting. So the wait is bounded and the process is left
-   alone to finish.
+2. Installing a .deb/.rpm through pkexec has a bounded wait, since a package
+   lock (routine on Ubuntu with unattended-upgrades) would hang the update
+   dialog forever. The child runs as root, a user process cannot kill it, and
+   killing a package manager mid-transaction is far worse than waiting, so the
+   process is left alone to finish.
 
-3. wtype had no timeout at all, though the ydotool branch directly above it
-   kills and reaps after 20s. On a compositor that stalls, dictation froze with
+3. wtype has a timeout, like the ydotool branch directly above it (killed and
+   reaped after 20s); otherwise a compositor that stalls freezes dictation with
    no text and no error.
 """
 
@@ -28,7 +27,7 @@ from tuxtalk import config as config_module
 
 class TestRecordingTheUpdateCheck:
     def test_it_does_not_carry_other_settings_along(self, monkeypatch):
-        """The bug: a setting changed during the network call is reverted."""
+        """A setting changed during the network call must not be reverted."""
         saved = {}
 
         # What the tray held before its ~30s network call.

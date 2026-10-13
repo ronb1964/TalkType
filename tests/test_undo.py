@@ -95,7 +95,7 @@ def test_everything_returns_full_length():
 def test_word_single():
     # "Hello world. " — last word is "world." (trailing space ignored by rfind)
     text = "Hello world. "
-    # Trailing space gets included in the cut (matches existing behavior)
+    # Trailing space gets included in the cut
     assert calculate_undo_length(text, "word") == len("world. ")
 
 
@@ -183,7 +183,7 @@ def test_single_unit_unknown_type():
 
 
 # =====================================================================
-# v0.5.17 review fixes — the undo buffer now stores line breaks as '\n'
+# The undo buffer stores line breaks as '\n'
 # (one char = one backspace), so word boundaries must treat newlines
 # and tabs as separators, not as part of the word.
 # =====================================================================
@@ -203,9 +203,9 @@ def test_paragraph_length_with_newline_breaks():
 
 
 # --- sentence undo must not cut inside numbers or abbreviations -------------
-# The sentence boundary search accepted any '.', so a decimal or an
-# abbreviation was mistaken for the end of a sentence and undo deleted far too
-# little — leaving behind something that still looked like a finished sentence.
+# The sentence boundary search must not accept any '.', or a decimal or an
+# abbreviation is mistaken for the end of a sentence and undo deletes far too
+# little — leaving behind something that still looks like a finished sentence.
 
 def test_sentence_undo_does_not_cut_inside_a_price():
     text = "I paid $19.99 for the book."
@@ -243,11 +243,11 @@ def test_sentence_undo_handles_a_decimal_in_an_earlier_sentence():
     assert calculate_undo_length(text, "sentence", 1) == len(" That was too much.")
 
 
-# --- regression: a sentence ending inside a closing quote is still a boundary
+# --- a sentence ending inside a closing quote is still a boundary
 # normalize.py deliberately moves sentence punctuation INSIDE a closing smart
 # quote, so `."` is a shape this app manufactures itself. Requiring whitespace
-# immediately after the period made undo skip that boundary and delete the
-# previous sentence too — often the entire dictation.
+# immediately after the period would make undo skip that boundary and delete
+# the previous sentence too — often the entire dictation.
 
 def test_sentence_ending_in_a_closing_quote_is_a_boundary():
     text = 'He said, "Go." Then he left.'
@@ -265,14 +265,14 @@ def test_sentence_ending_in_a_closing_parenthesis_is_a_boundary():
 
 
 def test_undo_does_not_swallow_the_whole_buffer_on_quoted_text():
-    """The worst form of the regression: everything deleted."""
+    """The worst case: everything deleted."""
     text = 'She replied, "No." I walked away.'
     assert calculate_undo_length(text, "sentence", 1) < len(text)
 
 
-# The last sentence itself can end inside a closing quote or bracket, and
-# the search then found its own period and measured nothing: "delete last
-# sentence" deleted nothing after 'Hello. Hi.”'.
+# The last sentence itself can end inside a closing quote or bracket; the
+# search must not stop at its own period and measure nothing, or "delete last
+# sentence" deletes nothing after 'Hello. Hi.”'.
 def test_last_sentence_ending_in_a_closing_smart_quote_is_deleted():
     assert calculate_undo_length("Hello. Hi.”", "sentence", 1) == len(" Hi.”")
 

@@ -1,9 +1,9 @@
 """Guard against version drift between pyproject.toml and __init__.py.
 
 The AppImage filename comes from pyproject.toml (container-build.sh) while
-the running app reports talktype.__version__ — if they diverge, the update
-checker offers the app an 'update' to itself forever. This happened once
-(commit da52655). This test makes the drift fail CI/local runs instead.
+the running app reports tuxtalk.__version__ — if they diverge, the update
+checker offers the app an 'update' to itself forever. This test makes the
+drift fail CI and local runs instead.
 """
 import re
 from pathlib import Path

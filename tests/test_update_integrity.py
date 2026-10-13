@@ -1,10 +1,10 @@
 """The in-app updater must not install an AppImage it could not verify.
 
 The updater downloads the release's SHA256SUMS.txt and checks the AppImage
-against it. That check was fail-open: fetch_expected_sha256() returns None for
-*any* problem — the asset 404s, the body is malformed, or it simply doesn't
-list the AppImage — and download_update() treated None as "no checksum
-published, carry on", installing the file after only a length check.
+against it. fetch_expected_sha256() returns None for *any* problem — the asset
+404s, the body is malformed, or it simply doesn't list the AppImage — so
+download_update() must not treat None as "no checksum published, carry on" and
+install the file after only a length check.
 
 Releases genuinely published before checksums existed pass checksums_url=None.
 That is the only case where skipping the hash is legitimate.

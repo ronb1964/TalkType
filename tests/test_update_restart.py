@@ -1,15 +1,15 @@
 """Installing an update and restarting into it.
 
-Both update buttons used to finish with os.execv on the new AppImage:
-- from Preferences (its own process), the new tray found the old one still
-  holding the single-instance lock and exited, so nothing restarted;
-- from the tray, the tray restarted but kept the old dictation service.
-Now installing only installs, and one restart path in the tray stops the
-service, quits and starts the new copy. Preferences asks the tray over D-Bus.
+Installing only installs, and one restart path in the tray stops the service,
+quits and starts the new copy; Preferences asks the tray over D-Bus. Finishing
+with os.execv on the new AppImage fails both ways:
+- from Preferences (its own process), the new tray finds the old one still
+  holding the single-instance lock and exits, so nothing restarts;
+- from the tray, the tray restarts but keeps the old dictation service.
 
-The first-run copy into ~/AppImages also wrote straight onto the file the
-launcher and autostart point at, so a quit or reboot mid-copy left a
-truncated AppImage there.
+The first-run copy into ~/AppImages goes through a staging file: writing
+straight onto the file the launcher and autostart point at would leave a
+truncated AppImage there after a quit or reboot mid-copy.
 """
 import os
 import pathlib
@@ -102,7 +102,7 @@ def test_install_refuses_when_the_disk_is_too_full(tmp_path, appimages, monkeypa
 
 
 def test_no_update_path_execs_the_appimage():
-    """execv from Preferences or a worker thread is what broke the restart."""
+    """execv from Preferences or a worker thread breaks the restart."""
     for path in SRC.glob("*.py"):
         assert "os.execv(" not in path.read_text(), path.name
     assert not hasattr(uc, "install_update_and_restart")

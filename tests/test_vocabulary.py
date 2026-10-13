@@ -1,4 +1,4 @@
-"""Teaching TalkType a word from a recent dictation (Recent Dictations > Fix a Word).
+"""Teaching TuxTalk a word from a recent dictation (Recent Dictations > Fix a Word).
 
 The fix is saved as an ordinary custom voice command ("bamboo studio" =
 "BambuStudio"), so it works for every engine: it rewrites the transcription
