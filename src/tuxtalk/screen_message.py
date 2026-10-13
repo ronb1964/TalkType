@@ -54,7 +54,8 @@ def _show_now(text, center):
     try:
         import gi
         gi.require_version("Gtk", "3.0")
-        from gi.repository import Gdk, GLib, Gtk
+        gi.require_version("PangoCairo", "1.0")
+        from gi.repository import Gdk, GLib, Gtk, PangoCairo
         import cairo
         from .window_geometry import Rect
 
@@ -98,7 +99,6 @@ def _show_now(text, center):
             cr.stroke()
             cr.move_to(_PAD_X, _PAD_Y)
             cr.set_source_rgba(0.98, 0.93, 0.85, 1.0)
-            from gi.repository import PangoCairo
             PangoCairo.show_layout(cr, layout)
             return True
 
