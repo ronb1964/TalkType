@@ -3573,7 +3573,8 @@ class PreferencesWindow:
         Returns True if they were written, False if the existing file could
         not be read — in which case the list on screen is empty because of
         that failure, not because the user cleared it, and writing it would
-        delete every command they have.
+        delete every command they have — and None if writing them failed,
+        which the user has been told about.
         """
         commands = merge_custom_command_edits(
             self._commands_loaded, self._commands_from_store(), load_custom_commands())
@@ -3587,11 +3588,11 @@ class PreferencesWindow:
             print(f"Custom commands not saved: {e}")
             return False
         except OSError as e:
-            # A full disk or read-only config folder: say so, then let the
-            # settings save go ahead on its own.
+            # A full disk or read-only config folder: say so. Apply saves the
+            # settings anyway; OK stays open so the edits aren't thrown away.
             print(f"Custom commands not saved: {e}")
             self._message(Gtk.MessageType.ERROR, "Your snippets weren't saved", str(e))
-            return False
+            return None
     
     def _apply_hotkey_fallbacks(self, hotkeys):
         """Select the configured hotkeys, falling back to F8/F9 for display —
@@ -5707,9 +5708,10 @@ class PreferencesWindow:
     
     def on_ok(self, button):
         """Save, apply (restarting only if needed), and close."""
-        # Save custom commands first
-        if hasattr(self, 'commands_store'):
-            self._save_custom_commands()
+        # Save custom commands first. If writing them failed, closing would
+        # throw away the edits the user was just told weren't saved.
+        if hasattr(self, 'commands_store') and self._save_custom_commands() is None:
+            return
 
         # MUST be computed before save_config(), which resets _config_at_open.
         changed = self._changed_since_open()

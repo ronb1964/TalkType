@@ -89,5 +89,20 @@ def test_a_write_error_is_reported_not_raised(tmp_path, monkeypatch):
     monkeypatch.setattr(P, "save_custom_commands", full_disk)
 
     d = _window([["talk type", "TalkType"]])
-    assert d._save_custom_commands() is False
+    assert d._save_custom_commands() is None
     assert d.messages == ["Your snippets weren't saved"]
+
+
+def test_ok_stays_open_when_the_snippets_could_not_be_written():
+    """OK went on to close the window right after saying the snippets
+    weren't saved, throwing the unsaved edits away."""
+    steps = []
+    d = SimpleNamespace(commands_store=FakeStore([]),
+                        _save_custom_commands=lambda: None,
+                        _changed_since_open=lambda: steps.append("settings") or {},
+                        save_config=lambda: steps.append("save") or True,
+                        window=SimpleNamespace(destroy=lambda: steps.append("destroy")))
+
+    PreferencesWindow.on_ok(d, None)
+
+    assert steps == []
