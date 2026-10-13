@@ -17,6 +17,8 @@ logger = setup_logger(__name__)
 # extension whenever focus changes. Read by app._paste_text to decide between
 # plain Ctrl+V (regular apps) and Ctrl+Shift+V (terminals).
 _focused_window_class: str | None = None
+# "x,y,w,h|output|ox,oy,ow,oh" from the same reporters (window_geometry.py).
+_focused_window_geometry: str = ""
 
 # The bus identifiers, at module level so providers that fill the focused-window
 # cache (the GNOME extension's Python side, and kwin_focus on KDE) can name the
@@ -258,6 +260,19 @@ class TuxTalkDBusService(dbus.service.Object):
         if new_class != _focused_window_class:
             logger.info(f"Focused window class: {new_class!r}")
         _focused_window_class = new_class
+
+    @dbus.service.method(DBUS_INTERFACE, in_signature='s')
+    def SetFocusedWindowGeometry(self, geometry: str):
+        """Where the focused window is, from the KWin script or GNOME
+        extension: "x,y,w,h|output|ox,oy,ow,oh" (window_geometry.py). Sent on
+        every move, so it is cached without logging."""
+        global _focused_window_geometry
+        _focused_window_geometry = str(geometry or "")
+
+    @dbus.service.method(DBUS_INTERFACE, out_signature='s')
+    def GetFocusedWindowGeometry(self):
+        """The cached geometry, for the dictation service's floating messages."""
+        return _focused_window_geometry
 
     @dbus.service.method(DBUS_INTERFACE, out_signature='s')
     def GetFocusedWindowClass(self):

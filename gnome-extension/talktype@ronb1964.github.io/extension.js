@@ -60,6 +60,9 @@ const TuxTalkIface = `
     <method name="SetFocusedWindowClass">
       <arg type="s" direction="in" name="wm_class"/>
     </method>
+    <method name="SetFocusedWindowGeometry">
+      <arg type="s" direction="in" name="geometry"/>
+    </method>
     <method name="ApplyPerformancePreset">
       <arg type="s" direction="in" name="preset"/>
     </method>
@@ -245,8 +248,55 @@ class TuxTalkIndicator extends PanelMenu.Button {
             const win = global.display && global.display.focus_window;
             const wmClass = (win && win.get_wm_class()) || '';
             this._proxy.SetFocusedWindowClassRemote(wmClass, () => {});
+            this._watchFocusedWindow(win);
+            this._pushFocusedWindowGeometry();
         } catch (e) {
             console.error('TuxTalk: focus push failed:', e);
+        }
+    }
+
+    // Follow the focused window's moves and resizes, so TuxTalk's messages
+    // can float over it (window_geometry.py in the app).
+    _watchFocusedWindow(win) {
+        if (this._geometryWindow && this._geometrySignalIds) {
+            for (const id of this._geometrySignalIds) {
+                try { this._geometryWindow.disconnect(id); } catch (e) {}
+            }
+        }
+        this._geometryWindow = win || null;
+        this._geometrySignalIds = win ? [
+            win.connect('position-changed', () => this._queueGeometryPush()),
+            win.connect('size-changed', () => this._queueGeometryPush()),
+        ] : [];
+    }
+
+    // A drag moves the window every frame; send its position at most every 150 ms.
+    _queueGeometryPush() {
+        if (this._geometryTimeoutId)
+            return;
+        this._geometryTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 150, () => {
+            this._geometryTimeoutId = null;
+            this._pushFocusedWindowGeometry();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    // "x,y,w,h|output|ox,oy,ow,oh": the frame and its monitor. GNOME has no
+    // connector name at hand, so the output is left empty.
+    _pushFocusedWindowGeometry() {
+        if (!this._proxy || !this._dbusAvailable)
+            return;
+        try {
+            const win = global.display && global.display.focus_window;
+            let geometry = '';
+            if (win) {
+                const r = win.get_frame_rect();
+                const m = global.display.get_monitor_geometry(win.get_monitor());
+                geometry = `${r.x},${r.y},${r.width},${r.height}||${m.x},${m.y},${m.width},${m.height}`;
+            }
+            this._proxy.SetFocusedWindowGeometryRemote(geometry, () => {});
+        } catch (e) {
+            console.error('TuxTalk: geometry push failed:', e);
         }
     }
 
@@ -727,6 +777,11 @@ class TuxTalkIndicator extends PanelMenu.Button {
         if (this._focusSignalId && global.display) {
             global.display.disconnect(this._focusSignalId);
             this._focusSignalId = null;
+        }
+        this._watchFocusedWindow(null);
+        if (this._geometryTimeoutId) {
+            GLib.source_remove(this._geometryTimeoutId);
+            this._geometryTimeoutId = null;
         }
 
         if (this._proxy) {

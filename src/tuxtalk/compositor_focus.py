@@ -277,3 +277,41 @@ def focused_class():
     except Exception as e:
         logger.debug(f"Could not ask the compositor for the focused window: {e}")
     return None
+
+
+# --- Where the focused window is (window_geometry.py) ----------------------------------
+# Sway / i3 and Hyprland say where it is too; niri doesn't (its windows scroll),
+# and X11 is asked through GDK in window_geometry.
+
+def _rect_from_i3(path):
+    from .window_geometry import Rect
+    tree = _exchange(path, _I3_MAGIC + struct.pack("<II", 0, _I3_GET_TREE), _i3_reply)
+    node = _find_focused(tree)
+    if not node or node.get("type") not in ("con", "floating_con"):
+        return None
+    r = node.get("rect") or {}
+    return Rect(r["x"], r["y"], r["width"], r["height"]) if r.get("width") else None
+
+
+def _rect_from_hyprland(signature):
+    from .window_geometry import Rect
+    runtime = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
+    path = os.path.join(runtime, "hypr", signature, ".socket.sock")
+    window = json.loads(_exchange(path, b"j/activewindow", _recv_until_closed) or b"{}")
+    at, size = window.get("at"), window.get("size")
+    return Rect(at[0], at[1], size[0], size[1]) if at and size else None
+
+
+def focused_rect():
+    """The focused window's frame (window_geometry.Rect, compositor
+    coordinates) on Sway, i3 or Hyprland, or None."""
+    env = os.environ
+    try:
+        if env.get("HYPRLAND_INSTANCE_SIGNATURE"):
+            return _rect_from_hyprland(env["HYPRLAND_INSTANCE_SIGNATURE"])
+        path = env.get("SWAYSOCK") or env.get("I3SOCK")
+        if path:
+            return _rect_from_i3(path)
+    except Exception as e:
+        logger.debug(f"Could not ask the compositor where the focused window is: {e}")
+    return None
