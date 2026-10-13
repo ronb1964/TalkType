@@ -194,6 +194,22 @@ def get_releases_url() -> str:
     return "https://github.com/ronb1964/TuxTalk/releases"
 
 
+# Why the last fetch_latest_release() failed: ("network" | "http" | "other",
+# HTTP code or None), so the message can say what really happened.
+_last_fetch_error = ("other", None)
+
+
+def _fetch_failure_message():
+    kind, code = _last_fetch_error
+    if kind == "network":
+        return "Could not connect to GitHub. Check your internet connection."
+    if kind == "http" and code in (403, 429):
+        return "GitHub is limiting update checks right now. Try again later."
+    if kind == "http":
+        return f"GitHub couldn't give TuxTalk's release information (error {code}). Try again later."
+    return "Couldn't check for updates. Try again later."
+
+
 def fetch_latest_release() -> Optional[dict]:
     """
     Fetch latest release info from GitHub API.
@@ -208,6 +224,7 @@ def fetch_latest_release() -> Optional[dict]:
             - extension_url: Direct download URL for extension (if found)
         None: If fetch failed
     """
+    global _last_fetch_error
     try:
         # Create request with User-Agent (GitHub requires this)
         request = urllib.request.Request(
@@ -258,15 +275,18 @@ def fetch_latest_release() -> Optional[dict]:
             return result
 
     except urllib.error.HTTPError as e:
+        _last_fetch_error = ("http", e.code)
         if e.code == 403:
             logger.warning("GitHub API rate limit exceeded. Try again later.")
         else:
             logger.warning(f"GitHub API error: {e.code} {e.reason}")
         return None
     except urllib.error.URLError as e:
+        _last_fetch_error = ("network", None)
         logger.warning(f"Network error checking for updates: {e.reason}")
         return None
     except Exception as e:
+        _last_fetch_error = ("other", None)
         logger.warning(f"Error fetching latest release: {e}")
         return None
 
@@ -305,7 +325,7 @@ def check_for_updates() -> dict:
     # Fetch latest release
     release = fetch_latest_release()
     if not release:
-        result["error"] = "Could not connect to GitHub. Check your internet connection."
+        result["error"] = _fetch_failure_message()
         return result
 
     result["release"] = release
