@@ -1,91 +1,73 @@
-# TuxTalk Development Environment - FINAL SETUP
+# Working on TuxTalk
 
-**This is the ONLY way to run TuxTalk in development mode.**
+This is how to run TuxTalk from the source code and run its tests.
 
-## Current Status
+## What you need
 
-✅ `.venv` created with Python 3.13
-✅ All dependencies installed (faster-whisper, sounddevice, evdev, etc.)
-✅ Uses system PyGObject (can't be installed in venv without python3-devel)
-✅ Run script created: `run-dev.sh`
+TuxTalk is Python with GTK 3. GTK's Python bindings (PyGObject) can't be pip installed into a venv without a pile of build headers, so they come from your system and everything else goes in a venv in the project folder.
 
-## How to Run TuxTalk (Dev Mode)
+On Fedora or Nobara:
 
-### Option 1: Desktop Launcher (Primary Method)
-**The user has been using this from the beginning:**
-
-Click on "TuxTalk (Dev)" in your application launcher, or run:
 ```bash
-gtk-launch tuxtalk-dev
+sudo dnf install -y portaudio-devel ydotool wl-clipboard \
+                    python3-gobject libayatana-appindicator-gtk3 libnotify
 ```
 
-Desktop file location: `~/.local/share/applications/tuxtalk-dev.desktop`
+Other distros have the same packages under similar names. On Debian and Ubuntu it's `python3-gi`, `gir1.2-ayatanaappindicator3-0.1` and `libportaudio2`, among others.
 
-This launcher:
-- Sets `DEV_MODE=1` environment variable
-- Sets proper PYTHONPATH automatically
-- Uses the `.venv/bin/python` from the project
-- Runs `python -m tuxtalk.tray` to start the tray icon
+## Setting it up
 
-### Option 2: Command Line Script
+```bash
+git clone https://github.com/ronb1964/TuxTalk.git
+cd TuxTalk
+python3 -m venv .venv
+.venv/bin/pip install poetry
+.venv/bin/poetry install
+```
+
+Use your system's `python3` for the venv. The PyGObject your distro ships only works with that same Python version.
+
+## Running it
+
 ```bash
 ./run-dev.sh
 ```
 
-This script does the same thing as the desktop launcher but from command line
+That starts the tray with `DEV_MODE=1`, which keeps its settings and downloads apart from an installed copy (`~/.config/tuxtalk-dev/` and `~/.local/share/TuxTalk-dev/`) and shows the GTK tray icon even on GNOME, next to the extension's. The script points Python at `src/` and at your system's site-packages, so don't set PYTHONPATH yourself. If you'd rather have a menu entry, make a launcher that runs the same command `run-dev.sh` ends with.
 
-## How It Works
+Don't use `poetry run dictate-tray`. Poetry's environment can't see the system PyGObject and it stops on `import gi`.
 
-- **Dependencies**: `.venv/` (faster-whisper, sounddevice, evdev, etc. — PyTorch was removed in 0.7.0; it was never used)
-- **PyGObject**: System package from `/usr/lib64/python3.13/site-packages`
-- **TuxTalk code**: `src/tuxtalk/`
-- **Runner**: `run-dev.sh` sets up environment correctly
+To stop it, use Quit TuxTalk in the tray menu. If something is stuck, this stops only TuxTalk's own Python processes and nothing else that happens to have "tuxtalk" in its command line:
 
-## If Something Breaks
-
-1. **Kill all TuxTalk processes**:
-   ```bash
-   pkill -f tuxtalk
-   rm -f /run/user/$(id -u)/tuxtalk-tray.lock
-   ```
-
-2. **Reinstall dependencies** (if needed):
-   ```bash
-   rm -rf .venv
-   python3 -m venv .venv
-   .venv/bin/pip install --upgrade pip poetry
-   .venv/bin/poetry config virtualenvs.in-project true
-   .venv/bin/poetry install
-   ```
-
-3. **Run again**:
-   ```bash
-   ./run-dev.sh
-   ```
-
-## DON'T
-
-- ❌ Don't use `poetry run dictate-tray` (won't find PyGObject)
-- ❌ Don't try to install PyGObject in venv (needs python3-devel)
-- ❌ Don't use PYTHONPATH manually (run-dev.sh does it)
-- ❌ Don't create multiple venvs (.venv-new, .venv-dev, etc.)
-
-## DO
-
-- ✅ Use `./run-dev.sh` to start TuxTalk
-- ✅ Use `.venv/bin/pytest` to run tests
-- ✅ Use `.venv/bin/python` for Python scripts (with PYTHONPATH set)
-
-## The service won't start from tray?
-
-The code in `src/tuxtalk/tray.py` was fixed to detect dev mode and set PYTHONPATH automatically when starting the dictation service. It should work now.
-
-If it doesn't, check:
 ```bash
-# See if service starts manually
-PYTHONPATH=./src .venv/bin/python -m tuxtalk.app
+pkill -f -- '-m tuxtalk\.'
 ```
 
----
+The single-instance lock is released when the process ends, so there's no lock file to delete.
 
-**This setup is FINAL. Don't change it unless you have a good reason and test completely.**
+## Running the tests
+
+Swap 3.14 for your Python version (`python3 --version` shows it):
+
+```bash
+PYTHONPATH=./src:/usr/lib64/python3.14/site-packages:/usr/lib/python3.14/site-packages \
+    .venv/bin/python -m pytest tests -q -p no:cacheprovider
+```
+
+Plain `.venv/bin/pytest` won't work, for the same PyGObject reason. On Debian and Ubuntu the system folder is `/usr/lib/python3/dist-packages`.
+
+CI also runs two linters, and they should pass before you push:
+
+```bash
+uvx ruff check --select F src/tuxtalk
+uvx --from shellcheck-py shellcheck -S warning *.sh packaging/*.sh packaging/flatpak/build-flatpak.sh
+```
+
+## If the venv gets into a bad state
+
+```bash
+rm -rf .venv
+python3 -m venv .venv
+.venv/bin/pip install poetry
+.venv/bin/poetry install
+```
