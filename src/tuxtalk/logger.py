@@ -6,6 +6,10 @@ from pathlib import Path
 # The log file in the config folder (talktype.log before the 0.15.0 rename).
 LOG_FILE_NAME = "tuxtalk.log"
 
+# The log names before the 0.15.0 rename. The rename moved the whole config
+# folder, so these can still sit next to the new log, holding old dictations.
+_LEGACY_LOG_NAMES = ("talktype.log", "talktype.log.old")
+
 # Roll the log over once it passes this size (checked at process startup).
 _MAX_LOG_BYTES = 5 * 1024 * 1024
 
@@ -40,7 +44,8 @@ def log_file_path() -> Path:
 
 
 def clear_log(log_dir: Path = None) -> None:
-    """Empty the log: truncate the log to zero and remove its .old backup.
+    """Empty the log: truncate the log to zero and remove its .old backup and
+    the pre-rename talktype logs.
 
     Truncation rather than deletion is deliberate — the dictation service holds
     the file open in append mode, and on Linux O_APPEND writes always land at the
@@ -54,12 +59,12 @@ def clear_log(log_dir: Path = None) -> None:
             open(main, "w").close()  # truncate in place
     except OSError:
         pass
-    try:
-        old = d / (LOG_FILE_NAME + ".old")
-        if old.exists():
-            old.unlink()
-    except OSError:
-        pass
+    # Nothing holds these open, so they can simply be removed.
+    for name in (LOG_FILE_NAME + ".old",) + _LEGACY_LOG_NAMES:
+        try:
+            (d / name).unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def redact_text(text, reveal: bool = False) -> str:

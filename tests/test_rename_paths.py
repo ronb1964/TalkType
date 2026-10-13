@@ -45,3 +45,13 @@ def test_tray_logs_what_the_migration_did():
     src = (pathlib.Path(config.__file__).parent / "tray.py").read_text()
     main = src[src.index("def main():"):]
     assert "MIGRATION_LOG" in main[:3000]
+
+
+def test_clearing_the_log_also_removes_the_pre_rename_logs(tmp_path):
+    """The rename moved the config folder with talktype.log inside, and those
+    can hold dictations logged before the rename."""
+    (tmp_path / "talktype.log").write_text("old dictation")
+    (tmp_path / "talktype.log.old").write_text("older dictation")
+    logger.clear_log(tmp_path)
+    assert not (tmp_path / "talktype.log").exists()
+    assert not (tmp_path / "talktype.log.old").exists()
