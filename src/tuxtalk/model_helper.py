@@ -448,7 +448,6 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
     cancel_event = threading.Event()
     download_result = [None]
     download_error = [None]
-    download_done = [False]
 
     # Progress tracking state (shared between threads)
     progress_state = {
@@ -472,6 +471,16 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
                 status_label.set_markup(f'<span>{file_info}</span>')
             return False
         GLib.idle_add(do_update)
+
+    def close_dialog():
+        if cancel_event.is_set():
+            return False       # the dialog is already gone
+        # Set to 100% before closing
+        progress_bar.set_fraction(1.0)
+        progress_bar.set_text("100%")
+        # Small delay so user sees 100%
+        GLib.timeout_add(200, lambda: progress_dialog.response(Gtk.ResponseType.OK) or False)
+        return False
 
     def do_download():
         """Download model files with byte-level progress tracking"""
@@ -603,16 +612,10 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
             download_error[0] = e
             logger.error(f"Model download failed: {e}")
         finally:
-            download_done[0] = True
-
-        def close_dialog():
-            # Set to 100% before closing
-            progress_bar.set_fraction(1.0)
-            progress_bar.set_text("100%")
-            # Small delay so user sees 100%
-            GLib.timeout_add(200, lambda: progress_dialog.response(Gtk.ResponseType.OK) or False)
-            return False
-        GLib.idle_add(close_dialog)
+            # Every way out closes the dialog, including the early return of
+            # the fallback path; otherwise run() waits for a Cancel that then
+            # throws the finished model away.
+            GLib.idle_add(close_dialog)
 
     # Start download thread
     download_thread = threading.Thread(target=do_download)
