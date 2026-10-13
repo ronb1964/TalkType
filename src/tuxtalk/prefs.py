@@ -5175,7 +5175,8 @@ class PreferencesWindow:
         Returns:
             tuple: (success: bool, was_downloaded: bool, cancelled: bool)
         """
-        from .model_helper import is_model_cached_fast, make_model_download_func
+        from .model_helper import (is_model_cached_fast, make_model_download_func,
+                                   model_display_name)
 
         # Completeness check on the cached files (no model loading — this
         # runs on every Apply/OK click). A partial cache left by a cancelled
@@ -5207,7 +5208,7 @@ class PreferencesWindow:
 
         # Status label
         status_label = Gtk.Label()
-        status_label.set_markup(f'<b>Downloading Whisper model: {model_name}</b>\n<span size="small">({size_str})</span>\n\nThis may take a few minutes depending on your connection...')
+        status_label.set_markup(f'<b>Downloading the speech model: {GLib.markup_escape_text(model_display_name(model_name))}</b>\n<span size="small">({size_str})</span>\n\nThis may take a few minutes depending on your connection...')
         status_label.set_line_wrap(True)
         content.pack_start(status_label, False, False, 0)
 
@@ -5275,29 +5276,18 @@ class PreferencesWindow:
         dialog_closed["v"] = True
         dialog.destroy()
 
-        # Show success message if download completed successfully
-        if download_complete["success"] and not cancel_event.is_set():
-            print(f"✅ Model {model_name} downloaded successfully")
-
-            # Show success dialog
-            success_dialog = message_dialog(
-                transient_for=self.window,
-                flags=0,
-                message_type=Gtk.MessageType.INFO,
-                buttons=Gtk.ButtonsType.OK,
-                text="Model Downloaded Successfully!"
-            )
-
-            success_dialog.format_secondary_text(f"The {model_name} model has been downloaded and is ready to use.")
-            success_dialog.run()
-            success_dialog.destroy()
-
         cancelled = cancel_event.is_set()
         _ok = download_complete["success"] and not cancelled
         # Belt and suspenders: trust the downloader only if the cache now
-        # actually contains every file.
+        # actually contains every file. Checked before the success message,
+        # which would otherwise be followed by "Model download failed!".
         if _ok:
             _ok = is_model_cached_fast(model_name)
+        if _ok:
+            print(f"Model {model_name} downloaded successfully")
+            self._message(Gtk.MessageType.INFO, "Model Downloaded Successfully!",
+                          f"The {model_display_name(model_name)} model has been "
+                          "downloaded and is ready to use.")
         return (_ok, _ok, cancelled)  # (success, was_downloaded, cancelled)
 
     def _changed_since_open(self):
@@ -5406,7 +5396,7 @@ class PreferencesWindow:
                 text="Model download failed!"
             )
 
-            dialog.format_secondary_text("Failed to download the Whisper model. Please check your internet connection.")
+            dialog.format_secondary_text("Failed to download the speech model. Please check your internet connection.")
             dialog.run()
             dialog.destroy()
         return success
