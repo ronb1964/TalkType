@@ -22,11 +22,13 @@ def cuda_dir(tmp_path, monkeypatch):
 
 
 def _install_complete_cuda(path):
-    """Look like a real, complete CUDA install."""
+    """Look like a real, complete CUDA install: the download unpacks each
+    wheel into its own folder, lib/<package>/lib/<library>."""
     lib = path / "lib"
-    lib.mkdir(parents=True)
-    for name in ("libcudart.so", "libcublas.so", "libcudnn.so"):
-        (lib / name).write_text("x" * 1000)
+    for folder, name in (("cuda_runtime", "libcudart.so.12"), ("cublas", "libcublas.so.12"),
+                         ("cudnn", "libcudnn.so.9")):
+        (lib / folder / "lib").mkdir(parents=True)
+        (lib / folder / "lib" / name).write_text("x" * 1000)
     return sorted(os.listdir(lib))
 
 
@@ -50,3 +52,17 @@ def test_a_partial_download_is_cleaned_up(cuda_dir):
     cleanup()
 
     assert not cuda_dir.exists(), "left a broken half-download in place"
+
+
+def test_the_real_nested_layout_counts_as_complete(cuda_dir):
+    """The check only listed lib/ itself, which holds folders, so a real
+    install never counted and a failed re-download deleted it."""
+    _install_complete_cuda(cuda_dir)
+    assert cuda_helper._cuda_install_looks_complete(str(cuda_dir))
+    assert cuda_helper.has_talktype_cuda_libraries()
+
+
+def test_an_install_without_cudnn_is_not_complete(cuda_dir):
+    _install_complete_cuda(cuda_dir)
+    (cuda_dir / "lib" / "cudnn" / "lib" / "libcudnn.so.9").unlink()
+    assert not cuda_helper._cuda_install_looks_complete(str(cuda_dir))

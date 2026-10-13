@@ -23,6 +23,10 @@ SUBPROCESS_TIMEOUT = 2
 SUCCESS_DIALOG_DELAY_MS = 1000
 ERROR_DIALOG_DELAY_MS = 2000
 
+# The libraries CTranslate2 needs to run on CUDA: the runtime, cuBLAS and
+# cuDNN. Without cuDNN the model loads "on cuda" and the first dictation crashes.
+_REQUIRED_CUDA_LIBS = ("libcudart.so", "libcublas.so", "libcudnn.so")
+
 def detect_nvidia_gpu():
     """Check if an NVIDIA GPU is present.
 
@@ -41,24 +45,28 @@ def detect_nvidia_gpu():
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return False
 
-def _cuda_install_looks_complete(cuda_path: str) -> bool:
-    """True if *cuda_path* holds the key libraries of a usable install.
+def _has_required_libs(names) -> bool:
+    """True if *names* (library file names) include every required library."""
+    names = list(names)
+    return all(any(name.startswith(lib) for name in names)
+               for lib in _REQUIRED_CUDA_LIBS)
 
-    Deliberately stricter than has_cuda_libraries(): both libraries must be
-    present, so a directory holding only the debris of an interrupted
-    download does not read as complete.
+
+def _cuda_install_looks_complete(cuda_path: str) -> bool:
+    """True if *cuda_path* holds every required library of a usable install.
+
+    The download unpacks each wheel into its own folder (lib/cudnn/lib/...,
+    lib/cublas/lib/..., lib/cuda_runtime/lib/...), so the whole tree is
+    searched. A directory holding only the debris of an interrupted download
+    does not read as complete.
     """
     lib_path = os.path.join(cuda_path, "lib")
     if not os.path.isdir(lib_path):
         return False
-    try:
-        names = os.listdir(lib_path)
-    except OSError:
-        return False
-    return all(
-        any(name.startswith(lib) for name in names)
-        for lib in ("libcudart.so", "libcublas.so")
-    )
+    names = []
+    for _root, _dirs, files in os.walk(lib_path):
+        names.extend(files)
+    return _has_required_libs(names)
 
 
 def _make_cuda_cleanup(cuda_path: str):
@@ -94,87 +102,44 @@ def _make_cuda_cleanup(cuda_path: str):
 def has_cuda_libraries():
     """
     Check if CUDA libraries are available for running GPU-accelerated models.
-    This checks:
+    Each place must hold all of _REQUIRED_CUDA_LIBS:
     1. Downloaded CUDA in TuxTalk data dir (respects DEV_MODE)
-    2. System-wide CUDA installation (standard /usr paths)
+    2. The system's library cache (ldconfig)
     3. CUDA toolkit installation (/usr/local/cuda, /opt/cuda)
+    4. Standard /usr library paths (distro-packaged CUDA)
     """
-    # First check for downloaded CUDA libraries in TuxTalk data dir.
-    # Uses get_appdir_cuda_path() which respects DEV_MODE, so dev version
-    # checks ~/.local/share/TuxTalk-dev/cuda and AppImage checks
-    # ~/.local/share/TuxTalk/cuda — they never interfere with each other.
-    cuda_path = get_appdir_cuda_path()
-    lib_path = os.path.join(cuda_path, "lib")
-    
-    if os.path.exists(lib_path):
-        # Check for key CUDA libraries
-        required_libs = ['libcudart.so', 'libcublas.so']
-        found_all = True
-        
-        for lib in required_libs:
-            try:
-                result = subprocess.run(['find', lib_path, '-name', f'{lib}*'],
-                                      capture_output=True, text=True, timeout=SUBPROCESS_TIMEOUT)
-                if not result.stdout.strip():
-                    found_all = False
-                    break
-            except (subprocess.TimeoutExpired, Exception):
-                found_all = False
-                break
-        
-        if found_all:
-            return True
-    
+    # get_appdir_cuda_path() respects DEV_MODE, so the dev version checks
+    # ~/.local/share/TuxTalk-dev/cuda and the AppImage ~/.local/share/TuxTalk/cuda.
+    if _cuda_install_looks_complete(get_appdir_cuda_path()):
+        return True
+
     # Check system-wide CUDA installation via ldconfig (most reliable)
     try:
         result = subprocess.run(['ldconfig', '-p'], capture_output=True, text=True, timeout=SUBPROCESS_TIMEOUT)
-        has_cudart = 'libcudart.so' in result.stdout
-        has_cublas = 'libcublas.so' in result.stdout
-        has_cudnn = 'libcudnn.so' in result.stdout
-
-        # If we have basic CUDA runtime and cuBLAS, consider it available
-        if has_cudart and has_cublas:
+        # Lines look like "\tlibcudart.so.12 (libc6,x86-64) => /usr/lib64/libcudart.so.12".
+        names = [line.split()[0] for line in result.stdout.splitlines()[1:] if line.strip()]
+        if _has_required_libs(names):
             return True
     except (subprocess.TimeoutExpired, Exception):
         pass
-    
-    # Check common CUDA toolkit installation paths
-    cuda_toolkit_paths = [
+
+    lib_dirs = [
         '/usr/local/cuda/lib64',
         '/usr/local/cuda/lib',
         '/opt/cuda/lib64',
-        '/opt/cuda/lib'
-    ]
-    
-    for cuda_dir in cuda_toolkit_paths:
-        if os.path.exists(cuda_dir):
-            try:
-                files = os.listdir(cuda_dir)
-                has_cudart = any('libcudart.so' in f for f in files)
-                has_cublas = any('libcublas.so' in f for f in files)
-
-                if has_cudart and has_cublas:
-                    return True
-            except (PermissionError, OSError):
-                pass
-    
-    # Check standard library paths (for distro-packaged CUDA)
-    system_lib_paths = [
+        '/opt/cuda/lib',
         '/usr/lib/x86_64-linux-gnu',
         '/usr/lib64',
-        '/usr/lib'
+        '/usr/lib',
     ]
-    
-    for lib_dir in system_lib_paths:
+    for lib_dir in lib_dirs:
         if os.path.exists(lib_dir):
             try:
-                files = os.listdir(lib_dir)
-                has_cudart = any('libcudart.so' in f for f in files)
-                if has_cudart:
+                if _has_required_libs(os.listdir(lib_dir)):
                     return True
             except (PermissionError, OSError):
                 pass
-    
+
     return False
 
 def get_appdir_cuda_path():
@@ -192,25 +157,7 @@ def has_talktype_cuda_libraries():
     Returns:
         bool: True if TuxTalk CUDA libraries exist, False otherwise
     """
-    cuda_path = get_appdir_cuda_path()
-    lib_path = os.path.join(cuda_path, "lib")
-
-    if not os.path.exists(lib_path):
-        return False
-
-    # Check for key CUDA libraries
-    required_libs = ['libcudart.so', 'libcublas.so']
-
-    for lib in required_libs:
-        try:
-            result = subprocess.run(['find', lib_path, '-name', f'{lib}*'],
-                                  capture_output=True, text=True, timeout=SUBPROCESS_TIMEOUT)
-            if not result.stdout.strip():
-                return False
-        except (subprocess.TimeoutExpired, Exception):
-            return False
-
-    return True
+    return _cuda_install_looks_complete(get_appdir_cuda_path())
 
 def is_first_run():
     """Check if this is the first time the app is run."""

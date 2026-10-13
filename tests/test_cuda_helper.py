@@ -65,10 +65,11 @@ def test_first_run_flag(tmp_path):
             assert is_first_run() is False
 
 
+@patch('tuxtalk.cuda_helper.get_appdir_cuda_path', return_value='/nonexistent/cuda')
 @patch('subprocess.run')
 @patch('os.path.exists')
 @patch('os.listdir')
-def test_has_cuda_libraries_permission_error(mock_listdir, mock_exists, mock_run):
+def test_has_cuda_libraries_permission_error(mock_listdir, mock_exists, mock_run, _cuda_path):
     """Test has_cuda_libraries handles permission errors gracefully"""
     # Mock ldconfig to fail (first check in has_cuda_libraries)
     import subprocess
@@ -83,10 +84,11 @@ def test_has_cuda_libraries_permission_error(mock_listdir, mock_exists, mock_run
     assert result is False
 
 
+@patch('tuxtalk.cuda_helper.get_appdir_cuda_path', return_value='/nonexistent/cuda')
 @patch('subprocess.run')
 @patch('os.path.exists')
 @patch('os.listdir')
-def test_has_cuda_libraries_os_error(mock_listdir, mock_exists, mock_run):
+def test_has_cuda_libraries_os_error(mock_listdir, mock_exists, mock_run, _cuda_path):
     """Test has_cuda_libraries handles OS errors gracefully"""
     # Mock ldconfig to fail (first check in has_cuda_libraries)
     import subprocess
@@ -99,3 +101,42 @@ def test_has_cuda_libraries_os_error(mock_listdir, mock_exists, mock_run):
     # Should not crash, should return False
     result = has_cuda_libraries()
     assert result is False
+
+
+LDCONFIG_HEADER = "1234 libs found in cache `/etc/ld.so.cache'\n"
+
+
+def _ldconfig(*names):
+    return Mock(returncode=0, stdout=LDCONFIG_HEADER + "".join(
+        f"\t{n} (libc6,x86-64) => /usr/lib64/{n}\n" for n in names))
+
+
+def _no_other_cuda(monkeypatch):
+    from tuxtalk import cuda_helper
+    monkeypatch.setattr(cuda_helper, "get_appdir_cuda_path", lambda: "/nonexistent/cuda")
+    monkeypatch.setattr(cuda_helper.os.path, "exists", lambda p: False)
+
+
+def test_system_cuda_without_cudnn_is_not_enough(monkeypatch):
+    """A distro CUDA runtime without cuDNN passed the check, the model loaded
+    on CUDA, and the first dictation crashed."""
+    _no_other_cuda(monkeypatch)
+    monkeypatch.setattr("subprocess.run", lambda *a, **k: _ldconfig(
+        "libcudart.so.12", "libcublas.so.12", "libcublasLt.so.12"))
+    assert has_cuda_libraries() is False
+
+
+def test_system_cuda_with_cudnn_is_found(monkeypatch):
+    _no_other_cuda(monkeypatch)
+    monkeypatch.setattr("subprocess.run", lambda *a, **k: _ldconfig(
+        "libcudart.so.12", "libcublas.so.12", "libcudnn.so.9"))
+    assert has_cuda_libraries() is True
+
+
+def test_a_runtime_alone_in_a_system_folder_is_not_enough(monkeypatch, tmp_path):
+    from tuxtalk import cuda_helper
+    monkeypatch.setattr(cuda_helper, "get_appdir_cuda_path", lambda: "/nonexistent/cuda")
+    monkeypatch.setattr("subprocess.run", lambda *a, **k: _ldconfig())
+    monkeypatch.setattr(cuda_helper.os.path, "exists", lambda p: p == "/usr/lib64")
+    monkeypatch.setattr(cuda_helper.os, "listdir", lambda p: ["libcudart.so.12", "libc.so.6"])
+    assert has_cuda_libraries() is False
