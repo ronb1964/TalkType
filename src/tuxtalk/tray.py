@@ -187,6 +187,33 @@ def _show_already_running(older_talktype):
     except Exception as e:      # no display: the stderr line is all there is
         logger.debug(f"Could not show the already-running notice: {e}")
 
+OLD_FLATPAK_NOTICE_TITLE = "Stopped the old TalkType Flatpak"
+OLD_FLATPAK_NOTICE_BODY = (
+    "It was running next to TuxTalk, its new name, so everything you said "
+    "would be typed twice. You can uninstall it from your software center, or "
+    "with: flatpak uninstall io.github.ronb1964.TalkType")
+
+
+def _handle_old_talktype_flatpak(stop=None, notify=None):
+    """Stop an old TalkType Flatpak and say so; runs off the main thread, so
+    the notice is handed to the main loop."""
+    if stop is None:
+        from .service_launcher import stop_old_talktype_flatpak as stop
+    if notify is None:
+        from .notify import notify as _notify
+
+        def notify(title, body):
+            def show():
+                _notify(title, body)
+                return False    # once
+            GLib.idle_add(show)
+    try:
+        if stop():
+            notify(OLD_FLATPAK_NOTICE_TITLE, OLD_FLATPAK_NOTICE_BODY)
+    except Exception as e:      # never stop the tray from starting
+        logger.warning(f"Could not check for the pre-rename Flatpak: {e}")
+
+
 def about_icon_source(theme_has_icon):
     """Where the About dialog's icon comes from: ("file", path), ("icon",
     theme name) or None. *theme_has_icon* is the icon theme's has_icon."""
@@ -2071,6 +2098,11 @@ def main():
     except ImportError:
         pass
     _acquire_tray_singleton()
+
+    # An old TalkType Flatpak can't see the lock above and would type every
+    # dictation twice. Checked on a thread so a slow flatpak never delays the tray.
+    import threading
+    threading.Thread(target=_handle_old_talktype_flatpak, daemon=True).start()
 
     # The TalkType -> TuxTalk folder move ran at package import, before any
     # logger existed; record what it did now (see rename_migration.py).

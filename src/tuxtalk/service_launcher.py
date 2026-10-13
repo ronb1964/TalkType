@@ -125,6 +125,41 @@ def pre_rename_tray_pids():
     return pids
 
 
+# The Flatpak of TalkType before the rename. Its sandbox has its own runtime
+# folder, so it never sees TuxTalk's lock and would type every dictation twice.
+OLD_TALKTYPE_FLATPAK = "io.github.ronb1964.TalkType"
+
+
+def stop_old_talktype_flatpak(run=subprocess.run) -> bool:
+    """Kill a running old TalkType Flatpak; True only if one was stopped.
+
+    Any error asking Flatpak (not installed, hung, refused) counts as "not
+    running", and both calls are short so startup is never held up.
+    """
+    if os.environ.get("FLATPAK_ID"):
+        return False    # inside a sandbox: no flatpak command, nothing of ours to stop
+    try:
+        ps = run(["flatpak", "ps", "--columns=application"],
+                 capture_output=True, text=True, timeout=3)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    if OLD_TALKTYPE_FLATPAK not in (ps.stdout or "").split():
+        return False
+    try:
+        result = run(["flatpak", "kill", OLD_TALKTYPE_FLATPAK],
+                     capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError) as e:
+        logger.warning(f"Could not stop the old {OLD_TALKTYPE_FLATPAK} Flatpak: {e}")
+        return False
+    if result.returncode != 0:
+        logger.warning(f"Could not stop the old {OLD_TALKTYPE_FLATPAK} Flatpak: "
+                       f"{(result.stderr or '').strip()}")
+        return False
+    logger.info(f"Stopped the old {OLD_TALKTYPE_FLATPAK} Flatpak "
+                "so dictation isn't typed twice")
+    return True
+
+
 def _read_argv(pid):
     """A process's argument list from /proc, or None if it can't be read."""
     try:

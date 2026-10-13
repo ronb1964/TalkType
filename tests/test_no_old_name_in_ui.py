@@ -36,6 +36,11 @@ ALLOWED_EXACT = {
         "TuxTalk is the new name for TalkType, and only one of them can run at a "
         "time. Click the TalkType microphone icon in the system tray, choose Quit "
         "TalkType, then start TuxTalk again.",
+        # An old TalkType Flatpak was stopped: its uninstall needs its real ID.
+        "Stopped the old TalkType Flatpak",
+        "It was running next to TuxTalk, its new name, so everything you said "
+        "would be typed twice. You can uninstall it from your software center, or "
+        "with: flatpak uninstall io.github.ronb1964.TalkType",
     },
 }
 
