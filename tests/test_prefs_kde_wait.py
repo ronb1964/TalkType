@@ -1,0 +1,39 @@
+"""While Preferences waits for KDE's verdict on a new hotkey, its buttons
+must not work: the wait runs the main loop, and a second Apply, OK or Cancel
+clicked then ran inside the first Apply (Cancel destroyed the window it was
+still using)."""
+from types import SimpleNamespace
+
+from tuxtalk import kwin_hotkeys, service_launcher
+from tuxtalk import prefs as P
+from tuxtalk.prefs import PreferencesWindow
+
+
+def test_the_window_is_locked_while_waiting_and_unlocked_after(monkeypatch):
+    states = []
+    answers = iter([None, ["F8"]])
+    monkeypatch.setattr(kwin_hotkeys, "should_claim", lambda: True)
+    monkeypatch.setattr(kwin_hotkeys, "refused_since", lambda since: next(answers))
+    monkeypatch.setattr(service_launcher, "find_service_pids", lambda: [123])
+    monkeypatch.setattr(P.Gtk, "events_pending", lambda: False)
+    d = SimpleNamespace(window=SimpleNamespace(set_sensitive=states.append))
+
+    assert PreferencesWindow._kde_refused(d, 0.0) == ["F8"]
+    assert states == [False, True]
+
+
+def test_an_error_while_waiting_still_unlocks_it(monkeypatch):
+    states = []
+
+    def boom(since):
+        raise RuntimeError("kwin went away")
+    monkeypatch.setattr(kwin_hotkeys, "should_claim", lambda: True)
+    monkeypatch.setattr(kwin_hotkeys, "refused_since", boom)
+    monkeypatch.setattr(service_launcher, "find_service_pids", lambda: [123])
+    d = SimpleNamespace(window=SimpleNamespace(set_sensitive=states.append))
+
+    try:
+        PreferencesWindow._kde_refused(d, 0.0)
+    except RuntimeError:
+        pass
+    assert states == [False, True]

@@ -5591,14 +5591,20 @@ class PreferencesWindow:
         except Exception:
             return None
         deadline = time.monotonic() + 6
-        while time.monotonic() < deadline:
-            found = kwin_hotkeys.refused_since(since)
-            if found is not None:
-                return found
-            while Gtk.events_pending():
-                Gtk.main_iteration()
-            time.sleep(0.1)
-        return None
+        # The wait keeps the window drawn by running the main loop, which
+        # would also let a second Apply, OK or Cancel run inside this one.
+        self.window.set_sensitive(False)
+        try:
+            while time.monotonic() < deadline:
+                found = kwin_hotkeys.refused_since(since)
+                if found is not None:
+                    return found
+                while Gtk.events_pending():
+                    Gtk.main_iteration()
+                time.sleep(0.1)
+            return None
+        finally:
+            self.window.set_sensitive(True)
 
     def _after_hotkey_change(self, changed, since):
         """After OK or Apply with a changed hotkey: offer the hotkey test,
