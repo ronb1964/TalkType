@@ -348,3 +348,16 @@ def test_saving_an_unrelated_change_leaves_autostart_alone(tmp_path, monkeypatch
         assert PreferencesWindow.save_config(d) is True    # a second Apply
 
         assert applied == [], "autostart was rewritten though launch at login did not change"
+
+
+def test_a_failed_save_says_why(tmp_path, monkeypatch):
+    """"Failed to save settings!" gave no reason, so a full disk or read-only
+    folder looked like a bug in TuxTalk."""
+    def full_disk(path, text, keep_backup=True):
+        raise OSError(28, "No space left on device")
+    monkeypatch.setattr(P, "write_text_atomic", full_disk)
+    d = _saveable(tmp_path, monkeypatch, {"beeps": False, "language_mode": "auto"},
+                  {"beeps": True, "language_mode": "auto"})
+
+    assert PreferencesWindow.save_config(d) is False
+    assert "No space left on device" in d._save_error

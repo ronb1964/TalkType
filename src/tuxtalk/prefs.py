@@ -536,6 +536,7 @@ class PreferencesWindow:
                     # copy. Leave it alone; config.load_config()'s repair
                     # path is what knows how to recover this safely.
                     print(f"Refusing to save over an unreadable config: {e}")
+                    self._save_error = f"Your settings file could not be read: {e}"
                     return False
             # Base: window-open snapshot (has every key incl. defaults),
             # updated with whatever is currently on disk.
@@ -580,6 +581,7 @@ class PreferencesWindow:
             return True
         except Exception as e:
             print(f"Error saving config: {e}")
+            self._save_error = str(e)
             return False
     
     def create_ui(self):
@@ -2434,6 +2436,9 @@ class PreferencesWindow:
         # Phrase column (editable)
         phrase_renderer = Gtk.CellRendererText()
         phrase_renderer.set_property("editable", True)
+        # The hint is drawn only in an empty cell, never stored, so a row
+        # added and left untouched saves nothing.
+        phrase_renderer.set_property("placeholder-text", "new phrase")
         phrase_renderer.connect("edited", self._on_phrase_edited)
         phrase_renderer.connect("editing-started", self._on_cell_editing_started, 0)
         phrase_column = Gtk.TreeViewColumn("You Say", phrase_renderer, text=0)
@@ -2444,6 +2449,7 @@ class PreferencesWindow:
         # Replacement column (editable)
         replacement_renderer = Gtk.CellRendererText()
         replacement_renderer.set_property("editable", True)
+        replacement_renderer.set_property("placeholder-text", "replacement text")
         replacement_renderer.connect("edited", self._on_replacement_edited)
         replacement_renderer.connect("editing-started", self._on_cell_editing_started, 1)
         replacement_column = Gtk.TreeViewColumn("TuxTalk Types", replacement_renderer, text=1)
@@ -3240,9 +3246,39 @@ class PreferencesWindow:
         editable.connect("key-press-event", on_key_press)
     
     def _on_phrase_edited(self, renderer, path, new_text):
-        """Handle editing of the phrase column."""
-        if new_text.strip():
-            self.commands_store[path][0] = new_text.strip().lower()
+        """Handle editing of the phrase column.
+
+        A phrase another row already has is refused: the snippets are saved
+        by phrase, so one of the two rows would silently disappear.
+        """
+        phrase = new_text.strip().lower()
+        if not phrase:
+            return
+        row_index = int(str(path))
+        for i, row in enumerate(self.commands_store):
+            if i != row_index and row[0].strip().lower() == phrase:
+                self._warn_duplicate_phrase(phrase)
+                return
+        self.commands_store[path][0] = phrase
+
+    def _warn_duplicate_phrase(self, phrase):
+        """Say once that *phrase* already has a snippet.
+
+        Focus-out and "edited" both commit the same edit, so the warning
+        waits for the idle loop and a second call while it is pending adds
+        nothing.
+        """
+        if getattr(self, "_duplicate_warning_pending", False):
+            return
+        self._duplicate_warning_pending = True
+
+        def show():
+            self._duplicate_warning_pending = False
+            self._message(Gtk.MessageType.WARNING, "That phrase is already a snippet",
+                          f"You already have a snippet for \u201c{phrase}\u201d. "
+                          "Change that one, or pick a different phrase.")
+            return False
+        GLib.idle_add(show)
     
     def _on_replacement_edited(self, renderer, path, new_text):
         """Handle editing of the replacement column."""
@@ -3250,7 +3286,7 @@ class PreferencesWindow:
     
     def _on_add_command(self, button):
         """Add a new empty command row."""
-        iter = self.commands_store.append(["new phrase", "replacement text"])
+        iter = self.commands_store.append(["", ""])
         # Select the new row
         path = self.commands_store.get_path(iter)
         self.commands_tree.set_cursor(path, self.commands_tree.get_column(0), True)
@@ -3409,6 +3445,12 @@ class PreferencesWindow:
             # Runs first in both on_apply and on_ok — letting this propagate
             # would abort the whole save and leave the window stuck open.
             print(f"Custom commands not saved: {e}")
+            return False
+        except OSError as e:
+            # A full disk or read-only config folder: say so, then let the
+            # settings save go ahead on its own.
+            print(f"Custom commands not saved: {e}")
+            self._message(Gtk.MessageType.ERROR, "Your snippets weren't saved", str(e))
             return False
     
     def _apply_hotkey_fallbacks(self, hotkeys):
@@ -5004,6 +5046,11 @@ class PreferencesWindow:
             buttons=Gtk.ButtonsType.OK,
             text="Failed to save settings!"
         )
+        # Why it failed (disk full, read-only folder…) is what the user needs
+        # to fix it.
+        reason = getattr(self, "_save_error", "")
+        if reason:
+            dialog.format_secondary_text(reason)
         dialog.run()
         dialog.destroy()
 
