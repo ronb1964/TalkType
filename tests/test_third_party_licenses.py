@@ -1,4 +1,4 @@
-"""Bundled third-party software must ship with its license (0.14.7).
+"""Bundled third-party software must ship with its license.
 
 The AppImage (and so the .deb and .rpm, which repackage it) carries ydotool
 (AGPL-3.0-or-later), wl-clipboard (GPL-3.0-or-later), Python packages and
@@ -22,7 +22,7 @@ def _var(name):
 
 
 def test_ydotool_is_pinned_and_the_notice_names_that_commit():
-    # It used to build whatever ydotool's latest code was, so no notice could
+    # Building whatever ydotool's latest code is would leave no notice able to
     # say which version shipped.
     commit = _var("YDOTOOL_COMMIT")
     assert re.fullmatch(r"[0-9a-f]{40}", commit)

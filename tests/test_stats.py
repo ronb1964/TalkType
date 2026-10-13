@@ -1,6 +1,6 @@
 """Usage stats: how much you've dictated, kept as daily counts only.
 
-TalkType promises dictated text never reaches the disk, so stats store
+TuxTalk promises dictated text never reaches the disk, so stats store
 numbers per day (dictations, words, seconds of speech) and nothing else.
 """
 import datetime
@@ -182,8 +182,8 @@ def test_usage_stats_setting_applies_without_a_restart():
 
 
 def test_preferences_finds_tabs_by_name_not_position():
-    """A Stats tab now sits before Updates; --tab=updates and bring_to_front
-    used a hard-coded position (4) that would have opened Stats instead."""
+    """A Stats tab sits before Updates, so --tab=updates and bring_to_front
+    find tabs by name; a hard-coded position (4) would open Stats instead."""
     import types
     import gi
     gi.require_version("Gtk", "3.0")

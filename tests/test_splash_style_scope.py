@@ -1,8 +1,8 @@
 """The splash screen's stylesheet must not restyle other windows.
 
-It was added screen-wide with bare `window { background-color: transparent }`
-and `image` rules and never removed, so every plain window the tray opened
-afterwards (Fix a Word, for one) lost its background.
+Bare `window { background-color: transparent }` and `image` rules added
+screen-wide and never removed would strip the background from every plain
+window the tray opens afterwards (Fix a Word, for one).
 """
 import re
 

@@ -1,8 +1,8 @@
 """Escape during the "Checking Speed" spinner must not end the check early.
 
 GtkDialog sends Escape and Alt+F4 as a delete-event even with the title-bar X
-hidden, so run() came back while the worker was still timing and
-run_speed_check() raised KeyError on the missing result.
+hidden. If run() returned then, while the worker is still timing,
+run_speed_check() would raise KeyError on the missing result.
 """
 import threading
 
@@ -69,8 +69,8 @@ def test_an_interrupted_check_keeps_the_processor(monkeypatch):
 
 
 def test_a_long_check_can_be_stopped(monkeypatch):
-    """A hung graphics driver kept the modal spinner up for many minutes with
-    no way to close it. Once it runs long, Stop appears and Escape works."""
+    """A hung graphics driver could keep the modal spinner up for many minutes
+    with no way to close it, so once it runs long, Stop appears and Escape works."""
     release = threading.Event()
     timers = {}
     seen = {"buttons": []}

@@ -1,9 +1,9 @@
 """Starting the service when its speech model is not downloaded yet.
 
-Two bugs found by clicking Cancel on the startup "Download model?" question:
-Cancel was ignored on NVIDIA setups (it looked like a CUDA failure, and the
-CUDA fallback re-downloaded without asking), and a startup download crashed
-the service (its dialogs ran while Gtk.main() was live on another thread).
+Cancel on the startup "Download model?" question is honoured on NVIDIA setups
+too, not taken for a CUDA failure that the CUDA fallback answers by
+downloading without asking. And a startup download's dialogs run before
+Gtk.main() is live on another thread, or they crash the service.
 """
 import re
 from pathlib import Path
@@ -30,8 +30,8 @@ def cuda_installed(monkeypatch):
 def test_missing_cuda_files_use_the_processor_instead_of_crashing(monkeypatch):
     """Device CUDA with the CUDA files gone: the model still loads "on cuda",
     then the first dictation crashes the service inside the speech library
-    (libcudnn_ops.so.9 not found), past every Python fallback. Ron, 0.14.5
-    test. Use the processor for this run and say why; keep the setting."""
+    (libcudnn_ops.so.9 not found), past every Python fallback. So use the
+    processor for this run and say why; keep the setting."""
     from tuxtalk import cuda_helper
     monkeypatch.setattr(cuda_helper, "has_cuda_libraries", lambda: False)
     loaded, notes = [], []
@@ -134,9 +134,9 @@ def test_cancel_falls_back_to_a_downloaded_model_and_saves_it(monkeypatch):
 
 
 def test_a_cancelled_cpu_retry_is_a_missing_model_not_a_crash(monkeypatch):
-    """CUDA failed, then the processor copy was cancelled. A bare Exception
-    escaped _build_model_or_exit (which handles ModelUnavailable) and crashed
-    the service with a traceback instead of using a downloaded model."""
+    """CUDA failed, then the processor copy was cancelled. That must reach
+    _build_model_or_exit as ModelUnavailable, which it handles by using a
+    downloaded model, not as a bare Exception that crashes the service."""
     def load(*a, **k):
         if k.get("device") == "cuda":
             raise RuntimeError("CUDA driver missing")
@@ -148,9 +148,9 @@ def test_a_cancelled_cpu_retry_is_a_missing_model_not_a_crash(monkeypatch):
 
 
 def test_a_model_load_error_is_not_reported_as_a_gtk_failure():
-    """The early build sat inside the GTK setup's try: a load error was logged
-    as "GTK initialization failed", the GTK loop never started, and the model
-    was then built a second time."""
+    """The early build must not sit inside the GTK setup's try, or a load
+    error is logged as "GTK initialization failed", the GTK loop never starts,
+    and the model is then built a second time."""
     main_src = (ROOT / "src/tuxtalk/app.py").read_text().split("\ndef main():", 1)[1]
     gtk_except = main_src.index('logger.error(f"GTK initialization failed')
     early_build = main_src.index("if not is_model_cached_fast(cfg.model):")
@@ -190,9 +190,10 @@ def test_the_service_treats_broken_files_as_an_unavailable_model(monkeypatch):
 
 
 def test_a_model_that_wont_load_falls_back_without_replacing_the_choice(monkeypatch):
-    """Downloaded files that won't load were reported as "wasn't downloaded"
-    and the fallback was saved, so the chosen model was replaced at every
-    start: choosing it again in Preferences downloads nothing."""
+    """Downloaded files that won't load are not "wasn't downloaded", and the
+    fallback is not saved over the choice: replaced at every start, the model
+    could not be fixed by choosing it again in Preferences, which downloads
+    nothing."""
     import tuxtalk.config as config
     from tuxtalk import cuda_helper
 

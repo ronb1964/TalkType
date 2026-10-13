@@ -1,14 +1,13 @@
 """Terminal detection must not hinge on how a compositor capitalises a class.
 
-The focused-window class now arrives from two different sources — the GNOME
+The focused-window class arrives from two different sources — the GNOME
 Shell extension and, on KDE, the KWin script — and they are under no obligation
 to agree on case. The set already carries hand-maintained variants ("xterm",
 "XTerm", "UXTerm"), which is the shape of a bug waiting for the next terminal
 whose class is spelled differently than someone expected.
 
 Real values captured from a live Plasma 6.7.4 Wayland session: Konsole reports
-"org.kde.konsole" and kitty reports "kitty". Both are in the set, so this is
-hardening rather than a repair.
+"org.kde.konsole" and kitty reports "kitty".
 """
 
 import pytest

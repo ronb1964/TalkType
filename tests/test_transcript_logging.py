@@ -1,6 +1,6 @@
 """Privacy: transcribed text is kept out of the on-disk log by default.
 
-TalkType logs every raw/normalized transcription to ~/.config/tuxtalk/tuxtalk.log
+TuxTalk logs every raw/normalized transcription to ~/.config/tuxtalk/tuxtalk.log
 for troubleshooting. That is a standing plaintext record of everything the user
 dictates. It must be redacted by default and only revealed when the user opts in
 via the `log_transcripts` setting (which pops a warning before it turns on).
@@ -32,8 +32,8 @@ def test_redact_hides_content_but_keeps_length_by_default():
 
 
 def test_redact_reveals_full_repr_when_opted_in():
-    # repr form matches the old `{text!r}` logging exactly, so an opted-in log
-    # reads identically to before.
+    # The repr form matches `{text!r}` logging exactly, so an opted-in log
+    # reads the same as plain repr logging.
     assert tlog.redact_text("hello world", reveal=True) == "'hello world'"
 
 
@@ -94,9 +94,9 @@ def test_enabling_logging_is_gated_by_a_warning_dialog():
 
 
 def test_injection_tooltip_no_longer_claims_password_field_handling():
-    """The old Auto-mode tooltip claimed it types into password fields and uses
-    AT-SPI — both false (AT-SPI is unreachable; nothing detects password fields).
-    That misleading copy must be gone."""
+    """The Auto-mode tooltip must not claim it types into password fields or
+    uses AT-SPI — both false (AT-SPI is unreachable; nothing detects password
+    fields)."""
     text = PREFS.read_text()
     assert "Typing for password fields" not in text
     assert "AT-SPI when available" not in text

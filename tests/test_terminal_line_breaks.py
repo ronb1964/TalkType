@@ -6,18 +6,16 @@ and other chat inputs, where a literal newline would SUBMIT the message rather
 than break the line.
 
 It is inert in a terminal. Terminals bind no soft-newline key — Enter means "run
-this" — so Konsole simply ignored the keystroke and everything landed on one
-line, which is what Ron reported. Verified in his log: the marker was produced
-correctly and "Sending Shift+Enter after part 1" was logged, with nothing to show
-for it.
+this" — so Konsole simply ignores the keystroke and everything lands on one
+line, even though "Sending Shift+Enter after part 1" is logged.
 
 Terminals accept the line break the other way round: a newline inside pasted text
 is inserted literally, because bracketed paste stops the shell executing at the
 first one. So in a terminal the marker becomes a real newline in one paste, and
 everywhere else the existing chunk-and-keystroke path is untouched.
 
-This is only decidable now that KWin reports the focused window on KDE; before
-that a terminal was indistinguishable from anything else.
+This relies on knowing the focused window (on KDE the KWin script reports it);
+without that a terminal is indistinguishable from anything else.
 """
 
 import pytest

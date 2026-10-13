@@ -1,4 +1,4 @@
-"""stop_recording was split so Backend B (Flatpak) can run the slow half
+"""stop_recording is split so Backend B (Flatpak) can run the slow half
 (transcribe + portal typing) on a worker thread, keeping the F3/F4 hotkey loop
 responsive instead of freezing it for 10-20s per dictation on a CPU-only box.
 
