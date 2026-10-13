@@ -227,8 +227,6 @@ class TuxTalkIndicator extends PanelMenu.Button {
             this._signalIds.push(this._proxy.connectSignal('ModelChanged', (proxy, sender, [modelName]) => {
                 // Re-query rather than patching the model alone: a preset also
                 // changes the device, and the preset dot is matched on both.
-                // Updating just the model left "Device:" reading the old value
-                // and the dot sitting on the wrong preset.
                 this._currentModel = modelName;
                 this._updateStatus();
             }));
@@ -409,7 +407,7 @@ class TuxTalkIndicator extends PanelMenu.Button {
         this.menu.addMenuItem(this._deviceDisplayItem);
 
         // (No separator here — Model/Device/Performance/Injection are one
-        // contiguous block, matching the GTK tray and CLAUDE.md menu order.)
+        // contiguous block, matching the GTK tray's menu.)
 
         // Performance submenu
         this._performanceSubMenu = new PopupMenu.PopupSubMenuMenuItem('Performance');
@@ -420,7 +418,7 @@ class TuxTalkIndicator extends PanelMenu.Button {
         // Text Injection Mode submenu
         this._injectionSubMenu = new PopupMenu.PopupSubMenuMenuItem('Text Injection Mode');
         this._injectionItems = {};
-        // Order and labels must match the GTK tray exactly (see CLAUDE.md):
+        // Order and labels must match the GTK tray exactly (tray.py):
         // anyone following instructions like "the second item under Text
         // Injection Mode" has to land on the same option in both menus.
         const injectionModes = {
@@ -536,28 +534,19 @@ class TuxTalkIndicator extends PanelMenu.Button {
         this._clearUpdateTimeout();
         this._restoreUpdatesItem();
 
-        const [success, currentVersion, latestVersion, updateAvailable,
-               extCurrent, extLatest, extUpdate, releaseUrl, error] = params;
+        const [success, , , updateAvailable, , , extUpdate, , error] = params;
 
         if (!success) {
             Main.notify('TuxTalk', `Update check failed: ${error || 'Unknown error'}`);
             return;
         }
 
-        // The app itself pops the result window for us via the D-Bus
-        // CheckForUpdates handler: either "You're up to date" or the actionable
-        // update dialog (Download & Install / View on GitHub). Opening
-        // Preferences on top of that — the old behaviour — was a redundant,
-        // clunky extra step, so we no longer do it for an app update.
-        if (updateAvailable) {
-            // App dialog handles it; nothing to add here.
-        } else if (extUpdate) {
-            // App is up to date but the GNOME extension has an update — the app
-            // dialog can't offer that, so send the user to the Updates tab.
+        // The app shows its own result window for the app itself. Only an
+        // extension update, which that window can't offer, needs the Updates tab.
+        if (!updateAvailable && extUpdate) {
             Main.notify('TuxTalk', 'Extension update available — opening Updates…');
             this._proxy?.OpenPreferencesUpdatesRemote();
         }
-        // else: nothing — the app already showed the "up to date" window.
     }
 
     _updatePresetSelection(activePreset) {
@@ -648,8 +637,7 @@ class TuxTalkIndicator extends PanelMenu.Button {
             // The tray works out which preset is active (recommend.match_preset).
             this._currentPreset = status.preset ? status.preset.deep_unpack() : 'custom';
             this._currentInjectionMode = status.injection_mode ? status.injection_mode.deep_unpack() : 'auto';
-            // Absent from a TuxTalk older than 0.14.1: then nothing is grabbed,
-            // which is how it always behaved.
+            // Absent from a TuxTalk older than 0.14.1, which grabs nothing.
             this._hotkeys = status.hotkeys ? status.hotkeys.deep_unpack() : [];
 
             this._updateIcon();
@@ -675,7 +663,7 @@ class TuxTalkIndicator extends PanelMenu.Button {
             const action = global.display.grab_accelerator(accel, Meta.KeyBindingFlags.NONE);
             if (action === Meta.KeyBindingAction.NONE) {
                 // Usually another shortcut already has it. Dictation still
-                // works; the key just reaches the app too, as before.
+                // works; the key just reaches the app too.
                 console.warn(`TuxTalk: could not hold ${accel} back from apps (already in use?)`);
                 continue;
             }
