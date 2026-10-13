@@ -2134,6 +2134,21 @@ class PreferencesWindow:
             grid.attach(self.voice_editing_check, 0, row, 2, 1)
             row += 1
 
+            # The recording indicator follows the window being dictated into
+            # (recording_indicator._follow_target), placed by the same
+            # active-window position as the floating messages.
+            follow_check = Gtk.CheckButton(
+                label="Recording indicator follows the window you\u2019re dictating into")
+            follow_check.set_active(bool(self.config.get("indicator_follow_window", False)))
+            follow_check.set_tooltip_text(
+                "Shows the recording indicator near the bottom of the window you're dictating\n"
+                "into, wherever it is on the screen, instead of at the position set on the Audio tab.\n"
+                "When TuxTalk can't tell where that window is, the usual position is used.")
+            follow_check.connect("toggled", lambda c: self.update_config(
+                "indicator_follow_window", c.get_active()))
+            grid.attach(follow_check, 0, row, 2, 1)
+            row += 1
+
             # How these work (Help, on its Labs tab) and Send feedback.
             from .help_dialog import FEEDBACK_URL, show_help_dialog
             labs_links = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)

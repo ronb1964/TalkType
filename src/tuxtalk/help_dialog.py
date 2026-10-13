@@ -453,7 +453,17 @@ Say it in your own words; there's no fixed list. Some that work well:
   • <i>I didn't catch what to change</i>: it heard no instruction. Hold the keys while you talk.
   • <i>The AI is still starting</i>: right after turning it on or starting TuxTalk, wait a few seconds.
   • <i>The AI didn't come up with a change</i>: try saying it another way.
-  • <i>You switched windows</i>: the rewrite wasn't typed; it's in Recent Dictations.'''
+  • <i>You switched windows</i>: the rewrite wasn't typed; it's in Recent Dictations.
+<span size="large"><b>Indicator Follows Your Window</b></span>
+The recording indicator shows up near the bottom of the window you're dictating
+into, wherever that window is on the screen, instead of always in the same spot.
+
+  • Turn it on in <b>Preferences → Advanced → TuxTalk Labs</b>.
+  • It's placed each time you start talking, so it goes wherever your window is.
+  • When TuxTalk can't tell where the window is, the indicator uses its usual
+    position from <b>Preferences → Audio</b>.
+  • Works on KDE, on GNOME with the TuxTalk extension, on Sway and Hyprland, and on
+    X11 desktops like Cinnamon and XFCE. On a scaled screen it may sit a little off.'''
     create_tab("🧪 TuxTalk Labs", labs_text)
 
     # Tab 5: Voice Commands

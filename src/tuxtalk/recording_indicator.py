@@ -56,13 +56,39 @@ def positioning_available():
     return bool(os.environ.get("DISPLAY"))
 
 
+# TuxTalk Labs, "follow the active window": how far above the bottom edge of
+# the window being dictated into the indicator sits.
+FOLLOW_MARGIN = 40
+
+
+def follow_position(window, width, height, monitor):
+    """Top-left corner for a *width* x *height* indicator centred near the
+    bottom of *window*, kept on *monitor* (window_geometry.Rect values)."""
+    x = window.x + (window.w - width) // 2
+    y = window.y + window.h - height - FOLLOW_MARGIN
+    x = max(monitor.x, min(x, monitor.x + monitor.w - width))
+    y = max(monitor.y, min(y, monitor.y + monitor.h - height))
+    return x, y
+
+
+def _monitor_rect_at(x, y):
+    """The monitor holding (x, y), as a window_geometry.Rect."""
+    from .window_geometry import Rect
+    display = Gdk.Display.get_default()
+    g = (display.get_monitor_at_point(x, y) or display.get_monitor(0)).get_geometry()
+    return Rect(g.x, g.y, g.width, g.height)
+
+
 class RecordingIndicator(Gtk.Window):
     """Floating recording indicator window with configurable position"""
 
     def __init__(self, position="center", offset_x=0, offset_y=0, size="medium",
                  style="orb", color_mode="custom", custom_color="#4db3ff",
-                 backing="medium", sensitivity=1.0):
+                 backing="medium", sensitivity=1.0, follow_window=False):
         super().__init__(title="TuxTalk Recording")
+        # TuxTalk Labs: show near the bottom of the window being dictated
+        # into, instead of the fixed position (_follow_target).
+        self.follow_window = follow_window
 
         # Style + appearance. The orb keeps its own draw path; the other styles
         # are drawn by indicator_styles from the data fed below. color_mode
@@ -185,13 +211,19 @@ class RecordingIndicator(Gtk.Window):
                     window_x = (screen_width - window_width) // 2
                     window_y = (screen_height - window_height) // 2
 
-                # Apply custom offset
-                window_x += self.offset_x
-                window_y += self.offset_y
+                follow = self._follow_target(window_width, window_height)
+                if follow:
+                    # TuxTalk Labs: near the bottom of the window being
+                    # dictated into; the configured offset doesn't apply.
+                    window_x, window_y = follow
+                else:
+                    # Apply custom offset
+                    window_x += self.offset_x
+                    window_y += self.offset_y
 
-                # Ensure window stays on screen
-                window_x = max(0, min(window_x, screen_width - window_width))
-                window_y = max(0, min(window_y, screen_height - window_height))
+                    # Ensure window stays on screen
+                    window_x = max(0, min(window_x, screen_width - window_width))
+                    window_y = max(0, min(window_y, screen_height - window_height))
 
                 # Make window completely pass-through for input events
                 # This prevents it from interfering with keyboard/mouse input
@@ -221,6 +253,19 @@ class RecordingIndicator(Gtk.Window):
             return False  # Don't repeat
 
         GLib.idle_add(_do_show)
+
+    def _follow_target(self, width, height):
+        """Where to show when following the active window, or None to use the
+        configured position (following is off, or nothing said where the
+        window is)."""
+        if not self.follow_window:
+            return None
+        from . import window_geometry
+        rect = window_geometry.active_window_rect()
+        if not rect:
+            return None
+        monitor = _monitor_rect_at(rect.x + rect.w // 2, rect.y + rect.h // 2)
+        return follow_position(rect, width, height, monitor)
 
     def hide_indicator(self):
         """Hide the indicator and stop animation"""
@@ -261,7 +306,7 @@ class RecordingIndicator(Gtk.Window):
 
     def apply_settings(self, position, size, offset_x, offset_y,
                        style=None, color_mode=None, custom_color=None,
-                       backing=None, sensitivity=None):
+                       backing=None, sensitivity=None, follow_window=None):
         """Adopt new appearance settings without rebuilding the indicator.
 
         show_at_position() reads position, scale and the offsets at show time,
@@ -279,6 +324,8 @@ class RecordingIndicator(Gtk.Window):
         self.position = str(position).lower()
         self.offset_x = offset_x
         self.offset_y = offset_y
+        if follow_window is not None:
+            self.follow_window = follow_window
 
         new_scale = _scale_for_size(size)
         if new_scale != self.scale:

@@ -1,0 +1,111 @@
+"""TuxTalk Labs: the recording indicator follows the window you're dictating
+into, centred near its bottom edge (Ron, 2026-10-12). Uses the same
+active-window position as the floating messages (window_geometry).
+"""
+import pathlib
+
+import pytest
+
+from tuxtalk import config, recording_indicator as ri, window_geometry as wg
+from tuxtalk.window_geometry import Rect
+
+SRC = pathlib.Path(wg.__file__).parent
+
+
+# --- where the active window is, as a rectangle --------------------------------------
+
+def test_the_rect_maps_like_the_point_on_a_scaled_screen():
+    monitors = [("DP-1", Rect(0, 0, 3840, 2160))]
+    assert wg.to_screen_rect(Rect(100, 100, 400, 200), "DP-1", Rect(0, 0, 1920, 1080), monitors) \
+        == Rect(200, 200, 800, 400)
+
+
+def test_the_rect_is_one_to_one_without_screen_sizes():
+    assert wg.to_screen_rect(Rect(10, 20, 30, 40), "", None, []) == Rect(10, 20, 30, 40)
+
+
+def test_the_active_window_rect_follows_the_same_sources(monkeypatch):
+    monkeypatch.setattr(wg, "screen_monitors", lambda: [("DP-6", Rect(0, 0, 3440, 1440))])
+    monkeypatch.setattr(wg, "_reported", lambda: "100,200,800,600|DP-6|0,0,3440,1440")
+    assert wg.active_window_rect() == Rect(100, 200, 800, 600)
+
+
+# --- where the indicator goes ----------------------------------------------------------------
+
+def test_centred_near_the_bottom_of_the_window():
+    pos = ri.follow_position(Rect(100, 200, 800, 600), 200, 80, Rect(0, 0, 3440, 1440))
+    assert pos == (400, 200 + 600 - 80 - ri.FOLLOW_MARGIN)
+
+
+def test_kept_on_the_monitor():
+    pos = ri.follow_position(Rect(3300, 1300, 300, 300), 200, 80, Rect(0, 0, 3440, 1440))
+    assert pos == (3240, 1360)
+
+
+def test_a_tiny_window_still_gets_the_indicator_inside_its_monitor():
+    pos = ri.follow_position(Rect(0, 0, 50, 30), 200, 80, Rect(0, 0, 1920, 1080))
+    assert pos == (0, 0)
+
+
+class _Ind:
+    """Just enough of RecordingIndicator for _follow_target."""
+    follow_window = True
+    _follow_target = ri.RecordingIndicator._follow_target
+
+
+def test_the_indicator_asks_for_the_window_when_following(monkeypatch):
+    monkeypatch.setattr(wg, "active_window_rect", lambda: Rect(100, 200, 800, 600))
+    monkeypatch.setattr(ri, "_monitor_rect_at", lambda x, y: Rect(0, 0, 3440, 1440))
+    assert _Ind()._follow_target(200, 80) == ri.follow_position(Rect(100, 200, 800, 600), 200, 80,
+                                                                 Rect(0, 0, 3440, 1440))
+
+
+def test_no_window_known_falls_back_to_the_usual_position(monkeypatch):
+    monkeypatch.setattr(wg, "active_window_rect", lambda: None)
+    assert _Ind()._follow_target(200, 80) is None
+
+
+def test_switched_off_never_asks(monkeypatch):
+    monkeypatch.setattr(wg, "active_window_rect", lambda: pytest.fail("asked"))
+    ind = _Ind()
+    ind.follow_window = False
+    assert ind._follow_target(200, 80) is None
+
+
+# --- the setting ------------------------------------------------------------------------------
+
+def test_off_by_default_and_applied_without_a_restart():
+    assert config.Settings().indicator_follow_window is False
+    assert "indicator_follow_window" in config.LIVE_APPLIED_KEYS
+
+
+def test_the_service_passes_it_to_the_indicator():
+    app_src = (SRC / "app.py").read_text()
+    assert app_src.count("follow_window=getattr(cfg, \"indicator_follow_window\", False)") == 2
+
+
+def test_it_is_a_labs_switch():
+    prefs = (SRC / "prefs.py").read_text()
+    labs = prefs[prefs.index("# ===== TUXTALK LABS ====="):]
+    labs = labs[:labs.index("return grid")]
+    assert '"indicator_follow_window"' in labs
+
+
+def test_the_labs_help_page_explains_it():
+    import gi
+    gi.require_version("Gtk", "3.0")
+    from gi.repository import Gtk
+    from tuxtalk import help_dialog
+    dialog = help_dialog.show_help_dialog(tab="labs")
+    try:
+        def walk(w):
+            yield w
+            if isinstance(w, Gtk.Container):
+                for c in w.get_children():
+                    yield from walk(c)
+        notebook = next(w for w in walk(dialog) if isinstance(w, Gtk.Notebook))
+        page = notebook.get_nth_page(notebook.get_current_page())
+        text = " ".join(w.get_text() for w in walk(page) if isinstance(w, Gtk.Label))
+        assert "Indicator Follows Your Window" in text
+    finally:
+        dialog.destroy()

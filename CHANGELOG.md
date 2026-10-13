@@ -40,6 +40,11 @@ Also new in this one:
 - TuxTalk Labs, a new spot at the bottom of Preferences, Advanced, for
   features that work but are still being worked on. There's a Labs page in
   Help that explains them, and a link to tell me how they're working for you.
+- Also in Labs: the recording indicator can follow the window you're
+  dictating into, showing up near the bottom of it wherever it is on the
+  screen. And when voice editing can't do something, like when nothing's
+  selected, the message now pops up right over the window you're working in
+  instead of only down in the corner where it's easy to miss.
 - Voice editing, the first thing in Labs. Select some text, hold Shift+F8 and say how to change it,
   like "make this more formal", "shorten this" or "turn this into a bullet
   list". Say it however you want, there's no fixed wording. The text gets

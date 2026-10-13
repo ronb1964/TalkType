@@ -43,24 +43,38 @@ def parse_reported(text):
         return None
 
 
-def to_screen_point(rect, output, output_rect, monitors):
-    """The middle of *rect* (compositor coordinates) where GDK draws it.
+def _mapper(output, output_rect, monitors):
+    """A function taking a compositor point to where GDK draws it.
 
-    *monitors* is [(name, Rect)] as GDK sees them. The point keeps its offset
+    *monitors* is [(name, Rect)] as GDK sees them. A point keeps its offset
     within its monitor, scaled from the compositor's size of that monitor to
     GDK's. Without a matching name a single monitor is still used; with
     several, or no monitor size at all, coordinates are taken as they are."""
-    cx, cy = rect.x + rect.w / 2, rect.y + rect.h / 2
+    one_to_one = lambda x, y: (round(x), round(y))
     if output_rect is None or output_rect.w <= 0 or output_rect.h <= 0:
-        return round(cx), round(cy)
+        return one_to_one
     match = [m for name, m in monitors if output and name == output]
     if not match and len(monitors) == 1:
         match = [monitors[0][1]]
     if not match:
-        return round(cx), round(cy)
+        return one_to_one
     mon = match[0]
     sx, sy = mon.w / output_rect.w, mon.h / output_rect.h
-    return round(mon.x + (cx - output_rect.x) * sx), round(mon.y + (cy - output_rect.y) * sy)
+    return lambda x, y: (round(mon.x + (x - output_rect.x) * sx),
+                         round(mon.y + (y - output_rect.y) * sy))
+
+
+def to_screen_point(rect, output, output_rect, monitors):
+    """The middle of *rect* (compositor coordinates) where GDK draws it."""
+    return _mapper(output, output_rect, monitors)(rect.x + rect.w / 2, rect.y + rect.h / 2)
+
+
+def to_screen_rect(rect, output, output_rect, monitors):
+    """*rect* (compositor coordinates) where GDK draws it."""
+    to_screen = _mapper(output, output_rect, monitors)
+    x0, y0 = to_screen(rect.x, rect.y)
+    x1, y1 = to_screen(rect.x + rect.w, rect.y + rect.h)
+    return Rect(x0, y0, x1 - x0, y1 - y0)
 
 
 def screen_monitors():
@@ -114,19 +128,21 @@ def _x11_active_rect():
         return None
 
 
-def active_window_center():
-    """The middle of the active window where TuxTalk's own windows are drawn,
-    or None when nothing could say."""
+def active_window_rect():
+    """The active window's frame where TuxTalk's own windows are drawn, or
+    None when nothing could say."""
     from . import compositor_focus
     monitors = screen_monitors()
     reported = _reported()
     parsed = parse_reported(reported) if reported else None
     if parsed:
-        return to_screen_point(*parsed, monitors)
-    rect = compositor_focus.focused_rect()
-    if rect:
-        return to_screen_point(rect, "", None, monitors)
-    rect = _x11_active_rect()
-    if rect:
-        return to_screen_point(rect, "", None, monitors)
-    return None
+        return to_screen_rect(*parsed, monitors)
+    rect = compositor_focus.focused_rect() or _x11_active_rect()
+    return to_screen_rect(rect, "", None, monitors) if rect else None
+
+
+def active_window_center():
+    """The middle of the active window where TuxTalk's own windows are drawn,
+    or None when nothing could say."""
+    rect = active_window_rect()
+    return (round(rect.x + rect.w / 2), round(rect.y + rect.h / 2)) if rect else None
