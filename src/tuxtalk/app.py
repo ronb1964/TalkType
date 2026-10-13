@@ -3062,10 +3062,6 @@ def _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
         # side; without this every edit would say "select some text first".
         _edit_problem("needs_wayland", beeps_on)
         return
-    engine = _ai_engine
-    if engine is None:
-        _edit_problem("not_installed", beeps_on)
-        return
     focused_class = _query_focused_window_class()
     if is_terminal_class(focused_class):
         _edit_problem("terminal", beeps_on)
@@ -3083,9 +3079,6 @@ def _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
         return
     result = None
     try:
-        if len(selected) > ai_cleanup.MAX_EDIT_CHARS:
-            _edit_problem("too_long", beeps_on)
-            return
         instruction = _transcribe_audio(audio_f32, language)
         if not instruction:
             _edit_problem("no_instruction", beeps_on)
@@ -3124,9 +3117,18 @@ def _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
             else:
                 _edit_problem("shortcut_failed", beeps_on)
             return
+        # Deleting and formatting press keys only, so any length will do; a
+        # rewrite is typed back, and the AI's context holds only so much.
+        if len(selected) > ai_cleanup.MAX_EDIT_CHARS:
+            _edit_problem("too_long", beeps_on)
+            return
         result = voice_edit_rules.mechanical_edit(selected, instruction)
+        engine = _ai_engine
         if result is not None:
             logger.info("Voice edit done in code, without the AI")
+        elif engine is None:
+            _edit_problem("not_installed", beeps_on)
+            return
         elif not engine.is_ready():
             _edit_problem("not_ready", beeps_on)
             return

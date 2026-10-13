@@ -913,3 +913,28 @@ def test_indenting_one_line_counts_as_a_change(edit_env, monkeypatch, said, sele
     edit_env["selection"]["text"] = selected
     run_edit()
     assert edit_env["typed"] == [typed] and edit_env["notices"] == []
+
+
+# --- deleting and formatting need no AI ------------------------------------------------------
+
+def test_delete_and_exact_jobs_work_without_the_ai_downloaded(edit_env, keys_sent, monkeypatch):
+    """Every edit said "needs its AI" when the AI download was missing, even
+    the ones done with a key or in code."""
+    monkeypatch.setattr(app, "_ai_engine", None)
+    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "Delete this.")
+    run_edit()
+    assert keys_sent == [["111:1", "111:0"]] and edit_env["notices"] == []
+    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "Make this all caps.")
+    run_edit()
+    assert edit_env["typed"] == ["WE FINISHED THE ELECTRICAL TODAY."] and edit_env["notices"] == []
+
+
+def test_a_long_selection_can_still_be_deleted_or_made_bold(edit_env, keys_sent, monkeypatch):
+    edit_env["selection"]["text"] = "x " * 2000
+    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "Delete this.")
+    run_edit()
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "libreoffice-writer")
+    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "Make this bold.")
+    run_edit()
+    assert keys_sent == [["111:1", "111:0"], ["29:1", "48:1", "48:0", "29:0"]]
+    assert edit_env["notices"] == []
