@@ -556,6 +556,33 @@ class CorrectionEngine:
         any problem or before the engine is ready."""
         if not self._ready.is_set():
             return None
+        result = self._edit_once(text, instruction)
+        if (result is not None and _line_count(result) and _line_count(text) > 1
+                and _line_count(result) != _line_count(text)):
+            from .voice_edit_rules import keeps_lines
+            if keeps_lines(instruction):
+                # The model merged the lines, or dropped some (Ron's two lines
+                # came back as one). One line at a time it can't.
+                logger.info("Voice edit: the AI changed the lines; editing line by line")
+                return self._edit_by_line(text, instruction)
+        return result
+
+    def _edit_by_line(self, text: str, instruction: str):
+        """Each line edited on its own; blank lines and indentation kept. None
+        if any line fails: half an edit must never replace the selection."""
+        out = []
+        for line in text.split("\n"):
+            body = line.strip()
+            if not body:
+                out.append(line)
+                continue
+            edited = self._edit_once(body, instruction)
+            if edited is None:
+                return None
+            out.append(line[:len(line) - len(line.lstrip())] + " ".join(edited.split("\n")))
+        return "\n".join(out)
+
+    def _edit_once(self, text: str, instruction: str):
         messages = [{"role": "system", "content": EDIT_SYSTEM}]
         for before, instr, after in EDIT_EXAMPLES:
             messages += [{"role": "user", "content": _edit_request(before, instr)},
@@ -564,8 +591,14 @@ class CorrectionEngine:
         # Room for a rewrite longer than the text ("turn this into an email"),
         # and time for it on a processor.
         max_tokens = min(2000, len(text) // 2 + 400)
-        return self._post(messages, max_tokens, timeout=max(20.0, len(text) / 50),
-                          what="voice edit")
+        answer = self._post(messages, max_tokens, timeout=max(20.0, len(text) / 50),
+                            what="voice edit")
+        if answer is not None and answer.strip(" .").lower() in _NOT_AN_ANSWER:
+            # The model's way of saying it has nothing; "delete this" got
+            # "None." and that replaced Ron's text.
+            logger.info(f"Voice edit: the AI answered {answer!r}; not using it")
+            return None
+        return answer
 
     def _ask(self, sentence: str, timeout: float):
         messages = [{"role": "system", "content": _SYSTEM}]
@@ -672,3 +705,12 @@ def fix_self_corrections(text: str, engine: CorrectionEngine) -> str:
             rebuilt += seps[g[0] - 1] + chunk
         pieces[i] = rebuilt
     return "".join(pieces)
+
+
+def _line_count(text: str) -> int:
+    """Lines with something on them."""
+    return sum(1 for line in text.split("\n") if line.strip())
+
+
+# Answers that mean the model had nothing to give.
+_NOT_AN_ANSWER = {"", "none", "null", "n/a", "nothing", "empty"}

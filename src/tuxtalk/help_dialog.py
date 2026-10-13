@@ -432,8 +432,23 @@ Say it in your own words; there's no fixed list. Some that work well:
   • <b>turn this into a bullet list</b>  •  <b>make this a complete sentence</b>
   • <b>translate this to Spanish</b> (or another language)
 
+These are done exactly, without the AI, so they always come out right:
+  • <b>make this all caps</b>  •  <b>make this lowercase</b>  •  <b>capitalize each word</b>
+  • <b>remove the commas</b> (or periods, dashes, punctuation)  •  <b>remove the bullets</b>
+  • <b>remove the word ...</b> (a word or a few words, everywhere in the selection)
+  • <b>make this a bulleted list</b> or <b>a numbered list</b> (several lines: one point per line)
+  • <b>indent this</b>  •  <b>remove the indent</b>  •  <b>delete this</b>
+
+<b>Bold, italics and underline</b>
+Say <b>make this bold</b>, <b>italicize this</b> or <b>underline this</b> in LibreOffice and
+other word processors, and TuxTalk presses the app's own Ctrl+B, Ctrl+I or Ctrl+U for you.
+Plain-text apps like KWrite and Kate have no formatting to apply. Font, size and color
+can't be changed by voice.
+
 <b>What it's good at, and what it isn't</b>
   • Quick, clear changes to your own text work best: tone, length, grammar, lists.
+  • Several lines stay several lines. If the AI runs them together when you didn't
+    ask for that, TuxTalk does the edit again one line at a time.
   • It's a small AI that runs on your computer, not a big online one. Asked for
     something large, like "write a whole email from this one line", it can make
     up details. Always read the result.

@@ -729,3 +729,121 @@ def test_voice_editing_is_no_longer_in_dictation_cleanup():
     prefs = (SRC / "prefs.py").read_text()
     cleanup = prefs[prefs.index("Dictation Cleanup"):prefs.index("# ===== PRIVACY SECTION =====")]
     assert "voice_editing_check" not in cleanup
+
+
+# --- lines the AI must not lose (Ron, 2026-10-12) ---------------------------------------
+
+def scripted_engine(engine, monkeypatch, answers):
+    """The engine's AI answers, in turn, with *answers*."""
+    replies = iter(answers)
+
+    def urlopen(request, timeout):
+        engine.sent.append((json.loads(request.data), timeout))
+        return Reply(next(replies))
+    monkeypatch.setattr(ai_cleanup.urllib.request, "urlopen", urlopen)
+
+
+def test_merged_lines_are_edited_again_line_by_line(engine, monkeypatch):
+    """Two selected lines came back as one ("Testing one, two, three, four!
+    Testing one, two, three!"), and for some edits the second line was lost."""
+    scripted_engine(engine, monkeypatch, ["Testing one, two, three, four!",
+                                          "Testing one, two, three, four!", "Testing one, two, three!"])
+    out = engine.edit("Testing one, two, three, four.\n\n  Testing one, two, three.", "add an exclamation point")
+    assert out == "Testing one, two, three, four!\n\n  Testing one, two, three!"
+    asked = [body["messages"][-1]["content"].split("\n")[1] for body, _ in engine.sent]
+    assert asked == ["Testing one, two, three, four.", "Testing one, two, three, four.",
+                     "Testing one, two, three."]
+
+
+def test_a_list_or_a_shorter_text_may_change_the_lines(engine, monkeypatch):
+    scripted_engine(engine, monkeypatch, ["Buy plywood and call George."])
+    assert engine.edit("Buy plywood.\nCall George.", "join these into one sentence") == "Buy plywood and call George."
+    assert len(engine.sent) == 1
+
+
+def test_a_failed_line_fails_the_whole_edit(engine, monkeypatch):
+    replies = iter(["merged", "first!"])
+
+    def urlopen(request, timeout):
+        try:
+            return Reply(next(replies))
+        except StopIteration:
+            raise OSError("server gone")
+    monkeypatch.setattr(ai_cleanup.urllib.request, "urlopen", urlopen)
+    assert engine.edit("first\nsecond", "add an exclamation point") is None
+
+
+# --- done without the AI, and formatting --------------------------------------------------
+
+def test_exact_jobs_are_done_in_code_even_before_the_ai_is_ready(edit_env, monkeypatch):
+    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "Make this all caps.")
+    edit_env["selection"]["text"] = "Testing one.\nTesting two."
+    edit_env["engine"].ready = False
+    run_edit()
+    assert edit_env["engine"].asked == []
+    assert edit_env["typed"] == ["TESTING ONE.\nTESTING TWO."]
+
+
+@pytest.fixture
+def keys_sent(edit_env, monkeypatch):
+    sent = []
+    monkeypatch.setattr(app, "_ydotool_key", lambda keys, what="": sent.append(list(keys)) or True)
+    monkeypatch.setattr("tuxtalk.keyboard_layout.active_layout", lambda: ("us", ""))
+    return sent
+
+
+def test_bold_in_a_word_processor_is_its_shortcut(edit_env, keys_sent, monkeypatch):
+    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "Make this bold and italic.")
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "libreoffice-writer")
+    run_edit()
+    assert keys_sent == [["29:1", "48:1", "48:0", "29:0"], ["29:1", "23:1", "23:0", "29:0"]]
+    assert edit_env["typed"] == [] and edit_env["notices"] == [] and edit_env["engine"].asked == []
+    assert edit_env["beeps"] == [app.READY_BEEP] and edit_env["put_back"] == 1
+
+
+def test_bold_in_a_plain_text_app_says_where_it_works(edit_env, keys_sent, monkeypatch):
+    """KWrite has no bold; its Ctrl+B sets a bookmark."""
+    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "Make this bold.")
+    run_edit()
+    assert keys_sent == [] and edit_env["typed"] == [] and edit_env["engine"].asked == []
+    assert "LibreOffice" in edit_env["notices"][0]
+
+
+def test_font_size_says_it_cant(edit_env, keys_sent, monkeypatch):
+    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "Make this text larger.")
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "libreoffice-writer")
+    run_edit()
+    assert keys_sent == [] and edit_env["typed"] == []
+    assert "font, size or color" in edit_env["notices"][0]
+
+
+@pytest.mark.parametrize("answer", ["None.", "none", "  ", "N/A", "null"])
+def test_a_none_answer_is_no_answer(engine, monkeypatch, answer):
+    """"Delete this" got "None." from the AI, once per line (Ron, 2026-10-12)."""
+    scripted_engine(engine, monkeypatch, [answer, "x", "x"])
+    assert engine.edit("Testing one.\nTesting two.", "make it nicer") is None
+    assert len(engine.sent) == 1
+
+
+def test_delete_this_presses_delete(edit_env, keys_sent, monkeypatch):
+    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "Delete this.")
+    run_edit()
+    assert keys_sent == [["111:1", "111:0"]]
+    assert edit_env["typed"] == [] and edit_env["engine"].asked == [] and edit_env["notices"] == []
+
+
+def test_an_ai_answer_that_only_changes_spacing_is_no_change(edit_env, monkeypatch):
+    """"Select all" went to the AI, which trimmed the line ends and pasted
+    that back (Ron, 2026-10-12)."""
+    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "Select all.")
+    edit_env["selection"]["text"] = "Testing one. \nTesting two. "
+    edit_env["engine"].answer = "Testing one.\nTesting two."
+    run_edit()
+    assert edit_env["typed"] == [] and "didn't come up with a change" in edit_env["notices"][0]
+
+
+def test_indenting_still_counts_as_a_change(edit_env, monkeypatch):
+    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "Indent this.")
+    edit_env["selection"]["text"] = "One\nTwo"
+    run_edit()
+    assert edit_env["typed"] == ["    One\n    Two"]

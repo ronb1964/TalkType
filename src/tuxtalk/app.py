@@ -2858,6 +2858,11 @@ _EDIT_NOTICES = {
                 "replace.",
     "window_changed": "You switched windows while the AI was working, so the rewrite "
                       "wasn't typed. It's in Recent Dictations in the TuxTalk menu.",
+    "no_shortcuts": "Bold, italics and underline work in LibreOffice and other word "
+                    "processors. This app has no formatting TuxTalk can use.",
+    "cant_format": "Voice editing changes the words. It can't change the font, size or color.",
+    "shortcut_failed": "TuxTalk couldn't press the keys for that. Try doing it from the "
+                       "keyboard yourself.",
 }
 
 
@@ -2873,6 +2878,9 @@ _EDIT_LABELS = {
     "no_answer": "No change, try other words",
     "terminal": "Can't edit in a terminal",
     "window_changed": "Window changed, see Recent Dictations",
+    "no_shortcuts": "No bold or italics in this app",
+    "cant_format": "Can't change font, size or color",
+    "shortcut_failed": "Couldn't press the keys",
 }
 
 
@@ -2900,11 +2908,23 @@ def _send_copy_keystroke() -> bool:
     return _ydotool_key(["29:1", "46:1", "46:0", "29:0"], what="copy")
 
 
+_FORMAT_LETTERS = {"bold": "b", "italic": "i", "underline": "u"}
+
+
+def _send_format_shortcut(kind: str) -> bool:
+    """Ctrl+B, Ctrl+I or Ctrl+U, on the key that is that letter on the user's
+    keyboard layout. Sent only to word processors (voice_edit_rules)."""
+    from .keyboard_layout import shortcut_keycode
+    key = shortcut_keycode(_FORMAT_LETTERS[kind])
+    # KEY_LEFTCTRL=29
+    return _ydotool_key(["29:1", f"{key}:1", f"{key}:0", "29:0"], what=kind)
+
+
 def _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
     """Voice editing: the recording is an instruction ("make this more formal")
     for the text selected in the focused app, which the AI rewrites and the
     rewrite replaces. Ctrl+Z in the app undoes it."""
-    from . import ai_cleanup, clipboard, history
+    from . import ai_cleanup, clipboard, history, voice_edit_rules
     from .silence import is_speechless_tap
     t0 = time.time()
     pcm_int16 = np.frombuffer(b''.join(frames), dtype=np.int16)
@@ -2940,11 +2960,44 @@ def _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
         if not instruction:
             _edit_problem("no_instruction", beeps_on)
             return
-        if not engine.is_ready():
+        logger.info(f"Voice edit: {_loggable(instruction)} ({len(selected)} characters)")
+        # Deleting, formatting and exact jobs need no AI (voice_edit_rules.py).
+        if voice_edit_rules.is_delete(instruction):
+            # KEY_DELETE=111: the selection is still selected.
+            if _ydotool_key(["111:1", "111:0"], what="delete"):
+                logger.info("Voice edit: deleted the selection")
+                _beep(beeps_on, *READY_BEEP)
+            else:
+                _edit_problem("shortcut_failed", beeps_on)
+            return
+        fmt = voice_edit_rules.formatting(instruction)
+        if fmt == voice_edit_rules.CANT_FORMAT:
+            _edit_problem("cant_format", beeps_on)
+            return
+        if fmt:
+            if not voice_edit_rules.has_formatting_shortcuts(focused_class):
+                logger.info(f"Voice edit: no formatting shortcuts in {focused_class!r}")
+                _edit_problem("no_shortcuts", beeps_on)
+                return
+            # The selection is still selected, so the app's shortcut formats it.
+            if all(_send_format_shortcut(kind) for kind in fmt):
+                logger.info(f"Voice edit: {', '.join(fmt)} with the app's shortcut ({focused_class})")
+                _beep(beeps_on, *READY_BEEP)
+            else:
+                _edit_problem("shortcut_failed", beeps_on)
+            return
+        result = voice_edit_rules.mechanical_edit(selected, instruction)
+        if result is not None:
+            logger.info("Voice edit done in code, without the AI")
+        elif not engine.is_ready():
             _edit_problem("not_ready", beeps_on)
             return
-        logger.info(f"Voice edit: {_loggable(instruction)} ({len(selected)} characters)")
-        result = engine.edit(selected, instruction)
+        else:
+            result = engine.edit(selected, instruction)
+            if result and result.split() == selected.split():
+                # Only spacing changed ("select all" got the line ends
+                # trimmed): not an edit anyone asked for.
+                result = None
         if not result or result.strip() == selected.strip():
             _edit_problem("no_answer", beeps_on)
             return

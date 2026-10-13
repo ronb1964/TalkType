@@ -53,6 +53,13 @@ Also new in this one:
   download. It's off unless you turn it on in TuxTalk Labs. Heads up,
   it's a small model: quick changes come out well, but ask it to write a whole
   email from one line and it'll make stuff up.
+  Some jobs skip the AI completely because it's bad at them. All caps,
+  lowercase, taking out the commas or a word, removing bullets, that's all done
+  exactly in code, and so are indenting, "delete this" and turning a few
+  lines into a bulleted or numbered list. Bold, italics and underline work in word processors like
+  LibreOffice, where TuxTalk just presses Ctrl+B or whatever for you. KWrite has
+  no bold at all, so there it tells you so. And select a few lines and you get
+  a few lines back, the AI doesn't get to squash them into one.
 - Ctrl+Alt+P types your last dictation again, wherever your cursor is. Handy
   when a dictation lands in the wrong window because something stole the
   focus. You can change the key or turn it off in Preferences, General.

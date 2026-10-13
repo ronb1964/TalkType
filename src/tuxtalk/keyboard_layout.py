@@ -419,6 +419,27 @@ def layout_key_events(text):
     return tokens
 
 
+# Where the letters sit on a US keyboard (evdev key codes).
+_US_LETTER_KEYS = {"b": 48, "c": 46, "i": 23, "u": 22, "v": 47}
+
+
+def shortcut_keycode(letter):
+    """The key that is *letter* on the active layout, for a Ctrl shortcut.
+
+    On Dvorak the US B key types X, so Ctrl+B sent there would cut the
+    selection. A layout without Latin letters (Russian) gets the US key, which
+    is the key apps match their shortcuts on there."""
+    layout = active_layout()
+    if layout:
+        try:
+            entry = planner_for(layout)._keys.get(_lib().xkb_utf32_to_keysym(ord(letter)))
+            if entry and not entry[1] and not entry[2]:     # no Shift, no AltGr
+                return entry[0]
+        except Exception as e:
+            logger.debug(f"Could not find {letter!r} on the {layout} layout: {e}")
+    return _US_LETTER_KEYS[letter]
+
+
 class UntypableText(Exception):
     """Some character can't be typed on the active layout.
     args: ((layout, variant), the first character that can't be typed)."""
