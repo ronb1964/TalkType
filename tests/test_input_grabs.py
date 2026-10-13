@@ -592,7 +592,7 @@ def test_dropping_a_device_mid_hold_ends_the_recording(key_env):
     press_hold(devices)
     assert app.state.is_recording
 
-    app._drop_dead_devices([kb1], devices, "hold", FakeConfig())
+    app._drop_dead_devices([kb1], devices, FakeConfig())
 
     assert app.state.is_recording is False, "recording could never be ended"
     assert stopped, "stop_recording was not called"
@@ -606,7 +606,7 @@ def test_dropping_a_device_releases_every_other_keyboard(key_env):
     press_hold(devices)
     assert kb2.is_grabbed
 
-    app._drop_dead_devices([kb1], devices, "hold", FakeConfig())
+    app._drop_dead_devices([kb1], devices, FakeConfig())
 
     assert not kb2.is_grabbed, "other keyboards left grabbed — user cannot type"
     assert app._grabbed_devices == []
@@ -618,10 +618,49 @@ def test_dropping_a_device_while_idle_just_removes_it(key_env):
     kb1, kb2 = keyboard("dies"), keyboard("survives")
     devices = [kb1, kb2]
 
-    app._drop_dead_devices([kb1], devices, "hold", FakeConfig())
+    app._drop_dead_devices([kb1], devices, FakeConfig())
 
     assert devices == [kb2]
     assert not stopped, "stopped a recording that was never running"
+
+
+class ToggleModeConfig(FakeConfig):
+    mode = "toggle"
+
+
+def test_dropping_a_device_mid_hold_ends_the_recording_in_toggle_mode(key_env):
+    """The hold key records whatever the mode setting says (old configs still
+    carry mode = "toggle"), but the recovery only ran when it said "hold".
+    The key-up never came, and the other keyboards stayed grabbed."""
+    started, stopped = key_env
+    kb1, kb2 = keyboard("dies"), keyboard("survives")
+    devices = [kb1, kb2]
+    app._handle_key_event(FakeEvent(HOLD, 1), "toggle", HOLD, TOGGLE,
+                          None, set(), devices, ToggleModeConfig(), 0)
+    assert app.state.is_recording and kb2.is_grabbed
+
+    app._drop_dead_devices([kb1], devices, ToggleModeConfig())
+
+    assert app.state.is_recording is False
+    assert stopped
+    assert not kb2.is_grabbed, "other keyboards left grabbed — user cannot type"
+
+
+def test_a_toggle_recording_survives_an_unrelated_keyboard_dropping_out(key_env):
+    """A tap-to-toggle recording holds no grab, and any keyboard can stop it,
+    so a keyboard blip must not end someone's hands-free dictation."""
+    started, stopped = key_env
+    kb1, kb2 = keyboard("dies"), keyboard("survives")
+    devices = [kb1, kb2]
+    app._handle_key_event(FakeEvent(TOGGLE, 1), "hold", HOLD, TOGGLE,
+                          None, set(), devices, FakeConfig(), 0)
+    assert app.state.is_recording
+
+    app._drop_dead_devices([kb1], devices, FakeConfig())
+
+    assert app.state.is_recording is True
+    assert not stopped
+    assert devices == [kb2]
 
 
 def test_focused_window_query_is_time_bounded(tray_proxy):

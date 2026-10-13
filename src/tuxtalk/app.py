@@ -1432,12 +1432,13 @@ def _input_access_diagnosis() -> str:
     )
 
 
-def _drop_dead_devices(dead_devices, devices, mode, cfg) -> None:
+def _drop_dead_devices(dead_devices, devices, cfg) -> None:
     """Remove input devices that failed mid-read, ending a recording we could
     no longer end any other way.
 
-    In hold mode the key-up that stops recording can only come from the device
-    the key was pressed on. If that device dies — a wireless receiver blip, a
+    A hold-key recording (the only kind that keeps the keyboards grabbed) is
+    stopped by a key-up that can only come from the device the key was
+    pressed on. If that device dies — a wireless receiver blip, a
     USB reset, a resume from suspend — the release event is unreachable and
     state.is_recording would stay True for the life of the process.
 
@@ -1454,7 +1455,10 @@ def _drop_dead_devices(dead_devices, devices, mode, cfg) -> None:
         if dev in devices:
             devices.remove(dev)
 
-    if state.is_recording and mode == "hold":
+    # The hold key works whatever the configured mode, so the grabs, not the
+    # mode, tell a hold recording apart. A toggle or hands-free recording
+    # holds no grab and carries on: any keyboard can still stop it.
+    if state.is_recording and _grabbed_devices:
         logger.warning(
             "Input device died while the hold hotkey was down — ending the "
             "recording, since its key-up can no longer arrive"
@@ -3501,8 +3505,9 @@ def _loop_evdev(cfg: Settings, input_device_idx):
     print(f"Session: {session} | Wayland={session=='wayland'}")
     logger.info(f"Session type: {session}, Wayland: {session=='wayland'}")
     mode = cfg.mode.lower().strip()
-    print(f"Mode: {mode} | Hold key: {cfg.hotkey}" + (f" | Toggle key: {cfg.toggle_hotkey}" if mode=='toggle' else ""))
-    logger.info(f"Input mode: {mode}, Hold key: {cfg.hotkey}, Toggle key: {cfg.toggle_hotkey if mode=='toggle' else 'N/A'}")
+    # Both hotkeys work whatever the mode setting says.
+    print(f"Hold key: {cfg.hotkey} | Toggle key: {cfg.toggle_hotkey or 'none'}")
+    logger.info(f"Hold key: {cfg.hotkey}, Toggle key: {cfg.toggle_hotkey or 'none'}")
 
     # Auto-timeout setup
     svc = _ServiceState(cfg, input_device_idx)
@@ -3650,7 +3655,7 @@ def _loop_evdev(cfg: Settings, input_device_idx):
                 # turned a microphone error into an unexplained keyboard lockup.
                 logger.error(f"Error handling input event: {e}", exc_info=True)
 
-        _drop_dead_devices(dead_devices, devices, mode, cfg)
+        _drop_dead_devices(dead_devices, devices, cfg)
 
         # Pick up keyboards that have (re)appeared. Only while idle: rescanning
         # mid-recording would add an ungrabbed device to a grabbed set, letting
