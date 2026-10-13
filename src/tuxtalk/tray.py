@@ -85,8 +85,10 @@ def _acquire_tray_singleton():
     """
     lockfile_path = os.path.join(_runtime_dir(), "talktype-tray.lock")
     try:
-        # Open lock file (create if doesn't exist)
-        lockfile = open(lockfile_path, "w")
+        # Opened without truncating: the running instance's PID stays in the
+        # file until this process actually holds the lock.
+        fd = os.open(lockfile_path, os.O_RDWR | os.O_CREAT, 0o600)
+        lockfile = os.fdopen(fd, "r+")
 
         # Mark the lock FD close-on-exec. The updater's "Restart Now" restarts
         # in place with os.execv, which keeps FDs open by default — so without
@@ -98,10 +100,17 @@ def _acquire_tray_singleton():
 
         # Try to acquire exclusive lock (non-blocking)
         # LOCK_EX = exclusive lock, LOCK_NB = non-blocking
-        fcntl.flock(lockfile.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        try:
+            fcntl.flock(lockfile.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            # Only this error means another tray holds the lock. Anything else
+            # (an unwritable runtime folder) is not "already running".
+            print("Another tray instance is already running. Exiting.", file=sys.stderr)
+            sys.exit(0)
 
         # If we got here, we acquired the lock successfully
         # Write our PID for informational purposes
+        lockfile.truncate(0)
         lockfile.write(str(os.getpid()))
         lockfile.flush()
 
@@ -113,11 +122,8 @@ def _acquire_tray_singleton():
 
         logger.debug(f"Acquired tray singleton lock: {lockfile_path}")
 
-    except IOError:
-        # Lock is already held by another process
-        print("Another tray instance is already running. Exiting.", file=sys.stderr)
-        sys.exit(0)
-    except Exception as e:
+    except OSError as e:
+        logger.warning(f"Could not acquire tray singleton lock at {lockfile_path}: {e}")
         print(f"Warning: could not acquire tray singleton lock: {e}", file=sys.stderr)
 
 # Global to keep lock file open
