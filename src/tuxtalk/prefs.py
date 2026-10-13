@@ -102,6 +102,28 @@ def _pulse_source_for_mic(mic, sources):
     return None
 
 
+# What the GNOME extension adds, shared by the install and success dialogs so
+# the two can't promise different things.
+EXTENSION_FEATURES = (
+    "  • A panel icon that shows when you're dictating\n"
+    "  • Start or stop dictation, Recent Dictations and Fix a Word\n"
+    "  • Performance presets and Preferences\n"
+    "  • The recording indicator where you put it, on Wayland too"
+)
+
+
+def extension_reload_steps():
+    """How to make GNOME Shell load (or drop) the extension in this session.
+
+    Alt+F2 r restarts the shell only in an X11 session; GNOME on Wayland has
+    no shell restart, and GNOME 50 has no X11 session at all.
+    """
+    steps = "Log out and log back in."
+    if os.environ.get("XDG_SESSION_TYPE") == "x11":
+        steps += "\nOn X11 you can instead press Alt+F2, type r and press Enter."
+    return steps
+
+
 # Single instance management (see prefs_ipc.py)
 from . import prefs_ipc
 _PREFS_PIDFILE = prefs_ipc.pidfile_path()
@@ -2060,7 +2082,7 @@ class PreferencesWindow:
         self.install_extension_button.connect("clicked", self._on_install_extension_clicked)
         self.install_extension_button.get_child().set_xalign(0.5)
         self.install_extension_button.set_tooltip_text(
-            "Download and install GNOME Shell extension (~3KB)\n"
+            "Download and install the GNOME Shell extension\n"
             "Adds panel indicator, service controls, and enables recording indicator positioning on Wayland"
         )
         self.install_extension_button.set_sensitive(False)
@@ -4854,7 +4876,7 @@ class PreferencesWindow:
                 self.extension_status_label.set_markup('<span color="#9E9E9E">⊘ Not available (requires GNOME desktop)</span>')
                 self.install_extension_button.set_sensitive(False)
                 self.uninstall_extension_button.set_sensitive(False)
-                # Its dialog tells the user to press Alt+F2 and type 'r', which
+                # Its dialog explains how to reload GNOME Shell, which
                 # is meaningless off GNOME — on KDE or any other desktop it is
                 # advice for software that isn't running.
                 self._set_restart_info_sensitive(False)
@@ -4912,13 +4934,8 @@ class PreferencesWindow:
         dialog.format_secondary_markup(
             "<b>TuxTalk GNOME Shell Extension</b>\n\n"
             "✨ <b>Features:</b>\n"
-            "  • Panel indicator with recording status\n"
-            "  • Active model and device display (read-only)\n"
-            "  • Enables custom recording indicator positioning on Wayland\n"
-            "  • Native GNOME integration with service controls\n\n"
-            "📦 <b>Size:</b> ~3KB\n\n"
-            "⚠️  <b>Note:</b> You'll need to restart GNOME Shell after installation:\n"
-            "    Press Alt+F2, type 'r', press Enter\n\n"
+            f"{EXTENSION_FEATURES}\n\n"
+            "⚠️  <b>Note:</b> it starts working after you log out and back in.\n\n"
             "Install now?"
         )
 
@@ -4987,15 +5004,11 @@ class PreferencesWindow:
                         )
                         success_dialog.format_secondary_markup(
                             "<b>Next Steps:</b>\n\n"
-                            "1. Restart GNOME Shell to activate the extension:\n"
-                            "   • Press <b>Alt+F2</b>\n"
-                            "   • Type <b>r</b> and press <b>Enter</b>\n"
-                            "   • OR log out and log back in\n\n"
+                            "1. To activate the extension: "
+                            f"{GLib.markup_escape_text(extension_reload_steps())}\n\n"
                             "2. The TuxTalk icon will appear in your top panel\n\n"
-                            "3. Click the icon to:\n"
-                            "   • Start/stop dictation service\n"
-                            "   • Switch Whisper models\n"
-                            "   • Access preferences"
+                            "3. The icon gives you:\n"
+                            f"{EXTENSION_FEATURES}"
                         )
                         success_dialog.run()
                         success_dialog.destroy()
@@ -5065,8 +5078,7 @@ class PreferencesWindow:
                 )
                 info.format_secondary_text(
                     "The GNOME extension has been removed.\n\n"
-                    "Restart GNOME Shell to complete:\n"
-                    "  Press Alt+F2, type 'r', press Enter"
+                    "To finish: " + extension_reload_steps()
                 )
                 info.run()
                 info.destroy()
@@ -5094,14 +5106,7 @@ class PreferencesWindow:
         )
         dialog.format_secondary_markup(
             "<b>To activate or update the extension:</b>\n\n"
-            "<b>Method 1: Quick Restart (Recommended)</b>\n"
-            "1. Press <b>Alt+F2</b>\n"
-            "2. Type <b>r</b> and press <b>Enter</b>\n"
-            "3. GNOME Shell will restart immediately\n\n"
-            "<b>Method 2: Log Out</b>\n"
-            "1. Log out of your session\n"
-            "2. Log back in\n\n"
-            "⚠️  <b>Note:</b> Wayland sessions require Method 2"
+            + GLib.markup_escape_text(extension_reload_steps())
         )
         dialog.run()
         dialog.destroy()
