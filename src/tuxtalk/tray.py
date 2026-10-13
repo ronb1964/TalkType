@@ -2090,6 +2090,14 @@ def main():
     # Schedule update notification check after tray is up
     GLib.timeout_add(500, check_and_show_update_notification)
 
+    # A first-run hotkey test that was killed mid-way leaves GNOME's Alt+F8 and
+    # Alt+F7 cleared; put them back.
+    try:
+        from .gnome_keybindings import restore_left_over
+        restore_left_over()
+    except Exception as e:
+        logger.debug(f"Could not check GNOME keybindings: {e}")
+
     # Check for first run and show welcome dialog if applicable
     try:
         import tuxtalk.cuda_helper as cuda_helper

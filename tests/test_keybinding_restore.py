@@ -1,66 +1,111 @@
 """GNOME's Alt+F8 / Alt+F7 must always come back.
 
-The hotkey-test dialog disables org.gnome.desktop.wm.keybindings begin-resize
-and begin-move so they don't fight the key capture, then restores them after
-dialog.run(). Everything in between was unprotected: any exception — building
-the dialog, starting a thread, the X server hiccuping — skipped the restore
-and left the user's window keybindings disabled permanently, as a persisted
-gsettings value that survives reboots, with nothing pointing at TalkType.
+The hotkey-test dialog clears org.gnome.desktop.wm.keybindings begin-resize
+and begin-move while it is open. gsettings keeps whatever is written across
+reboots, so an exception, a crash, a kill or a logout before the restore left
+the user's window keybindings disabled for good, with nothing pointing at
+TuxTalk. The originals now go to a backup file first, and the next start puts
+them back if the restore never happened.
 """
 
 import ast
+import json
 import pathlib
 
-from tuxtalk import welcome_dialog as W
+import pytest
+
+from tuxtalk import gnome_keybindings as G
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tuxtalk"
 
 
-def test_restore_sets_both_bindings_back(monkeypatch):
-    calls = []
-    monkeypatch.setattr(W.subprocess, "run", lambda cmd, **k: calls.append(cmd))
+class FakeGsettings:
+    """Stands in for the gsettings command line."""
 
-    W._restore_gnome_keybindings("['<Alt>F8']", "['<Alt>F7']")
+    def __init__(self, values, fail_keys=()):
+        self.values = dict(values)
+        self.fail_keys = set(fail_keys)
+        self.sets = []
 
-    joined = [" ".join(c) for c in calls]
-    assert any("begin-resize ['<Alt>F8']" in c for c in joined)
-    assert any("begin-move ['<Alt>F7']" in c for c in joined)
-
-
-def test_restore_skips_values_that_were_never_captured(monkeypatch):
-    """None means we never successfully read the old value — writing a
-    guess would be worse than leaving it."""
-    calls = []
-    monkeypatch.setattr(W.subprocess, "run", lambda cmd, **k: calls.append(cmd))
-
-    W._restore_gnome_keybindings(None, None)
-
-    assert calls == []
-
-
-def test_restore_survives_gsettings_failing(monkeypatch):
-    """Called from a finally block — it must never raise on the way out."""
-    def boom(cmd, **k):
-        raise OSError("gsettings not found")
-
-    monkeypatch.setattr(W.subprocess, "run", boom)
-
-    W._restore_gnome_keybindings("['<Alt>F8']", "['<Alt>F7']")   # must not raise
-
-
-def test_restore_still_tries_the_second_binding_if_the_first_fails(monkeypatch):
-    seen = []
-
-    def flaky(cmd, **k):
-        seen.append(cmd)
-        if "begin-resize" in cmd:
+    def run(self, cmd, **kwargs):
+        _, action, schema, key, value = cmd
+        assert action == "set" and schema == G.SCHEMA
+        self.sets.append((key, value))
+        if key in self.fail_keys:
             raise OSError("transient")
+        self.values[key] = value
+        return type("R", (), {"returncode": 0})()
 
-    monkeypatch.setattr(W.subprocess, "run", flaky)
+    def check_output(self, cmd, **kwargs):
+        _, action, schema, key = cmd
+        assert action == "get"
+        return self.values[key] + "\n"
 
-    W._restore_gnome_keybindings("['<Alt>F8']", "['<Alt>F7']")
 
-    assert any("begin-move" in c for c in seen), "gave up after the first failure"
+@pytest.fixture
+def gnome(monkeypatch, tmp_path):
+    fake = FakeGsettings({"begin-resize": "['<Alt>F8']", "begin-move": "['<Alt>F7']"})
+    monkeypatch.setattr(G.subprocess, "run", fake.run)
+    monkeypatch.setattr(G.subprocess, "check_output", fake.check_output)
+    monkeypatch.setattr(G, "_backup_path", lambda: str(tmp_path / G.BACKUP_NAME))
+    monkeypatch.setenv("XDG_CURRENT_DESKTOP", "GNOME")
+    fake.backup = tmp_path / G.BACKUP_NAME
+    return fake
+
+
+def test_the_originals_are_saved_before_they_are_cleared(gnome):
+    saved = G.disable_for_hotkey_test()
+    assert saved == {"begin-resize": "['<Alt>F8']", "begin-move": "['<Alt>F7']"}
+    assert json.loads(gnome.backup.read_text()) == saved
+    assert gnome.values == {"begin-resize": "[]", "begin-move": "[]"}
+
+
+def test_restore_puts_both_back_and_removes_the_backup(gnome):
+    saved = G.disable_for_hotkey_test()
+    G.restore(saved)
+    assert gnome.values == {"begin-resize": "['<Alt>F8']", "begin-move": "['<Alt>F7']"}
+    assert not gnome.backup.exists()
+
+
+def test_a_killed_test_is_repaired_at_the_next_start(gnome):
+    G.disable_for_hotkey_test()          # ...and the process dies here
+    G.restore_left_over()
+    assert gnome.values == {"begin-resize": "['<Alt>F8']", "begin-move": "['<Alt>F7']"}
+    assert not gnome.backup.exists()
+
+
+def test_a_second_test_after_a_crash_keeps_the_real_values(gnome):
+    """Reading the bindings again would only find the cleared ones."""
+    G.disable_for_hotkey_test()          # crash, then onboarding runs again
+    saved = G.disable_for_hotkey_test()
+    assert saved["begin-resize"] == "['<Alt>F8']"
+
+
+def test_restore_still_tries_the_second_binding_if_the_first_fails(gnome):
+    saved = G.disable_for_hotkey_test()
+    gnome.fail_keys = {"begin-resize"}
+    G.restore(saved)                     # must not raise
+    assert gnome.values["begin-move"] == "['<Alt>F7']"
+    assert gnome.backup.exists()         # retried at the next start
+
+
+def test_restore_skips_values_that_were_never_captured(gnome):
+    G.restore(None)
+    assert gnome.sets == []
+
+
+def test_other_desktops_are_left_alone(gnome, monkeypatch):
+    monkeypatch.setenv("XDG_CURRENT_DESKTOP", "KDE")
+    assert G.disable_for_hotkey_test() is None
+    assert gnome.sets == [] and not gnome.backup.exists()
+
+
+def test_nothing_is_cleared_when_the_backup_cannot_be_written(gnome, monkeypatch, tmp_path):
+    blocker = tmp_path / "file"
+    blocker.write_text("")
+    monkeypatch.setattr(G, "_backup_path", lambda: str(blocker / G.BACKUP_NAME))
+    assert G.disable_for_hotkey_test() is None
+    assert gnome.sets == []
 
 
 def test_the_restore_runs_from_a_finally_block():
@@ -73,10 +118,15 @@ def test_the_restore_runs_from_a_finally_block():
             for stmt in node.finalbody:
                 for sub in ast.walk(stmt):
                     if (isinstance(sub, ast.Call)
-                            and getattr(sub.func, "id", "") == "_restore_gnome_keybindings"):
+                            and getattr(sub.func, "attr", "") == "restore"
+                            and getattr(sub.func.value, "id", "") == "gnome_keybindings"):
                         in_finally = True
 
     assert in_finally, (
-        "_restore_gnome_keybindings() is not called from a finally block — an "
+        "gnome_keybindings.restore() is not called from a finally block — an "
         "exception would leave the user's GNOME keybindings disabled for good"
     )
+
+
+def test_the_tray_repairs_left_over_bindings_at_start():
+    assert "restore_left_over()" in (SRC / "tray.py").read_text()

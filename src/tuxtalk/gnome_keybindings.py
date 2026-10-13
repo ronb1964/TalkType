@@ -1,0 +1,110 @@
+"""GNOME's Alt+F8 (resize) and Alt+F7 (move) bindings during the hotkey test.
+
+The first-run hotkey test clears them while it is open, because GNOME answers
+Alt+F8 by sending the focused window an F8 without the Alt modifier, which
+looks exactly like a real F8 press. gsettings keeps whatever is written across
+reboots, so the original values are first saved to a file. Restoring deletes
+the file; if the process dies before that (killed, crashed, logged out), the
+next start finds the file and puts the bindings back.
+"""
+import json
+import os
+import subprocess
+
+from .logger import setup_logger
+
+logger = setup_logger(__name__)
+
+SCHEMA = "org.gnome.desktop.wm.keybindings"
+KEYS = ("begin-resize", "begin-move")
+BACKUP_NAME = "gnome-keybindings-backup.json"
+
+
+def _backup_path():
+    from .config import get_data_dir
+    return os.path.join(get_data_dir(), BACKUP_NAME)
+
+
+def _on_gnome():
+    return "GNOME" in os.environ.get("XDG_CURRENT_DESKTOP", "").upper()
+
+
+def _set(key, value):
+    """Write one binding; True if gsettings accepted it."""
+    try:
+        result = subprocess.run(["gsettings", "set", SCHEMA, key, value],
+                                capture_output=True, text=True, timeout=5)
+        return result.returncode == 0
+    except Exception as e:
+        logger.debug(f"Could not set {key}: {e}")
+        return False
+
+
+def restore(saved):
+    """Put the saved bindings back; never raises (it runs from finally blocks).
+
+    One failed key never skips the other. The backup file is deleted only
+    once every key is back, so a failure is retried at the next start.
+    """
+    if not saved:
+        return
+    all_back = True
+    for key, value in saved.items():
+        if key not in KEYS or not isinstance(value, str):
+            continue
+        if _set(key, value):
+            logger.info(f"Restored {key} to {value}")
+        else:
+            all_back = False
+    if all_back:
+        try:
+            os.remove(_backup_path())
+        except FileNotFoundError:
+            pass
+        except Exception as e:
+            logger.debug(f"Could not remove the keybinding backup: {e}")
+
+
+def restore_left_over():
+    """Restore bindings a previous run cleared and never put back."""
+    try:
+        with open(_backup_path(), encoding="utf-8") as f:
+            saved = json.load(f)
+    except FileNotFoundError:
+        return
+    except Exception as e:
+        logger.warning(f"Unreadable GNOME keybinding backup: {e}")
+        return
+    if isinstance(saved, dict):
+        logger.warning("Putting back GNOME's Alt+F8/Alt+F7 bindings left cleared by a "
+                       "hotkey test that didn't finish")
+        restore(saved)
+
+
+def disable_for_hotkey_test():
+    """Clear the bindings on GNOME. Returns what to pass to restore(), or None."""
+    if not _on_gnome():
+        return None
+    # A backup left by a run that died holds the real values; reading the
+    # bindings now would only find the cleared ones.
+    restore_left_over()
+    try:
+        saved = {key: subprocess.check_output(["gsettings", "get", SCHEMA, key],
+                                              text=True, timeout=5).strip()
+                 for key in KEYS}
+    except Exception as e:
+        logger.debug(f"Could not read GNOME keybindings: {e}")
+        return None
+    try:
+        path = _backup_path()
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(saved, f)
+    except Exception as e:
+        # Without the backup a crash would lose them for good; leave them alone.
+        logger.warning(f"Not clearing GNOME keybindings: could not save them ({e})")
+        return None
+    for key in KEYS:
+        _set(key, "[]")
+    logger.info("Temporarily disabled GNOME begin-resize/begin-move keybindings")
+    return saved

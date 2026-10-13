@@ -11,6 +11,7 @@ Cross-desktop compatible - works on GNOME, KDE, XFCE, etc.
 """
 
 import os
+import select
 import subprocess
 import sys
 import threading
@@ -2245,28 +2246,56 @@ def show_tips_and_features_dialog(extension_installed=False):
     dialog.destroy()
 
 
-def _restore_gnome_keybindings(begin_resize, begin_move):
-    """Put GNOME's begin-resize/begin-move keybindings back.
+# The keys the hotkey test accepts: the F1-F12 that Preferences offers. The
+# service understands only F-keys and letters, and a letter as a hotkey would
+# start dictation whenever that letter is typed.
+HOTKEY_CHOICES = tuple(f"F{i}" for i in range(1, 13))
 
-    Must be safe to call from a finally block, so it never raises and never
-    lets one failed restore skip the other. A None value means the original
-    was never captured, in which case writing anything would be a guess.
 
-    Leaving these disabled is not a transient glitch: gsettings persists, so
-    the user's Alt+F8 and Alt+F7 stay dead across reboots with nothing to
-    connect it back to TuxTalk.
+def _captured_key_problem(keyname, other_key):
+    """Why *keyname* can't become a hotkey, or None if it can."""
+    if keyname not in HOTKEY_CHOICES:
+        return "That key can't be used for dictation. Pick F1 to F12."
+    if keyname == other_key:
+        return f"{keyname} is already your other hotkey. Pick a different key."
+    return None
+
+
+def _hotkeys_to_save(config, hold, toggle, confirmed):
+    """The (hold, toggle) keys to save when the hotkey test closes.
+
+    Continue saves what the dialog shows. Closing it any other way keeps keys
+    already saved and fills in only blanks: the settings start with no hotkey,
+    and leaving them blank left the service watching no key at all.
     """
-    for key, value in (("begin-resize", begin_resize), ("begin-move", begin_move)):
-        if value is None:
-            continue
-        try:
-            subprocess.run(
-                ["gsettings", "set", "org.gnome.desktop.wm.keybindings", key, value],
-                check=False,
-            )
-            logger.info(f"Restored {key} to {value}")
-        except Exception as e:
-            logger.debug(f"Could not restore {key}: {e}")
+    if not confirmed:
+        hold = config.hotkey or hold
+        toggle = config.toggle_hotkey or toggle
+    if hold not in HOTKEY_CHOICES:
+        hold = "F8"
+    if toggle not in HOTKEY_CHOICES or toggle == hold:
+        toggle = "F9" if hold != "F9" else "F8"
+    return hold, toggle
+
+
+def _evdev_key_action(event, held_modifiers, modifier_codes, code_to_name):
+    """(keyname, "press" or "release") for one evdev event, or None to ignore it.
+
+    Tracks Alt, Ctrl and Super in *held_modifiers*, so Alt+F8 doesn't count as
+    F8, as on the GTK side. Auto-repeat (value 2) is ignored.
+    """
+    if event.code in modifier_codes:
+        if event.value == 1:
+            held_modifiers.add(event.code)
+        elif event.value == 0:
+            held_modifiers.discard(event.code)
+        return None
+    if event.value not in (0, 1) or held_modifiers:
+        return None
+    keyname = code_to_name(event.code)
+    if not keyname:
+        return None
+    return keyname, ("press" if event.value == 1 else "release")
 
 
 def _flush_pending_events(devices):
@@ -2299,22 +2328,20 @@ def show_hotkey_test_dialog():
     Show hotkey testing dialog for first-run experience.
     Allows users to test and customize both hotkeys in one place.
 
-    Uses EVDEV for key detection (same as dictation service) to bypass
-    Wayland compositor key grabbing issues on KDE/Plasma.
+    Reads keys through evdev (as the dictation service does) as well as GTK,
+    so a key the compositor grabs before GTK sees it still tests as working.
 
     Returns:
         bool: True if user completed the test
     """
-    import subprocess
-    import threading
-    import time
-    import select
     from tuxtalk.config import load_config, save_config
+    from tuxtalk import gnome_keybindings
 
-    # CRITICAL: Kill any running dictation service IMMEDIATELY
-    # The service would intercept F8/F9 before we can detect them
+    # The service would intercept F8/F9 before we can detect them. The tray
+    # already stopped it and keeps it from starting during onboarding; this
+    # makes sure, once, just before the dialog appears.
     def kill_dictation_service():
-        """Kill any running dictation service processes with extreme prejudice."""
+        """Kill any running dictation service processes."""
         try:
             # SIGKILL for immediate termination - no chance to respawn.
             # The pattern list used to live here and included "-m tuxtalk",
@@ -2336,14 +2363,6 @@ def show_hotkey_test_dialog():
         except Exception as e:
             logger.warning(f"Error killing service: {e}")
 
-    # Kill service right away - multiple times to be sure
-    print("🔪 Killing dictation service for hotkey test...")
-    kill_dictation_service()
-    time.sleep(0.5)  # Extra wait
-    kill_dictation_service()  # Double-tap
-    logger.info("Killed any running dictation service for hotkey test")
-    print("✅ Dictation service killed")
-
     # Try to import evdev for low-level key detection
     try:
         from evdev import InputDevice, ecodes, list_devices
@@ -2358,11 +2377,10 @@ def show_hotkey_test_dialog():
     config = load_config()
 
     # State variables (accessible from threads)
-    # Use F8/F9 as suggested defaults if config is empty (first run)
-    # These won't be saved to config until user confirms
+    # Use F8/F9 as suggested defaults if config is empty (first run).
+    # What gets saved is decided when the dialog closes (_hotkeys_to_save).
     current_hold_key = [config.hotkey if config.hotkey else "F8"]
     current_toggle_key = [config.toggle_hotkey if config.toggle_hotkey else "F9"]
-    tested_keys = {"hold": False, "toggle": False}
     capturing_key = [None]  # "hold", "toggle", or None
     dialog_ready = [False]
     stop_evdev = threading.Event()
@@ -2389,20 +2407,6 @@ def show_hotkey_test_dialog():
             ecodes.KEY_BACKSPACE: "BackSpace",
         }
         return special.get(code)
-
-    def name_to_evdev_code(name):
-        """Convert key name to evdev code."""
-        if not EVDEV_AVAILABLE:
-            return None
-        n = (name or "F8").strip().upper()
-        # Function keys
-        for i in range(1, 13):
-            if n == f"F{i}":
-                return getattr(ecodes, f"KEY_F{i}")
-        # Letter keys
-        if len(n) == 1 and "A" <= n <= "Z":
-            return getattr(ecodes, f"KEY_{n}", None)
-        return None
 
     # Build dialog
     dialog = Gtk.Dialog(title="Test Your Hotkeys")
@@ -2478,7 +2482,9 @@ def show_hotkey_test_dialog():
 
     # Capture instruction (hidden initially)
     capture_instruction = Gtk.Label()
-    capture_instruction.set_markup('<span background="#FFA500" color="white"> Press any key to set hotkey... (ESC to cancel) </span>')
+    _capture_prompt = ('<span background="#FFA500" color="white"> Press F1 to F12 to set the '
+                       'hotkey... (ESC to cancel) </span>')
+    capture_instruction.set_markup(_capture_prompt)
     capture_instruction.set_margin_top(10)
     capture_instruction.set_no_show_all(True)
     content.pack_start(capture_instruction, False, False, 0)
@@ -2501,23 +2507,32 @@ def show_hotkey_test_dialog():
             if keyname == "Escape":
                 capturing_key[0] = None
                 capture_instruction.hide()
+                capture_instruction.set_markup(_capture_prompt)
                 hold_change_btn.set_sensitive(True)
                 toggle_change_btn.set_sensitive(True)
+                return False
+
+            other = current_toggle_key[0] if capturing_key[0] == "hold" else current_hold_key[0]
+            problem = _captured_key_problem(keyname, other)
+            if problem:
+                # Stay in capture mode so the user can press another key.
+                capture_instruction.set_markup(
+                    f'<span background="#E57373" color="white"> '
+                    f'{GLib.markup_escape_text(problem)} (ESC to cancel) </span>')
                 return False
 
             if capturing_key[0] == "hold":
                 current_hold_key[0] = keyname
                 hold_label.set_markup(f'<b>Push-to-talk:</b> {keyname}')
-                tested_keys["hold"] = True
                 hold_status.set_markup('<span color="#4CAF50">✓ Working!</span>')
             elif capturing_key[0] == "toggle":
                 current_toggle_key[0] = keyname
                 toggle_label.set_markup(f'<b>Toggle mode:</b> {keyname}')
-                tested_keys["toggle"] = True
                 toggle_status.set_markup('<span color="#4CAF50">✓ Working!</span>')
 
             capturing_key[0] = None
             capture_instruction.hide()
+            capture_instruction.set_markup(_capture_prompt)
             hold_change_btn.set_sensitive(True)
             toggle_change_btn.set_sensitive(True)
         else:
@@ -2526,10 +2541,8 @@ def show_hotkey_test_dialog():
             # release → green "✓ Working!" (requires a physical press+release, phantom-proof)
             if action == "release":
                 if keyname == current_hold_key[0]:
-                    tested_keys["hold"] = True
                     hold_status.set_markup('<span color="#4CAF50">✓ Working!</span>')
                 elif keyname == current_toggle_key[0]:
-                    tested_keys["toggle"] = True
                     toggle_status.set_markup('<span color="#4CAF50">✓ Working!</span>')
 
         return False  # Don't repeat
@@ -2577,6 +2590,11 @@ def show_hotkey_test_dialog():
         # just before onboarding) would appear as "Working!" immediately.
         _flush_pending_events(keyboards)
 
+        modifier_codes = {ecodes.KEY_LEFTALT, ecodes.KEY_RIGHTALT,
+                          ecodes.KEY_LEFTCTRL, ecodes.KEY_RIGHTCTRL,
+                          ecodes.KEY_LEFTMETA, ecodes.KEY_RIGHTMETA}
+        held_modifiers = set()
+
         while not stop_evdev.is_set():
             try:
                 # Use select to wait for events with timeout
@@ -2584,11 +2602,16 @@ def show_hotkey_test_dialog():
                 for dev in r:
                     try:
                         for event in dev.read():
-                            if event.type == ecodes.EV_KEY and event.value == 1:  # Key press
-                                keyname = evdev_code_to_name(event.code)
-                                if keyname:
-                                    is_capture = capturing_key[0] is not None
-                                    GLib.idle_add(update_ui_for_key, keyname, is_capture)
+                            if event.type != ecodes.EV_KEY:
+                                continue
+                            # Releases count too: they are what marks a key
+                            # as working, and GTK never sees a grabbed key.
+                            found = _evdev_key_action(event, held_modifiers,
+                                                      modifier_codes, evdev_code_to_name)
+                            if found:
+                                keyname, action = found
+                                is_capture = capturing_key[0] is not None
+                                GLib.idle_add(update_ui_for_key, keyname, is_capture, action)
                     except Exception as e:
                         logger.debug(f"Error reading from {dev.name}: {e}")
             except Exception as e:
@@ -2643,6 +2666,8 @@ def show_hotkey_test_dialog():
         _held_keycodes.discard(event.hardware_keycode)
         if not dialog_ready[0]:
             return False
+        if event.state & _NO_MODIFIER_MASK:
+            return False
         # Release = physical action confirmed — mark the key as working
         keyname = Gtk.accelerator_name(event.keyval, 0)
         is_capture = capturing_key[0] is not None
@@ -2665,11 +2690,9 @@ def show_hotkey_test_dialog():
     hold_change_btn.connect("clicked", on_change_hold)
     toggle_change_btn.connect("clicked", on_change_toggle)
 
-    # Always connect the GTK key handlers. Phantom events from killing the
-    # dictation service are prevented by stopping the service killer thread
-    # BEFORE setting dialog_ready=True in enable_key_handling() below.
-    # The handler itself also guards: it returns immediately if dialog_ready
-    # is False, so any events that arrive before the gate opens are ignored.
+    # Always connect the GTK key handlers. They return straight away until
+    # dialog_ready is set, so events that arrive before the gate opens are
+    # ignored.
     dialog.connect("key-press-event", on_key_press)
     dialog.connect("key-release-event", on_key_release)
 
@@ -2698,58 +2721,25 @@ def show_hotkey_test_dialog():
     continue_button = Gtk.Button(label="Continue")
 
     def on_continue(button):
-        config.hotkey = current_hold_key[0]
-        config.toggle_hotkey = current_toggle_key[0]
-        try:
-            save_config(config)
-        except Exception as e:
-            # Never leave the user stuck on a dialog whose Continue button
-            # appears to do nothing. save_config refuses to write when the
-            # settings file could not be read, which is the right call — but
-            # onboarding must still move on rather than silently wedging.
-            logger.error(f"Could not save hotkey choice: {e}")
+        # The keys are saved after run() returns, however the dialog closes.
         dialog.response(Gtk.ResponseType.OK)
 
     continue_button.connect("clicked", on_continue)
     continue_button.get_style_context().add_class("suggested-action")
     dialog.add_action_widget(continue_button, Gtk.ResponseType.OK)
 
-    # Temporarily disable GNOME's Alt+F8 (begin-resize) binding.
-    # CRITICAL: Must happen BEFORE dialog.show_all() so our dialog doesn't have
-    # focus when GNOME processes the gsettings change. GNOME Shell takes ~1-2 seconds
-    # to process a gsettings change and may send a synthetic F8 key event to whatever
-    # window currently has focus. If we clear the binding after show_all(), our dialog
-    # has focus and receives that phantom F8 — bypassing the 2-second gate because
-    # the event arrives at almost exactly the same time the gate opens.
-    # By clearing BEFORE show_all(), any GNOME synthetic event goes to the previously
-    # focused window instead of ours.
-    import subprocess as _sp
-    _gnome_begin_resize = None
-    _gnome_begin_move = None
-    try:
-        _gnome_begin_resize = _sp.check_output(
-            ["gsettings", "get", "org.gnome.desktop.wm.keybindings", "begin-resize"],
-            text=True
-        ).strip()
-        _gnome_begin_move = _sp.check_output(
-            ["gsettings", "get", "org.gnome.desktop.wm.keybindings", "begin-move"],
-            text=True
-        ).strip()
-        _sp.run(["gsettings", "set", "org.gnome.desktop.wm.keybindings", "begin-resize", "[]"], check=False)
-        _sp.run(["gsettings", "set", "org.gnome.desktop.wm.keybindings", "begin-move", "[]"], check=False)
-        logger.info("Temporarily disabled GNOME begin-resize/begin-move keybindings (before show_all)")
-        # Brief pause to let GNOME process the change before we take focus
-        time.sleep(0.3)
-    except Exception as e:
-        logger.debug(f"Could not disable GNOME keybindings: {e}")
-        _gnome_begin_resize = None
-        _gnome_begin_move = None
+    # Clear GNOME's Alt+F8/Alt+F7 bindings before show_all(): GNOME may send a
+    # synthetic F8 to whichever window has focus while it applies the change,
+    # and that must not be this dialog. gnome_keybindings saves the originals
+    # to a file first, so a crash can't lose them.
+    gnome_saved = gnome_keybindings.disable_for_hotkey_test()
+    if gnome_saved:
+        time.sleep(0.3)  # let GNOME process the change before we take focus
 
-    # Bound before the try so the finally can always clean them up, however
+    # Bound before the try so the finally can always clean it up, however
     # early an exception lands.
-    stop_killer = threading.Event()
-    killer_thread = None
     evdev_thread = None
+    response = Gtk.ResponseType.NONE
 
     try:
         # Kill the dictation service BEFORE showing the dialog so its evdev keyboard
@@ -2761,19 +2751,6 @@ def show_hotkey_test_dialog():
 
         dialog.show_all()
 
-        # Service killer thread - keeps killing dictation service while dialog is open
-        # This prevents the service from grabbing F8/F9 before we can detect them
-
-        def service_killer_thread():
-            """Periodically kill any dictation service that might start."""
-            while not stop_killer.is_set():
-                kill_dictation_service()
-                time.sleep(0.5)  # Check every 500ms
-
-        killer_thread = threading.Thread(target=service_killer_thread, daemon=True)
-        killer_thread.start()
-        logger.info("Started service killer thread")
-
         # Start evdev reader thread
         if EVDEV_AVAILABLE:
             evdev_thread = threading.Thread(target=evdev_key_reader, daemon=True)
@@ -2784,32 +2761,31 @@ def show_hotkey_test_dialog():
         # Only KEY_RELEASE events update the UI, which phantoms never generate.
         dialog_ready[0] = True
 
-        # Stop the killer thread after 500ms — enough time for the service to die.
-        def stop_killer_stage():
-            stop_killer.set()
-            return False
-        GLib.timeout_add(500, stop_killer_stage)
-
         response = dialog.run()
         dialog.destroy()
 
     finally:
-        # Always: an exception between disabling these and restoring them
-        # left the user's Alt+F8/Alt+F7 disabled permanently, because
-        # gsettings persists across reboots.
-        _restore_gnome_keybindings(_gnome_begin_resize, _gnome_begin_move)
-
-        # The killer thread kills the dictation service every 500ms. Leaking it
-        # on an exception would leave dictation permanently unable to start —
-        # so it is stopped here, not on the happy path.
-        stop_killer.set()
-        if killer_thread is not None:
-            killer_thread.join(timeout=1.0)
-        logger.info("Stopped service killer thread")
+        # Always: gsettings persists across reboots, so a skipped restore
+        # would leave Alt+F8/Alt+F7 dead.
+        gnome_keybindings.restore(gnome_saved)
 
         stop_evdev.set()
         if evdev_thread is not None:
             evdev_thread.join(timeout=1.0)
+
+        # Whatever closed the dialog, never leave the settings without a
+        # hotkey: the service then watches no key at all.
+        confirmed = response == Gtk.ResponseType.OK
+        hold, toggle = _hotkeys_to_save(config, current_hold_key[0],
+                                        current_toggle_key[0], confirmed)
+        if (hold, toggle) != (config.hotkey, config.toggle_hotkey):
+            config.hotkey, config.toggle_hotkey = hold, toggle
+            try:
+                save_config(config)
+            except Exception as e:
+                # save_config refuses to write when the settings file could
+                # not be read; onboarding still moves on.
+                logger.error(f"Could not save hotkey choice: {e}")
 
     logger.info("Hotkey test complete")
     print("✅ Hotkey test complete")
