@@ -386,9 +386,7 @@
   <provides>
     <id>io.github.ronb1964.TalkType</id>
     <binary>tuxtalk</binary>
-    <binary>dictate</binary>
-    <binary>dictate-tray</binary>
-    <binary>dictate-prefs</binary>
+    <binary>talktype</binary>
   </provides>
 
   <requires>
