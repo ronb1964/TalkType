@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
-"""
-CUDA Helper Module for TuxTalk AppImage
-Handles NVIDIA GPU detection and CUDA library downloads
-"""
+"""NVIDIA graphics card detection and TuxTalk's own CUDA library download."""
 
 import os
 import subprocess
@@ -25,11 +22,10 @@ _REQUIRED_CUDA_LIBS = ("libcudart.so", "libcublas.so", "libcudnn.so")
 def detect_nvidia_gpu():
     """Check if an NVIDIA GPU is present.
 
-    Inside a Flatpak nvidia-smi is not in the sandbox, so detect the driver by
-    its device node instead — /dev/nvidiactl (and /dev/nvidia0) are exposed by
-    the manifest's --device=dri. This is also independent of CUDA_VISIBLE_DEVICES
-    (which torch_init clears on first run before any CUDA libs exist). On the host
-    the nvidia-smi check is unchanged.
+    The host asks nvidia-smi. A Flatpak sandbox has no nvidia-smi, so there the
+    driver's device nodes (/dev/nvidiactl, /dev/nvidia0, exposed by the
+    manifest's --device=dri) are checked instead, which also works when
+    torch_init has cleared CUDA_VISIBLE_DEVICES.
     """
     if os.environ.get("FLATPAK_ID"):
         return os.path.exists("/dev/nvidiactl") or os.path.exists("/dev/nvidia0")
@@ -68,10 +64,8 @@ def _make_cuda_cleanup(cuda_path: str):
     """Build the failure cleanup for a CUDA download attempt.
 
     Snapshots whether a complete installation is already present *before* the
-    download starts. If one is, failure must leave it alone: the cleanup used
-    to rmtree the whole directory unconditionally, so any early failure — no
-    network, pip missing, the user cancelling — destroyed a working 1.4 GB
-    GPU setup that had nothing to do with the attempt that failed.
+    download starts. If one is, a failed or cancelled attempt leaves it alone
+    rather than deleting a working 1.4 GB setup.
     """
     import shutil
 
@@ -143,14 +137,10 @@ def get_appdir_cuda_path():
     return os.path.join(get_data_dir(), "cuda")
 
 def has_talktype_cuda_libraries():
-    """
-    Check if TuxTalk's own downloaded CUDA libraries are installed.
-    This ONLY checks ~/.local/share/TuxTalk/cuda, not system CUDA.
+    """True if TuxTalk's own CUDA download is complete in its data dir.
 
-    Use this in UI to show download status (not for runtime detection).
-
-    Returns:
-        bool: True if TuxTalk CUDA libraries exist, False otherwise
+    System CUDA is not considered, so this is for showing download status in
+    the UI; has_cuda_libraries() answers whether CUDA can run.
     """
     return _cuda_install_looks_complete(get_appdir_cuda_path())
 
@@ -187,13 +177,12 @@ def download_cuda_libraries(progress_callback=None, cancel_event=None):
     cuda_path = get_appdir_cuda_path()
     lib_path = os.path.join(cuda_path, "lib")
 
-    # Create directories
     os.makedirs(lib_path, exist_ok=True)
 
     # Clean up on failure/cancellation — but only what this run created.
     cleanup_cuda_dir = _make_cuda_cleanup(cuda_path)
     
-    # Use pip to download packages instead of direct URLs
+    # The wheels come straight from PyPI's JSON API; no pip is needed.
     cuda_packages = ['nvidia-cuda-runtime-cu12', 'nvidia-cublas-cu12', 'nvidia-cudnn-cu12']
     
     try:
@@ -219,8 +208,7 @@ def download_cuda_libraries(progress_callback=None, cancel_event=None):
                     api_url = f"https://pypi.org/pypi/{pkg_name}/json"
                     request = urllib.request.Request(
                         api_url, headers={"User-Agent": "TuxTalk"})
-                    # timeout is required — without it a stalled PyPI
-                    # connection hung this thread forever
+                    # Without a timeout a stalled PyPI connection hangs this thread.
                     with urllib.request.urlopen(request, timeout=30) as response:
                         data = json.loads(response.read())
 
@@ -233,9 +221,8 @@ def download_cuda_libraries(progress_callback=None, cancel_event=None):
                                 pkg_name,
                                 file_info['url'],
                                 file_info['filename'],
-                                # PyPI publishes the sha256 of every file —
-                                # verify it so a corrupted/tampered download
-                                # can never be installed
+                                # PyPI's published sha256, so a corrupted or
+                                # tampered download is never installed.
                                 file_info.get('digests', {}).get('sha256'),
                                 int(file_info.get('size', 0) or 0),
                             ))
@@ -286,7 +273,7 @@ def download_cuda_libraries(progress_callback=None, cancel_event=None):
                     percent = int((pkg_idx / len(wheels)) * 70)
                     progress_callback(f"Downloading {pkg_name}...", percent)
 
-                logger.info(f"📥 Downloading {pkg_name}...")
+                logger.info(f"Downloading {pkg_name}...")
                 wheel_path = os.path.join(temp_dir, wheel_filename)
 
                 def progress_hook(downloaded, total, _pkg=pkg_name, _idx=pkg_idx):
@@ -310,7 +297,7 @@ def download_cuda_libraries(progress_callback=None, cancel_event=None):
                         progress_callback(f"Download of {pkg_name} failed or was corrupted", 0)
                     cleanup_cuda_dir()
                     return False
-                logger.info(f"✅ Downloaded and verified {wheel_filename}")
+                logger.info(f"Downloaded and verified {wheel_filename}")
 
             # Check for cancellation before extraction
             if cancel_event and cancel_event.is_set():
@@ -332,35 +319,28 @@ def download_cuda_libraries(progress_callback=None, cancel_event=None):
                     return False
 
                 wheel_path = os.path.join(temp_dir, wheel_file)
-                logger.info(f"📦 Extracting {wheel_file}...")
+                logger.info(f"Extracting {wheel_file}...")
 
                 with zipfile.ZipFile(wheel_path, 'r') as zip_ref:
-                    # Get list of .so files to extract for progress tracking
+                    # Only the shared libraries under nvidia/ are needed; the
+                    # nvidia/ prefix is dropped so each lands in lib/<package>/lib/.
                     so_files = [member for member in zip_ref.namelist() 
                                if member.startswith('nvidia/') and '.so' in member]
                     
-                    # Extract all .so files from nvidia/* directories
                     for j, member in enumerate(so_files):
-                        # Get the relative path under nvidia/
                         rel_path = member[len('nvidia/'):]
                         target = os.path.join(lib_path, rel_path)
-                        
-                        # Create parent directories
                         os.makedirs(os.path.dirname(target), exist_ok=True)
-                        
-                        # Extract file
                         with zip_ref.open(member) as source:
                             with open(target, 'wb') as dest:
                                 shutil.copyfileobj(source, dest)
-                        
-                        # Make executable if it's a .so file
+
                         if target.endswith('.so') or '.so.' in target:
                             try:
                                 os.chmod(target, 0o755)
                             except (PermissionError, OSError):
                                 pass
-                        
-                        # Update progress more frequently during extraction
+
                         if progress_callback and len(so_files) > 0:
                             file_progress = (j + 1) / len(so_files)
                             wheel_progress = (i + file_progress) / len(wheel_files)
@@ -374,11 +354,11 @@ def download_cuda_libraries(progress_callback=None, cancel_event=None):
         if progress_callback:
             progress_callback("CUDA libraries installed successfully!", 100)
         
-        logger.info(f"✅ CUDA libraries installed to {cuda_path}")
-        logger.info(f"📂 Libraries extracted to {lib_path}")
+        logger.info(f"CUDA libraries installed to {cuda_path}")
+        logger.info(f"Libraries extracted to {lib_path}")
         
         so_count = sum(1 for _r, _d, files in os.walk(lib_path) for f in files if '.so' in f)
-        logger.info(f"✅ Installed {so_count} library files")
+        logger.info(f"Installed {so_count} library files")
         return True
 
     except Exception as e:
@@ -387,22 +367,15 @@ def download_cuda_libraries(progress_callback=None, cancel_event=None):
         return False
 
 def show_cuda_download_dialog(parent=None, on_success_callback=None):
-    """
-    Show modern CUDA download dialog with progress bar.
-    This is the unified dialog used by both welcome screen and preferences.
+    """Download TuxTalk's CUDA libraries behind a progress dialog (Preferences' Device choice).
 
-    Args:
-        parent: Optional parent window for the dialog
-        on_success_callback: Optional callback function to run after successful download
-                           (e.g., to refresh UI elements in preferences)
-
-    Returns:
-        bool: True if download was successful, False otherwise, None if cancelled
+    on_success_callback runs after the "Downloaded!" message, for example to
+    refresh Preferences. Returns True on success, False on failure and None
+    if the user cancelled.
     """
     import threading
     from gi.repository import GLib
 
-    # Create progress dialog
     progress_dialog = Gtk.Dialog(title="Downloading CUDA Libraries")
     progress_dialog.set_default_size(500, 150)
     progress_dialog.set_modal(True)
@@ -418,29 +391,24 @@ def show_cuda_download_dialog(parent=None, on_success_callback=None):
     content.set_margin_end(30)
     content.set_spacing(15)
 
-    # Title
     title_label = Gtk.Label()
     title_label.set_markup('<span size="large"><b>Downloading CUDA Libraries</b></span>')
     content.pack_start(title_label, False, False, 0)
 
-    # Status label
     status_label = Gtk.Label()
     status_label.set_markup('<span>Initializing download... (~1.4GB)</span>')
     status_label.set_line_wrap(True)
     content.pack_start(status_label, False, False, 0)
 
-    # Progress bar
     progress_bar = Gtk.ProgressBar()
     progress_bar.set_show_text(True)
     content.pack_start(progress_bar, False, False, 0)
 
-    # Info label
     info_label = Gtk.Label()
     info_label.set_markup('<span size="small"><i>This may take several minutes depending on your connection...</i></span>')
     info_label.set_opacity(0.7)
     content.pack_start(info_label, False, False, 0)
 
-    # Add Cancel button
     cancel_button = Gtk.Button(label="Cancel")
     progress_dialog.add_action_widget(cancel_button, Gtk.ResponseType.CANCEL)
 
@@ -470,23 +438,19 @@ def show_cuda_download_dialog(parent=None, on_success_callback=None):
             return False
         GLib.idle_add(close_dialog)
 
-    # Start download in background thread
     download_thread = threading.Thread(target=do_download)
     download_thread.daemon = True
     download_thread.start()
 
-    # Run dialog event loop
     response = progress_dialog.run()
     progress_dialog.destroy()
 
-    # Check if user cancelled
     if response == Gtk.ResponseType.CANCEL or response == Gtk.ResponseType.DELETE_EVENT:
         logger.info("User cancelled CUDA download")
-        cancel_event.set()  # Signal the download thread to stop
-        # Don't wait for thread - let it clean up in background
+        # The download thread notices the event and cleans up by itself.
+        cancel_event.set()
         return None
 
-    # Wait for thread to complete (only if not cancelled)
     download_thread.join()
 
     success = download_success[0]
@@ -499,7 +463,6 @@ def show_cuda_download_dialog(parent=None, on_success_callback=None):
             text="CUDA Libraries Downloaded!"
         )
 
-        # Apply dark theme
         settings = Gtk.Settings.get_default()
         if settings:
             settings.set_property("gtk-application-prefer-dark-theme", True)
@@ -508,9 +471,9 @@ def show_cuda_download_dialog(parent=None, on_success_callback=None):
         msg.run()
         msg.destroy()
 
-        # Switching the device is the caller's job (Preferences, through
-        # Apply): written here, the service never restarted onto it. After
-        # the message, so its question doesn't come before "Downloaded!".
+        # Switching the device is the caller's job (Preferences applies it, so
+        # the service restarts onto it). It runs after the message so its
+        # question doesn't come before "Downloaded!".
         if on_success_callback:
             try:
                 on_success_callback()
@@ -518,7 +481,6 @@ def show_cuda_download_dialog(parent=None, on_success_callback=None):
                 logger.warning(f"Error in success callback: {e}")
         logger.info("CUDA libraries downloaded successfully")
     else:
-        # Show error message
         msg = message_dialog(
             parent=parent,
             message_type=Gtk.MessageType.ERROR,
@@ -526,7 +488,6 @@ def show_cuda_download_dialog(parent=None, on_success_callback=None):
             text="Download Failed"
         )
 
-        # Apply dark theme
         settings = Gtk.Settings.get_default()
         if settings:
             settings.set_property("gtk-application-prefer-dark-theme", True)
