@@ -317,6 +317,28 @@ class BrokenModelFiles(Exception):
     dialogs to fetch it again."""
 
 
+# Pauses before the second and third try of a model file.
+_RETRY_WAITS = (2.0, 5.0)
+
+
+def _fetch_with_retry(fetch, filename, sleep=None):
+    """fetch() (one file's download), tried again after a short wait if it
+    fails: a single slow moment shouldn't sink a 670 MB download. A cancel
+    is never retried; after the last try its error is raised."""
+    import time
+    sleep = sleep or time.sleep
+    for attempt, wait in enumerate((*_RETRY_WAITS, None), start=1):
+        try:
+            return fetch()
+        except InterruptedError:
+            raise
+        except Exception as e:
+            if wait is None:
+                raise
+            logger.warning(f"Download of {filename} failed (try {attempt}): {e}; trying again")
+            sleep(wait)
+
+
 def download_model_with_progress(model_name, device="cpu", compute_type="int8", parent=None,
                                  show_confirmation=True, redownload_broken=True,
                                  result_info=None):
@@ -538,18 +560,21 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
                         percent = min(95, percent)  # the last 5% is loading the model
                         update_ui_progress(percent, f"Downloading {self._current_file}...")
 
+            failed = []
             for filename, file_size in files_with_sizes:
                 if cancel_event.is_set():
                     raise InterruptedError("Download cancelled")
 
                 bytes_before = progress_state['downloaded_bytes']
 
+                def fetch(filename=filename, bytes_before=bytes_before):
+                    # A retried file counts its bytes once.
+                    progress_state['downloaded_bytes'] = bytes_before
+                    return hf_hub_download(repo_id=repo_id, filename=filename,
+                                           tqdm_class=GtkProgressTqdm)
+
                 try:
-                    hf_hub_download(
-                        repo_id=repo_id,
-                        filename=filename,
-                        tqdm_class=GtkProgressTqdm,
-                    )
+                    _fetch_with_retry(fetch, filename)
                     # No progress means the file was already cached; count it anyway.
                     if progress_state['downloaded_bytes'] == bytes_before:
                         progress_state['downloaded_bytes'] += file_size
@@ -563,13 +588,18 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
                     # Keep the bar moving; a missing essential file shows up
                     # when the model fails to load below.
                     logger.warning(f"Error downloading {filename}: {e}")
-                    progress_state['downloaded_bytes'] += file_size
+                    failed.append(filename)
+                    progress_state['downloaded_bytes'] = bytes_before + file_size
 
             if cancel_event.is_set():
                 return
 
             update_ui_progress(95, "Loading model...")
-            logger.info(f"All files downloaded, loading model {model_name}")
+            if failed:
+                logger.warning(f"{len(failed)} file(s) failed to download ({', '.join(failed)}); "
+                               f"trying to load model {model_name} anyway")
+            else:
+                logger.info(f"All files downloaded, loading model {model_name}")
 
             model = load_model(model_name, device=device, compute_type=compute_type)
 

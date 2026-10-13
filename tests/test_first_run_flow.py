@@ -19,6 +19,8 @@ def env(monkeypatch):
     monkeypatch.setattr("tuxtalk.model_helper.is_model_cached_fast", lambda m: False)
     monkeypatch.setattr("tuxtalk.model_helper.download_model_with_progress",
                         lambda m, **k: calls.append(("cpu", m)) or object())
+    monkeypatch.setattr(wd, "_ask_retry_download", lambda m: False)
+    monkeypatch.setattr(wd, "_tell_using_smaller_model", lambda chosen, used: None)
     return cfg, calls
 
 
@@ -68,6 +70,10 @@ def store(monkeypatch):
     monkeypatch.setattr("tuxtalk.model_helper.is_model_cached_fast", lambda m: False)
     monkeypatch.setattr("tuxtalk.model_helper.download_model_with_progress",
                         lambda m, **k: calls.append(m) or object())
+    monkeypatch.setattr(wd, "_ask_retry_download", lambda m: False)
+    notes = []
+    monkeypatch.setattr(wd, "_tell_using_smaller_model", lambda chosen, used: notes.append((chosen, used)))
+    saved["_notes"] = notes
     return saved, calls
 
 
@@ -206,3 +212,34 @@ def test_the_ready_screen_names_the_key_the_user_chose(monkeypatch):
     import pathlib
     src = pathlib.Path(wd.__file__).read_text()
     assert "Press and hold <b>F8</b> (or your hotkey)" not in src
+
+
+# --- a failed download asks before falling back (VM tests, 2026-10-13) --------
+
+def test_a_failed_download_can_be_tried_again(store, monkeypatch):
+    saved, calls = store
+    results = iter([None, object()])               # fails, then works
+    monkeypatch.setattr("tuxtalk.model_helper.download_model_with_progress",
+                        lambda m, **k: calls.append(m) or next(results))
+    monkeypatch.setattr(wd, "_ask_retry_download", lambda m: True)
+    wd._apply_first_run_setup({"model": "parakeet-v3", "device": "cpu", "dictation_language": "en"})
+    assert calls == ["parakeet-v3", "parakeet-v3"]
+    assert saved["model"] == "parakeet-v3" and saved["_notes"] == []
+
+
+def test_a_smaller_model_is_announced(store, monkeypatch):
+    saved, calls = store
+    monkeypatch.setattr("tuxtalk.model_helper.download_model_with_progress",
+                        lambda m, **k: calls.append(m) or (object() if m == "small" else None))
+    wd._apply_first_run_setup({"model": "parakeet-v3", "device": "cpu", "dictation_language": "en"})
+    assert saved["model"] == "small"
+    assert saved["_notes"] == [("parakeet-v3", "small")]
+
+
+def test_retrying_is_offered_at_most_twice(store, monkeypatch):
+    saved, calls = store
+    monkeypatch.setattr("tuxtalk.model_helper.download_model_with_progress",
+                        lambda m, **k: calls.append(m) or None)
+    monkeypatch.setattr(wd, "_ask_retry_download", lambda m: True)
+    wd._apply_first_run_setup({"model": "parakeet-v3", "device": "cpu", "dictation_language": "en"})
+    assert calls == ["parakeet-v3"] * 3 + ["small"]

@@ -2887,6 +2887,46 @@ def _processor_model(model, result):
                                recommend.Hardware(None), model=model).model
 
 
+def _ask_retry_download(model):
+    """After a failed first-run download: True to try *model* again, False
+    to use a smaller model."""
+    from .model_helper import model_display_name
+    msg = message_dialog(
+        message_type=Gtk.MessageType.QUESTION,
+        buttons=Gtk.ButtonsType.NONE,
+        text=f"Try downloading {model_display_name(model)} again?",
+    )
+    msg.format_secondary_text(
+        "The download didn't finish, often just a slow moment on the network. "
+        "You can try again, or use a smaller model for now and switch later.")
+    msg.add_button("Use a Smaller Model", Gtk.ResponseType.NO)
+    msg.add_button("Try Again", Gtk.ResponseType.YES)
+    msg.set_default_response(Gtk.ResponseType.YES)
+    answer = msg.run()
+    msg.destroy()
+    return answer == Gtk.ResponseType.YES
+
+
+def _tell_using_smaller_model(chosen, used):
+    """Say that setup fell back from *chosen* to *used*, and how to go back."""
+    from .model_helper import model_display_name
+    msg = message_dialog(
+        message_type=Gtk.MessageType.INFO,
+        buttons=Gtk.ButtonsType.OK,
+        text=f"Using {model_display_name(used)} for now",
+    )
+    msg.format_secondary_text(
+        f"{model_display_name(chosen)} couldn't be downloaded, so TuxTalk will use "
+        f"{model_display_name(used)}. To switch later, open Preferences, General and "
+        "click Use Recommended.")
+    msg.run()
+    msg.destroy()
+
+
+# A failed first-run download is offered again at most this many times.
+_FIRST_RUN_RETRIES = 2
+
+
 def _apply_first_run_setup(result):
     """Save the setup the welcome card showed, then download it.
 
@@ -2999,16 +3039,38 @@ def _apply_first_run_setup(result):
             # stays, and the service offers the download when it starts.
             logger.info(f"First-run download cancelled; leaving {selected_model} for later")
         else:
-            # The download failed and its error was already shown. Use a
-            # smaller model that is already downloaded, or try ONE smaller
-            # download; a second failure or a Cancel ends it there.
+            # The download failed and its error was already shown. The user
+            # may try it again; otherwise use a smaller model that is already
+            # downloaded, or try ONE smaller download, and say so.
             logger.warning(f"Model download failed for {selected_model}")
+            outcome = None
+            for _ in range(_FIRST_RUN_RETRIES):
+                if not _ask_retry_download(selected_model):
+                    break
+                retry_info = {}
+                retried = download_model_with_progress(
+                    selected_model, device=device, compute_type=compute_type, parent=None,
+                    show_confirmation=False, result_info=retry_info)
+                if retried:
+                    config.model = selected_model
+                    save_config(config)
+                    del retried
+                    logger.info(f"{selected_model} downloaded on a retry")
+                    outcome = "ok"
+                    break
+                if retry_info.get("cancelled"):
+                    logger.info(f"Retry of {selected_model} cancelled; leaving it for later")
+                    outcome = "cancelled"
+                    break
             fallback_models = ["small", "tiny"] if selected_model not in ["small", "tiny"] else ["tiny"]
-            cached = next((m for m in fallback_models if is_model_cached_fast(m)), None)
-            if cached:
+            cached = None if outcome else next((m for m in fallback_models if is_model_cached_fast(m)), None)
+            if outcome:
+                pass
+            elif cached:
                 logger.info(f"Using cached {cached} model as fallback")
                 config.model = cached
                 save_config(config)
+                _tell_using_smaller_model(selected_model, cached)
             else:
                 fallback = fallback_models[0]
                 logger.info(f"Attempting fallback to {fallback} model...")
@@ -3025,6 +3087,7 @@ def _apply_first_run_setup(result):
                         config.model = fallback
                         save_config(config)
                         del fallback_model
+                        _tell_using_smaller_model(selected_model, fallback)
                     else:
                         logger.warning(f"Fallback to {fallback} did not download either")
                 except Exception as e:
