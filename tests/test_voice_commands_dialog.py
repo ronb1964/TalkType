@@ -1,8 +1,8 @@
 """The Voice Commands window lists what the code really recognises.
 
-In 0.14.1 it left out self-corrections ("no wait", "scratch that") entirely,
-showed "literal" for only four words, and didn't say the commands are English
-words whatever language you dictate in.
+That includes self-corrections ("no wait", "scratch that"), the words
+"literal" really works with, and the fact that the commands are English words
+whatever language you dictate in.
 """
 import re
 
@@ -33,9 +33,9 @@ def test_alternate_wordings_are_listed_and_work():
 
 
 def test_literal_names_words_it_really_covers():
-    """It claimed "any punctuation or formatting word", but brackets, em dash
-    and full stop are not covered: "literal open parenthesis" types "(".
-    The words it now names as examples must all work with "literal"."""
+    """Not "any punctuation or formatting word": brackets, em dash and full
+    stop are not covered ("literal open parenthesis" types "("). The words it
+    names as examples must all work with "literal"."""
     assert "any punctuation" not in TEXT
     assert "the word" in TEXT
     for word in ("period", "comma", "quote", "dash", "new line"):
@@ -43,8 +43,8 @@ def test_literal_names_words_it_really_covers():
 
 
 def test_help_lists_exactly_the_literal_words():
-    """Help said "Works with any punctuation or formatting command" and that
-    "literal new line" types "newline" (it types "new line")."""
+    """Help must not say "Works with any punctuation or formatting command",
+    or that "literal new line" types "newline" (it types "new line")."""
     from pathlib import Path
     from tuxtalk import help_dialog
     source = Path(help_dialog.__file__).read_text()

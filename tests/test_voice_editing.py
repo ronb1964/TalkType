@@ -352,8 +352,8 @@ def test_an_edit_replaces_the_selection(edit_env):
 
 
 def test_a_multi_line_rewrite_goes_in_as_one_block(edit_env, monkeypatch):
-    """Line by line with Enter in between, KWrite continued each "- " list
-    line and the dashes piled up ("- - 2", "- - - 3"); Ron, 2026-10-12."""
+    """Line by line with Enter in between, KWrite continues each "- " list
+    line and the dashes pile up ("- - 2", "- - - 3")."""
     calls = []
     monkeypatch.setattr(app, "_inject_text", lambda text, mode, t0, one_block=False: calls.append((text, one_block)) or "ok")
     edit_env["engine"].answer = "- Buy plywood\n- Call George"
@@ -471,7 +471,7 @@ def test_the_advanced_tab_has_the_switch():
     assert "self.voice_editing_check" in prefs and "_on_voice_editing_toggled" in prefs
 
 
-# --- review fixes (second reviewer, 2026-10-12) -------------------------------------------
+# --- Shift release, the clipboard, terminals and window changes --------------------------
 
 class FakeKeyboard:
     """A keyboard whose held keys change over successive active_keys() calls."""
@@ -483,8 +483,8 @@ class FakeKeyboard:
 
 
 def test_stopping_with_shift_waits_for_it_without_injecting_keys(keyloop, monkeypatch):
-    """Injected key events replayed after a slow edit and started a new
-    recording; now TuxTalk just waits for the real Shift release."""
+    """Injected key events replayed after a slow edit would start a new
+    recording, so TuxTalk just waits for the real Shift release."""
     monkeypatch.setattr(app, "_is_keyboard_device", lambda d: True)
     kb = FakeKeyboard([[SHIFT], [SHIFT], []])
     key(F9, 1, {SHIFT})
@@ -598,7 +598,7 @@ def test_a_window_change_while_the_ai_works_keeps_the_rewrite_safe(edit_env, mon
 
 
 
-# --- re-review fixes ------------------------------------------------------------------------
+# --- primary selection, links, pasted rewrites and the toggle key ---------------------------
 
 def test_an_app_without_primary_selection_keeps_a_line_selection(monkeypatch):
     board = FakeBoard(selected="a triple-clicked line\n")
@@ -633,7 +633,7 @@ def test_tapping_the_toggle_key_during_a_hold_edit_lets_go_of_the_keyboard(keylo
 
 
 
-# --- Ron's first live test, 2026-10-12 ----------------------------------------------------
+# --- pasting a rewrite, and nothing said ----------------------------------------------------
 
 @pytest.fixture
 def injection(monkeypatch):
@@ -687,7 +687,7 @@ def test_a_selection_with_nothing_said_says_so(edit_env, monkeypatch):
     assert edit_env["put_back"] == 1
 
 
-# --- TuxTalk Labs (Ron, 2026-10-12): experimental features, with Help and feedback -----
+# --- TuxTalk Labs: experimental features, with Help and feedback ---------------------------
 
 import pathlib
 
@@ -736,7 +736,7 @@ def test_voice_editing_is_no_longer_in_dictation_cleanup():
     assert "voice_editing_check" not in cleanup
 
 
-# --- lines the AI must not lose (Ron, 2026-10-12) ---------------------------------------
+# --- lines the AI must not lose ------------------------------------------------------------
 
 def scripted_engine(engine, monkeypatch, answers):
     """The engine's AI answers, in turn, with *answers*."""
@@ -749,8 +749,9 @@ def scripted_engine(engine, monkeypatch, answers):
 
 
 def test_merged_lines_are_edited_again_line_by_line(engine, monkeypatch):
-    """Two selected lines came back as one ("Testing one, two, three, four!
-    Testing one, two, three!"), and for some edits the second line was lost."""
+    """Two selected lines can come back as one ("Testing one, two, three,
+    four! Testing one, two, three!"), and for some edits the second line is
+    lost."""
     scripted_engine(engine, monkeypatch, ["Testing one, two, three, four!",
                                           "Testing one, two, three, four!", "Testing one, two, three!"])
     out = engine.edit("Testing one, two, three, four.\n\n  Testing one, two, three.", "add an exclamation point")
@@ -824,7 +825,7 @@ def test_font_size_says_it_cant(edit_env, keys_sent, monkeypatch):
 
 @pytest.mark.parametrize("answer", ["None.", "none", "  ", "N/A", "null"])
 def test_a_none_answer_is_no_answer(engine, monkeypatch, answer):
-    """"Delete this" got "None." from the AI, once per line (Ron, 2026-10-12)."""
+    """"Delete this" can get "None." from the AI, once per line."""
     scripted_engine(engine, monkeypatch, [answer, "x", "x"])
     assert engine.edit("Testing one.\nTesting two.", "make it nicer") is None
     assert len(engine.sent) == 1
@@ -838,8 +839,8 @@ def test_delete_this_presses_delete(edit_env, keys_sent, monkeypatch):
 
 
 def test_an_ai_answer_that_only_changes_spacing_is_no_change(edit_env, monkeypatch):
-    """"Select all" went to the AI, which trimmed the line ends and pasted
-    that back (Ron, 2026-10-12)."""
+    """An answer that only trims the line ends (as the AI does for "Select
+    all") changes nothing."""
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "Select all.")
     edit_env["selection"]["text"] = "Testing one. \nTesting two. "
     edit_env["engine"].answer = "Testing one.\nTesting two."
@@ -857,8 +858,8 @@ def test_indenting_still_counts_as_a_change(edit_env, monkeypatch):
 # --- X11 and a clipboard that can't be used ----------------------------------------------
 
 def test_on_x11_it_says_voice_editing_needs_wayland(edit_env, monkeypatch):
-    """The selection is read with wl-copy / wl-paste; on X11 every edit said
-    "select some text first" with text selected."""
+    """The selection is read with wl-copy / wl-paste, so on X11 every edit
+    would say "select some text first" with text selected."""
     monkeypatch.setattr(app, "_is_wayland_session", lambda: False)
     copied = []
     monkeypatch.setattr(cb, "copy_selection", lambda send: copied.append(1))
@@ -896,8 +897,8 @@ def test_the_edit_says_the_clipboard_could_not_be_used(edit_env, monkeypatch):
 ])
 def test_no_key_goes_to_a_window_switched_to_while_transcribing(edit_env, keys_sent, monkeypatch,
                                                                 said, focused):
-    """Delete and Ctrl+B were sent after transcription without checking, so
-    they could land in whatever window the user had clicked into."""
+    """Delete and Ctrl+B are sent after transcription, so without a check they
+    could land in whatever window the user had clicked into."""
     classes = iter([focused, "org.kde.konsole"])
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: next(classes))
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: said)
@@ -909,8 +910,8 @@ def test_no_key_goes_to_a_window_switched_to_while_transcribing(edit_env, keys_s
 
 @pytest.mark.parametrize("said", ["Delete this.", "Make this bold."])
 def test_no_key_is_pressed_when_the_window_is_unknown(edit_env, keys_sent, monkeypatch, said):
-    """Unknown both times (None == None) passed as "the same window", so a
-    switch during transcription went unnoticed."""
+    """Unknown both times (None == None) is not "the same window", or a
+    switch during transcription goes unnoticed."""
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: None)
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: said)
     run_edit()
@@ -943,7 +944,7 @@ def test_a_rewrite_is_still_typed_where_the_window_is_never_known(edit_env, monk
     ("Unindent this.", "    One", "One"),
 ])
 def test_indenting_one_line_counts_as_a_change(edit_env, monkeypatch, said, selected, typed):
-    """The only change is spacing, which the old strip() comparison removed."""
+    """The only change is spacing, which a strip() comparison would remove."""
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: said)
     edit_env["selection"]["text"] = selected
     run_edit()
@@ -953,8 +954,8 @@ def test_indenting_one_line_counts_as_a_change(edit_env, monkeypatch, said, sele
 # --- deleting and formatting need no AI ------------------------------------------------------
 
 def test_delete_and_exact_jobs_work_without_the_ai_downloaded(edit_env, keys_sent, monkeypatch):
-    """Every edit said "needs its AI" when the AI download was missing, even
-    the ones done with a key or in code."""
+    """Edits done with a key or in code must not say "needs its AI" when the
+    AI download is missing."""
     monkeypatch.setattr(app, "_ai_engine", None)
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "Delete this.")
     run_edit()
@@ -978,8 +979,9 @@ def test_a_long_selection_can_still_be_deleted_or_made_bold(edit_env, keys_sent,
 # --- put_back leaves only what the user had ------------------------------------------------
 
 def test_the_probe_marker_is_not_left_when_the_clipboard_could_not_be_kept(monkeypatch):
-    """The old clipboard couldn't be read (too big, too slow), so there was
-    nothing to put back, and the next Ctrl+V pasted "tuxtalk-selection-probe-…"."""
+    """When the old clipboard can't be read (too big, too slow) there is
+    nothing to put back, and the next Ctrl+V must not paste
+    "tuxtalk-selection-probe-…"."""
     board = FakeBoard(selected=None)
     board.install(monkeypatch)
     monkeypatch.setattr(cb, "_read_clipboard", lambda: cb._NOTHING)

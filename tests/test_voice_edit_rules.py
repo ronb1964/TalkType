@@ -1,10 +1,10 @@
 """Voice edits that don't go to the AI (voice_edit_rules.py).
 
-Ron, 2026-10-12, KWrite, two selected lines "Testing one, two, three, four." /
-"Testing one, two, three.": the 1.5B model wrote "DRYWALL ScreWz" for all caps,
-never removed a comma, dropped the second line for "remove the word testing",
-and could only say "No change" to "make this bold". Exact jobs are done in
-code; formatting is the app's own shortcut, or an honest "can't".
+The 1.5B model is unreliable at exact jobs: on two selected lines "Testing one,
+two, three, four." / "Testing one, two, three." it wrote "DRYWALL ScreWz" for
+all caps, never removed a comma, dropped the second line for "remove the word
+testing", and could only say "No change" to "make this bold". So exact jobs
+are done in code; formatting is the app's own shortcut, or an honest "can't".
 """
 import pytest
 
@@ -173,9 +173,9 @@ def test_a_layout_without_latin_letters_uses_the_us_keys(monkeypatch):
     assert kl.shortcut_keycode("u") == 22
 
 
-# --- Ron's second test, LibreOffice, 2026-10-12 --------------------------------------------
-# "make this a bulleted list" came back numbered, "add an indent" changed
-# nothing, and "delete this" replaced the text with "None." twice.
+# --- lists, indents and deleting -----------------------------------------------------------
+# The AI makes "make this a bulleted list" numbered, changes nothing for "add an
+# indent", and answers "delete this" with "None.", so these are done in code.
 
 TWO = "Testing one, two, three, four, five.\nTesting one two three four five six."
 
@@ -218,7 +218,7 @@ def test_deleting_the_selection(said, yes):
 # --- only what was asked about changes ---------------------------------------------------
 
 def test_removing_an_opening_word_capitalises_only_the_word_after_it():
-    """Every lowercase sentence start on the line was capitalised ("IPhone")."""
+    """Not every lowercase sentence start on the line ("IPhone")."""
     assert (r.mechanical_edit("Testing this. iPhone is great.", "remove the word testing")
             == "This. iPhone is great.")
     assert (r.mechanical_edit("Testing that, e.g. apples work.", "remove the word testing")
@@ -230,7 +230,7 @@ def test_removing_an_opening_word_capitalises_only_the_word_after_it():
     ("Um, 2 of them came.", "remove the word um", "2 of them came."),
 ])
 def test_a_number_after_the_removed_word_leaves_the_next_word_alone(text, said, out):
-    """The first letter after the number was capitalised ("3 Times over.")."""
+    """Not the first letter after the number ("3 Times over.")."""
     assert r.mechanical_edit(text, said) == out
 
 
@@ -248,7 +248,7 @@ def test_lines_without_the_mark_are_left_exactly_as_they_were():
     "make this 12pt", "Make it 16-point font.", "Make it red and bold.",
 ])
 def test_a_colour_or_point_size_is_an_honest_cant(said):
-    """"Make this red" went to the AI, which reworded the selection."""
+    """"Make this red" must not go to the AI, which rewords the selection."""
     assert r.formatting(said) == r.CANT_FORMAT
 
 
