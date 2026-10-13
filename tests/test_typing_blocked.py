@@ -1,10 +1,9 @@
 """When typing can't work, say why and what fixes it.
 
-A Fedora user on X11 dictated for minutes: every word was transcribed and none
-reached the window. His typing permissions had been granted but his login
-session predated them, so ydotoold failed with "Permission denied" until a
-restart. 0.14.2 started telling users a dictation didn't arrive, but not why,
-so the notice must now name the cause and the fix.
+Typing permissions can be granted while the login session predates them:
+ydotoold then fails with "Permission denied" until a restart, and every word is
+transcribed but none reaches the window. Saying a dictation didn't arrive is
+not enough, so the notice names the cause and the fix.
 """
 
 import types
@@ -101,8 +100,9 @@ def test_failed_notice_without_a_known_cause_is_unchanged(monkeypatch):
 
 
 def test_service_setup_uses_the_bundled_helper_when_the_system_has_none(monkeypatch):
-    """An AppImage user without the ydotool package was told the package
-    'may be incomplete'. TalkType brings its own copy, which the tray starts."""
+    """An AppImage user without the ydotool package must not be told the
+    package 'may be incomplete': TuxTalk brings its own copy, which the tray
+    starts."""
     monkeypatch.setattr(U, "check_ydotool_available",
                         lambda: (True, "/tmp/.mount_TalkTyX/usr/bin/ydotool"))
     monkeypatch.setattr(U, "find_ydotoold_path", lambda: None)
@@ -131,7 +131,7 @@ def test_ensure_ydotoold_running_starts_it_only_when_stopped(monkeypatch):
 
 def test_only_this_users_ydotoold_counts(monkeypatch):
     """A ydotoold run by another user, or a system service, listens on a
-    socket this user's ydotool doesn't use, and used to count as running."""
+    socket this user's ydotool doesn't use, so it doesn't count as running."""
     seen = []
 
     class Done:
@@ -150,9 +150,10 @@ def test_the_socket_path_follows_the_environment(monkeypatch):
 
 
 def test_the_fix_script_touches_only_uinput_and_matches_the_group_exactly():
-    """`udevadm trigger` with no filter replayed events for every device, and
-    a grep for 'input' in the group list matched 'input-foo' too. Members are
-    still skipped, because usermod fails for users outside /etc/passwd."""
+    """`udevadm trigger` with no filter would replay events for every device,
+    and a grep for 'input' in the group list would match 'input-foo' too.
+    Members are still skipped, because usermod fails for users outside
+    /etc/passwd."""
     script = U.get_fix_script_content()
     assert "udevadm trigger --sysname-match=uinput" in script
     assert ("id -nG \"$TUXTALK_USER\" | tr ' ' '\\n' | grep -qx input "

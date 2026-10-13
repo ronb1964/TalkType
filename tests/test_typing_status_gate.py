@@ -7,9 +7,9 @@ usermod/udev setup). That decision must consider BOTH halves of setup:
     udev rule present      -> /dev/uinput write (typing)
     in 'input' group       -> /dev/input read  (hotkeys)
 
-Keying it on the udev rule alone reproduced the Fedora bug this whole changeset
-fixes: rule present, user never added to 'input', so the section claimed
-"configured - please restart" and DISABLED the only button that would add them.
+Keying it on the udev rule alone gets the Fedora case wrong: rule present, user
+never added to 'input', so the section would claim "configured - please
+restart" and DISABLE the only button that would add them.
 """
 
 import types

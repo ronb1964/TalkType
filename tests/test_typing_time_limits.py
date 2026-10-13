@@ -1,9 +1,9 @@
 """Typing and undo time limits must grow with the amount of text.
 
 `ydotool type -d D -H D` spends about two delays on every character, and
-`ydotool key` waits its delay after every key event. A fixed limit cut long
-dictations off partway (about 830 characters at the default 12 ms) and killed
-long undos after most of the backspaces had landed.
+`ydotool key` waits its delay after every key event. A fixed limit would cut
+long dictations off partway (about 830 characters at the default 12 ms) and
+kill long undos after most of the backspaces had landed.
 """
 
 import subprocess
@@ -106,8 +106,9 @@ def test_backspaces_cut_off_by_the_limit_are_reported_as_partway(monkeypatch):
 
 
 def test_an_undo_stopped_partway_forgets_the_buffer(monkeypatch):
-    """Most of the text may be gone already. Keeping the buffer made the next
-    undo backspace that many characters again, into the user's own writing."""
+    """Most of the text may be gone already, so keeping the buffer would make
+    the next undo backspace that many characters again, into the user's own
+    writing."""
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
     monkeypatch.setattr(app, "_notify", lambda *a, **k: None)
 

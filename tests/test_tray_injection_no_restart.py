@@ -1,7 +1,7 @@
 """Changing Text Injection Mode does not restart the dictation service.
 
 The service rereads injection_mode from config.toml by itself within about a
-second, so the restart only reloaded the model and left dictation dead for
+second, so a restart would only reload the model and leave dictation dead for
 several seconds.
 """
 

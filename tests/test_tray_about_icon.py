@@ -1,7 +1,7 @@
 """The About dialog finds TuxTalk's icon.
 
-It looked only at hicolor/128x128/apps/talktype.png and a src/tuxtalk/icons
-folder, neither of which any install has, so About never showed an icon.
+No install has hicolor/128x128/apps/talktype.png or a src/tuxtalk/icons
+folder, so looking only there would leave About without an icon.
 """
 from tuxtalk import tray
 

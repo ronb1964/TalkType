@@ -1,8 +1,8 @@
 """Tests for the tray telling the GNOME extension about committed changes.
 
 The tray process owns the D-Bus name the extension listens on. Change signals
-emitted anywhere else never reach the extension, which is why its menu could sit
-on a stale model indefinitely while the GTK tray showed the new one.
+emitted anywhere else never reach the extension, and its menu would sit on a
+stale model indefinitely while the GTK tray shows the new one.
 """
 
 import pytest
@@ -55,10 +55,10 @@ def test_a_failing_bus_does_not_break_the_preset_change():
 def test_extension_version_is_bumped_whenever_extension_js_changes():
     """The in-app updater compares only this integer.
 
-    It sat at 5 through five rewrites of extension.js, so every GNOME user who
-    had ever installed the extension was told "up to date" forever and never
-    received the newer menu. This test fails the build if extension.js is
-    committed at a newer revision than the last version bump.
+    Without a bump, every GNOME user who has installed the extension is told
+    "up to date" forever and never receives the newer menu. This test fails
+    the build if extension.js is committed at a newer revision than the last
+    version bump.
     """
     import json
     import pathlib

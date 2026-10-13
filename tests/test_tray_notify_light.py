@@ -1,8 +1,8 @@
 """The tray shows notices without loading the dictation engine.
 
-It used to borrow app.py's libnotify wrapper, and importing app.py loads
-numpy, faster_whisper and torch: about 300 MB that the tray then kept for the
-whole session, the first time anyone changed Text Injection Mode or picked a
+Borrowing app.py's libnotify wrapper would import app.py, which loads numpy,
+faster_whisper and torch: about 300 MB that the tray would then keep for the
+whole session, the first time anyone changes Text Injection Mode or picks a
 Performance preset. A fresh interpreter is used because the rest of the suite
 has already imported tuxtalk.app.
 """

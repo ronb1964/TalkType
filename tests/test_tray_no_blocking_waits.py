@@ -1,9 +1,8 @@
-"""One-time tray paths that used to freeze the menu.
+"""One-time tray paths that must not freeze the menu by waiting on the GTK
+main loop.
 
-* Replacing a pre-rename service slept up to 3 s on the GTK main loop
-  waiting for it to exit.
-* After onboarding, KDE's menu cache rebuild (kbuildsycoca, up to 15 s) ran
-  on the main loop.
+* Replacing a pre-rename service can wait up to 3 s for it to exit.
+* After onboarding, KDE's menu cache rebuild (kbuildsycoca) can take up to 15 s.
 """
 import types
 

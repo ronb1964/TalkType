@@ -4,7 +4,7 @@ The Test Hotkeys dialog labels its rows from the pending dropdown selections in
 Preferences, but the running service reports which hotkey ROLE it matched
 against the SAVED config. Change the hold key without applying and the two
 disagree: pressing the new key hits the service's old toggle key, and the dialog
-lights the wrong row — which read as an off-by-one bug during Ubuntu testing.
+lights the wrong row, which looks like an off-by-one bug.
 """
 
 from tuxtalk.config import unapplied_hotkeys

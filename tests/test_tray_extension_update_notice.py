@@ -1,8 +1,8 @@
 """The daily check's extension-update notice points to where it installs.
 
-It said "Click 'Check for Updates' in menu for details", but that dialog
-covers only the app, so it answered "You're up to date". Extension updates
-are installed from Preferences → Updates & Backup.
+Extension updates are installed from Preferences → Updates & Backup. "Check
+for Updates" covers only the app, so pointing there would answer "You're up to
+date".
 """
 from tuxtalk import tray
 

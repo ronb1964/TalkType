@@ -1,7 +1,7 @@
 """A tray restart asked for while another is running is queued, not dropped.
 
-Dropping it meant a model change saved in that window never reached the
-running service, though the menu and config.toml showed the new model.
+Dropping it would mean a model change saved in that window never reaches the
+running service, though the menu and config.toml show the new model.
 """
 
 import types

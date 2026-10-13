@@ -1,8 +1,8 @@
 """The tray's Performance menu: three outcome presets from recommend.py.
 
-Seven model-named presets used to promise "GPU" and silently use the
-processor. Now Recommended for this computer / Lightest / Battery saver come
-from recommend.presets(), so the menu, first run and the GNOME menu agree.
+Recommended for this computer / Lightest / Battery saver come from
+recommend.presets(), so the menu, first run and the GNOME menu agree, and no
+preset promises "GPU" while using the processor.
 """
 import types
 
@@ -79,7 +79,7 @@ def test_recommended_falls_back_to_the_processor_when_it_is_faster(env, monkeypa
 
 def test_large_v3_becomes_small_when_the_processor_is_faster(env, monkeypatch):
     """Japanese with a graphics card: Recommended is Large-v3 on it. Losing the
-    speed check used to leave Large-v3 on the processor, the setup first run
+    speed check must not leave Large-v3 on the processor, the setup first run
     greys out ("Needs a graphics card")."""
     cfg, saved = env
     cfg.dictation_language = "ja"
@@ -90,7 +90,7 @@ def test_large_v3_becomes_small_when_the_processor_is_faster(env, monkeypatch):
 
 
 def test_cancelling_the_download_changes_nothing(env, monkeypatch):
-    """Review focus 4."""
+    """A cancelled download leaves the setup as it was."""
     cfg, saved = env
     monkeypatch.setattr("tuxtalk.vulkan_setup_dialogs.ensure_files", lambda p, m, confirm: False)
     t = FakeTray()
@@ -107,8 +107,8 @@ def test_battery_saver_sets_its_timeout(env):
 
 @pytest.mark.parametrize("preset_id", ["recommended", "lightest"])
 def test_leaving_battery_saver_puts_the_timeout_back_to_5_minutes(env, monkeypatch, preset_id):
-    """Ron, 2026-10-06: after Battery saver, the other presets used to keep
-    its 2-minute auto-stop."""
+    """After Battery saver, the other presets must not keep its 2-minute
+    auto-stop."""
     cfg, saved = env
     monkeypatch.setattr("tuxtalk.vulkan_setup_dialogs.ensure_files", lambda p, m, confirm: True)
     monkeypatch.setattr("tuxtalk.vulkan_setup_dialogs.run_speed_check", lambda p, m: True)
@@ -126,7 +126,7 @@ def test_a_timeout_set_in_preferences_is_kept(env, monkeypatch):
 
 @pytest.mark.parametrize("old_id", ["balanced", "accurate", "parakeet", "fastest", "custom"])
 def test_old_or_unknown_ids_are_ignored(env, old_id):
-    """Review focus 3: an older GNOME extension sends the old ids."""
+    """An older GNOME extension sends the old ids."""
     cfg, saved = env
     t = FakeTray()
     t.set_performance_preset(old_id)
@@ -166,8 +166,8 @@ def test_old_preset_table_is_gone():
 
 
 def test_preset_radio_sync_always_clears_the_busy_flag():
-    """Review minor: the flag was set without try/finally, so one failure
-    would have left every later preset click silently ignored."""
+    """The flag is cleared in a finally: one failure must not leave every
+    later preset click silently ignored."""
     t = FakeTray()
     t.preset_radios = {}
 
@@ -180,8 +180,8 @@ def test_preset_radio_sync_always_clears_the_busy_flag():
 
 
 def test_choosing_the_active_preset_again_changes_nothing(env, monkeypatch):
-    """The GNOME menu sends a click on the dotted item too: it used to rerun
-    the download check and speed check, then restart the service."""
+    """The GNOME menu sends a click on the dotted item too, which must not
+    rerun the download check and speed check, then restart the service."""
     cfg, saved = env
     cfg.model, cfg.device = "parakeet-v3", "vulkan"     # Recommended on NVIDIA
     checks = []
