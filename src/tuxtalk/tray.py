@@ -19,7 +19,13 @@ import subprocess
 import time
 import sys
 import fcntl
+import warnings
 from .logger import setup_logger
+
+# The tray menu's icons need Gtk.ImageMenuItem: AppIndicator sends only its
+# image to the desktop. It is deprecated but stays in GTK3, so its warnings
+# are noise in every terminal launch and pasted bug report.
+warnings.filterwarnings("ignore", message=r"Gtk\.ImageMenuItem\.", category=DeprecationWarning)
 logger = setup_logger(__name__)
 
 # CSS styling for the tray popup menu (solid dark background for readability)
