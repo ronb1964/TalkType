@@ -1,8 +1,7 @@
-"""Cairo drawing for the recording indicator's new styles + the soft backing.
+"""Cairo drawing for the recording indicator's non-orb styles + the soft backing.
 
 Pure cairo (no GTK widget), so every renderer is testable by drawing onto an
-ImageSurface with no display. Geometry and colors were settled by live
-prototyping with Ron; see
+ImageSurface with no display. The design is in
 docs/superpowers/specs/2026-08-14-recording-indicator-styles-design.md.
 """
 import math
@@ -11,18 +10,18 @@ import random
 import cairo
 import numpy as np
 
-# Core alpha of the soft dark backing, per level. Approved by Ron.
+# Core alpha of the soft dark backing, per level.
 BACKING_LEVELS = {"off": 0.0, "soft": 0.34, "medium": 0.50, "strong": 0.68}
 
-# The cyan the orb has always used; also the "cyan" color option for every style.
+# The classic orb cyan; also the fallback for an unreadable custom color.
 CYAN = (0.30, 0.70, 1.0)
 
 
 def resolve_color(mode, custom_hex, accent_rgb):
     """(r,g,b) in 0..1 for the active color mode.
 
-    cyan → CYAN, system → the desktop accent, custom → the chosen hex. One
-    control governs every style, including the orb.
+    system → the desktop accent, custom → the chosen hex, anything else →
+    CYAN. One control governs every style, including the orb.
     """
     if mode == "custom":
         h = str(custom_hex or "").lstrip("#")
@@ -53,10 +52,10 @@ def _mix(a, b, t):
 def orb_palette(color):
     """Build the orb's gradient palette from a single base color.
 
-    Mirrors the original cyan orb's structure (white-hot core → color → dark
-    edge, particles color-graded near→far) so recoloring keeps its exact look,
-    only the hue changing. Used for the orb's system/custom color modes; the
-    cyan mode keeps the orb's own hardcoded cyan draw path untouched.
+    Mirrors the classic cyan orb's structure (white-hot core → color → dark
+    edge, particles color-graded near→far) so recoloring keeps its look and
+    only the hue changes. The classic cyan itself keeps the orb's own
+    hand-tuned draw path (see orb_palette_for).
     """
     white, black = (1.0, 1.0, 1.0), (0.0, 0.0, 0.0)
     return {
@@ -74,10 +73,9 @@ def orb_palette(color):
 def is_cyan(rgb, tol=0.03):
     """True when a color is (within tolerance) the classic orb cyan.
 
-    The orb's original hand-tuned gradient is preserved by keying off the color
-    itself, not a mode name: whenever the resolved color is this cyan, the orb
-    draws its byte-identical classic path. A small tolerance is needed because
-    the classic cyan hex (#4db3ff) parses a hair off the CYAN constant.
+    Whenever the resolved color is this cyan, the orb draws its hand-tuned
+    classic path. The tolerance is needed because the classic cyan hex
+    (#4db3ff) parses a hair off the CYAN constant.
     """
     return all(abs(rgb[i] - CYAN[i]) <= tol for i in range(3))
 
@@ -85,7 +83,7 @@ def is_cyan(rgb, tol=0.03):
 def orb_palette_for(rgb):
     """The orb palette for a resolved color, or None to draw the classic path.
 
-    None → the original cyan orb (unchanged). A dict → recolor the orb to `rgb`.
+    None → the classic cyan orb. A dict → recolor the orb to `rgb`.
     """
     return None if is_cyan(rgb) else orb_palette(rgb)
 
@@ -109,7 +107,7 @@ def draw_backing(cr, cx, cy, rx, ry, core):
     """Feathered dark backing centered at (cx,cy), sized rx×ry.
 
     Sampled across many stops because cairo draws straight lines between stops,
-    and too few showed each junction as a faint ring. rx/ry must be chosen so
+    and too few show each junction as a faint ring. rx/ry must be chosen so
     the ellipse feathers to zero inside the window, or the window clips it into
     a hard edge.
     """
@@ -130,6 +128,7 @@ def draw_backing(cr, cx, cy, rx, ry, core):
 
 
 def draw_waveform(cr, w, h, samples, level, color_rgb, backing_core, sensitivity):
+    """The waveform style: the recent samples as one line across the middle."""
     draw_backing(cr, w / 2, h / 2, w * 0.48, h * 0.44, backing_core)
     if len(samples) == 0:
         return
@@ -150,6 +149,7 @@ def draw_waveform(cr, w, h, samples, level, color_rgb, backing_core, sensitivity
 
 
 def draw_bars(cr, w, h, spectrum, color_rgb, backing_core):
+    """The bars style: one bar per spectrum band, rising from a baseline."""
     draw_backing(cr, w / 2, h / 2, w * 0.49, h * 0.46, backing_core)
     n = len(spectrum)
     if n == 0:
@@ -174,19 +174,19 @@ RADIAL_BASE = 0.42       # resting ring, as a fraction of RADIAL_MAX_R
 RADIAL_GAIN = 2.5        # fixed boost, used only when no RadialGain is given (tests, previews)
 RADIAL_AUTO_GAIN = 0.8   # with RadialGain: a peak as loud as you've recently been ~ 85% out
 RADIAL_BINS = 96
-# Where each time slice sits on the ring: a fixed shuffle (seed 7 = the version
-# Ron approved). A regular stride looked like a star; a shuffle looks organic.
+# Where each time slice sits on the ring: a fixed shuffle (seed 7). A regular
+# stride looks like a star; a shuffle looks organic.
 _RADIAL_SPOTS = list(range(RADIAL_BINS))
 random.Random(7).shuffle(_RADIAL_SPOTS)
-RADIAL_SMOOTHING = 2     # wrap-around smoothing passes; more = rounder (3 was too round for Ron)
+RADIAL_SMOOTHING = 2     # wrap-around smoothing passes; more = rounder (3 is too round)
 
 
 class RadialGain:
     """Follows how loud THIS microphone gets, so the radial suits any mic.
 
-    A fixed boost tuned on a loud recording barely moved on Ron's quieter mic,
-    even at sensitivity 1.9 (2026-10-11). Like the bars, this learns two levels
-    from the audio itself:
+    A fixed boost tuned on a loud mic barely moves on a quiet one, even at
+    high sensitivity. Like the bars, this learns two levels from the audio
+    itself:
       noise   - the room's quiet level. Drops at once to any quieter block and
                 creeps up only slowly, so the gaps between words keep it honest.
       ceiling - how loud you've been lately. Jumps up to any louder block and
@@ -221,8 +221,8 @@ class RadialGain:
 
     def normalize(self, peak):
         # The 4x-noise floor is applied here, not stored in the ceiling: when a
-        # dictation's first block was already speech, the noise briefly read as
-        # that speech, and a stored floor kept the ring sluggish for seconds.
+        # dictation's first block is already speech, the noise briefly reads as
+        # that speech, and a stored floor would keep the ring sluggish for seconds.
         noise = self.noise or 0.0
         top = max(self.ceiling, noise * 4, 1e-3)
         quiet = noise * 1.5
@@ -243,16 +243,15 @@ def radial_offsets(samples, sensitivity, bins=RADIAL_BINS, gain=None):
     """How far (0..1) each of `bins` points around the ring pushes outward.
 
     Each slice of the sample window gives its PEAK, not a single raw sample:
-    raw samples are small and swing negative half the time, which made the old
-    ring jitter inward and barely move (Ron, 0.14.6 testing). A gentle curve
+    raw samples are small and swing negative half the time, which makes a
+    ring jitter inward and barely move. A gentle curve
     (power 0.7) lifts quiet speech more than loud. With a RadialGain the peak is
     first scaled to this mic's own range; without one a fixed boost is used.
 
     The slices are then spread around the ring out of time order (slice i goes
-    to a fixed, shuffled spot). Laid out in time order, a syllable starting partway
-    through the window made one side bulge, and the bulge crawled around the
-    ring. Spread out, the whole shape swells evenly with the voice: the "blob"
-    Ron picked over a mirrored ring and a frequency ring (2026-10-11).
+    to a fixed, shuffled spot). In time order, a syllable starting partway
+    through the window makes one side bulge, and the bulge crawls around the
+    ring; spread out, the whole shape swells evenly with the voice.
     Smoothing then rounds the spikes off into a wobble.
     """
     n = len(samples)
@@ -273,6 +272,7 @@ def radial_offsets(samples, sensitivity, bins=RADIAL_BINS, gain=None):
 
 
 def draw_radial(cr, w, h, samples, level, color_rgb, backing_core, sensitivity, gain=None):
+    """The radial style: a ring around a dot that swells with the voice."""
     cx, cy = w / 2, h / 2
     max_r = min(w, h) * RADIAL_MAX_R
     # 1.15 x the ring keeps the feathered edge inside the window (0.42 * 1.15

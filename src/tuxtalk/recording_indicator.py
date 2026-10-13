@@ -28,8 +28,7 @@ logger = setup_logger(__name__)
 
 # Unscaled window size. show_at_position() positions the window as
 # BASE_WIDTH * scale, so the window itself must be created at that size or
-# right- and bottom-anchored positions land off by the difference — they did,
-# by roughly 80px at "large", until this was made a single source of truth.
+# right- and bottom-anchored positions land off by the difference.
 BASE_WIDTH = 200
 BASE_HEIGHT = 180
 
@@ -120,8 +119,8 @@ def fixed_position(position, width, height, monitor, offset_x=0, offset_y=0):
 
 def _main_monitor_rect():
     """The primary monitor (or the first one), as a window_geometry.Rect.
-    The screen's own size spans every monitor, which put "center" on the
-    seam between two side-by-side screens."""
+    The screen's own size spans every monitor, which would put "center" on
+    the seam between two side-by-side screens."""
     from .window_geometry import Rect
     display = Gdk.Display.get_default()
     g = (display.get_primary_monitor() or display.get_monitor(0)).get_geometry()
@@ -149,7 +148,7 @@ class RecordingIndicator(Gtk.Window):
 
         # Style + appearance. The orb keeps its own draw path; the other styles
         # are drawn by indicator_styles from the data fed below. color_mode
-        # (cyan/system/custom) governs every style, including the orb.
+        # (system/custom) governs every style, including the orb.
         self.style = style
         self.color_mode = color_mode
         self.custom_color = custom_color
@@ -178,13 +177,10 @@ class RecordingIndicator(Gtk.Window):
         self.set_accept_focus(False)
         self.set_can_focus(False)
         self.set_focus_on_map(False)
-        self.set_type_hint(Gdk.WindowTypeHint.TOOLTIP)  # Changed from NOTIFICATION to TOOLTIP
+        self.set_type_hint(Gdk.WindowTypeHint.TOOLTIP)  # stays above, never takes focus
         self.set_skip_taskbar_hint(True)
         self.set_skip_pager_hint(True)
-        # Calculate window size to fit full animation with satellites
-        # Need to accommodate: orb + satellites at max extension + padding
-        # Large scale (1.4): satellites reach ~53px from center, need 120+ height
-        # Adding safety margin for all sizes
+        # Room for the orb, its satellites at full extension and the timer
         self.set_default_size(int(BASE_WIDTH * self.scale), int(BASE_HEIGHT * self.scale))
 
         # Try to allow positioning (may not work on all compositors)
@@ -266,10 +262,8 @@ class RecordingIndicator(Gtk.Window):
                 self.start_time = time.time()
                 if self.animation_timeout_id is None:
                     self.animation_timeout_id = GLib.timeout_add(16, self.update_animation)
-            except Exception as e:
-                print(f"❌ Error showing indicator: {e}")
-                import traceback
-                traceback.print_exc()
+            except Exception:
+                logger.exception("Error showing indicator")
             return False  # Don't repeat
 
         GLib.idle_add(_do_show)
@@ -294,9 +288,9 @@ class RecordingIndicator(Gtk.Window):
             if self.animation_timeout_id is not None:
                 GLib.source_remove(self.animation_timeout_id)
                 self.animation_timeout_id = None
-            # The app only ever calls hide_indicator(), never stop_recording(),
-            # so the buffer clearing in there never ran and the last dictation's
-            # sound could flash up briefly when the next one began.
+            # The app calls only hide_indicator(), so clear the recording state
+            # and buffers here, or the last dictation's sound could flash up
+            # when the next one begins.
             self.stop_recording()
             # One line per dictation of what this mic delivered, for tuning
             # the radial.
@@ -326,8 +320,8 @@ class RecordingIndicator(Gtk.Window):
         self.is_recording = False
         self.audio_level = 0.0
         # Clear the reactive buffers so nothing lingers on screen after the key
-        # is released — draw_waveform/draw_bars early-out on empty data. Without
-        # this a bright dash of the last block stayed visible for seconds.
+        # is released — draw_waveform/draw_bars early-out on empty data, where
+        # a bright dash of the last block would otherwise stay for seconds.
         self._wave_history = []
         self.waveform = None
         self.spectrum = None
@@ -339,17 +333,13 @@ class RecordingIndicator(Gtk.Window):
 
         show_at_position() reads position, scale and the offsets at show time,
         so updating them here is enough — the change takes effect the next time
-        the indicator is shown. Deliberately does NOT move a currently visible
-        indicator: the orb should never jump mid-dictation.
+        the indicator is shown. A visible indicator is never moved: the orb
+        should not jump mid-dictation. Keyword arguments left as None keep
+        their current value.
 
-        The style/color/backing/sensitivity kwargs are optional and applied only
-        when given, so existing four-argument callers keep working unchanged.
-
-        Called from the service's config watcher so Preferences can change
-        these without restarting the service, which would reload the Whisper
-        model and leave the hotkey dead for about ten seconds. That watcher
-        runs on the input thread, so this is safe to call from any thread:
-        the window itself is only resized on the GTK thread.
+        Called from the service's config watcher on the input thread, so
+        Preferences can change these without a service restart. Safe from any
+        thread: the window itself is only resized on the GTK thread.
         """
         self.position = str(position).lower()
         self.offset_x = offset_x
@@ -392,10 +382,9 @@ class RecordingIndicator(Gtk.Window):
         """Append the latest audio block to a rolling window and expose that as
         the waveform, so the display is independent of the driver's block size.
 
-        The Flatpak's bundled PortAudio hands uniform 384-frame blocks ~115x/sec
-        while the system PortAudio hands smaller varied blocks ~193x/sec (measured).
-        Drawing only the latest block made the same code render a lively wave on
-        one and a stretched sine on the other. A rolling window normalizes both."""
+        The Flatpak's bundled PortAudio delivers uniform 384-frame blocks
+        ~115x/sec and the system PortAudio smaller, varied blocks ~193x/sec, so
+        drawing only the latest block would look different on each."""
         if self.style == "radial":
             self._radial_gain.update(samples, time.monotonic())
         self._wave_history.extend(samples)
@@ -459,7 +448,7 @@ class RecordingIndicator(Gtk.Window):
         cr.set_operator(cairo.OPERATOR_OVER)
 
         # Non-orb styles are drawn by indicator_styles from the fed data. The
-        # orb keeps its own draw path below, unchanged.
+        # orb keeps its own draw path below.
         if self.style != "orb":
             st = indicator_styles
             core = st.BACKING_LEVELS.get(self.backing, 0.5)
@@ -487,11 +476,9 @@ class RecordingIndicator(Gtk.Window):
         # Draw pill-shaped background container
         self.draw_pill_background(cr, orb_x, orb_y)
 
-        # Draw the animated orb. When the resolved color is the classic cyan the
-        # orb keeps its original hand-tuned gradient (palette=None), byte-identical
-        # to prior releases; any other color recolors it via a palette that keeps
-        # the exact structure and only changes the hue. Keying off the color (not
-        # a mode name) means the default custom-cyan looks exactly like before.
+        # Draw the animated orb. For the classic cyan the orb uses its
+        # hand-tuned gradient (palette=None); any other color recolors it via a
+        # palette that keeps the same structure and only changes the hue.
         orb_palette = self._resolved_colors()[1]
         self.draw_orb(cr, orb_x, orb_y, orb_palette)
 
@@ -535,9 +522,9 @@ class RecordingIndicator(Gtk.Window):
     def draw_orb(self, cr, x, y, palette=None):
         """Draw the glowing orb with pulsing animation.
 
-        palette=None keeps the original cyan gradient exactly (cyan mode).
-        A palette (from indicator_styles.orb_palette) recolors the glow, core
-        and particles while keeping the same structure, for system/custom modes.
+        palette=None draws the classic cyan gradient. A palette (from
+        indicator_styles.orb_palette) recolors the glow, core and particles
+        while keeping the same structure.
         """
         # Calculate current size based on gentle pulse (only when not recording)
         if self.is_recording:
@@ -585,7 +572,7 @@ class RecordingIndicator(Gtk.Window):
     def draw_particles(self, cr, center_x, center_y, base_radius, palette=None):
         """Draw small glowing particles that extend radially based on voice.
 
-        palette=None keeps the original cyan→blue grading; a palette recolors
+        palette=None keeps the classic cyan→blue grading; a palette recolors
         the near→far gradient to match a chosen orb color.
         """
         num_particles = 16
@@ -596,7 +583,7 @@ class RecordingIndicator(Gtk.Window):
 
             # Radial distance: start touching orb, limited extension
             # Quiet/Silence (0.0): 0.7x base radius (very close, almost touching)
-            # Loud (1.0): 1.4x base radius (reduced from 1.7 for more compact look)
+            # Loud (1.0): 1.4x base radius
             min_distance = 0.7
             max_distance = 1.4
 
@@ -631,7 +618,7 @@ class RecordingIndicator(Gtk.Window):
                 g = near[1] + (far[1] - near[1]) * distance_factor
                 b = near[2] + (far[2] - near[2]) * distance_factor
             else:
-                # Original: warm cyan/white (0.7,0.95,1.0) → cooler blue (0.4,0.6,1.0)
+                # Classic: warm cyan/white (0.7,0.95,1.0) → cooler blue (0.4,0.6,1.0)
                 r = 0.7 - (distance_factor * 0.3)
                 g = 0.95 - (distance_factor * 0.35)
                 b = 1.0
