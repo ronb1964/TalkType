@@ -53,15 +53,30 @@ def language_name(code):
     return _NAMES.get(code, code)
 
 
+def _locale_code(value):
+    """"de_DE.UTF-8" -> "de"; None for "C", "POSIX" or anything unreadable."""
+    value = (value or "").strip()
+    if not value or value == "POSIX" or value.split(".")[0] == "C":
+        return None
+    code = value.split(".")[0].split("@")[0].split("_")[0].lower()
+    return code if code.isalpha() and 2 <= len(code) <= 3 else None
+
+
 def system_language(env=None):
     """ISO 639-1 code of the desktop's language, from the locale variables."""
     env = os.environ if env is None else env
+    # LANGUAGE names the display language ahead of the others, as in gettext,
+    # which ignores it when the locale itself is C. KDE sets it when the
+    # display language differs from the formats locale.
+    locale = next((env.get(v) for v in ("LC_ALL", "LC_MESSAGES", "LANG") if env.get(v)), "")
+    if _locale_code(locale):
+        for entry in (env.get("LANGUAGE") or "").split(":"):
+            code = _locale_code(entry)
+            if code:
+                return code
     for var in ("LC_ALL", "LC_MESSAGES", "LANG"):
-        value = (env.get(var) or "").strip()
-        if not value or value == "POSIX" or value.split(".")[0] == "C":
-            continue
-        code = value.split(".")[0].split("@")[0].split("_")[0].lower()
-        if code.isalpha() and 2 <= len(code) <= 3:
+        code = _locale_code(env.get(var))
+        if code:
             return code
     return "en"
 

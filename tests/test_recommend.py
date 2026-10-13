@@ -70,6 +70,12 @@ def test_option_states_grey_out_what_cant_work():
     ({"LANG": "C.UTF-8"}, "en"),
     ({"LANG": "sr_RS@latin"}, "sr"),
     ({}, "en"),
+    # LANGUAGE (the display language) comes first, as in gettext...
+    ({"LANG": "en_US.UTF-8", "LANGUAGE": "de"}, "de"),
+    ({"LANG": "en_US.UTF-8", "LANGUAGE": "pt_BR:pt:en"}, "pt"),
+    ({"LANG": "en_US.UTF-8", "LANGUAGE": ""}, "en"),
+    # ...except when the locale is C, where gettext ignores it.
+    ({"LC_ALL": "C", "LANGUAGE": "de"}, "en"),
 ])
 def test_system_language(env, code):
     assert r.system_language(env) == code
