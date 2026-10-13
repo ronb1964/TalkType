@@ -116,10 +116,9 @@ def single_unit_length(text: str, undo_type: str) -> int:
 def _is_sentence_end(text: str, i: int) -> bool:
     """True if the punctuation at index *i* really ends a sentence.
 
-    "Undo last sentence" used to accept any period, so a decimal or an
-    abbreviation was mistaken for a sentence boundary and undo deleted far too
-    little — "I paid $19.99 for the book." left "I paid $19.", which still looks
-    like a finished sentence and is easy to miss.
+    A decimal or an abbreviation is not a boundary: taking one for it deletes
+    far too little ("I paid $19.99 for the book." would leave "I paid $19.",
+    which still looks like a finished sentence and is easy to miss).
     """
     ch = text[i]
     prev = text[i - 1] if i > 0 else ''
@@ -132,8 +131,8 @@ def _is_sentence_end(text: str, i: int) -> bool:
 
     # Step over any closers that belong to this sentence. normalize_text moves
     # sentence punctuation INSIDE a closing smart quote, so `."` is a shape this
-    # app produces itself — treating it as "not a sentence end" made undo skip
-    # the boundary and delete the previous sentence too, often the whole text.
+    # app produces itself; missing the boundary there would delete the previous
+    # sentence too, often the whole text.
     end = _end_of_sentence(text, i)
 
     if ch in '?!…':

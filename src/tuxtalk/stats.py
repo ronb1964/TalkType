@@ -44,11 +44,13 @@ _LINE_BREAK_MARKER = "\xa7SHIFT_ENTER\xa7"
 
 
 def stats_path():
+    """stats.json in TuxTalk's data folder."""
     from .config import get_data_dir
     return os.path.join(get_data_dir(), "stats.json")
 
 
 def count_words(text):
+    """How many words *text* holds, by _WORD_RE's rules."""
     return len(_WORD_RE.findall((text or "").replace(_LINE_BREAK_MARKER, " ")))
 
 
@@ -177,6 +179,7 @@ def time_saved(words, seconds, wpm=TYPING_WPM):
 
 
 def _totals(day_counts, wpm):
+    """Summed counts and time saved over *day_counts*."""
     words = sum(d["words"] for d in day_counts)
     seconds = sum(d["seconds"] for d in day_counts)
     return {"dictations": sum(d["dictations"] for d in day_counts), "words": words,

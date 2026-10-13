@@ -50,6 +50,7 @@ _DOWNLOAD = {
 
 
 def language_name(code):
+    """English name of a language code, or the code itself if unknown."""
     return _NAMES.get(code, code)
 
 
@@ -93,11 +94,13 @@ def effective_language(cfg):
 
 @dataclass(frozen=True)
 class Hardware:
+    """What detect_hardware() found."""
     gpu_name: str | None      # None: no graphics chip worth using
     has_nvidia: bool = False
 
     @property
     def gpu(self):
+        """Whether there is a graphics chip worth using."""
         return self.gpu_name is not None
 
 
@@ -151,6 +154,7 @@ def detect_hardware(cfg=None):
 
 @dataclass(frozen=True)
 class Setup:
+    """A recommended model and device, with the text that presents them."""
     model: str
     device: str
     title: str
@@ -161,7 +165,8 @@ class Setup:
 def recommend(language, hw, model=None, use_gpu=None):
     """The setup for this computer. *model* and *use_gpu* are the user's own
     choices from Other options; one that can't work is replaced, and the
-    explanation says why."""
+    explanation says why. *model* is Parakeet, small or large-v3 (the ones
+    Other options offers); others have no entry in _BENEFIT or _DOWNLOAD."""
     language = language or "en"
     name = language_name(language)
     parakeet_ok = language in PARAKEET_LANGUAGES

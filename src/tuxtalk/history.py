@@ -29,6 +29,7 @@ _LINE_BREAK_MARKER = "\xa7SHIFT_ENTER\xa7"
 
 
 def _history_path():
+    """The history file, in the user's (or the Flatpak's) runtime directory."""
     base = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
     # Inside a Flatpak, use its private runtime dir (same rule as app/tray
     # _runtime_dir) so a host install and the Flatpak keep separate lists.
