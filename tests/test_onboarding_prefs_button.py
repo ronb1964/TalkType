@@ -50,16 +50,13 @@ def test_mid_onboarding_screen_does_not_offer_preferences():
     )
 
 
-def test_preferences_launcher_handles_appimage_and_dev():
-    """A dev-only launcher would silently do nothing inside the AppImage."""
+def test_preferences_launcher_is_the_shared_one():
+    """It must start Preferences the way the tray does, in every install."""
     text = WELCOME.read_text()
     launcher = text.split("def _open_preferences", 1)
     assert len(launcher) > 1, "Expected a shared _open_preferences() helper"
     body = launcher[1].split("\ndef ", 1)[0]
-    assert "dictate-prefs" in body, (
-        "The launcher does not try the AppImage's bin/dictate-prefs, so the "
-        "button would do nothing for AppImage users."
-    )
-    assert "tuxtalk.prefs" in body, (
-        "The launcher has no dev-mode fallback (python -m tuxtalk.prefs)."
+    assert "launch_preferences" in body, (
+        "The launcher does not use service_launcher.launch_preferences, so it "
+        "can drift from how the tray opens Preferences."
     )

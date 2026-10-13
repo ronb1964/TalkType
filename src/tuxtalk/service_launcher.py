@@ -186,17 +186,6 @@ def build_service_env(base_env=None, dev_pythonpath=None):
     return env
 
 
-def _dictate_script_path():
-    """Path to the AppImage's bin/dictate, or None outside an AppImage.
-
-    __file__ is usr/src/tuxtalk/service_launcher.py → usr/bin/dictate
-    """
-    src_dir = os.path.dirname(__file__)
-    usr_dir = os.path.dirname(os.path.dirname(src_dir))
-    path = os.path.join(usr_dir, "bin", "dictate")
-    return path if os.path.exists(path) else None
-
-
 def dev_pythonpath():
     """PYTHONPATH for running from a source checkout, or None for the AppImage."""
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
@@ -212,16 +201,27 @@ def launch_dictation_service():
     Callers must not spawn it themselves — tests/test_service_launch_parity.py
     fails if they do, because that is how the two paths drifted apart.
     """
-    dictate_script = _dictate_script_path()
-
-    if dictate_script:
-        env = build_service_env()
-        proc = subprocess.Popen([dictate_script], env=env)
-        logger.info(f"Started dictation service via {dictate_script} (PID {proc.pid})")
-        return proc
-
-    # Dev mode: run the module directly with src/ and system PyGObject on the path.
+    # Every install runs the module. The AppImage, .deb and .rpm child inherits
+    # PYTHONPATH and the library paths from dictate-tray; in a source checkout
+    # dev_pythonpath() adds src/ and the system PyGObject.
     env = build_service_env(dev_pythonpath=dev_pythonpath())
     proc = subprocess.Popen([sys.executable, "-m", "tuxtalk.app"], env=env)
     logger.info(f"Started dictation service via python -m tuxtalk.app (PID {proc.pid})")
     return proc
+
+
+def launch_preferences(tab=None):
+    """Start the Preferences window as its own process; returns the Popen.
+
+    Shared by the tray and the first-run screens. Unlike the service it keeps
+    the caller's GDK_BACKEND: Preferences runs natively, so its dropdowns work
+    on Wayland.
+    """
+    env = os.environ.copy()
+    pythonpath = dev_pythonpath()
+    if pythonpath:
+        env["PYTHONPATH"] = pythonpath
+    cmd = [sys.executable, "-m", "tuxtalk.prefs"]
+    if tab:
+        cmd.append(f"--tab={tab}")
+    return subprocess.Popen(cmd, env=env)

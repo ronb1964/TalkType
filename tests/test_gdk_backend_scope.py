@@ -62,7 +62,7 @@ def _load_tray_module():
     return tray
 
 
-def _capture_service_env(monkeypatch, *, appimage: bool):
+def _capture_service_env(monkeypatch):
     """Run _launch_service with Popen stubbed, and return the env it passed."""
     tray = _load_tray_module()
     captured = {}
@@ -83,21 +83,15 @@ def _capture_service_env(monkeypatch, *, appimage: bool):
     monkeypatch.delenv("GDK_BACKEND", raising=False)
 
     monkeypatch.setattr(tray.subprocess, "Popen", fake_popen)
-    # os.path.exists decides AppImage (dictate script present) vs dev fallback.
-    monkeypatch.setattr(tray.os.path, "exists", lambda p: appimage)
 
-    stub = types.SimpleNamespace(
-        _get_dev_pythonpath=lambda: None,
-        _service_pid=None,
-    )
+    stub = types.SimpleNamespace(_service_pid=None)
     tray.DictationTray._launch_service(stub)
     return captured
 
 
-@pytest.mark.parametrize("appimage", [True, False], ids=["appimage", "dev"])
-def test_service_prefers_xwayland(monkeypatch, appimage):
+def test_service_prefers_xwayland(monkeypatch):
     """The recording indicator cannot position itself without XWayland."""
-    captured = _capture_service_env(monkeypatch, appimage=appimage)
+    captured = _capture_service_env(monkeypatch)
     backends = captured["env"].get("GDK_BACKEND", "").split(",")
     assert backends and backends[0] == "x11", (
         "The dictation service must try XWayland FIRST or the recording "
@@ -106,8 +100,7 @@ def test_service_prefers_xwayland(monkeypatch, appimage):
     )
 
 
-@pytest.mark.parametrize("appimage", [True, False], ids=["appimage", "dev"])
-def test_service_falls_back_when_xwayland_is_absent(monkeypatch, appimage):
+def test_service_falls_back_when_xwayland_is_absent(monkeypatch):
     """A bare 'x11' would make the service refuse to start without XWayland.
 
     GDK_BACKEND accepts a comma-separated preference list. Pinning it to x11
@@ -115,7 +108,7 @@ def test_service_falls_back_when_xwayland_is_absent(monkeypatch, appimage):
     XWayland installed — the dictation service dies on launch and there is no
     dictation, to protect a cosmetic indicator position. Degrade instead.
     """
-    captured = _capture_service_env(monkeypatch, appimage=appimage)
+    captured = _capture_service_env(monkeypatch)
     backends = captured["env"].get("GDK_BACKEND", "").split(",")
     assert "wayland" in backends, (
         f"GDK_BACKEND={captured['env'].get('GDK_BACKEND')!r} has no fallback. "

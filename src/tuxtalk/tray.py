@@ -576,27 +576,8 @@ class DictationTray:
     
     # ----- Service management helpers -----
 
-    def _get_dev_pythonpath(self):
-        """Build PYTHONPATH for dev mode (includes src/ and system PyGObject).
-
-        Returns the PYTHONPATH string if in dev mode, or None for AppImage.
-        """
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        src_dir_check = os.path.join(project_root, "src")
-        if os.path.exists(src_dir_check):
-            return ":".join([
-                os.path.abspath(src_dir_check),
-                "/usr/lib64/python3.14/site-packages",
-                "/usr/lib/python3.14/site-packages",
-            ])
-        return None
-
     def _launch_service(self):
-        """Launch the dictation service subprocess.
-
-        Finds the dictate script (AppImage) or falls back to python -m (dev mode).
-        """
-        # AppImage path: __file__ → usr/src/tuxtalk/tray.py → usr/bin/dictate
+        """Launch the dictation service subprocess (see service_launcher)."""
         # Delegated so the tray and Preferences start the service identically.
         # They used to spawn it separately and only this copy set GDK_BACKEND,
         # so a restart from Preferences ran the service on native Wayland and
@@ -1044,30 +1025,9 @@ class DictationTray:
 
         tab_desc = f" ({tab} tab)" if tab else ""
 
-        # AppImage path: __file__ → usr/src/tuxtalk/tray.py → usr/bin/dictate-prefs
-        src_dir = os.path.dirname(__file__)
-        usr_dir = os.path.dirname(os.path.dirname(src_dir))
-        prefs_script = os.path.join(usr_dir, "bin", "dictate-prefs")
-
-        if os.path.exists(prefs_script):
-            cmd = [prefs_script]
-            if tab:
-                cmd.append(f"--tab={tab}")
-            self.preferences_process = subprocess.Popen(cmd, env=os.environ.copy())
-            logger.info(f"Opened preferences{tab_desc} via {prefs_script}")
-        else:
-            # Dev mode fallback
-            env = os.environ.copy()
-            pythonpath = self._get_dev_pythonpath()
-            if pythonpath:
-                # Prefs also needs Python 3.13 paths for GTK bindings
-                pythonpath += ":/usr/lib64/python3.13/site-packages:/usr/lib/python3.13/site-packages"
-                env["PYTHONPATH"] = pythonpath
-            cmd = [sys.executable, "-m", "tuxtalk.prefs"]
-            if tab:
-                cmd.append(f"--tab={tab}")
-            self.preferences_process = subprocess.Popen(cmd, env=env)
-            logger.info(f"Opened preferences{tab_desc} via Python module")
+        from .service_launcher import launch_preferences
+        self.preferences_process = launch_preferences(tab)
+        logger.info(f"Opened preferences{tab_desc}")
 
     def open_preferences(self, _):
         """Launch preferences window."""

@@ -13,8 +13,6 @@ Cross-desktop compatible - works on GNOME, KDE, XFCE, etc.
 import math
 import os
 import select
-import subprocess
-import sys
 import threading
 import time
 import gi
@@ -3205,24 +3203,15 @@ def show_welcome_and_install():
 
 
 def _open_preferences():
-    """Launch the Preferences window as its own process.
-
-    Mirrors the AppImage/dev split in DictationTray.open_preferences. These
-    dialogs are module-level functions with no access to the tray instance, so
-    the resolution is repeated here rather than imported.
+    """Launch the Preferences window as its own process, the same way the
+    tray does (service_launcher.launch_preferences).
 
     Never raises: failing to open Preferences must not prevent the user from
     dismissing the final screen and getting on with dictating.
     """
     try:
-        # AppImage path: __file__ → usr/src/tuxtalk/ → usr/bin/dictate-prefs
-        src_dir = os.path.dirname(__file__)
-        usr_dir = os.path.dirname(os.path.dirname(src_dir))
-        prefs_script = os.path.join(usr_dir, "bin", "dictate-prefs")
-        if os.path.exists(prefs_script):
-            subprocess.Popen([prefs_script], env=os.environ.copy())
-        else:
-            subprocess.Popen([sys.executable, "-m", "tuxtalk.prefs"], env=os.environ.copy())
+        from .service_launcher import launch_preferences
+        launch_preferences()
     except Exception as e:
         logger.warning(f"Could not open Preferences: {e}")
 
