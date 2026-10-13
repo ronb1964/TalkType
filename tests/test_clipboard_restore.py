@@ -157,6 +157,7 @@ def test_paste_uses_the_keeper_only_when_the_setting_is_on(monkeypatch):
     class Proc:
         returncode = 0
         stdin = Pipe()
+        stderr = None
         def poll(self): return 0
         def communicate(self, *a, **k): return b"", b""
         def wait(self, *a, **k): return 0

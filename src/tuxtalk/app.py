@@ -1529,6 +1529,10 @@ YDOTOOL_TIMEOUT_S = 5.0
 # single keystroke. wtype has no per-key delay, so a fixed ceiling is enough.
 WTYPE_TIMEOUT_S = 20.0
 
+# How long wl-copy may take to hand the dictation to the compositor. It is
+# usually a few milliseconds; a slower one is stuck, and nothing is pasted.
+WL_COPY_READY_TIMEOUT_S = 1.0
+
 # ydotool's own default wait after each `ydotool key` event. Backspaces pass it
 # explicitly, so their time limit is worked out from the speed really used.
 BACKSPACE_DELAY_MS = 12
@@ -1985,7 +1989,6 @@ def _paste_text(text: str) -> bool:
             # wm_class is pushed by the GNOME extension on every focus change.
 
             # Copy text to clipboard
-            # wl-copy needs to stay running to serve clipboard requests
             paste_start = time.time()
             logger.info(f"TIMING: Starting paste operation for {len(text)} chars")
             # Optionally keep what the user had copied, to put back afterwards
@@ -2001,24 +2004,27 @@ def _paste_text(text: str) -> bool:
             # --sensitive keeps the dictation out of clipboard managers' history
             # (Klipper saved every one to disk) where wl-copy supports it.
             proc = subprocess.Popen(clipboard.wl_copy_command(), stdin=subprocess.PIPE,
-                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
             try:
                 proc.stdin.write(text.encode("utf-8"))
                 proc.stdin.close()
-                wl_copy_time = time.time() - paste_start
-                logger.info(f"TIMING: wl-copy started in {wl_copy_time:.3f}s")
 
-                # Wait for clipboard to be ready (needs time for wl-copy to set up)
-                time.sleep(0.08)
-
-                # wl-copy forks on success, so the process we spawned exits 0
-                # right away; a still-running one is serving the clipboard and
-                # is equally healthy. A non-zero exit means the clipboard was
-                # never set, and pasting now would insert the wrong text.
-                status = proc.poll()
-                if status is not None and status != 0:
-                    logger.error(f"wl-copy failed (exit {status}) — clipboard not set, skipping paste")
+                # wl-copy forks a background copy to serve the clipboard once
+                # the compositor has accepted the selection, and the process we
+                # started then exits 0. Until it exits the clipboard may still
+                # hold the old contents, and pasting would insert those.
+                try:
+                    status = proc.wait(timeout=WL_COPY_READY_TIMEOUT_S)
+                except subprocess.TimeoutExpired:
+                    logger.error(f"wl-copy did not set the clipboard within "
+                                 f"{WL_COPY_READY_TIMEOUT_S}s — skipping paste")
                     return False
+                if status != 0:
+                    err = proc.stderr.read().decode(errors="replace").strip() if proc.stderr else ""
+                    logger.error(f"wl-copy failed (exit {status}): {err} — clipboard not set, skipping paste")
+                    return False
+                wl_copy_time = time.time() - paste_start
+                logger.info(f"TIMING: wl-copy set the clipboard in {wl_copy_time:.3f}s")
 
                 ydotool_start = time.time()
                 if not _send_paste_keystroke():
@@ -2032,13 +2038,16 @@ def _paste_text(text: str) -> bool:
                 logger.info(f"TIMING: Total paste operation time: {total_paste_time:.3f}s")
                 return True
             finally:
-                # Always reap wl-copy, even if the paste raised partway, so it
-                # never lingers as an orphan holding the clipboard open.
+                # Only a wl-copy that never finished handing off is still ours
+                # to stop; the background copy serving the clipboard is not.
                 try:
-                    proc.terminate()
-                    proc.wait(timeout=0.3)
+                    if proc.poll() is None:
+                        proc.terminate()
+                        proc.wait(timeout=0.3)
                 except Exception:
                     pass  # wl-copy cleanup is best-effort
+                if proc.stderr is not None:
+                    proc.stderr.close()
                 # Restore even after a failed paste, so the user's clipboard
                 # isn't lost either way.
                 if keeping:

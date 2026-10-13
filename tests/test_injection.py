@@ -29,13 +29,15 @@ class FakeCompleted:
 class FakePopen:
     """Stands in for a wl-copy process.
 
-    wl-copy forks by default: the process we spawn exits 0 straight away on
-    success, and non-zero when it cannot reach the compositor.
+    wl-copy forks by default: the process we spawn exits 0 once the clipboard
+    is set, and non-zero when it cannot reach the compositor. returncode=None
+    is one that never gets that far.
     """
 
     def __init__(self, returncode=None):
         self._returncode = returncode
         self.stdin = _FakeStdin()
+        self.stderr = _FakeStderr()
         self.terminated = False
 
     def poll(self):
@@ -43,9 +45,21 @@ class FakePopen:
 
     def terminate(self):
         self.terminated = True
+        if self._returncode is None:
+            self._returncode = -15
 
     def wait(self, timeout=None):
-        return self._returncode or 0
+        if self._returncode is None:
+            raise subprocess.TimeoutExpired(cmd="wl-copy", timeout=timeout)
+        return self._returncode
+
+
+class _FakeStderr:
+    def read(self):
+        return b"Failed to connect to a Wayland server"
+
+    def close(self):
+        pass
 
 
 class _FakeStdin:
@@ -99,12 +113,27 @@ def test_paste_reports_success_when_both_tools_succeed(monkeypatch, wayland):
     assert app._paste_text("hello") is True
 
 
-def test_paste_reports_success_while_the_clipboard_server_is_still_running(monkeypatch, wayland):
-    """A wl-copy still serving the clipboard polls as None, which is healthy."""
-    monkeypatch.setattr(app.subprocess, "Popen", lambda *a, **k: FakePopen(returncode=None))
+def test_paste_waits_for_wl_copy_to_set_the_clipboard(monkeypatch, wayland):
+    """The wl-copy we start exits once the clipboard is set. One still running
+    has not got that far, so Ctrl+V would paste the old clipboard contents;
+    and it used to be killed afterwards, before it could serve the new one."""
+    proc = FakePopen(returncode=None)
+    monkeypatch.setattr(app.subprocess, "Popen", lambda *a, **k: proc)
+    keys = []
+    monkeypatch.setattr(app.subprocess, "run", lambda *a, **k: keys.append(a) or FakeCompleted(returncode=0))
+
+    assert app._paste_text("hello") is False
+    assert not keys, "pasted before the clipboard held the dictation"
+    assert proc.terminated, "a stuck wl-copy was left running"
+
+
+def test_a_wl_copy_that_handed_off_is_not_killed(monkeypatch, wayland):
+    proc = FakePopen(returncode=0)
+    monkeypatch.setattr(app.subprocess, "Popen", lambda *a, **k: proc)
     monkeypatch.setattr(app.subprocess, "run", lambda *a, **k: FakeCompleted(returncode=0))
 
     assert app._paste_text("hello") is True
+    assert not proc.terminated
 
 
 def test_paste_is_refused_outside_a_wayland_session(monkeypatch):
