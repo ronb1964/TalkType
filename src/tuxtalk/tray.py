@@ -538,8 +538,12 @@ class DictationTray:
         from .service_launcher import is_service_pid
         return is_service_pid(pid)
 
-    def _auto_start_service(self):
-        """Auto-start the dictation service if not already running."""
+    def _auto_start_service(self, _waited=0):
+        """Auto-start the dictation service if not already running.
+
+        *_waited* counts the 100 ms checks spent waiting for a pre-rename
+        service to exit; they run as GLib timeouts so the menu stays usable.
+        """
         try:
             # NEVER start during onboarding - hotkey test needs to capture keys
             if self.onboarding_in_progress:
@@ -550,15 +554,14 @@ class DictationTray:
             # update is old code holding the shared lock: replace it, so the
             # new version's service starts and the tray can control it.
             from .service_launcher import pre_rename_service_pids, stop_dictation_service
-            if pre_rename_service_pids():
-                logger.info("Stopping the pre-0.15.0 dictation service left running by the update")
-                stop_dictation_service()
+            if pre_rename_service_pids() and _waited < 30:
+                if _waited == 0:
+                    logger.info("Stopping the pre-0.15.0 dictation service left running by the update")
+                    stop_dictation_service()
                 # SIGTERM returns at once; give it up to 3 s to exit and free
                 # the lock, or the check below would still see it running.
-                for _ in range(30):
-                    if not pre_rename_service_pids():
-                        break
-                    time.sleep(0.1)
+                GLib.timeout_add(100, self._auto_start_service, _waited + 1)
+                return False
 
             # Only start if not already running
             if not self.is_service_running():
@@ -1976,6 +1979,20 @@ class DictationTray:
         self.indicator.set_menu(self.build_menu())
 
 
+def _refresh_kde_menu_cache():
+    """Rebuild KDE's launcher cache so a new TuxTalk menu entry shows at once."""
+    for tool in ("kbuildsycoca6", "kbuildsycoca5"):
+        try:
+            subprocess.run([tool], capture_output=True, timeout=15)
+            logger.info(f"KDE menu cache refreshed ({tool})")
+            return
+        except FileNotFoundError:
+            continue  # not this KDE version, or not KDE at all
+        except Exception as e:
+            logger.debug(f"Could not refresh KDE menu cache: {e}")
+            return
+
+
 def _show_rename_notice_once():
     """'TalkType is now TuxTalk', once, after this start converted an old
     TalkType install (rename_migration leaves a marker for it). It is cleared
@@ -2135,19 +2152,10 @@ def main():
                 logger.info("Onboarding complete - starting service")
 
                 # Refresh KDE menu cache so TuxTalk shows in start menu immediately
-                # This must run AFTER the .desktop file is created by the welcome dialog
-                try:
-                    subprocess.run(["kbuildsycoca6"], capture_output=True, timeout=15)
-                    logger.info("KDE menu cache refreshed (kbuildsycoca6)")
-                except FileNotFoundError:
-                    # Not KDE, try kbuildsycoca5
-                    try:
-                        subprocess.run(["kbuildsycoca5"], capture_output=True, timeout=15)
-                        logger.info("KDE menu cache refreshed (kbuildsycoca5)")
-                    except FileNotFoundError:
-                        pass  # Not KDE
-                except Exception as e:
-                    logger.debug(f"Could not refresh KDE menu cache: {e}")
+                # This must run AFTER the .desktop file is created by the welcome dialog.
+                # On a thread: the rebuild can take seconds and would freeze the menu.
+                import threading
+                threading.Thread(target=_refresh_kde_menu_cache, daemon=True).start()
 
                 GLib.timeout_add(500, tray._auto_start_service)
                 return False  # Don't repeat

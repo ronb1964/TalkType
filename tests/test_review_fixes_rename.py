@@ -30,7 +30,7 @@ def test_a_talktype_service_left_running_by_the_update_is_recognised():
 def test_the_tray_replaces_a_pre_rename_service_on_start():
     import pathlib
     src = (pathlib.Path(uc.__file__).parent / "tray.py").read_text()
-    body = src[src.index("def _auto_start_service(self):"):]
+    body = src[src.index("def _auto_start_service(self"):]
     body = body[:body.index("\n    def ")]
     assert "pre_rename_service_pids(" in body and "stop_dictation_service(" in body
 
