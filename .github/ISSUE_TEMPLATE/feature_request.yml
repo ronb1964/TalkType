@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for suggesting a feature! We'd love to hear your ideas for improving TalkType.
+        Thanks for the idea. Tell me what you're trying to do and I'll see what I can come up with.
 
   - type: textarea
     id: problem
@@ -22,7 +22,7 @@ body:
     attributes:
       label: Proposed Solution
       description: How would you like this to work?
-      placeholder: "It would be great if TalkType could..."
+      placeholder: "It would be great if TuxTalk could..."
     validations:
       required: true
 

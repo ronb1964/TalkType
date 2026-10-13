@@ -1,12 +1,12 @@
 name: Bug Report
-description: Report a problem with TalkType
+description: Report a problem with TuxTalk
 title: "[Bug]: "
 labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time to report a bug! Please fill out the information below to help us fix it.
+        Thanks for reporting this. The more of this you fill in, the faster I can track it down.
 
   - type: input
     id: distro
@@ -47,9 +47,9 @@ body:
   - type: input
     id: version
     attributes:
-      label: TalkType Version
-      description: What version of TalkType are you using? (Check Help > About)
-      placeholder: "e.g., v0.5.10"
+      label: TuxTalk Version
+      description: Which version are you on? The tray menu's About TuxTalk shows it.
+      placeholder: "e.g., 0.15.0"
     validations:
       required: true
 
@@ -68,7 +68,7 @@ body:
       label: Steps to Reproduce
       description: How can we reproduce this bug?
       placeholder: |
-        1. Open TalkType
+        1. Open TuxTalk
         2. Click on...
         3. See error
     validations:
@@ -79,8 +79,10 @@ body:
     attributes:
       label: Log Output (if applicable)
       description: |
-        Paste relevant lines from the log file at `~/.config/talktype/talktype.log`
-        You can view recent logs with: `tail -50 ~/.config/talktype/talktype.log`
+        Paste the lines from around the time it happened. The log is at `~/.config/tuxtalk/tuxtalk.log`,
+        and `tail -50 ~/.config/tuxtalk/tuxtalk.log` shows the last 50 lines.
+        On 0.14.x and earlier it's `~/.config/talktype/talktype.log`.
+        For the Flatpak it's `~/.var/app/io.github.ronb1964.TuxTalk/config/tuxtalk/tuxtalk.log`.
       render: shell
 
   - type: textarea

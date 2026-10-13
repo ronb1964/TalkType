@@ -82,3 +82,16 @@ def test_extension_ui_text_says_tuxtalk():
 
 def test_about_says_formerly_talktype():
     assert "Formerly TalkType" in (SRC / "tray.py").read_text()
+
+
+def test_issue_templates_say_tuxtalk_and_point_to_the_current_log():
+    templates = SRC.parent.parent / ".github" / "ISSUE_TEMPLATE"
+    bug = (templates / "bug_report.yml").read_text()
+    assert "~/.config/tuxtalk/tuxtalk.log" in bug
+    for f in templates.glob("*.yml"):
+        text = f.read_text()
+        # The repo URL waits for the GitHub rename, and 0.14.x users still
+        # need their old log path.
+        text = text.replace("github.com/ronb1964/TalkType", "")
+        text = text.replace("~/.config/talktype/talktype.log", "")
+        assert "TalkType" not in text and "talktype" not in text, f.name
