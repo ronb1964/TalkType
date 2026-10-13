@@ -1,15 +1,11 @@
 """
-AT-SPI (Assistive Technology Service Provider Interface) integration for TuxTalk.
+AT-SPI (Assistive Technology Service Provider Interface) queries for TuxTalk.
 
-This module provides intelligent context detection and text insertion using the
-AT-SPI accessibility framework. It enables:
-- Detection of focused application and window context
-- Reading text selection state
-- Direct text insertion (more reliable than keystroke simulation)
-- Application-specific behavior (code editors, terminals, chat windows, etc.)
-
-Falls back gracefully to ydotool/wtype when AT-SPI is not available or not
-supported by the target application.
+Reads what the accessibility framework knows about the focused widget (the
+application, its role, the selection and caret, whether it is a password
+field) and can insert text through AT-SPI's EditableText interface. Many apps,
+Electron ones among them, expose little or nothing to AT-SPI, so every answer
+is best-effort and callers must handle None or False.
 
 Nothing imports this module yet. It is kept as the base for detecting password
 fields (see ROADMAP.md, "Auto-disable in password fields").
@@ -116,12 +112,8 @@ def get_focused_context() -> Optional[AppContext]:
         try:
             state_set = focused.get_state_set()
             if state_set:
-                states = state_set.get_states()
-                # Check for password/sensitive state
-                if Atspi.StateType.SENSITIVE in states:
-                    # This might be overly broad - refine based on testing
-                    pass
-                # Better check: role is PASSWORD_TEXT
+                # The role, not the SENSITIVE state: that one is set on
+                # almost every enabled widget.
                 if context.role == "password text":
                     context.is_password = True
         except Exception as e:
@@ -376,8 +368,7 @@ def is_vscode_active() -> bool:
             capture_output=True,
             text=True
         )
-        # If we have VS Code processes, assume it might be active
-        # This is a heuristic - not perfect, but good enough
+        # A heuristic: any running VS Code process counts, focused or not.
         return result.returncode == 0
     except Exception:
         return False
@@ -502,14 +493,11 @@ def _get_active_window_title() -> str:
                     timeout=2
                 )
                 if result.returncode == 0:
-                    # Parse the output to find focused window
-                    # The output is a JSON-like string with window info
+                    # The extension's reply is a JSON list of windows, but gdbus
+                    # prints it inside a GVariant tuple, which json.loads rejects.
                     output = result.stdout
-                    # Look for "focus": true in the output and extract title
-                    # This is a simplified approach - may need refinement
                     import json
                     try:
-                        # Try to parse as JSON
                         data = json.loads(output)
                         for window in data:
                             if window.get('focus'):
@@ -548,9 +536,6 @@ def _get_active_window_title() -> str:
                                 parts = line.split(None, 3)
                                 if len(parts) >= 4:
                                     return parts[3]
-        
-        # Last resort: try to get window info from /proc
-        # This won't give us the title, but we can try to detect terminal processes
         
         return ""
     except Exception as e:
