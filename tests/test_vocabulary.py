@@ -12,11 +12,6 @@ from tuxtalk import config, vocabulary
 
 # --- which words were picked -------------------------------------------------
 
-def test_words_are_split_on_whitespace():
-    assert vocabulary.words("I ordered filament, for the  printer.") == [
-        "I", "ordered", "filament,", "for", "the", "printer."]
-
-
 @pytest.mark.parametrize("text, first, last, phrase", [
     ("I use bamboo studio daily", 2, 3, "bamboo studio"),
     ("Open Bamboo Studio.", 1, 2, "bamboo studio"),        # case and full stop

@@ -39,22 +39,12 @@ yeah you your okay ok right
 """.split())
 
 
-def words(text):
-    """The dictation split into the clickable words the dialog shows."""
-    return _WORD_RE.findall(text)
-
-
-def _selection(text, first, last):
-    """(start, end) character span covering words *first*..*last* inclusive."""
+def word_span(text, first, last):
+    """(start, end) character offsets covering words *first*..*last*
+    inclusive, in either order: the picked words in the dialog's text box."""
     first, last = sorted((first, last))
     spans = [m.span() for m in _WORD_RE.finditer(text)]
     return spans[first][0], spans[last][1]
-
-
-def word_span(text, first, last):
-    """(start, end) character offsets covering words *first*..*last*, for
-    highlighting the picked words in the dialog's text box."""
-    return _selection(text, first, last)
 
 
 def word_range(text, start, end):
@@ -80,7 +70,7 @@ def phrase_for(text, first, last):
     """The trigger phrase for a selection: lowercased, single-spaced, with the
     punctuation at its ends removed. Custom commands match case-insensitively
     against the raw transcription, which has no such punctuation."""
-    start, end = _selection(text, first, last)
+    start, end = word_span(text, first, last)
     core = _EDGE_RE.match(text[start:end]).group(2)
     return " ".join(core.split()).lower()
 
@@ -88,7 +78,7 @@ def phrase_for(text, first, last):
 def fixed_text(text, first, last, replacement):
     """*text* with the selected words replaced, keeping the punctuation around
     them ("Bamboo Studio," -> "BambuStudio,") and everything else as it was."""
-    start, end = _selection(text, first, last)
+    start, end = word_span(text, first, last)
     lead, _core, trail = _EDGE_RE.match(text[start:end]).groups()
     return text[:start] + lead + replacement + trail + text[end:]
 
