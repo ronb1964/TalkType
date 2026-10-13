@@ -1,5 +1,5 @@
 """On the Flatpak the dictation keys are owned by the desktop's global-shortcuts
-portal, not TalkType's config — so Preferences must point the user at the right
+portal, not TuxTalk's config — so Preferences must point the user at the right
 place to change them instead of showing an editable (and wrong) F8/F9 combo."""
 
 from tuxtalk.desktop_detect import flatpak_hotkey_hint

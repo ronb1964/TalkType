@@ -12,8 +12,8 @@ from tuxtalk.app import _strip_hallucinations
 # --- ordinary sentences must survive ---------------------------------------
 
 def test_a_sentence_ending_in_subscribe_keeps_the_word():
-    """"subscribe" was in the always-strip list, so any dictation ending in
-    it silently lost the word — with no indication anything was removed."""
+    """"subscribe" is not on the always-strip list, so a dictation ending in
+    it keeps the word instead of silently losing it."""
     assert _strip_hallucinations("tell them to subscribe", 0.0) == "tell them to subscribe"
 
 
@@ -49,9 +49,9 @@ def test_a_whole_text_outro_is_still_dropped():
 
 
 # --- sign-offs people really dictate ----------------------------------------
-# "thanks for watching" and "see you next time" were on the always-strip list,
-# so they were cut from the end of every dictation whatever Whisper said, and a
-# dictation that was only "Thanks for listening." typed nothing.
+# "thanks for watching" and "see you next time" are stripped only when Whisper
+# reports the audio was probably not speech. Cut every time, a dictation that
+# was only "Thanks for listening." would type nothing.
 
 def test_a_dictated_sign_off_is_kept():
     text = "Great meeting today, see you next time."
@@ -85,12 +85,12 @@ def test_stripping_keeps_the_sentences_own_closing_mark():
 
 def test_the_cut_lands_in_the_right_place_after_a_dotted_capital_i():
     """"İ".lower() is two characters, so an index found in a lower-cased copy
-    pointed past the phrase in the original and cut real words."""
+    would point past the phrase in the original and cut real words."""
     text = "İstanbul İzmir İzmit İnegöl like and subscribe"
     assert _strip_hallucinations(text, 0.0) == "İstanbul İzmir İzmit İnegöl"
 
 
-# --- the whole-text and trailing tiers are unchanged ------------------------
+# --- the whole-text and trailing tiers --------------------------------------
 
 def test_a_silent_recording_transcribed_as_thank_you_is_dropped():
     assert _strip_hallucinations("thank you", 0.9).strip() == ""

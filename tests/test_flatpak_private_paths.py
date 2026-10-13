@@ -33,7 +33,7 @@ def test_get_data_dir_is_private_inside_flatpak(monkeypatch, tmp_path):
     cfg = _config()
     monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TalkType")
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
-    # DATA_DIR is "TalkType" outside DEV_MODE.
+    # DATA_DIR is "TuxTalk" outside DEV_MODE.
     assert cfg.get_data_dir() == str(tmp_path / "data" / cfg.DATA_DIR)
 
 

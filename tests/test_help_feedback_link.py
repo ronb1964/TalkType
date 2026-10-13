@@ -1,8 +1,8 @@
 """The Help window offers a feedback link, and never asks for feedback itself.
 
-Ron's rule: nothing in TalkType pops up asking for feedback, but a link people
-can go looking for in Help is welcome (2026-10-03). The link sits under the
-tabs so it's there whichever tab is open.
+Nothing in TuxTalk pops up asking for feedback, but a link people can go
+looking for in Help is welcome. The link sits under the tabs so it's there
+whichever tab is open.
 """
 import pytest
 

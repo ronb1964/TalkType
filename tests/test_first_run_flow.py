@@ -23,9 +23,8 @@ def env(monkeypatch):
 
 
 def test_graphics_card_setup(env):
-    """One download window: the model's own window fetches the engine too.
-    A separate engine window first meant two windows, and on a dead network
-    the engine was tried twice (review minor)."""
+    """One download window: the model's own window fetches the engine too, so
+    there is no second window and a dead network is tried only once."""
     cfg, calls = env
     wd._apply_first_run_setup({"model": "parakeet-v3", "device": "vulkan", "dictation_language": "en"})
     assert ("engine",) not in calls
@@ -58,7 +57,8 @@ def test_tips_dialog_no_longer_picks_a_model():
 @pytest.fixture
 def store(monkeypatch):
     """Like the real config: every load is a fresh copy and every save writes
-    all of it back. The shared-object fixture above hid a lost write."""
+    all of it back, so a lost write shows (the shared-object fixture above
+    would hide one)."""
     saved = {"model": "parakeet-v3", "device": "cpu", "dictation_language": "",
              "recommend_notice_shown": False, "vulkan_slower": False}
     calls = []
@@ -93,7 +93,7 @@ def test_a_lost_speed_check_stays_remembered(store, monkeypatch):
 
 def test_large_v3_becomes_small_when_it_ends_up_on_the_processor(store, monkeypatch):
     """Large-v3 on the processor is the setup the card greys out ("Needs a
-    graphics card"), and first run would have fetched 3 GB of it unasked."""
+    graphics card"), and first run must not fetch 3 GB of it unasked."""
     saved, calls = store
     _processor_wins(monkeypatch)
     wd._apply_first_run_setup({"model": "large-v3", "device": "vulkan", "dictation_language": "ja"})
@@ -111,7 +111,7 @@ def test_failed_graphics_download_also_falls_back_to_small(store, monkeypatch):
 
 
 def test_a_cancelled_first_run_download_starts_no_other(store, monkeypatch):
-    """Cancel used to start Whisper Small, then Tiny: three Cancels to get out."""
+    """One Cancel is enough: it must not go on to Whisper Small, then Tiny."""
     saved, calls = store
 
     def cancelled(m, result_info=None, **k):
@@ -126,8 +126,8 @@ def test_a_cancelled_first_run_download_starts_no_other(store, monkeypatch):
 
 
 def test_a_cancelled_graphics_download_starts_no_processor_download(store, monkeypatch):
-    """Cancel in the graphics download window went straight on to a
-    processor download of the same model: two Cancels to get out."""
+    """Cancel in the graphics download window must not go straight on to a
+    processor download of the same model."""
     saved, calls = store
     speed = []
 
@@ -196,7 +196,7 @@ def test_model_download_reports_a_cancel(monkeypatch):
 
 
 def test_the_ready_screen_names_the_key_the_user_chose(monkeypatch):
-    """It always said F8, even right after the hotkey test changed the key."""
+    """Not always F8: the hotkey test may have changed the key."""
     monkeypatch.setattr("tuxtalk.config.load_config",
                         lambda: types.SimpleNamespace(hotkey="F10"))
     assert wd._saved_hold_key() == "F10"

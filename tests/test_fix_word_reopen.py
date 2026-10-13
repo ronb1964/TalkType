@@ -1,9 +1,9 @@
 """Re-opening Fix a Word while it is open must pick the dictation asked for.
 
-The open window kept the list it was opened with, but the tray passes an
-index into the history as it is now. After one new dictation, Fix a Word on
-the newest entry (index 0) showed the previous one, and the new dictations
-were missing from the dropdown.
+The tray passes an index into the history as it is now, so the open window
+must refresh its list. Otherwise, after one new dictation, Fix a Word on the
+newest entry (index 0) shows the previous one, and the new dictations are
+missing from the dropdown.
 """
 from types import SimpleNamespace
 

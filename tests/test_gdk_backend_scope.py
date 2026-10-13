@@ -1,15 +1,15 @@
 """GDK_BACKEND=x11 must be scoped to the dictation service, never set globally.
 
-TalkType forces the X11 backend so the recording indicator can place itself:
+TuxTalk forces the X11 backend so the recording indicator can place itself:
 gtk_window_move() is honoured under XWayland and ignored under native Wayland,
 which centres the window instead. That was measured on a real GNOME/Wayland
 session — top-left was honoured as (20, 20) under x11 and ignored under wayland.
 
-The cost of setting it globally is severe and was shipped for several releases:
-under XWayland, GTK3 combo popups dismiss on button-release, so EVERY dropdown
-in the app is unusable. The user cannot pick a model in the welcome dialog, or
-change model, device or hotkey in Preferences. Verified with a plain GtkComboBox
-containing no TalkType code, which reproduced it under x11 and worked natively.
+The cost of setting it globally is severe: under XWayland, GTK3 combo popups
+dismiss on button-release, so EVERY dropdown in the app is unusable. The user
+cannot pick a model in the welcome dialog, or change model, device or hotkey in
+Preferences. A plain GtkComboBox containing no TuxTalk code behaves the same
+under x11 and works natively.
 
 The split works because the two live in different processes: the tray owns the
 welcome dialog and spawns Preferences (dropdowns, needs native Wayland), while
@@ -28,7 +28,7 @@ import pytest
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 # Launchers that start the TRAY. Setting the backend here leaks it to the
-# welcome dialog and to Preferences, which is what broke every dropdown.
+# welcome dialog and to Preferences, which breaks every dropdown.
 TRAY_LAUNCHERS = [
     "container-build.sh",  # writes the AppImage's AppRun
     "run-dev.sh",          # dev launcher
@@ -78,8 +78,8 @@ def _capture_service_env(monkeypatch):
     # The launching environment usually HAS GDK_BACKEND set (a terminal started
     # from a launcher that exports it, for instance). os.environ.copy() would
     # then carry it through and this test would pass without tray.py setting
-    # anything — the exact false pass observed while writing it. Clear it so the
-    # assertion can only be satisfied by _launch_service itself.
+    # anything. Clear it so the assertion can only be satisfied by
+    # _launch_service itself.
     monkeypatch.delenv("GDK_BACKEND", raising=False)
 
     monkeypatch.setattr(tray.subprocess, "Popen", fake_popen)

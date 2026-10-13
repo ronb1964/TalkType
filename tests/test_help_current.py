@@ -1,7 +1,7 @@
-"""Help and the README describe the app as it is in 0.14.2.
+"""Help and the README describe the app as it is.
 
-A read-through before 0.14.2 found them still describing the old first run
-(an NVIDIA-only CUDA offer), calling Whisper Small the recommended model, a red
+Each test keeps out a description that no longer fits: the old first run (an
+NVIDIA-only CUDA offer), Whisper Small as the recommended model, a red
 recording indicator (it's a cyan orb by default), Fix a Word under a
 "Voice Commands" tab (it's "Commands"), tray items that no longer exist, a
 "Fast & Accurate" preset, and setting names that were never real.
@@ -46,7 +46,7 @@ def test_quote_lines_show_curly_quotes():
 def test_no_menu_items_or_presets_that_do_not_exist():
     assert "Stop Service then Start Service" not in HELP
     assert "Fast &amp; Accurate" not in README and "Fast & Accurate" not in README
-    assert "98 point 6" not in HELP          # a model's habit, not something TalkType does
+    assert "98 point 6" not in HELP          # a model's habit, not something TuxTalk does
 
 
 def test_voice_commands_tab_mentions_english_and_self_corrections():

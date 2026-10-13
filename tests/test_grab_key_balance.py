@@ -1,10 +1,10 @@
 """The desktop must never be left thinking the hotkey is held.
 
-TalkType grabs the keyboard after the hotkey goes down, so the desktop
-(libinput) saw the press but used to never see the release. libinput counts
-presses minus releases, so F8 stayed "held" for the whole session, and a VM
-window or remote-desktop client that asks which keys are down auto-repeated it
-forever (found testing in a GNOME VM: endless "~" in its terminal).
+TuxTalk grabs the keyboard after the hotkey goes down, so the desktop
+(libinput) sees the press and must also be shown the release. libinput counts
+presses minus releases; otherwise F8 stays "held" for the whole session, and a
+VM window or remote-desktop client that asks which keys are down auto-repeats
+it forever (endless "~" in a terminal).
 
 These tests run hold-to-talk against a small model of the kernel's rules:
 - while a device is grabbed, only the grabbing handle gets its events;
@@ -28,7 +28,7 @@ class Event:
 
 
 class KernelKeyboard:
-    """One keyboard with two readers: the desktop (libinput) and TalkType."""
+    """One keyboard with two readers: the desktop (libinput) and TuxTalk."""
 
     def __init__(self):
         self.path, self.name = "/dev/input/event-test", "Test Keyboard"
@@ -49,7 +49,7 @@ class KernelKeyboard:
     def physical(self, code, value):
         self._deliver(code, value)
 
-    # -- what python-evdev offers TalkType -----------------------------
+    # -- what python-evdev offers TuxTalk ------------------------------
     def write(self, etype, code, value):
         if etype == ecodes.EV_KEY:
             self._deliver(code, value)
@@ -93,7 +93,7 @@ class Cfg:
 
 
 def pump(kb):
-    """Run TalkType's read loop over whatever the kernel delivered to it."""
+    """Run TuxTalk's read loop over whatever the kernel delivered to it."""
     for event in kb.read():
         if app._is_own_injected_event(kb, event):
             continue
@@ -108,7 +108,7 @@ def test_hold_to_talk_leaves_the_desktop_balanced(kb):
 
     kb.physical(F8, 0)                                # user lets go (grabbed)
     pump(kb)
-    assert kb.stops == [1]                            # TalkType still hears the release
+    assert kb.stops == [1]                            # TuxTalk still hears the release
     assert not app.state.is_recording and not kb.grabbed
     assert kb.desktop_count.get(F8, 0) == 0
 
@@ -130,14 +130,14 @@ def test_the_injected_release_does_not_stop_the_recording(kb):
 
 def test_a_tap_released_before_the_grab_needs_no_balancing(kb):
     kb.physical(F8, 1)
-    kb.physical(F8, 0)                                # both happen before TalkType acts
+    kb.physical(F8, 0)                                # both happen before TuxTalk acts
     pump(kb)
     assert kb.desktop_count.get(F8, 0) == 0
     assert app._injected_pending == []                # nothing was injected
 
 
 def test_without_the_fix_the_desktop_is_left_holding_f8(kb, monkeypatch):
-    """The bug itself, reproduced by grabbing the old way."""
+    """A plain grab, without _grab_keyboards_hiding, leaves F8 held."""
     monkeypatch.setattr(app, "_grab_keyboards_hiding",
                         lambda devices, codes: app._grab_all_devices(devices))
     kb.physical(F8, 1); pump(kb)

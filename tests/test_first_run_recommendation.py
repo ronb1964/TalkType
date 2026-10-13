@@ -1,9 +1,7 @@
 """First run recommends one complete setup instead of asking about CUDA.
 
-The old screen: an unticked "Use your NVIDIA graphics card" box, Full (CUDA,
-1.4 GB, preselected) or Light (Vulkan), AMD/Intel never offered, and the model
-picked on a later screen. Now one card says what will be set up, and Other
-options change it with every choice explained.
+One card says what will be set up, model and graphics card included (AMD and
+Intel too), and Other options change it with every choice explained.
 """
 import pathlib
 
@@ -68,8 +66,8 @@ def test_first_run_never_mentions_cuda():
 
 
 def test_options_button_says_what_can_be_changed(dialog):
-    """A plain "Other options" expander went unnoticed, and a small "change"
-    link on the card was easy to miss too. One button names the choices."""
+    """A plain "Other options" expander or a small "change" link on the card
+    is easy to miss, so one button names the choices."""
     title = dialog.options_expander.get_label_widget().get_label()
     assert title == "Change language, model or graphics card"
     assert dialog.options_expander.get_style_context().has_class("tt-options")
@@ -89,24 +87,24 @@ def _find_button(widget, label):
 
 
 def test_set_it_up_is_pinned_outside_the_scroll(dialog):
-    """Inside the scrolling area, KDE's title bar left "Set it up" flush with
-    the window's bottom edge until the user scrolled. Pinned below it, the
-    button is always on screen whole."""
+    """Inside the scrolling area, KDE's title bar would leave "Set it up" cut
+    off at the window's bottom edge until the user scrolled. Pinned below it,
+    the button is always on screen whole."""
     button = _find_button(dialog.dialog, "Set it up")
     assert button is not None
     assert button.get_ancestor(Gtk.ScrolledWindow) is None
 
 
 def test_flatpak_footer_no_longer_promises_a_model_choice():
-    """The model is chosen on this screen now; the later picker is gone."""
+    """The model is chosen on this screen; there is no later picker."""
     assert "choose your speech model" not in SRC
     assert "downloads your speech model, then starts" in SRC
 
 
 def test_no_pulse_timer_without_anything_to_pulse(dialog, monkeypatch):
-    """With no extension checkbox and no Flatpak warning the pulse timer
-    stopped itself at once, and closing the window then removed it again:
-    GLib warned "Source ID … was not found" on every first run off GNOME."""
+    """With no extension checkbox and no Flatpak warning there is nothing to
+    pulse. A timer that stops itself at once and is then removed again when
+    the window closes makes GLib warn "Source ID … was not found"."""
     started, removed = [], []
     monkeypatch.setattr(wd.GLib, "timeout_add", lambda *a: started.append(a) or 7)
     monkeypatch.setattr(wd.GLib, "source_remove", lambda sid: removed.append(sid))
@@ -119,10 +117,10 @@ def test_no_pulse_timer_without_anything_to_pulse(dialog, monkeypatch):
 
 
 def test_the_card_shows_on_a_computer_with_nothing_to_fix(monkeypatch):
-    """KDE, AMD or Intel graphics, typing and audio already working: 0.14.2
-    to 0.14.5 skipped the whole card there (it sat inside a section shown
-    only for GNOME, NVIDIA or something to fix), so the user was never asked
-    their language or offered their graphics card."""
+    """KDE, AMD or Intel graphics, typing and audio already working: the card
+    must not sit inside a section shown only for GNOME, NVIDIA or something
+    to fix, or the user is never asked their language or offered their
+    graphics card."""
     if not Gtk.init_check()[0]:
         pytest.skip("no display")
     monkeypatch.setattr(r, "detect_hardware",
