@@ -1,10 +1,9 @@
 """The repository must be able to build and release itself from a clean clone.
 
-build-release.sh is tracked in git, but the scripts it calls were once listed in
-.gitignore under "Dev/test scripts". They are not dev scripts — they are the
-release toolchain, and with them missing a fresh clone dies immediately with
-"No such file or directory". The whole ability to ship existed only as untracked
-files on one machine.
+The scripts build-release.sh calls are the release toolchain, not dev scripts.
+If any of them is left untracked (a .gitignore pattern can catch them), a fresh
+clone dies immediately with "No such file or directory", and the ability to
+ship lives only as untracked files on one machine.
 """
 
 import pathlib

@@ -59,8 +59,8 @@ def test_cross_device_falls_back_to_reverse_symlink(tmp_path, monkeypatch):
 
 
 def test_a_run_after_the_other_disk_fallback_does_nothing(tmp_path, monkeypatch):
-    """The new name linking to the old folder is the fallback working, but
-    every later start logged it as "both exist"."""
+    """The new name linking to the old folder is the fallback working, not
+    "both exist", so later starts leave it alone."""
     h = str(tmp_path)
     _mk(f"{h}/.local/share/TalkType", "m.bin")
 

@@ -1,9 +1,9 @@
 """OK in Preferences closes the window, even right after a model download.
 
-OK used to stay open after a download "so the user can keep adjusting", which
-meant clicking OK twice. Apply is the button that keeps the window open. On
-Vulkan it was worse: files that were merely present counted as a download, so
-OK never closed Preferences at all (0.12.0 to 0.13.1, found 2026-10-03).
+Apply is the button that keeps the window open, so OK closes it after a
+download too instead of needing a second click. On Vulkan, files that are
+merely present must not count as a download, or OK would never close
+Preferences at all.
 """
 from types import SimpleNamespace
 

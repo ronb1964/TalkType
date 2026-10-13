@@ -1,9 +1,9 @@
-"""The AppImage runs Python 3.10; Ron's dev version runs 3.14.
+"""The AppImage runs Python 3.10; the dev setup runs 3.14.
 
-tomllib only exists from 3.11. settings_backup.py imported it directly and
-the 0.14.6 test AppImage crashed at startup, while every test passed on the
-newer Pythons. Importing it is fine inside a try with the toml package as the fallback,
-as config.py and prefs.py do. The CI also runs on Ubuntu 22.04's Python 3.10.
+tomllib only exists from 3.11, so a bare import crashes the AppImage at
+startup while every test passes on the newer Pythons. Importing it is fine
+inside a try with the toml package as the fallback, as config.py and prefs.py
+do. The CI also runs on Ubuntu 22.04's Python 3.10.
 """
 import pathlib
 import re

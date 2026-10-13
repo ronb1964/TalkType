@@ -129,7 +129,7 @@ def test_differs_from_recommendation(monkeypatch):
 
 
 def test_a_slower_graphics_chip_means_the_processor(monkeypatch):
-    """Review focus 1: once the speed check said the processor wins, recommend it."""
+    """Once the speed check says the processor wins, recommend it."""
     monkeypatch.setattr(r, "_vulkan_facts", lambda: (True, frozenset({"0x8086"})))
     monkeypatch.setattr(r, "_nvidia_name", lambda: None)
     monkeypatch.delenv("FLATPAK_ID", raising=False)
@@ -154,7 +154,7 @@ def test_detect_hardware_never_raises(monkeypatch):
 
 
 def test_hardware_facts_are_cached():
-    """Review focus 5: the tray asks every second; nvidia-smi must run once."""
+    """The tray asks every second; nvidia-smi must run once."""
     assert hasattr(r._nvidia_name, "cache_info") and hasattr(r._vulkan_facts, "cache_info")
 
 
@@ -167,8 +167,8 @@ def test_new_settings_exist_and_are_live():
 
 @pytest.mark.parametrize("hw", [r.Hardware("NVIDIA GeForce RTX 4070 SUPER", True), r.Hardware(None)])
 def test_explanation_never_repeats_itself(hw):
-    """Japanese on a graphics card used to read "...uses Whisper, which knows 99
-    languages. Whisper's most accurate, and it knows 99 languages." """
+    """Japanese on a graphics card must not read "...uses Whisper, which knows
+    99 languages. Whisper's most accurate, and it knows 99 languages." """
     for model in (None, "parakeet-v3", "small", "large-v3"):
         s = r.recommend("ja", hw, model=model)
         assert s.explanation.count("99 languages") <= 1, s.explanation

@@ -1,7 +1,7 @@
 """An update error containing & or < must still show in the status line.
 
-The text went into set_markup() unescaped, so Pango rejected it and the
-label went blank exactly when the user needed the error.
+Unescaped, set_markup() makes Pango reject the text, and the label goes blank
+exactly when the user needs the error.
 """
 from types import SimpleNamespace
 

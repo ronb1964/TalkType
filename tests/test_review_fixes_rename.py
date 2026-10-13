@@ -1,4 +1,5 @@
-"""Fixes from the fresh review of the TuxTalk rename (2026-10-11)."""
+"""Rename edge cases: the menu launcher, a pre-rename service, and folders and
+AppImages that need care when they are moved."""
 import os
 
 from tuxtalk import update_checker as uc
@@ -35,7 +36,7 @@ def test_the_tray_replaces_a_pre_rename_service_on_start():
     assert "pre_rename_service_pids(" in body and "stop_dictation_service(" in body
 
 
-# --- rename_migration: review findings 3, 4 and 5 ----------------------------
+# --- rename_migration: linked folders, mount points and the AppImage ---------
 import errno  # noqa: E402
 
 from tuxtalk import rename_migration as rm  # noqa: E402
@@ -49,7 +50,8 @@ def _mk(p, f="x"):
 
 def test_a_user_link_to_another_disk_is_followed_not_skipped(tmp_path):
     # Models moved to a bigger disk with a symlink is common. Skipping it as
-    # "already migrated" gave an empty new install and re-downloaded everything.
+    # "already migrated" would give an empty new install and re-download
+    # everything.
     h = str(tmp_path / "home")
     _mk(str(tmp_path / "bigdisk" / "TalkType" / "models"), "m.bin")
     os.makedirs(f"{h}/.local/share")

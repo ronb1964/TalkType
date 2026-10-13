@@ -1,9 +1,9 @@
 """Pinned dock and favourite entries follow the rename (0.15.0).
 
 The migration renames the menu entry (talktype.desktop -> tuxtalk.desktop).
-A dock that pinned the old name then shows a blank icon on KDE (Ron saw it on
-his own panel), and GNOME silently drops it from the favourites. So the pinned
-lists are rewritten too, once.
+A dock that pinned the old name then shows a blank icon on KDE, and GNOME
+silently drops it from the favourites. So the pinned lists are rewritten too,
+once.
 """
 from tuxtalk import rename_migration as rm
 
