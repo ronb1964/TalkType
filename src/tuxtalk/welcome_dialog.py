@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Welcome Dialog for TuxTalk - First Launch Experience
+First-run onboarding for TuxTalk: splash, welcome screen, hotkey test, tips,
+model download and the final Ready screen.
 
-Displays adaptive welcome screen based on detected system capabilities:
-- Base welcome for all users
-- Optional GNOME Shell Extension (if GNOME desktop detected)
-- Optional CUDA Libraries (if NVIDIA GPU detected)
-
-Cross-desktop compatible - works on GNOME, KDE, XFCE, etc.
+The welcome screen adapts to the computer: every one gets the
+recommended-setup card; PortAudio and typing setup (or, in a Flatpak, the
+shortcut step) appear only when needed, and the GNOME extension option only
+on GNOME. A Flatpak on a desktop without the GlobalShortcuts portal gets a
+stop screen instead.
 """
 
 import math
@@ -31,10 +31,10 @@ from .uinput_helper import (
 
 logger = setup_logger(__name__)
 
-# Checks BOTH halves: writing keystrokes (/dev/uinput) and reading hotkeys
-# (/dev/input). Checking uinput alone skipped setup entirely on Fedora, where
-# logind's per-user ACL already grants uinput but nothing grants 'input' group
-# membership, so hotkeys could never be read. Returns (has_access, reason).
+# Checks both halves: writing keystrokes (/dev/uinput) and reading hotkeys
+# (/dev/input). Some systems grant uinput through a logind ACL but not 'input'
+# group membership, so uinput alone says nothing about hotkeys.
+# Returns (has_access, reason).
 detect_uinput_access = check_all_device_permissions
 # A dict with running, ydotool_installed, service_exists, needs_setup, message.
 detect_ydotoold_status = get_ydotoold_status
@@ -45,9 +45,9 @@ detect_portaudio_status = get_portaudio_status
 def _status_markup(text, color, max_lines=4):
     """Pango markup for a status label: escaped, and at most *max_lines* lines.
 
-    The helpers' messages carry raw package-manager output. A '<' or '&' in
-    it made the markup invalid and left the label blank, and dozens of lines
-    stretched the dialog off the screen. The full text is in the log.
+    The helpers' messages carry raw package-manager output: a '<' or '&'
+    would make the markup invalid and blank the label, and dozens of lines
+    would stretch the dialog off the screen. The full text is in the log.
     """
     lines = [line for line in str(text).splitlines() if line.strip()]
     if len(lines) > max_lines:
@@ -151,8 +151,7 @@ class SplashScreen:
                 padding: 0px;
                 margin: 0px;
             }
-            /* Glow animation states - grows radially from small to large with smoother steps */
-            /* Using -gtk-icon-shadow which follows icon shape - 16 steps for smooth animation */
+            /* Glow steps 0-15; -gtk-icon-shadow follows the icon's shape. */
             .tt-splash image.glow-0  { -gtk-icon-shadow: 0 0 10px rgba(66, 133, 244, 0.4); }
             .tt-splash image.glow-1  { -gtk-icon-shadow: 0 0 15px rgba(66, 133, 244, 0.45); }
             .tt-splash image.glow-2  { -gtk-icon-shadow: 0 0 20px rgba(66, 133, 244, 0.5); }
@@ -200,10 +199,9 @@ class SplashScreen:
             os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "icons", "OFFICIAL_ICON_DO_NOT_CHANGE.svg"),
             os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "icons", "TT_retro_square_light_transparent.png"),
             "/app/share/icons/hicolor/scalable/apps/io.github.ronb1964.TuxTalk.svg",
-            # System install locations (.deb / .rpm) — crisp hicolor SVG first, then the
-            # pixmaps PNG fallback. Without these the splash finds no icon on a packaged
-            # install ($APPDIR is unset and the project icons/ dir isn't bundled) and
-            # falls back to plain "TuxTalk" text.
+            # System install locations (.deb / .rpm): the hicolor SVG, then the
+            # pixmaps PNG. A packaged install has no $APPDIR and no project
+            # icons/ folder, so without these the splash shows plain text.
             "/usr/share/icons/hicolor/scalable/apps/io.github.ronb1964.TuxTalk.svg",
             "/usr/share/icons/hicolor/256x256/apps/io.github.ronb1964.TuxTalk.png",
             "/usr/share/pixmaps/io.github.ronb1964.TuxTalk.png",
@@ -280,26 +278,26 @@ class SplashScreen:
         self.window.set_opacity(0.0)
         self.window.show_all()
 
-        # Start glow animation (100ms per frame for faster animation)
+        # The glow grows one step every 100 ms.
         GLib.timeout_add(100, self._animate_glow)
 
-        # Fade in over 300ms
+        # Fade in over about half a second (20 steps of 25 ms).
         self._fade_in(0.0, callback)
 
     def _fade_in(self, opacity, callback):
         """Gradually increase opacity."""
-        opacity += 0.05  # Slower fade in (20 steps)
+        opacity += 0.05
         self.window.set_opacity(opacity)
 
         if opacity < 1.0:
             GLib.timeout_add(25, lambda: self._fade_in(opacity, callback))
         else:
-            # Hold at full opacity for 2500ms (let glow expand once to max and hold), then fade out
+            # Hold for 2.5 s while the glow grows to full, then fade out.
             GLib.timeout_add(2500, lambda: self._fade_out(1.0, callback))
 
     def _fade_out(self, opacity, callback):
         """Gradually decrease opacity."""
-        opacity -= 0.05  # Slower fade out (20 steps), matches fade in
+        opacity -= 0.05  # same pace as the fade-in
         self.window.set_opacity(opacity)
 
         if opacity > 0.0:
@@ -385,9 +383,8 @@ class WelcomeDialog:
 
         # Calculate height based on what sections we'll show
         if self.hotkey_unsupported:
-            # Lean stop screen: header + the red stop box + quit. No features,
-            # quick-start, CUDA or extension sections — the app can't run here.
-            # Sized to fit the content (Quit visible) without dead space below.
+            # Lean stop screen: header, the red stop box and Quit, since the app
+            # can't run here. Sized so Quit is visible without dead space below.
             self.height = 700
         else:
             base_height = 700
@@ -522,7 +519,7 @@ class WelcomeDialog:
                 font-weight: bold;
                 font-size: 9pt;
             }
-            /* Other options as a button: as a plain expander people missed it. */
+            /* Other options looks like a button; a plain expander is easy to miss. */
             expander.tt-options > title {
                 border: 1px solid rgba(255, 255, 255, 0.22);
                 border-radius: 6px;
@@ -567,15 +564,12 @@ class WelcomeDialog:
             self._build_base_content(vbox)
             # Always: it holds the recommended-setup card, which every computer
             # needs (language, model, graphics card). Its other parts check
-            # their own conditions. Gated on GNOME / NVIDIA / something to fix
-            # until 0.14.6, which hid the card on, say, KDE with AMD graphics
-            # and nothing to fix, so those users were never asked their language.
+            # their own conditions.
             self._build_optional_features(vbox)
 
-        # The footer ("Next:" and Set it up / Quit) sits below the scrolling part,
-        # so it is always on screen whole. Inside the scroll, a title bar the
-        # desktop draws (KDE) or a short screen left the button flush with the
-        # bottom edge or out of sight, depending on where it was scrolled.
+        # The footer ("Next:" and Set it up / Quit) sits below the scrolling
+        # part so it is always fully visible: inside the scroll, a title bar the
+        # desktop draws (KDE) or a short screen can push the button out of sight.
         footer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         footer.set_margin_bottom(20)
         footer.set_margin_start(30)
@@ -673,7 +667,8 @@ class WelcomeDialog:
         vbox.pack_start(quickstart_box, False, False, 0)
 
     def _build_optional_features(self, vbox):
-        """Build the optional features section (GNOME extension, CUDA, PortAudio, and/or uinput fix)."""
+        """The recommended-setup card, the setup steps this computer needs, and the
+        optional GNOME extension."""
         # Separator before optional features
         sep3 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
         sep3.set_margin_top(10)
@@ -886,12 +881,11 @@ class WelcomeDialog:
     def _run_in_background(self, work, finish):
         """Run blocking *work* on a thread, then *finish(outcome)* on the GTK thread.
 
-        Package installs and pkexec scripts can take minutes. On the GTK thread
-        they froze the window, and the desktop offered to force-quit it. The
-        outcome is work's return value, or the exception it raised. "Set it up"
-        waits while anything runs, and nothing is updated once the window has
-        closed. Jobs run one after another: two package installs at once would
-        fail on the package manager's lock.
+        Package installs and pkexec scripts can take minutes; on the GTK thread
+        they would freeze the window. The outcome is work's return value, or the
+        exception it raised. "Set it up" waits while anything runs, and nothing
+        is updated once the window has closed. Jobs run one after another: two
+        package installs at once would fail on the package manager's lock.
         """
         self._busy += 1
         self._update_continue_button()
@@ -907,6 +901,7 @@ class WelcomeDialog:
         threading.Thread(target=runner, daemon=True).start()
 
     def _finish_background(self, finish, outcome):
+        """GTK-thread half of _run_in_background: report one finished job."""
         self._busy -= 1
         if self._closed:
             return False
@@ -918,6 +913,7 @@ class WelcomeDialog:
         return False
 
     def _update_continue_button(self):
+        """The "Set it up" button works only while no background job runs."""
         if self.continue_button is not None:
             self.continue_button.set_sensitive(self._busy == 0)
 
@@ -1128,8 +1124,8 @@ class WelcomeDialog:
         keys_label.set_margin_top(8)
         box.pack_start(keys_label, False, False, 0)
 
-        # Desktop-specific, step-by-step instructions. The portal hotkey is only
-        # implemented on KDE and GNOME today; be precise there and honest elsewhere.
+        # Desktop-specific instructions: precise steps for KDE and GNOME, generic
+        # wording for other portal desktops (e.g. Hyprland).
         desktop = os.environ.get("XDG_CURRENT_DESKTOP", "").upper()
         if "KDE" in desktop:
             how_title = "To set your keys on KDE Plasma:"
@@ -1189,8 +1185,7 @@ class WelcomeDialog:
         #  - KDE opens a fresh remote-control session per dictation, so it shows a
         #    "Started Remote Desktop" popup EVERY time. "Allow restoring" only
         #    stops the APPROVAL dialog re-asking — the popup is a separate KDE
-        #    notification, turned off in System Settings (there's no toggle in the
-        #    approval dialog itself; Plasma 6.5 will add a permissions page).
+        #    notification, turned off in System Settings.
         if "KDE" in desktop:
             perm_note = (
                 "💡 The first time you dictate, KDE's <b>Remote Control</b> window "
@@ -1235,7 +1230,7 @@ class WelcomeDialog:
         typing_box.set_margin_start(10)
         typing_box.set_margin_top(5)
 
-        # Header with warning icon - make it clear this is REQUIRED
+        # Header: this step is required, not optional.
         header_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         header_label = Gtk.Label()
         header_label.set_markup('<span size="large"><b>🔴 Typing Setup Required</b></span>')
@@ -1243,7 +1238,6 @@ class WelcomeDialog:
         header_box.pack_start(header_label, False, False, 0)
         typing_box.pack_start(header_box, False, False, 0)
 
-        # Explanation - make it VERY clear this is mandatory
         explain_text = (
             '<span><b>This step is required for TuxTalk to work.</b>\n'
             'Without this setup, dictated text cannot be typed into your applications.\n'
@@ -1706,6 +1700,7 @@ class WelcomeDialog:
         return bool(self.gpu_check and self.gpu_check.get_active())
 
     def _current_setup(self):
+        """The setup the card shows for the current language, model and device."""
         from . import recommend as rec
         return rec.recommend(self._language(), self.hardware,
                              model=self._chosen_model, use_gpu=self._use_gpu())
@@ -1819,17 +1814,14 @@ class WelcomeDialog:
         return [w for w in (self.extension_check, self.required_pulse_box) if w]
 
     def _pulse_checkboxes(self):
-        """Animate checkboxes with smooth continuous pulsating glow."""
+        """Advance the pulsing glow one step on each of _pulse_targets()."""
 
         targets = self._pulse_targets()
 
-        # Smooth continuous pulse using sin wave
+        # A sine wave from dim (0) to bright (4) and back.
         phase = getattr(self, '_pulse_phase', 0)
-        self._pulse_phase = phase + 0.15  # Even faster increment for more noticeable pulse
-
-        # Calculate pulse intensity (oscillates smoothly between 0 and 4)
-        # Using sin wave that goes from dim (0) to bright (4) and back
-        intensity = 2 + 2 * math.sin(phase)  # Range: 0 to 4
+        self._pulse_phase = phase + 0.15
+        intensity = 2 + 2 * math.sin(phase)
 
         # Map to one of 5 pulse states (0=dimmest, 4=brightest)
         pulse_level = int(round(intensity))
@@ -1873,9 +1865,9 @@ class WelcomeDialog:
         self.dialog.show_all()
         self._fade_in_dialog(0.0)
 
-        # Pulse the checkbox/warning, if there is one (50ms for a smooth pulse).
-        # Only started when there is: a timer that stopped itself for lack of
-        # targets made the source_remove below warn "Source ID not found".
+        # Pulse the checkbox/warning every 50 ms, only when there is one:
+        # source_remove below warns "Source ID not found" for a timer that has
+        # already stopped itself.
         self._pulse_phase = 0
         pulse_timer = (GLib.timeout_add(50, self._pulse_checkboxes)
                        if self._pulse_targets() else None)
@@ -2241,7 +2233,7 @@ def show_tips_and_features_dialog(extension_installed=False):
 
             return True  # Continue animation
 
-        # Start pulsing timer (60 FPS = ~16ms per frame)
+        # 20 steps a second.
         pulse_timer_id = GLib.timeout_add(50, pulse_logout_reminder)
 
     dialog.show_all()
@@ -2274,7 +2266,7 @@ def _hotkeys_to_save(config, hold, toggle, confirmed):
 
     Continue saves what the dialog shows. Closing it any other way keeps keys
     already saved and fills in only blanks: the settings start with no hotkey,
-    and leaving them blank left the service watching no key at all.
+    and blank keys leave the service watching no key at all.
     """
     if not confirmed:
         hold = config.hotkey or hold
@@ -2309,13 +2301,10 @@ def _evdev_key_action(event, held_modifiers, modifier_codes, code_to_name):
 def _flush_pending_events(devices):
     """Drain whatever is already queued on each device, then return.
 
-    evdev's InputDevice.read() is a *generator function*: calling it builds a
-    generator and executes none of its body, so it neither reads anything nor
-    raises BlockingIOError until something iterates it. Written as a bare
-    `while True: dev.read()` this never terminated — it spun at 100% CPU and
-    the key-monitoring loop that follows it was never reached, so the hotkey
-    test silently detected nothing. Iterating the generator is what makes the
-    read actually happen and the "queue empty" signal actually arrive.
+    evdev's InputDevice.read() is a generator function: calling it reads
+    nothing and never raises BlockingIOError, so a bare `while True:
+    dev.read()` would spin forever. Iterating it performs the read and lets the
+    "queue empty" BlockingIOError arrive.
     """
     for dev in devices:
         try:
@@ -2352,9 +2341,6 @@ def show_hotkey_test_dialog():
         """Kill any running dictation service processes."""
         try:
             # SIGKILL for immediate termination - no chance to respawn.
-            # The pattern list used to live here and included "-m tuxtalk",
-            # which matches "-m tuxtalk.tray": had pkill ever accepted it, the
-            # tray would have killed itself in front of a first-run user.
             from tuxtalk.service_launcher import stop_dictation_service
             stop_dictation_service(force=True)
 
@@ -2365,7 +2351,7 @@ def show_hotkey_test_dialog():
             from tuxtalk.service_launcher import find_service_pids
             if find_service_pids():
                 # Still running! Try again
-                print("⚠️ Service still running, killing again...")
+                print("Service still running, killing again...")
                 stop_dictation_service(force=True)
                 time.sleep(0.2)
         except Exception as e:
@@ -2376,11 +2362,9 @@ def show_hotkey_test_dialog():
         from evdev import InputDevice, ecodes, list_devices
         EVDEV_AVAILABLE = True
         logger.info("evdev available for hotkey testing")
-        print("✅ Using evdev for hotkey detection (bypasses Wayland)")
     except ImportError:
         EVDEV_AVAILABLE = False
         logger.warning("evdev not available - falling back to GTK key events")
-        print("⚠️ evdev not available - using GTK key events")
 
     config = load_config()
 
@@ -2506,7 +2490,6 @@ def show_hotkey_test_dialog():
             return False
 
         logger.info(f"Hotkey test: {action} '{keyname}', capture={is_capture_mode}")
-        print(f"🔑 Key {action}: {keyname}")
 
         if is_capture_mode and capturing_key[0]:
             # In capture mode we only care about presses
@@ -2572,8 +2555,6 @@ def show_hotkey_test_dialog():
                     # Just check for EV_KEY capability (same as app.py does)
                     if ecodes.EV_KEY in caps:
                         # Already non-blocking: evdev opens with O_NONBLOCK.
-                        # A call here to a "make it non-blocking" method that
-                        # evdev doesn't have used to skip every keyboard.
                         devices.append(dev)
                         logger.info(f"Opened input device: {dev.name} at {path}")
                 except PermissionError:
@@ -2583,15 +2564,13 @@ def show_hotkey_test_dialog():
         except Exception as e:
             logger.error(f"Error listing devices: {e}")
 
-        # Rename for clarity
         keyboards = devices
 
         if not keyboards:
             logger.warning("No keyboards found via evdev")
-            print("⚠️ No keyboards found for evdev - some keys may not work")
             return
 
-        print(f"🎹 Monitoring {len(keyboards)} keyboard(s) via evdev")
+        print(f"Monitoring {len(keyboards)} keyboard(s) via evdev")
 
         # Flush any stale events buffered in the kernel queue before we start
         # monitoring. Without this, a prior F8 press (e.g. from using TuxTalk
@@ -2634,7 +2613,7 @@ def show_hotkey_test_dialog():
             except Exception:
                 pass
 
-    # GTK key handler (fallback if evdev doesn't work)
+    # GTK key handlers: they cover keys when evdev can't open the keyboards.
     # Modifier mask: reject Alt (MOD1), Ctrl, Super — GNOME delivers Alt+F8
     # (begin-resize binding) to focused windows; stripping modifiers would
     # make it look like a plain F8 press, causing a false positive.
@@ -2663,7 +2642,6 @@ def show_hotkey_test_dialog():
 
         keyname = Gtk.accelerator_name(event.keyval, 0)
         logger.info(f"GTK key press: keyval={event.keyval}, keyname='{keyname}'")
-        print(f"🔑 GTK press: {keyname}")
 
         is_capture = capturing_key[0] is not None
         update_ui_for_key(keyname, is_capture, action="press")
@@ -2764,9 +2742,8 @@ def show_hotkey_test_dialog():
             evdev_thread = threading.Thread(target=evdev_key_reader, daemon=True)
             evdev_thread.start()
 
-        # Open the gate immediately — no timer needed.
-        # KEY_PRESS events are ignored entirely (phantoms only generate presses).
-        # Only KEY_RELEASE events update the UI, which phantoms never generate.
+        # Presses never mark a key as working, only releases do: the phantom
+        # events a released keyboard grab produces are presses only.
         dialog_ready[0] = True
 
         response = dialog.run()
@@ -2796,7 +2773,6 @@ def show_hotkey_test_dialog():
                 logger.error(f"Could not save hotkey choice: {e}")
 
     logger.info("Hotkey test complete")
-    print("✅ Hotkey test complete")
 
     return response == Gtk.ResponseType.OK
 
@@ -2805,9 +2781,9 @@ def _vulkan_speed_check_first_run(model):
     """True if the graphics chip should run *model*: the same speed check (and
     messages) as choosing Vulkan in Preferences.
 
-    First run used to switch to Vulkan without it, so the small graphics built
-    into some processors could end up slower than the processor itself, with
-    nothing to say so. Any error keeps the processor, as Preferences does.
+    Without it, the small graphics built into some processors could end up
+    slower than the processor itself. Any error keeps the processor, as
+    Preferences does.
     """
     try:
         from tuxtalk import vulkan_setup_dialogs
@@ -2889,7 +2865,6 @@ def _apply_first_run_setup(result):
         # Check if model is already cached
         already_cached = is_model_cached_fast(selected_model)
         logger.info(f"Model {selected_model} cached status: {already_cached}")
-        print(f"📦 Model {selected_model} cached: {already_cached}")
 
         config = load_config()
         device = config.device
@@ -2929,14 +2904,12 @@ def _apply_first_run_setup(result):
             config.model = selected_model
             save_config(config)
             model = True
-            logger.info(f"✅ {selected_model} ready for Vulkan")
+            logger.info(f"{selected_model} ready for Vulkan")
         elif already_cached:
-            # Model files already on disk — just save config and move on.
-            # DO NOT load the model here; the dictation service will load it
-            # when it starts. Loading large models (especially large-v3 on CUDA)
-            # takes 5-10 seconds and would freeze the UI with no feedback.
-            logger.info(f"✅ {selected_model} already cached — skipping load, saving config")
-            print(f"✅ {selected_model} already cached — skipping model load")
+            # Already on disk: save the choice and leave loading to the
+            # dictation service. Loading a large model here would freeze the
+            # window for several seconds.
+            logger.info(f"{selected_model} already cached — skipping load, saving config")
             config.model = selected_model
             save_config(config)
             model = True  # Treat as success so the flow continues normally
@@ -2957,18 +2930,18 @@ def _apply_first_run_setup(result):
 
         if model:
             if model is not True:
-                # Freshly downloaded — update config and free the loaded model.
-                # IMPORTANT: freeing a large model (especially on CUDA) can take
-                # several seconds on the main thread and freeze the UI. We pass the
-                # model to a background thread so it's freed there instead.
+                # Freshly downloaded and loaded: save the choice and drop the
+                # model, which the service loads for itself. A short-lived thread
+                # holds a reference so freeing a large model is less likely to
+                # stall the GTK thread.
                 config.model = selected_model
                 save_config(config)
-                logger.info(f"✅ Config updated to use {selected_model} model")
+                logger.info(f"Config updated to use {selected_model} model")
                 def _free_in_background(m):
-                    pass  # m goes out of scope here, freeing memory in background thread
+                    pass
                 threading.Thread(target=_free_in_background, args=(model,), daemon=True).start()
-                del model  # Remove main thread's ref; background thread holds the last ref
-            logger.info(f"✅ {selected_model} model ready")
+                del model
+            logger.info(f"{selected_model} model ready")
         elif download_info.get("cancelled"):
             # "Not now": no surprise downloads after a Cancel. The setting
             # stays, and the service offers the download when it starts.
@@ -2981,7 +2954,7 @@ def _apply_first_run_setup(result):
             fallback_models = ["small", "tiny"] if selected_model not in ["small", "tiny"] else ["tiny"]
             cached = next((m for m in fallback_models if is_model_cached_fast(m)), None)
             if cached:
-                logger.info(f"✅ Using cached {cached} model as fallback")
+                logger.info(f"Using cached {cached} model as fallback")
                 config.model = cached
                 save_config(config)
             else:
@@ -2996,7 +2969,7 @@ def _apply_first_run_setup(result):
                         show_confirmation=False
                     )
                     if fallback_model:
-                        logger.info(f"✅ Fallback to {fallback} model successful")
+                        logger.info(f"Fallback to {fallback} model successful")
                         config.model = fallback
                         save_config(config)
                         del fallback_model
@@ -3047,8 +3020,8 @@ def show_welcome_and_install():
         logger.info("User cancelled welcome dialog")
         return result
 
-    # The GNOME extension is the only optional download left on the welcome
-    # screen; the speech model (and the Vulkan engine) follow the hotkey test.
+    # The GNOME extension is the welcome screen's only optional download; the
+    # speech model (and the Vulkan engine) follow the hotkey test.
     install_extension = result.get('install_extension', False)
     extension_installed = False  # Track if extension was successfully installed
 
@@ -3180,9 +3153,8 @@ def show_welcome_and_install():
     # — so raise the persistent, always-on-top help window now (deferred to the
     # tray's main loop so it's interactive). It's reopenable from Preferences too.
     try:
-        # NOTE: no `import os` here — os is imported at module scope and used
-        # earlier in this function (the hotkey-test skip). A local import would
-        # make os function-local and crash that earlier use with UnboundLocalError.
+        # No local `import os` here: it would make os local to the whole
+        # function and break its earlier use with UnboundLocalError.
         from .desktop_detect import get_desktop_environment
         if os.environ.get("FLATPAK_ID") and get_desktop_environment() == "kde":
             from .notification_help import show_notification_help_window
@@ -3273,10 +3245,9 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
     Args:
         appimage_installed: True if AppImage was copied to ~/AppImages/
         launcher_created: True if desktop launcher was created
-        needs_restart: True if permissions were changed this run and a restart is
-            required before typing/hotkeys work. Only then is the restart reminder
-            and "Restart Now" button shown — this is the deferred, end-of-setup
-            reminder that replaces the old mid-onboarding "restart now" popup.
+        needs_restart: True if permissions were changed this run and a restart
+            is required before typing/hotkeys work. Only then are the restart
+            reminder and "Restart Now" button shown.
     """
     dialog = Gtk.Dialog(title="TuxTalk - Ready!")
     dialog.set_border_width(0)
@@ -3296,7 +3267,7 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
     vbox.set_margin_bottom(20)
     content.pack_start(vbox, True, True, 0)
 
-    # Success header - no emoji (unreliable in AppImage font environment)
+    # Header
     header_label = Gtk.Label()
     header_label.set_markup('<span size="x-large"><b>Setup Complete!</b></span>')
     header_label.set_halign(Gtk.Align.CENTER)
@@ -3519,10 +3490,8 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
         restart_button.connect("clicked", on_restart_now)
         button_box.pack_start(restart_button, False, False, 0)
     else:
-        # Two ways out: start dictating, or go and adjust settings. Setup is
-        # finished here and the model is downloaded, so this is the right screen
-        # for it — the earlier model-picker screen would have sent them off
-        # mid-setup.
+        # Two ways out: start dictating, or adjust settings. Setup is finished
+        # here, so it is safe to send the user to Preferences.
         prefs_button = Gtk.Button(label="Open Preferences")
         prefs_button.set_size_request(150, 35)
         prefs_button.set_tooltip_text(
