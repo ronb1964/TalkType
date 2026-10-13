@@ -18,12 +18,12 @@ def test_quotes_and_comma():
 
 def test_ellipsis_and_caps():
     s = "this is fine dot dot dot next sentence"
-    # Note: auto-period adds period at end of line
+    # auto-period adds a period at the end of the line
     assert normalize_text(s) == "This is fine\u2026 Next sentence."
 
 def test_newlines_tabs():
     s = "first line newline tab indented second line period"
-    # Note: \u00a7SHIFT_ENTER\u00a7 markers are converted to keypresses by app.py
+    # \u00a7SHIFT_ENTER\u00a7 markers are converted to keypresses by app.py
     # Auto-period adds periods at line ends
     # There's a space after tab because capitalize logic adds it
     assert normalize_text(s) == "First line.\u00a7SHIFT_ENTER\u00a7\t Indented second line."
@@ -41,7 +41,7 @@ def test_return_commands():
     assert normalize_text(s) == "First line.\u00a7SHIFT_ENTER\u00a7Second line."
 
     # Test "new paragraph" for double line break
-    # Note: the regex for "new paragraph" eats surrounding whitespace/punctuation,
+    # The regex for "new paragraph" eats surrounding whitespace/punctuation,
     # so no space appears after the second marker.
     s = "first paragraph new paragraph second paragraph"
     assert normalize_text(s) == "First paragraph.\u00a7SHIFT_ENTER\u00a7\u00a7SHIFT_ENTER\u00a7Second paragraph."
@@ -53,9 +53,8 @@ def test_return_commands():
 
 # =====================================================================
 # Context-aware protection: command words used as English nouns must
-# NOT be replaced with punctuation. Bug pattern: phrases like "period
-# of time" became "period. Of time" because the regex matched any
-# occurrence of the word.
+# NOT be replaced with punctuation, or "period of time" becomes
+# "period. Of time".
 # =====================================================================
 
 def test_period_of_time_preserved():
@@ -159,13 +158,12 @@ def test_existing_uppercase_I_unchanged():
 
 
 # =====================================================================
-# v0.5.17 review fixes — regression tests for verified corruption bugs.
-# Each case below was reproduced against the pre-fix code during the
-# 2026-07-04 full-codebase review.
+# Numbers, abbreviations, times, dashes and command words that
+# normalization must not corrupt.
 # =====================================================================
 
 def test_decimals_and_prices_preserved():
-    """Periods inside numbers must not get split: '3.5' stayed '3. 5' before fix."""
+    """Periods inside numbers must not get split: '3.5' must not become '3. 5'."""
     assert normalize_text("version 3.5 costs $19.99") == "Version 3.5 costs $19.99."
 
 
@@ -182,18 +180,18 @@ def test_am_prefixed_words_not_time_formatted():
 
 
 def test_time_formatting_still_works():
-    """Real times keep getting normalized (guard for the am/pm fix)."""
+    """Real times keep getting normalized alongside the rule above."""
     assert "11:30 PM" in normalize_text("meet me at 11. 30 p. m. sharp")
     assert "5 PM" in normalize_text("the store closes at 5 p. m. tonight")
 
 
 def test_em_dash_command_works():
-    """'em dash' was broken: the 'dash' rule ran first, leaving 'em-'."""
+    """'em dash' is handled before the 'dash' rule, which would leave 'em-'."""
     assert normalize_text("please use an em dash here") == "Please use an — here."
 
 
 def test_dash_command_still_works():
-    """Plain 'dash' still produces a tight hyphen (guard for the reorder)."""
+    """Plain 'dash' still produces a tight hyphen."""
     assert normalize_text("five dash three") == "Five-three."
 
 
@@ -241,7 +239,7 @@ def test_auto_punct_plain_text():
 
 
 def test_auto_punct_no_orphan_period_after_trailing_break():
-    """'hello new line' used to become 'Hello.' + newline + '. ' (orphan)."""
+    """'hello new line' must not leave an orphan '. ' after the line break."""
     assert append_auto_punct(f"Hello.{_M}", True, True) == f"Hello.{_M}"
 
 
@@ -254,7 +252,7 @@ def test_auto_punct_only_markers_untouched():
     assert append_auto_punct(_M, True, True) == _M
 
 
-# --- Adversarial-review regressions: protection lists must not swallow the command ---
+# --- protection lists must not swallow the command ---
 
 def test_return_command_after_pronoun_still_works():
     """'thank you return' is a very common dictation ending — must break line."""
@@ -279,8 +277,9 @@ def test_line_starting_with_protected_word_is_capitalized():
 
 
 # --- cap_first: don't capitalize past the start of the line -----------------
-# The capitalization pass scanned forward to the first letter it could find,
-# so a line opening with a number or symbol capitalized the *second* word.
+# The capitalization pass must not scan forward to the first letter it can
+# find, or a line opening with a number or symbol gets its *second* word
+# capitalized.
 
 def test_line_starting_with_a_year_does_not_capitalize_the_next_word():
     assert normalize_text("2024 was a good year") == "2024 was a good year."
@@ -312,7 +311,7 @@ def test_ordinary_sentences_are_still_capitalized():
 
 # --- a.m./p.m. must not swallow the sentence period -------------------------
 # "a.m." ends in a period that can also be the full stop. Rewriting it to "AM"
-# dropped that period, merging two sentences into one.
+# must keep that period, or two sentences merge into one.
 
 def test_am_at_end_of_text_keeps_its_period():
     assert normalize_text("It starts at 5 p.m.") == "It starts at 5 PM."
@@ -324,7 +323,7 @@ def test_am_mid_text_does_not_gain_a_period_even_before_a_capital():
     "9 a.m. We should be early" and "8 a.m. Tuesday" are grammatically
     identical, and a following capital cannot tell them apart because Whisper
     capitalizes proper nouns as well as sentence starts. Adding a period here
-    split ordinary sentences in two, which is worse than leaving one out: a
+    would split ordinary sentences in two, which is worse than leaving one out: a
     wrong split corrupts text the user must notice and repair, while a missing
     full stop merely reads a little short.
     """
@@ -347,7 +346,7 @@ def test_am_followed_by_a_lowercase_word_does_not_gain_a_period():
         "I woke at 6 AM and went running."
 
 
-# --- regression: a.m./p.m. must not split a sentence at a proper noun -------
+# --- a.m./p.m. must not split a sentence at a proper noun -------------------
 # Whisper capitalizes proper nouns as well as sentence starts, so "uppercase
 # word follows" is not evidence that the abbreviation's period was also a full
 # stop. "8 a.m. Tuesday" is an ordinary thing to dictate.
@@ -376,10 +375,10 @@ def test_am_mid_sentence_before_a_capitalized_word_does_not_gain_a_period():
 # --- filenames must not be split into two sentences -------------------------
 
 def test_a_filename_is_not_split_into_two_sentences():
-    """The pass that puts a space after a sentence period protected decimals
+    """The pass that puts a space after a sentence period protects decimals
     ("19.99") and single-letter abbreviations ("e.g."), and a separate guard
-    protects domains ("example.com"). Filenames had neither, so "report.pdf"
-    became "report. Pdf" — the extension capitalized as a new sentence."""
+    protects domains ("example.com"). Filenames need the same, or "report.pdf"
+    becomes "report. Pdf" — the extension capitalized as a new sentence."""
     assert normalize_text("the file is report.pdf") == "The file is report.pdf."
 
 
@@ -391,7 +390,7 @@ def test_common_file_extensions_survive():
 
 
 def test_a_domain_still_survives():
-    """Already worked — pin it so the filename fix doesn't regress it."""
+    """Domains stay whole alongside the filename rule."""
     assert "example.com" in normalize_text("go to example.com for info")
 
 
@@ -404,7 +403,7 @@ def test_a_real_sentence_boundary_is_still_spaced():
 
 def test_ie_is_not_capitalized_as_the_pronoun():
     """The standalone-"i" rule uses \\bi\\b, and the dot in "i.e." is a word
-    boundary — so "i.e." became "I.e." in the middle of a sentence."""
+    boundary — so "i.e." must be kept from becoming "I.e." mid-sentence."""
     assert normalize_text("use it, i.e. the new one") == "Use it, i.e. the new one."
 
 
@@ -419,8 +418,8 @@ def test_i_at_the_end_of_a_sentence_is_still_capitalized():
 # --- a line already ending in punctuation gets no extra period --------------
 
 def test_a_line_ending_in_a_colon_gets_no_period():
-    """"[.?!…]" was the whole definition of "already punctuated", so a
-    dictated colon or semicolon collected a period: "the plan:." """
+    """A dictated colon or semicolon counts as "already punctuated" too, so
+    it doesn't collect a period: "the plan:." """
     assert normalize_text("here is the plan colon") == "Here is the plan:"
 
 
@@ -431,9 +430,9 @@ def test_a_line_ending_in_a_semicolon_gets_no_period():
 # --- times must not capitalize the word that follows -------------------------
 
 def test_a_spaced_am_does_not_capitalize_the_next_word():
-    """Whisper writes "9 a. m.". Time formatting collapsed that to "9 AM",
-    but it ran AFTER the capitalization pass — which had already treated the
-    "m." as a sentence ending and upper-cased the following word."""
+    """Whisper writes "9 a. m.", which time formatting collapses to "9 AM".
+    The capitalization pass must not treat the "m." as a sentence ending and
+    upper-case the following word."""
     assert normalize_text("meet at 9 a. m. tomorrow") == "Meet at 9 AM tomorrow."
 
 
@@ -464,8 +463,8 @@ def test_auto_punct_leaves_a_trailing_semicolon_alone():
 
 
 def test_auto_punct_does_not_invent_a_period_from_silence():
-    """A whitespace-only utterance became a lone "." injected into the
-    document — a stray full stop appearing from a recording of nothing."""
+    """A whitespace-only utterance must not become a lone "." injected into
+    the document — a stray full stop from a recording of nothing."""
     assert append_auto_punct("   ", True, False).strip() == ""
 
 
@@ -476,10 +475,10 @@ def test_auto_punct_still_adds_a_period_to_a_normal_sentence():
 # --- the auto-period preference must actually be honoured -------------------
 
 def test_normalize_can_be_told_not_to_add_a_period():
-    """normalize_text appended a full stop to every line unconditionally, and
-    _prepare_text calls it BEFORE append_auto_punct — so the "Ensure period at
-    end of sentences" preference had no effect at all when unchecked: the
-    period was already there by the time the preference was consulted."""
+    """_prepare_text calls normalize_text BEFORE append_auto_punct, so
+    normalize_text must honour the "Ensure period at end of sentences"
+    preference itself, or the period is already there by the time the
+    preference is consulted."""
     assert normalize_text("this is a sentence", auto_period=False) == "This is a sentence"
 
 
@@ -495,8 +494,8 @@ def test_auto_period_off_still_normalizes_everything_else():
 
 # The email rule turns "name at domain.tld" into name@domain.tld. Country
 # endings like .no .it .in .my .us are also English words that start sentences,
-# so "Look at this. My car broke." became "Look@this.My car broke." A space
-# around the dot may only count for endings that can't be words.
+# so "Look at this. My car broke." must not become "Look@this.My car broke."
+# A space around the dot may only count for endings that can't be words.
 @pytest.mark.parametrize("said", [
     "Meet me at three. No wait, four o'clock.",
     "Look at this. My car broke.",
@@ -520,8 +519,8 @@ def test_spoken_email_addresses_still_join(said, expected):
     assert normalize_text(said) == expected
 
 
-# The space-after-the-dot fix for email endings ran on ALL text, so a sentence
-# starting with "Net", "Co" or "De" got glued to the one before it.
+# The space-after-the-dot fix for email endings must not run on all text, or a
+# sentence starting with "Net", "Co" or "De" gets glued to the one before it.
 @pytest.mark.parametrize("said", [
     "That's it. Net profit was up.",
     "I left early. Co-workers stayed.",
@@ -538,8 +537,8 @@ def test_tld_space_fix_still_joins_a_split_address():
     assert normalize_text("write to john@gmail. Net today") == "Write to john@gmail.net today."
 
 
-# The space-fix also took every country ending (it, in, my, no, us) across a
-# spaced dot, so the sentence after an address was glued into it:
+# The space-fix must not take every country ending (it, in, my, no, us) across
+# a spaced dot, or the sentence after an address is glued into it:
 # "john@gmail.com. It was great" -> "john@gmail.com.it was great".
 @pytest.mark.parametrize("said, expected", [
     ("send it to john@gmail.com. it was great",
@@ -621,8 +620,8 @@ def test_an_ordinary_dot_stays_a_word(said):
     assert "dot" in out.lower() or out == "…" or out.startswith("…")
 
 
-# Only the dot right before the ending was protected, so an address with more
-# parts was split like a sentence: "www.example.org" -> "www. Example.org".
+# Every dot in an address is protected, not only the one before the ending, so
+# an address with more parts isn't split like a sentence ("www. Example.org").
 @pytest.mark.parametrize("said, expected", [
     ("go to www.example.org for the details", "Go to www.example.org for the details."),
     ("the docs are at docs.python.org", "The docs are at docs.python.org."),
@@ -637,8 +636,8 @@ def test_a_missed_space_is_still_a_sentence_break():
     assert normalize_text("I left early.then I came back") == "I left early. Then I came back."
 
 
-# Parakeet ends "New line" with a colon sometimes, not a period: the colon was
-# left at the start of the new line (": Go to ...").
+# Parakeet sometimes ends "New line" with a colon, not a period; the colon goes
+# with the command rather than starting the new line (": Go to ...").
 @pytest.mark.parametrize("said", [
     "New line: Go to the shop.",
     "New line; go to the shop.",
@@ -650,7 +649,7 @@ def test_punctuation_after_a_line_break_command_goes_with_it(said):
 
 
 # Parakeet capitalizes a name ("John at gmail.com"), but an address is written
-# in lower case: "John@gmail.com" looked wrong.
+# in lower case, not "John@gmail.com".
 @pytest.mark.parametrize("said, expected", [
     ("Send the plans to John at gmail.com.", "Send the plans to john@gmail.com."),
     ("Email me at John at Gmail dot com.", "Email me at john@gmail.com."),
@@ -662,7 +661,7 @@ def test_a_spoken_address_is_lower_case(said, expected):
 
 # --- hour and minutes run together ("641 p.m.") --------------------------------
 # Parakeet writes the same spoken time different ways: "6.41 p.m." one time,
-# "641 p.m." the next. The first became 6:41 PM; the second was typed as is.
+# "641 p.m." the next. Both must become 6:41 PM.
 
 @pytest.mark.parametrize("heard, typed", [
     ("So your 641 p.m. draft is what we sent.", "So your 6:41 PM draft is what we sent."),
@@ -684,9 +683,9 @@ def test_numbers_that_cannot_be_times_are_left_alone(heard, number):
     assert number in out and ":" not in out
 
 
-# Every line's trailing comma used to become a full stop, so a letter
-# greeting said as "dear john comma new line" lost its comma, and the
-# period appeared even with the auto-period preference off.
+# A comma the user says before a line break is kept, so a letter greeting said
+# as "dear john comma new line" keeps its comma, and no period appears with the
+# auto-period preference off.
 @pytest.mark.parametrize("said, expected", [
     ("dear john comma new line thanks for the update",
      f"Dear john,{_M}Thanks for the update."),
@@ -730,9 +729,9 @@ def test_trailing_comma_at_the_end_still_becomes_a_period():
     assert normalize_text("it was hot comma") == "It was hot."
 
 
-# Only the last character was checked for punctuation, so a full stop or
-# question mark followed by a closing quote or bracket got a second one:
-# "hello close quote" ended as 'Hello.”. '.
+# A full stop or question mark followed by a closing quote or bracket already
+# ends the line, so it gets no second one: "hello close quote" must not end as
+# 'Hello.”. '.
 @pytest.mark.parametrize("said, expected", [
     ("hello close quote", "Hello.” "),
     ("why question mark close quote", "Why?” "),
@@ -748,9 +747,8 @@ def test_a_closing_bracket_without_punctuation_still_gets_a_period():
     assert normalize_text("see the note close parenthesis") == "See the note)."
 
 
-# Every hyphen had all whitespace around it squeezed out, so a dash the
-# engine wrote as a pause joined two words ("going-you know-to") and a tab
-# next to a spoken dash was deleted.
+# Only a spoken dash joins words: a dash the engine writes as a pause keeps its
+# spaces (not "going-you know-to"), and a tab next to a spoken dash is kept.
 def test_an_engine_dash_between_words_keeps_its_spaces():
     assert (normalize_text("I was going - you know - to the store")
             == "I was going - you know - to the store.")
