@@ -13,7 +13,7 @@ import numpy as np
 
 
 # The smallest per-band range the bars are scaled to, on the log scale below.
-# Measured (2026-10-11, rooms at -65 to -48 dBFS): room noise peaks at 0.03 to
+# Measured in rooms at -65 to -48 dBFS: room noise peaks at 0.03 to
 # 0.17 above its floor, quiet speech (-42 dBFS) at 0.33 to 0.56 and normal
 # speech at about 1.0. So noise stays under a third of the bar height, and
 # speech still fills it.
@@ -21,6 +21,8 @@ _MIN_CEIL = 0.6
 
 
 class SpectrumProcessor:
+    """Turns the latest audio into one 0..1 level per frequency band."""
+
     def __init__(self, sample_rate=16000, ring_size=5600, bins=20,
                  freq_lo=110, freq_hi=4200):
         self.bins = bins
@@ -58,8 +60,8 @@ class SpectrumProcessor:
         residual = np.maximum(0.0, raw - self._floor)
 
         # ceiling: fast attack, slow decay, giving each band full range. Never
-        # below _MIN_CEIL: decaying freely in silence it shrank onto the room's
-        # own noise and stretched that to full height (Ron, 0.14.6).
+        # below _MIN_CEIL: decaying freely in silence it would shrink onto the
+        # room's own noise and stretch that to full height.
         up = residual > self._ceil
         self._ceil[up] = residual[up]
         self._ceil[~up] = np.maximum(self._ceil[~up] * 0.99, _MIN_CEIL)

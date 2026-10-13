@@ -5,9 +5,9 @@ Used only for toggle recordings (tap the toggle key, talk, and it stops on its
 own). A hold recording already ends when the key is released.
 
 This decides WHEN to stop and never removes audio from the start or middle of
-a recording. That distinction matters: v0.5.16 turned off Whisper's built-in
-voice-activity filter because trimming audio clipped the first words after a
-pause. The only audio ever dropped is the silent tail this detector measured
+a recording. That distinction matters: Whisper's built-in voice-activity
+filter is off because trimming audio clips the first words after a pause.
+The only audio ever dropped is the silent tail this detector measured
 (see tail_to_trim), which is safe and also keeps Whisper from inventing words
 like "thank you" in trailing silence.
 
@@ -40,8 +40,8 @@ class SilenceDetector:
     # With nothing said at all for this long, stop anyway (nothing_said is
     # set, and the recording is dropped rather than transcribed). Before the
     # first word the silence setting doesn't apply, so a slow start isn't cut
-    # off; without this limit a recording with nothing said never ended
-    # (Ron, 0.14.6). Long enough to look at what you're answering first.
+    # off; without this limit a recording with nothing said would never end.
+    # Long enough to look at what you're answering first.
     NOTHING_SAID_S = 10.0
 
     def __init__(self, silence_seconds: float, sample_rate: int):
@@ -56,9 +56,11 @@ class SilenceDetector:
 
     @property
     def armed(self) -> bool:
+        """Whether the speaker has talked long enough for silence to count."""
         return self.speech_time >= _SPEECH_TO_ARM_S
 
     def _threshold(self) -> float:
+        """The loudness (int16 RMS) that counts as speech in this room."""
         return max(_MIN_SPEECH_RMS, (self.noise_floor or 0.0) * _SPEECH_OVER_NOISE)
 
     def feed(self, block) -> bool:
@@ -117,9 +119,8 @@ class SilenceDetector:
 
 # --- An accidental tap of the hold key ---------------------------------------------
 # A tap just over MIN_HOLD_MS records a fraction of a second of room noise and
-# the key's click, and Parakeet can "hear" a word in it: "Thank you." got typed
-# into a terminal while testing 0.14.0, and the processor engine says "Yeah."
-# to 0.4 s of loud hiss. Whisper has a no-speech score to catch this; Parakeet
+# the key's click, and Parakeet can "hear" a word in it ("Thank you.", or
+# "Yeah." from the processor engine for 0.4 s of loud hiss). Whisper has a no-speech score to catch this; Parakeet
 # has none. So a recording this short is only transcribed if some of it is
 # clearly louder than its own background.
 
@@ -128,7 +129,7 @@ _TAP_BLOCK_S = 0.02
 # Tuned on 26 real taps from a Sennheiser Profile desk mic (noisy background,
 # int16 RMS 70-130; the key's thump reached 1.6-4.7x that for a few tens of
 # ms) and 5,039 real speech clips of 0.3-0.5 s, plus real words laid over that
-# mic's own background (2026-10-03). At 2.5x: all 26 taps dropped, no speech
+# mic's own background. At 2.5x: all 26 taps dropped, no speech
 # at normal or loud level dropped, 3 of 138 very soft single words dropped.
 # 1.5x let 10 of the 26 taps through, and Parakeet on the processor typed
 # "Yeah." for them. A ratio needs the second route below: when a short clip is
