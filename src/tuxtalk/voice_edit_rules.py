@@ -147,11 +147,14 @@ def _remove_phrase(text: str, phrase: str):
 
 def _capitalise_first(segment: str):
     """*segment* with its first letter in upper case, and True when it has
-    no letter, so the capital still goes to whatever follows it."""
-    m = re.search(r"[^\W\d_]", segment)
+    no letter or digit, so the capital still goes to whatever follows it. A
+    sentence that now opens with a number keeps its letters as they were."""
+    m = re.search(r"[^\W_]", segment)
     if not m:
         return segment, True
     i = m.start()
+    if not segment[i].isalpha():
+        return segment, False
     return segment[:i] + segment[i].upper() + segment[i + 1:], False
 
 

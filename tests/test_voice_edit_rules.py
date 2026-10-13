@@ -225,6 +225,15 @@ def test_removing_an_opening_word_capitalises_only_the_word_after_it():
             == "That, e.g. apples work.")
 
 
+@pytest.mark.parametrize("text, said, out", [
+    ("Testing 3 times over.", "remove the word testing", "3 times over."),
+    ("Um, 2 of them came.", "remove the word um", "2 of them came."),
+])
+def test_a_number_after_the_removed_word_leaves_the_next_word_alone(text, said, out):
+    """The first letter after the number was capitalised ("3 Times over.")."""
+    assert r.mechanical_edit(text, said) == out
+
+
 def test_lines_without_the_word_are_left_exactly_as_they_were():
     assert (r.mechanical_edit("Testing one\nkeep  this , line\n: label here", "remove the word testing")
             == "One\nkeep  this , line\n: label here")
