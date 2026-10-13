@@ -21,7 +21,7 @@ SCRIPT = textwrap.dedent("""
     from tuxtalk import tray
 
     cfg = types.SimpleNamespace(injection_mode="auto", model="small", device="cpu",
-                                recommend_notice_shown=False)
+                                recommend_notice_shown=False, notify=True)
     config.load_config = lambda: cfg
     config.save_config = lambda c: None
     shown = []
@@ -48,3 +48,21 @@ def test_changing_injection_mode_does_not_load_the_dictation_engine():
 def test_notify_is_skipped_quietly_without_libnotify(monkeypatch):
     monkeypatch.setattr(notify, "_ready", False)
     notify.notify("TuxTalk", "should not appear")   # no error, nothing shown
+
+
+def test_the_mode_confirmation_follows_the_notifications_setting(monkeypatch):
+    """Mint VM test, 2026-10-13: "Input mode: Clipboard Paste" popped up with
+    "Show desktop notifications" off."""
+    import types
+    import tuxtalk.config as config
+    from tuxtalk import tray
+    shown = []
+    for wanted in (False, True):
+        cfg = types.SimpleNamespace(injection_mode="auto", notify=wanted)
+        monkeypatch.setattr(config, "load_config", lambda: cfg)
+        monkeypatch.setattr(config, "save_config", lambda c: None)
+        monkeypatch.setattr(notify, "notify", lambda title, body: shown.append((wanted, body)))
+        t = types.SimpleNamespace(dbus_service=None, _updating_injection_mode=False,
+                                  restart_service=lambda _: None)
+        tray.DictationTray.set_injection_mode(t, "paste")
+    assert shown == [(True, "Input mode: Clipboard Paste")]

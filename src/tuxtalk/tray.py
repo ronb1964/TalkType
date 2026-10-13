@@ -823,7 +823,8 @@ class DictationTray:
             }
             mode_name = mode_names.get(mode, mode)
             logger.info(f"Switched to {mode_name} mode")
-            _notify("TuxTalk", f"Input mode: {mode_name}")
+            if getattr(cfg, "notify", False):
+                _notify("TuxTalk", f"Input mode: {mode_name}")
 
             # Notify GNOME extension of mode change via D-Bus signal
             if self.dbus_service:
