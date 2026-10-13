@@ -1886,12 +1886,17 @@ def _query_focused_window_class() -> str | None:
     tray, which we ask over D-Bus. Sway, i3, Hyprland and niri have nothing
     to push it, so when the tray doesn't know, the compositor is asked
     directly (compositor_focus.py).
+
+    TuxTalk's own windows count as unknown: a stale report of Preferences
+    must not pick the paste shortcut for the app the user is really in.
     """
+    from .desktop_identity import is_own_window_class
     reported = _query_reported_window_class()
-    if reported:
+    if reported and not is_own_window_class(reported):
         return reported
     from .compositor_focus import focused_class
-    return focused_class()
+    asked = focused_class()
+    return None if is_own_window_class(asked) else asked
 
 
 def _query_reported_window_class() -> str | None:
@@ -1957,16 +1962,22 @@ def _type_text_fast(text: str, delay_ms: int = 1):
         return False
 
 
-def _send_paste_keystroke() -> bool:
-    """Ctrl+V, or Ctrl+Shift+V into a terminal, where Ctrl+V is readline's
-    quoted-insert. The window class comes from the tray's cache (the GNOME
-    extension, the KWin script or a compositor's focus events fill it); None
-    when nothing has reported yet. True if the keystroke was sent."""
-    focused_class = _query_focused_window_class()
-    # KEY_LEFTSHIFT=42, KEY_LEFTCTRL=29, KEY_V=47
+def _send_paste_keystroke(focused_class: str | None, primary_holds_text: bool = False) -> bool:
+    """Send the paste shortcut for *focused_class*. True if it was sent.
+
+    A terminal gets Ctrl+Shift+V (Ctrl+V is readline's quoted-insert there and
+    shows nothing) and other known apps Ctrl+V. An unknown window gets
+    Shift+Insert when the primary selection holds the text too: GUI toolkits
+    paste the clipboard on Shift+Insert and terminals paste the primary
+    selection, so it lands either way. Without that, Ctrl+V, which suits most
+    apps."""
+    # KEY_LEFTSHIFT=42, KEY_LEFTCTRL=29, KEY_V=47, KEY_INSERT=110
     if is_terminal_class(focused_class):
         keys = ["42:1", "29:1", "47:1", "47:0", "29:0", "42:0"]  # Ctrl+Shift+V
         logger.info(f"Paste: Ctrl+Shift+V (terminal class={focused_class!r})")
+    elif focused_class is None and primary_holds_text:
+        keys = ["42:1", "110:1", "110:0", "42:0"]  # Shift+Insert
+        logger.info("Paste: Shift+Insert (window unknown; clipboard and primary selection set)")
     else:
         keys = ["29:1", "47:1", "47:0", "29:0"]  # Ctrl+V
         logger.info(f"Paste: Ctrl+V (class={focused_class!r})")
@@ -1974,6 +1985,24 @@ def _send_paste_keystroke() -> bool:
         # The keystroke never reached the desktop: the text is sitting on the
         # clipboard but never made it into the app.
         logger.error("Paste keystroke failed — text was not inserted")
+        return False
+    return True
+
+
+def _copy_to_primary(text: str) -> bool:
+    """Put *text* on the primary selection as well (wl-copy --primary). True
+    once wl-copy has handed it to the compositor; False if the desktop has no
+    primary selection or wl-copy failed."""
+    from . import clipboard
+    try:
+        result = subprocess.run(clipboard.wl_copy_command() + ["--primary"],
+                                input=text.encode("utf-8"), stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL, timeout=WL_COPY_READY_TIMEOUT_S)
+    except Exception as e:
+        logger.info(f"Could not set the primary selection: {e}")
+        return False
+    if result.returncode != 0:
+        logger.info(f"Could not set the primary selection (wl-copy exit {result.returncode})")
         return False
     return True
 
@@ -1992,12 +2021,13 @@ def _paste_text_x11(text: str) -> bool:
         logger.error("X11 paste: couldn't put the text on the clipboard; nothing was inserted")
         return False
     time.sleep(0.08)    # let the selection settle before the app asks for it
-    return _send_paste_keystroke()
+    return _send_paste_keystroke(_query_focused_window_class())
 
 
 def _paste_text(text: str) -> bool:
     """Wayland paste: put *text* on the clipboard with wl-copy, then send the
-    paste keystroke (_send_paste_keystroke picks Ctrl+V or Ctrl+Shift+V).
+    paste keystroke (_send_paste_keystroke picks Ctrl+V, Ctrl+Shift+V or
+    Shift+Insert).
 
     Returns True only when the text actually reached the focused app: the undo
     buffer records it, and a paste over an unset clipboard would insert
@@ -2049,8 +2079,13 @@ def _paste_text(text: str) -> bool:
                 wl_copy_time = time.time() - paste_start
                 logger.info(f"TIMING: wl-copy set the clipboard in {wl_copy_time:.3f}s")
 
+                # With the window unknown, the primary selection gets the text
+                # too, so the paste key works in a terminal as well.
+                focused_class = _query_focused_window_class()
+                primary_holds_text = focused_class is None and _copy_to_primary(text)
+
                 ydotool_start = time.time()
-                if not _send_paste_keystroke():
+                if not _send_paste_keystroke(focused_class, primary_holds_text):
                     return False
                 ydotool_time = time.time() - ydotool_start
                 logger.info(f"TIMING: ydotool paste command took {ydotool_time:.3f}s")

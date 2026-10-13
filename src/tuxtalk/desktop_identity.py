@@ -29,6 +29,21 @@ _BY_INSTALL_TYPE = {
 }
 
 
+# Every name a TuxTalk window can report as its class, lower-cased: this
+# release's launcher names and the TalkType ones still running until a restart.
+_OWN_CLASSES = frozenset(name.lower() for name in (
+    *_BY_INSTALL_TYPE.values(), APP_ID,
+    "talktype", "talktype-dev", "io.github.ronb1964.TalkType",
+))
+
+
+def is_own_window_class(wm_class) -> bool:
+    """Whether *wm_class* is one of TuxTalk's own windows. Dictation never
+    goes into those through the paste shortcut, so callers treat it as an
+    unknown window rather than a target."""
+    return bool(wm_class) and wm_class.lower() in _OWN_CLASSES
+
+
 def desktop_id(install_type: str) -> str:
     """The launcher name (without .desktop) for this kind of install."""
     return _BY_INSTALL_TYPE.get(install_type, APP_ID)

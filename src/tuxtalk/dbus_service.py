@@ -223,7 +223,11 @@ class TuxTalkDBusService(dbus.service.Object):
         subprocess from this service.
         """
         global _focused_window_class
-        new_class = wm_class if wm_class else None
+        from .desktop_identity import is_own_window_class
+        # TuxTalk's own window (Preferences) is never a paste target, and kept
+        # here it would outlive a reporter that stops, such as an extension
+        # uninstalled from Preferences.
+        new_class = wm_class if wm_class and not is_own_window_class(wm_class) else None
         if new_class != _focused_window_class:
             logger.info(f"Focused window class: {new_class!r}")
         _focused_window_class = new_class

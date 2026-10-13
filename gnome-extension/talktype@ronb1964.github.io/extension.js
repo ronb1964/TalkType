@@ -816,6 +816,16 @@ class TuxTalkIndicator extends PanelMenu.Button {
         }
 
         if (this._proxy) {
+            // Nothing reports focus once this is gone, so the last window
+            // reported must not stay behind as the paste target.
+            if (this._dbusAvailable) {
+                try {
+                    this._proxy.SetFocusedWindowClassRemote('', () => {});
+                    this._proxy.SetFocusedWindowGeometryRemote('', () => {});
+                } catch (e) {
+                    // TuxTalk may be quitting too — nothing left to clear
+                }
+            }
             // Disconnect every D-Bus signal subscription before dropping the
             // proxy, so no callback fires on the destroyed button afterward.
             if (this._signalIds) {

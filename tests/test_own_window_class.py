@@ -1,0 +1,160 @@
+"""TuxTalk's own window is never the window a dictation is pasted into.
+
+GNOME VM test: Preferences → Uninstall Extension, then dictate into Ptyxis.
+The extension's last report was TuxTalk's Preferences window ('tuxtalk'), and
+with the extension gone nothing replaced it, so every paste went out as plain
+Ctrl+V (readline's quoted-insert in a terminal) and nothing appeared. Log:
+"Paste: Ctrl+V (class='tuxtalk')".
+
+Two things follow. TuxTalk's own class means "don't know", wherever it comes
+from. And when the window is unknown on Wayland, the paste must still land in
+a terminal: the dictation goes on the primary selection too and the paste key
+is Shift+Insert, which GUI apps (GTK, Qt, Chromium, Firefox, LibreOffice)
+paste the clipboard with and terminals (VTE, Konsole, kitty, foot, Alacritty)
+paste the primary selection with.
+"""
+import pathlib
+import re
+import subprocess
+
+import pytest
+
+from tuxtalk import app, clipboard, compositor_focus, dbus_service, desktop_identity
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+EXT = ROOT / "gnome-extension" / "talktype@ronb1964.github.io"
+
+CTRL_V = ["29:1", "47:1", "47:0", "29:0"]
+CTRL_SHIFT_V = ["42:1", "29:1", "47:1", "47:0", "29:0", "42:0"]
+SHIFT_INSERT = ["42:1", "110:1", "110:0", "42:0"]
+
+
+# --- TuxTalk's own class is not a target ---------------------------------------------
+
+@pytest.mark.parametrize("wm_class", [
+    "tuxtalk", "Tuxtalk", "tuxtalk-dev", "io.github.ronb1964.TuxTalk",
+    "talktype", "talktype-dev", "io.github.ronb1964.TalkType",
+])
+def test_every_name_tuxtalk_windows_go_by_is_its_own(wm_class):
+    assert desktop_identity.is_own_window_class(wm_class)
+
+
+@pytest.mark.parametrize("wm_class", [None, "", "org.gnome.Ptyxis", "python3", "tuxtalker"])
+def test_other_windows_are_not_tuxtalks(wm_class):
+    assert not desktop_identity.is_own_window_class(wm_class)
+
+
+def test_the_tray_does_not_keep_tuxtalks_own_window_as_the_focus(monkeypatch):
+    """A report of TuxTalk's own window clears the cache, so it can't stay
+    behind when the reporter goes away."""
+    monkeypatch.setattr(dbus_service, "_focused_window_class", "org.gnome.Ptyxis")
+    service = object.__new__(dbus_service.TuxTalkDBusService)
+    dbus_service.TuxTalkDBusService.SetFocusedWindowClass(service, "tuxtalk")
+    assert dbus_service.TuxTalkDBusService.GetFocusedWindowClass(service) == ""
+
+
+class _Tray:
+    def __init__(self, reported):
+        self.reported = reported
+
+    def GetFocusedWindowClass(self, **kw):
+        return self.reported
+
+
+def test_a_reported_tuxtalk_window_counts_as_unknown(monkeypatch):
+    """An older extension still reports TuxTalk's windows."""
+    monkeypatch.setattr(app, "_get_tray_dbus_proxy", lambda: _Tray("tuxtalk"))
+    monkeypatch.setattr(compositor_focus, "focused_class", lambda: None)
+    assert app._query_focused_window_class() is None
+
+
+def test_a_tuxtalk_window_from_the_compositor_counts_as_unknown(monkeypatch):
+    monkeypatch.setattr(app, "_get_tray_dbus_proxy", lambda: _Tray(""))
+    monkeypatch.setattr(compositor_focus, "focused_class", lambda: "Tuxtalk")
+    assert app._query_focused_window_class() is None
+
+
+def test_a_reported_tuxtalk_window_still_asks_the_compositor(monkeypatch):
+    monkeypatch.setattr(app, "_get_tray_dbus_proxy", lambda: _Tray("tuxtalk"))
+    monkeypatch.setattr(compositor_focus, "focused_class", lambda: "foot")
+    assert app._query_focused_window_class() == "foot"
+
+
+def test_the_extension_clears_the_focus_when_it_is_turned_off():
+    """Disabled or uninstalled, the extension stops reporting; the class it
+    reported last must not outlive it."""
+    js = (EXT / "extension.js").read_text()
+    destroy = js[js.index("    destroy() {"):]
+    destroy = destroy[:destroy.index("super.destroy();")]
+    assert re.search(r"SetFocusedWindowClassRemote\(\s*''", destroy)
+    assert destroy.index("SetFocusedWindowClassRemote") < destroy.index("this._proxy = null")
+
+
+# --- the paste keystroke for an unknown window ----------------------------------------
+
+class _Copy:
+    def __init__(self, returncode=0):
+        self.returncode = returncode
+        self.stdin = self
+        self.stderr = None
+        self.written = b""
+
+    def write(self, data):
+        self.written += data
+
+    def close(self):
+        pass
+
+    def poll(self):
+        return self.returncode
+
+    def wait(self, timeout=None):
+        return self.returncode
+
+
+@pytest.fixture
+def paste_env(monkeypatch):
+    """A Wayland session where wl-copy and ydotool work; records what is run."""
+    monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
+    monkeypatch.setattr(app, "_which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(app.time, "sleep", lambda s: None)
+    monkeypatch.setattr(app, "_restore_clipboard", False)
+    monkeypatch.setattr(clipboard, "wl_copy_command", lambda: ["wl-copy"])
+    env = {"copies": [], "keys": [], "primary_rc": 0}
+    monkeypatch.setattr(app.subprocess, "Popen",
+                        lambda cmd, **kw: env["copies"].append(list(cmd)) or _Copy())
+
+    def run(cmd, **kw):
+        env["copies"].append(list(cmd))
+        return subprocess.CompletedProcess(cmd, env["primary_rc"])
+    monkeypatch.setattr(app.subprocess, "run", run)
+    monkeypatch.setattr(app, "_ydotool_key", lambda keys, **kw: env["keys"].append(list(keys)) or True)
+    return env
+
+
+def test_an_unknown_window_gets_the_text_on_both_selections_and_shift_insert(monkeypatch, paste_env):
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: None)
+    assert app._paste_text("hello") is True
+    assert ["wl-copy"] in paste_env["copies"]
+    assert ["wl-copy", "--primary"] in paste_env["copies"]
+    assert paste_env["keys"] == [SHIFT_INSERT]
+
+
+def test_without_a_primary_selection_an_unknown_window_gets_ctrl_v(monkeypatch, paste_env):
+    """Shift+Insert would paste the old primary selection into a terminal."""
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: None)
+    paste_env["primary_rc"] = 1
+    assert app._paste_text("hello") is True
+    assert paste_env["keys"] == [CTRL_V]
+
+
+@pytest.mark.parametrize("wm_class,keys", [
+    ("org.gnome.Ptyxis", CTRL_SHIFT_V),
+    ("org.gnome.TextEditor", CTRL_V),
+])
+def test_a_known_window_keeps_its_shortcut_and_leaves_the_primary_alone(monkeypatch, paste_env,
+                                                                        wm_class, keys):
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: wm_class)
+    assert app._paste_text("hello") is True
+    assert not any("--primary" in c for c in paste_env["copies"])
+    assert paste_env["keys"] == [keys]
