@@ -123,6 +123,10 @@ def _wait_dialog(parent, work):
         waiting.response(Gtk.ResponseType.OK)
         return False
 
+    # set_deletable(False) only hides the title-bar X: Escape and Alt+F4 still
+    # send delete-event, which would end run() while the work goes on. Refusing
+    # it while the thread lives keeps the spinner up until the work is done.
+    waiting.connect("delete-event", lambda *_: thread.is_alive())
     GLib.timeout_add(200, poll)
     waiting.run()
     waiting.destroy()
@@ -157,10 +161,12 @@ def run_speed_check(parent, model):
 
     _wait_dialog(parent, work)
 
-    if "error" in result:
-        message(parent, Gtk.MessageType.WARNING, "Keeping the processor", result["error"])
+    times = result.get("times")
+    if times is None:
+        message(parent, Gtk.MessageType.WARNING, "Keeping the processor",
+                result.get("error") or "The speed check was interrupted.")
         return False
-    gpu, cpu = result["times"]
+    gpu, cpu = times
     if wv.graphics_is_worth_it(gpu, cpu):
         _remember_speed_result(False)
         message(parent, Gtk.MessageType.INFO, "Your graphics chip is faster",
