@@ -2888,18 +2888,17 @@ def _download_vulkan_model_first_run(model):
     try:
         from tuxtalk import whisper_vulkan as wv
         from tuxtalk.download_progress_dialog import DownloadTask, UnifiedDownloadDialog
-        from tuxtalk.model_helper import model_display_name
         if wv.is_installed(model):
             return True
         dialog = UnifiedDownloadDialog(
             parent=None, title="Downloading Your Model",
             description="The speech model in the format your graphics engine uses. One-time download.")
         if not wv.is_engine_installed(model):
-            dialog.add_task(DownloadTask("Graphics engine", "whisper.cpp (Vulkan)",
-                                         wv.ENGINE_SIZE_TEXT, wv.make_engine_download_func(model)))
+            dialog.add_task(DownloadTask("Graphics engine", wv.ENGINE_SIZE_TEXT,
+                                         wv.make_engine_download_func(model)))
         if wv.model_path(model) is None:
-            dialog.add_task(DownloadTask("Speech model", f"{model_display_name(model)} (for Vulkan)",
-                                         wv.MODEL_FILES[model][1], wv.make_model_download_func(model)))
+            dialog.add_task(DownloadTask("Speech model", wv.MODEL_FILES[model][1],
+                                         wv.make_model_download_func(model)))
         dialog.run()
         return wv.is_installed(model)
     except Exception as e:

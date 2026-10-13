@@ -5,7 +5,6 @@ import threading
 
 from tuxtalk.download_utils import (
     download_file,
-    sha256_of_file,
     parse_sha256sums,
     free_space_bytes,
 )
@@ -65,11 +64,6 @@ def test_download_file_bad_url(tmp_path):
     dest = tmp_path / "dest.bin"
     assert download_file((tmp_path / "missing.bin").as_uri(), str(dest)) is False
     assert not dest.exists()
-
-
-def test_sha256_of_file(tmp_path):
-    src, content = _make_source(tmp_path)
-    assert sha256_of_file(str(src)) == hashlib.sha256(content).hexdigest()
 
 
 def test_parse_sha256sums():

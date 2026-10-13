@@ -4342,9 +4342,9 @@ class PreferencesWindow:
         dialog = UnifiedDownloadDialog(
             parent=self.window, title="Downloading AI Cleanup",
             description="One-time download. Everything runs on this computer.")
-        dialog.add_task(DownloadTask("AI engine", "llama.cpp", ai_cleanup.LLAMA_SIZE_TEXT,
+        dialog.add_task(DownloadTask("AI engine", ai_cleanup.LLAMA_SIZE_TEXT,
                                      ai_cleanup.make_engine_download_func()))
-        dialog.add_task(DownloadTask("AI model", "Qwen2.5 1.5B", ai_cleanup.MODEL_SIZE_TEXT,
+        dialog.add_task(DownloadTask("AI model", ai_cleanup.MODEL_SIZE_TEXT,
                                      ai_cleanup.make_model_download_func()))
         results = dialog.run()
 

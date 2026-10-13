@@ -117,18 +117,6 @@ def _remove_quiet(path: str | None) -> None:
         pass
 
 
-def sha256_of_file(path: str) -> str:
-    """Hex sha256 digest of a file, streamed (no full read into memory)."""
-    sha = hashlib.sha256()
-    with open(path, "rb") as f:
-        while True:
-            chunk = f.read(_CHUNK_SIZE)
-            if not chunk:
-                break
-            sha.update(chunk)
-    return sha.hexdigest()
-
-
 def parse_sha256sums(text: str) -> dict:
     """Parse `sha256sum` output ("<hash>  <filename>") into {filename: hash}.
 

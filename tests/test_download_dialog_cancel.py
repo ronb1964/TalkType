@@ -13,7 +13,7 @@ from tuxtalk.download_progress_dialog import DownloadTask, UnifiedDownloadDialog
 
 
 def _task(name="CUDA Libraries"):
-    return DownloadTask(name=name, description="test", size_text="~1.4GB",
+    return DownloadTask(name=name, size_text="~1.4GB",
                         download_func=lambda cb, ev: True)
 
 
@@ -40,3 +40,89 @@ def test_closing_the_window_leaves_finished_tasks_alone():
 
     assert not done.cancelled
     assert done.success is True
+
+
+class _Widget:
+    def __init__(self):
+        self.markup = []
+        self.labels = []
+
+    def set_markup(self, text):
+        self.markup.append(text)
+
+    def set_label(self, text):
+        self.labels.append(text)
+
+    def set_sensitive(self, value):
+        pass
+
+    def set_fraction(self, value):
+        pass
+
+    def set_text(self, value):
+        pass
+
+
+def _dialog_with_widgets(monkeypatch, task):
+    import tuxtalk.download_progress_dialog as dpd
+    monkeypatch.setattr(dpd.GLib, "idle_add", lambda fn, *a: fn(*a))
+    monkeypatch.setattr(dpd.GLib, "timeout_add", lambda ms, fn, *a: None)
+    dlg = UnifiedDownloadDialog.__new__(UnifiedDownloadDialog)
+    dlg.tasks = [task]
+    dlg.all_completed = False
+    dlg.dialog = None
+    dlg.task_widgets = {task: {"status": _Widget(), "cancel_btn": _Widget(),
+                               "progress": _Widget()}}
+    return dlg
+
+
+def test_a_cancelled_task_is_not_relabelled_failed(monkeypatch):
+    task = _task()
+    dlg = _dialog_with_widgets(monkeypatch, task)
+
+    dlg._cancel_task(task)
+    dlg._mark_task_complete(task, False)
+
+    widgets = dlg.task_widgets[task]
+    assert "Cancelled" in widgets["status"].markup[-1]
+    assert widgets["cancel_btn"].labels[-1] == "Cancelled"
+
+
+def test_progress_text_is_escaped(monkeypatch):
+    """An error like '<urlopen error ...>' is not valid Pango markup."""
+    task = _task()
+    dlg = _dialog_with_widgets(monkeypatch, task)
+
+    dlg._update_task_progress(task, "Failed: <urlopen error> & more", 0)
+
+    assert "&lt;urlopen error&gt; &amp; more" in dlg.task_widgets[task]["status"].markup[-1]
+
+
+def test_closing_the_window_drops_its_widgets(monkeypatch):
+    """Downloads that finish after the window is gone must not touch it."""
+    class FakeGtkDialog:
+        def show_all(self): pass
+        def run(self): return 0
+        def destroy(self): pass
+
+    task = _task()
+    dlg = UnifiedDownloadDialog(title="t")
+    dlg.add_task(task)
+    monkeypatch.setattr(dlg, "_build_dialog",
+                        lambda: (setattr(dlg, "dialog", FakeGtkDialog()),
+                                 dlg.task_widgets.update({task: {}})))
+    monkeypatch.setattr(dlg, "_run_task", lambda t: None)
+
+    dlg.run()
+
+    assert dlg.dialog is None
+    assert dlg.task_widgets == {}
+
+
+def test_the_stylesheet_only_reaches_the_download_dialog():
+    import re
+    import tuxtalk.download_progress_dialog as dpd
+    selectors = re.findall(rb"^\s*([^{}\n]+?)\s*\{", dpd._CSS, re.MULTILINE)
+    assert selectors
+    for selector in selectors:
+        assert selector.startswith(b"." + dpd._STYLE_CLASS.encode()), selector

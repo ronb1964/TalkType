@@ -19,23 +19,73 @@ except ImportError:
     logger = logging.getLogger(__name__)
 
 
+# Every rule is scoped to this class on the dialog, because a screen-wide
+# provider otherwise restyles every window in the process (Preferences too).
+_STYLE_CLASS = "tuxtalk-download-dialog"
+_CSS = b"""
+    .tuxtalk-download-dialog {
+        background-color: #2b2b2b;
+    }
+    .tuxtalk-download-dialog .task-box {
+        background-color: #363636;
+        border-radius: 8px;
+        padding: 15px;
+        margin: 8px;
+    }
+    .tuxtalk-download-dialog .task-title {
+        color: #ffffff;
+        font-weight: bold;
+        font-size: 14px;
+    }
+    .tuxtalk-download-dialog .task-status {
+        color: #b8b8b8;
+        font-size: 12px;
+    }
+    .tuxtalk-download-dialog progressbar {
+        min-height: 20px;
+    }
+    .tuxtalk-download-dialog progressbar progress {
+        background-color: #4285f4;
+        border-radius: 4px;
+    }
+    .tuxtalk-download-dialog progressbar trough {
+        background-color: #1a1a1a;
+        border-radius: 4px;
+    }
+"""
+_style_installed = False
+
+
+def _install_style():
+    """Add the dialog's stylesheet to the screen once per process."""
+    global _style_installed
+    if _style_installed:
+        return
+    screen = Gdk.Screen.get_default()
+    if screen is None:
+        return
+    provider = Gtk.CssProvider()
+    provider.load_from_data(_CSS)
+    Gtk.StyleContext.add_provider_for_screen(
+        screen, provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+    _style_installed = True
+
+
 class DownloadTask:
     """Represents a single download task with progress tracking."""
 
-    def __init__(self, name, description, size_text, download_func):
+    def __init__(self, name, size_text, download_func):
         """
         Initialize a download task.
 
         Args:
             name: Display name (e.g., "CUDA Libraries")
-            description: Short description
             size_text: Size indicator (e.g., "~1.4GB")
             download_func: Function that performs the download
                           Should accept (progress_callback, cancel_event) args
                           progress_callback signature: func(message, percent)
         """
         self.name = name
-        self.description = description
         self.size_text = size_text
         self.download_func = download_func
         self.cancelled = False
@@ -84,44 +134,8 @@ class UnifiedDownloadDialog:
         if self.parent:
             self.dialog.set_transient_for(self.parent)
 
-        # Apply dark theme styling
-        css_provider = Gtk.CssProvider()
-        css_provider.load_from_data(b"""
-            window {
-                background-color: #2b2b2b;
-            }
-            .task-box {
-                background-color: #363636;
-                border-radius: 8px;
-                padding: 15px;
-                margin: 8px;
-            }
-            .task-title {
-                color: #ffffff;
-                font-weight: bold;
-                font-size: 14px;
-            }
-            .task-status {
-                color: #b8b8b8;
-                font-size: 12px;
-            }
-            progressbar {
-                min-height: 20px;
-            }
-            progressbar progress {
-                background-color: #4285f4;
-                border-radius: 4px;
-            }
-            progressbar trough {
-                background-color: #1a1a1a;
-                border-radius: 4px;
-            }
-        """)
-        Gtk.StyleContext.add_provider_for_screen(
-            self.dialog.get_screen() if self.dialog.get_screen() else Gdk.Screen.get_default(),
-            css_provider,
-            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
-        )
+        self.dialog.get_style_context().add_class(_STYLE_CLASS)
+        _install_style()
 
         content = self.dialog.get_content_area()
         content.set_margin_top(20)
@@ -133,10 +147,12 @@ class UnifiedDownloadDialog:
         # Main title
         title_text = self._title or "Setting up TuxTalk"
         title_label = Gtk.Label()
-        title_label.set_markup(f'<span size="x-large"><b>{title_text}</b></span>')
+        title_label.set_markup(
+            f'<span size="x-large"><b>{GLib.markup_escape_text(title_text)}</b></span>')
         content.pack_start(title_label, False, False, 0)
 
-        # Description (can be multi-line for user-friendly explanations)
+        # Description (can be multi-line for user-friendly explanations).
+        # It is Pango markup on purpose: callers bold the item names.
         desc_text = self._description or "Downloading optional components..."
         desc_label = Gtk.Label()
         desc_label.set_markup(f'<span>{desc_text}</span>')
@@ -173,7 +189,9 @@ class UnifiedDownloadDialog:
 
         # Task title
         title_label = Gtk.Label()
-        title_label.set_markup(f'<b>{task.name}</b> <span size="small" alpha="70%">({task.size_text})</span>')
+        title_label.set_markup(
+            f'<b>{GLib.markup_escape_text(task.name)}</b> '
+            f'<span size="small" alpha="70%">({GLib.markup_escape_text(task.size_text)})</span>')
         title_label.set_halign(Gtk.Align.START)
         title_label.get_style_context().add_class('task-title')
         header_box.pack_start(title_label, True, True, 0)
@@ -247,7 +265,8 @@ class UnifiedDownloadDialog:
                 return False
 
             widgets = self.task_widgets[task]
-            widgets['status'].set_markup(f'<span size="small">{message}</span>')
+            widgets['status'].set_markup(
+                f'<span size="small">{GLib.markup_escape_text(str(message))}</span>')
             widgets['progress'].set_fraction(percent / 100.0)
             widgets['progress'].set_text(f"{percent}%")
             return False
@@ -266,7 +285,10 @@ class UnifiedDownloadDialog:
             widgets = self.task_widgets[task]
             widgets['cancel_btn'].set_sensitive(False)
 
-            if success:
+            if task.cancelled:
+                # The download returns False when cancelled; it didn't fail.
+                pass
+            elif success:
                 widgets['status'].set_markup('<span size="small" color="#51cf66">✅ Complete!</span>')
                 widgets['progress'].set_fraction(1.0)
                 widgets['progress'].set_text("100%")
@@ -327,11 +349,15 @@ class UnifiedDownloadDialog:
             self._run_task(task)
 
         # Run the dialog (blocks until closed)
-        response = self.dialog.run()
+        self.dialog.run()
         # Whatever closed it — the X, Escape, or a button — nothing is left to
         # show progress in, so no download may outlive it.
         self._cancel_unfinished_tasks()
         self.dialog.destroy()
+        # Cancelled downloads still report back for a moment; with no widgets
+        # left, their updates and the auto-close timer do nothing.
+        self.task_widgets.clear()
+        self.dialog = None
 
         # Return results
         results = {}
@@ -382,7 +408,6 @@ def show_unified_download_dialog(cuda=False, extension=False, model=None, parent
         from tuxtalk import cuda_helper
         task = DownloadTask(
             name="CUDA Libraries",
-            description="GPU acceleration libraries",
             size_text="~1.4GB",
             download_func=cuda_helper.download_cuda_libraries
         )
@@ -393,7 +418,6 @@ def show_unified_download_dialog(cuda=False, extension=False, model=None, parent
         model_size = MODEL_DISPLAY_SIZES.get(model, "unknown size")
         task = DownloadTask(
             name=f"{model} AI Model",
-            description=f"Speech recognition model ({model_size})",
             size_text=model_size,
             download_func=make_model_download_func(model)
         )
@@ -414,8 +438,7 @@ def show_unified_download_dialog(cuda=False, extension=False, model=None, parent
 
         task = DownloadTask(
             name="GNOME Extension",
-            description="Native desktop integration",
-            size_text="~3KB",
+            size_text="~10KB",
             download_func=extension_download
         )
         dialog.add_task(task)
@@ -442,7 +465,6 @@ if __name__ == '__main__':
 
     task1 = DownloadTask(
         name="CUDA Libraries",
-        description="GPU acceleration",
         size_text="~1.4GB",
         download_func=dummy_download
     )
@@ -450,8 +472,7 @@ if __name__ == '__main__':
 
     task2 = DownloadTask(
         name="GNOME Extension",
-        description="Desktop integration",
-        size_text="~3KB",
+        size_text="~10KB",
         download_func=dummy_download
     )
     dialog.add_task(task2)

@@ -65,12 +65,12 @@ def ensure_files(parent, model, confirm):
     # Engine build 1 (0.12.0 to 0.13.1) can't run Parakeet, so it's fetched
     # again, as a superset, the first time someone sets Parakeet up.
     if not wv.is_engine_installed(model):
-        tasks.append(DownloadTask("Graphics engine", "whisper.cpp (Vulkan)",
-                                  wv.ENGINE_SIZE_TEXT, wv.make_engine_download_func(model)))
+        tasks.append(DownloadTask("Graphics engine", wv.ENGINE_SIZE_TEXT,
+                                  wv.make_engine_download_func(model)))
         needed.append(f"the graphics engine ({wv.ENGINE_SIZE_TEXT})")
     if wv.model_path(model) is None:
-        tasks.append(DownloadTask("Speech model", f"{name} (for graphics)",
-                                  wv.MODEL_FILES[model][1], wv.make_model_download_func(model)))
+        tasks.append(DownloadTask("Speech model", wv.MODEL_FILES[model][1],
+                                  wv.make_model_download_func(model)))
         needed.append(f"the {name} model in the format it uses ({wv.MODEL_FILES[model][1]})")
     if not tasks:
         return True
