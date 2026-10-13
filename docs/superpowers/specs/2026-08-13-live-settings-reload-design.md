@@ -79,7 +79,7 @@ polling path mid-flight, which is real risk for a setting nobody toggles often.
 **Noted, not addressed:** `paste_injection` exists in `Settings` but appears
 nowhere outside `config.py` — it reads as a dead setting. Left out of the
 allowlist so it conservatively triggers a restart; whether to delete it is a
-separate question, not this change's business.
+separate question, not this change's business. (It has since been removed.)
 
 Every field of `Settings` is accounted for by one of the groups above. A test
 enforces that, so a newly added setting cannot be silently forgotten.

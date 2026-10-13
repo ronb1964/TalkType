@@ -74,14 +74,6 @@ class ConfigError(Exception):
         self.fields = list(fields or [])
         super().__init__("; ".join(self.errors))
 
-    def report(self) -> str:
-        """Human-readable summary, suitable for stderr or a dialog."""
-        lines = ["Configuration validation failed:"]
-        lines += [f"  • {e}" for e in self.errors]
-        lines.append(f"\nPlease fix your configuration in: {CONFIG_PATH}")
-        lines.append("Or use environment variables (DICTATE_MODEL, DICTATE_DEVICE, etc.)")
-        return "\n".join(lines)
-
 # ---------------------------------------------------------------------------
 # Validation constants — defined once, used by validate_config()
 # ---------------------------------------------------------------------------
@@ -138,7 +130,6 @@ class Settings:
     language: str = ""          # optional language code (e.g., "en"); empty = auto-detect
     auto_space: bool = True     # prepend a space before new utterance when not starting a new line/tab
     auto_period: bool = True   # append a period when an utterance ends without terminal punctuation
-    paste_injection: bool = False  # when adding a leading space is unreliable, paste " ␣text" via clipboard
     injection_mode: str = "auto"  # "auto" (smart detection), "type" (ydotool/wtype), or "paste" (wl-copy + Ctrl+V)
     typing_delay: int = 12  # milliseconds between keystrokes when typing (5-50, higher = slower but more reliable)
     auto_timeout_enabled: bool = True   # enable automatic timeout after inactivity (default: on)
@@ -196,17 +187,6 @@ def _parse_toml_text(text: str) -> dict:
 # Set once a repair has been attempted in this process, so the tray's
 # once-per-second polling cannot turn recovery into a write loop.
 _repair_attempted = False
-
-def _env_bool(key: str, default: bool) -> bool:
-    """Read a boolean from an environment variable, falling back to *default*.
-
-    Treats "0", "false", "off", "no" (case-insensitive) as False;
-    anything else as True.
-    """
-    val = os.getenv(key)
-    if val is None:
-        return default
-    return val.lower() not in {"0", "false", "off", "no"}
 
 
 # ---------------------------------------------------------------------------
@@ -498,30 +478,6 @@ def load_config() -> Settings:
             # the user's real settings for good.
             s = _recover_damaged_config(e)
 
-    # Environment variable overrides
-    s.model = os.getenv("DICTATE_MODEL", s.model)
-    s.device = os.getenv("DICTATE_DEVICE", s.device)
-    s.hotkey = os.getenv("DICTATE_HOTKEY", s.hotkey)
-    s.mode = os.getenv("DICTATE_MODE", s.mode)
-    s.toggle_hotkey = os.getenv("DICTATE_TOGGLE_HOTKEY", s.toggle_hotkey)
-    s.mic = os.getenv("DICTATE_MIC", s.mic)
-    s.language = os.getenv("DICTATE_LANGUAGE", s.language)
-    s.injection_mode = os.getenv("DICTATE_INJECTION_MODE", s.injection_mode)
-
-    # Boolean environment overrides
-    s.auto_space = _env_bool("DICTATE_AUTO_SPACE", s.auto_space)
-    s.auto_period = _env_bool("DICTATE_AUTO_PERIOD", s.auto_period)
-    s.paste_injection = _env_bool("DICTATE_PASTE_INJECTION", s.paste_injection)
-    s.beeps = _env_bool("DICTATE_BEEPS", s.beeps)
-    s.smart_quotes = _env_bool("DICTATE_SMART_QUOTES", s.smart_quotes)
-    s.notify = _env_bool("DICTATE_NOTIFY", s.notify)
-    s.auto_timeout_enabled = _env_bool("DICTATE_AUTO_TIMEOUT_ENABLED", s.auto_timeout_enabled)
-
-    # Integer environment override
-    timeout_minutes = os.getenv("DICTATE_AUTO_TIMEOUT_MINUTES")
-    if timeout_minutes is not None:
-        s.auto_timeout_minutes = int(timeout_minutes)
-
     # Bring older schemas forward before validating, so retired values (e.g. the
     # old 'cyan' color mode) become their modern equivalents instead of tripping
     # validation and being reset.
@@ -730,9 +686,6 @@ RESTART_REQUIRED_KEYS = {
     # Turning the indicator on would mean constructing a GTK window from the
     # polling path mid-flight. Low value, real risk — restart instead.
     "recording_indicator",
-    # Referenced nowhere outside this module; treated as restart-required
-    # rather than quietly assumed safe.
-    "paste_injection",
 }
 
 LIVE_APPLIED_KEYS = {
