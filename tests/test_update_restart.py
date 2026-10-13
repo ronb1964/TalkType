@@ -140,28 +140,53 @@ def test_first_run_copy_succeeds(tmp_path, appimages, monkeypatch):
 
 
 def test_restart_now_waits_for_the_first_run_copy(monkeypatch):
+    """Restart Now reboots only once the copy into ~/AppImages has finished,
+    and waits through GLib timeouts instead of freezing the window."""
     import threading
     from tuxtalk import welcome_dialog as wd
-    finished = threading.Event()
     release = threading.Event()
-
-    def copy():
-        release.wait(5)
-        finished.set()
-    thread = threading.Thread(target=copy)
+    thread = threading.Thread(target=lambda: release.wait(5))
     thread.start()
     monkeypatch.setattr(wd, "_appimage_copy_thread", thread)
+    polls = []
+    monkeypatch.setattr(wd.GLib, "timeout_add", lambda ms, fn: polls.append(fn))
+    rebooted = []
 
+    wd._after_appimage_copy(lambda: rebooted.append(True))
+    assert rebooted == [] and len(polls) == 1
+    assert polls[0]() is True              # still copying: keep waiting
     release.set()
-    assert wd.wait_for_appimage_copy(timeout=5)
-    assert finished.is_set()
+    thread.join(5)
+    assert polls[0]() is False
+    assert rebooted == [True]
+
+
+def test_restart_now_goes_straight_on_without_a_copy(monkeypatch):
+    from tuxtalk import welcome_dialog as wd
+    monkeypatch.setattr(wd, "_appimage_copy_thread", None)
+    rebooted = []
+    wd._after_appimage_copy(lambda: rebooted.append(True))
+    assert rebooted == [True]
 
 
 def test_first_run_copy_thread_is_not_a_daemon():
     source = (SRC / "welcome_dialog.py").read_text()
-    body = source[source.index("_appimage_copy_thread = _threading.Thread("):]
+    body = source[source.index("_appimage_copy_thread = threading.Thread("):]
     assert "daemon=False" in body[:200]
-    assert "wait_for_appimage_copy()" in source
+    assert "_after_appimage_copy(reboot_after_copy)" in source
+
+
+def test_a_failed_copy_points_login_back_at_the_running_appimage(monkeypatch):
+    from types import SimpleNamespace
+    from tuxtalk import autostart, config
+    from tuxtalk import welcome_dialog as wd
+    calls = []
+    monkeypatch.setattr(config, "load_config", lambda: SimpleNamespace(launch_at_login=True))
+    monkeypatch.setattr(autostart, "set_autostart",
+                        lambda enable, prefer_installed_appimage=False:
+                        calls.append(prefer_installed_appimage) or True)
+    assert wd._autostart_running_appimage() is False
+    assert calls == [False]
 
 
 # ---- restarting ---------------------------------------------------------
