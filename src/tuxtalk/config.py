@@ -33,8 +33,8 @@ APP_ID = "io.github.ronb1964.TuxTalk"
 def _config_home():
     """Base config dir. Inside a Flatpak use the private per-app XDG_CONFIG_HOME
     so the app never adopts a HOST install's config when the user has granted
-    --filesystem=home (e.g. a global override for GTK theming). On host, keep the
-    historical ~/.config exactly — the FLATPAK_ID gate means zero host change."""
+    --filesystem=home (e.g. a global override for GTK theming). Elsewhere it is
+    ~/.config."""
     if os.environ.get("FLATPAK_ID"):
         return os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
     return os.path.expanduser("~/.config")
@@ -42,7 +42,7 @@ def _config_home():
 
 def _data_home():
     """Base data dir. Private per-app XDG_DATA_HOME inside a Flatpak (same reason
-    as _config_home); historical ~/.local/share on host."""
+    as _config_home); ~/.local/share elsewhere."""
     if os.environ.get("FLATPAK_ID"):
         return os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
     return os.path.expanduser("~/.local/share")
@@ -100,16 +100,15 @@ VALID_INDICATOR_POSITIONS = {
 
 VALID_INDICATOR_SIZES = {"small", "medium", "large"}
 VALID_INDICATOR_STYLES = {"orb", "waveform", "bars", "radial"}
-# Two real choices: match the desktop accent, or pick a color. "cyan" used to
-# be a third, redundant option; legacy configs holding it are migrated to
-# custom + CLASSIC_CYAN_HEX on load (see _migrate_settings).
+# Match the desktop accent, or pick a color. An older config's "cyan" mode is
+# migrated to custom + CLASSIC_CYAN_HEX on load (see _migrate_settings).
 VALID_COLOR_MODES = {"system", "custom"}
 VALID_BACKINGS = {"off", "soft", "medium", "strong"}
 
 # The classic cyan the orb has always drawn, as a hex color. This is the exact
 # blue of the original hand-tuned orb gradient (0.30, 0.70, 1.0), so when it is
-# the chosen custom color the orb falls back to that original draw path and
-# looks byte-identical to every prior release. It also seeds the first swatch
+# the chosen custom color the orb uses that original draw path and looks
+# exactly as it always has. It also seeds the first swatch
 # in the color picker so the classic color is always one click away.
 CLASSIC_CYAN_HEX = "#4db3ff"
 
@@ -171,7 +170,8 @@ class Settings:
 # ---------------------------------------------------------------------------
 
 def _load_toml_file(path: str) -> dict:
-    """Load a TOML file and return its data as a dict. Returns {} on failure."""
+    """Load a TOML file and return its data as a dict. Raises OSError if it
+    can't be read, or a parse error if the content is not TOML."""
     file_mode = "rb" if _USE_TOMLLIB else "r"
     with open(path, file_mode) as f:
         return tomllib.load(f)
@@ -242,12 +242,10 @@ def _validation_problems(s: Settings) -> list[tuple[str, str]]:
 def validate_config(s: Settings) -> None:
     """Raise ConfigError if any setting holds a value the app cannot use.
 
-    Raises rather than exits. This runs inside load_config(), which the tray
-    calls once per second \u2014 calling sys.exit() here made the tray icon
-    disappear from the panel within a second of a bad value being saved, with
-    no dialog and nothing to indicate which setting was at fault. SystemExit
-    also deliberately bypasses `except Exception`, so the tray's own error
-    handling could not catch it either.
+    Raises rather than exits: this runs inside load_config(), which the tray
+    calls once per second, and a SystemExit would bypass the tray's
+    `except Exception` and take its icon off the panel with no word about
+    which setting was at fault.
     """
     problems = _validation_problems(s)
     if problems:
@@ -261,9 +259,8 @@ def _migrate_settings(s: Settings) -> Settings:
     Runs before validation so retired-but-recognized values become their modern
     equivalents silently, instead of tripping validation and being blanked.
 
-    - indicator_color_mode 'cyan' → 'custom' + CLASSIC_CYAN_HEX. "Cyan" stopped
-      being its own mode when the color control collapsed to system/custom;
-      mapping it to the classic cyan color preserves exactly what these users saw.
+    - indicator_color_mode 'cyan' → 'custom' + CLASSIC_CYAN_HEX, which keeps
+      exactly the color these users saw.
     """
     if s.indicator_color_mode == "cyan":
         s.indicator_color_mode = "custom"
@@ -284,7 +281,7 @@ def _repair_invalid_fields(s: Settings, error: ConfigError) -> Settings:
         setattr(s, name, default)
 
     if not getattr(load_config, "_invalid_reported", False):
-        print("\u26a0\ufe0f  Some settings held invalid values and were reset to defaults:", file=sys.stderr)
+        print("Some settings held invalid values and were reset to defaults:", file=sys.stderr)
         for message in error.errors:
             print(f"  \u2022 {message}", file=sys.stderr)
         load_config._invalid_reported = True
@@ -346,7 +343,7 @@ def _recover_damaged_config(error: Exception) -> Settings:
         shutil.copy2(CONFIG_PATH, quarantine)
         quarantined = True
         logger.error(f"Damaged config saved to {quarantine}: {error}")
-        print(f"⚠️  Settings file was unreadable ({error}).", file=sys.stderr)
+        print(f"Settings file was unreadable ({error}).", file=sys.stderr)
         print(f"    A copy was kept at: {quarantine}", file=sys.stderr)
     except OSError as copy_error:
         logger.error(f"Could not preserve damaged config: {copy_error}")
@@ -382,10 +379,10 @@ def _recover_damaged_config(error: Exception) -> Settings:
 def _persist_recovered_config(recovered: Settings) -> None:
     """Replace the damaged file with the recovered settings.
 
-    Recovering in memory only left the damaged file in place, so every process
-    that starts — tray, dictation service, Preferences — quarantined it again
-    and showed the user the same alarming warning, accumulating a
-    config.toml.corrupt-* file each time while never fixing anything.
+    Recovering in memory alone would leave the damaged file in place, so every
+    process that starts (tray, dictation service, Preferences) would quarantine
+    it again, show the same alarming warning and add another
+    config.toml.corrupt-* file, never fixing anything.
 
     keep_backup is off deliberately: the existing .bak is the last copy of the
     user's real settings, and backing up the damaged file first would overwrite
@@ -420,13 +417,13 @@ def _persist_recovered_config(recovered: Settings) -> None:
 
 
 def load_config() -> Settings:
+    """The current settings, read from disk only when the file has changed."""
     global _config_cache, _config_mtime, _config_read_failed
 
     # Return cached config if the file hasn't been modified.
     # The mtime is recorded only AFTER a successful read (see the end of this
-    # function). Stamping it here meant a single transient read error cached
-    # the defaults under the real file's mtime, so the cache looked current
-    # forever and the good file on disk was never read again.
+    # function), so a transient read error can't cache the defaults under the
+    # real file's mtime and hide the good file for good.
     #
     # Every caller gets its own copy. Callers change the object they are given
     # before saving it; on the shared cached object an unsaved or failed change
@@ -448,8 +445,8 @@ def load_config() -> Settings:
         try:
             data = _load_toml_file(CONFIG_PATH)
             # An existing file with nothing in it is damage, not configuration:
-            # empty parses as valid TOML, so it silently produced all-defaults \u2014
-            # including a blank hotkey, which kills dictation with no message.
+            # empty parses as valid TOML and would silently give all defaults,
+            # including a blank hotkey, which stops dictation with no message.
             if not data:
                 raise ValueError("config file is empty")
             # Apply TOML values using dataclass field types for casting
@@ -461,22 +458,22 @@ def load_config() -> Settings:
             # rewriting them would destroy settings that only needed a chmod.
             logger.error(f"Could not read {CONFIG_PATH}: {e}")
             if not getattr(load_config, "_read_error_printed", False):
-                print(f"⚠️  Could not read settings file: {e}", file=sys.stderr)
+                print(f"Could not read settings file: {e}", file=sys.stderr)
                 print("    Using defaults for now; the file has been left untouched.", file=sys.stderr)
                 load_config._read_error_printed = True
             s = dataclasses.replace(_config_cache) if _config_cache else Settings()
             # Hand out defaults so the app keeps running, but mark them as
             # never-loaded: save_config() must refuse to write them back over
-            # a file it could not read. The tray's daily update check calls
-            # save_config(load_config()) five seconds after launch, which
-            # turned a chmod into permanent loss of every setting.
+            # a file it could not read, or any later save (the daily update
+            # check's, say) would turn a chmod problem into the loss of every
+            # setting.
             _config_read_failed = True
             current_mtime = None
         except Exception as e:
             # Genuinely unparseable content. Preserve the damaged file and fall
             # back to the last known good settings. Silently resetting to
-            # defaults looked like a fresh install, and the next save overwrote
-            # the user's real settings for good.
+            # defaults would look like a fresh install, and the next save would
+            # overwrite the user's real settings for good.
             s = _recover_damaged_config(e)
 
     # Bring older schemas forward before validating, so retired values (e.g. the
@@ -503,9 +500,8 @@ def _toml_value(val) -> str:
     """Format a Python value as a TOML literal.
 
     Strings go through _toml_string so quotes, backslashes and newlines are
-    escaped. Wrapping them in bare quotes produced a file that would not parse
-    — a microphone named 'Blue Yeti "Nano" USB' silently destroyed every
-    setting, because the next load treated the whole file as damaged.
+    escaped: a microphone named 'Blue Yeti "Nano" USB' in bare quotes would
+    make the file unparseable, and the next load would treat it as damaged.
     """
     if isinstance(val, bool):
         return str(val).lower()     # true / false
@@ -542,11 +538,10 @@ def _toml_string(value: str) -> str:
 def write_text_atomic(path: str, text: str, keep_backup: bool = True) -> None:
     """Replace *path* with *text* without ever leaving it half-written.
 
-    The previous version was opened in truncate mode, so an interruption —
-    most realistically a full disk, which this app can cause itself by
-    downloading multi-gigabyte models — left the file empty every time. On the
-    next launch every setting fell back to its default, including the hotkey,
-    which defaults to blank and silently kills dictation.
+    Writing in place would leave an empty file after an interruption (most
+    realistically a full disk, which multi-gigabyte model downloads can
+    cause), and every setting would fall back to its default, including the
+    hotkey, which defaults to blank and silently stops dictation.
 
     Writing to a sibling temp file and renaming is atomic on POSIX: readers see
     either the old file or the new one, never a partial one. The fsync before
@@ -558,8 +553,8 @@ def write_text_atomic(path: str, text: str, keep_backup: bool = True) -> None:
 
     # A UNIQUE temp file per writer. TuxTalk runs three processes that all save
     # settings — the tray, the dictation service and Preferences — and a shared
-    # temp name let them truncate each other's half-written file and then fail
-    # the rename with FileNotFoundError, raising out of save_config().
+    # temp name would let them truncate each other's half-written file and fail
+    # the rename with FileNotFoundError.
     fd, tmp_path = tempfile.mkstemp(dir=directory, prefix=os.path.basename(path) + ".", suffix=".tmp")
     try:
         with os.fdopen(fd, "w") as f:
@@ -623,20 +618,14 @@ def changed_keys(original: dict, current: dict) -> set:
 def record_update_check(timestamp: str, _stale=None) -> None:
     """Persist the update-check timestamp without dragging other settings back.
 
-    The tray's daily check used to snapshot the whole Settings object, spend up
-    to ~30s on a network call, then save all 36 fields to record this one. Any
-    setting the user changed in Preferences during that window was silently
-    reverted — no error, no log line.
+    The update check spends up to ~30 s on the network, so the settings are
+    re-read right before the write: a change made in Preferences meanwhile is
+    kept, and only the timestamp is carried across. save_config refuses to
+    write when that read failed, so a damaged config is never overwritten with
+    defaults.
 
-    Re-reading immediately before the write is the fix: the only state carried
-    across the slow call is the timestamp itself. save_config already refuses to
-    write when the preceding read failed, so a damaged config still cannot be
-    overwritten with defaults; losing a timestamp is much cheaper than losing a
-    hotkey.
-
-    *_stale* is accepted and ignored on purpose — it documents at the call site
-    that the caller's snapshot must NOT be what gets written, and lets the
-    regression test pass one in.
+    *_stale* is accepted and ignored on purpose: the caller's snapshot must NOT
+    be what gets written.
     """
     try:
         fresh = load_config()
@@ -669,9 +658,8 @@ def merge_changed_keys(original: dict, current: dict, base: dict) -> dict:
 # Which settings need the dictation service restarted
 # ---------------------------------------------------------------------------
 #
-# Restarting rebuilds the Whisper model — roughly ten seconds during which the
-# hotkey does nothing at all. Preferences used to do it for every change, so
-# toggling auto-punctuation reloaded a 3 GB model onto the GPU.
+# Restarting rebuilds the speech model — roughly ten seconds during which the
+# hotkey does nothing at all — so only the settings that need it trigger one.
 #
 # Most settings are read off the long-lived cfg object at the point of use
 # (every dictation ends by passing cfg.beeps, cfg.auto_period and the rest into
@@ -775,8 +763,7 @@ def needs_service_restart(changed: set) -> bool:
     Anything not explicitly known to be live counts as requiring a restart.
     That direction is deliberate: a setting added later then costs an
     unnecessary restart, which is merely slow. Defaulting the other way would
-    make it silently fail to apply — a setting that lies about itself, which is
-    the class of bug v0.6.0 spent four commits removing.
+    make it silently fail to apply: a setting that lies about itself.
     """
     return bool(set(changed) - LIVE_APPLIED_KEYS)
 
@@ -855,7 +842,7 @@ def find_input_device(mic_substring: str | None) -> int | None:
                                 logger.info(
                                     f"Auto-detected mic: [{i}] {d['name']}"
                                     " (via PipeWire default source)")
-                                print(f"🎙️  Auto-detected mic: {d['name']}")
+                                print(f"Auto-detected mic: {d['name']}")
                                 return i
     except FileNotFoundError:
         pass  # wpctl not installed — not a PipeWire system
@@ -879,7 +866,7 @@ def find_input_device(mic_substring: str | None) -> int | None:
         logger.info(
             f"Auto-detected mic (hardware fallback):"
             f" [{chosen_i}] {chosen_d['name']}")
-        print(f"🎙️  Auto-detected mic: {chosen_d['name']}")
+        print(f"Auto-detected mic: {chosen_d['name']}")
         return chosen_i
 
     return None  # Last resort: let sounddevice use its own default
@@ -899,7 +886,7 @@ def load_custom_commands() -> dict[str, str]:
 
     Returns:
         dict: Mapping of spoken phrases to replacement text
-              e.g., {"my email": "user@example.com", "signature": "Best regards,\\nRon"}
+              e.g., {"my email": "user@example.com", "signature": "Best regards,\\nAlex"}
     """
     global _commands_read_failed
 
@@ -912,9 +899,8 @@ def load_custom_commands() -> dict[str, str]:
         except Exception as e:
             print(f"Warning: Could not load custom commands: {e}")
             # Preferences rebuilds its list from whatever this returns and
-            # writes it back on every Apply/OK. Returning a bare {} therefore
-            # deleted every custom command the moment the user clicked Apply
-            # for any unrelated reason. Mark the failure so the writer refuses.
+            # writes it back on every Apply/OK, so a bare {} would delete every
+            # custom command. Mark the failure so the writer refuses.
             _commands_read_failed = True
     return commands
 
@@ -923,7 +909,7 @@ def merge_custom_command_edits(loaded: dict[str, str], edited: dict[str, str],
     """Apply the user's edits (from *loaded* to *edited*) on top of *on_disk*.
 
     Preferences holds the commands it loaded when it opened. Writing that list
-    back as-is deleted anything saved in the meantime, such as a word fixed
+    back as-is would delete anything saved in the meantime, such as a word fixed
     from the tray with Fix a Word. Only what the user added, changed or
     removed in Preferences is applied; everything else comes from the file.
     """
@@ -963,11 +949,8 @@ def save_custom_commands(commands: dict[str, str]) -> None:
         "[commands]",
     ]
     for phrase, replacement in commands.items():
-        # Escape BOTH sides. Only the replacement used to be escaped, so a
-        # phrase containing a double quote produced a malformed line that made
-        # the whole file unparseable — every custom command stopped working at
-        # once, and Preferences then showed an empty list and saved it back,
-        # deleting the lot.
+        # Escape BOTH sides: one unescaped double quote makes the whole file
+        # unparseable, and every custom command stops working at once.
         lines.append(f'{_toml_string(phrase)} = {_toml_string(replacement)}')
 
     write_text_atomic(CUSTOM_COMMANDS_PATH, "\n".join(lines) + "\n")
