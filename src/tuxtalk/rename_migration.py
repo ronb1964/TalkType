@@ -96,6 +96,8 @@ def migrate(home=None, dev=False):
                 os.rmdir(new)
             except OSError:
                 pass
+        if os.path.islink(new) and os.path.realpath(new) == os.path.realpath(old):
+            continue                      # the other-disk link from an earlier run
         if os.path.lexists(new):
             done.append(f"{old_rel} and {new_rel} both exist; "
                         f"using {new_rel}, left {old_rel} alone")
