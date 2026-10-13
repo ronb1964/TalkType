@@ -176,3 +176,16 @@ def test_model_download_reports_a_cancel(monkeypatch):
     info = {}
     assert mh.download_model_with_progress("small", result_info=info) is None
     assert info == {"cancelled": True}
+
+
+def test_the_ready_screen_names_the_key_the_user_chose(monkeypatch):
+    """It always said F8, even right after the hotkey test changed the key."""
+    monkeypatch.setattr("tuxtalk.config.load_config",
+                        lambda: types.SimpleNamespace(hotkey="F10"))
+    assert wd._saved_hold_key() == "F10"
+    monkeypatch.setattr("tuxtalk.config.load_config",
+                        lambda: types.SimpleNamespace(hotkey=""))
+    assert wd._saved_hold_key() == "F8"
+    import pathlib
+    src = pathlib.Path(wd.__file__).read_text()
+    assert "Press and hold <b>F8</b> (or your hotkey)" not in src

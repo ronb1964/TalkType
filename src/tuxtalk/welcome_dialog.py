@@ -2193,13 +2193,22 @@ def show_tips_and_features_dialog(extension_installed=False):
             return True
 
         button.set_label("Setting up TuxTalk")
-        anim_id = GLib.timeout_add(350, animate_dots)
+        pending = {"anim": GLib.timeout_add(350, animate_dots)}
 
         def close_dialog():
-            GLib.source_remove(anim_id)
+            GLib.source_remove(pending.pop("anim"))
+            pending.pop("close", None)
             dialog.response(Gtk.ResponseType.OK)
             return False
-        GLib.timeout_add(1200, close_dialog)
+        pending["close"] = GLib.timeout_add(1200, close_dialog)
+
+        # Escape or the window's X during the animation ends run() and
+        # destroys the dialog; the timers must not touch it after that.
+        def stop_timers(*_):
+            for source in pending.values():
+                GLib.source_remove(source)
+            pending.clear()
+        dialog.connect("destroy", stop_timers)
 
     get_started_button.connect("clicked", on_get_started_clicked)
 
@@ -3108,6 +3117,8 @@ def show_welcome_and_install():
                 if success:
                     launcher_created = True
                     logger.info("Desktop launcher created")
+                else:
+                    logger.warning(f"Could not create the desktop launcher: {msg}")
     except Exception as e:
         logger.warning(f"Could not set up AppImage/launcher: {e}")
 
@@ -3238,6 +3249,15 @@ def _autostart_running_appimage():
     return False
 
 
+def _saved_hold_key():
+    """The push-to-talk key in the settings, F8 when there is none yet."""
+    try:
+        from tuxtalk.config import load_config
+        return load_config().hotkey or "F8"
+    except Exception:
+        return "F8"
+
+
 def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
                                needs_restart=False):
     """
@@ -3321,7 +3341,7 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
 
     _hold_step = ("1. Press your <b>Hold-to-talk</b> key"
                   if os.environ.get("FLATPAK_ID")
-                  else "1. Press and hold <b>F8</b> (or your hotkey)")
+                  else f"1. Press and hold <b>{GLib.markup_escape_text(_saved_hold_key())}</b>")
     steps = [
         _hold_step,
         "2. Speak clearly into your microphone",
