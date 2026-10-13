@@ -104,6 +104,8 @@ def _pulse_source_for_mic(mic, sources):
     return None
 
 
+FIX_TYPING_LABEL = "Fix Typing Permissions"
+
 # What the GNOME extension adds, shared by the install and success dialogs so
 # the two can't promise different things.
 EXTENSION_FEATURES = (
@@ -2033,7 +2035,7 @@ class PreferencesWindow:
             typing_button_box.set_margin_start(10)
 
             # Fix Typing button
-            self.fix_typing_button = Gtk.Button(label="Fix Typing Permissions")
+            self.fix_typing_button = Gtk.Button(label=FIX_TYPING_LABEL)
             self.fix_typing_button.connect("clicked", self._on_fix_typing_clicked)
             self.fix_typing_button.get_child().set_xalign(0.5)
             self.fix_typing_button.set_tooltip_text(
@@ -4766,7 +4768,7 @@ class PreferencesWindow:
                     self.typing_status_label.set_markup(
                         '<span color="#FF9800">⚠ Typing permissions not configured (using Clipboard mode as fallback)</span>'
                     )
-                    self.fix_typing_button.set_label("Fix Typing Permissions")
+                    self.fix_typing_button.set_label(FIX_TYPING_LABEL)
                     self.fix_typing_button.set_sensitive(True)
                     
         except ImportError:
@@ -4813,55 +4815,62 @@ class PreferencesWindow:
             # Disable button during fix
             button.set_sensitive(False)
             button.set_label("Setting up...")
-            
-            # Run the fix
-            success, message = uinput_helper.install_udev_rule_with_pkexec(self.window)
-
-            if success:
-                uinput_helper.ensure_ydotoold_running()   # one started without permission has exited
-                # Show success dialog
-                msg = message_dialog(
-                    transient_for=self.window,
-                    modal=True,
-                    message_type=Gtk.MessageType.INFO,
-                    buttons=Gtk.ButtonsType.OK,
-                    text="Typing Permissions Configured!"
-                )
-                msg.format_secondary_text(
-                    "The system has been configured for keystroke injection.\n\n"
-                    "IMPORTANT: Restart your computer to apply the changes.\n"
-                    "(Logging out and back in is often not enough.)\n"
-                    "(Some systems may require a full reboot instead.)\n\n"
-                    "After that, TuxTalk will be able to type "
-                    "directly into your applications."
-                )
-                msg.run()
-                msg.destroy()
-                
-                # Update status
-                self._check_typing_status()
-            else:
-                # Re-enable button
-                button.set_sensitive(True)
-                button.set_label("🔧 Fix Typing Permissions")
-                
-                if "cancelled" not in message.lower():
-                    # Show error dialog
-                    msg = message_dialog(
-                        transient_for=self.window,
-                        modal=True,
-                        message_type=Gtk.MessageType.ERROR,
-                        buttons=Gtk.ButtonsType.OK,
-                        text="Setup Failed"
-                    )
-                    msg.format_secondary_text(message)
-                    msg.run()
-                    msg.destroy()
-                    
         except Exception as e:
             print(f"Error fixing typing permissions: {e}")
             button.set_sensitive(True)
-            button.set_label("🔧 Fix Typing Permissions")
+            button.set_label(FIX_TYPING_LABEL)
+            return
+
+        # pkexec waits for the password prompt, up to a minute: off the GTK
+        # thread, or the window freezes and "Setting up..." is never drawn.
+        def work():
+            try:
+                success, message = uinput_helper.install_udev_rule_with_pkexec()
+                if success:
+                    uinput_helper.ensure_ydotoold_running()   # one started without permission has exited
+            except Exception as e:
+                success, message = False, str(e)
+            GLib.idle_add(self._finish_fix_typing, button, success, message)
+
+        import threading
+        threading.Thread(target=work, daemon=True).start()
+
+    def _finish_fix_typing(self, button, success, message):
+        """Back on the GTK thread: report how Fix Typing Permissions went."""
+        if success:
+            msg = message_dialog(
+                transient_for=self.window,
+                modal=True,
+                message_type=Gtk.MessageType.INFO,
+                buttons=Gtk.ButtonsType.OK,
+                text="Typing Permissions Configured!"
+            )
+            msg.format_secondary_text(
+                "The system has been configured for keystroke injection.\n\n"
+                "IMPORTANT: Restart your computer to apply the changes.\n"
+                "(Logging out and back in is often not enough.)\n"
+                "(Some systems may require a full reboot instead.)\n\n"
+                "After that, TuxTalk will be able to type "
+                "directly into your applications."
+            )
+            msg.run()
+            msg.destroy()
+            self._check_typing_status()
+        else:
+            button.set_sensitive(True)
+            button.set_label(FIX_TYPING_LABEL)
+            if "cancelled" not in message.lower():
+                msg = message_dialog(
+                    transient_for=self.window,
+                    modal=True,
+                    message_type=Gtk.MessageType.ERROR,
+                    buttons=Gtk.ButtonsType.OK,
+                    text="Setup Failed"
+                )
+                msg.format_secondary_text(message)
+                msg.run()
+                msg.destroy()
+        return False
 
     def _initial_extension_check(self):
         """Perform initial extension check when preferences window opens."""

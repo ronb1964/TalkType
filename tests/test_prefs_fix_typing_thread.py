@@ -1,0 +1,70 @@
+"""Fix Typing Permissions must not freeze Preferences while pkexec waits.
+
+pkexec ran on the GTK thread for up to a minute, so the window froze while
+the password prompt was open and its "Setting up..." label was never drawn.
+A failure also reset the button to a different label than the status check
+used.
+"""
+import threading
+from types import SimpleNamespace
+
+import pytest
+
+gi = pytest.importorskip("gi")
+gi.require_version("Gtk", "3.0")
+
+from tuxtalk import prefs as P  # noqa: E402
+from tuxtalk import uinput_helper  # noqa: E402
+from tuxtalk.prefs import PreferencesWindow  # noqa: E402
+
+
+class FakeButton:
+    def __init__(self):
+        self.label, self.sensitive = None, True
+
+    def set_label(self, text):
+        self.label = text
+
+    def set_sensitive(self, value):
+        self.sensitive = value
+
+
+class FakeDialog:
+    def __init__(self, answer):
+        self.answer = answer
+
+    def format_secondary_text(self, text):
+        pass
+
+    def run(self):
+        return self.answer
+
+    def destroy(self):
+        pass
+
+
+def test_pkexec_runs_off_the_gtk_thread_and_a_failure_resets_the_button(monkeypatch):
+    threads, idle = [], []
+    monkeypatch.setattr(threading, "Thread",
+                        lambda target, daemon=None: threads.append(target) or
+                        SimpleNamespace(start=lambda: None))
+    monkeypatch.setattr(P.GLib, "idle_add", lambda fn, *a: idle.append((fn, a)))
+    monkeypatch.setattr(P, "message_dialog", lambda **k: FakeDialog(P.Gtk.ResponseType.YES))
+    ran_in = []
+    monkeypatch.setattr(uinput_helper, "install_udev_rule_with_pkexec",
+                        lambda *a: ran_in.append(threading.current_thread()) or
+                        (False, "Authentication was cancelled"))
+
+    d = SimpleNamespace(window=None)
+    d._finish_fix_typing = lambda *a: PreferencesWindow._finish_fix_typing(d, *a)
+    button = FakeButton()
+
+    PreferencesWindow._on_fix_typing_clicked(d, button)
+    assert ran_in == [], "pkexec ran inside the click handler"
+    assert button.label == "Setting up..." and not button.sensitive
+
+    threads[0]()                      # the worker thread
+    fn, args = idle[0]
+    fn(*args)                         # back on the GTK thread
+
+    assert button.label == P.FIX_TYPING_LABEL and button.sensitive
