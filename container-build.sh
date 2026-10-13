@@ -359,14 +359,13 @@ chmod -R a+rX AppDir/usr/src/tuxtalk
 # NOTE: GNOME extension is NOT bundled - it's downloaded from GitHub releases during onboarding
 # This allows users to update the extension independently of the AppImage
 
-# Create entry points
+# usr/bin/dictate-tray is on AppRun's PATH, so autostart.py's last-resort
+# `dictate-tray` lookup can find it from an extracted AppImage. It hands over
+# to AppRun, which owns the environment setup.
 cat > AppDir/usr/bin/dictate-tray << 'EOF'
 #!/bin/sh
 DIR="$(dirname "$(readlink -f "$0")")"
-export PYTHONPATH="$DIR/../src:$DIR/../lib/python3.10/site-packages"
-export LD_LIBRARY_PATH="$DIR/../lib:$LD_LIBRARY_PATH"
-export GI_TYPELIB_PATH="$DIR/../lib/girepository-1.0"
-exec "$DIR/python3" -m tuxtalk.tray "$@"
+exec "$DIR/../../AppRun" "$@"
 EOF
 chmod +x AppDir/usr/bin/dictate-tray
 
@@ -382,7 +381,9 @@ cat > AppDir/AppRun << 'EOF'
 SELF=$(readlink -f "$0")
 HERE=${SELF%/*}
 export PATH="${HERE}/usr/bin:${PATH}"
-export LD_LIBRARY_PATH="${HERE}/usr/lib:${LD_LIBRARY_PATH}"
+# No trailing ":" when LD_LIBRARY_PATH is unset: the loader reads an empty
+# entry as the current folder, which is $HOME after the cd below.
+export LD_LIBRARY_PATH="${HERE}/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export PYTHONPATH="${HERE}/usr/src:${HERE}/usr/lib/python3.10/site-packages"
 export GI_TYPELIB_PATH="${HERE}/usr/lib/girepository-1.0"
 export PYTHONHOME="${HERE}/usr"
@@ -394,11 +395,7 @@ export PYTHONHOME="${HERE}/usr"
 # Disable HuggingFace XET downloads - they bypass progress tracking
 export HF_HUB_DISABLE_XET=1
 cd "$HOME"
-if [ "$1" = "prefs" ]; then
-    exec "${HERE}/usr/bin/python3" -m tuxtalk.prefs
-else
-    exec "${HERE}/usr/bin/python3" -m tuxtalk.tray "$@"
-fi
+exec "${HERE}/usr/bin/python3" -m tuxtalk.tray "$@"
 EOF
 chmod +x AppDir/AppRun
 
