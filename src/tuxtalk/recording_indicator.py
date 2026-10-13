@@ -19,6 +19,7 @@ import math
 import os
 import time
 
+from . import indicator_styles
 from .indicator_styles import RadialGain
 from .logger import setup_logger
 
@@ -159,6 +160,10 @@ class RecordingIndicator(Gtk.Window):
         self._wave_history_max = 1024    # ~23 ms at 44.1 kHz; spans the display
         self.spectrum = None   # band magnitudes for bars
         self._radial_gain = RadialGain()   # learns this mic's range for the radial
+        # ((color_mode, custom_color), rgb, orb palette), worked out once
+        # rather than on every frame; cleared at each show so a theme
+        # accent change is picked up by the next dictation.
+        self._color_cache = None
 
         # Position configuration
         self.position = position.lower()
@@ -257,6 +262,7 @@ class RecordingIndicator(Gtk.Window):
                 GLib.timeout_add(50, try_move_again)
 
                 # Start animation
+                self._color_cache = None
                 self.start_time = time.time()
                 if self.animation_timeout_id is None:
                     self.animation_timeout_id = GLib.timeout_add(16, self.update_animation)
@@ -404,9 +410,20 @@ class RecordingIndicator(Gtk.Window):
             pass
         return (0.30, 0.72, 0.42)
 
+    def _resolved_colors(self):
+        """(rgb, orb palette) for the current color settings, cached: the
+        accent lookup builds a widget, and this runs on every frame."""
+        key = (self.color_mode, self.custom_color)
+        cache = self._color_cache
+        if cache is None or cache[0] != key:
+            accent = self._accent_rgb() if self.color_mode == "system" else None
+            rgb = indicator_styles.resolve_color(self.color_mode, self.custom_color, accent)
+            cache = (key, rgb, indicator_styles.orb_palette_for(rgb))
+            self._color_cache = cache
+        return cache[1], cache[2]
+
     def _resolved_color(self):
-        from .indicator_styles import resolve_color
-        return resolve_color(self.color_mode, self.custom_color, self._accent_rgb())
+        return self._resolved_colors()[0]
 
     def update_animation(self):
         """Update animation state"""
@@ -436,7 +453,7 @@ class RecordingIndicator(Gtk.Window):
         # Non-orb styles are drawn by indicator_styles from the fed data. The
         # orb keeps its own draw path below, unchanged.
         if self.style != "orb":
-            from . import indicator_styles as st
+            st = indicator_styles
             core = st.BACKING_LEVELS.get(self.backing, 0.5)
             color = self._resolved_color()
             if self.style == "waveform":
@@ -466,8 +483,7 @@ class RecordingIndicator(Gtk.Window):
         # to prior releases; any other color recolors it via a palette that keeps
         # the exact structure and only changes the hue. Keying off the color (not
         # a mode name) means the default custom-cyan looks exactly like before.
-        from .indicator_styles import orb_palette_for
-        orb_palette = orb_palette_for(self._resolved_color())
+        orb_palette = self._resolved_colors()[1]
         self.draw_orb(cr, orb_x, orb_y, orb_palette)
 
         # Draw timer aligned with orb center (scaled position)
