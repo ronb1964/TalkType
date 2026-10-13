@@ -10,8 +10,8 @@ Nothing answered: None, and the caller uses the middle of the screen.
 
 The answer is in the compositor's logical coordinates. TuxTalk's windows (the
 recording indicator, screen_message) are drawn through X11 / XWayland, which
-on a scaled screen counts physical pixels, so to_screen_point() maps the
-point into GDK's monitor of the same name.
+on a scaled screen counts physical pixels, so to_screen_rect() maps the
+window's rectangle into GDK's monitor of the same name.
 Spec: docs/superpowers/specs/2026-10-12-messages-at-active-window-design.md
 """
 import os
@@ -62,11 +62,6 @@ def _mapper(output, output_rect, monitors):
     sx, sy = mon.w / output_rect.w, mon.h / output_rect.h
     return lambda x, y: (round(mon.x + (x - output_rect.x) * sx),
                          round(mon.y + (y - output_rect.y) * sy))
-
-
-def to_screen_point(rect, output, output_rect, monitors):
-    """The middle of *rect* (compositor coordinates) where GDK draws it."""
-    return _mapper(output, output_rect, monitors)(rect.x + rect.w / 2, rect.y + rect.h / 2)
 
 
 def to_screen_rect(rect, output, output_rect, monitors):

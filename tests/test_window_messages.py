@@ -34,32 +34,38 @@ def test_a_bad_report_is_nothing(bad):
 
 # --- compositor coordinates -> where GTK draws ----------------------------------------
 
+def _mapped_center(rect, output, output_rect, monitors):
+    """The middle of *rect* once mapped, worked out as active_window_center does."""
+    r = wg.to_screen_rect(rect, output, output_rect, monitors)
+    return (round(r.x + r.w / 2), round(r.y + r.h / 2))
+
+
 def test_unscaled_screen_is_one_to_one():
     monitors = [("DP-6", Rect(0, 0, 3440, 1440))]
-    assert wg.to_screen_point(Rect(100, 200, 800, 600), "DP-6", Rect(0, 0, 3440, 1440), monitors) == (500, 500)
+    assert _mapped_center(Rect(100, 200, 800, 600), "DP-6", Rect(0, 0, 3440, 1440), monitors) == (500, 500)
 
 
 def test_a_scaled_screen_is_scaled():
     """Plasma's XWayland default: X apps see physical pixels, KWin reports logical."""
     monitors = [("DP-1", Rect(0, 0, 3840, 2160))]
-    point = wg.to_screen_point(Rect(100, 100, 400, 200), "DP-1", Rect(0, 0, 1920, 1080), monitors)
+    point = _mapped_center(Rect(100, 100, 400, 200), "DP-1", Rect(0, 0, 1920, 1080), monitors)
     assert point == (600, 400)
 
 
 def test_the_window_is_found_on_its_own_monitor():
     monitors = [("HDMI-A-1", Rect(0, 0, 1920, 1080)), ("DP-2", Rect(1920, 0, 2560, 1440))]
-    point = wg.to_screen_point(Rect(2020, 100, 400, 200), "DP-2", Rect(1920, 0, 2560, 1440), monitors)
+    point = _mapped_center(Rect(2020, 100, 400, 200), "DP-2", Rect(1920, 0, 2560, 1440), monitors)
     assert point == (2220, 200)
 
 
 def test_without_a_name_a_single_monitor_still_scales():
     monitors = [("", Rect(0, 0, 3840, 2160))]
-    assert wg.to_screen_point(Rect(0, 0, 200, 100), "", Rect(0, 0, 1920, 1080), monitors) == (200, 100)
+    assert _mapped_center(Rect(0, 0, 200, 100), "", Rect(0, 0, 1920, 1080), monitors) == (200, 100)
 
 
 def test_without_a_name_several_monitors_are_one_to_one():
     monitors = [("", Rect(0, 0, 1920, 1080)), ("", Rect(1920, 0, 1920, 1080))]
-    assert wg.to_screen_point(Rect(2000, 0, 200, 100), "", Rect(1920, 0, 1920, 1080), monitors) == (2100, 50)
+    assert _mapped_center(Rect(2000, 0, 200, 100), "", Rect(1920, 0, 1920, 1080), monitors) == (2100, 50)
 
 
 # --- which source answers ---------------------------------------------------------------
