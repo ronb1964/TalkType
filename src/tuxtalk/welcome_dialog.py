@@ -54,7 +54,8 @@ class SplashScreen:
         self.window.set_position(Gtk.WindowPosition.CENTER)
         self.window.set_decorated(False)  # No title bar
         self.window.set_keep_above(True)  # Stay on top
-        self.window.set_type_hint(Gtk.WindowType.POPUP)  # Splash-style window
+        self.window.set_type_hint(Gdk.WindowTypeHint.SPLASHSCREEN)
+        self.window.get_style_context().add_class('tt-splash')
 
         # Enable transparency
         screen = self.window.get_screen()
@@ -66,40 +67,44 @@ class SplashScreen:
         # Transparent window with rounded dark box - glow will be animated via CSS classes
         self.css_provider = Gtk.CssProvider()
         self.css_provider.load_from_data(b"""
-            window {
+            window.tt-splash {
                 background-color: transparent;
             }
-            .splash-box {
+            .tt-splash .splash-box {
                 background-color: #262626;
                 border-radius: 16px;
                 padding: 80px;
             }
-            image {
+            .tt-splash image {
                 padding: 0px;
                 margin: 0px;
             }
             /* Glow animation states - grows radially from small to large with smoother steps */
             /* Using -gtk-icon-shadow which follows icon shape - 16 steps for smooth animation */
-            image.glow-0  { -gtk-icon-shadow: 0 0 10px rgba(66, 133, 244, 0.4); }
-            image.glow-1  { -gtk-icon-shadow: 0 0 15px rgba(66, 133, 244, 0.45); }
-            image.glow-2  { -gtk-icon-shadow: 0 0 20px rgba(66, 133, 244, 0.5); }
-            image.glow-3  { -gtk-icon-shadow: 0 0 25px rgba(66, 133, 244, 0.55); }
-            image.glow-4  { -gtk-icon-shadow: 0 0 30px rgba(66, 133, 244, 0.6); }
-            image.glow-5  { -gtk-icon-shadow: 0 0 35px rgba(66, 133, 244, 0.65); }
-            image.glow-6  { -gtk-icon-shadow: 0 0 40px rgba(66, 133, 244, 0.7); }
-            image.glow-7  { -gtk-icon-shadow: 0 0 45px rgba(66, 133, 244, 0.75); }
-            image.glow-8  { -gtk-icon-shadow: 0 0 50px rgba(66, 133, 244, 0.8); }
-            image.glow-9  { -gtk-icon-shadow: 0 0 55px rgba(66, 133, 244, 0.82), 0 0 90px rgba(66, 133, 244, 0.4); }
-            image.glow-10 { -gtk-icon-shadow: 0 0 60px rgba(66, 133, 244, 0.84), 0 0 100px rgba(66, 133, 244, 0.5); }
-            image.glow-11 { -gtk-icon-shadow: 0 0 65px rgba(66, 133, 244, 0.86), 0 0 110px rgba(66, 133, 244, 0.55); }
-            image.glow-12 { -gtk-icon-shadow: 0 0 70px rgba(66, 133, 244, 0.88), 0 0 120px rgba(66, 133, 244, 0.6); }
-            image.glow-13 { -gtk-icon-shadow: 0 0 75px rgba(66, 133, 244, 0.9), 0 0 130px rgba(66, 133, 244, 0.65); }
-            image.glow-14 { -gtk-icon-shadow: 0 0 80px rgba(66, 133, 244, 0.95), 0 0 140px rgba(66, 133, 244, 0.7); }
-            image.glow-15 { -gtk-icon-shadow: 0 0 90px rgba(66, 133, 244, 1.0), 0 0 160px rgba(66, 133, 244, 0.8); }
+            .tt-splash image.glow-0  { -gtk-icon-shadow: 0 0 10px rgba(66, 133, 244, 0.4); }
+            .tt-splash image.glow-1  { -gtk-icon-shadow: 0 0 15px rgba(66, 133, 244, 0.45); }
+            .tt-splash image.glow-2  { -gtk-icon-shadow: 0 0 20px rgba(66, 133, 244, 0.5); }
+            .tt-splash image.glow-3  { -gtk-icon-shadow: 0 0 25px rgba(66, 133, 244, 0.55); }
+            .tt-splash image.glow-4  { -gtk-icon-shadow: 0 0 30px rgba(66, 133, 244, 0.6); }
+            .tt-splash image.glow-5  { -gtk-icon-shadow: 0 0 35px rgba(66, 133, 244, 0.65); }
+            .tt-splash image.glow-6  { -gtk-icon-shadow: 0 0 40px rgba(66, 133, 244, 0.7); }
+            .tt-splash image.glow-7  { -gtk-icon-shadow: 0 0 45px rgba(66, 133, 244, 0.75); }
+            .tt-splash image.glow-8  { -gtk-icon-shadow: 0 0 50px rgba(66, 133, 244, 0.8); }
+            .tt-splash image.glow-9  { -gtk-icon-shadow: 0 0 55px rgba(66, 133, 244, 0.82), 0 0 90px rgba(66, 133, 244, 0.4); }
+            .tt-splash image.glow-10 { -gtk-icon-shadow: 0 0 60px rgba(66, 133, 244, 0.84), 0 0 100px rgba(66, 133, 244, 0.5); }
+            .tt-splash image.glow-11 { -gtk-icon-shadow: 0 0 65px rgba(66, 133, 244, 0.86), 0 0 110px rgba(66, 133, 244, 0.55); }
+            .tt-splash image.glow-12 { -gtk-icon-shadow: 0 0 70px rgba(66, 133, 244, 0.88), 0 0 120px rgba(66, 133, 244, 0.6); }
+            .tt-splash image.glow-13 { -gtk-icon-shadow: 0 0 75px rgba(66, 133, 244, 0.9), 0 0 130px rgba(66, 133, 244, 0.65); }
+            .tt-splash image.glow-14 { -gtk-icon-shadow: 0 0 80px rgba(66, 133, 244, 0.95), 0 0 140px rgba(66, 133, 244, 0.7); }
+            .tt-splash image.glow-15 { -gtk-icon-shadow: 0 0 90px rgba(66, 133, 244, 1.0), 0 0 160px rgba(66, 133, 244, 0.8); }
         """)
-        # Apply CSS globally (needed for image child widget)
+        # Screen-wide, because a provider on the window's own style context never
+        # reaches the child image. Every rule is scoped to .tt-splash, and the
+        # provider is removed with the splash, so other windows in the tray
+        # process keep their normal background.
+        self._screen = self.window.get_screen() or Gdk.Screen.get_default()
         Gtk.StyleContext.add_provider_for_screen(
-            self.window.get_screen() if self.window.get_screen() else Gdk.Screen.get_default(),
+            self._screen,
             self.css_provider,
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
         )
@@ -232,6 +237,7 @@ class SplashScreen:
             self._stop_glow = True
 
             # Close splash and show welcome dialog
+            Gtk.StyleContext.remove_provider_for_screen(self._screen, self.css_provider)
             self.window.destroy()
             callback()
 

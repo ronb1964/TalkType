@@ -1,0 +1,50 @@
+"""The splash screen's stylesheet must not restyle other windows.
+
+It was added screen-wide with bare `window { background-color: transparent }`
+and `image` rules and never removed, so every plain window the tray opened
+afterwards (Fix a Word, for one) lost its background.
+"""
+import re
+
+import pytest
+
+gi = pytest.importorskip("gi")
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+from gi.repository import Gdk, Gtk  # noqa: E402
+
+from tuxtalk import welcome_dialog as wd  # noqa: E402
+
+
+@pytest.fixture
+def splash():
+    if not Gtk.init_check()[0]:
+        pytest.skip("no display")
+    s = wd.SplashScreen()
+    yield s
+    Gtk.StyleContext.remove_provider_for_screen(s._screen, s.css_provider)
+    s.window.destroy()
+
+
+def test_every_rule_is_scoped_to_the_splash(splash):
+    css = splash.css_provider.to_string()
+    selectors = re.findall(r"^([^{}\n][^{}]*)\{", css, re.MULTILINE)
+    assert selectors
+    for selector in selectors:
+        assert "tt-splash" in selector, selector
+
+
+def test_the_splash_window_carries_its_class_and_hint(splash):
+    assert splash.window.get_style_context().has_class("tt-splash")
+    assert splash.window.get_type_hint() == Gdk.WindowTypeHint.SPLASHSCREEN
+
+
+def test_the_stylesheet_goes_with_the_splash(splash, monkeypatch):
+    removed = []
+    monkeypatch.setattr(wd.Gtk.StyleContext, "remove_provider_for_screen",
+                        lambda screen, provider: removed.append(provider))
+    monkeypatch.setattr(splash.window, "set_opacity", lambda o: None)
+    done = []
+    splash._fade_out(0.05, lambda: done.append(True))
+    assert removed == [splash.css_provider]
+    assert done == [True]
