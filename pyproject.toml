@@ -40,7 +40,7 @@ dictate-prefs = "tuxtalk.prefs:main"
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.4.1"
 black = "^25.1.0"
-ruff = "^0.12.9"
+ruff = "0.17.0"  # the version CI lints with
 
 [tool.black]
 line-length = 100
