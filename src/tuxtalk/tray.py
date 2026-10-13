@@ -128,6 +128,43 @@ def _acquire_tray_singleton():
 # Global to keep lock file open
 _tray_lockfile_handle = None
 
+def about_icon_source(theme_has_icon):
+    """Where the About dialog's icon comes from: ("file", path), ("icon",
+    theme name) or None. *theme_has_icon* is the icon theme's has_icon."""
+    from .autostart import get_icon_path
+    from .config import APP_ID
+    path = get_icon_path()
+    if os.path.isfile(path):
+        return ("file", path)
+    appdir = os.environ.get("APPDIR")
+    if appdir:
+        bundled = os.path.join(appdir, f"{APP_ID}.svg")
+        if os.path.isfile(bundled):
+            return ("file", bundled)
+    # deb/rpm install the icon under the app ID; the AppImage's first run
+    # installs it as "tuxtalk".
+    for name in (APP_ID, "tuxtalk"):
+        if theme_has_icon(name):
+            return ("icon", name)
+    return None
+
+
+def _about_icon():
+    """The TuxTalk icon at 64 px for the About dialog, or None."""
+    theme = Gtk.IconTheme.get_default()
+    source = about_icon_source(theme.has_icon if theme else (lambda name: False))
+    if source is None:
+        return None
+    kind, value = source
+    if kind == "file":
+        from gi.repository import GdkPixbuf
+        return Gtk.Image.new_from_pixbuf(
+            GdkPixbuf.Pixbuf.new_from_file_at_scale(value, 64, 64, True))
+    image = Gtk.Image.new_from_icon_name(value, Gtk.IconSize.DIALOG)
+    image.set_pixel_size(64)
+    return image
+
+
 def engine_status(cfg_model, cfg_device, running=None):
     """(model id, device text) for the tray's "Active Model" and "Device" lines.
 
@@ -1084,17 +1121,9 @@ class DictationTray:
 
         # App icon
         try:
-            icon_paths = [
-                "/usr/share/icons/hicolor/128x128/apps/talktype.png",
-                os.path.join(os.path.dirname(__file__), "icons", "talktype-128.png"),
-            ]
-            for icon_path in icon_paths:
-                if os.path.exists(icon_path):
-                    from gi.repository import GdkPixbuf
-                    pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(icon_path, 64, 64, True)
-                    icon = Gtk.Image.new_from_pixbuf(pixbuf)
-                    content.pack_start(icon, False, False, 0)
-                    break
+            icon = _about_icon()
+            if icon:
+                content.pack_start(icon, False, False, 0)
         except Exception as e:
             logger.debug(f"Could not load icon for About dialog: {e}")
 
