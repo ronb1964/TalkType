@@ -38,17 +38,57 @@ def take_tab_request():
         return None
 
 
+def is_prefs_argv(argv) -> bool:
+    """True if *argv* (a process's argument list) is a Preferences window.
+
+    Whole arguments are compared, never substrings, the same way as
+    service_launcher.is_service_argv: Preferences runs as ``<python> -m
+    tuxtalk.prefs`` or as the ``dictate-prefs`` console script.
+    """
+    argv = list(argv)
+    for flag, module in zip(argv, argv[1:]):
+        # talktype.prefs: Preferences from before the 0.15.0 rename, which
+        # shares this pidfile.
+        if flag == "-m" and module in ("tuxtalk.prefs", "talktype.prefs"):
+            return True
+    if not argv:
+        return False
+    if os.path.basename(argv[0]) == "dictate-prefs":
+        return True
+    return (len(argv) > 1 and os.path.basename(argv[0]).startswith("python")
+            and os.path.basename(argv[1]) == "dictate-prefs")
+
+
+def _process_argv(pid):
+    """The argument list of process *pid*; raises OSError if it is gone."""
+    with open(f"/proc/{pid}/cmdline", "rb") as f:
+        raw = f.read()
+    return [arg.decode(errors="ignore") for arg in raw.split(b"\0") if arg]
+
+
+def is_prefs_pid(pid) -> bool:
+    """Whether *pid* is a running Preferences window.
+
+    A pidfile left by a Preferences that crashed can name a pid the system
+    has since given to another program, and FRONT's default action ends a
+    process, so the pid's own command line has to say it is Preferences.
+    """
+    if pid <= 0:
+        return False
+    try:
+        return is_prefs_argv(_process_argv(pid))
+    except OSError:
+        return False     # gone (or not ours to inspect): never signal it
+
+
 def running_pid():
     """Pid of the open Preferences window, or None."""
     try:
         with open(pidfile_path()) as f:
             pid = int(f.read().strip() or "0")
-        if pid > 0:
-            os.kill(pid, 0)
-            return pid
     except (OSError, ValueError):
-        pass
-    return None
+        return None
+    return pid if is_prefs_pid(pid) else None
 
 
 def bring_to_front(pid, tab=None):

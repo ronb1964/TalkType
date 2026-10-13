@@ -10,15 +10,48 @@ import signal
 from tuxtalk import prefs_ipc
 
 
-def test_running_pid_reads_a_live_pid(tmp_path, monkeypatch):
+def test_running_pid_reads_a_live_preferences_pid(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
     assert prefs_ipc.running_pid() is None                 # no pidfile
 
+    monkeypatch.setattr(prefs_ipc, "_process_argv",
+                        lambda pid: ["/usr/bin/python3", "-m", "tuxtalk.prefs"])
     (tmp_path / "talktype-prefs.pid").write_text(str(os.getpid()))
     assert prefs_ipc.running_pid() == os.getpid()
 
-    (tmp_path / "talktype-prefs.pid").write_text("999999999")  # stale
+
+def test_a_stale_pid_is_not_trusted(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    (tmp_path / "talktype-prefs.pid").write_text("999999999")  # gone
     assert prefs_ipc.running_pid() is None
+
+
+def test_a_reused_pid_is_not_trusted(tmp_path, monkeypatch):
+    """A Preferences killed without its cleanup leaves its pid behind. Once
+    another program has that pid, any live pid used to count, and the tray
+    then sent it SIGUSR1, whose default action ends the process. This test
+    run's own pid stands in for that other program."""
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    (tmp_path / "talktype-prefs.pid").write_text(str(os.getpid()))
+    assert prefs_ipc.running_pid() is None
+
+
+def test_preferences_is_recognised_by_whole_arguments():
+    assert prefs_ipc.is_prefs_argv(["/usr/bin/python3", "-m", "tuxtalk.prefs", "--tab=stats"])
+    assert prefs_ipc.is_prefs_argv(["/home/u/.local/bin/dictate-prefs"])
+    assert prefs_ipc.is_prefs_argv(["/usr/bin/python3.12", "/home/u/.local/bin/dictate-prefs"])
+    assert not prefs_ipc.is_prefs_argv(["bash", "-c", "pgrep -f tuxtalk.prefs"])
+    assert not prefs_ipc.is_prefs_argv(["vim", "/home/u/.local/bin/dictate-prefs"])
+    assert not prefs_ipc.is_prefs_argv([])
+
+
+def test_a_pid_that_vanishes_while_checked_is_not_running(monkeypatch):
+    """It exited between the existence check and reading its command line:
+    treating that as "running" made the new window exit and nothing opened."""
+    def gone(pid):
+        raise FileNotFoundError
+    monkeypatch.setattr(prefs_ipc, "_process_argv", gone)
+    assert prefs_ipc.is_prefs_pid(4242) is False
 
 
 def test_bring_to_front_passes_the_tab_through_a_request_file(tmp_path, monkeypatch):
@@ -56,7 +89,7 @@ def test_a_second_launch_forwards_and_exits(tmp_path, monkeypatch):
     pidfile = tmp_path / "talktype-prefs.pid"
     pidfile.write_text("4242")
     monkeypatch.setattr(prefs, "_PREFS_PIDFILE", str(pidfile))
-    monkeypatch.setattr(prefs, "_pid_running", lambda pid: True)
+    monkeypatch.setattr(prefs.prefs_ipc, "is_prefs_pid", lambda pid: True)
     sent = []
     monkeypatch.setattr(prefs.prefs_ipc, "bring_to_front", lambda pid, tab: sent.append((pid, tab)))
 

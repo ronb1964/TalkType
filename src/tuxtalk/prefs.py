@@ -130,17 +130,6 @@ def extension_reload_steps():
 from . import prefs_ipc
 _PREFS_PIDFILE = prefs_ipc.pidfile_path()
 
-def _pid_running(pid: int) -> bool:
-    if pid <= 0: return False
-    proc = f"/proc/{pid}"
-    if not os.path.exists(proc): return False
-    try:
-        with open(os.path.join(proc, "cmdline"), "rb") as f:
-            cmd = f.read().decode(errors="ignore")
-        return ("dictate-prefs" in cmd) or ("tuxtalk.prefs" in cmd)
-    except Exception:
-        return True
-
 def _acquire_prefs_singleton(tab=None):
     try:
         if os.path.exists(_PREFS_PIDFILE):
@@ -149,7 +138,7 @@ def _acquire_prefs_singleton(tab=None):
                     old = int(f.read().strip() or "0")
             except Exception:
                 old = 0
-            if _pid_running(old):
+            if old != os.getpid() and prefs_ipc.is_prefs_pid(old):
                 # Bring the open one forward rather than silently doing
                 # nothing, which looked like Preferences failed to open.
                 prefs_ipc.bring_to_front(old, tab)
