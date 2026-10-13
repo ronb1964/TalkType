@@ -456,3 +456,30 @@ def test_download_progress_is_passed_on_once_per_percent(tmp_path, monkeypatch):
     downloading = [p for p in seen if 0 <= p <= 100]
     assert len(downloading) <= 103, f"{len(seen)} progress callbacks for one download"
     assert 100 in seen
+
+
+@pytest.mark.parametrize("returncode,said,expected", [
+    (126, "", "cancelled"),
+    # Several polkit agents report a cancelled prompt as a refusal.
+    (127, "Error executing command as another user: Not authorized\n\n"
+          "This incident has been reported.", "cancelled"),
+    (127, "pkexec: cannot run program", "Could not start the installer"),
+])
+def test_a_cancelled_password_prompt_says_cancelled(tmp_path, monkeypatch, returncode, said,
+                                                    expected):
+    package = _package(tmp_path)
+
+    class Proc:
+        def __init__(self, stdout):
+            stdout.write(said.encode())
+            self.returncode = returncode
+
+        def wait(self, timeout=None):
+            return self.returncode
+
+    monkeypatch.setattr(uc, "package_install_argv", lambda t, p: ["pkexec", "dpkg", "-i", p])
+    monkeypatch.setattr(uc.subprocess, "Popen", lambda argv, stdout, stderr: Proc(stdout))
+
+    ok, message = uc.install_package_update(str(package), "deb")
+    assert not ok
+    assert expected in message
