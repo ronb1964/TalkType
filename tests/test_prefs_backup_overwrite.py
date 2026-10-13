@@ -1,8 +1,8 @@
 """Save Backup must ask before replacing a backup the dialog didn't ask about.
 
 The file dialog confirms overwriting only the name as typed. Typing
-"mybackup" when mybackup.zip existed added ".zip" afterwards and replaced
-that backup without asking.
+"mybackup" when mybackup.zip exists adds ".zip" afterwards, which would
+replace that backup without asking.
 """
 from types import SimpleNamespace
 

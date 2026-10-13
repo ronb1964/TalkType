@@ -1,11 +1,10 @@
 """After the CUDA download: switch for real, and never slow Parakeet down.
 
-The download used to save device = "cuda" by itself, which also moved the
-baseline Preferences diffs against, so OK found no change and never restarted
-the service (Ron, 0.14.5 test: config said cuda, dictation stayed on Vulkan).
-And Parakeet can't use CUDA, so switching it there would move it from the
-graphics card to the processor. Now Parakeet users are asked whether to move
-to Whisper Small on CUDA, and any switch goes through Apply.
+The download must not save device = "cuda" by itself: that also moves the
+baseline Preferences diffs against, so OK finds no change and never restarts
+the service. And Parakeet can't use CUDA, so switching it there would move it
+from the graphics card to the processor. Parakeet users are asked which Whisper
+model to use on CUDA instead, and any switch goes through Apply.
 """
 from types import SimpleNamespace
 
@@ -38,8 +37,8 @@ def test_a_whisper_model_switches_to_cuda_through_apply(prefs, monkeypatch):
 
 @pytest.mark.parametrize("picked", ["small", "large-v3", "tiny"])
 def test_parakeet_is_asked_and_moves_to_the_model_picked(prefs, monkeypatch, picked):
-    """Only Small was offered, so wanting another model meant downloading
-    Small first (Ron, 0.14.5 test)."""
+    """Any Whisper model can be picked, not only Small, so wanting another
+    one doesn't mean downloading Small first."""
     stub = _stub(prefs, "parakeet-v3", picked, monkeypatch)
     prefs.PreferencesWindow._after_cuda_download(stub)
     assert len(stub.asked) == 1
@@ -84,8 +83,8 @@ def test_the_question_offers_every_whisper_model_with_large_v3_picked(prefs, mon
 # --- CUDA already downloaded, picked in Device with Parakeet -----------------
 
 def _picker(prefs, answer):
-    """Device → CUDA with the files already there. Ron, 0.14.6 test: it just
-    switched and OK left Parakeet running on the processor under "CUDA"."""
+    """Device → CUDA with the files already there. Switching straight away
+    would leave Parakeet running on the processor under "CUDA"."""
     stub = SimpleNamespace(config={"model": "parakeet-v3", "device": "vulkan"},
                            _device_before="vulkan", asked=[])
     stub._ask_whisper_model_for_cuda = lambda: stub.asked.append(True) or answer

@@ -1,9 +1,9 @@
 """Fix Typing Permissions must not freeze Preferences while pkexec waits.
 
-pkexec ran on the GTK thread for up to a minute, so the window froze while
-the password prompt was open and its "Setting up..." label was never drawn.
-A failure also reset the button to a different label than the status check
-used.
+pkexec can wait up to a minute, so it runs off the GTK thread; otherwise the
+window freezes while the password prompt is open and its "Setting up..."
+label is never drawn. A failure resets the button to the same label the
+status check uses.
 """
 import threading
 from types import SimpleNamespace

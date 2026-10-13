@@ -1,8 +1,8 @@
 """"Model Downloaded Successfully!" only after the download is verified.
 
-The success message ran before the cache check, so a download that reported
-success but left files missing showed "Model Downloaded Successfully!" and
-then "Model download failed!".
+The success message comes after the cache check, so a download that reports
+success but leaves files missing doesn't show "Model Downloaded Successfully!"
+and then "Model download failed!".
 """
 import threading
 from types import SimpleNamespace

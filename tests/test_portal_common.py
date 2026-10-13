@@ -55,7 +55,7 @@ def _builder(token):
 
 
 def test_the_subscription_ends_when_the_response_arrives():
-    """Every request left a live Response subscription on the shared bus."""
+    """Otherwise every request leaves a live Response subscription on the shared bus."""
     bus, got = FakeBus(), []
     cancel = pc.call_portal(bus, "I", "M", _builder, lambda c, r: got.append(c))
     bus.respond(0, {})
@@ -73,7 +73,7 @@ def test_the_subscription_ends_when_the_call_fails():
 
 
 def test_an_error_in_the_response_handler_reaches_on_error():
-    """PyGObject swallowed it, so a caller waiting for the response hung."""
+    """PyGObject would swallow it, and a caller waiting for the response would hang."""
     bus, errors = FakeBus(), []
     pc.call_portal(bus, "I", "M", _builder, lambda c, r: r["missing"],
                    on_error=errors.append)

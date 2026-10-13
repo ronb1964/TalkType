@@ -1,8 +1,8 @@
 """The GNOME extension dialogs must give steps that work on today's GNOME.
 
-All four told the user to press Alt+F2 and type r, which restarts GNOME Shell
+None may tell the user to press Alt+F2 and type r, which restarts GNOME Shell
 only in an X11 session; GNOME 49 turned that session off by default and
-GNOME 50 removed it. The success dialog also promised a model switcher the
+GNOME 50 removed it. The success dialog must not promise a model switcher the
 extension's menu does not have.
 """
 from tuxtalk import prefs as P

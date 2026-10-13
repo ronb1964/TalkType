@@ -1,9 +1,9 @@
 """Opening Preferences must not change a saved "cuda" to "cpu" by itself.
 
 Without CUDA's files the Device dropdown shows CPU (the service runs on the
-processor then). That display change was written into self.config as if the
-user had picked it, so the next OK for any unrelated setting saved
-device = "cpu" and the user's CUDA choice was gone for good.
+processor then). That display change must not be written into self.config as
+if the user had picked it, or the next OK for any unrelated setting saves
+device = "cpu" and the user's CUDA choice is gone for good.
 """
 try:
     import tomllib

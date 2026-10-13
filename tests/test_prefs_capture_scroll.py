@@ -1,9 +1,8 @@
 """Preferences must still open when the capture-scroll controller is missing.
 
-Gtk.EventControllerScroll only exists from GTK 3.24. Its fallback branch named
-a `logger` that prefs.py never defined, so the NameError escaped from
-create_ui and the whole window failed to open instead of just skipping the
-scroll controller.
+Gtk.EventControllerScroll only exists from GTK 3.24. Without it the fallback
+branch must just skip the scroll controller; an error there escapes from
+create_ui and the whole window fails to open.
 """
 from types import SimpleNamespace
 

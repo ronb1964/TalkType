@@ -1,7 +1,7 @@
 """A second "open Preferences" brings the open window to the front.
 
-It used to do nothing when Preferences was already open, so a window hidden
-behind a browser looked like Preferences had failed to open (2026-09-29).
+Doing nothing when Preferences is already open would leave a window hidden
+behind a browser looking like Preferences had failed to open.
 """
 import inspect
 import os
@@ -28,9 +28,9 @@ def test_a_stale_pid_is_not_trusted(tmp_path, monkeypatch):
 
 def test_a_reused_pid_is_not_trusted(tmp_path, monkeypatch):
     """A Preferences killed without its cleanup leaves its pid behind. Once
-    another program has that pid, any live pid used to count, and the tray
-    then sent it SIGUSR1, whose default action ends the process. This test
-    run's own pid stands in for that other program."""
+    another program has that pid, counting any live pid would make the tray
+    send it SIGUSR1, whose default action ends the process. This test run's
+    own pid stands in for that other program."""
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
     (tmp_path / "talktype-prefs.pid").write_text(str(os.getpid()))
     assert prefs_ipc.running_pid() is None
@@ -47,7 +47,7 @@ def test_preferences_is_recognised_by_whole_arguments():
 
 def test_a_pid_that_vanishes_while_checked_is_not_running(monkeypatch):
     """It exited between the existence check and reading its command line:
-    treating that as "running" made the new window exit and nothing opened."""
+    treating that as "running" would make the new window exit and nothing open."""
     def gone(pid):
         raise FileNotFoundError
     monkeypatch.setattr(prefs_ipc, "_process_argv", gone)

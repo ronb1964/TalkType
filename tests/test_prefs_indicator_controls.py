@@ -18,9 +18,8 @@ def test_no_redundant_orb_checkbox():
 
 
 def test_color_dropdown_has_only_two_modes():
-    """Two real choices remain: match the desktop accent, or pick a color.
-    'Cyan' was a redundant third option and is gone (it lives on as the classic
-    color you can pick from the swatch's preset palette)."""
+    """Two choices: match the desktop accent, or pick a color. Cyan is not a
+    third option; it is the classic color in the swatch's preset palette."""
     text = PREFS.read_text()
     assert '.append("system"' in text
     assert '.append("custom"' in text
@@ -94,10 +93,10 @@ def test_backing_control_greys_out_for_the_orb():
 
 
 def test_offset_boxes_show_up_and_right_as_positive():
-    """Ron (0.14.7): typing a negative number to move the indicator UP felt
-    backwards. The vertical box flips the sign it shows; the saved value keeps
-    screen coordinates (positive = down) so old settings and backups still
-    mean the same place."""
+    """Typing a negative number to move the indicator UP feels backwards, so
+    the vertical box flips the sign it shows; the saved value keeps screen
+    coordinates (positive = down) so old settings and backups still mean the
+    same place."""
     from tuxtalk.prefs import OFFSET_DISPLAY_SIGN
     assert OFFSET_DISPLAY_SIGN == {"indicator_offset_x": 1, "indicator_offset_y": -1}
     # Showing +30 ("up 30") saves -30, which the indicator reads as 30 px up.
@@ -106,8 +105,8 @@ def test_offset_boxes_show_up_and_right_as_positive():
 
 
 def test_offset_direction_is_shown_beside_the_boxes_with_a_reset():
-    """The direction was only in a hover tooltip on the box; Ron hovered the
-    label and never saw it. It's now written under each box."""
+    """The direction is written under each box, not only in a hover tooltip
+    that is easy to miss."""
     text = PREFS.read_text()
     assert '"+ moves it right, − moves it left"' in text
     assert '"+ moves it up, − moves it down"' in text
