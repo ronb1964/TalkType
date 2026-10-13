@@ -540,6 +540,7 @@ def test_a_copied_whole_line_without_a_selection_is_not_a_selection(monkeypatch)
     monkeypatch.setattr(cb, "_read_primary", lambda: "an older selection")
     text, _ = cb.copy_selection(board.ctrl_c, sleep=lambda s: None)
     assert text is None
+    assert board.data == b"what I copied"          # not the editor's line
 
 
 def test_a_real_selection_ending_in_a_line_break_is_kept(monkeypatch):
@@ -939,3 +940,28 @@ def test_a_long_selection_can_still_be_deleted_or_made_bold(edit_env, keys_sent,
     run_edit()
     assert keys_sent == [["111:1", "111:0"], ["29:1", "48:1", "48:0", "29:0"]]
     assert edit_env["notices"] == []
+
+
+# --- put_back leaves only what the user had ------------------------------------------------
+
+def test_the_probe_marker_is_not_left_when_the_clipboard_could_not_be_kept(monkeypatch):
+    """The old clipboard couldn't be read (too big, too slow), so there was
+    nothing to put back, and the next Ctrl+V pasted "tuxtalk-selection-probe-…"."""
+    board = FakeBoard(selected=None)
+    board.install(monkeypatch)
+    monkeypatch.setattr(cb, "_read_clipboard", lambda: cb._NOTHING)
+    text, _ = cb.copy_selection(board.ctrl_c, sleep=lambda s: None)
+    assert text is None and board.data is None
+
+
+def test_an_image_copied_during_the_probe_is_left_alone(monkeypatch):
+    board = FakeBoard()
+    board.install(monkeypatch)
+
+    def copy_an_image():
+        board.data, board.mime = b"\x89PNG", "image/png"
+        return True
+    monkeypatch.setattr(cb, "_wl_paste", lambda mime: board.data if mime == board.mime else b"")
+    monkeypatch.setattr(cb, "_wl_paste_types", lambda: [board.mime] if board.data is not None else [])
+    text, _ = cb.copy_selection(copy_an_image, sleep=lambda s: None)
+    assert text is None and board.data == b"\x89PNG"

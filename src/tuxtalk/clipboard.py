@@ -302,10 +302,30 @@ def copy_selection(send_copy, wait=COPY_WAIT_S, sleep=None):
 
     def put_back(also=()):
         """Restore the user's clipboard, unless something newer is on it:
-        only the marker, the selection or *also* (a pasted rewrite) may be
-        replaced. A password goes back marked sensitive, as it came."""
-        if _read_text() not in {marker, text, *also}:
+        only the marker, the selection or *also* (a pasted rewrite, or what
+        the app copied instead of a selection) may be replaced, or nothing at
+        all. A password goes back marked sensitive, as it came."""
+        current = _read_text()
+        if current is None:
+            # No text: empty is safe to fill, but an image the user just
+            # copied, or a clipboard that can't be read, is left alone.
+            try:
+                replaceable = not _wl_paste_types()
+            except Exception:
+                replaceable = False
+        else:
+            replaceable = current in {s for s in (marker, text, *also) if s is not None}
+        if not replaceable:
             logger.info("Clipboard changed during the voice edit; leaving it as it is")
+            return
+        if saved is _NOTHING:
+            # The user's clipboard couldn't be kept; at least the probe
+            # marker mustn't be what their next Ctrl+V pastes.
+            if current == marker:
+                try:
+                    _wl_clear()
+                except Exception as e:
+                    logger.warning(f"Couldn't clear the clipboard: {e}")
             return
         _write_back(saved)
 
@@ -327,12 +347,14 @@ def copy_selection(send_copy, wait=COPY_WAIT_S, sleep=None):
     # highlighted text (the primary selection); an app without one gets the
     # benefit of the doubt.
     primary = _read_primary() if copied and copied.endswith("\n") else None
+    rejected = copied
     if primary and primary != copied:
         logger.info("Ctrl+C copied a whole line with nothing selected; not a selection")
         copied = None
     if not copied:
-        text = copied
-        put_back()
+        # What the app copied instead of a selection (that whole line, or
+        # nothing) is on the clipboard now, and may be replaced.
+        put_back(also=(rejected,))
         return None, put_back
     text = copied
     return text, put_back
