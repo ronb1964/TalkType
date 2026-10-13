@@ -187,3 +187,28 @@ def test_the_service_treats_broken_files_as_an_unavailable_model(monkeypatch):
     with pytest.raises(app.ModelUnavailable):
         app.build_model(_settings(device="cpu"))
     assert asked == [False]
+
+
+def test_a_model_that_wont_load_falls_back_without_replacing_the_choice(monkeypatch):
+    """Downloaded files that won't load were reported as "wasn't downloaded"
+    and the fallback was saved, so the chosen model was replaced at every
+    start: choosing it again in Preferences downloads nothing."""
+    import tuxtalk.config as config
+    from tuxtalk import cuda_helper
+
+    def load(name, **k):
+        if name == "medium":
+            raise model_helper.BrokenModelFiles("medium won't load")
+        return f"model:{name}"
+
+    saved, notes = [], []
+    monkeypatch.setattr(model_helper, "download_model_with_progress", load)
+    monkeypatch.setattr(model_helper, "is_model_cached_fast", lambda m: m in ("small", "medium"))
+    monkeypatch.setattr(cuda_helper, "has_cuda_libraries", lambda: False)
+    monkeypatch.setattr(config, "save_config", lambda cfg: saved.append(cfg.model))
+    monkeypatch.setattr(app, "_notify", lambda title, body: notes.append(body))
+
+    settings = _settings(model="medium", device="cpu")
+    assert app._build_model_or_exit(settings) == "model:small"
+    assert settings.model == "small" and saved == []
+    assert "wouldn't load" in notes[0] and "wasn't downloaded" not in notes[0]

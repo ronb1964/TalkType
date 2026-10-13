@@ -3683,6 +3683,12 @@ class ModelUnavailable(Exception):
     or it failed. Nothing to retry: the service cannot run without a model."""
 
 
+class ModelWontLoad(ModelUnavailable):
+    """The speech model is downloaded but won't load. Unlike a missing model,
+    choosing it again in Preferences downloads nothing, so the fallback is for
+    this run only and the user's choice stays."""
+
+
 # Speech models from best quality to fastest. When the chosen model is not
 # downloaded, the service falls back to the downloaded model nearest to it here.
 _QUALITY_ORDER = ("large-v3", "parakeet-v3", "medium", "small", "base", "tiny")
@@ -3741,6 +3747,10 @@ def _build_model_or_exit(settings: Settings):
     carries on with the nearest model already on disk. The switch is saved, so
     every menu shows the model actually running, and the user is told. Only
     with no model downloaded at all does the service stop.
+
+    A model that is downloaded but won't load (ModelWontLoad) gets the same
+    fallback for this run only: saving it would replace the user's choice at
+    every start, since choosing the model again downloads nothing.
     """
     try:
         return build_model(settings)
@@ -3766,6 +3776,12 @@ def _build_model_or_exit(settings: Settings):
         except ModelUnavailable:
             logger.warning(f"Dictation service stopping: fallback {fallback} could not load either")
             sys.exit(1)
+        if isinstance(e, ModelWontLoad):
+            _notify("TuxTalk",
+                    f"{model_display_name(wanted)} is downloaded but wouldn't load, so "
+                    f"TuxTalk is using {model_display_name(fallback)} for now. It tries "
+                    f"{model_display_name(wanted)} again the next time dictation starts.")
+            return model
         try:
             from .config import load_config, save_config
             saved = load_config()
@@ -3918,7 +3934,7 @@ def build_model(settings: Settings):
         _record_engine(settings.model, where)
         return model
     except BrokenModelFiles as e:
-        raise ModelUnavailable(str(e)) from e
+        raise ModelWontLoad(str(e)) from e
     except ModelUnavailable:
         # Never "fall back to CPU" here. That fallback exists for a CUDA load
         # failure; treating a cancel as one re-ran the download without asking
@@ -3969,7 +3985,7 @@ def build_model(settings: Settings):
 
                 return model
             except BrokenModelFiles as cpu_e:
-                raise ModelUnavailable(str(cpu_e)) from cpu_e
+                raise ModelWontLoad(str(cpu_e)) from cpu_e
             except Exception as cpu_e:
                 print(f"❌ CPU fallback also failed: {cpu_e}")
                 logger.error(f"CPU fallback failed: {cpu_e}")
