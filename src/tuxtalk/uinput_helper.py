@@ -319,12 +319,21 @@ def find_ydotoold_path():
     return None
 
 
+def ydotool_socket_path():
+    """The socket ydotool talks to ydotoold on: YDOTOOL_SOCKET when set, else
+    .ydotool_socket in this user's runtime folder."""
+    runtime = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+    return os.environ.get("YDOTOOL_SOCKET") or os.path.join(runtime, ".ydotool_socket")
+
+
 def check_ydotoold_running():
-    """Whether a ydotoold process is alive. Not its socket file: a daemon that
-    died leaves .ydotool_socket behind, and then nothing would restart it."""
+    """Whether this user's ydotoold process is alive. Not its socket file: a
+    daemon that died leaves .ydotool_socket behind, and then nothing would
+    restart it. Only this user's: another user's, or a system service's,
+    listens on a socket this user's ydotool doesn't use."""
     try:
-        return subprocess.run(["pgrep", "-x", "ydotoold"], capture_output=True,
-                              timeout=2).returncode == 0
+        return subprocess.run(["pgrep", "-u", str(os.getuid()), "-x", "ydotoold"],
+                              capture_output=True, timeout=2).returncode == 0
     except Exception as e:
         logger.warning(f"Could not check ydotoold status: {e}")
         return True     # can't tell: don't report it stopped or start a second one
@@ -478,7 +487,10 @@ def ensure_ydotoold_running():
             logger.debug("ydotoold is already running")
             return
         logger.info("Starting ydotoold daemon for text injection...")
-        subprocess.Popen(["ydotoold"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # The socket named explicitly, so the daemon listens where ydotool
+        # looks even when XDG_RUNTIME_DIR is unset (ydotoold then uses /tmp).
+        subprocess.Popen(["ydotoold", f"--socket-path={ydotool_socket_path()}"],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         logger.info("ydotoold launch requested")
     except FileNotFoundError:
         logger.warning("ydotoold not found in PATH - text injection may not work")

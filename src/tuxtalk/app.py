@@ -268,9 +268,9 @@ dbus_service = None
 # ---------------------------------------------------------------------------
 def _get_ydotool_env():
     """Return env dict with YDOTOOL_SOCKET set for subprocess calls."""
+    from .uinput_helper import ydotool_socket_path
     env = os.environ.copy()
-    runtime = env.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
-    env.setdefault("YDOTOOL_SOCKET", os.path.join(runtime, ".ydotool_socket"))
+    env["YDOTOOL_SOCKET"] = ydotool_socket_path()
     return env
 
 # Undo voice-command parsing/length logic lives in tuxtalk.undo so it can

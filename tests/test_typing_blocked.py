@@ -122,5 +122,28 @@ def test_ensure_ydotoold_running_starts_it_only_when_stopped(monkeypatch):
     U.ensure_ydotoold_running()
     assert calls == []
     monkeypatch.setattr(U, "check_ydotoold_running", lambda: False)
+    monkeypatch.setenv("XDG_RUNTIME_DIR", "/run/user/1234")
+    monkeypatch.delenv("YDOTOOL_SOCKET", raising=False)
     U.ensure_ydotoold_running()
-    assert calls == [["ydotoold"]]
+    # Started on the socket ydotool itself will look for.
+    assert calls == [["ydotoold", "--socket-path=/run/user/1234/.ydotool_socket"]]
+
+
+def test_only_this_users_ydotoold_counts(monkeypatch):
+    """A ydotoold run by another user, or a system service, listens on a
+    socket this user's ydotool doesn't use, and used to count as running."""
+    seen = []
+
+    class Done:
+        returncode = 1
+    monkeypatch.setattr(U.subprocess, "run", lambda cmd, **k: seen.append(cmd) or Done())
+    assert U.check_ydotoold_running() is False
+    assert seen == [["pgrep", "-u", str(U.os.getuid()), "-x", "ydotoold"]]
+
+
+def test_the_socket_path_follows_the_environment(monkeypatch):
+    monkeypatch.setenv("XDG_RUNTIME_DIR", "/run/user/1234")
+    monkeypatch.delenv("YDOTOOL_SOCKET", raising=False)
+    assert U.ydotool_socket_path() == "/run/user/1234/.ydotool_socket"
+    monkeypatch.setenv("YDOTOOL_SOCKET", "/tmp/custom")
+    assert U.ydotool_socket_path() == "/tmp/custom"
