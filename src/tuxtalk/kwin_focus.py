@@ -84,6 +84,15 @@ function tuxtalkGeometry() {{
              s);
 }}
 
+// A drag or resize changes the frame on every frame: report once it ends.
+function tuxtalkGeometryChanged() {{
+    var w = tuxtalkWatched;
+    if (w && (w.move || w.resize)) {{
+        return;
+    }}
+    tuxtalkGeometry();
+}}
+
 function tuxtalkReport(w) {{
     var cls = (w && w.resourceClass) ? String(w.resourceClass) : "";
     callDBus("{DBUS_NAME}",
@@ -93,11 +102,17 @@ function tuxtalkReport(w) {{
              cls);
     // Follow this window's moves and resizes until another one is active.
     if (tuxtalkWatched && tuxtalkWatched.frameGeometryChanged) {{
-        try {{ tuxtalkWatched.frameGeometryChanged.disconnect(tuxtalkGeometry); }} catch (e) {{}}
+        try {{ tuxtalkWatched.frameGeometryChanged.disconnect(tuxtalkGeometryChanged); }} catch (e) {{}}
+    }}
+    if (tuxtalkWatched && tuxtalkWatched.interactiveMoveResizeFinished) {{
+        try {{ tuxtalkWatched.interactiveMoveResizeFinished.disconnect(tuxtalkGeometry); }} catch (e) {{}}
     }}
     tuxtalkWatched = w;
     if (w && w.frameGeometryChanged) {{
-        w.frameGeometryChanged.connect(tuxtalkGeometry);
+        w.frameGeometryChanged.connect(tuxtalkGeometryChanged);
+    }}
+    if (w && w.interactiveMoveResizeFinished) {{
+        w.interactiveMoveResizeFinished.connect(tuxtalkGeometry);
     }}
     tuxtalkGeometry();
 }}

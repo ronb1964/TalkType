@@ -187,3 +187,15 @@ class TestRenameToTuxTalk:
         K.stop(bus)
         unloaded = [c[1][0] for c in bus.calls if c[0] == "unloadScript"]
         assert "talktype-focus" in unloaded and "tuxtalk-focus" in unloaded
+
+
+def test_window_drags_are_reported_once_they_end():
+    """frameGeometryChanged fires on every frame of a drag: 60+ D-Bus calls a
+    second into the tray, for a value read only when a message is shown."""
+    from tuxtalk import kwin_focus
+
+    script = kwin_focus.build_script()
+    assert "w.frameGeometryChanged.connect(tuxtalkGeometryChanged)" in script
+    assert "if (w && (w.move || w.resize))" in script
+    assert "w.interactiveMoveResizeFinished.connect(tuxtalkGeometry)" in script
+    assert "tuxtalkWatched.interactiveMoveResizeFinished.disconnect(tuxtalkGeometry)" in script
