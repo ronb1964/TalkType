@@ -30,6 +30,10 @@ EXTENSION_UUID = "talktype@ronb1964.github.io"
 # Download directory for updates
 UPDATE_DIR = os.path.expanduser("~/.local/share/TuxTalk/updates")
 
+# Anything in UPDATE_DIR this old is left over from an earlier update. An hour
+# is far longer than any installer takes to open its package.
+STALE_UPDATE_S = 60 * 60
+
 # Standard AppImage install location
 APPIMAGE_DIR = os.path.expanduser("~/AppImages")
 APPIMAGE_NAME = "TuxTalk.AppImage"
@@ -381,11 +385,13 @@ def download_update(
     Returns:
         str: Path to downloaded file, or None if failed
     """
-    from .download_utils import download_file
+    from .download_utils import download_file, remove_stale_files
 
     try:
         # Create update directory
         os.makedirs(UPDATE_DIR, exist_ok=True)
+        # A package whose installer outlived TuxTalk is never deleted by it.
+        remove_stale_files(UPDATE_DIR, "*", STALE_UPDATE_S)
         dest_path = os.path.join(UPDATE_DIR, filename)
 
         if progress_callback:
@@ -695,51 +701,57 @@ def _remove_package(package_path: str) -> None:
 
 def _finish_in_background(proc, package_path: str) -> None:
     """Wait for an installer that outlived PACKAGE_INSTALL_TIMEOUT_S on a
-    background thread. Its output pipes must keep being read: once they close,
-    the installer's next write kills it with SIGPIPE, part-way through."""
+    background thread, then delete its package. If TuxTalk exits first the
+    installer is unaffected, and the next update download sweeps the package."""
     import threading
 
-    def drain():
+    def wait():
         try:
-            proc.communicate()
+            proc.wait()
             logger.info(f"Background package install finished with exit code {proc.returncode}")
         except Exception as e:
             logger.warning(f"Background package install: {e}")
         _remove_package(package_path)
 
-    threading.Thread(target=drain, name="package-install", daemon=True).start()
+    threading.Thread(target=wait, name="package-install", daemon=True).start()
 
 
 def install_package_update(package_path: str, install_type: str) -> Tuple[bool, str]:
     """Install a downloaded .rpm/.deb as root via pkexec (PolicyKit prompts for
     the password). Returns (success, message). Does NOT restart TuxTalk.
     The package file is deleted once the installer is done with it."""
+    import tempfile
     argv = package_install_argv(install_type, package_path)
     if not argv:
         return (False, "No supported package manager was found to install the update.")
-    try:
-        proc = subprocess.Popen(argv, stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE, text=True)
-    except FileNotFoundError:
-        return (False, "pkexec (PolicyKit) is not available. Please install the "
-                       "update through your package manager.")
+    # The installer writes to an unnamed file rather than a pipe: a pipe closes
+    # when TuxTalk exits, and the installer's next write would then kill it
+    # part-way through the transaction. The file disappears once both close it.
+    with tempfile.TemporaryFile(dir=os.path.dirname(package_path) or None) as output:
+        try:
+            proc = subprocess.Popen(argv, stdout=output, stderr=subprocess.STDOUT)
+        except FileNotFoundError:
+            return (False, "pkexec (PolicyKit) is not available. Please install the "
+                           "update through your package manager.")
 
-    try:
-        out, err = proc.communicate(timeout=PACKAGE_INSTALL_TIMEOUT_S)
-    except subprocess.TimeoutExpired:
-        # Deliberately NOT killed. The child runs as root, so a user process
-        # could not reap it anyway — and interrupting dpkg or rpm mid-transaction
-        # can leave the package database broken, which is far worse than an
-        # update that takes a long time. A package lock (unattended-upgrades on
-        # Ubuntu, dnf-makecache on Fedora) is the usual cause and clears itself.
-        # Let it finish in the background and give the dialog something to say.
-        logger.warning(
-            f"Package install still running after {PACKAGE_INSTALL_TIMEOUT_S}s; "
-            f"leaving it to finish")
-        _finish_in_background(proc, package_path)
-        return (False, "The installer is taking longer than expected — your system "
-                       "may be waiting on another package operation. It will keep "
-                       "running in the background; check again in a few minutes.")
+        try:
+            proc.wait(timeout=PACKAGE_INSTALL_TIMEOUT_S)
+        except subprocess.TimeoutExpired:
+            # Deliberately NOT killed. The child runs as root, so a user process
+            # could not reap it anyway — and interrupting dpkg or rpm mid-transaction
+            # can leave the package database broken, which is far worse than an
+            # update that takes a long time. A package lock (unattended-upgrades on
+            # Ubuntu, dnf-makecache on Fedora) is the usual cause and clears itself.
+            # Let it finish in the background and give the dialog something to say.
+            logger.warning(
+                f"Package install still running after {PACKAGE_INSTALL_TIMEOUT_S}s; "
+                f"leaving it to finish")
+            _finish_in_background(proc, package_path)
+            return (False, "The installer is taking longer than expected — your system "
+                           "may be waiting on another package operation. It will keep "
+                           "running in the background; check again in a few minutes.")
+        output.seek(0)
+        detail = output.read().decode("utf-8", "replace").strip()
     _remove_package(package_path)
     if proc.returncode == 0:
         return (True, "Update installed. Restart TuxTalk to use the new version.")
@@ -747,7 +759,8 @@ def install_package_update(package_path: str, install_type: str) -> Tuple[bool, 
         return (False, "Authorization was cancelled — the update was not installed.")
     if proc.returncode == 127:
         return (False, "Could not start the installer (authorization failed).")
-    detail = (err or out or "").strip()
+    # The last lines hold the error; apt and dnf print pages of progress first.
+    detail = "\n".join(detail.splitlines()[-8:])
     return (False, f"Install failed: {detail or ('exit code ' + str(proc.returncode))}")
 
 

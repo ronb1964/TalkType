@@ -69,7 +69,7 @@ class TestPackageInstallIsBounded:
         uc = self._checker()
 
         class HungProc:
-            def communicate(self, timeout=None):
+            def wait(self, timeout=None):
                 raise subprocess.TimeoutExpired(cmd="pkexec", timeout=timeout)
             def kill(self):
                 pytest.fail("a package manager must never be killed mid-transaction")
@@ -88,8 +88,8 @@ class TestPackageInstallIsBounded:
 
         class GoodProc:
             returncode = 0
-            def communicate(self, timeout=None):
-                return ("", "")
+            def wait(self, timeout=None):
+                return self.returncode
 
         monkeypatch.setattr(uc, "package_install_argv",
                             lambda t, p: ["pkexec", "apt", "install", "-y", p])
@@ -104,8 +104,8 @@ class TestPackageInstallIsBounded:
 
         class CancelledProc:
             returncode = 126
-            def communicate(self, timeout=None):
-                return ("", "")
+            def wait(self, timeout=None):
+                return self.returncode
 
         monkeypatch.setattr(uc, "package_install_argv",
                             lambda t, p: ["pkexec", "apt", "install", "-y", p])
