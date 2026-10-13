@@ -245,9 +245,14 @@ _RE_EMAIL_AT_WORD = re.compile(
     _EMAIL_NAME + r"\s+at\s+([a-zA-Z0-9.-]+?)\s*\.\s*(" + _EMAIL_TLDS_SAFE + r")\b",
     re.IGNORECASE
 )
+# A gap the punctuation passes opened inside an address ("john@gmail. Com").
+# Space is required next to the dot (a joined ending is already part of the
+# address), and the ending must be one that can't start a sentence, so
+# "john@gmail.com. It was great" keeps its full stop. "co" counts only before
+# "uk". The ending alone ignores case: the capitalization pass wrote "Com".
 _RE_EMAIL_SPLIT_TLD = re.compile(
-    r"(@[\w-]+(?:\.[\w-]+)*)\s*\.\s*(" + _EMAIL_TLDS_ALL + r")\b",
-    re.IGNORECASE
+    r"(@[\w-]+(?:\.[\w-]+)*)(?:\s+\.\s*|\.\s+)"
+    r"((?i:" + _EMAIL_TLDS_SAFE + r"|uk|co(?=\s*\.\s*uk\b)))\b"
 )
 _RE_EMAIL_AT_SPACE = re.compile(r"@\s+")
 # A dot written joined to a lowercase web ending is part of an address, and

@@ -532,6 +532,25 @@ def test_tld_space_fix_only_touches_email_addresses(said):
 
 def test_tld_space_fix_still_joins_a_split_address():
     assert normalize_text("write to john@gmail. Com today") == "Write to john@gmail.com today."
+    assert normalize_text("mail a@b. co. uk now") == "Mail a@b.co.uk now."
+
+
+# The space-fix also took every country ending (it, in, my, no, us) across a
+# spaced dot, so the sentence after an address was glued into it:
+# "john@gmail.com. It was great" -> "john@gmail.com.it was great".
+@pytest.mark.parametrize("said, expected", [
+    ("send it to john@gmail.com. it was great",
+     "Send it to john@gmail.com. It was great."),
+    ("reach me at bob@work.com. my phone is off",
+     "Reach me at bob@work.com. My phone is off."),
+    ("email john@gmail.com period No thanks", "Email john@gmail.com. No thanks."),
+    ("write to anna@example.de. it is ok", "Write to anna@example.de. It is ok."),
+    ("email bob at work dot com. no rush", "Email bob@work.com. No rush."),
+    ("my email is john at gmail dot com period in the morning",
+     "My email is john@gmail.com. In the morning."),
+])
+def test_sentence_after_an_email_address_stays_a_sentence(said, expected):
+    assert normalize_text(said) == expected
 
 
 def test_missed_space_before_a_capital_is_still_a_sentence_break():
