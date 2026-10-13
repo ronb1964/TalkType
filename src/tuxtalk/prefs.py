@@ -4810,8 +4810,13 @@ class PreferencesWindow:
                     self.fix_typing_button.set_label("✓ Configured")
                     self.fix_typing_button.set_sensitive(False)
                 else:
+                    # Without /dev/input the hotkey is never seen, so no mode
+                    # of output can help; say so rather than offer a fallback.
+                    hotkey_ok, _ = uinput_helper.check_input_read_permission()
+                    blocked = "TuxTalk can't type" if hotkey_ok else "The dictation key won't work"
                     self.typing_status_label.set_markup(
-                        '<span color="#FF9800">⚠ Typing permissions not configured (using Clipboard mode as fallback)</span>'
+                        f'<span color="#FF9800">⚠ {blocked} until you run '
+                        'Fix Typing and restart</span>'
                     )
                     self.fix_typing_button.set_label(FIX_TYPING_LABEL)
                     self.fix_typing_button.set_sensitive(True)
@@ -4904,7 +4909,12 @@ class PreferencesWindow:
         else:
             button.set_sensitive(True)
             button.set_label(FIX_TYPING_LABEL)
-            if "cancelled" not in message.lower():
+            if "cancelled" in message.lower():
+                self.typing_status_label.set_markup(
+                    '<span color="#FF9800">⚠ Setup cancelled. Click '
+                    f'{FIX_TYPING_LABEL} to try again</span>'
+                )
+            else:
                 msg = message_dialog(
                     transient_for=self.window,
                     modal=True,

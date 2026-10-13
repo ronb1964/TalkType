@@ -55,7 +55,7 @@ def test_pkexec_runs_off_the_gtk_thread_and_a_failure_resets_the_button(monkeypa
                         lambda *a: ran_in.append(threading.current_thread()) or
                         (False, "Authentication was cancelled"))
 
-    d = SimpleNamespace(window=None)
+    d = SimpleNamespace(window=None, typing_status_label=SimpleNamespace(set_markup=lambda m: None))
     d._finish_fix_typing = lambda *a: PreferencesWindow._finish_fix_typing(d, *a)
     button = FakeButton()
 

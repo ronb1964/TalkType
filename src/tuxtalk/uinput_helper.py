@@ -660,6 +660,19 @@ def get_portaudio_install_command():
     return (None, None)
 
 
+def pkexec_was_declined(result):
+    """True when pkexec never ran the command because the password prompt was
+    cancelled or the password wasn't accepted.
+
+    pkexec exits 126 when the polkit agent reports the prompt as dismissed, but
+    several agents report a cancel as a refusal instead: exit 127 with "Not
+    authorized ... This incident has been reported." Both mean the user said no.
+    """
+    if result.returncode == 126:
+        return True
+    return result.returncode == 127 and "Not authorized" in (result.stderr or "")
+
+
 def install_portaudio_with_pkexec():
     """
     Install PortAudio using the system package manager with pkexec for privilege escalation.
@@ -701,8 +714,7 @@ def install_portaudio_with_pkexec():
             else:
                 return (False, "Installation appeared to succeed but PortAudio not found. "
                               "You may need to restart TuxTalk.")
-        elif result.returncode == 126:
-            # User cancelled authentication
+        elif pkexec_was_declined(result):
             logger.info("User cancelled pkexec authentication for PortAudio install")
             return (False, "Installation was cancelled.")
         else:
@@ -788,8 +800,7 @@ def install_ydotool_with_pkexec():
             else:
                 return (False, "Installation appeared to succeed but ydotool not found. "
                               "You may need to restart your terminal or log out and back in.")
-        elif result.returncode == 126:
-            # User cancelled authentication
+        elif pkexec_was_declined(result):
             logger.info("User cancelled pkexec authentication for ydotool install")
             return (False, "Installation was cancelled.")
         else:
@@ -896,8 +907,7 @@ def install_udev_rule_with_pkexec():
             logger.info("Udev rule installed successfully")
             return (True, "Permissions configured successfully!\n\n"
                          "Restart your computer to apply (logging out is often not enough).")
-        elif result.returncode == 126:
-            # User cancelled the authentication dialog
+        elif pkexec_was_declined(result):
             logger.info("User cancelled pkexec authentication")
             return (False, "Authentication was cancelled.")
         else:
