@@ -2,8 +2,7 @@
 
 Pure cairo — every renderer is exercised by drawing onto a headless
 ImageSurface, so these run without a display. Geometry and colors come from
-live prototyping; see
-docs/superpowers/specs/2026-08-14-recording-indicator-styles-design.md.
+live prototyping.
 """
 import numpy as np
 import pytest

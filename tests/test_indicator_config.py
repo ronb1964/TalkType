@@ -4,8 +4,6 @@ These settings drive the selectable indicator styles (waveform, bars, radial)
 alongside the orb, plus color, backing and sensitivity. They must all apply
 live — the service reads them without a restart — so every one belongs in
 LIVE_APPLIED_KEYS.
-
-See docs/superpowers/specs/2026-08-14-recording-indicator-styles-design.md.
 """
 from tuxtalk import config
 

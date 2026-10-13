@@ -1,6 +1,5 @@
 """Messages where the user is looking: a voice-edit problem floats over the
 middle of the active window instead of only in the corner notification.
-Spec: docs/superpowers/specs/2026-10-12-messages-at-active-window-design.md
 """
 import json
 import pathlib

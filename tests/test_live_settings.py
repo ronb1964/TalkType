@@ -9,8 +9,6 @@ Most settings don't need that. They are read off the long-lived
 cfg.beeps, cfg.auto_period and the rest into stop_recording), so refreshing
 that object's fields makes them live. Only `model` and `device` require
 rebuilding the model.
-
-See docs/superpowers/specs/2026-08-13-live-settings-reload-design.md.
 """
 
 import dataclasses

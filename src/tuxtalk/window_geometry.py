@@ -12,7 +12,6 @@ The answer is in the compositor's logical coordinates. TuxTalk's windows (the
 recording indicator, screen_message) are drawn through X11 / XWayland, which
 on a scaled screen counts physical pixels, so to_screen_rect() maps the
 window's rectangle into GDK's monitor of the same name.
-Spec: docs/superpowers/specs/2026-10-12-messages-at-active-window-design.md
 """
 import os
 from collections import namedtuple

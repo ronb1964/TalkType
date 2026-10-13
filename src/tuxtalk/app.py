@@ -2860,7 +2860,7 @@ def stop_recording(
                            language, auto_space, auto_period, injection_mode)
 
 
-# --- Voice editing (docs/superpowers/specs/2026-10-12-voice-editing-design.md) ---
+# --- Voice editing ---
 
 # How long after typing the rewrite the user's clipboard is put back: after
 # ClipboardKeeper's own restore (0.5 s) when "Restore clipboard" is on, and

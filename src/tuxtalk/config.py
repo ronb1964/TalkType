@@ -665,8 +665,6 @@ def merge_changed_keys(original: dict, current: dict, base: dict) -> dict:
 # (every dictation ends by passing cfg.beeps, cfg.auto_period and the rest into
 # stop_recording), so refreshing that object's fields makes them live. The rest
 # are re-applied explicitly by the service's config watcher.
-#
-# See docs/superpowers/specs/2026-08-13-live-settings-reload-design.md.
 
 # The model is constructed once at startup; changing either rebuilds it.
 RESTART_REQUIRED_KEYS = {

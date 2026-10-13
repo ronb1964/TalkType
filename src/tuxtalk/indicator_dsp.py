@@ -7,7 +7,6 @@ Without this, low-frequency energy dominates every frame and pins the low bars
 while everything else ramps down from the left.
 
 Pure numpy — no GTK — so it is unit-tested without a display.
-See docs/superpowers/specs/2026-08-14-recording-indicator-styles-design.md.
 """
 import numpy as np
 

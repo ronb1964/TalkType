@@ -1,8 +1,7 @@
 """Cairo drawing for the recording indicator's non-orb styles + the soft backing.
 
 Pure cairo (no GTK widget), so every renderer is testable by drawing onto an
-ImageSurface with no display. The design is in
-docs/superpowers/specs/2026-08-14-recording-indicator-styles-design.md.
+ImageSurface with no display.
 """
 import math
 import random

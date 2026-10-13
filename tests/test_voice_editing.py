@@ -1,6 +1,6 @@
 """Voice editing: select text, hold Shift + the dictation key, say how to
 change it ("make this more formal"), and the selection is rewritten by the
-local AI model. Spec: docs/superpowers/specs/2026-10-12-voice-editing-design.md
+local AI model.
 """
 import pytest
 

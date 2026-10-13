@@ -85,36 +85,17 @@ squashfs-root/
 cuda_wheels/
 
 # ============================================
-# Internal dev notes & planning docs
-# (kept locally, not needed on public repo)
+# Internal planning notes (kept locally, not published)
 # ============================================
-APPIMAGEHUB_STATUS.md
-APPIMAGEHUB_SUBMISSION.md
-CROSS_PLATFORM_PORTING_GUIDE.md
-DEVELOPMENT_PLAN.md
-DEVELOPMENT_SEPARATION.md
-DEV_NOTES.md
-GNOME_EXTENSION_FIXES_NEEDED.md
-GNOME_EXTENSION_IDEAS.md
-ICON_DOCUMENTATION.md
-IMAGE_GENERATION_TOOLS.md
-MARKETING_PLAN.md
-MCP_SCREENSHOT_USAGE.md
-MCP_SERVER_DEBUG_SUMMARY.md
-NO_PREINSTALL_BUNDLING_NOTES.md
-REPOSITORY_STRUCTURE.md
-ROADMAP_v*.md
-STABLE_DIFFUSION_SETUP.md
-VISUAL_STYLE_GUIDE.md
-marketing-posts.md
+docs/superpowers/
 
 # ============================================
 # Dev/test scripts (root level)
 # (proper unit tests in tests/ are tracked)
 #
 # NOTE: the build and release toolchain does NOT belong in this section.
-# container-build.sh, patch_pytorch.py, package-extension.sh and
-# fresh-start-for-testing.sh were once filed here by mistake, which left a
+# container-build.sh, package-extension.sh and fresh-start-for-testing.sh
+# were once filed here by mistake, which left a
 # clone of this repository unable to build or release itself — build-release.sh
 # is tracked but calls container-build.sh, which was not. Keep anything the
 # documented release process in CLAUDE.md depends on OUT of this list.
@@ -159,14 +140,9 @@ test-screenshots/
 archive/
 
 # ============================================
-# Claude Code
+# Claude Code (local session state and personal skills)
 # ============================================
-.claude/*
-# Shared skills are part of the project, not local session state, so they
-# stay tracked. Note this has to be `.claude/*` and not `.claude/` — git
-# never descends into an excluded directory, so a negation inside one is
-# silently ignored.
-!.claude/skills/
+.claude/
 
 # Playwright MCP automation logs
 .playwright-mcp/
@@ -180,7 +156,7 @@ archive/
 *.flatpak
 *.flatpak.sha256
 
-# AMD/Intel graphics engine builds (build-vulkan-engine.sh); hosted on a GitHub pre-release
+# Vulkan engine builds (build-vulkan-engine.sh); hosted on a GitHub pre-release
 talktype-whisper-vulkan-*.tar.gz*
 
 # Brainstorming mockups (visual companion), local only

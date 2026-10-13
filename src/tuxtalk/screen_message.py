@@ -9,7 +9,6 @@ notification as a backup, which stays in the notification history.
 Drawn in the dictation service, which runs GTK on X11 / XWayland (for the
 recording indicator), as an override-redirect popup, so it goes exactly
 where it is put on every desktop.
-Spec: docs/superpowers/specs/2026-10-12-messages-at-active-window-design.md
 """
 from .logger import setup_logger
 
