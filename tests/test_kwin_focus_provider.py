@@ -1,17 +1,17 @@
 """On KDE, KWin must report the focused window so paste can pick the right keys.
 
-TalkType chooses Ctrl+Shift+V for terminals and plain Ctrl+V everywhere else, and
-routes Electron apps to a typing fallback. Both decisions read one cache, and
-until now the only thing that ever filled it was the GNOME Shell extension. On
-KDE the cache stayed empty forever: every paste used Ctrl+V, which a terminal
-treats as readline's quoted-insert, so dictating into a terminal put nothing on
-screen while TalkType reported success.
+TuxTalk chooses Ctrl+Shift+V for terminals and plain Ctrl+V everywhere else, and
+routes Electron apps to a typing fallback. Both decisions read one cache, which
+the GNOME Shell extension fills on GNOME. Without a provider the cache stays
+empty on KDE: every paste uses Ctrl+V, which a terminal treats as readline's
+quoted-insert, so dictating into a terminal puts nothing on screen while
+TuxTalk reports success.
 
 The provider is a KWin script loaded over D-Bus. It connects to
 workspace.windowActivated and pushes window.resourceClass into the same
 SetFocusedWindowClass method the GNOME extension calls, so everything downstream
-is unchanged. Verified against a live Plasma 6.7.4 Wayland session before this
-was written: the cache went com.anthropic.Claude -> zenity -> back as focus moved.
+is unchanged. Checked by hand on a live Plasma 6.7.4 Wayland session, where the
+cache follows focus from window to window.
 
 Nothing here may be fatal. A missing KWin, a refused D-Bus call or a read-only
 data directory must cost the paste hint, never the tray.
@@ -147,8 +147,8 @@ class TestItIsNeverFatal:
     def test_it_never_starts_a_script_by_its_number(self, tmp_path, monkeypatch, on_kde):
         """KWin numbers scripts by list length, so after an unload a new one can
         share a number with one still loaded, and run() on that number starts
-        the wrong script. This is what left the focus script dead and made
-        terminals show "^V"."""
+        the wrong script, leaving the focus script dead and terminals showing
+        "^V"."""
         monkeypatch.setattr(K, "script_path", lambda: str(tmp_path / "focus.js"))
         bus = FakeBus()
         K.start(bus)
@@ -174,8 +174,8 @@ class TestItIsNeverFatal:
 
 class TestRenameToTuxTalk:
     def test_a_talktype_focus_script_is_unloaded_too(self, tmp_path, monkeypatch, on_kde):
-        """A TalkType run left 'talktype-focus' loaded; with ours it would
-        report every focus change twice."""
+        """A 'talktype-focus' script left loaded by a TalkType run would report
+        every focus change twice alongside ours."""
         monkeypatch.setattr(K, "script_path", lambda: str(tmp_path / "focus.js"))
         bus = FakeBus()
         K.start(bus)

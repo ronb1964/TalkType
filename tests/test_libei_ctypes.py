@@ -118,8 +118,8 @@ def test_smart_quotes_and_dashes_are_typed_as_plain_lookalikes():
 
 
 def test_text_with_an_untypable_character_types_nothing(monkeypatch):
-    """Characters libei can't type were skipped while type_string still said
-    it had typed everything, so undo later deleted the user's own text."""
+    """Skipping characters libei can't type while type_string still says it
+    typed everything would make undo later delete the user's own text."""
     s = _fake_ready_session(monkeypatch)
     assert s.type_string("5€ time") is False
     assert s.ei.events == []
@@ -127,8 +127,8 @@ def test_text_with_an_untypable_character_types_nothing(monkeypatch):
 
 def test_ellipses_and_accents_are_typed_as_their_plain_forms():
     """Dictation turns "..." into "…", and an accented word is common; both
-    have a plain form, so refusing the whole dictation over them lost far
-    more than it saved."""
+    have a plain form, so refusing the whole dictation over them would lose
+    far more than it saves."""
     assert L.typeable_text("Wait… café, naïve “ok”") == 'Wait... cafe, naive "ok"'
     assert L.plan_keys("Wait… café") == L.plan_keys("Wait... cafe")
 
@@ -192,7 +192,7 @@ class _LifecycleEi(_FakeEi):
 
 
 def test_each_session_frees_its_context_and_device(monkeypatch):
-    """Every dictation leaked a libei context and a device reference."""
+    """Otherwise every dictation leaks a libei context and a device reference."""
     from tuxtalk.output_backends import LibeiOutputBackend
     r, w = os.pipe()
     os.write(w, b"x")                   # readable, so the select returns at once

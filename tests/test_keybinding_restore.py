@@ -2,10 +2,10 @@
 
 The hotkey-test dialog clears org.gnome.desktop.wm.keybindings begin-resize
 and begin-move while it is open. gsettings keeps whatever is written across
-reboots, so an exception, a crash, a kill or a logout before the restore left
-the user's window keybindings disabled for good, with nothing pointing at
-TuxTalk. The originals now go to a backup file first, and the next start puts
-them back if the restore never happened.
+reboots, so an exception, a crash, a kill or a logout before the restore would
+leave the user's window keybindings disabled for good, with nothing pointing at
+TuxTalk. The originals go to a backup file first, and the next start puts them
+back if the restore never happened.
 """
 
 import ast

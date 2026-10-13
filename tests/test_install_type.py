@@ -1,6 +1,6 @@
 """Tests for install-type detection in update_checker.
 
-The updater must know HOW TalkType was installed so it never tries to download
+The updater must know HOW TuxTalk was installed so it never tries to download
 and run an AppImage on a .deb/.rpm/AUR/Flatpak install (that fails, e.g. missing
 libfuse.so.2 on Fedora). get_install_type() is fully injectable so these tests
 never touch the real environment.

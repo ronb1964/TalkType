@@ -1,4 +1,4 @@
-"""KWin holds TalkType's hotkeys back from the focused app (the F8 "~" leak).
+"""KWin holds TuxTalk's hotkeys back from the focused app (the F8 "~" leak).
 
 The behaviour itself was proven by hand on Plasma 6.7.4 (see the module
 docstring). These pin the parts that are easy to break: which keys are claimed,
@@ -121,8 +121,8 @@ class TestClaim:
 
     def test_keys_kwin_is_still_registering_are_not_reported(self, on_kde, caplog, monkeypatch):
         """Restarting the service re-claims the keys within a second, and the
-        first read-back can come before KWin has finished: 0.14.2's test logged
-        "KDE already uses F8" while KWin really held F8, F9 and Ctrl+Alt+V."""
+        first read-back can come before KWin has finished, which would wrongly
+        log "KDE already uses F8" while KWin really holds F8, F9 and Ctrl+Alt+V."""
         waits = []
         monkeypatch.setattr(kh.time, "sleep", waits.append)
         bus = FakeBus()
@@ -201,8 +201,8 @@ def test_stopping_the_service_releases_the_hotkeys(monkeypatch):
 
 
 class TestRefusedKeysReachPreferences:
-    """The refused-key warning only reached the log. The service now saves
-    the result so Preferences can say it after a hotkey change (Ron, 0.14.6)."""
+    """The service saves which keys KDE refused, so Preferences can say so
+    after a hotkey change rather than leaving it in the log."""
 
     @pytest.fixture
     def result_file(self, on_kde, monkeypatch, tmp_path):

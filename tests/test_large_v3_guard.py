@@ -1,8 +1,8 @@
 """large-v3 is only swapped for medium when it was meant to run on CUDA.
 
-The guard predates Vulkan. It checked only for TalkType's CUDA libraries, so an
-AMD or Intel user who set up large-v3 on their graphics card (Vulkan, 0.12.0)
-silently got the medium model while the tray said "Large".
+Checking only for TuxTalk's CUDA libraries would give an AMD or Intel user who
+set up large-v3 on their graphics card (Vulkan) the medium model while the tray
+said "Large".
 """
 import types
 
@@ -49,8 +49,8 @@ def test_other_models_are_untouched(no_cuda):
 
 def test_a_system_wide_cuda_install_keeps_large_v3(monkeypatch):
     """Preferences offers large-v3 when CUDA is installed system-wide (common
-    on Arch). The guard checked only TuxTalk's own download, so those users
-    silently got medium, and could be asked to download it."""
+    on Arch). Checking only TuxTalk's own download would silently give those
+    users medium, and could ask them to download it."""
     monkeypatch.setattr("tuxtalk.cuda_helper.has_talktype_cuda_libraries", lambda: False)
     monkeypatch.setattr("tuxtalk.cuda_helper.has_cuda_libraries", lambda: True)
     cfg = _cfg("cuda")

@@ -1,9 +1,7 @@
 """Preferences and the dictation service start as Python modules everywhere.
 
-The launchers first looked for usr/bin/dictate and usr/bin/dictate-prefs next
-to the code, but no package ever ships them (the AppImage has only
-dictate-tray), so that branch never ran and its "AppImage path" comments
-pointed readers the wrong way.
+No package ships usr/bin/dictate or usr/bin/dictate-prefs (the AppImage has
+only dictate-tray), so the launchers don't look for them.
 """
 import sys
 

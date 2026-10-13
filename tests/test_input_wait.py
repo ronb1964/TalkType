@@ -1,7 +1,7 @@
 """The hotkey loop waits on the input devices instead of polling them.
 
-It used to read every /dev/input node 200 times a second, each idle read
-raising and catching BlockingIOError: thousands of wakeups a second, all day,
+Reading every /dev/input node 200 times a second, each idle read raising and
+catching BlockingIOError, would mean thousands of wakeups a second, all day,
 on an idle laptop.
 """
 

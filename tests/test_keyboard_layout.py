@@ -1,7 +1,7 @@
 """Typing on non-US keyboard layouts (GitHub issue #8).
 
 ydotool turns characters into US key positions, so on a Swiss German keyboard
-"my keyboard is lazy" came out as "mz kezboard is layz". keyboard_layout works
+"my keyboard is lazy" comes out as "mz kezboard is layz". keyboard_layout works
 out the right physical keys for the active layout instead.
 
 Every mapping test replays the planned keys through libxkbcommon, the same
@@ -79,7 +79,7 @@ def test_swiss_german_letters_and_symbols():
 def test_swiss_german_euro_sign():
     """AltGr+E. Ubuntu 22.04's keyboard data (xkb-data 2.33, which the CI
     runs) has no € on the Swiss layout; newer data does. Without it the text
-    is untypable on keys and TalkType types it another way (UntypableText)."""
+    is untypable on keys and TuxTalk types it another way (UntypableText)."""
     planner = kl.KeyPlanner("ch", "")
     if planner.plan("€") is None:
         pytest.skip("this system's keyboard data has no € on the Swiss layout")
@@ -87,7 +87,7 @@ def test_swiss_german_euro_sign():
 
 
 def test_y_and_z_use_the_keys_where_they_really_are():
-    """The reported bug, as raw keys: on QWERTZ, y is evdev key 44 (US z)."""
+    """As raw keys: on QWERTZ, y is evdev key 44 (US z)."""
     planner = kl.KeyPlanner("ch", "")
     assert planner.plan("y") == ["44:1", "44:0"]
     assert planner.plan("z") == ["21:1", "21:0"]
@@ -114,13 +114,13 @@ def test_us_keyboards_keep_the_old_typing_path():
 
 
 def test_non_ascii_on_a_us_keyboard_is_planned_not_typed_blind():
-    """`ydotool type` only knows US key positions: Cyrillic came out as 9s."""
+    """`ydotool type` only knows US key positions: Cyrillic would come out as 9s."""
     assert kl.needs_layout_typing(("us", ""), "Привіт") is True
     assert kl.needs_layout_typing(("us", ""), "I\u2019m") is True       # smart apostrophe
 
 
 def test_the_blocking_character_is_named():
-    """guelz had to match timestamps to find which dictation fell back."""
+    """Naming it saves matching timestamps to find which dictation fell back."""
     assert kl.KeyPlanner("ua", "").plan_or_blocker("Це Windows 10") == (None, "W")
     tokens, blocker = kl.KeyPlanner("ua", "").plan_or_blocker("Привіт, світе.")
     assert tokens and blocker is None
@@ -189,8 +189,8 @@ def test_x11_reports_the_layout(monkeypatch):
 
 
 def test_x11_reports_the_layout_that_is_on_not_the_first(monkeypatch):
-    """The Fedora report: "us,ua" with Ukrainian active was typed as US, and
-    Ukrainian came out as 9s with commas and full stops as б and ю."""
+    """"us,ua" with Ukrainian active must not be typed as US, which turns
+    Ukrainian into 9s with commas and full stops as б and ю."""
     _x11(monkeypatch, "us,ua", None, 1)
     assert kl.active_layout() == ("ua", "")
 
@@ -347,8 +347,8 @@ class _FakeRegistry:
 
 
 def test_the_registry_is_parsed_once_and_freed(monkeypatch):
-    """Every typed chunk on Sway parsed the whole XKB registry again and
-    never freed it."""
+    """Parsing the whole XKB registry for every typed chunk on Sway, and
+    never freeing it, would waste time and memory."""
     import ctypes
     from tuxtalk import keyboard_layout as kl
     fake = _FakeRegistry()

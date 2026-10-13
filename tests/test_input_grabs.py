@@ -1,8 +1,8 @@
 """Tests for exclusive input-device grabbing.
 
-TalkType takes an exclusive grab on the keyboard while recording, so the hotkey
+TuxTalk takes an exclusive grab on the keyboard while recording, so the hotkey
 doesn't leak into whatever app has focus. If a grab is ever taken and not
-released, the user's keyboard stops working *system-wide* until TalkType exits.
+released, the user's keyboard stops working *system-wide* until TuxTalk exits.
 
 These tests pin down the invariant that makes that impossible:
 
@@ -135,7 +135,7 @@ def test_devices_that_fail_to_grab_are_not_tracked():
     assert denied not in app._grabbed_devices
 
 
-# --- the lockup bugs -------------------------------------------------------
+# --- a failed start must not lock the keyboard -----------------------------
 
 def test_failed_recording_start_releases_the_keyboard(monkeypatch, quiet_recording):
     """The system-wide keyboard lockup.
@@ -168,7 +168,7 @@ def test_failed_recording_start_clears_the_recording_flag(monkeypatch, quiet_rec
 
 
 def test_failed_recording_start_tells_the_user(monkeypatch, quiet_recording):
-    """Silent failure is what made this bug unrecoverable — the user must be told."""
+    """A silent failure leaves the user no way to recover, so they must be told."""
     monkeypatch.setattr(app.sd, "InputStream", lambda *a, **k: (_ for _ in ()).throw(Exception("no mic")))
     seen = []
     monkeypatch.setattr(app, "_notify", lambda title, msg: seen.append((title, msg)))
@@ -328,9 +328,7 @@ def test_microphone_failure_during_hold_leaves_nothing_grabbed(monkeypatch, quie
 # --- stale microphone index -------------------------------------------------
 
 def test_stale_microphone_index_is_re_resolved_and_retried(monkeypatch, quiet_recording):
-    """The real-world trigger.
-
-    The mic is stored as a device *number*, resolved once at startup. Unplug a
+    """The mic is stored as a device *number*, resolved once at startup. Unplug a
     USB device and the numbers shift, so the stored one points at nothing.
     Rather than failing, re-resolve it by name and try once more.
     """
@@ -409,11 +407,11 @@ def test_grabs_held_while_recording_are_left_alone():
 
 
 def test_keyboard_declaring_the_pointer_event_type_is_still_a_keyboard():
-    """Regression: Ron's Logitech K800, modelled from its real capabilities.
+    """A Logitech K800, modelled from its real capabilities.
 
     Unifying receivers advertise a superset HID descriptor, so this keyboard
     declares the EV_REL *type* while exposing no actual REL_X axis. Rejecting
-    on the event type alone threw out a real keyboard, which would let the
+    on the event type alone would throw out a real keyboard and let the
     hotkey leak into whatever app has focus.
     """
     k800 = FakeDevice("Logitech K800", {
@@ -426,7 +424,7 @@ def test_keyboard_declaring_the_pointer_event_type_is_still_a_keyboard():
 
 
 def test_unifying_mouse_advertising_letter_keys_is_not_grabbed():
-    """Regression: Ron's MX Master / MX Ergo / MX Vertical.
+    """Logitech MX Master / MX Ergo / MX Vertical mice.
 
     The same superset descriptor makes these mice claim all 26 letter keys and
     all 12 F-keys. What actually distinguishes them is real pointer motion plus
@@ -441,7 +439,7 @@ def test_unifying_mouse_advertising_letter_keys_is_not_grabbed():
 
 
 def test_the_apps_own_injection_device_is_not_grabbed():
-    """ydotoold's virtual device is how TalkType types — never grab it."""
+    """ydotoold's virtual device is how TuxTalk types — never grab it."""
     ydotool = FakeDevice("ydotoold virtual device", {
         ecodes.EV_KEY: sorted(app._LETTER_KEYS) + [ecodes.BTN_LEFT],
         ecodes.EV_REL: [ecodes.REL_X, ecodes.REL_Y],
@@ -460,10 +458,9 @@ def _press_voice_combo(devices, monkeypatch, dbus=None):
 
 
 def test_voice_commands_hotkey_does_not_grab_the_mouse(key_env, monkeypatch):
-    """This branch grabbed every device under /dev/input, pointer included,
-    while the recording path was fixed to filter to keyboards. The grab is
-    held across the call to the tray, so that is when the pointer freezes —
-    check the state *during* the call, not after it."""
+    """Like the recording path, this branch grabs keyboards only. The grab is
+    held across the call to the tray, so that is when a grabbed pointer would
+    freeze — check the state *during* the call, not after it."""
     kb, mx = keyboard(), mouse()
     during = {}
 
@@ -476,8 +473,8 @@ def test_voice_commands_hotkey_does_not_grab_the_mouse(key_env, monkeypatch):
 
 def test_voice_commands_grabs_are_visible_to_the_recovery_backstop(key_env,
                                                                    monkeypatch):
-    """The grabs were tracked in a local list, so _release_all_grabs() and the
-    stranded-grab backstop could not see or recover them."""
+    """The grabs go in the shared registry, so _release_all_grabs() and the
+    stranded-grab backstop can see and recover them."""
     kb = keyboard()
     during = {}
 
@@ -498,8 +495,7 @@ def test_voice_commands_hotkey_leaves_nothing_grabbed(key_env, monkeypatch):
 
 def test_voice_commands_grabs_are_released_even_if_the_tray_call_fails(key_env,
                                                                        monkeypatch):
-    """The grabs were held in a local list the recovery paths cannot see, so
-    an exception between grab and ungrab stranded them permanently.
+    """An exception between grab and ungrab must not strand the grabs.
 
     The exception itself is allowed to propagate — the event loop logs it
     with a traceback (app.py) rather than swallowing it silently. What must
@@ -543,8 +539,8 @@ def test_recording_state_notification_is_time_bounded(tray_proxy):
     """_notify_tray_recording_state runs inside start_recording — after every
     keyboard has been exclusively grabbed. dbus-python's default reply
     timeout is 25s, and building the proxy adds a 25s introspect on top, so
-    an unresponsive tray froze every keyboard system-wide for ~50 seconds.
-    Nothing on that path may block without a bound.
+    an unresponsive tray could freeze every keyboard system-wide for ~50
+    seconds. Nothing on that path may block without a bound.
     """
     app._notify_tray_recording_state(True)
 
@@ -630,8 +626,8 @@ class ToggleModeConfig(FakeConfig):
 
 def test_dropping_a_device_mid_hold_ends_the_recording_in_toggle_mode(key_env):
     """The hold key records whatever the mode setting says (old configs still
-    carry mode = "toggle"), but the recovery only ran when it said "hold".
-    The key-up never came, and the other keyboards stayed grabbed."""
+    carry mode = "toggle"), so the recovery must not depend on it saying
+    "hold", or the other keyboards stay grabbed."""
     started, stopped = key_env
     kb1, kb2 = keyboard("dies"), keyboard("survives")
     devices = [kb1, kb2]
@@ -664,10 +660,9 @@ def test_a_toggle_recording_survives_an_unrelated_keyboard_dropping_out(key_env)
 
 
 def test_focused_window_query_is_time_bounded(tray_proxy):
-    """Runs on the input thread during paste injection, and built a brand new
-    proxy — with introspection — on every single paste. Two unbounded 25s
-    waits on the path between the user releasing the hotkey and their text
-    appearing."""
+    """Runs on the input thread during paste injection, between the user
+    releasing the hotkey and their text appearing, so neither building the
+    proxy nor the call may wait unbounded."""
     app._query_focused_window_class()
 
     assert tray_proxy.calls, "no D-Bus call was made"
@@ -680,10 +675,9 @@ def test_focused_window_query_is_time_bounded(tray_proxy):
 # --- devices that come back must be picked up again -------------------------
 
 def test_a_device_that_returns_is_monitored_again(monkeypatch):
-    """Devices were enumerated once at startup and never again. A wireless
-    receiver blip or a USB reset dropped the keyboard from the poll list for
-    good, so the hotkey silently stopped working until TalkType was restarted
-    — with only a log line the user never sees."""
+    """A wireless receiver blip or a USB reset drops the keyboard from the
+    poll list, so devices are enumerated again; otherwise the hotkey silently
+    stops working until TuxTalk is restarted."""
     kb = keyboard("reconnected")
     monkeypatch.setattr(app, "list_devices", lambda: ["/dev/input/event3"])
     monkeypatch.setattr(app, "InputDevice", lambda p: kb)
@@ -741,8 +735,8 @@ def test_rediscovery_survives_an_unreadable_device(monkeypatch):
 
 
 def test_the_voice_commands_combo_mid_hold_keeps_the_recordings_grab(key_env, monkeypatch):
-    """The combo's brief grab ended by releasing every grab, the hold
-    recording's too, so the rest of that dictation's keys reached the app."""
+    """The combo's brief grab must not end by releasing the hold recording's
+    grab too, or the rest of that dictation's keys reach the app."""
     monkeypatch.setattr(app, "_show_voice_commands_via_dbus", lambda: None)
     kb = keyboard()
     press_hold([kb])

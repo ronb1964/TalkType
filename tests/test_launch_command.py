@@ -4,8 +4,7 @@ A packaged install ships python at /opt/talktype/usr/bin/python3, but that
 interpreter has no PYTHONPATH/LD_LIBRARY_PATH/GI_TYPELIB_PATH of its own — the
 /usr/bin/talktype wrapper (via AppRun) sets those before launching. Writing the
 raw `python3 -m tuxtalk.tray` into the autostart .desktop therefore produces a
-command that dies silently at login while a terminal `talktype` works. This bit
-a real .deb install: "Launch at login" was on, but nothing started.
+command that dies silently at login while a terminal `talktype` works.
 
 The launcher must resolve to the wrapper the package actually installed. It is
 looked up by KNOWN ABSOLUTE PATH, not `which`, so a stray ~/.local/bin/talktype
@@ -122,9 +121,9 @@ DOWNLOAD = "/home/ron/Downloads/TalkType-v0.10.0-x86_64.AppImage"
 
 
 def test_autostart_uses_the_installed_appimage_not_the_download(monkeypatch):
-    """Found in a fresh Ubuntu GNOME VM: setup said "Installed to
-    ~/AppImages/TalkType.AppImage" but autostart pointed at ~/Downloads, so
-    tidying Downloads silently stopped TalkType starting at login."""
+    """Setup installs the AppImage under ~/AppImages, so autostart must point
+    there and not at ~/Downloads, or tidying Downloads silently stops TuxTalk
+    starting at login."""
     mod = _make_prefs(monkeypatch, exists={DOWNLOAD}, appimage=DOWNLOAD)
     installed = mod.INSTALLED_APPIMAGE
     mod = _make_prefs(monkeypatch, exists={DOWNLOAD, installed}, appimage=DOWNLOAD)
