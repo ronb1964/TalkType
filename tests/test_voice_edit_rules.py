@@ -213,3 +213,22 @@ def test_removing_the_indent(said):
 ])
 def test_deleting_the_selection(said, yes):
     assert r.is_delete(said) is yes
+
+
+# --- only what was asked about changes ---------------------------------------------------
+
+def test_removing_an_opening_word_capitalises_only_the_word_after_it():
+    """Every lowercase sentence start on the line was capitalised ("IPhone")."""
+    assert (r.mechanical_edit("Testing this. iPhone is great.", "remove the word testing")
+            == "This. iPhone is great.")
+    assert (r.mechanical_edit("Testing that, e.g. apples work.", "remove the word testing")
+            == "That, e.g. apples work.")
+
+
+def test_lines_without_the_word_are_left_exactly_as_they_were():
+    assert (r.mechanical_edit("Testing one\nkeep  this , line\n: label here", "remove the word testing")
+            == "One\nkeep  this , line\n: label here")
+
+
+def test_lines_without_the_mark_are_left_exactly_as_they_were():
+    assert r.mechanical_edit("a, b\nx  y : z", "remove the commas") == "a b\nx  y : z"

@@ -108,6 +108,8 @@ def _remove_marks(text: str, marks: str) -> str:
     pattern = re.compile(rf"(?<!\d)[{cls}]|[{cls}](?!\d)")
 
     def change(body):
+        if not pattern.search(body):
+            return body                   # a line without the mark stays as it is
         return _tidy(pattern.sub(lambda m: " " if m.group() in "-–—" else "", body))
     return _per_line(text, change)
 
@@ -121,22 +123,36 @@ def _remove_phrase(text: str, phrase: str):
         return None                       # not there: let the AI make sense of it
 
     def change(body):
+        if not pattern.search(body):
+            return body                   # a line without the phrase stays as it is
         out, pos, capitalise = [], 0, False
         for m in pattern.finditer(body):
             before = body[pos:m.start()]
+            if capitalise:
+                before, capitalise = _capitalise_first(before)
             out.append(before)
             # The phrase opened a sentence: the word after it opens it now.
+            # Only that word: other sentences keep their letters ("iPhone").
             head = "".join(out)
             capitalise = capitalise or (m.group()[0].isupper()
                                         and re.search(r"(?:^|[.!?])\s*$", head) is not None)
             pos = m.end()
-        out.append(body[pos:])
-        result = _tidy("".join(out))
+        tail = body[pos:]
         if capitalise:
-            result = re.sub(r"(^|[.!?]\s+)([a-z])", lambda m: m.group(1) + m.group(2).upper(),
-                            result, count=0)
-        return result
+            tail, _ = _capitalise_first(tail)
+        out.append(tail)
+        return _tidy("".join(out))
     return _per_line(text, change)
+
+
+def _capitalise_first(segment: str):
+    """*segment* with its first letter in upper case, and True when it has
+    no letter, so the capital still goes to whatever follows it."""
+    m = re.search(r"[^\W\d_]", segment)
+    if not m:
+        return segment, True
+    i = m.start()
+    return segment[:i] + segment[i].upper() + segment[i + 1:], False
 
 
 def _title(body: str) -> str:
