@@ -17,8 +17,8 @@ The solution:
   things -- the udev rule alone is not enough:
     1. installs a udev rule giving the 'input' group access to /dev/uinput
     2. runs `usermod -a -G input` to actually put the user in that group
-- The group change only takes effect after a re-login, which is why setup
-  asks the user to log out and back in
+- The group change only takes effect in a new session, which is why setup
+  asks the user to restart the computer (logging out is often not enough)
 """
 
 import os
@@ -157,9 +157,9 @@ def check_all_device_permissions():
     on /dev/uinput, while /dev/input relies on 'input' group membership — so on
     some distributions (Fedora) one works while the other does not.
 
-    Gating setup on the uinput check alone meant Fedora users had setup skipped
-    entirely, and with it the `usermod -a -G input` that grants hotkey access.
-    They could type, but no hotkey could ever be read.
+    Checking uinput alone would skip setup on Fedora, and with it the
+    `usermod -a -G input` that grants hotkey access: typing would work, but no
+    hotkey could ever be read.
 
     Returns:
         tuple: (has_access: bool, reason: str)
@@ -341,11 +341,10 @@ def check_ydotool_available():
     because it feeds a systemd user unit that cannot reference a mount point
     which disappears when the app exits.
 
-    Do NOT "fix" this to match find_ydotoold_path(). Doing so would show
-    "ydotool not installed (required)" on the welcome screen to every AppImage
-    user who already has a working bundled copy, and would make
-    install_ydotool_with_pkexec() prompt to install a package that is already
-    present. tests/test_ydotool_discovery.py guards both halves.
+    Keep the two lookups different: matching find_ydotoold_path() would tell
+    every AppImage user with a working bundled copy that ydotool is missing,
+    and make install_ydotool_with_pkexec() offer to install it.
+    tests/test_ydotool_discovery.py guards both halves.
 
     Returns:
         tuple: (available: bool, path: str or None)
@@ -415,7 +414,7 @@ def setup_ydotoold_service():
             logger.error(f"systemctl start failed: {result.stderr}")
             return (False, f"Failed to start ydotoold service: {result.stderr}")
 
-        # Verify it's running (with retries - service may take a moment to create socket)
+        # Verify it's running, with retries: the service may take a moment to start it.
         import time
         for attempt in range(5):
             time.sleep(0.5)  # Wait 0.5s between checks (total up to 2.5s)
@@ -480,6 +479,7 @@ TYPING_HELPER_STOPPED = ("TuxTalk's typing helper had stopped. It's been started
 
 
 def _username():
+    """This user's login name, from the passwd database."""
     try:
         return pwd.getpwuid(os.getuid()).pw_name
     except Exception:
