@@ -97,8 +97,19 @@ def ensure_files(parent, model, confirm):
     return False
 
 
+# How long the speed check runs before the spinner offers a way out. A hung
+# graphics driver can keep it going for many minutes (each run has a 5-minute
+# timeout), and a modal window with no way to close it traps the user.
+_STOP_OFFER_MS = 90_000
+
+
 def _wait_dialog(parent, work):
-    """Run *work* on a thread behind a modal "Checking Speed" spinner."""
+    """Run *work* on a thread behind a modal "Checking Speed" spinner.
+
+    It can't be closed at first, so a stray Escape doesn't cut the check
+    short. Once it runs long, a Stop button appears and Escape works too; the
+    caller then finds no result and keeps the processor.
+    """
     waiting = Gtk.Dialog(title="Checking Speed", transient_for=parent, modal=True)
     waiting.set_deletable(False)
     waiting.set_keep_above(True)
@@ -109,26 +120,39 @@ def _wait_dialog(parent, work):
     spinner = Gtk.Spinner()
     spinner.start()
     row.pack_start(spinner, False, False, 0)
-    row.pack_start(Gtk.Label(label="Checking how fast your graphics chip is compared to your\n"
-                                   "processor. This can take up to a minute.", xalign=0),
-                   False, False, 0)
+    label = Gtk.Label(label="Checking how fast your graphics chip is compared to your\n"
+                            "processor. This can take up to a minute.", xalign=0)
+    row.pack_start(label, False, False, 0)
     box.add(row)
     waiting.show_all()
     thread = threading.Thread(target=work, daemon=True)
     thread.start()
+    state = {"closed": False, "stoppable": False}
 
     def poll():
+        if state["closed"]:
+            return False
         if thread.is_alive():
             return True
         waiting.response(Gtk.ResponseType.OK)
         return False
 
+    def offer_stop():
+        if not state["closed"] and thread.is_alive():
+            state["stoppable"] = True
+            label.set_text("This is taking longer than it should. You can stop it\n"
+                           "and keep using the processor.")
+            waiting.add_button("Stop", Gtk.ResponseType.CANCEL).show()
+        return False
+
     # set_deletable(False) only hides the title-bar X: Escape and Alt+F4 still
-    # send delete-event, which would end run() while the work goes on. Refusing
-    # it while the thread lives keeps the spinner up until the work is done.
-    waiting.connect("delete-event", lambda *_: thread.is_alive())
+    # send delete-event, which would end run() while the work goes on. It is
+    # refused until the work is done or the Stop button has been offered.
+    waiting.connect("delete-event", lambda *_: thread.is_alive() and not state["stoppable"])
     GLib.timeout_add(200, poll)
+    GLib.timeout_add(_STOP_OFFER_MS, offer_stop)
     waiting.run()
+    state["closed"] = True
     waiting.destroy()
 
 

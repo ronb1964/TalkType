@@ -66,3 +66,42 @@ def test_an_interrupted_check_keeps_the_processor(monkeypatch):
                         lambda parent, kind, title, text, **k: shown.append(title))
     assert vsd.run_speed_check(None, "parakeet-v3") is False
     assert shown == ["Keeping the processor"]
+
+
+def test_a_long_check_can_be_stopped(monkeypatch):
+    """A hung graphics driver kept the modal spinner up for many minutes with
+    no way to close it. Once it runs long, Stop appears and Escape works."""
+    release = threading.Event()
+    timers = {}
+    seen = {"buttons": []}
+
+    class FakeDialog(_Anything):
+        def __init__(self, *args, **kwargs):
+            self.handlers = {}
+
+        def connect(self, signal, handler):
+            self.handlers[signal] = handler
+
+        def add_button(self, text, response):
+            seen["buttons"].append(text)
+            return _Anything()
+
+        def run(self):
+            handler = self.handlers["delete-event"]
+            seen["before"] = handler(self, None)
+            timers[vsd._STOP_OFFER_MS]()          # the check has run long
+            seen["after_offer"] = handler(self, None)
+            release.set()
+
+    monkeypatch.setattr(vsd.Gtk, "Dialog", FakeDialog)
+    for name in ("Box", "Spinner", "Label"):
+        monkeypatch.setattr(vsd.Gtk, name, _Anything)
+    monkeypatch.setattr(vsd.GLib, "timeout_add",
+                        lambda ms, fn, *a: timers.__setitem__(ms, fn) or 0)
+
+    vsd._wait_dialog(None, lambda: release.wait(2))
+
+    assert seen["before"] is True            # a stray Escape early on is refused
+    assert seen["after_offer"] is False      # now it closes
+    assert seen["buttons"] == ["Stop"]
+    assert timers[200]() is False            # the poll stops once the window is gone
