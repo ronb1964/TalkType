@@ -294,33 +294,67 @@ LAUNCHER_RENAMES = {
 }
 
 
-def _renamed(item):
+def application_dirs(environ=None):
+    """The folders a desktop looks in for .desktop files: XDG_DATA_HOME and
+    XDG_DATA_DIRS, plus the Flatpak exports in case XDG_DATA_DIRS lacks them."""
+    env = os.environ if environ is None else environ
+    home = env.get("HOME") or os.path.expanduser("~")
+    data_home = env.get("XDG_DATA_HOME") or os.path.join(home, ".local", "share")
+    data_dirs = (env.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share").split(":")
+    dirs = []
+    for base in [data_home, *data_dirs,
+                 os.path.join(home, ".local", "share", "flatpak", "exports", "share"),
+                 "/var/lib/flatpak/exports/share"]:
+        path = os.path.join(base, "applications")
+        if base and path not in dirs:
+            dirs.append(path)
+    return dirs
+
+
+def installed_renames(app_dirs=None):
+    """The renames whose new .desktop file exists. A desktop drops a pin it
+    can't find a file for, so an old pin stays as it is until then."""
+    dirs = application_dirs() if app_dirs is None else app_dirs
+    return {old: new for old, new in LAUNCHER_RENAMES.items()
+            if any(os.path.isfile(os.path.join(d, new)) for d in dirs)}
+
+
+def _renamed(item, renames=LAUNCHER_RENAMES):
     """'talktype.desktop' or 'applications:talktype.desktop' under its new name."""
     prefix, _, rest = item.rpartition(":")
-    if rest in LAUNCHER_RENAMES:
-        return (prefix + ":" if prefix else "") + LAUNCHER_RENAMES[rest]
+    if rest in renames:
+        return (prefix + ":" if prefix else "") + renames[rest]
     return item
 
 
-def renamed_launchers(items):
+def waiting_launchers(items, renames):
+    """Old pinned entries left alone because their new entry isn't installed."""
+    return [item for item in items
+            if item.rpartition(":")[2] in LAUNCHER_RENAMES
+            and item.rpartition(":")[2] not in renames]
+
+
+def renamed_launchers(items, renames=LAUNCHER_RENAMES):
     """(new list, changed) for a pinned list. A renamed entry already pinned
     under its new name is dropped rather than listed twice."""
     items = list(items)
     out = []
     for item in items:
-        new = _renamed(item)
+        new = _renamed(item, renames)
         if new != item and (new in out or new in items):
             continue
         out.append(new)
     return out, out != items
 
 
-def _plasma_script():
-    """Plasma desktop script: rename the pinned launchers in every task manager."""
+def _plasma_script(renames=LAUNCHER_RENAMES):
+    """Plasma desktop script: rename the pinned launchers in every task manager.
+    It prints how many it changed and how many old pins it left waiting."""
     import json
-    renames = {f"applications:{a}": f"applications:{b}" for a, b in LAUNCHER_RENAMES.items()}
-    return ("var renames = " + json.dumps(renames) + ";\n" + r"""
-var changed = 0;
+    old = [f"applications:{a}" for a in LAUNCHER_RENAMES]
+    renames = {f"applications:{a}": f"applications:{b}" for a, b in renames.items()}
+    return ("var renames = " + json.dumps(renames) + ";\nvar old = " + json.dumps(old) + ";\n" + r"""
+var changed = 0, waiting = 0;
 function fix(w) {
     if (w.type.indexOf("taskmanager") < 0 && w.type.indexOf("icontasks") < 0) return;
     w.currentConfigGroup = ["General"];
@@ -329,6 +363,7 @@ function fix(w) {
     var out = [], did = false;
     for (var i = 0; i < l.length; i++) {
         var n = renames[l[i]] || l[i];
+        if (n === l[i] && old.indexOf(l[i]) >= 0) waiting++;
         if (n !== l[i]) {
             did = true;
             if (out.indexOf(n) >= 0 || l.indexOf(n) >= 0) continue;
@@ -339,7 +374,7 @@ function fix(w) {
 }
 panels().forEach(function (p) { p.widgets().forEach(fix); });
 desktops().forEach(function (d) { d.widgets().forEach(fix); });
-print(changed);
+print(changed + " " + waiting);
 """)
 
 
@@ -379,31 +414,43 @@ def _default_gnome_favorites():
 _DEFAULT = object()
 
 
-def repin_launchers(marker_path, run_plasma_script=_DEFAULT, gnome_favorites=_DEFAULT):
+def repin_launchers(marker_path, run_plasma_script=_DEFAULT, gnome_favorites=_DEFAULT,
+                    app_dirs=None):
     """Rename pinned TalkType launchers on the KDE dock and in GNOME's
     favourites, once. The marker file records success; after a failure (say
-    plasmashell wasn't up yet at login) the next start tries again."""
+    plasmashell wasn't up yet at login), or while an old pin waits for its new
+    entry to be installed, the next start tries again."""
     if os.path.exists(marker_path):
         return []
     if run_plasma_script is _DEFAULT:
         run_plasma_script = _default_plasma_runner()
     if gnome_favorites is _DEFAULT:
         gnome_favorites = _default_gnome_favorites()
+    renames = installed_renames(app_dirs)
     done, ok = [], True
     if run_plasma_script:
         try:
-            n = run_plasma_script(_plasma_script())
-            done.append(f"KDE: renamed pinned launchers in {n} task manager(s)")
+            counts = str(run_plasma_script(_plasma_script(renames))).split()
+            n = counts[0] if counts else "0"
+            waiting = int(counts[1]) if len(counts) > 1 else 0
+            if n != "0":
+                done.append(f"KDE: renamed pinned launchers in {n} task manager(s)")
+            if waiting:
+                ok = False
+                done.append(f"KDE: left {waiting} old pin(s) alone; the new entry isn't installed")
         except Exception as e:
             ok = False
             done.append(f"KDE: could not update pinned launchers yet: {e}")
     if gnome_favorites:
         get, put = gnome_favorites
         try:
-            new, changed = renamed_launchers(get())
+            new, changed = renamed_launchers(get(), renames)
             if changed:
                 put(new)
                 done.append("GNOME: renamed TuxTalk in the favourites")
+            if waiting_launchers(new, renames):
+                ok = False
+                done.append("GNOME: left an old favourite alone; the new entry isn't installed")
         except Exception as e:
             ok = False
             done.append(f"GNOME: could not update the favourites yet: {e}")

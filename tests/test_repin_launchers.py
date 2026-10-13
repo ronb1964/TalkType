@@ -43,7 +43,8 @@ def test_repin_runs_once_and_uses_both_desktops(tmp_path):
         calls.append(script)
         return "1"
     lines = rm.repin_launchers(str(marker), run_plasma_script=plasma,
-                               gnome_favorites=(lambda: favs["v"], lambda v: favs.update(v=v)))
+                               gnome_favorites=(lambda: favs["v"], lambda v: favs.update(v=v)),
+                               app_dirs=_apps(tmp_path, "tuxtalk.desktop", "tuxtalk-dev.desktop"))
     assert favs["v"] == ["org.gnome.Nautilus.desktop", "tuxtalk.desktop"]
     assert "applications:talktype-dev.desktop" in calls[0]     # the KDE script carries the map
     assert marker.exists() and lines
@@ -56,7 +57,7 @@ def test_a_failure_leaves_it_to_try_again_next_start(tmp_path):
 
     def broken(script):
         raise RuntimeError("plasmashell not running yet")
-    rm.repin_launchers(str(marker), run_plasma_script=broken, gnome_favorites=None)
+    rm.repin_launchers(str(marker), run_plasma_script=broken, gnome_favorites=None, app_dirs=[])
     assert not marker.exists()
 
 
@@ -65,3 +66,54 @@ def test_tray_repins_on_start():
     src = (pathlib.Path(rm.__file__).parent / "tray.py").read_text()
     main = src[src.index("def main():"):]
     assert "repin_launchers(" in main[:3500]
+
+
+def _apps(tmp_path, *names):
+    """An applications folder holding the given .desktop files."""
+    apps = tmp_path / "share" / "applications"
+    apps.mkdir(parents=True, exist_ok=True)
+    for name in names:
+        (apps / name).write_text("[Desktop Entry]\n")
+    return [str(apps)]
+
+
+def test_a_pin_is_left_alone_when_the_new_entry_is_not_installed(tmp_path):
+    """GNOME drops a favourite whose .desktop file doesn't exist, so an old
+    Flatpak's pin must not be renamed to a TuxTalk Flatpak that isn't there."""
+    marker = tmp_path / "launchers-renamed"
+    favs = {"v": ["org.gnome.Nautilus.desktop", "io.github.ronb1964.TalkType.desktop",
+                  "talktype.desktop"]}
+    scripts = []
+
+    def plasma(script):
+        scripts.append(script)
+        return "0 1"
+    rm.repin_launchers(str(marker), run_plasma_script=plasma,
+                       gnome_favorites=(lambda: favs["v"], lambda v: favs.update(v=v)),
+                       app_dirs=_apps(tmp_path, "tuxtalk.desktop"))
+    assert favs["v"] == ["org.gnome.Nautilus.desktop", "io.github.ronb1964.TalkType.desktop",
+                         "tuxtalk.desktop"]
+    assert "io.github.ronb1964.TuxTalk.desktop" not in scripts[0].split("\n")[0]   # nor on KDE
+    assert not marker.exists()      # tried again once the new entry is installed
+
+
+def test_the_pin_follows_once_the_new_entry_is_installed(tmp_path):
+    marker = tmp_path / "launchers-renamed"
+    favs = {"v": ["io.github.ronb1964.TalkType.desktop"]}
+    rm.repin_launchers(str(marker), run_plasma_script=None,
+                       gnome_favorites=(lambda: favs["v"], lambda v: favs.update(v=v)),
+                       app_dirs=_apps(tmp_path, "io.github.ronb1964.TuxTalk.desktop"))
+    assert favs["v"] == ["io.github.ronb1964.TuxTalk.desktop"]
+    assert marker.exists()
+
+
+def test_application_dirs_cover_xdg_and_flatpak_exports(tmp_path):
+    env = {"HOME": str(tmp_path), "XDG_DATA_DIRS": "/opt/x/share:/usr/share"}
+    dirs = rm.application_dirs(env)
+    assert f"{tmp_path}/.local/share/applications" in dirs
+    assert "/opt/x/share/applications" in dirs and "/usr/share/applications" in dirs
+    assert f"{tmp_path}/.local/share/flatpak/exports/share/applications" in dirs
+    assert "/var/lib/flatpak/exports/share/applications" in dirs
+    env = {"HOME": str(tmp_path), "XDG_DATA_HOME": "/d"}
+    dirs = rm.application_dirs(env)
+    assert "/d/applications" in dirs and "/usr/share/applications" in dirs
