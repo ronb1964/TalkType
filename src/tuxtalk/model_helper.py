@@ -331,7 +331,13 @@ def make_model_download_func(model_name, repo_id=None, only_files=None):
     return download_func
 
 
-def download_model_with_progress(model_name, device="cpu", compute_type="int8", parent=None, show_confirmation=True):
+class BrokenModelFiles(Exception):
+    """A downloaded model won't load, and the caller can't show the download
+    dialogs to fetch it again."""
+
+
+def download_model_with_progress(model_name, device="cpu", compute_type="int8", parent=None,
+                                 show_confirmation=True, redownload_broken=True):
     """
     Download a Whisper model with progress dialog.
 
@@ -341,6 +347,9 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
         compute_type: Compute type ("int8", "float16", etc.)
         parent: Optional parent window for dialog
         show_confirmation: Whether to show confirmation dialog before download (default True)
+        redownload_broken: False when this thread must not open GTK dialogs
+            (another thread runs Gtk.main()); a downloaded model that won't
+            load then raises BrokenModelFiles instead of downloading again.
 
     Returns:
         WhisperModel (or ParakeetModel) instance, or None if cancelled/failed
@@ -359,6 +368,9 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
             # load on the processor) is the caller's to report.
             if is_parakeet(model_name) or _loads_on_cpu(model_name):
                 raise
+            if not redownload_broken:
+                raise BrokenModelFiles(
+                    f"{model_name} looked downloaded but won't load: {e}") from e
             logger.warning(f"Model {model_name} looked downloaded but won't load "
                            f"({e}); downloading it again")
 

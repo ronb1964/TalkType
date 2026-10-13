@@ -3846,6 +3846,11 @@ def _build_parakeet_gpu_model(settings: Settings):
 # say "GPU (Vulkan)" while the processor did the work.
 _running_engine = None
 
+# True once Gtk.main() runs on its own thread. From then on the service's main
+# thread must not open the model download dialogs: two threads driving GTK at
+# once crash the service.
+_gtk_loop_running = False
+
 
 def _record_engine(model, device):
     global _running_engine
@@ -3867,7 +3872,7 @@ def _notify_tray_running_engine():
 
 
 def build_model(settings: Settings):
-    from .model_helper import download_model_with_progress
+    from .model_helper import BrokenModelFiles, download_model_with_progress
     from .parakeet_engine import is_parakeet
 
     if settings.device.lower() == "vulkan":
@@ -3899,7 +3904,8 @@ def build_model(settings: Settings):
         model = download_model_with_progress(
             settings.model,
             device=settings.device,
-            compute_type=compute_type
+            compute_type=compute_type,
+            redownload_broken=not _gtk_loop_running,
         )
 
         if model is None:
@@ -3911,6 +3917,8 @@ def build_model(settings: Settings):
         logger.info(f"Model loaded: {settings.model} on {where}")
         _record_engine(settings.model, where)
         return model
+    except BrokenModelFiles as e:
+        raise ModelUnavailable(str(e)) from e
     except ModelUnavailable:
         # Never "fall back to CPU" here. That fallback exists for a CUDA load
         # failure; treating a cancel as one re-ran the download without asking
@@ -3930,7 +3938,8 @@ def build_model(settings: Settings):
                     settings.model,
                     device="cpu",
                     compute_type="int8",
-                    show_confirmation=False
+                    show_confirmation=False,
+                    redownload_broken=not _gtk_loop_running,
                 )
 
                 if model is None:
@@ -3959,6 +3968,8 @@ def build_model(settings: Settings):
                     logger.warning(f"Could not persist device=cpu after CUDA fallback: {_ce}")
 
                 return model
+            except BrokenModelFiles as cpu_e:
+                raise ModelUnavailable(str(cpu_e)) from cpu_e
             except Exception as cpu_e:
                 print(f"❌ CPU fallback also failed: {cpu_e}")
                 logger.error(f"CPU fallback failed: {cpu_e}")
@@ -3987,7 +3998,7 @@ def main():
     desktop_identity.apply()        # TuxTalk's icon on its windows, not KDE's generic one
     # The loaded speech model. Usually built after the GTK loop starts; built
     # earlier when it must first be downloaded (see the GTK section below).
-    global model
+    global model, _gtk_loop_running
     model = None
     _acquire_single_instance()
     _install_signal_handlers()
@@ -4251,6 +4262,7 @@ def main():
 
             gtk_thread = threading.Thread(target=run_gtk_loop, daemon=True)
             gtk_thread.start()
+            _gtk_loop_running = True
             print("✓ GTK main loop started in background thread")
 
     if model is None:

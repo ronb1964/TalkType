@@ -155,3 +155,35 @@ def test_a_model_load_error_is_not_reported_as_a_gtk_failure():
     gtk_except = main_src.index('logger.error(f"GTK initialization failed')
     early_build = main_src.index("if not is_model_cached_fast(cfg.model):")
     assert gtk_except < early_build
+
+
+def test_broken_files_raise_instead_of_opening_dialogs_off_the_gtk_thread(monkeypatch):
+    """With Gtk.main() on another thread, the service's main thread must not
+    run the download dialogs for a model whose files won't load."""
+    def broken(*a, **k):
+        raise RuntimeError("bad model.bin")
+
+    def no_dialogs(*a, **k):
+        raise AssertionError("a GTK dialog was opened")
+
+    monkeypatch.setattr(model_helper, "is_model_cached_fast", lambda m: True)
+    monkeypatch.setattr(model_helper, "load_model", broken)
+    monkeypatch.setattr(model_helper, "_loads_on_cpu", lambda m: False)
+    monkeypatch.setattr(model_helper, "message_dialog", no_dialogs)
+    monkeypatch.setattr(model_helper.Gtk, "Dialog", no_dialogs)
+    with pytest.raises(model_helper.BrokenModelFiles):
+        model_helper.download_model_with_progress("small", redownload_broken=False)
+
+
+def test_the_service_treats_broken_files_as_an_unavailable_model(monkeypatch):
+    asked = []
+
+    def broken(*a, **k):
+        asked.append(k.get("redownload_broken"))
+        raise model_helper.BrokenModelFiles("small won't load")
+
+    monkeypatch.setattr(app, "_gtk_loop_running", True)
+    monkeypatch.setattr(model_helper, "download_model_with_progress", broken)
+    with pytest.raises(app.ModelUnavailable):
+        app.build_model(_settings(device="cpu"))
+    assert asked == [False]
