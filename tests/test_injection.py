@@ -197,7 +197,9 @@ def test_failed_chunk_only_retypes_the_remainder(monkeypatch, wayland):
 
 def test_undo_buffer_records_only_what_actually_landed(monkeypatch, wayland):
     """The buffer must match the document, or the next undo deletes the user's
-    own writing."""
+    own writing. A failed typing run may have typed part of the text before it
+    stopped, so neither this dictation nor the previous one is a safe length
+    to delete: the buffer is emptied, and undo then deletes nothing."""
     monkeypatch.setattr(app, "_paste_text", lambda *a, **k: False)
     monkeypatch.setattr(app, "_type_text", lambda t: False)
     monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
@@ -206,8 +208,8 @@ def test_undo_buffer_records_only_what_actually_landed(monkeypatch, wayland):
 
     app._inject_text("brand new text", "paste", 0.0)
 
-    assert app.state.last_inserted_text == "previous dictation", \
-        "undo buffer updated even though nothing was injected"
+    assert app.state.last_inserted_text == "", \
+        "undo buffer kept a length that no longer matches the document"
 
 
 def test_undo_buffer_updates_on_a_successful_injection(monkeypatch, wayland):

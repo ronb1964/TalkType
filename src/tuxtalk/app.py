@@ -1625,15 +1625,16 @@ def _output_backend():
 
 def _type_text(text: str) -> bool:
     """Type text (handling line-break markers). Returns True if it was
-    actually typed into the focused app, False if injection failed."""
+    actually typed into the focused app, False if injection failed.
+
+    Stops at the first part or line break that fails: typing on after a gap
+    would leave the later lines run into the earlier ones."""
     # Handle special markers first
     if "§SHIFT_ENTER§" in text:
-        ok = True
         parts = text.split("§SHIFT_ENTER§")
         for i, part in enumerate(parts):
-            if part:  # Type the text part
-                if not _type_text_raw(part):
-                    ok = False
+            if part and not _type_text_raw(part):
+                return False
             if i < len(parts) - 1:  # Not the last part, send Shift+Enter
                 time.sleep(0.05)  # Small delay between text and key
                 # The line break is part of the text. Dropping this return
@@ -1641,24 +1642,22 @@ def _type_text(text: str) -> bool:
                 # the undo buffer then held one character more than the
                 # document had — so "undo that" ate into the user's own text.
                 if not _send_shift_enter():
-                    ok = False
+                    return False
                 time.sleep(0.05)  # Small delay after key
-        return ok
+        return True
 
     # Handle regular newlines by converting them to Enter key presses
     if "\n" in text:
-        ok = True
         parts = text.split("\n")
         for i, part in enumerate(parts):
-            if part:  # Type the text part
-                if not _type_text_raw(part):
-                    ok = False
+            if part and not _type_text_raw(part):
+                return False
             if i < len(parts) - 1:  # Not the last part, send Enter
                 time.sleep(0.05)  # Small delay between text and key
                 if not _send_enter():
-                    ok = False
+                    return False
                 time.sleep(0.05)  # Small delay after key
-        return ok
+        return True
 
     # Normal text typing
     return _type_text_raw(text)
@@ -2062,9 +2061,9 @@ def _determine_injection_method(injection_mode: str) -> tuple[str, str]:
         - actual_mode: "type" or "paste" (what to actually use)
         - reason: str (explanation for logging)
 
-    Auto always pastes: the paste keystroke is picked per paste from the focused
-    window's class (Ctrl+Shift+V in a terminal), and Electron apps where paste
-    is broken are switched to fast typing in _inject_text.
+    Auto pastes on Wayland: the paste keystroke is picked per paste from the
+    focused window's class (Ctrl+Shift+V in a terminal), and Electron apps where
+    paste is broken are switched to fast typing in _inject_text. It types on X11.
     """
     # Inside a Flatpak, clipboard-paste needs wl-copy (not bundled) and the libei
     # output backend types directly — always type, never attempt paste.
@@ -2078,6 +2077,10 @@ def _determine_injection_method(injection_mode: str) -> tuple[str, str]:
         else:
             return ("type", "User selected type mode")
 
+    # Pasting needs wl-copy, which only talks to a Wayland compositor. On X11
+    # every paste would fail and fall back to typing anyway.
+    if not _is_wayland_session():
+        return ("type", "Auto: not a Wayland session, typing")
     return ("paste", "Auto: paste")
 
 def plan_line_breaks(text: str, is_terminal: bool) -> list[str]:
@@ -2453,6 +2456,7 @@ def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = Fa
             unified = unified.replace("\t", "    ")
             success = True
             delivered_parts = 0  # chunks confirmed in the document
+            breaks_sent = 0      # line breaks confirmed after those chunks
             if marker in unified:
                 parts = unified.split(marker)
                 for i, part in enumerate(parts):
@@ -2465,6 +2469,7 @@ def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = Fa
                         if not _send_shift_enter():
                             success = False
                             break
+                        breaks_sent += 1
                         time.sleep(0.03)
             else:
                 success = _type_text_fast(unified)
@@ -2486,6 +2491,8 @@ def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = Fa
             # again by the fallback below, or the user gets a duplicate copy.
             if delivered_parts:
                 landed = marker.join(unified.split(marker)[:delivered_parts])
+                if breaks_sent == delivered_parts:
+                    landed += marker   # the break after the last chunk landed too
                 state.last_inserted_text = landed.replace(marker, "\n")
                 logger.warning(
                     f"Fast-type stopped after {delivered_parts} chunk(s) — "
@@ -2552,13 +2559,22 @@ def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = Fa
             logger.info(f"Smart hybrid paste completed: {len(parts)} chunks")
         else:
             remainder = (marker if needs_break else "") + marker.join(parts[resume_at:])
+            # A terminal's single chunk carries real newlines for bracketed
+            # paste. Typed, a newline is a plain Enter, which would run the
+            # half-dictated command, so the breaks go back to markers and are
+            # typed as Shift+Enter, which a terminal ignores.
+            remainder = remainder.replace("\n", marker)
             print(f"\u2328\ufe0f  Inject (type) remainder len={len(remainder)} [paste failed partway]")
             if _output_backend().type_text(remainder):
                 inject_ok = True  # delivered chunks + typed remainder == full text
             else:
-                # Only the chunks before the failure reached the document. Record
-                # exactly those, so undo can't delete what was never inserted.
+                # The chunks before the failure reached the document, and so did
+                # the line break after the last of them unless that break is what
+                # failed. Recording only those makes undo delete too little rather
+                # than too much if part of the remainder was typed as well.
                 delivered = marker.join(parts[:resume_at])
+                if resume_at and not needs_break:
+                    delivered += marker
                 state.last_inserted_text = delivered.replace(marker, "\n")
                 logger.warning(
                     f"Injection stopped after {resume_at}/{len(parts)} chunks \u2014 "
@@ -2588,13 +2604,15 @@ def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = Fa
     # Track injected text for undo — but ONLY when injection actually
     # succeeded. Line-break markers are stored as '\n' (one keystroke on
     # screen = one character in the buffer) so undo backspace counts stay in
-    # sync with what was typed. If injection failed, leave the previous
-    # buffer untouched so undo can't delete text the document never got.
+    # sync with what was typed. A failed typing run may have typed part of
+    # the text before it stopped, so the buffer matches neither this
+    # dictation nor the last one: empty it, and undo then deletes nothing.
     if inject_ok:
         state.last_inserted_text = text.replace("\xa7SHIFT_ENTER\xa7", "\n")
         logger.debug(f"Stored last inserted text for undo: {len(state.last_inserted_text)} chars")
     else:
-        logger.warning("Injection failed — undo buffer left unchanged")
+        state.last_inserted_text = ""
+        logger.warning("Injection failed — undo buffer cleared")
     return "ok" if inject_ok else "failed"
 
 
