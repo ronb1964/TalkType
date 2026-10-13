@@ -31,6 +31,10 @@ def _project_root() -> str:
 # too (update_checker.create_desktop_launcher).
 INSTALLED_APPIMAGE = os.path.expanduser("~/AppImages/TuxTalk.AppImage")
 
+# How long the Flatpak waits for the Background portal's answer. Long enough
+# for the user to read and answer the desktop's question.
+_PORTAL_TIMEOUT_S = 60
+
 
 def get_launch_command(prefer_installed_appimage: bool = False) -> str:
     """Return the most portable command to launch the tray.
@@ -168,9 +172,23 @@ def _set_autostart_flatpak(enable: bool) -> bool:
             st["ok"] = (code == 0)
             loop.quit()
 
-        pc.call_portal(bus, "org.freedesktop.portal.Background",
-                       "RequestBackground", builder, on_response)
+        def give_up():
+            logger.warning("Background portal did not answer within "
+                           f"{_PORTAL_TIMEOUT_S} s")
+            st["timed_out"] = True
+            loop.quit()
+            return False
+
+        unsubscribe = pc.call_portal(bus, "org.freedesktop.portal.Background",
+                                     "RequestBackground", builder, on_response,
+                                     on_error=lambda e: loop.quit())
+        # A portal that accepts the call but never answers must not leave
+        # Preferences' Apply waiting forever.
+        timeout_id = GLib.timeout_add_seconds(_PORTAL_TIMEOUT_S, give_up)
         loop.run()
+        if not st.get("timed_out"):
+            GLib.source_remove(timeout_id)
+        unsubscribe()
         logger.info("Flatpak autostart %s via Background portal (ok=%s)",
                     "enabled" if enable else "disabled", st["ok"])
         return st["ok"]

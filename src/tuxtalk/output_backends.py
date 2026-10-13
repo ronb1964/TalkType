@@ -58,6 +58,10 @@ class LibeiOutputBackend(OutputBackend):
 
     IFACE = "org.freedesktop.portal.RemoteDesktop"
     KEYBOARD = 1  # RemoteDesktop DeviceType bitmask: KEYBOARD=1, POINTER=2
+    # How long a handshake may take before typing gives up. The first one
+    # (no restore token yet) waits for the user to answer the approval dialog.
+    FIRST_HANDSHAKE_TIMEOUT_S = 120
+    HANDSHAKE_TIMEOUT_S = 30
 
     def _token_path(self) -> str:
         import os
@@ -121,17 +125,28 @@ class LibeiOutputBackend(OutputBackend):
         bus = pc.session_bus()
         loop = GLib.MainLoop.new(ctx, False)
         st = {"session": None, "fd": None}
+        unsubscribes = []
 
         def fail(code):
+            # 1: the user cancelled, 2: the portal refused, -1: no answer in
+            # time, -2: an error while handling an answer.
+            logger.warning("RemoteDesktop handshake stopped (code %s)", code)
             st["fd"] = None
             loop.quit()
+
+        def call(method, builder, on_response):
+            # Every step runs inside the previous step's response; an error
+            # there must end the loop, or the dictation would wait forever.
+            unsubscribes.append(pc.call_portal(
+                bus, self.IFACE, method, builder, on_response,
+                on_error=lambda e: fail(-2)))
 
         def create_session():
             def b(token):
                 opts = {"handle_token": GLib.Variant("s", token),
                         "session_handle_token": GLib.Variant("s", token + "_sess")}
                 return GLib.Variant("(a{sv})", (opts,))
-            pc.call_portal(bus, self.IFACE, "CreateSession", b, on_session)
+            call("CreateSession", b, on_session)
 
         def on_session(code, results):
             if code:
@@ -148,14 +163,13 @@ class LibeiOutputBackend(OutputBackend):
                 if saved:
                     opts["restore_token"] = GLib.Variant("s", saved)
                 return GLib.Variant("(oa{sv})", (st["session"], opts))
-            pc.call_portal(bus, self.IFACE, "SelectDevices", b,
-                           lambda c, r: start() if not c else fail(c))
+            call("SelectDevices", b, lambda c, r: start() if not c else fail(c))
 
         def start():
             def b(token):
                 opts = {"handle_token": GLib.Variant("s", token)}
                 return GLib.Variant("(osa{sv})", (st["session"], "", opts))
-            pc.call_portal(bus, self.IFACE, "Start", b, on_start)
+            call("Start", b, on_start)
 
         def on_start(code, results):
             if code:
@@ -176,15 +190,27 @@ class LibeiOutputBackend(OutputBackend):
             opts = GLib.Variant("(oa{sv})", (st["session"], {}))
             ret, fd_list = bus.call_with_unix_fd_list_sync(
                 pc.BUS_NAME, pc.OBJ_PATH, self.IFACE, "ConnectToEIS", opts,
-                GLib.VariantType("(h)"), Gio.DBusCallFlags.NONE, -1, None, None)
+                GLib.VariantType("(h)"), Gio.DBusCallFlags.NONE, 10000, None, None)
             st["fd"] = fd_list.get(ret.unpack()[0])
             loop.quit()
 
+        # Attached to this private context: GLib.timeout_add would attach to
+        # the default one, which this loop never runs.
+        seconds = (self.HANDSHAKE_TIMEOUT_S if self._load_token()
+                   else self.FIRST_HANDSHAKE_TIMEOUT_S)
+        timeout = GLib.timeout_source_new_seconds(seconds)
+        timeout.set_callback(lambda *_: (fail(-1), False)[1])
+        timeout.attach(ctx)
         try:
             create_session()
             loop.run()
+            # On a failure the half-open session is still returned, so the
+            # caller closes it.
             return st["fd"], st["session"]
         finally:
+            timeout.destroy()
+            for unsubscribe in unsubscribes:
+                unsubscribe()
             ctx.pop_thread_default()
 
     def _with_session(self, action) -> bool:

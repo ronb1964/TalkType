@@ -31,3 +31,39 @@ def test_set_autostart_writes_desktop_file_off_flatpak(tmp_path, monkeypatch):
     assert autostart.set_autostart(True) is True
     assert df.exists()
     assert "Exec=/usr/bin/talktype" in df.read_text()
+
+
+def test_a_background_portal_that_never_answers_gives_up(monkeypatch):
+    """Preferences' Apply waited forever for a portal that took the request
+    and never sent its Response."""
+    import threading
+    from tuxtalk import portal_common as pc
+
+    class SilentBus:
+        def __init__(self):
+            self.subs = set()
+
+        def get_unique_name(self):
+            return ":1.9"
+
+        def signal_subscribe(self, *args):
+            self.subs.add(1)
+            return 1
+
+        def signal_unsubscribe(self, sid):
+            self.subs.remove(sid)
+
+        def call_sync(self, *args):
+            pass
+
+    bus = SilentBus()
+    monkeypatch.setattr(pc, "session_bus", lambda: bus)
+    monkeypatch.setattr(autostart, "_PORTAL_TIMEOUT_S", 1)
+    out = []
+    t = threading.Thread(target=lambda: out.append(autostart._set_autostart_flatpak(True)),
+                         daemon=True)
+    t.start()
+    t.join(10)
+    assert not t.is_alive(), "set_autostart never returned"
+    assert out == [False]
+    assert bus.subs == set()

@@ -210,3 +210,78 @@ def test_flatpak_electron_app_types_via_libei_not_ydotool_fasttype(monkeypatch):
 
     assert fast_calls == [], "ydotool fast-type must not run on the Flatpak"
     assert typed == ["line1    indented"], "tab→4 spaces, delivered via libei"
+
+
+# --- the RemoteDesktop handshake --------------------------------------------
+
+class _PortalBus:
+    """A session bus whose RemoteDesktop portal answers each request with
+    *answers[method]* (code, results), or never when the method is missing.
+    Answers arrive on the calling thread's main context, like real signals."""
+
+    def __init__(self, answers):
+        from gi.repository import GLib
+        self.GLib = GLib
+        self.answers = answers
+        self.subs = {}
+        self._next = 1
+
+    def get_unique_name(self):
+        return ":1.42"
+
+    def signal_subscribe(self, sender, iface, member, path, arg0, flags, callback):
+        sid, self._next = self._next, self._next + 1
+        self.subs[sid] = callback
+        return sid
+
+    def signal_unsubscribe(self, sid):
+        del self.subs[sid]
+
+    def call_sync(self, bus_name, obj, iface, method, params, *rest):
+        if method not in self.answers:
+            return
+        code, results = self.answers[method]
+        callback = self.subs[max(self.subs)]
+        GLib = self.GLib
+        variant = GLib.Variant("(ua{sv})", (code, results))
+        src = GLib.idle_source_new()
+        src.set_callback(lambda *_: (callback(self, "", "", "", "Response", variant), False)[1])
+        src.attach(GLib.MainContext.get_thread_default())
+
+
+def _handshake_in_a_thread(backend, seconds=10):
+    import threading
+    out = []
+    t = threading.Thread(target=lambda: out.append(backend._run_handshake()), daemon=True)
+    t.start()
+    t.join(seconds)
+    assert not t.is_alive(), "the handshake never returned"
+    return out[0]
+
+
+def test_an_error_inside_a_portal_answer_ends_the_handshake(monkeypatch):
+    """A failure inside a response callback was swallowed and the dictation
+    thread waited forever."""
+    from tuxtalk import portal_common as pc
+    from tuxtalk.output_backends import LibeiOutputBackend
+    bus = _PortalBus({"CreateSession": (0, {})})        # no session_handle in it
+    monkeypatch.setattr(pc, "session_bus", lambda: bus)
+    b = LibeiOutputBackend()
+    monkeypatch.setattr(b, "_load_token", lambda: "")
+    assert _handshake_in_a_thread(b) == (None, None)
+    assert bus.subs == {}
+
+
+def test_a_portal_that_never_answers_times_out(monkeypatch):
+    from gi.repository import GLib
+    from tuxtalk import portal_common as pc
+    from tuxtalk.output_backends import LibeiOutputBackend
+    bus = _PortalBus({"CreateSession": (0, {"session_handle": GLib.Variant("o", "/s/1")})})
+    monkeypatch.setattr(pc, "session_bus", lambda: bus)
+    b = LibeiOutputBackend()
+    monkeypatch.setattr(b, "_load_token", lambda: "saved")
+    monkeypatch.setattr(LibeiOutputBackend, "HANDSHAKE_TIMEOUT_S", 1)
+    fd, session = _handshake_in_a_thread(b)
+    assert fd is None
+    assert session == "/s/1"                 # returned so the caller closes it
+    assert bus.subs == {}
