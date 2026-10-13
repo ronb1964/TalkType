@@ -10,6 +10,7 @@ Displays adaptive welcome screen based on detected system capabilities:
 Cross-desktop compatible - works on GNOME, KDE, XFCE, etc.
 """
 
+import math
 import os
 import select
 import subprocess
@@ -1818,7 +1819,6 @@ class WelcomeDialog:
 
     def _pulse_checkboxes(self):
         """Animate checkboxes with smooth continuous pulsating glow."""
-        import math
 
         targets = self._pulse_targets()
 
@@ -2065,7 +2065,6 @@ def show_tips_and_features_dialog(extension_installed=False):
     # EVERY dictation. The multi-step way to silence it belongs HERE — the last
     # screen before the user starts dictating — not on an early onboarding screen
     # they'll have long forgotten by the time the popup actually appears.
-    import os
     from .desktop_detect import get_desktop_environment
     if os.environ.get("FLATPAK_ID") and get_desktop_environment() == "kde":
         tips.append((
@@ -2210,7 +2209,6 @@ def show_tips_and_features_dialog(extension_installed=False):
     # Start pulsing animation for logout reminder if extension was installed
     pulse_timer_id = None
     if logout_reminder_box:
-        import math
         pulse_phase = [0]  # Use list to make it mutable in nested function
 
         def pulse_logout_reminder():
@@ -3161,7 +3159,6 @@ def show_welcome_and_install():
         # make os function-local and crash that earlier use with UnboundLocalError.
         from .desktop_detect import get_desktop_environment
         if os.environ.get("FLATPAK_ID") and get_desktop_environment() == "kde":
-            from gi.repository import GLib
             from .notification_help import show_notification_help_window
 
             # One-shot, briefly delayed so the shortcut picker appears first

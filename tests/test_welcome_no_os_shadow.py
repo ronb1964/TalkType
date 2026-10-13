@@ -18,3 +18,11 @@ def test_show_welcome_and_install_uses_module_level_os():
         "will crash the earlier os.environ use with UnboundLocalError and abort "
         "onboarding after 'Let's Go!'. Use the module-level os."
     )
+
+
+def test_show_welcome_and_install_uses_module_level_glib():
+    """The AppImage-copy thread inside it calls GLib.idle_add when the copy
+    fails. A local `from gi.repository import GLib` further down made GLib a
+    not-yet-assigned closure variable there, so that call raised NameError."""
+    code = welcome_dialog.show_welcome_and_install.__code__
+    assert "GLib" not in code.co_varnames + code.co_cellvars
