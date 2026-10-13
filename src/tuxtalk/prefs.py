@@ -5750,7 +5750,7 @@ class PreferencesWindow:
         # Listen for HotkeyPressed D-Bus signals from app.py.
         # The app's evdev loop detects hotkey presses and sends them to the
         # tray's D-Bus service, which emits the HotkeyPressed signal.
-        import dbus
+        from .dbus_service import DBUS_INTERFACE, DBUS_NAME, DBUS_PATH
         dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
         bus = dbus.SessionBus()
 
@@ -5768,9 +5768,9 @@ class PreferencesWindow:
         signal_match = bus.add_signal_receiver(
             _on_hotkey_signal,
             signal_name="HotkeyPressed",
-            dbus_interface="io.github.ronb1964.TalkType",
-            bus_name="io.github.ronb1964.TalkType",
-            path="/io/github/ronb1964/TalkType"
+            dbus_interface=DBUS_INTERFACE,
+            bus_name=DBUS_NAME,
+            path=DBUS_PATH
         )
 
         # Info label
