@@ -379,7 +379,13 @@ class TuxTalkDBusService(dbus.service.Object):
         GNOME extension will receive. App.py calls this method to relay the state.
         """
         logger.debug(f"D-Bus: NotifyRecordingState called: {is_recording}")
-        self.app.is_recording = is_recording
+        try:
+            self.app.is_recording = is_recording
+        except AttributeError:
+            # The stand-in service reads the state live from its engine (a
+            # read-only property), so there is nothing to store; the signal
+            # still has to go out.
+            pass
         self.RecordingStateChanged(is_recording)
 
     @dbus.service.method(DBUS_INTERFACE, in_signature='s')
