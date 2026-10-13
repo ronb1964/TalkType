@@ -760,7 +760,7 @@ class PreferencesWindow:
             ctrl = Gtk.EventControllerScroll.new(
                 scrolled, Gtk.EventControllerScrollFlags.VERTICAL)
         except Exception as e:
-            logger.warning(f"Could not install capture scroll controller: {e}")
+            print(f"Could not install capture scroll controller: {e}")
             return
         ctrl.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
         ctrl.connect("scroll", self._on_capture_scroll, scrolled)
