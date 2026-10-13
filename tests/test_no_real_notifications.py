@@ -18,5 +18,16 @@ def test_notifications_are_held_back_during_tests():
 
 def test_app_notify_does_not_reach_the_desktop(monkeypatch):
     assert app._notify is notify.notify
+    # Count the calls that reach the held-back show(). A notify() that found
+    # another way to the desktop would leave the count at zero.
+    held_back = Notify.Notification.show
+    shown = []
+
+    def counting_show(self, *args, **kwargs):
+        shown.append(self.props.summary)
+        return held_back(self, *args, **kwargs)
+
+    monkeypatch.setattr(Notify.Notification, "show", counting_show)
     monkeypatch.setattr(notify, "_ready", True)
-    notify.notify("TalkType", "should not appear")    # would pop up without the guard
+    notify.notify("TuxTalk", "should not appear")
+    assert shown == ["TuxTalk"]
