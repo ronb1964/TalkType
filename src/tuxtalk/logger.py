@@ -4,11 +4,12 @@ import logging.handlers
 import os
 from pathlib import Path
 
-# The log file in the config folder (talktype.log before the 0.15.0 rename).
+# The log file in the config folder.
 LOG_FILE_NAME = "tuxtalk.log"
 
-# The log names before the 0.15.0 rename. The rename moved the whole config
-# folder, so these can still sit next to the new log, holding old dictations.
+# The log names from before the rename to TuxTalk. The rename migration moves
+# the whole config folder, so these can sit next to the new log, holding old
+# dictations.
 _LEGACY_LOG_NAMES = ("talktype.log", "talktype.log.old")
 
 # Roll the log over once it passes this size (checked at process startup).
@@ -24,20 +25,19 @@ _handler = None
 def _log_dir() -> Path:
     """The dev or production config directory that holds the log.
 
-    DEV_MODE=1 (Ron's daily dev build) logs to ~/.config/tuxtalk-dev/, the
+    DEV_MODE=1 (the dev build) logs to ~/.config/tuxtalk-dev/, the
     AppImage to ~/.config/tuxtalk/ — matching config.py's split so the two
     never interleave.
     """
     # TUXTALK_LOG_DIR overrides everything. The test suite sets it (see
-    # tests/conftest.py): without it, every test run appended fake entries,
-    # made-up AppImage paths and simulated timeouts, to the user's real log.
+    # tests/conftest.py) so its fake entries never reach the user's real log.
     override = os.environ.get("TUXTALK_LOG_DIR")
     if override:
         return Path(override)
     config_dir = "tuxtalk-dev" if os.environ.get("DEV_MODE") == "1" else "tuxtalk"
     # Inside a Flatpak use the private per-app XDG_CONFIG_HOME so logs don't land
-    # in (or read from) a HOST install when --filesystem=home is granted. Host
-    # behavior is unchanged (FLATPAK_ID gate). Mirrors config._config_home().
+    # in (or read from) a HOST install when --filesystem=home is granted.
+    # Mirrors config._config_home().
     if os.environ.get("FLATPAK_ID"):
         base = Path(os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"))
     else:
@@ -81,7 +81,7 @@ def redact_text(text, reveal: bool = False) -> str:
     issues, but that means everything the user says would otherwise be written
     to disk in plain text. Redact by default — keep the length as a breadcrumb
     so the log still shows a transcription happened — and only reveal the full
-    text (as `repr`, matching the old `{text!r}` output) when the user has
+    text (as `repr`) when the user has
     explicitly opted in via the log_transcripts setting.
     """
     if reveal:

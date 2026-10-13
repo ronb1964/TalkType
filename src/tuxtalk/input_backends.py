@@ -22,7 +22,7 @@ class InputBackend:
 
 
 class EvdevInputBackend(InputBackend):
-    """Backend A: the existing evdev loop, unchanged."""
+    """Backend A: app.py's evdev loop, reading the keyboard directly."""
 
     def __init__(self, cfg, input_device_idx):
         self.cfg = cfg
@@ -49,6 +49,7 @@ class PortalInputBackend(InputBackend):
         self.input_device_idx = input_device_idx
 
     def _shortcut_id(self, params):
+        """The shortcut id carried by an Activated/Deactivated signal, or None."""
         try:
             return params.unpack()[1]
         except Exception:
@@ -65,7 +66,7 @@ class PortalInputBackend(InputBackend):
         elif sid == "dictate_toggle":
             # Ask the recording itself rather than keeping a private on/off
             # flag: a recording can end without this key (auto-stop, Esc), and
-            # a stale flag made the next press do nothing.
+            # a stale flag would make the next press do nothing.
             if not app.state.is_recording:
                 app._cmd_start_from_toggle_key.set()
                 app._cmd_start_recording.set()

@@ -1,8 +1,7 @@
 """Minimal GDBus helper for the xdg-desktop-portal Request/Response pattern.
 
-Productionized from spikes/flatpak-portal/_portal_common.py. Both the input
-(GlobalShortcuts) and output (RemoteDesktop) backends use this to talk to the
-portal over the session bus.
+Both the input (GlobalShortcuts) and output (RemoteDesktop) backends use this
+to talk to the portal over the session bus.
 """
 import itertools
 import logging
@@ -21,10 +20,12 @@ _tokens = itertools.count(1)
 
 
 def new_request_token() -> str:
+    """A handle token no other request from this process has used."""
     return f"talktype_{next(_tokens)}"
 
 
 def session_bus() -> Gio.DBusConnection:
+    """The session bus connection the portal listens on."""
     return Gio.bus_get_sync(Gio.BusType.SESSION, None)
 
 
@@ -44,7 +45,7 @@ def call_portal(bus, iface, method, param_builder, on_response, on_error=None):
 
     Returns a function that drops the Response subscription; it is dropped by
     itself once the response arrives, and calling it again does nothing.
-    Without that, every request left a live subscription on the shared bus.
+    This keeps finished requests from piling up subscriptions on the shared bus.
     """
     token = new_request_token()
     request_path = (f"/org/freedesktop/portal/desktop/request/"

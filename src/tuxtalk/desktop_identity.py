@@ -2,8 +2,8 @@
 
 The desktop finds a window's icon (title bar, taskbar, Alt+Tab) by matching
 the program name, which becomes the Wayland app_id or the X11 WM_CLASS, to a
-launcher (.desktop file). Without it every TuxTalk window reported itself as
-"python3", and KDE showed its generic "W" icon instead of TuxTalk's.
+launcher (.desktop file). Without it every TuxTalk window reports itself as
+"python3", and KDE shows its generic "W" icon instead of TuxTalk's.
 
 Each install type names its launcher differently, so the name follows the
 install:

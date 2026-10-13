@@ -23,12 +23,11 @@ def _use_bundled_portaudio(lib_dir=_BUNDLED_PORTAUDIO_DIR):
 
     sounddevice finds PortAudio with ctypes.util.find_library("portaudio"),
     which only consults the system's linker cache, so a copy inside the
-    AppImage is invisible to it. On a system without libportaudio that meant
-    no microphone at all (AppImageHub's test, 2026-09-26).
+    AppImage is invisible to it and a system without libportaudio would have
+    no microphone at all.
 
-    The system's PortAudio still wins when there is one, so existing installs
-    behave exactly as before. Runs on package import, which is always before
-    sounddevice is imported.
+    The system's PortAudio still wins when there is one. Runs on package
+    import, which is always before sounddevice is imported.
     """
     bundled = os.path.join(lib_dir, "libportaudio.so.2")
     if not os.path.isfile(bundled):

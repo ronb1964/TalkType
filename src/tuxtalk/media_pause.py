@@ -1,7 +1,7 @@
 """Pause music and videos while dictating (config pause_media).
 
-Audio playing through the speakers reaches the microphone: a YouTube video
-turned "isn't it" into "Venezuela". When a recording starts, TuxTalk pauses
+Audio playing through the speakers reaches the microphone and gets mixed into
+the dictation. When a recording starts, TuxTalk pauses
 every media player that is playing; when it ends, it resumes only the players
 it paused, and only if they are still paused (a player the user restarted or
 stopped meanwhile is left alone).
@@ -72,9 +72,11 @@ class MediaPauser:
     # -- called from the dictation service; never block -------------------
 
     def pause(self):
+        """Pause every playing player, on the worker thread."""
         self._submit(self._pause_now)
 
     def resume(self):
+        """Resume the players pause() paused, on the worker thread."""
         self._submit(self._resume_now)
 
     def resume_now(self):
