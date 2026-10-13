@@ -1,8 +1,14 @@
 #!/bin/bash
-# TalkType Development Runner
-# Uses venv for Python packages but system PyGObject
+# TuxTalk development runner: starts the tray from this source tree, with the
+# Python packages from .venv and GTK's Python bindings (PyGObject) from the
+# system, which pip cannot install into a venv.
 
-cd "$(dirname "$0")"
+ROOT="$(cd "$(dirname "$0")" && pwd)" || exit 1
+PY="$ROOT/.venv/bin/python"
+if [ ! -x "$PY" ]; then
+    echo "No .venv found in $ROOT. See DEV_SETUP.md." >&2
+    exit 1
+fi
 
 # Enable dev mode to show both GTK and extension trays
 export DEV_MODE=1
@@ -13,12 +19,17 @@ export DEV_MODE=1
 # tray, and under XWayland GTK3 dropdowns do not stay open on a plain click —
 # which made the model picker and every Preferences combo unusable.
 
-# Set PYTHONPATH to find talktype module AND system PyGObject
-export PYTHONPATH="./src:/usr/lib64/python3.14/site-packages:/usr/lib/python3.14/site-packages"
+# The tuxtalk package, then the system site-packages for the venv's Python
+# version: lib64/lib on Fedora and Arch, dist-packages on Debian and Ubuntu.
+PYVER="$("$PY" -c 'import sys; print("%d.%d" % sys.version_info[:2])')"
+export PYTHONPATH="$ROOT/src:/usr/lib64/python$PYVER/site-packages:/usr/lib/python$PYVER/site-packages:/usr/lib/python3/dist-packages"
 
-# Set LD_LIBRARY_PATH so ctranslate2/faster-whisper can find cuDNN libs bundled
-# in the venv. Without this, CUDA falls back to CPU when launched from desktop/autostart.
-export LD_LIBRARY_PATH=".venv/lib64/python3.14/site-packages/ctranslate2.libs:.venv/lib/python3.14/site-packages/nvidia/cudnn/lib"
+# ctranslate2 (faster-whisper's engine) loads its own bundled libraries from
+# the first folder. The nvidia/cudnn folder only exists in a venv that has the
+# nvidia wheels; otherwise TuxTalk preloads the CUDA libraries it downloaded
+# itself (torch_init.py).
+CT2_LIBS="$ROOT/.venv/lib64/python$PYVER/site-packages/ctranslate2.libs"
+CUDNN_LIBS="$ROOT/.venv/lib/python$PYVER/site-packages/nvidia/cudnn/lib"
+export LD_LIBRARY_PATH="$CT2_LIBS:$CUDNN_LIBS${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
-# Run with venv Python
-exec .venv/bin/python -m tuxtalk.tray "$@"
+exec "$PY" -m tuxtalk.tray "$@"
