@@ -404,6 +404,24 @@ def test_a_damaged_stats_file_is_left_alone_by_a_restore(home):
     assert read(config.CONFIG_PATH) == CONFIG_TEXT      # the settings still came across
 
 
+def test_a_failed_stats_write_does_not_suggest_resetting_stats(home, monkeypatch):
+    """A full disk while saving the merged stats leaves the stats file fine,
+    so the note must not tell the user to reset it."""
+    set_stats({"2026-10-01": day(50)})
+    dest = home / "b.zip"
+    sb.write_backup(str(dest))
+
+    def full_disk(theirs):
+        raise OSError(28, "No space left on device")
+    monkeypatch.setattr(stats, "merge_days", full_disk)
+
+    notes = sb.restore(sb.read_backup(str(dest)))
+
+    assert any("couldn't be saved" in n for n in notes)
+    assert not any("Reset Stats" in n for n in notes)
+    assert read(config.CONFIG_PATH) == CONFIG_TEXT      # the settings still came across
+
+
 def test_nothing_is_restored_when_the_undo_copy_cannot_be_saved(home, monkeypatch):
     """The copy that lets a restore be undone used to fail silently, and the
     settings were replaced anyway."""

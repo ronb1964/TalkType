@@ -316,9 +316,12 @@ def _merge_stats(data, notes):
         merged = stats.merge_days(theirs)
     except OSError as e:
         # The settings are already in place; a failed stats write must not
-        # turn the whole restore into an error.
+        # turn the whole restore into an error. The stats file itself is
+        # untouched, so this note must not suggest resetting it.
         logger.warning(f"Could not add the backup's stats: {e}")
-        merged = False
+        notes.append("The backup's usage stats couldn't be saved, so your current "
+                     "stats were left as they are.")
+        return
     if not merged:
         notes.append("Your usage stats couldn't be read, so the backup's stats weren't "
                      "added to them. Reset Stats on the Stats tab starts them fresh.")
