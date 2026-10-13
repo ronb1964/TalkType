@@ -1,4 +1,5 @@
 from __future__ import annotations
+import dataclasses
 import os
 import shutil
 import subprocess
@@ -320,6 +321,26 @@ def _repair_invalid_fields(s: Settings, error: ConfigError) -> Settings:
 _TYPE_CASTERS = {"str": str, "bool": bool, "int": int, "float": float}
 
 
+def _apply_toml(s: Settings, data: dict) -> list[str]:
+    """Copy the values in *data* onto *s*, casting each to its field's type.
+
+    A value that will not cast (a hand-edited `typing_delay = "fast"`) keeps
+    that one setting at its default instead of making the whole file look
+    damaged. Returns the names of the settings it skipped.
+    """
+    skipped = []
+    for fld in fields(s):
+        if fld.name not in data:
+            continue
+        cast = _TYPE_CASTERS.get(fld.type, str)
+        try:
+            setattr(s, fld.name, cast(data[fld.name]))
+        except (TypeError, ValueError) as e:
+            logger.warning(f"Ignoring setting {fld.name!r} = {data[fld.name]!r}: {e}")
+            skipped.append(fld.name)
+    return skipped
+
+
 # Config cache — avoids re-reading TOML from disk when file hasn't changed.
 # The tray polls load_config() every 1 second; this reduces disk I/O to near zero.
 _config_cache = None
@@ -356,10 +377,7 @@ def _recover_damaged_config(error: Exception) -> Settings:
         try:
             data = _load_toml_file(backup)
             if data:
-                for fld in fields(recovered):
-                    if fld.name in data:
-                        cast = _TYPE_CASTERS.get(fld.type, str)
-                        setattr(recovered, fld.name, cast(data[fld.name]))
+                _apply_toml(recovered, data)
                 restored_from_backup = True
                 logger.info(f"Recovered settings from {backup}")
                 print("    Your previous settings were restored from backup.", file=sys.stderr)
@@ -428,15 +446,19 @@ def load_config() -> Settings:
     # function). Stamping it here meant a single transient read error cached
     # the defaults under the real file's mtime, so the cache looked current
     # forever and the good file on disk was never read again.
+    #
+    # Every caller gets its own copy. Callers change the object they are given
+    # before saving it; on the shared cached object an unsaved or failed change
+    # would show in the tray and be written by the next unrelated save.
     current_mtime = None
     try:
         current_mtime = os.path.getmtime(CONFIG_PATH)
         if _config_cache is not None and current_mtime == _config_mtime:
-            return _config_cache
+            return dataclasses.replace(_config_cache)
     except OSError:
         # File doesn't exist yet — return cache if we have one
         if _config_cache is not None:
-            return _config_cache
+            return dataclasses.replace(_config_cache)
 
     _config_read_failed = False
 
@@ -450,10 +472,7 @@ def load_config() -> Settings:
             if not data:
                 raise ValueError("config file is empty")
             # Apply TOML values using dataclass field types for casting
-            for fld in fields(s):
-                if fld.name in data:
-                    cast = _TYPE_CASTERS.get(fld.type, str)
-                    setattr(s, fld.name, cast(data[fld.name]))
+            _apply_toml(s, data)
         except OSError as e:
             # The file could not be READ — permissions, a bad mount, too many
             # open handles. That is not corruption, and it must never trigger
@@ -464,7 +483,7 @@ def load_config() -> Settings:
                 print(f"⚠️  Could not read settings file: {e}", file=sys.stderr)
                 print("    Using defaults for now; the file has been left untouched.", file=sys.stderr)
                 load_config._read_error_printed = True
-            s = _config_cache or Settings()
+            s = dataclasses.replace(_config_cache) if _config_cache else Settings()
             # Hand out defaults so the app keeps running, but mark them as
             # never-loaded: save_config() must refuse to write them back over
             # a file it could not read. The tray's daily update check calls
@@ -520,7 +539,7 @@ def load_config() -> Settings:
     # current_mtime is None, so the next call re-reads instead of serving
     # defaults from a cache that looks up to date.
     _config_mtime = current_mtime
-    return s
+    return dataclasses.replace(s)
 
 
 def _toml_value(val) -> str:
@@ -540,10 +559,27 @@ def _toml_value(val) -> str:
     return _toml_string(str(val))
 
 
+# Characters with a short TOML escape. Every other control character (except
+# tab, which TOML allows as is) is written as \uXXXX.
+_TOML_SHORT_ESCAPES = {"\\": "\\\\", '"': '\\"', "\b": "\\b", "\n": "\\n",
+                       "\f": "\\f", "\r": "\\r"}
+
+
 def _toml_string(value: str) -> str:
-    """Quote and escape *value* as a TOML basic string."""
-    escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
-    return f'"{escaped}"'
+    """Quote and escape *value* as a TOML basic string.
+
+    TOML forbids raw control characters in a basic string, so a single one (a
+    pasted Windows line break's \\r) would make the whole file unreadable.
+    """
+    out = []
+    for ch in value:
+        if ch in _TOML_SHORT_ESCAPES:
+            out.append(_TOML_SHORT_ESCAPES[ch])
+        elif (ord(ch) < 0x20 and ch != "\t") or ord(ch) == 0x7F:
+            out.append(f"\\u{ord(ch):04X}")
+        else:
+            out.append(ch)
+    return '"' + "".join(out) + '"'
 
 
 def write_text_atomic(path: str, text: str, keep_backup: bool = True) -> None:

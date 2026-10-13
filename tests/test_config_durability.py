@@ -680,3 +680,57 @@ def test_saving_a_fresh_install_is_never_blocked(config_path):
     loaded.model = "medium"
     config.save_config(loaded)
     assert "medium" in config_path.read_text()
+
+
+# --- control characters, wrong types, the shared cache --------------------
+
+@pytest.mark.parametrize("value", [
+    "a\r\nb", "\x1b[0m", "del\x7f", "nul\x00c", "tab\there", "back\bspace\f",
+    "emoji 🎤 ok", 'mixed "q" \\ \r\n',
+])
+def test_any_string_round_trips_as_valid_toml(value):
+    """A raw \\r or other control character made tomllib reject the whole
+    file, so one pasted Windows line break broke every custom command."""
+    import tomllib
+    assert tomllib.loads(f"k = {config._toml_string(value)}")["k"] == value
+
+
+def test_a_setting_with_a_carriage_return_survives_a_save(config_path):
+    settings = config.Settings()
+    settings.mic = "USB\r\nMic"
+    config.save_config(settings)
+    config._config_cache = None
+    assert config.load_config().mic == "USB\r\nMic"
+    assert not list(config_path.parent.glob("config.toml.corrupt-*"))
+
+
+def test_a_wrong_typed_value_costs_only_that_setting(config_path):
+    """typing_delay = "fast" used to make the whole file count as damaged:
+    quarantined and rolled back to the .bak copy."""
+    config_path.write_text('model = "small"\nhotkey = "F8"\ntyping_delay = "fast"\n')
+    loaded = config.load_config()
+    assert loaded.model == "small"
+    assert loaded.hotkey == "F8"
+    assert loaded.typing_delay == config.Settings().typing_delay
+    assert not list(config_path.parent.glob("config.toml.corrupt-*"))
+
+
+def test_recovery_from_backup_skips_only_the_bad_field(config_path):
+    config_path.write_text("this is = = not toml")
+    (config_path.parent / "config.toml.bak").write_text(
+        'hotkey = "F7"\ntyping_delay = "fast"\nmodel = "small"\n')
+    loaded = config.load_config()
+    assert loaded.hotkey == "F7"
+    assert loaded.model == "small"
+    assert loaded.typing_delay == config.Settings().typing_delay
+
+
+def test_changing_a_loaded_object_without_saving_changes_nothing_else(config_path):
+    """load_config() handed every caller the same cached object, so a change
+    that was never saved showed up everywhere and was written by the next
+    unrelated save."""
+    config.save_config(config.Settings(model="small"))
+    first = config.load_config()
+    first.model = "large-v3"
+    assert config.load_config().model == "small"
+    assert config.load_config() is not config.load_config()
