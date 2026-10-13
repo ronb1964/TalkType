@@ -27,6 +27,7 @@ _DBUS_TIMEOUT_S = 0.3     # the tray answers from a cache in a millisecond
 
 
 def _rect(text):
+    """"x,y,w,h" -> Rect; raises ValueError for anything else."""
     parts = [int(round(float(p))) for p in text.split(",")]
     if len(parts) != 4:
         raise ValueError(text)

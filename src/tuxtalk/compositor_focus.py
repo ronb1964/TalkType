@@ -207,13 +207,13 @@ def _x11_property(lib, conn, window, atom):
 
 def parse_wm_class(raw):
     """WM_CLASS holds the instance and class names, each ending in a NUL byte.
-    Returns the class part, or the instance if
-    that's all there is."""
+    Returns the class part, or the instance if that's all there is."""
     parts = [p.decode("utf-8", "replace") for p in raw.split(b"\0") if p]
     return parts[-1] if parts else None
 
 
 def _from_x11():
+    """The class of the window named in _NET_ACTIVE_WINDOW, through XCB."""
     lib = _xcb_lib()
     screen_number = ctypes.c_int(0)
     conn = lib.xcb_connect(None, ctypes.byref(screen_number))   # $DISPLAY
@@ -254,6 +254,7 @@ def _from_x11():
 
 
 def _is_x11_session(env):
+    """XDG_SESSION_TYPE when it is set; otherwise an X DISPLAY with no Wayland one."""
     session = (env.get("XDG_SESSION_TYPE") or "").lower()
     if session:
         return session == "x11"

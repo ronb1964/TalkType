@@ -1,13 +1,11 @@
 """Report the focused window to TuxTalk on KDE, the way the extension does on GNOME.
 
-Two features key off which window has focus: paste sends Ctrl+Shift+V to
-terminals (they treat plain Ctrl+V as readline's quoted-insert and show nothing),
-and Electron apps that swallow synthetic paste are routed to a typing fallback.
-Both read one cache, filled by SetFocusedWindowClass.
-
-Until now the only writer was the GNOME Shell extension, so on KDE the cache was
-empty forever and every paste used Ctrl+V. Dictating into a terminal put nothing
-on screen while TuxTalk logged success and played the ready beep.
+Paste keys off which window has focus: it sends Ctrl+Shift+V to terminals (they
+treat plain Ctrl+V as readline's quoted-insert and show nothing), and routes
+Electron apps that swallow synthetic paste to a typing fallback. Floating
+messages and the follow-window indicator need where that window is. Both are
+cached by the D-Bus service (SetFocusedWindowClass, SetFocusedWindowGeometry),
+and on KDE nothing else fills that cache.
 
 KWin has no D-Bus property for the active window — queryWindowInfo() asks the
 user to click one, and getWindowInfo() needs a UUID you do not have. The usable
@@ -16,9 +14,8 @@ can call back out over D-Bus. So this loads a small script that pushes
 resourceClass into the same method the extension calls, leaving everything
 downstream untouched.
 
-Proven against Plasma 6.7.4 on Wayland before this module was written: with the
-script loaded, the cache tracked com.anthropic.Claude -> zenity -> back as focus
-moved.
+Checked against Plasma 6.7.4 on Wayland: with the script loaded, the cache
+follows focus from window to window.
 
 Nothing here may be fatal. A missing KWin, a refused call or an unwritable data
 directory costs the paste hint; it must never cost the tray.
@@ -159,11 +156,10 @@ def load_and_start(bus, path, plugin_name) -> None:
     running yet, NOT with run() on /Scripting/Script<id>. KWin numbers a new
     script by how many are loaded (scripts.size()), so after an unload a new
     script can get the number of one still loaded. Its D-Bus object then fails
-    to register and run() starts the other script instead. That happened as
-    soon as TuxTalk had two scripts: after a tray restart the focus script
-    loaded but never ran, every paste fell back to Ctrl+V, and a terminal
-    showed "^V". start() skips scripts already running, so it is safe to call
-    for one new script.
+    to register and run() starts the other script instead, so with TuxTalk's
+    two scripts the focus script could load after a tray restart and never
+    run. start() skips scripts already running, so it is safe to call for one
+    new script.
     """
     script_id = bus.call("loadScript", path, plugin_name)
     if int(script_id) < 0:
@@ -182,6 +178,7 @@ def should_provide() -> bool:
 
 
 def _write_script() -> str:
+    """Write the script to script_path() and return that path."""
     path = script_path()
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w") as f:

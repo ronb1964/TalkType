@@ -1,8 +1,8 @@
 """A short message floating where the user is looking: over the middle of
 the active window (window_geometry), for a few seconds, then gone.
 
-The corner notification is easy to miss on a big screen (Ron, 2026-10-12).
-This is a pill-shaped label, not a window: it takes no focus, clicks go
+The corner notification is easy to miss on a big screen. This is a
+pill-shaped label, not a window: it takes no focus, clicks go
 through it, and there is nothing to close. The caller still sends the usual
 notification as a backup, which stays in the notification history.
 
@@ -16,8 +16,8 @@ from .logger import setup_logger
 logger = setup_logger(__name__)
 
 # On screen long enough to read: a few seconds plus a little per word, so a
-# short label stays 4 s and a longer one up to 8 (Ron, 2026-10-12: 3 s faded
-# before he had read it). Keep the text short all the same: it's glanced at.
+# short label stays 4 s and a longer one up to 8. Keep the text short all the
+# same: it's glanced at.
 MIN_SECONDS, MAX_SECONDS, SECONDS_PER_WORD = 4.0, 8.0, 0.4
 _PAD_X, _PAD_Y = 18, 10
 _current = None          # the label on screen, replaced by the next one
@@ -62,6 +62,7 @@ def show_over_active_window(text):
 
 
 def _show_over_window_now(text, report):
+    """GTK-thread half of show_over_active_window."""
     try:
         from . import window_geometry
         center = window_geometry.active_window_center(report)
@@ -72,6 +73,7 @@ def _show_over_window_now(text, report):
 
 
 def _show_now(text, center):
+    """Build the label and show it for reading_seconds(); GTK thread only."""
     global _current
     try:
         import gi

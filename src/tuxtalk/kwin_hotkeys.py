@@ -4,16 +4,16 @@ The service reads the keyboard with evdev, underneath the desktop, so it sees F8
 at the same moment KWin does and cannot stop KWin passing the press on. The
 keyboard grab goes on only after the press, which is already on its way to the
 focused window. Terminals turn F8 into an escape sequence ending in "~", and the
-shell prints the "~". The toggle key (F9) is never grabbed at all, so it leaked
-on press and release alike.
+shell prints the "~". The toggle key (F9) is never grabbed at all, so it would
+leak on press and release alike.
 
 KWin hands a key to an app only if it isn't a global shortcut. So while the
 service runs, a small KWin script registers the hotkeys as shortcuts that do
 nothing. KWin swallows the key; evdev still sees the raw press and release, so
-recording works exactly as before.
+recording is unaffected.
 
-Proven against Plasma 6.7.4 on Wayland before this module was written, with a
-window logging every key it received:
+Checked against Plasma 6.7.4 on Wayland, with a window logging every key it
+received:
   * shortcut registered from a script loaded over D-Bus: the window got neither
     the press nor the release, and the next key arrived normally;
   * script unloaded: the key reached the window again. A shortcut left behind
@@ -125,6 +125,7 @@ def build_script(shortcuts) -> str:
 
 
 def script_path() -> str:
+    """Where the generated KWin script is written."""
     from .config import get_data_dir
 
     return os.path.join(get_data_dir(), "kwin", "tuxtalk-hotkeys.js")
@@ -199,8 +200,8 @@ def result_path() -> str:
 
 
 def _save_result(refused) -> None:
-    """Record which keys KDE refused, and when. Preferences reads it after a
-    hotkey change; until 0.14.6 the warning only reached the log."""
+    """Record which keys KDE refused, and when, for Preferences to report
+    after a hotkey change."""
     import json
     try:
         with open(result_path(), "w") as f:
