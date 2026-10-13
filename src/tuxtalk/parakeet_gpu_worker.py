@@ -36,6 +36,7 @@ def encode_request(samples) -> bytes:
 
 
 def _read_exact(stream, n):
+    """Exactly *n* bytes from *stream*, or None if it ends first."""
     data = b""
     while len(data) < n:
         chunk = stream.read(n - len(data))
@@ -56,12 +57,13 @@ def read_request(stream):
 
 
 def write_reply(stream, obj):
-    # json.dumps escapes newlines inside strings, so a reply is always one line.
+    """Send *obj* as one line of JSON (json.dumps escapes newlines inside strings)."""
     stream.write((json.dumps(obj) + "\n").encode())
     stream.flush()
 
 
 def join_segments(texts) -> str:
+    """The segments' texts joined by single spaces, empty ones dropped."""
     return " ".join(t.strip() for t in texts if t.strip())
 
 
@@ -84,6 +86,7 @@ def load_engine(engine_dir, model, device, threads):
     """Load *model* onto graphics chip *device*; returns a function that
     turns raw float32 bytes into text."""
     # ggml's libraries first, shared, so libparakeet and the backends find them.
+    # Opening libggml.so again only returns a handle to the loaded copy.
     for name in ("libggml-base.so", "libggml.so"):
         C.CDLL(os.path.join(engine_dir, name), mode=C.RTLD_GLOBAL)
     ggml = C.CDLL(os.path.join(engine_dir, "libggml.so"), mode=C.RTLD_GLOBAL)
@@ -123,6 +126,7 @@ def load_engine(engine_dir, model, device, threads):
 
 
 def main(argv):
+    """Load the model, report ready, then answer requests until stdin closes."""
     engine_dir, model, device, threads = argv[0], argv[1], int(argv[2]), int(argv[3])
     # Replies go out on a private copy of stdout. The real stdout is pointed
     # at stderr, so nothing the engine prints can get mixed into a reply.
@@ -135,7 +139,7 @@ def main(argv):
         # of work the first time it meets one: 8 s for the first 1 s clip and
         # 7 s for the first 22 s one on an RTX 4070 Super. The driver keeps
         # them on disk after that, so this costs about 0.3 s on later starts,
-        # and nobody's first long dictation stalls for seconds (2026-10-03).
+        # and nobody's first long dictation stalls for seconds.
         for seconds in WARM_UP_SECONDS:
             transcribe(bytes(SAMPLE_RATE * seconds * 4))
     except Exception as e:

@@ -16,7 +16,7 @@ is a separate file from the faster-whisper one.
 
 whisper.cpp 1.9.4 also runs Parakeet (libparakeet), so the same engine runs
 Parakeet on the graphics chip: 0.17 s instead of 2.15 s for 66 s of speech on
-an RTX 4070 Super (2026-10-03). That runs as its own helper process,
+an RTX 4070 Super. That runs as its own helper process,
 parakeet_gpu.py, because whisper-server only serves Whisper models.
 
 At run time it is a whisper-server process, started and watched the same way
@@ -57,10 +57,10 @@ DEVICE_LABEL = "Vulkan (any GPU)"       # Preferences' Device dropdown
 # --- The engine download ------------------------------------------------------
 
 ENGINE_VERSION = "1.9.4"                           # whisper.cpp release it is built from
-# Build 2 adds Parakeet (libparakeet.so, parakeet-cli). It gets its own asset
-# and pre-release: 0.12.0 to 0.13.1 download build 1 and check its SHA256, so
-# build 1 must stay exactly as published. The folder inside keeps the old
-# name, so build 2 unpacks over build 1 as a superset.
+# Build 2 adds Parakeet (libparakeet.so, parakeet-cli). Each build has its own
+# asset and pre-release, because TuxTalk 0.12.0 to 0.13.1 download build 1 and
+# check its SHA256, so build 1 must stay exactly as published. The folder inside
+# keeps build 1's name, so build 2 unpacks over build 1 as a superset.
 ENGINE_BUILD = 2
 ENGINE_NAME = f"talktype-whisper-vulkan-{ENGINE_VERSION}"
 ENGINE_ASSET = f"{ENGINE_NAME}-b{ENGINE_BUILD}-x64.tar.gz"
@@ -84,7 +84,7 @@ MODEL_FILES = {
     "medium": ("ggml-medium-q5_0.bin", "539 MB"),
     "large-v3": ("ggml-large-v3-q5_0.bin", "1.1 GB"),
     # q8_0, the same size as the processor's int8 download, and slightly
-    # more accurate: 3.65% word errors vs 4.35% on LibriSpeech (2026-10-03).
+    # more accurate: 3.65% word errors vs 4.35% on LibriSpeech.
     PARAKEET_MODEL: ("ggml-parakeet-tdt-0.6b-v3-q8_0.bin", "669 MB"),
 }
 # Models not hosted in whisper.cpp's own repo.
@@ -137,6 +137,7 @@ def is_offered() -> bool:
 
 
 def has_nvidia() -> bool:
+    """Whether the kernel drives an NVIDIA graphics chip."""
     return NVIDIA_VENDOR in graphics_vendors()
 
 
@@ -276,6 +277,7 @@ _LOAD_TIME = re.compile(r"load time =\s+([\d.]+) ms")
 
 
 def _time_one(model, extra_args, threads, cli="whisper-cli"):
+    """Seconds *cli* takes to transcribe the bundled speed-check sample."""
     out = subprocess.run(
         [_binary(cli), "-m", model, "-f", _binary("speed-check.wav"),
          "-t", str(threads), *extra_args],
@@ -344,8 +346,8 @@ def multipart(fields, file_bytes):
 
 
 # whisper.cpp writes non-speech as bracketed markers: silence or room noise
-# with a language set came back as the text "[BLANK_AUDIO]", which would have
-# been typed. Any all-caps bracketed tag is such a marker, never dictation.
+# with a language set comes back as the text "[BLANK_AUDIO]", which must not be
+# typed. Any all-caps bracketed tag is such a marker, never dictation.
 _MARKER = re.compile(r"\[[A-Z][A-Z _]*\]")
 
 
@@ -353,9 +355,9 @@ def parse_result(reply):
     """(text, highest no-speech probability) from a verbose_json reply, with
     whisper.cpp's non-speech markers removed.
 
-    The no-speech probability is reported but not to be trusted: measured on
-    the same audio it read 0.90 for clear speech with the language set and
-    0.00 for pure silence (2026-10-03), so the service doesn't use it."""
+    The no-speech probability is reported but not to be trusted: on the same
+    audio it reads 0.90 for clear speech with the language set and 0.00 for
+    pure silence, so the service doesn't use it."""
     segments = reply.get("segments") or []
     text = " ".join((s.get("text") or "").strip() for s in segments).strip()
     if not segments:
@@ -463,5 +465,6 @@ class VulkanWhisperModel:
                 proc.wait()
 
     def close(self):
+        """Stop the server for good."""
         self._stop()
         self._launcher.shutdown(wait=False)

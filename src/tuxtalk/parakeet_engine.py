@@ -3,8 +3,8 @@ NVIDIA Parakeet speech engine for TuxTalk.
 
 Parakeet TDT 0.6B v3 is an alternative to Whisper for English and 24 other
 European languages. On a plain CPU it is several times faster than Whisper and
-more accurate than Whisper large-v3, which TuxTalk cannot offer CPU users at
-all. It adds its own punctuation and capitalisation, and it detects the
+more accurate than Whisper large-v3, a combination no Whisper model offers on
+a CPU. It adds its own punctuation and capitalisation, and it detects the
 language by itself.
 
 It runs on onnxruntime, which the AppImage already ships because faster-whisper

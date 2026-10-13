@@ -3,7 +3,7 @@ Parakeet on the graphics chip, through the Vulkan engine.
 
 Used when the device is "Vulkan (any GPU)" and the model is Parakeet. On an
 RTX 4070 Super it transcribed 66 s of speech in 0.17 s, against 2.15 s for the
-processor engine (parakeet_engine.py), with no loss of accuracy (2026-10-03).
+processor engine (parakeet_engine.py), with no loss of accuracy.
 
 whisper.cpp has no Parakeet server, so the model runs in a helper process of
 TuxTalk's own (parakeet_gpu_worker.py) that the dictation service starts and
@@ -95,6 +95,7 @@ class ParakeetGpuModel:
             return ""
 
     def _read_reply(self, timeout):
+        """The helper's next JSON reply, waiting at most *timeout* seconds."""
         out = self._proc.stdout
         ready, _, _ = select.select([out], [], [], timeout)
         if not ready:
@@ -114,6 +115,7 @@ class ParakeetGpuModel:
             self._stderr = None
 
     def _recognize_on_gpu(self, audio):
+        """Send one recording to the helper (restarting it if it died) and return its text."""
         if self._proc is None or self._proc.poll() is not None:
             logger.warning("Parakeet graphics helper had stopped; starting it again")
             self._start()
@@ -151,6 +153,7 @@ class ParakeetGpuModel:
             return self._cpu.recognize(audio)
 
     def close(self):
+        """Stop the helper for good."""
         with self._lock:
             self._stop()
         self._launcher.shutdown(wait=False)
