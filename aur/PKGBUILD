@@ -6,10 +6,11 @@ pkgdesc="Voice dictation for Linux: hold a key, talk, and your words are typed f
 arch=('x86_64')
 url="https://github.com/ronb1964/TuxTalk"
 license=('MIT')
-# libayatana-appindicator provides libayatana-appindicator3.so.1, which the
-# bundled AyatanaAppIndicator3 typelib loads at runtime. The AppImage does NOT
-# bundle this .so, so without the dependency the tray crashes on launch on a
-# clean Arch install (the same failure the .deb/.rpm dependency prevents).
+# The AppImage itself bundles libayatana-appindicator3 with its dbusmenu
+# libraries, and ydotool, ydotoold and wl-clipboard, so those depends are
+# belt and braces. They stay until a clean Arch install has been tested
+# without them. The AppImage needs fusermount to mount itself, which fuse2
+# provides (fuse3's fusermount3 works too).
 depends=('fuse2' 'ydotool' 'wl-clipboard' 'libayatana-appindicator')
 optdepends=(
     'pipewire-pulse: PipeWire audio support'
