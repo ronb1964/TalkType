@@ -653,15 +653,17 @@ class DictationTray:
             logger.info("Onboarding in progress - refusing to restart service")
             return
 
-        # Re-entrancy guard: the old synchronous version was serialized by the
-        # blocking sleep on the main loop. Now that the work runs on a thread,
-        # a second restart (model + preset changes both trigger one)
-        # firing within the 1s window could kill the freshly-launched service
-        # or leave two backends both grabbing the hotkey (double-typing).
+        # Re-entrancy guard: a second restart overlapping this one could kill
+        # the freshly-launched service or leave two backends both grabbing the
+        # hotkey (double-typing). A request that arrives meanwhile is queued,
+        # not dropped: the new service may already have read the old settings.
+        # Both this and _finish run on the GTK main thread, so no lock is needed.
         if getattr(self, '_restarting', False):
-            logger.info("Restart already in progress - ignoring duplicate request")
+            logger.info("Restart already in progress - will restart again when it finishes")
+            self._restart_pending = True
             return
         self._restarting = True
+        self._restart_pending = False
 
         import threading
 
@@ -674,8 +676,13 @@ class DictationTray:
                 logger.error(f"Failed to restart service: {e}", exc_info=True)
 
             def _finish():
-                self.update_status_and_menu(repeat=False)
                 self._restarting = False
+                try:
+                    self.update_status_and_menu(repeat=False)
+                finally:
+                    if getattr(self, '_restart_pending', False):
+                        self._restart_pending = False
+                        self.restart_service(None)
                 return False
             GLib.timeout_add_seconds(2, _finish)
 
