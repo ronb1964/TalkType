@@ -1,5 +1,6 @@
 """Lightweight logging setup for TuxTalk."""
 import logging
+import logging.handlers
 import os
 from pathlib import Path
 
@@ -12,6 +13,12 @@ _LEGACY_LOG_NAMES = ("talktype.log", "talktype.log.old")
 
 # Roll the log over once it passes this size (checked at process startup).
 _MAX_LOG_BYTES = 5 * 1024 * 1024
+
+# The package logger every "tuxtalk.*" module logger propagates to.
+_PACKAGE = "tuxtalk"
+
+# The one file handler this process writes the log through (see _shared_handler).
+_handler = None
 
 
 def _log_dir() -> Path:
@@ -83,26 +90,20 @@ def redact_text(text, reveal: bool = False) -> str:
         return f"[hidden, {len(text)} chars]"
     return "[hidden]"
 
-def setup_logger(name: str, level: int = logging.INFO) -> logging.Logger:
-    """Create a logger writing to the dev or production log file.
-
-    Honours DEV_MODE so the dev version (DEV_MODE=1) logs to
-    ~/.config/tuxtalk-dev/ and the AppImage logs to ~/.config/tuxtalk/ —
-    they no longer interleave into one shared file.
+def _shared_handler() -> logging.Handler:
+    """The process's single log-file handler, created on first use.
 
     The tray and the dictation service are SEPARATE processes sharing this
     file, so a per-write RotatingFileHandler would race on rollover (lost or
-    truncated lines). Instead we do a single atomic rename at startup when the
-    file has grown past the cap, then plain append — appends across processes
-    are safe, and the rename is atomic so at most one process rolls over.
+    truncated lines). Instead the first logger set up in a process does one
+    atomic rename when the file has grown past the cap, then plain appends,
+    which are safe across processes. A WatchedFileHandler reopens the path when
+    another process has renamed the file away, so this process's lines follow
+    the new log instead of going into tuxtalk.log.old.
     """
-    logger = logging.getLogger(name)
-
-    # Only configure if not already configured
-    if logger.handlers:
-        return logger
-
-    logger.setLevel(level)
+    global _handler
+    if _handler is not None:
+        return _handler
 
     # Match config.py's dev/prod directory split
     log_dir = _log_dir()
@@ -118,12 +119,34 @@ def setup_logger(name: str, level: int = logging.INFO) -> logging.Logger:
     except OSError:
         pass
 
-    # Plain append-mode file handler (multiprocess-safe for appends)
-    file_handler = logging.FileHandler(log_file)
-    file_handler.setLevel(logging.DEBUG)
-    file_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    file_handler.setFormatter(file_format)
+    handler = logging.handlers.WatchedFileHandler(log_file)
+    handler.setLevel(logging.DEBUG)
+    handler.setFormatter(logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    _handler = handler
+    return handler
 
-    logger.addHandler(file_handler)
 
+def setup_logger(name: str, level: int = logging.INFO) -> logging.Logger:
+    """Return the logger *name*, writing to the dev or production log file.
+
+    Honours DEV_MODE so the dev version (DEV_MODE=1) logs to
+    ~/.config/tuxtalk-dev/ and the AppImage logs to ~/.config/tuxtalk/ —
+    they never interleave into one shared file.
+
+    The file handler sits on the "tuxtalk" package logger, so every module
+    logger under it, including plain logging.getLogger(__name__) ones, reaches
+    the log through propagation, once per line. A logger outside the package
+    (the tray and the service run as "__main__") gets the same handler itself.
+    """
+    logger = logging.getLogger(name)
+    logger.setLevel(level)
+
+    in_package = name == _PACKAGE or name.startswith(_PACKAGE + ".")
+    target = logging.getLogger(_PACKAGE) if in_package else logger
+    handler = _shared_handler()
+    if handler not in target.handlers:
+        if in_package:
+            target.setLevel(logging.INFO)
+        target.addHandler(handler)
     return logger

@@ -1,6 +1,5 @@
 from __future__ import annotations
 import os
-import logging
 import shutil
 import subprocess
 import tempfile
@@ -14,7 +13,11 @@ except ImportError:
 from dataclasses import dataclass, fields
 import sys
 
-logger = logging.getLogger(__name__)
+from .logger import setup_logger
+
+# setup_logger, so every process that reads settings also has the log file
+# handler that "Damaged config…" and "Resetting invalid setting…" go to.
+logger = setup_logger(__name__)
 
 # Detect dev mode - use separate paths for dev vs production
 DEV_MODE = os.environ.get("DEV_MODE") == "1"

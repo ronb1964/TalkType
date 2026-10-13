@@ -30,8 +30,6 @@ from . import desktop_detect
 from .dbus_service import DBUS_INTERFACE, DBUS_NAME, DBUS_PATH
 from .logger import setup_logger
 
-# setup_logger: a plain getLogger never reaches tuxtalk.log, which hid this
-# module's warnings entirely.
 logger = setup_logger(__name__)
 
 # KWin identifies loaded scripts by this name; unloading uses it too.

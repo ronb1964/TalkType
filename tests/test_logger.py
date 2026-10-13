@@ -80,3 +80,53 @@ def test_logger_format_includes_name():
             # Should include module name in format
             assert "%(name)s" in format_str or "name" in format_str.lower()
             break
+
+
+def _fresh_handler(monkeypatch, tmp_path):
+    from tuxtalk import logger as tlog
+    monkeypatch.setenv("TUXTALK_LOG_DIR", str(tmp_path))
+    monkeypatch.setattr(tlog, "_handler", None)
+    return tlog
+
+
+def test_lines_follow_the_log_after_another_process_rolls_it_over(monkeypatch, tmp_path):
+    """The tray's handlers kept writing into tuxtalk.log.old after the
+    service rolled the log over, and into a deleted file after the next."""
+    tlog = _fresh_handler(monkeypatch, tmp_path)
+    log = tlog.setup_logger("test_rollover_follow")
+    try:
+        log.info("before")
+        os.replace(tmp_path / "tuxtalk.log", tmp_path / "tuxtalk.log.old")
+        log.info("after")
+        assert "after" in (tmp_path / "tuxtalk.log").read_text()
+        assert "after" not in (tmp_path / "tuxtalk.log.old").read_text()
+    finally:
+        for h in list(log.handlers):
+            log.removeHandler(h)
+            h.close()
+
+
+def test_one_handler_per_process_and_one_line_per_message(monkeypatch, tmp_path):
+    tlog = _fresh_handler(monkeypatch, tmp_path)
+    a = tlog.setup_logger("test_shared_a")
+    b = tlog.setup_logger("test_shared_b")
+    try:
+        assert a.handlers == b.handlers and len(a.handlers) == 1
+        a.info("only once")
+        assert (tmp_path / "tuxtalk.log").read_text().count("only once") == 1
+    finally:
+        for log in (a, b):
+            for h in list(log.handlers):
+                log.removeHandler(h)
+        tlog._handler.close()
+
+
+def test_package_loggers_reach_the_log_even_without_setup_logger():
+    """config.py and others used plain logging.getLogger(__name__), whose
+    lines never reached tuxtalk.log."""
+    from tuxtalk import config, logger as tlog  # noqa: F401  (config installs the handler)
+    package = logging.getLogger("tuxtalk")
+    assert tlog._handler in package.handlers
+    assert logging.getLogger("tuxtalk.download_utils").getEffectiveLevel() <= logging.INFO
+    # Module loggers carry no handler of their own, so nothing is written twice.
+    assert logging.getLogger("tuxtalk.config").handlers == []
