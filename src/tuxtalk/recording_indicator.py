@@ -174,6 +174,11 @@ class RecordingIndicator(Gtk.Window):
 
         self.set_app_paintable(True)
 
+        # An empty input region lets every click fall through to the window
+        # underneath. None would remove the shape instead, and then the whole
+        # transparent rectangle takes clicks.
+        self.connect("realize", lambda w: w.input_shape_combine_region(cairo.Region()))
+
     def _on_destroy(self, _widget):
         if self.animation_timeout_id is not None:
             GLib.source_remove(self.animation_timeout_id)
@@ -240,11 +245,6 @@ class RecordingIndicator(Gtk.Window):
                     # Ensure window stays on screen
                     window_x = max(0, min(window_x, screen_width - window_width))
                     window_y = max(0, min(window_y, screen_height - window_height))
-
-                # Make window completely pass-through for input events
-                # This prevents it from interfering with keyboard/mouse input
-                self.set_accept_focus(False)
-                self.input_shape_combine_region(None)  # Pass all input through
 
                 self.show_all()
                 # Don't call present() - it might steal focus from the text entry field
