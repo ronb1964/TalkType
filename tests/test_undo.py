@@ -262,3 +262,23 @@ def test_undo_does_not_swallow_the_whole_buffer_on_quoted_text():
     """The worst form of the regression: everything deleted."""
     text = 'She replied, "No." I walked away.'
     assert calculate_undo_length(text, "sentence", 1) < len(text)
+
+
+# The last sentence itself can end inside a closing quote or bracket, and
+# the search then found its own period and measured nothing: "delete last
+# sentence" deleted nothing after 'Hello. Hi.”'.
+def test_last_sentence_ending_in_a_closing_smart_quote_is_deleted():
+    assert calculate_undo_length("Hello. Hi.”", "sentence", 1) == len(" Hi.”")
+
+
+def test_last_sentence_ending_in_a_closing_quote_is_deleted():
+    assert calculate_undo_length('Hello. Hi."', "sentence", 1) == len(' Hi."')
+
+
+def test_only_sentence_ending_in_a_closing_quote_is_deleted():
+    assert calculate_undo_length("Hi.”", "sentence", 1) == len("Hi.”")
+
+
+def test_two_sentences_ending_in_closing_quotes():
+    text = "One. “Two.” “Three.”"
+    assert calculate_undo_length(text, "sentence", 2) == len(" “Two.” “Three.”")

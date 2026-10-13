@@ -92,9 +92,10 @@ def single_unit_length(text: str, undo_type: str) -> int:
         return len(text) - last_ws - 1
 
     if undo_type == 'sentence':
-        # Skip any trailing sentence-ending punctuation so we find the
-        # PREVIOUS sentence end, not the current one.
-        text_stripped = text_to_analyze.rstrip('.?!… ')
+        # Skip any trailing sentence-ending punctuation, and the closing quote
+        # or bracket after it, so we find the PREVIOUS sentence end, not the
+        # current one.
+        text_stripped = text_to_analyze.rstrip('.?!… ' + _SENTENCE_CLOSERS)
         for i in range(len(text_stripped) - 1, -1, -1):
             if text_stripped[i] in '.?!…' and _is_sentence_end(text_stripped, i):
                 # Delete from just past the punctuation — and past any closing
