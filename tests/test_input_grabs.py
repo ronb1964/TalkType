@@ -738,3 +738,19 @@ def test_rediscovery_survives_an_unreadable_device(monkeypatch):
 
     assert app._rediscover_devices(devices) == 1
     assert good in devices
+
+
+def test_the_voice_commands_combo_mid_hold_keeps_the_recordings_grab(key_env, monkeypatch):
+    """The combo's brief grab ended by releasing every grab, the hold
+    recording's too, so the rest of that dictation's keys reached the app."""
+    monkeypatch.setattr(app, "_show_voice_commands_via_dbus", lambda: None)
+    kb = keyboard()
+    press_hold([kb])
+    assert kb.is_grabbed
+
+    combo = (set(), ecodes.KEY_H)
+    app._handle_key_event(FakeEvent(ecodes.KEY_H, 1), "hold", HOLD, TOGGLE,
+                          combo, set(), [kb], FakeConfig(), 0)
+
+    assert app.state.is_recording
+    assert kb.is_grabbed, "the hold recording lost its keyboard grab"

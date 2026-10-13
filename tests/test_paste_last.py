@@ -241,3 +241,23 @@ def test_the_setup_tip_really_appears(monkeypatch):
     monkeypatch.setattr(Gtk.Dialog, "run", fake_run)
     welcome_dialog.show_tips_and_features_dialog()
     assert any("Press Ctrl+Alt+P to type it again" in text for text in seen)
+
+
+def test_a_hold_started_while_the_combo_is_pending_still_stops(keys, monkeypatch):
+    """While the combo waited for its keys to be let go, every key release
+    was swallowed, the hold key's too, so an F8 recording started in that
+    moment kept running after F8 was let go."""
+    stopped = []
+    monkeypatch.setattr(app, "start_recording",
+                        lambda *a, **k: setattr(app.state, "is_recording", True) or True)
+    monkeypatch.setattr(app, "stop_recording",
+                        lambda *a, **k: stopped.append(True) or setattr(app.state, "is_recording", False))
+    monkeypatch.setattr(Cfg, "smart_quotes", False, raising=False)
+    monkeypatch.setattr(Cfg, "language", None, raising=False)
+    monkeypatch.setattr(Cfg, "auto_period", True, raising=False)
+    held = set()
+    press_combo(held)
+    send(P, 0, held)                 # Ctrl and Alt still down: paste pending
+    send(ecodes.KEY_F8, 1, held)
+    send(ecodes.KEY_F8, 0, held)
+    assert stopped, "the hold key's release was swallowed"

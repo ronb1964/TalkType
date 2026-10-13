@@ -3287,12 +3287,16 @@ def _handle_key_event(event, mode, hold_key, toggle_key,
     if pending is not None:
         if time.time() - pending["at"] > PASTE_LAST_EXPIRY_S:
             state.paste_last = pending = None
-        elif event.value == 0:
+        elif event.value == 0 and (event.code == pending["key"] or event.code in _MODIFIER_CODES):
+            # Only the combo's own keys are waited for. Any other release
+            # goes on to the handlers below: swallowing it would lose a hold
+            # key's key-up and leave that recording running.
             if event.code == pending["key"]:
                 pending["key_up"] = True
             if pending["key_up"] and not held_modifiers:
                 state.paste_last = None
-                _paste_last_dictation(cfg)
+                if not state.is_recording:
+                    _paste_last_dictation(cfg)
             return
     if paste_last_combo and event.value == 1 and not state.is_recording:
         required_mods, main_key = paste_last_combo
@@ -3305,7 +3309,9 @@ def _handle_key_event(event, mode, hold_key, toggle_key,
             return
 
     # --- Voice Commands combo hotkey (e.g. Ctrl+Shift+H) ---
-    if voice_cmds_combo and event.value == 1:
+    # Not while recording: its brief grab ends by releasing every grab, which
+    # would also drop the ones a hold recording depends on.
+    if voice_cmds_combo and event.value == 1 and not state.is_recording:
         required_mods, main_key = voice_cmds_combo
         if event.code == main_key and _check_modifiers_held(required_mods, held_modifiers):
             # Briefly grab the keyboards to stop the keypress leaking into the
