@@ -775,27 +775,35 @@ def install_package_update(package_path: str, install_type: str) -> Tuple[bool, 
     return (False, f"Install failed: {detail or ('exit code ' + str(proc.returncode))}")
 
 
-def restart_via_launcher() -> Tuple[bool, str]:
+def restart_via_launcher(target: Optional[str] = None) -> Tuple[bool, str]:
     """Spawn a fresh, DETACHED TuxTalk that waits for THIS process to fully
     exit before starting. That clean-slate start is essential: an in-place
-    os.execv restart brought the new tray up while the old process's
-    dictation-service child, D-Bus name and single-instance lock were still
-    held, and the new instance wedged. The caller MUST quit cleanly afterwards
-    (the tray's quit_app, which stops the service + releases the name/lock);
-    this function does NOT exit the current process itself.
-    Only meaningful for package installs (/usr/bin/tuxtalk present; packages
-    from before 0.15.0 had /usr/bin/talktype)."""
+    os.execv restart brings the new tray up while the old process's
+    dictation-service child, D-Bus name and single-instance lock are still
+    held, so the new tray either exits at once or keeps the old service.
+    The caller MUST quit cleanly afterwards (the tray's quit_app, which stops
+    the service + releases the name/lock); this function does NOT exit the
+    current process itself.
+
+    target: the AppImage to start (its AppRun opens the tray with no
+    arguments). Without one, the package launcher is used: /usr/bin/tuxtalk,
+    or /usr/bin/talktype on packages from before 0.15.0."""
     import shlex
-    import subprocess
-    launcher = next((p for p in ("/usr/bin/tuxtalk", "/usr/bin/talktype")
-                     if os.path.exists(p)), "/usr/bin/tuxtalk")
-    if not os.path.exists(launcher):
-        return (False, f"Launcher not found at {launcher}; please restart TuxTalk manually.")
+    if target:
+        command = shlex.quote(target)
+        if not os.access(target, os.X_OK):
+            return (False, f"{target} is missing or not executable; please restart TuxTalk manually.")
+    else:
+        launcher = next((p for p in ("/usr/bin/tuxtalk", "/usr/bin/talktype")
+                         if os.path.exists(p)), "/usr/bin/tuxtalk")
+        if not os.path.exists(launcher):
+            return (False, f"Launcher not found at {launcher}; please restart TuxTalk manually.")
+        command = f"{shlex.quote(launcher)} tray"
     oldpid = os.getpid()
-    # Poll (up to ~10s) until the old PID is gone, then exec the launcher.
+    # Poll (up to ~10s) until the old PID is gone, then exec the new copy.
     # start_new_session detaches it so it survives this process exiting.
     script = (f"for _ in $(seq 1 50); do kill -0 {oldpid} 2>/dev/null || break; "
-              f"sleep 0.2; done; exec {shlex.quote(launcher)} tray")
+              f"sleep 0.2; done; exec {command}")
     try:
         subprocess.Popen(["/bin/sh", "-c", script],
                          start_new_session=True, close_fds=True)
@@ -804,18 +812,55 @@ def restart_via_launcher() -> Tuple[bool, str]:
     return (True, "restarting")
 
 
-def install_update_and_restart(
+def _not_enough_space(src: str, dest_dir: str) -> Optional[str]:
+    """A message when dest_dir can't hold a second full copy of src, else None.
+    The 50 MB margin keeps a nearly full disk usable after the copy."""
+    from .download_utils import free_space_bytes
+    try:
+        needed = os.path.getsize(src)
+    except OSError:
+        return None
+    free = free_space_bytes(dest_dir)
+    if needed and free and free < needed + 50 * 1024 * 1024:
+        return (f"Not enough disk space: need ~{needed / (1024 ** 2):.0f} MB "
+                f"free in {dest_dir}")
+    return None
+
+
+def _install_appimage_file(src: str, dest: str = APPIMAGE_PATH) -> None:
+    """Copy src onto dest so that dest is always either the old file or the
+    complete new one. The copy goes to a hidden sibling first and is renamed
+    into place: os.replace() unlinks a running AppImage rather than writing
+    into it ("Text file busy"), and a full disk or a quit part-way through
+    leaves dest untouched. Raises on failure, after removing the partial copy."""
+    import shutil
+    import tempfile
+    dest_dir = os.path.dirname(dest)
+    os.makedirs(dest_dir, exist_ok=True)
+    fd, staging_path = tempfile.mkstemp(
+        dir=dest_dir, prefix=f".{os.path.basename(dest)}.", suffix=".part")
+    os.close(fd)
+    try:
+        shutil.copy2(src, staging_path)
+        os.chmod(staging_path, 0o755)
+        os.replace(staging_path, dest)
+    except BaseException:
+        try:
+            os.remove(staging_path)
+        except OSError:
+            pass
+        raise
+
+
+def install_appimage_update(
     downloaded_path: str,
     progress_callback: Optional[Callable[[str, int], None]] = None
 ) -> Tuple[bool, str]:
     """
-    Install a downloaded AppImage update and restart the application.
-
-    This function:
-    1. Creates the AppImages directory if needed
-    2. Copies the downloaded AppImage to APPIMAGE_PATH (~/AppImages/TuxTalk.AppImage)
-    3. Makes it executable
-    4. Restarts the application using the new AppImage
+    Install a downloaded AppImage update at APPIMAGE_PATH
+    (~/AppImages/TuxTalk.AppImage). It does NOT restart anything: only the
+    tray can do that cleanly (its restart_app stops the dictation service,
+    then starts the new copy), so the caller asks the tray afterwards.
 
     Args:
         downloaded_path: Path to the downloaded AppImage
@@ -825,101 +870,41 @@ def install_update_and_restart(
         Tuple[bool, str]: (success, message)
     """
     import shutil
-    import stat
 
     try:
         if progress_callback:
             progress_callback("Installing update...", 50)
 
-        # Ensure AppImages directory exists
-        os.makedirs(APPIMAGE_DIR, exist_ok=True)
-
-        # Disk-space check before staging a second full copy of the AppImage
-        from .download_utils import free_space_bytes
-        try:
-            needed = os.path.getsize(downloaded_path)
-        except OSError:
-            needed = 0
-        free = free_space_bytes(APPIMAGE_DIR)
-        if needed and free and free < needed + 50 * 1024 * 1024:
-            msg = (f"Not enough disk space to install the update: need "
-                   f"~{(needed) / (1024 ** 2):.0f} MB free in {APPIMAGE_DIR}")
+        space_problem = _not_enough_space(downloaded_path, APPIMAGE_DIR)
+        if space_problem:
+            msg = f"Could not install the update. {space_problem}"
             logger.error(msg)
             return (False, msg)
 
-        # Copy downloaded AppImage to standard location
         if progress_callback:
             progress_callback("Copying to AppImages folder...", 60)
-
-        # Stage the new AppImage next to the old one, then atomically rename
-        # it into place. os.replace() unlinks the running file rather than
-        # writing into it, so there is no "Text file busy" problem — and
-        # unlike the old delete-then-copy approach, a failure part-way
-        # through can never leave the user with NO working AppImage.
-        staging_path = APPIMAGE_PATH + ".new"
-        try:
-            shutil.copy2(downloaded_path, staging_path)
-            os.chmod(staging_path, stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
-            os.replace(staging_path, APPIMAGE_PATH)
-        except Exception:
-            # Never leave a partial ".new" file behind to clog ~/AppImages
-            try:
-                if os.path.exists(staging_path):
-                    os.remove(staging_path)
-            except OSError:
-                pass
-            raise
+        _install_appimage_file(downloaded_path, APPIMAGE_PATH)
 
         if progress_callback:
-            progress_callback("Update installed!", 80)
+            progress_callback("Update installed!", 90)
 
-        # Clean up the downloaded file from temp location
+        # The download folder only ever holds this update.
+        update_dir = os.path.dirname(downloaded_path)
+        if update_dir and os.path.isdir(update_dir):
+            shutil.rmtree(update_dir, ignore_errors=True)
+
+        logger.info(f"Update installed to {APPIMAGE_PATH}")
+
+        # Tells the new version it was just updated, so it can say so.
         try:
-            os.remove(downloaded_path)
-        except Exception:
-            pass  # Not critical if cleanup fails
-
-        # Clean up update directory
-        try:
-            update_dir = os.path.dirname(downloaded_path)
-            if update_dir and os.path.isdir(update_dir):
-                shutil.rmtree(update_dir, ignore_errors=True)
-        except Exception:
-            pass
-
-        if progress_callback:
-            progress_callback("Restarting TuxTalk...", 90)
-
-        logger.info(f"Update installed to {APPIMAGE_PATH}, restarting...")
-
-        # Write a flag so the new version knows it just updated
-        # This allows showing a "update complete" message after restart
-        try:
-            just_updated_file = os.path.join(os.path.dirname(APPIMAGE_PATH), ".tuxtalk_just_updated")
+            just_updated_file = os.path.join(APPIMAGE_DIR, ".tuxtalk_just_updated")
             with open(just_updated_file, "w") as f:
                 from . import __version__
                 f.write(__version__)
         except Exception:
             pass  # Not critical
 
-        # Restart the application using the new AppImage
-        # Use os.execv to replace the current process
-        logger.info(f"About to execv: {APPIMAGE_PATH}")
-
-        # Verify the file exists and is executable before execv
-        if not os.path.exists(APPIMAGE_PATH):
-            return (False, f"AppImage not found at {APPIMAGE_PATH}")
-        if not os.access(APPIMAGE_PATH, os.X_OK):
-            return (False, f"AppImage is not executable: {APPIMAGE_PATH}")
-
-        try:
-            os.execv(APPIMAGE_PATH, [APPIMAGE_PATH])
-        except Exception as execv_error:
-            logger.error(f"execv failed: {execv_error}")
-            return (False, f"Failed to restart: {execv_error}")
-
-        # Note: If execv succeeds, we never reach here
-        return (True, "Update installed and restarting...")
+        return (True, "Update installed.")
 
     except Exception as e:
         logger.error(f"Failed to install update: {e}")
@@ -1239,22 +1224,19 @@ def copy_appimage_to_standard_location() -> Tuple[bool, str]:
     Returns:
         Tuple[bool, str]: (success, message)
     """
-    import shutil
-    import stat
-
     current_path = get_running_appimage_path()
     if not current_path:
         return (False, "Not running from an AppImage.")
 
     try:
-        # Ensure directory exists
-        os.makedirs(APPIMAGE_DIR, exist_ok=True)
+        space_problem = _not_enough_space(current_path, APPIMAGE_DIR)
+        if space_problem:
+            logger.error(f"Could not copy the AppImage. {space_problem}")
+            return (False, space_problem)
 
-        # Copy AppImage
-        shutil.copy2(current_path, APPIMAGE_PATH)
-
-        # Make executable
-        os.chmod(APPIMAGE_PATH, stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
+        # The desktop launcher and autostart already point at APPIMAGE_PATH,
+        # so it must never hold a half-written copy.
+        _install_appimage_file(current_path, APPIMAGE_PATH)
 
         logger.info(f"AppImage copied to {APPIMAGE_PATH}")
         return (True, f"AppImage installed to:\n{APPIMAGE_PATH}")
@@ -1268,7 +1250,7 @@ def check_just_updated() -> Optional[str]:
     """
     Check if the app was just updated and return the previous version.
 
-    This checks for a flag file written by install_update_and_restart()
+    This checks for a flag file written by install_appimage_update()
     before the app restarted. If found, the flag is deleted and the
     previous version is returned so a notification can be shown.
 

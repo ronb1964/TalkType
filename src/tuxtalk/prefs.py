@@ -3016,7 +3016,8 @@ class PreferencesWindow:
             return
         if method == "pkexec_package":
             from . import update_ui
-            update_ui.run_package_update(self._current_release, install_type)
+            update_ui.run_package_update(self._current_release, install_type,
+                                         restart_callback=update_ui.restart_via_tray)
             return
 
         url = self._current_release.get("appimage_url")
@@ -3095,19 +3096,27 @@ class PreferencesWindow:
 
             result_holder["download_path"] = downloaded_path
 
-            # Step 2: Install and restart
+            # Step 2: Install. The tray does the restart (see restart_via_tray).
             GLib.idle_add(lambda: status_label.set_text("Installing update..."))
             GLib.idle_add(lambda: progress_bar.set_fraction(0.9))
 
-            success, message = update_checker.install_update_and_restart(
+            success, message = update_checker.install_appimage_update(
                 downloaded_path,
                 progress_callback
             )
 
-            # If we get here, something went wrong (install_update_and_restart should exec)
-            if not success:
+            if success:
+                GLib.idle_add(installed)
+            else:
                 result_holder["error"] = message
                 GLib.idle_add(download_failed)
+
+        def installed():
+            from . import update_ui
+            progress_dialog.destroy()
+            # On success the tray quits, which closes this window too.
+            update_ui.restart_via_tray()
+            return False
 
         def download_failed():
             progress_dialog.destroy()

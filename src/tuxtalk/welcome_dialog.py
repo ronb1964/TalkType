@@ -3166,8 +3166,14 @@ def show_welcome_and_install():
                     except Exception as e:
                         logger.warning(f"Background AppImage install error: {e}")
 
+                # Not a daemon: quitting TuxTalk waits for the copy to finish
+                # instead of cutting it off, and the Ready screen's Restart
+                # Now waits for it too (wait_for_appimage_copy).
                 import threading as _threading
-                _threading.Thread(target=_bg_install, daemon=True).start()
+                global _appimage_copy_thread
+                _appimage_copy_thread = _threading.Thread(
+                    target=_bg_install, name="appimage-copy", daemon=False)
+                _appimage_copy_thread.start()
                 appimage_installed = True  # Optimistically mark as installed for the Ready screen
             else:
                 appimage_installed = already_there
@@ -3268,6 +3274,22 @@ def _open_preferences():
             subprocess.Popen([sys.executable, "-m", "tuxtalk.prefs"], env=os.environ.copy())
     except Exception as e:
         logger.warning(f"Could not open Preferences: {e}")
+
+
+# The background copy of the AppImage into ~/AppImages, while it runs.
+_appimage_copy_thread = None
+
+
+def wait_for_appimage_copy(timeout=120.0) -> bool:
+    """Wait for the first-run AppImage copy to finish. True when it has (or
+    none was running). A reboot would otherwise cut it off and leave the
+    launcher and autostart pointing at a copy that never arrived."""
+    thread = _appimage_copy_thread
+    if thread is None or not thread.is_alive():
+        return True
+    logger.info("Waiting for the AppImage copy to finish before restarting")
+    thread.join(timeout)
+    return not thread.is_alive()
 
 
 def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
@@ -3493,6 +3515,12 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
                 warn.run()
                 warn.destroy()
                 return
+            if _appimage_copy_thread is not None and _appimage_copy_thread.is_alive():
+                _widget.set_label("Finishing install…")
+                _widget.set_sensitive(False)
+                while Gtk.events_pending():
+                    Gtk.main_iteration()
+                wait_for_appimage_copy()
             from tuxtalk.uinput_helper import reboot_system
             if not reboot_system():
                 warn = message_dialog(

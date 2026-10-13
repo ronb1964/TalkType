@@ -412,6 +412,11 @@ class DictationTray:
                     """Quit via tray."""
                     GLib.idle_add(self.tray.quit_app, None)
 
+                def restart_app(self):
+                    """Restart into a just-installed update (called by
+                    Preferences, which can't restart the tray itself)."""
+                    GLib.idle_add(self.tray.restart_app, None)
+
                 @property
                 def config(self):
                     """Get current config."""
@@ -1511,18 +1516,18 @@ class DictationTray:
                 while Gtk.events_pending():
                     Gtk.main_iteration()
 
-                # Install and restart (this replaces the current process)
                 try:
-                    success, message = update_checker.install_update_and_restart(downloaded_path)
+                    success, message = update_checker.install_appimage_update(downloaded_path)
                 except Exception as install_error:
-                    logger.error(f"Exception during install_update_and_restart: {install_error}")
+                    logger.error(f"Exception during install_appimage_update: {install_error}")
                     success = False
                     message = f"Install failed with exception: {install_error}"
 
-                # Only reach here if install failed (execv didn't work)
                 status_dialog.destroy()
-                logger.info(f"install_update_and_restart returned: success={success}, message={message}")
-                if not success:
+                logger.info(f"install_appimage_update returned: success={success}, message={message}")
+                if success:
+                    self.restart_app()
+                else:
                     error_dialog = message_dialog(
                         message_type=Gtk.MessageType.ERROR,
                         buttons=Gtk.ButtonsType.OK,
@@ -1656,14 +1661,34 @@ class DictationTray:
         """Cleanly restart the whole app after an update: launch a detached
         instance that waits for us to exit, then quit this one via quit_app
         (which stops the dictation service and releases the D-Bus name + lock),
-        so the new instance starts on a clean slate."""
+        so the new instance starts on a clean slate with the new service.
+        Both update paths end here: the tray's own Download & Install, and
+        Preferences (a separate process) asking over D-Bus.
+        Returns False so it can be scheduled with GLib.idle_add."""
         from . import update_checker
-        ok, msg = update_checker.restart_via_launcher()
+        # A self-managed AppImage was just swapped in place at APPIMAGE_PATH;
+        # packages are started through their /usr/bin launcher.
+        target = (update_checker.APPIMAGE_PATH
+                  if update_checker.get_install_type() == "appimage" else None)
+        ok, msg = update_checker.restart_via_launcher(target)
         if not ok:
             logger.error(f"Restart failed: {msg}")
-            return
+            dlg = message_dialog(
+                message_type=Gtk.MessageType.INFO,
+                buttons=Gtk.ButtonsType.OK,
+                text="Update installed"
+            )
+            dlg.format_secondary_text(
+                "TuxTalk couldn't restart by itself. Quit TuxTalk from the tray "
+                "icon and open it again to start the new version.")
+            dlg.set_position(Gtk.WindowPosition.CENTER)
+            dlg.set_keep_above(True)
+            dlg.connect("response", lambda d, _r: d.destroy())
+            dlg.show_all()
+            return False
         logger.info("Restart scheduled; quitting this instance to hand off.")
         self.quit_app(None)
+        return False
 
     def quit_app(self, _):
         """Quit the tray and stop the dictation service."""

@@ -31,9 +31,9 @@ def run_package_update(release, install_type, restart_callback=None):
     restart. Shows its own progress and result dialogs. Call from the GTK thread.
 
     restart_callback: called when the user clicks "Restart Now". The tray passes
-    its restart_app (clean detached relaunch + quit_app). If None (e.g. the
-    separate Preferences process, which can't cleanly restart the tray), the
-    dialog tells the user to reopen TuxTalk instead."""
+    its restart_app (clean detached relaunch + quit_app); Preferences passes
+    restart_via_tray, which asks the tray to do the same. If None, the dialog
+    tells the user to reopen TuxTalk instead."""
     url, filename = update_checker.get_package_asset(release, install_type)
     if not url:
         _error("This release has no package for your install type.\n"
@@ -105,14 +105,43 @@ def _installed_restart_prompt(restart_callback=None):
             if restart_callback is not None:
                 restart_callback()
             else:
-                # No clean-restart path here (e.g. the separate Preferences
-                # process can't restart the tray). Ask the user to reopen.
-                _info("Update installed",
-                      "Please quit TuxTalk from the tray icon and open it "
-                      "again to finish updating.")
+                _reopen_to_finish()
     done.connect("response", _resp)
     done.show_all()
     done.present()
+
+
+def _tray_interface():
+    """The running tray's D-Bus interface. Raises when it can't be reached."""
+    import dbus
+    from .dbus_service import DBUS_NAME, DBUS_PATH, DBUS_INTERFACE
+    bus = dbus.SessionBus()
+    return dbus.Interface(bus.get_object(DBUS_NAME, DBUS_PATH), DBUS_INTERFACE)
+
+
+def restart_via_tray(get_interface=None) -> bool:
+    """Ask the running tray to restart TuxTalk into a just-installed update.
+
+    Preferences is a separate process started by the tray, so it can't
+    restart the app itself: a new tray it started would find the old one
+    still holding the single-instance lock and exit, and the old dictation
+    service would keep running. The tray's restart_app stops the service,
+    quits (closing Preferences too) and starts the new copy.
+    get_interface is injectable for testing. Returns True when the tray took
+    the request; otherwise the user is told to reopen TuxTalk."""
+    try:
+        (get_interface or _tray_interface)().RestartApp()
+        return True
+    except Exception as e:
+        logger.warning(f"Could not ask the tray to restart: {e}")
+        _reopen_to_finish()
+        return False
+
+
+def _reopen_to_finish():
+    _info("Update installed",
+          "Please quit TuxTalk from the tray icon and open it "
+          "again to finish updating.")
 
 
 def _info(title, message):

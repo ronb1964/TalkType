@@ -366,6 +366,11 @@ class TuxTalkDBusService(dbus.service.Object):
         """Quit the application"""
         self._dispatch('quit')
 
+    @dbus.service.method(DBUS_INTERFACE)
+    def RestartApp(self):
+        """Restart TuxTalk (tray and dictation service) into a just-installed update"""
+        self._dispatch('restart_app')
+
     @dbus.service.method(DBUS_INTERFACE, in_signature='b')
     def NotifyRecordingState(self, is_recording: bool):
         """
