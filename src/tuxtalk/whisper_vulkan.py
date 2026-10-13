@@ -52,9 +52,7 @@ from .parakeet_engine import PARAKEET_MODEL, is_parakeet
 
 logger = setup_logger(__name__)
 
-DEVICE = "vulkan"   # the config value for this device
 DEVICE_LABEL = "Vulkan (any GPU)"       # Preferences' Device dropdown
-MENU_LABEL = "GPU (Vulkan)"             # "Device:" line in the tray and GNOME menus
 
 # --- The engine download ------------------------------------------------------
 

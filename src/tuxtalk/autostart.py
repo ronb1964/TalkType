@@ -98,7 +98,6 @@ def get_launch_command(prefer_installed_appimage: bool = False) -> str:
 
 def get_icon_path() -> str:
     """Absolute path to the TuxTalk icon, or a system icon name as fallback."""
-    here = os.path.dirname(os.path.abspath(__file__))
     root = _project_root()
     candidates = [
         os.path.join(root, 'icons', 'OFFICIAL_ICON_DO_NOT_CHANGE.svg'),
