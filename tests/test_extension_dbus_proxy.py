@@ -2,12 +2,12 @@
 
 String checks, since the extension can't run here:
 
-* The proxy was built synchronously in enable(), which blocks GNOME Shell on
-  D-Bus round trips at every login and unlock, and it set _dbusAvailable to
-  true whether or not TuxTalk was running.
-* A service stopped mid-recording left the panel mic red.
-* Recent Dictations cleared itself before the call, so reopening the menu
-  before the first reply arrived listed every entry twice.
+* The proxy is built asynchronously, since building it in enable() blocks
+  GNOME Shell on D-Bus round trips at every login and unlock, and
+  _dbusAvailable is set only when TuxTalk is really running.
+* A service stopped mid-recording turns the panel mic off.
+* Recent Dictations clears itself inside the reply, so reopening the menu
+  before the first reply arrives can't list every entry twice.
 """
 
 import pathlib

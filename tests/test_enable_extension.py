@@ -1,11 +1,10 @@
 """Enabling the GNOME extension must persist even when the live shell can't.
 
 On Wayland, `gnome-extensions enable` fails for a just-installed extension
-because the running shell hasn't discovered it yet. The old code stopped there
-and returned False, so onboarding never actually enabled the extension — a fresh
-GNOME install rebooted to no tray icon (confirmed on a Fedora 50 VM). The fix
-also writes the UUID straight into org.gnome.shell enabled-extensions, which the
-shell reads on its next start.
+because the running shell hasn't discovered it yet. Stopping there would leave
+the extension disabled, and a fresh GNOME install would reboot to no tray icon,
+so the UUID is also written straight into org.gnome.shell enabled-extensions,
+which the shell reads on its next start.
 """
 
 import types
@@ -80,7 +79,7 @@ def test_enable_does_not_duplicate_existing_entry(monkeypatch):
 
 def test_does_not_clobber_extensions_when_read_fails(monkeypatch):
     """A failed `gsettings get` must NOT trigger a write — that would overwrite
-    the user's entire enabled-extensions list with only TalkType."""
+    the user's entire enabled-extensions list with only TuxTalk's."""
     run, state = _fake_run(enable_rc=1, get_out="", get_rc=1)
     monkeypatch.setattr(dd.subprocess, "run", run)
 

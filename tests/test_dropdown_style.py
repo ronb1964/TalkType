@@ -8,11 +8,11 @@ glitch — the Model row disappears behind the Device popup.
 Setting the appears-as-list style property switches it to a normal drop-down
 list anchored under the button.
 
-Two things are easy to get wrong here and both are covered below:
+Three things are easy to get wrong here, and all are covered below:
 
-1. The property is deprecated (GTK 3.20+). It still resolves in GTK 3.24.52 —
-   measured False -> True — but a future GTK could drop it, and this test says
-   so plainly rather than leaving a silent cosmetic regression.
+1. The property is deprecated (GTK 3.20+). It still resolves in GTK 3.24.52,
+   but a future GTK could drop it, and this test says so plainly rather than
+   leaving a silent cosmetic regression.
 
 2. Scope. prefs.py attaches prefs_style.css to the WINDOW's style context, and
    a window-scoped provider does NOT reach child widgets — measured: the child
@@ -158,9 +158,10 @@ def test_drop_down_below_leaves_an_explicit_wrap_width_alone(gtk):
 
 @pytest.mark.parametrize("items, columns", [(6, 1), (12, 1), (15, 1), (16, 3), (33, 3)])
 def test_long_lists_open_as_a_grid(gtk, items, columns):
-    """On Wayland the list hangs below the button and starts at the top, and
-    the 33 languages ran off the screen with the current one out of sight.
-    In three columns they fit, all visible, the current one highlighted."""
+    """On Wayland the list hangs below the button and starts at the top, so
+    in one column the 33 languages run off the screen with the current one
+    out of sight. In three columns they fit, all visible, the current one
+    highlighted."""
     from tuxtalk.ui_style import _drop_down_below
 
     combo = gtk.ComboBoxText()

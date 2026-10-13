@@ -1,11 +1,11 @@
-"""GNOME: the extension holds TalkType's hotkeys back from the focused app.
+"""GNOME: the extension holds TuxTalk's hotkeys back from the focused app.
 
 Same leak as KDE (test_kwin_hotkeys): the service reads keys below the desktop,
 so GNOME Shell also hands F8 to the app and a terminal prints "~". The service
 sends its hotkeys to the tray in accelerator syntax, the tray relays them, and
-the extension grabs them while the service runs. The grab itself was verified
-in the ubuntu26.04 GNOME VM; these pin the Python side and the contract the
-extension depends on.
+the extension grabs them while the service runs. The grab itself is checked by
+hand in a GNOME VM; these pin the Python side and the contract the extension
+depends on.
 """
 import pathlib
 import types

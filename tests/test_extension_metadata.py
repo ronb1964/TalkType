@@ -1,13 +1,10 @@
 """The GNOME extension must declare the shell versions users are running.
 
 GNOME Shell refuses to load an extension whose metadata does not list the
-running major version. For TalkType that is worse than losing the panel menu:
+running major version. For TuxTalk that is worse than losing the panel menu:
 tray.py's _check_tray_visibility() sees the extension as absent and activates
 the GTK AyatanaAppIndicator tray instead — which stock GNOME has no host for.
 The user ends up with no icon at all, and no way to reach Preferences or Quit.
-
-GNOME 51 "A Coruna" releases 2026-09-16, so 51 has to be declared before the
-next release goes out.
 """
 
 import json
@@ -18,7 +15,7 @@ METADATA_PATH = (
     REPO_ROOT / "gnome-extension" / "talktype@ronb1964.github.io" / "metadata.json"
 )
 
-# The oldest shell TalkType supports, and the newest that has a release date.
+# The oldest shell TuxTalk supports, and the newest that has a release date.
 # Bump NEWEST when the next GNOME ships; the test then fails until metadata
 # declares it, which is the reminder this file exists to provide.
 OLDEST_SUPPORTED_SHELL = 45

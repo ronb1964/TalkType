@@ -1,7 +1,7 @@
 """The GNOME menu's Performance presets come from the tray (GetPresets).
 
-The extension kept its own copy of the preset table and its own matcher, and
-the two drifted (Battery Saver's dot sat on Fastest). Now it asks the tray.
+Asking the tray means the extension keeps no copy of the preset table or the
+matcher that could drift from the tray's and put the dot on the wrong preset.
 """
 import json
 import pathlib
@@ -26,11 +26,8 @@ def test_menu_is_built_from_the_tray():
 
 
 def test_version_is_21():
-    """21: comment and update-result tidy-up, no change in behaviour.
-    20: builds its D-Bus proxy asynchronously, and the icon leaves red when
-    the service stops. 19: reports where the focused window is. 18: Recent Dictations mentions
-    Paste Last Dictation. 17: TuxTalk (formerly
-    TalkType) in the name and description. 16: the Custom item."""
+    """The version is bumped with every extension.js change so the in-app
+    updater offers the new extension."""
     assert json.loads((EXT / "metadata.json").read_text())["version"] == 21
 
 
@@ -38,9 +35,8 @@ CUSTOM_LABEL = "Custom (opens Preferences)"
 
 
 def test_both_menus_end_the_presets_with_the_same_custom_item():
-    """The GTK tray had a greyed-out "Custom (via Preferences)" that did
-    nothing, and the GNOME menu had no Custom item at all, so a custom setup
-    showed no dot there. Both now offer it, and it opens Preferences."""
+    """Both menus offer the same Custom item, which opens Preferences, so a
+    custom setup shows its dot in either menu."""
     tray = (EXT.parent.parent / "src/tuxtalk/tray.py").read_text()
     assert f'"{CUSTOM_LABEL}"' in tray and "Custom (via Preferences)" not in tray
     assert f"'{CUSTOM_LABEL}'" in JS

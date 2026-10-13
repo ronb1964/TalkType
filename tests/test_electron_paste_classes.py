@@ -6,11 +6,8 @@ single membership test against _ELECTRON_PASTE_BROKEN_CLASSES, which makes that
 set the whole feature: an app id missing from it means the override never fires
 and the user gets a paste that quietly does nothing.
 
-That is exactly what happened. Claude Desktop began reporting itself as
-'com.anthropic.Claude' on 2026-07-21; the set still listed only the older
-'claude-desktop' spelling. The override fired 95 times in the dictation log and
-then stopped dead on 2026-07-20 — the day before the change — and never fired
-again.
+Claude Desktop reports itself as 'claude-desktop' or as 'com.anthropic.Claude'
+depending on how it was packaged, so the set must list both.
 """
 
 from tuxtalk import app

@@ -1,8 +1,8 @@
 """The tray and GNOME menu say what really runs, not just what's configured.
 
-After a fallback they used to show the settings, so the Device line could say
-"GPU (Vulkan)" while the processor did the work. The dictation service now
-reports the model and device it actually loaded (NotifyRunningEngine).
+After a fallback the settings no longer match what runs, so the Device line
+could say "GPU (Vulkan)" while the processor does the work. The dictation
+service reports the model and device it actually loaded (NotifyRunningEngine).
 """
 import types
 

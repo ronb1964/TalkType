@@ -1,8 +1,8 @@
 """The GNOME extension is JavaScript that runs inside the user's shell, so a
-tampered or truncated zip matters. Its checksum lookup had the same fail-open
-shape as the updater's: any problem returned None and the install proceeded.
+tampered or truncated zip matters. Its checksum lookup must not fail open, with
+any problem returning None and the install going ahead.
 
-The fix has to distinguish two cases, because they are not the same risk:
+Two cases are told apart, because they are not the same risk:
 
   * the release publishes no SHA256SUMS.txt at all (404) — true of every
     release up to and including v0.5.16, so failing here would break the
