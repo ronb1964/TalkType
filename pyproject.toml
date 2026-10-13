@@ -13,6 +13,13 @@ faster-whisper = "*"
 # Optional Parakeet engine (parakeet_engine.py). Pure Python; runs on the
 # onnxruntime that faster-whisper already pulls in, so it adds only a few MB.
 onnx-asr = "^0.12"
+# Named here so one lock installs on every supported Python: 1.24+ ships no
+# Python 3.10 wheels (the AppImage's), and 1.23 ships none for 3.14 (the dev
+# version's). onnx-asr refuses 1.24.1, 1.25.* and 1.26.0, so 3.11+ starts at 1.27.
+onnxruntime = [
+    { version = "<1.24", python = "<3.11" },
+    { version = ">=1.27", python = ">=3.11" },
+]
 sounddevice = "*"
 evdev = "*"
 numpy = "*"
