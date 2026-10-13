@@ -25,11 +25,12 @@ def test_menu_is_built_from_the_tray():
     assert "status.preset" in JS
 
 
-def test_version_is_19():
-    """19: reports where the focused window is. 18: Recent Dictations mentions
+def test_version_is_20():
+    """20: builds its D-Bus proxy asynchronously, and the icon leaves red when
+    the service stops. 19: reports where the focused window is. 18: Recent Dictations mentions
     Paste Last Dictation. 17: TuxTalk (formerly
     TalkType) in the name and description. 16: the Custom item."""
-    assert json.loads((EXT / "metadata.json").read_text())["version"] == 19
+    assert json.loads((EXT / "metadata.json").read_text())["version"] == 20
 
 
 CUSTOM_LABEL = "Custom (opens Preferences)"

@@ -93,18 +93,11 @@ const TuxTalkIface = `
     <signal name="HotkeysChanged">
       <arg type="as" name="accelerators"/>
     </signal>
-    <signal name="TranscriptionComplete">
-      <arg type="s" name="text"/>
-    </signal>
     <signal name="ModelChanged">
       <arg type="s" name="model_name"/>
     </signal>
     <signal name="InjectionModeChanged">
       <arg type="s" name="mode"/>
-    </signal>
-    <signal name="ErrorOccurred">
-      <arg type="s" name="error_type"/>
-      <arg type="s" name="message"/>
     </signal>
     <signal name="UpdateCheckComplete">
       <arg type="b" name="success"/>
@@ -143,7 +136,14 @@ class TuxTalkIndicator extends PanelMenu.Button {
         // Id of the active preset, worked out by the tray (recommend.match_preset).
         this._currentPreset = 'custom';
         this._currentInjectionMode = 'auto';
+        // Only watch_name sets this: true while TuxTalk owns its bus name.
         this._dbusAvailable = false;
+        this._proxy = null;
+        this._signalIds = [];
+        this._cancellable = new Gio.Cancellable();
+        // Bumped on each Recent Dictations refresh, so a late reply from an
+        // earlier one can't add its list a second time.
+        this._historyRequest = 0;
 
         // TuxTalk reads its hotkeys below the desktop, so GNOME Shell also
         // hands F8 to the focused app and a terminal prints "~". While the
@@ -154,31 +154,50 @@ class TuxTalkIndicator extends PanelMenu.Button {
         this._hotkeys = [];
         this._grabs = new Map();
 
-        // Connect to D-Bus
-        this._connectDBus();
-
         // Build menu
         this._buildMenu();
 
+        // Hidden until watch_name sees TuxTalk on the bus.
+        this.hide();
+
+        // Connect to D-Bus
+        this._connectDBus();
+
         // Monitor D-Bus service availability (this will show/hide based on service presence)
         this._watchDBusService();
-
-        // Start hidden - will be shown when D-Bus service is detected
-        if (!this._dbusAvailable) {
-            this.hide();
-        } else {
-            this._updateStatus();
-        }
     }
 
     _connectDBus() {
-        try {
-            this._proxy = new TuxTalkProxy(
-                Gio.DBus.session,
-                'io.github.ronb1964.TalkType',
-                '/io/github/ronb1964/TalkType'
-            );
+        if (this._proxy || this._connecting)
+            return;
+        this._connecting = true;
+        const cancellable = this._cancellable;
+        // Built asynchronously: a synchronous proxy blocks the whole shell on
+        // D-Bus round trips at every login and unlock. No auto-start and no
+        // property load: TuxTalk can't be bus-activated and has no properties.
+        new TuxTalkProxy(
+            Gio.DBus.session,
+            'io.github.ronb1964.TalkType',
+            '/io/github/ronb1964/TalkType',
+            (proxy, error) => {
+                if (cancellable.is_cancelled())
+                    return;
+                this._connecting = false;
+                if (error || !proxy) {
+                    // watch_name's appeared callback tries again.
+                    console.error('TuxTalk: Failed to connect to D-Bus:', error);
+                    return;
+                }
+                this._onProxyReady(proxy);
+            },
+            cancellable,
+            Gio.DBusProxyFlags.DO_NOT_AUTO_START | Gio.DBusProxyFlags.DO_NOT_LOAD_PROPERTIES
+        );
+    }
 
+    _onProxyReady(proxy) {
+        this._proxy = proxy;
+        try {
             // Connect to signals. Store every subscription id so destroy()
             // can disconnect them — otherwise the callbacks keep firing on
             // the disposed panel button after the extension is disabled
@@ -191,6 +210,10 @@ class TuxTalkIndicator extends PanelMenu.Button {
 
             this._signalIds.push(this._proxy.connectSignal('ServiceStateChanged', (proxy, sender, [isRunning]) => {
                 this._isServiceRunning = isRunning;
+                // A stopped service isn't recording, and one that was killed
+                // mid-recording never said so.
+                if (!isRunning)
+                    this._isRecording = false;
                 this._updateIcon();
                 this._updateMenu();  // Update menu when service state changes
                 this._syncHotkeyGrabs();
@@ -219,15 +242,17 @@ class TuxTalkIndicator extends PanelMenu.Button {
                 this._handleUpdateCheckResult(params);
             }));
 
-            this._dbusAvailable = true;
             console.log('TuxTalk: Connected to D-Bus service');
 
             // Track focused window class so TuxTalk can pick the right
             // paste keystroke (Ctrl+V for normal apps, Ctrl+Shift+V for terminals).
             this._setupFocusTracking();
+            // TuxTalk may already be on the bus: watch_name's appeared
+            // callback can run before the proxy is ready.
+            if (this._dbusAvailable)
+                this._updateStatus();
         } catch (e) {
-            this._dbusAvailable = false;
-            console.error('TuxTalk: Failed to connect to D-Bus:', e);
+            console.error('TuxTalk: Failed to connect to D-Bus signals:', e);
         }
     }
 
@@ -309,6 +334,9 @@ class TuxTalkIndicator extends PanelMenu.Button {
                 // Service appeared - show the indicator
                 this._dbusAvailable = true;
                 this.show();
+                // A failed proxy setup is retried each time TuxTalk appears.
+                if (!this._proxy)
+                    this._connectDBus();
                 this._updateStatus();
                 // Re-push current focus so a freshly restarted Python service
                 // doesn't sit at class=None until the user changes windows.
@@ -337,9 +365,9 @@ class TuxTalkIndicator extends PanelMenu.Button {
                 return;
 
             if (item.state) {
-                this._proxy.StartServiceRemote();
+                this._proxy?.StartServiceRemote();
             } else {
-                this._proxy.StopServiceRemote();
+                this._proxy?.StopServiceRemote();
             }
         });
         this.menu.addMenuItem(this._serviceItem);
@@ -347,7 +375,7 @@ class TuxTalkIndicator extends PanelMenu.Button {
         // Restart service
         let restartItem = new PopupMenu.PopupMenuItem('Restart Service');
         restartItem.connect('activate', () => {
-            this._proxy.RestartServiceRemote();
+            this._proxy?.RestartServiceRemote();
         });
         this.menu.addMenuItem(restartItem);
 
@@ -365,7 +393,7 @@ class TuxTalkIndicator extends PanelMenu.Button {
         // Fix a Word, top level right under Recent Dictations as in the tray.
         // The window has its own dictation picker and opens on the newest.
         const fixWordItem = new PopupMenu.PopupMenuItem('Fix a Word...');
-        fixWordItem.connect('activate', () => this._proxy.FixWordInDictationRemote());
+        fixWordItem.connect('activate', () => this._proxy?.FixWordInDictationRemote());
         this.menu.addMenuItem(fixWordItem);
 
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
@@ -404,7 +432,7 @@ class TuxTalkIndicator extends PanelMenu.Button {
             let item = new PopupMenu.PopupMenuItem(`${mode.label} (${mode.description})`);
             item._modeKey = key;
             item.connect('activate', () => {
-                this._proxy.SetInjectionModeRemote(key);
+                this._proxy?.SetInjectionModeRemote(key);
                 this._updateInjectionSelection(key);
             });
             this._injectionItems[key] = item;
@@ -417,35 +445,35 @@ class TuxTalkIndicator extends PanelMenu.Button {
         // Preferences
         let prefsItem = new PopupMenu.PopupMenuItem('Preferences...');
         prefsItem.connect('activate', () => {
-            this._proxy.OpenPreferencesRemote();
+            this._proxy?.OpenPreferencesRemote();
         });
         this.menu.addMenuItem(prefsItem);
 
         // Voice Commands quick reference
         let voiceCmdsItem = new PopupMenu.PopupMenuItem('Voice Commands...');
         voiceCmdsItem.connect('activate', () => {
-            this._proxy.ShowVoiceCommandsRemote();
+            this._proxy?.ShowVoiceCommandsRemote();
         });
         this.menu.addMenuItem(voiceCmdsItem);
 
         // Usage stats: opens Preferences on its Stats tab
         let statsItem = new PopupMenu.PopupMenuItem('Your Stats...');
         statsItem.connect('activate', () => {
-            this._proxy.OpenPreferencesStatsRemote();
+            this._proxy?.OpenPreferencesStatsRemote();
         });
         this.menu.addMenuItem(statsItem);
 
         // Help
         let helpItem = new PopupMenu.PopupMenuItem('Help...');
         helpItem.connect('activate', () => {
-            this._proxy.ShowHelpRemote();
+            this._proxy?.ShowHelpRemote();
         });
         this.menu.addMenuItem(helpItem);
 
         // About
         let aboutItem = new PopupMenu.PopupMenuItem('About TuxTalk...');
         aboutItem.connect('activate', () => {
-            this._proxy.ShowAboutRemote();
+            this._proxy?.ShowAboutRemote();
         });
         this.menu.addMenuItem(aboutItem);
 
@@ -461,7 +489,7 @@ class TuxTalkIndicator extends PanelMenu.Button {
         // Quit TuxTalk
         let quitItem = new PopupMenu.PopupMenuItem('Quit TuxTalk');
         quitItem.connect('activate', () => {
-            this._proxy.QuitRemote();
+            this._proxy?.QuitRemote();
         });
         this.menu.addMenuItem(quitItem);
     }
@@ -473,7 +501,7 @@ class TuxTalkIndicator extends PanelMenu.Button {
         this._updatesItem.setSensitive(false);
 
         // Call D-Bus method - results come via signal
-        this._proxy.CheckForUpdatesRemote();
+        this._proxy?.CheckForUpdatesRemote();
 
         // Re-enable menu item after timeout (in case signal fails).
         // The id is kept so a result arriving first can cancel it, and so
@@ -527,7 +555,7 @@ class TuxTalkIndicator extends PanelMenu.Button {
             // App is up to date but the GNOME extension has an update — the app
             // dialog can't offer that, so send the user to the Updates tab.
             Main.notify('TuxTalk', 'Extension update available — opening Updates…');
-            this._proxy.OpenPreferencesUpdatesRemote();
+            this._proxy?.OpenPreferencesUpdatesRemote();
         }
         // else: nothing — the app already showed the "up to date" window.
     }
@@ -549,8 +577,18 @@ class TuxTalkIndicator extends PanelMenu.Button {
 
     _refreshHistoryMenu() {
         const menu = this._historySubMenu.menu;
-        menu.removeAll();
+        const request = ++this._historyRequest;
+        if (!this._proxy) {
+            menu.removeAll();
+            menu.addMenuItem(new PopupMenu.PopupMenuItem('TuxTalk Not Running', {reactive: false}));
+            return;
+        }
         this._proxy.GetRecentDictationsRemote((result, error) => {
+            // Cleared here, not before the call: a menu reopened before the
+            // first reply would otherwise get two full lists.
+            if (request !== this._historyRequest)
+                return;
+            menu.removeAll();
             // On error `result` is null, so it cannot be destructured.
             const entries = result ? result[0] : null;
             if (error || !entries || entries.length === 0) {
@@ -563,9 +601,9 @@ class TuxTalkIndicator extends PanelMenu.Button {
             // The Paste Last Dictation hotkey, as in the tray's menu. Placed
             // second when the answer comes; an older tray without the method
             // just leaves it out.
-            this._proxy.GetPasteLastHotkeyRemote((res, err) => {
+            this._proxy?.GetPasteLastHotkeyRemote((res, err) => {
                 const key = (!err && res) ? res[0] : '';
-                if (key)
+                if (key && request === this._historyRequest)
                     menu.addMenuItem(new PopupMenu.PopupMenuItem(
                         `${key} types the newest one again`, {reactive: false}), 1);
             });
@@ -586,7 +624,7 @@ class TuxTalkIndicator extends PanelMenu.Button {
             }
             menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
             const clearItem = new PopupMenu.PopupMenuItem('Clear History');
-            clearItem.connect('activate', () => this._proxy.ClearRecentDictationsRemote());
+            clearItem.connect('activate', () => this._proxy?.ClearRecentDictationsRemote());
             menu.addMenuItem(clearItem);
         });
     }
@@ -659,6 +697,8 @@ class TuxTalkIndicator extends PanelMenu.Button {
         // choice on click: the tray can refuse it (a cancelled download), and
         // the dot follows what actually took effect (status.preset).
         const menu = this._performanceSubMenu.menu;
+        if (!this._proxy)
+            return;
         this._proxy.GetPresetsRemote((result, error) => {
             menu.removeAll();
             this._presetItems = {};
@@ -670,7 +710,7 @@ class TuxTalkIndicator extends PanelMenu.Button {
             }
             for (const [id, label, description] of presets) {
                 const item = new PopupMenu.PopupMenuItem(`${label} (${description})`);
-                item.connect('activate', () => this._proxy.ApplyPerformancePresetRemote(id));
+                item.connect('activate', () => this._proxy?.ApplyPerformancePresetRemote(id));
                 this._presetItems[id] = item;
                 menu.addMenuItem(item);
             }
@@ -679,7 +719,7 @@ class TuxTalkIndicator extends PanelMenu.Button {
             // where a custom setup is made.
             menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
             const custom = new PopupMenu.PopupMenuItem('Custom (opens Preferences)');
-            custom.connect('activate', () => this._proxy.OpenPreferencesRemote());
+            custom.connect('activate', () => this._proxy?.OpenPreferencesRemote());
             this._presetItems['custom'] = custom;
             menu.addMenuItem(custom);
             this._updatePresetSelection(this._currentPreset);
@@ -766,6 +806,9 @@ class TuxTalkIndicator extends PanelMenu.Button {
         for (const action of this._grabs.values())
             this._ungrabHotkey(action);
         this._grabs.clear();
+
+        // A proxy still being set up must not call back into this button.
+        this._cancellable.cancel();
 
         // Clean up D-Bus name watcher
         if (this._nameWatcherId) {

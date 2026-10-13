@@ -141,7 +141,7 @@ def test_the_gnome_extension_reports_geometry():
     assert '<method name="SetFocusedWindowGeometry">' in js
     assert "SetFocusedWindowGeometryRemote" in js
     assert "position-changed" in js and "size-changed" in js
-    assert json.loads((EXT / "metadata.json").read_text())["version"] == 19
+    assert json.loads((EXT / "metadata.json").read_text())["version"] >= 19
 
 
 # --- the floating label -------------------------------------------------------------------------
