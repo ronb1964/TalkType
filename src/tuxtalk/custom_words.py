@@ -27,6 +27,7 @@ FILE_NAME = "custom_words.txt"
 # drops the rest from the front. ~600 characters stays well inside that.
 PROMPT_MAX_CHARS = 600
 MIN_LETTERS = 4         # shorter words join up by accident ("a i" -> AI)
+MIN_SOUND_LETTERS = 6   # sound-alike matching only for longer words ("Mack's" is not Max)
 MAX_PIECES = 4          # a word split into at most this many pieces
 ECHO_MIN_WORDS = 3      # Whisper reading the list back, not a short real phrase
 
@@ -135,6 +136,19 @@ def _letters(text):
     return "".join(c for c in text.casefold() if c.isalnum())
 
 
+# Spellings that sound the same, in the order they're folded. Parakeet hears
+# the x of TuxTalk as "ks" and writes "Tuck's talk" or "Tuckstalk".
+_SOUND_FOLDS = (("ph", "f"), ("cks", "x"), ("ks", "x"), ("cs", "x"), ("ck", "k"), ("c", "k"))
+
+
+def _sound(letters):
+    """*letters* (from _letters) folded so that sound-alike spellings match:
+    x/ks/cks/cs, ck/c/k, ph/f, and doubled letters counted once."""
+    for a, b in _SOUND_FOLDS:
+        letters = letters.replace(a, b)
+    return "".join(c for i, c in enumerate(letters) if i == 0 or c != letters[i - 1])
+
+
 _APOSTROPHES = "'\u2019"
 
 
@@ -161,11 +175,13 @@ def fix_spelling(text, words, hyphens=True):
     Pieces join only across plain spaces: a tab or line break there was
     dictated. *hyphens* False once the text has been tidied up, where a
     hyphen came from the user saying "dash", not from the engine."""
-    targets = {}
+    targets, sounds = {}, {}
     for word in words:
         key = _letters(word)
         if len(key) >= MIN_LETTERS:
             targets.setdefault(key, word)
+        if len(key) >= MIN_SOUND_LETTERS:
+            sounds.setdefault(_sound(key), word)
     if not targets or not text:
         return text
 
@@ -184,9 +200,18 @@ def fix_spelling(text, words, hyphens=True):
                 continue
             if any(text[a[1]:b[0]].strip(" ") for a, b in zip(group, group[1:])):
                 continue
-            word = targets.get("".join(_letters(t[3]) for t in group))
-            if word is None or not all(_joinable(t[3], word, hyphens) for t in group):
-                continue
+            joined = "".join(_letters(t[3]) for t in group)
+            word = targets.get(joined)
+            if word is not None:
+                if not all(_joinable(t[3], word, hyphens) for t in group):
+                    continue
+            else:
+                # Same sound, other letters. The apostrophe of "Tuck's" belongs
+                # to the mishearing, so it may sit inside the match.
+                word = sounds.get(_sound(joined)) if len(joined) >= MIN_SOUND_LETTERS else None
+                if word is None or not all(_joinable(t[3].replace("'", "").replace("\u2019", ""), word, hyphens)
+                                           for t in group):
+                    continue
             core_start = group[0][0] + len(group[0][2])
             core_end = group[-1][1] - len(group[-1][4])
             heard = text[core_start:core_end]

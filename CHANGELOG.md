@@ -34,8 +34,10 @@ Also new in this one:
   TuxTalk or Kubernetes, one per line. Whisper models get told about them
   before they listen, so they spell them your way. And every model fixes them
   when they come out split up or with the wrong capitals, so "tux talk" turns
-  into TuxTalk. Heads up, Parakeet can't be told about words ahead of time, so
-  if it hears one as something else entirely, Fix a Word is still the way.
+  into TuxTalk. It also catches spellings that sound the same, which is how
+  Parakeet kept writing it, "Tuck's talk" and "Tuckstalk". Heads up, Parakeet
+  can't be told about words ahead of time, so if it hears one as something
+  else entirely, Fix a Word is still the way.
   Words you fix with Fix a Word get added to Your Words too.
 - TuxTalk Labs, a new spot at the bottom of Preferences, Advanced, for
   features that work but are still being worked on. There's a Labs page in

@@ -340,3 +340,32 @@ def test_an_unreadable_words_file_keeps_the_words_in_force(monkeypatch):
 def test_a_possessive_followed_by_punctuation_is_still_the_word():
     assert cw.starts_with_word("TuxTalk's, menu", ["TuxTalk"])
     assert cw.starts_with_word("TuxTalk\u2019s.", ["TuxTalk"])
+
+
+# --- sound-alikes: Parakeet hears TuxTalk's "x" as "ks" ------------------------------
+
+
+@pytest.mark.parametrize("heard", [
+    "I use Tuck's talk every day.", "I use Tucks talk every day.", "I use Tuckstalk every day.",
+    "I use tucks talk every day.", "I use Tux talk every day.",
+])
+def test_a_sound_alike_spelling_becomes_the_word(heard):
+    assert cw.fix_spelling(heard, ["TuxTalk"]) == "I use TuxTalk every day."
+
+
+def test_sound_alikes_keep_the_punctuation_around_them():
+    assert cw.fix_spelling("Open Tuckstalk, then dictate.", ["TuxTalk"]) == "Open TuxTalk, then dictate."
+
+
+@pytest.mark.parametrize("heard, words", [
+    ("Mack's car is red.", ["Max"]),              # short words never match by sound
+    ("The talk was good.", ["TuxTalk"]),           # only part of the word
+    ("Tucks and talks.", ["TuxTalk"]),             # other words in between
+    ("Ducks talk loudly.", ["TuxTalk"]),           # a different sound
+])
+def test_sound_alikes_need_a_long_word_and_the_same_sound(heard, words):
+    assert cw.fix_spelling(heard, words) == heard
+
+
+def test_exact_spellings_still_win_over_sound_alikes():
+    assert cw.fix_spelling("Philips and Filips", ["Filips", "Philips"]) == "Philips and Filips"
