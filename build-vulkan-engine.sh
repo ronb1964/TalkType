@@ -1,10 +1,12 @@
 #!/bin/bash
-# Build TalkType's AMD / Intel graphics engine: whisper.cpp's whisper-server
-# with the Vulkan backend (Vulkan also runs on NVIDIA). whisper.cpp publishes
-# no Linux Vulkan build of its own, so TalkType builds one and hosts it as a
-# GitHub PRE-release (never "latest", so the in-app updater and the AppImage's
-# update information never mistake it for a TalkType version). TalkType
-# downloads it only when someone picks "AMD / Intel graphics" as the device.
+# Build TuxTalk's Vulkan engine (the "Vulkan (any GPU)" device, for AMD, Intel
+# and NVIDIA): whisper.cpp's whisper-server with the Vulkan backend.
+# whisper.cpp publishes no Linux Vulkan build of its own, so TuxTalk builds one
+# and hosts it as a GitHub PRE-release (never "latest", so the in-app updater
+# and the AppImage's update information never mistake it for a TuxTalk
+# version). TuxTalk downloads it when Vulkan is chosen as the device, by hand
+# or by first run's recommendation. The file names keep "talktype" because
+# released versions download them by those names.
 #
 # Built in Ubuntu 22.04 like the AppImage, so it runs on 22.04 and newer
 # (glibc 2.34). 22.04 has no glslc, so the build uses the LunarG Vulkan SDK,
@@ -13,24 +15,45 @@
 # It also builds whisper.cpp's Parakeet library (libparakeet.so), which
 # parakeet_gpu_worker.py loads to run Parakeet on the graphics chip.
 #
-# Usage: ./build-vulkan-engine.sh <whisper.cpp version> [build number]
-# The build number is for rebuilding the SAME whisper.cpp version with
-# different contents. Never re-upload a changed tarball under an old name:
-# released TalkType versions check its SHA256 and would refuse it.
+# Usage: ./build-vulkan-engine.sh <whisper.cpp version> <build number>
+# The build number tells apart builds of the SAME whisper.cpp version with
+# different contents. A published build must never be replaced: released
+# TuxTalk versions check its SHA256 and would refuse a changed file. So the
+# script refuses the build that src/tuxtalk/whisper_vulkan.py downloads now,
+# or any earlier one, and a tarball that already exists here.
 #
-# Output: talktype-whisper-vulkan-<version>[-b<build>]-x64.tar.gz and its
+# Output: talktype-whisper-vulkan-<version>-b<build>-x64.tar.gz and its
 # .sha256. The folder inside is always talktype-whisper-vulkan-<version>, so
 # a later build unpacks over an earlier one. Afterwards put the version, build
 # and SHA256 into src/tuxtalk/whisper_vulkan.py.
 set -e
-WHISPER_CPP_VERSION="${1:-1.9.4}"
-ENGINE_BUILD="${2:-1}"
-if [ "$ENGINE_BUILD" = "1" ]; then
-    ASSET="talktype-whisper-vulkan-${WHISPER_CPP_VERSION}-x64.tar.gz"
-else
-    ASSET="talktype-whisper-vulkan-${WHISPER_CPP_VERSION}-b${ENGINE_BUILD}-x64.tar.gz"
+if [ $# -ne 2 ]; then
+    echo "Usage: $0 <whisper.cpp version> <build number>" >&2
+    exit 1
 fi
+WHISPER_CPP_VERSION="$1"
+ENGINE_BUILD="$2"
+ASSET="talktype-whisper-vulkan-${WHISPER_CPP_VERSION}-b${ENGINE_BUILD}-x64.tar.gz"
+TAG="whisper-vulkan-${WHISPER_CPP_VERSION}-b${ENGINE_BUILD}"
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# What the app downloads today; that build and earlier ones are published.
+APP_PY="$PROJECT_DIR/src/tuxtalk/whisper_vulkan.py"
+APP_VERSION=$(sed -n 's/^ENGINE_VERSION = "\([^"]*\)".*/\1/p' "$APP_PY")
+APP_BUILD=$(sed -n 's/^ENGINE_BUILD = \([0-9]*\).*/\1/p' "$APP_PY")
+if [ -z "$APP_VERSION" ] || [ -z "$APP_BUILD" ]; then
+    echo "❌ Could not read ENGINE_VERSION / ENGINE_BUILD from $APP_PY" >&2
+    exit 1
+fi
+if [ "$WHISPER_CPP_VERSION" = "$APP_VERSION" ] && [ "$ENGINE_BUILD" -le "$APP_BUILD" ]; then
+    echo "❌ Build $ENGINE_BUILD of whisper.cpp $WHISPER_CPP_VERSION is already published" >&2
+    echo "   (TuxTalk downloads build $APP_BUILD). Use build $((APP_BUILD + 1))." >&2
+    exit 1
+fi
+if [ -e "$PROJECT_DIR/$ASSET" ]; then
+    echo "❌ $ASSET already exists here. Move it away first." >&2
+    exit 1
+fi
 SDK_CACHE="$HOME/.cache/talktype-vulkan-sdk"
 mkdir -p "$SDK_CACHE"
 CONTAINER_CMD=$(command -v podman || command -v docker)
@@ -51,3 +74,7 @@ $CONTAINER_CMD run --rm \
 
 ls -lh "$PROJECT_DIR/$ASSET"*
 cat "$PROJECT_DIR/$ASSET.sha256"
+echo ""
+echo "Next: upload both files to a GitHub pre-release tagged $TAG"
+echo "(gh release create $TAG ... --prerelease), then set ENGINE_VERSION,"
+echo "ENGINE_BUILD and ENGINE_SHA256 in src/tuxtalk/whisper_vulkan.py."
