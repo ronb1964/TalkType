@@ -220,6 +220,38 @@ class FakeEngine(wv.VulkanWhisperModel):
         return "Thank you.", 0.95          # a high, untrustworthy no-speech score
 
 
+class SignOffEngine(wv.VulkanWhisperModel):
+    """whisper.cpp's best-known invention from silence, with its 0.00 score."""
+    def __init__(self):
+        pass
+
+    def transcribe(self, audio, language=None, prompt=None):
+        return "Thanks for watching!", 0.0
+
+
+def _audio(voiced):
+    rng = np.random.default_rng(1)
+    t = np.arange(3 * 16000) / 16000
+    audio = rng.normal(0, 60, t.size)
+    if voiced:   # a second of speech in the middle
+        audio += np.sin(2 * np.pi * 220 * t) * 3000 * ((t > 1) & (t < 2))
+    return (audio / 32768.0).astype(np.float32)
+
+
+def test_vulkan_drops_a_sign_off_invented_from_silence(monkeypatch):
+    """whisper.cpp's no-speech score is 0.00 on silence, so without a stand-in
+    a held key with nothing said typed "Thanks for watching!"."""
+    from tuxtalk import app
+    monkeypatch.setattr(app, "model", SignOffEngine(), raising=False)
+    assert app._transcribe_audio(_audio(voiced=False), "en") is None
+
+
+def test_vulkan_keeps_a_sign_off_said_aloud(monkeypatch):
+    from tuxtalk import app
+    monkeypatch.setattr(app, "model", SignOffEngine(), raising=False)
+    assert app._transcribe_audio(_audio(voiced=True), "en") == "Thanks for watching!"
+
+
 def _settings(**kw):
     from tuxtalk.config import Settings
     return Settings(**{"model": "small", "device": "vulkan", **kw})
@@ -319,10 +351,11 @@ def test_parakeet_on_the_graphics_chip_transcribes(monkeypatch):
 
 
 def test_transcription_ignores_the_engines_no_speech_score(monkeypatch):
-    """A real "Thank you." must survive even though the engine scored it 0.95."""
+    """A real "Thank you." must survive even though the engine scored it 0.95.
+    Real means the recording has speech in it; silence now has its own test."""
     from tuxtalk import app
     monkeypatch.setattr(app, "model", FakeEngine("small", 1), raising=False)
-    assert app._transcribe_audio(np.zeros(16000, dtype=np.float32), "en") == "Thank you."
+    assert app._transcribe_audio(_audio(voiced=True), "en") == "Thank you."
 
 
 # --- first-run setup: the light choice for NVIDIA ---------------------------------

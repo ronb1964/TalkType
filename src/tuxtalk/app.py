@@ -740,8 +740,9 @@ def _strip_hallucinations(text: str, no_speech_prob: float = 0.0) -> str:
        This catches Whisper appending them to real speech during the silence
        at the end of a recording.
 
-    Parakeet and the Vulkan engine pass no probability (0.0), so for them only
-    tier 2 applies.
+    Parakeet passes no probability (0.0), so for it only tier 2 applies. The
+    Vulkan engine passes 1.0 when the recording has no speech in it and 0.0
+    otherwise, since whisper.cpp's own score can't be trusted.
 
     Args:
         text: Raw transcribed text
@@ -2245,12 +2246,15 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
         print(f"\U0001f4dd Raw (graphics): {_loggable(raw)}")
         logger.info(f"Raw transcription (Vulkan GPU): {_loggable(raw)}")
         # whisper.cpp's no-speech score isn't reliable (0.90 on clear speech,
-        # 0.00 on silence, see whisper_vulkan.parse_result), so it isn't passed
-        # on: the filter then only strips what it can recognise on its own.
+        # 0.00 on silence, see whisper_vulkan.parse_result), so the recording's
+        # own loudness stands in for it. With nobody talking, a lone "Thanks
+        # for watching!" is invented; said aloud, it is kept.
         if custom_words.is_echo(raw, _custom_words):
             logger.info("Whisper read your words back with nothing said; dropped")
             return None
-        return _strip_hallucinations(raw) or None
+        from .silence import has_no_speech
+        no_speech = 1.0 if has_no_speech(audio_f32, SAMPLE_RATE) else 0.0
+        return _strip_hallucinations(raw, no_speech_prob=no_speech) or None
 
     from .parakeet_engine import ParakeetModel
     from .parakeet_gpu import ParakeetGpuModel

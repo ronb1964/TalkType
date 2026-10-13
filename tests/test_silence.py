@@ -314,3 +314,30 @@ def test_a_hands_free_recording_with_nothing_said_is_dropped(monkeypatch):
     assert app.state.was_cancelled
     app._cmd_stop_recording.clear()
     app.state.was_cancelled = False
+
+
+# --- A recording with nobody talking -------------------------------------------
+# Stands in for Whisper's no-speech score on the Vulkan engine, whose own score
+# reads 0.00 on silence.
+
+from tuxtalk.silence import has_no_speech  # noqa: E402
+
+
+def test_a_long_quiet_hold_has_no_speech():
+    assert has_no_speech(f32(noise(4.0)), SR)
+
+
+def test_a_cough_or_a_click_in_a_long_hold_is_still_no_speech():
+    audio = np.concatenate([noise(2.0), speech(0.1), noise(2.0), click()])
+    assert has_no_speech(f32(audio), SR)
+
+
+def test_a_short_sign_off_said_aloud_is_speech():
+    audio = np.concatenate([noise(0.5), speech(1.0), noise(1.5)])
+    assert not has_no_speech(f32(audio), SR)
+
+
+def test_a_quiet_microphone_saying_a_sign_off_is_speech():
+    audio = np.concatenate([noise(0.5, 15), speech(1.0, level=250, noise_level=15),
+                            noise(1.5, 15)])
+    assert not has_no_speech(f32(audio), SR)

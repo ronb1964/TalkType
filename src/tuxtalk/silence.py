@@ -140,23 +140,40 @@ _TAP_VOICE_RMS = 500.0          # about -36 dBFS: normal speaking level, speech 
 _TAP_MIN_SPEECH_S = 0.08    # a key click is ~10 ms, a desk thump ~50; a word is longer
 
 
-def is_speechless_tap(audio_f32, sample_rate) -> bool:
-    """True for a recording shorter than TAP_MAX_S with no stretch of speech
-    in it, which should be dropped rather than transcribed.
+def _loud_seconds(audio_f32, sample_rate) -> float:
+    """Seconds of *audio_f32* clearly louder than its own background.
 
     Loudness is judged against the clip's own background (its quietest
     blocks), so a quiet microphone saying a quick word still counts, and
     normal speaking volume counts on its own, so a word that fills the whole
     clip does too."""
-    if len(audio_f32) >= TAP_MAX_S * sample_rate:
-        return False
     block = max(1, int(_TAP_BLOCK_S * sample_rate))
     count = len(audio_f32) // block
     if count < 3:
-        return True                 # under 60 ms: nothing to say in that
+        return 0.0                  # under 60 ms: nothing to say in that
     blocks = np.asarray(audio_f32[:count * block], dtype=np.float64).reshape(count, block) * 32768.0
     rms = np.sqrt(np.mean(blocks * blocks, axis=1))
     background = np.percentile(rms, 20)
     loud = ((rms > max(background * _TAP_SPEECH_OVER_NOISE, _TAP_MIN_SPEECH_RMS))
             | (rms > _TAP_VOICE_RMS))
-    return loud.sum() * _TAP_BLOCK_S < _TAP_MIN_SPEECH_S
+    return loud.sum() * _TAP_BLOCK_S
+
+
+def is_speechless_tap(audio_f32, sample_rate) -> bool:
+    """True for a recording shorter than TAP_MAX_S with no stretch of speech
+    in it, which should be dropped rather than transcribed."""
+    if len(audio_f32) >= TAP_MAX_S * sample_rate:
+        return False
+    return _loud_seconds(audio_f32, sample_rate) < _TAP_MIN_SPEECH_S
+
+
+def has_no_speech(audio_f32, sample_rate) -> bool:
+    """True for a recording of any length in which nobody talked: less than a
+    moment of it is louder than its background, so a cough or a key click
+    still counts as nothing said.
+
+    It stands in for a no-speech score where the engine's own can't be
+    trusted. It only decides whether stock phrases were invented, never
+    whether a recording is transcribed: a long clip's background can be the
+    speaker's own voice, so it is too blunt to drop real dictation on."""
+    return _loud_seconds(audio_f32, sample_rate) < _SPEECH_TO_ARM_S
