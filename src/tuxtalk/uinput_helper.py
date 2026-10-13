@@ -237,56 +237,6 @@ def check_udev_rule_exists():
     return exists
 
 
-def test_ydotool_works():
-    """
-    Actually test if ydotool can inject keystrokes.
-    This is the most reliable check as it tests the full stack.
-    
-    Returns:
-        tuple: (works: bool, reason: str)
-    """
-    # First check if ydotool is available
-    ydotool_path = None
-    
-    # Check in PATH
-    for path in os.environ.get('PATH', '').split(':'):
-        candidate = os.path.join(path, 'ydotool')
-        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
-            ydotool_path = candidate
-            break
-    
-    if not ydotool_path:
-        # Check bundled location (AppImage)
-        appdir = os.environ.get('APPDIR', '')
-        if appdir:
-            candidate = os.path.join(appdir, 'usr', 'bin', 'ydotool')
-            if os.path.isfile(candidate):
-                ydotool_path = candidate
-    
-    if not ydotool_path:
-        return (False, "ydotool not found. It should be bundled with TuxTalk.")
-    
-    # Check if ydotoold is running
-    try:
-        result = subprocess.run(['pgrep', '-f', 'ydotoold'], 
-                              capture_output=True, timeout=2)
-        if result.returncode != 0:
-            return (False, "ydotoold daemon is not running. "
-                          "TuxTalk should start it automatically.")
-    except Exception as e:
-        logger.warning(f"Could not check ydotoold status: {e}")
-    
-    # The actual typing test would require ydotoold to be running
-    # and would inject real keystrokes - too intrusive for a check
-    # So we just verify uinput access
-    has_access, reason = check_uinput_permission()
-    
-    if has_access:
-        return (True, "ydotool and /dev/uinput are ready for keystroke injection.")
-    else:
-        return (False, reason)
-
-
 # ydotoold systemd service template - {ydotoold_path} will be replaced with actual path
 YDOTOOLD_SERVICE_TEMPLATE = '''[Unit]
 Description=ydotool daemon (TuxTalk keystroke injection)
@@ -433,7 +383,7 @@ def setup_ydotoold_service():
     """
     try:
         # Check if ydotool is installed system-wide
-        ydotool_installed, ydotool_path = check_ydotool_available()
+        ydotool_installed, _ = check_ydotool_available()
 
         if not ydotool_installed:
             return (False, "ydotool is not installed. Please install it first:\n"
@@ -726,18 +676,13 @@ def get_portaudio_install_command():
     return (None, None)
 
 
-def install_portaudio_with_pkexec(parent_window=None):
+def install_portaudio_with_pkexec():
     """
     Install PortAudio using the system package manager with pkexec for privilege escalation.
-
-    Args:
-        parent_window: Optional GTK parent window for the pkexec dialog
 
     Returns:
         tuple: (success: bool, message: str)
     """
-    import subprocess
-
     # Check if already installed
     installed, _ = check_portaudio_installed()
     if installed:
@@ -764,7 +709,7 @@ def install_portaudio_with_pkexec(parent_window=None):
 
         if result.returncode == 0:
             # Verify installation
-            installed, msg = check_portaudio_installed()
+            installed, _ = check_portaudio_installed()
             if installed:
                 logger.info("PortAudio installed successfully")
                 return (True, "PortAudio installed successfully!")
@@ -801,7 +746,7 @@ def get_portaudio_status():
             - needs_install: bool
             - message: str
     """
-    installed, message = check_portaudio_installed()
+    installed, _ = check_portaudio_installed()
 
     if installed:
         return {
@@ -817,18 +762,13 @@ def get_portaudio_status():
     }
 
 
-def install_ydotool_with_pkexec(parent_window=None):
+def install_ydotool_with_pkexec():
     """
     Install ydotool using the system package manager with pkexec for privilege escalation.
-
-    Args:
-        parent_window: Optional GTK parent window for the pkexec dialog
 
     Returns:
         tuple: (success: bool, message: str)
     """
-    import subprocess
-
     # Check if already installed
     installed, _ = check_ydotool_available()
     if installed:
@@ -938,13 +878,10 @@ echo " session keeps the old group list alive.)"
 '''
 
 
-def install_udev_rule_with_pkexec(parent_window=None):
+def install_udev_rule_with_pkexec():
     """
     Install the udev rule using pkexec for privilege escalation.
     
-    Args:
-        parent_window: Optional GTK parent window for the pkexec dialog
-        
     Returns:
         tuple: (success: bool, message: str)
     """
@@ -996,170 +933,3 @@ def install_udev_rule_with_pkexec(parent_window=None):
     except Exception as e:
         logger.error(f"Error running pkexec: {e}")
         return (False, f"Error: {e}")
-
-
-def show_uinput_fix_dialog(parent=None):
-    """
-    Show a GTK dialog explaining the uinput permission issue and offering to fix it.
-    
-    Args:
-        parent: Optional parent GTK window
-        
-    Returns:
-        bool: True if user chose to fix and it succeeded, False otherwise
-    """
-    try:
-        import gi
-        gi.require_version('Gtk', '3.0')
-        from gi.repository import Gtk
-        from .ui_style import message_dialog
-        
-        # Check current status
-        has_access, reason = check_uinput_permission()
-        
-        if has_access:
-            # Already working, nothing to do
-            dialog = message_dialog(
-                transient_for=parent,
-                modal=True,
-                message_type=Gtk.MessageType.INFO,
-                buttons=Gtk.ButtonsType.OK,
-                text="Typing is Ready!"
-            )
-            dialog.format_secondary_text(
-                "Your system is already configured correctly.\n\n"
-                "Keystroke injection should work without issues."
-            )
-            dialog.run()
-            dialog.destroy()
-            return True
-        
-        # Show fix dialog
-        dialog = message_dialog(
-            transient_for=parent,
-            modal=True,
-            message_type=Gtk.MessageType.WARNING,
-            buttons=Gtk.ButtonsType.NONE,
-            text="Typing Permission Required"
-        )
-        
-        dialog.format_secondary_markup(
-            f"<b>Issue:</b> {reason}\n\n"
-            "<b>What this means:</b>\n"
-            "TuxTalk uses the Linux input system to type text into applications. "
-            "This requires permission to access /dev/uinput.\n\n"
-            "<b>The fix:</b>\n"
-            "We'll add a system rule that grants your user account access to the "
-            "input device. This is a one-time setup that requires your admin password.\n\n"
-            "<b>After the fix:</b>\n"
-            "Restart your computer to apply (logging out is often not enough)."
-        )
-        
-        dialog.add_button("Use Clipboard Instead", Gtk.ResponseType.CANCEL)
-        dialog.add_button("Fix Typing (Recommended)", Gtk.ResponseType.OK)
-        
-        # Style the recommended button
-        fix_button = dialog.get_widget_for_response(Gtk.ResponseType.OK)
-        if fix_button:
-            fix_button.get_style_context().add_class("suggested-action")
-        
-        response = dialog.run()
-        dialog.destroy()
-        
-        if response == Gtk.ResponseType.OK:
-            # User wants to fix
-            success, message = install_udev_rule_with_pkexec(parent)
-            
-            # Show result
-            result_dialog = message_dialog(
-                transient_for=parent,
-                modal=True,
-                message_type=Gtk.MessageType.INFO if success else Gtk.MessageType.ERROR,
-                buttons=Gtk.ButtonsType.OK,
-                text="Setup Complete" if success else "Setup Failed"
-            )
-            result_dialog.format_secondary_text(message)
-            result_dialog.run()
-            result_dialog.destroy()
-            
-            return success
-        else:
-            # User chose clipboard mode
-            logger.info("User chose to use clipboard mode instead of fixing uinput")
-            return False
-            
-    except Exception as e:
-        logger.error(f"Error showing uinput fix dialog: {e}")
-        return False
-
-
-def get_typing_status():
-    """
-    Get a summary of the typing injection status for display in UI.
-    
-    Returns:
-        dict with keys:
-            - 'works': bool - whether typing should work
-            - 'status': str - short status text
-            - 'details': str - detailed explanation
-            - 'can_fix': bool - whether we can offer to fix it
-    """
-    has_access, reason = check_uinput_permission()
-    
-    if has_access:
-        return {
-            'works': True,
-            'status': 'Ready',
-            'details': 'Keystroke injection is configured and ready.',
-            'can_fix': False
-        }
-    
-    # Check if it's fixable
-    can_fix = check_uinput_exists()  # If device exists, we can potentially fix permissions
-    
-    return {
-        'works': False,
-        'status': 'Permission needed',
-        'details': reason,
-        'can_fix': can_fix
-    }
-
-
-if __name__ == "__main__":
-    # Test the module
-    print("Testing uinput Helper Module")
-    print("=" * 50)
-    
-    print(f"\n/dev/uinput exists: {check_uinput_exists()}")
-    print(f"Readable: {check_uinput_readable()}")
-    print(f"Writable: {check_uinput_writable()}")
-    
-    has_access, reason = check_uinput_permission()
-    print(f"\nHas access: {has_access}")
-    print(f"Reason: {reason}")
-    
-    print(f"\nUser in 'input' group: {check_user_in_input_group()}")
-    print(f"Udev rule exists: {check_udev_rule_exists()}")
-    
-    status = get_typing_status()
-    print(f"\nTyping status: {status}")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
