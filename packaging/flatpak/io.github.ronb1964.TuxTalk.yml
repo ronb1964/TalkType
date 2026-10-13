@@ -1,4 +1,4 @@
-app-id: io.github.ronb1964.TalkType
+app-id: io.github.ronb1964.TuxTalk
 runtime: org.gnome.Platform
 runtime-version: '50'
 sdk: org.gnome.Sdk
@@ -28,7 +28,7 @@ finish-args:
   - --talk-name=org.mpris.MediaPlayer2.*
   - --filesystem=xdg-run/tray-icon:create
   # Query GNOME Shell (org.gnome.Shell.Extensions.GetExtensionInfo) to detect
-  # whether the TalkType extension is enabled. Inside the sandbox the
+  # whether the TuxTalk extension is enabled. Inside the sandbox the
   # gnome-extensions CLI and org.gnome.shell gsettings schema are both absent, so
   # this D-Bus call is the only way to know — without it the GTK tray shows
   # alongside the extension's indicator (a duplicate tray icon on GNOME).
@@ -72,15 +72,15 @@ modules:
           faster-whisper onnx-asr sounddevice evdev pyperclip toml dbus-python
 
   # The app itself: source + launcher + AppStream metadata + icon + desktop file.
-  - name: talktype
+  - name: tuxtalk
     buildsystem: simple
     build-commands:
       - install -Dm755 talktype-launcher /app/bin/talktype-launcher
-      - mkdir -p /app/lib && cp -r talktype /app/lib/talktype
+      - mkdir -p /app/lib && cp -r tuxtalk /app/lib/tuxtalk
       - install -Dm644 io.github.ronb1964.TuxTalk.appdata.xml
           /app/share/metainfo/io.github.ronb1964.TuxTalk.appdata.xml
       # App icon. The welcome splash searches for this exact path and falls back
-      # to plain "TalkType" text (no blue logo) if it's absent — which is what
+      # to plain "TuxTalk" text (no blue logo) if it's absent — which is what
       # happened before this was added. It is also the icon GNOME/KDE show in the
       # app grid and dock. Scalable SVG covers every size; the runtime ships
       # librsvg so GdkPixbuf can render it. This is a square-canvas copy of

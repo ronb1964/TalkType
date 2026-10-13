@@ -1,11 +1,14 @@
-# TalkType — Flatpak
+# TuxTalk — Flatpak
 
-A self-hosted [Flatpak](https://flatpak.org/) build of TalkType. It runs the same
+A self-hosted [Flatpak](https://flatpak.org/) build of TuxTalk. It runs the same
 app as the AppImage/`.deb`/`.rpm`, but sandboxed: dictation hotkeys go through the
 desktop's **GlobalShortcuts portal** and typing through **libei** (Backend B), so
 there is no `ydotool`, no `uinput`, no `input` group, and no root.
 
-App ID: **`io.github.ronb1964.TalkType`** · Runtime: **`org.gnome.Platform//50`**
+App ID: **`io.github.ronb1964.TuxTalk`** · Runtime: **`org.gnome.Platform//50`**
+
+The manifest was updated by hand for the rename to TuxTalk and has not been
+built since. Run `build-flatpak.sh` once before handing a bundle to anyone.
 
 ## Requirements
 
@@ -24,10 +27,10 @@ App ID: **`io.github.ronb1964.TalkType`** · Runtime: **`org.gnome.Platform//50`
 
 ```bash
 # optional: verify the download first
-sha256sum -c TalkType-flatpak-*.flatpak.sha256
+sha256sum -c TuxTalk-flatpak-*.flatpak.sha256
 
-flatpak install --user ./TalkType-flatpak-*.flatpak
-flatpak run io.github.ronb1964.TalkType
+flatpak install --user ./TuxTalk-flatpak-*.flatpak
+flatpak run io.github.ronb1964.TuxTalk
 ```
 
 The runtime (`org.gnome.Platform//50`) is pulled from Flathub automatically on first
@@ -45,7 +48,7 @@ install if it isn't already present.
   - **GNOME** — turn **on** the **"Allow Remote Interaction"** switch before clicking **Share**.
   - **KDE** — in the **Remote Control** window, check **"Allow restoring on future
     sessions"** before Approving so it won't ask again.
-- **Quieting KDE's per-dictation notification:** TalkType opens a fresh remote-control
+- **Quieting KDE's per-dictation notification:** TuxTalk opens a fresh remote-control
   session for each dictation, so KDE shows a **"Remote control session started"** popup
   every time. Checking "Allow restoring" does **not** silence it (that only stops the
   approval dialog). To turn the popup off: click the **sliders icon** on the notification
@@ -58,8 +61,8 @@ install if it isn't already present.
 
 ### Updates
 
-Flatpak apps update through Flatpak: `flatpak update io.github.ronb1964.TalkType`.
-TalkType's built-in update check is Flatpak-aware and will point you at that command
+Flatpak apps update through Flatpak: `flatpak update io.github.ronb1964.TuxTalk`.
+TuxTalk's built-in update check is Flatpak-aware and will point you at that command
 rather than trying to install an AppImage.
 
 ## Build from source
@@ -75,8 +78,8 @@ flatpak install --user -y flathub org.flatpak.Builder   # one-time
 
 # build + install, and also emit a single-file bundle + SHA256 sidecar
 ./packaging/flatpak/build-flatpak.sh bundle
-# -> TalkType-flatpak-<version>.flatpak
-# -> TalkType-flatpak-<version>.flatpak.sha256
+# -> TuxTalk-flatpak-<version>.flatpak
+# -> TuxTalk-flatpak-<version>.flatpak.sha256
 ```
 
 Build artifacts (`.flatpak-build/`, `.flatpak-builder/`, `.flatpak-repo/`, and the
@@ -86,7 +89,7 @@ Build artifacts (`.flatpak-build/`, `.flatpak-builder/`, `.flatpak-repo/`, and t
 
 | File | Purpose |
 |------|---------|
-| `io.github.ronb1964.TalkType.yml` | flatpak-builder manifest (runtime, deps, finish-args) |
+| `io.github.ronb1964.TuxTalk.yml` | flatpak-builder manifest (runtime, deps, finish-args) |
 | `io.github.ronb1964.TuxTalk.svg` | square app icon installed into the sandbox |
 | `talktype-launcher` | in-sandbox entry point (sets `PYTHONPATH`, runs `-m tuxtalk.tray`) |
 | `build-flatpak.sh` | build + install (+ optional `bundle`) wrapper |
@@ -101,8 +104,8 @@ the same code as the other packages.
 ## Uninstall
 
 ```bash
-flatpak uninstall --user io.github.ronb1964.TalkType
+flatpak uninstall --user io.github.ronb1964.TuxTalk
 ```
 
 Your settings and downloaded models live under
-`~/.var/app/io.github.ronb1964.TalkType/`; add `--delete-data` to remove those too.
+`~/.var/app/io.github.ronb1964.TuxTalk/`; add `--delete-data` to remove those too.

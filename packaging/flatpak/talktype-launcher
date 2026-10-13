@@ -1,7 +1,10 @@
 #!/bin/sh
-# In-sandbox entry point for the TalkType Flatpak.
-# The bundled Python deps live under /app/lib/python3.12/site-packages; the app
-# package lives at /app/lib/talktype. Backend B (portal hotkey + libei typing) is
+# In-sandbox entry point for the TuxTalk Flatpak. The file keeps its old name
+# because the launch-at-login request (autostart.py) runs it by that name.
+# The bundled Python deps live under /app/lib/python3.13/site-packages; the app
+# package lives at /app/lib/tuxtalk. Backend B (portal hotkey + libei typing) is
 # selected automatically because FLATPAK_ID is set.
-export PYTHONPATH="/app/lib:/app/lib/python3.13/site-packages:${PYTHONPATH}"
+# An empty PYTHONPATH must not leave a trailing ":", which Python reads as the
+# current folder.
+export PYTHONPATH="/app/lib:/app/lib/python3.13/site-packages${PYTHONPATH:+:$PYTHONPATH}"
 exec python3 -m tuxtalk.tray "$@"

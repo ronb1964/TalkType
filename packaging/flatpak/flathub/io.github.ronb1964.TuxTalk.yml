@@ -1,4 +1,4 @@
-app-id: io.github.ronb1964.TalkType
+app-id: io.github.ronb1964.TuxTalk
 runtime: org.gnome.Platform
 runtime-version: '50'
 sdk: org.gnome.Sdk
@@ -16,8 +16,8 @@ finish-args:
   - --share=ipc
   - --socket=pulseaudio
   - --device=dri
-  # RUNTIME network is required, not a convenience: on first run TalkType
-  # downloads the selected faster-whisper model from Hugging Face, optionally
+  # RUNTIME network is required, not a convenience: on first run TuxTalk
+  # downloads the selected speech model from Hugging Face, optionally
   # downloads the CUDA runtime for GPU users, and checks GitHub for updates.
   # No models are bundled (they are hundreds of MB and user-selectable). The
   # BUILD, however, is fully offline — every Python dep is a pinned wheel/sdist.
@@ -32,7 +32,7 @@ finish-args:
   - --talk-name=org.mpris.MediaPlayer2.*
   - --filesystem=xdg-run/tray-icon:create
   # Query GNOME Shell (org.gnome.Shell.Extensions.GetExtensionInfo) to detect
-  # whether the TalkType extension is enabled. Inside the sandbox the
+  # whether the TuxTalk extension is enabled. Inside the sandbox the
   # gnome-extensions CLI and org.gnome.shell gsettings schema are both absent, so
   # this D-Bus call is the only way to know — without it the GTK tray shows
   # alongside the extension's indicator (a duplicate tray icon on GNOME).
@@ -177,11 +177,11 @@ modules:
 
   # The app itself: source + launcher + AppStream metadata + icon + desktop file.
   # Sourced from the tagged git commit (Flathub forbids local paths).
-  - name: talktype
+  - name: tuxtalk
     buildsystem: simple
     build-commands:
       - install -Dm755 packaging/flatpak/talktype-launcher /app/bin/talktype-launcher
-      - mkdir -p /app/lib && cp -r src/tuxtalk /app/lib/talktype
+      - mkdir -p /app/lib && cp -r src/tuxtalk /app/lib/tuxtalk
       - install -Dm644 io.github.ronb1964.TuxTalk.appdata.xml
           /app/share/metainfo/io.github.ronb1964.TuxTalk.appdata.xml
       # App icon (square SVG copy; Flatpak rejects non-square icons on export).
@@ -194,7 +194,9 @@ modules:
     sources:
       - type: git
         url: https://github.com/ronb1964/TalkType.git
-        # Pinned commit that carries the 0.7.2 <release> in the appdata (a child
-        # of the v0.7.2 tag, which predates the appdata entry). Flathub requires a
-        # pinned commit, not a floating branch.
+        # Flathub requires a pinned commit, not a floating branch. This one is
+        # from 0.7.2, before the TuxTalk rename, so it has no src/tuxtalk and
+        # the build stops here. Before a Flathub submission, pin the release
+        # commit, and add the onnx-asr wheels (Parakeet, the default model) to
+        # python3-deps above.
         commit: 76e6cbe3e48407487c89aac8109b2a37d834f9cd

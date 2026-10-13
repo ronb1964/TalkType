@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build + install the TalkType Flatpak with flatpak-builder (run as the
+# Build + install the TuxTalk Flatpak with flatpak-builder (run as the
 # org.flatpak.Builder flatpak so no system package is needed).
 #
 #   ./packaging/flatpak/build-flatpak.sh            # build + install --user
@@ -7,11 +7,11 @@
 set -e
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
-MANIFEST="$HERE/io.github.ronb1964.TalkType.yml"
+MANIFEST="$HERE/io.github.ronb1964.TuxTalk.yml"
 BUILDDIR="$ROOT/.flatpak-build"
 STATE="$ROOT/.flatpak-builder"
 REPO="$ROOT/.flatpak-repo"
-APPID=io.github.ronb1964.TalkType
+APPID=io.github.ronb1964.TuxTalk
 
 # --filesystem=host so the builder can read the repo sources + write build dirs;
 # --share=network for source downloads and the pip module.
@@ -23,7 +23,8 @@ flatpak run --filesystem=host --share=network org.flatpak.Builder \
 echo "installed $APPID (--user)"
 
 if [ "$1" = "bundle" ]; then
-    OUT="$ROOT/TalkType-flatpak-$(cat "$ROOT/VERSION" 2>/dev/null || echo dev).flatpak"
+    VERSION=$(grep -E "^version = " "$ROOT/pyproject.toml" | sed 's/version = "\(.*\)"/\1/')
+    OUT="$ROOT/TuxTalk-flatpak-${VERSION:-dev}.flatpak"
     flatpak build-bundle "$REPO" "$OUT" "$APPID"
     echo "wrote bundle: $OUT"
     # SHA256 sidecar so users can verify the download (mirrors build-release.sh).
