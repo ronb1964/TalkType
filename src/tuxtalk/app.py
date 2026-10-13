@@ -117,7 +117,9 @@ def _apply_cleanup_settings(cfg):
             logger.warning("The AI is on but not downloaded; turn the option off and on in Preferences")
     elif not want_ai and _ai_engine is not None:
         engine, _ai_engine = _ai_engine, None
-        engine.stop()
+        # stop() can wait up to 5 s for the server to exit. This runs on the
+        # input thread, which must keep reading the hotkeys meanwhile.
+        threading.Thread(target=engine.stop, daemon=True, name="tt-ai-stop").start()
 
 # Cached tool path lookups — avoids searching PATH on every text injection
 _tool_cache = {}
@@ -1573,12 +1575,20 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
     return True
 
 def _stop_stream_safely():
-    if state.stream:
+    """Stop and close the microphone stream. close() runs even when stop()
+    fails (an unplugged mic), so the device is free to be opened again."""
+    stream, state.stream = state.stream, None
+    if stream is None:
+        return
+    try:
+        stream.stop()
+    except Exception as e:
+        logger.warning(f"Could not stop the microphone stream: {e}")
+    finally:
         try:
-            state.stream.stop(); state.stream.close()
-        except Exception:
-            pass
-        state.stream = None
+            stream.close()
+        except Exception as e:
+            logger.warning(f"Could not close the microphone stream: {e}")
 
 def cancel_recording(beeps_on: bool, notify_on: bool, reason="Cancelled"):
     state.is_recording = False
@@ -2895,9 +2905,12 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
     except Exception as e:
         logger.error(f"Transcription error: {e}", exc_info=True)
         print(f"❌ Transcription error: {e}")
-        _beep(beeps_on, *READY_BEEP)
+        # The cancel beep and a notice whatever the notifications setting,
+        # like _report_undelivered: nothing was typed, and the "done" beep
+        # would sound like it worked.
+        _beep(beeps_on, *CANCEL_BEEP)
         _ellipsis = "…"  # Must be outside f-string for Python 3.10 compat
-        if notify_on: _notify("TuxTalk", f"Transcription failed: {str(e)[:60]}{_ellipsis if len(str(e))>60 else ''}")
+        _notify("TuxTalk", f"Transcription failed: {str(e)[:60]}{_ellipsis if len(str(e))>60 else ''}")
 
 
 def stop_recording(
@@ -3939,7 +3952,8 @@ def build_model(settings: Settings):
                 )
 
                 if model is None:
-                    raise Exception("Model download cancelled by user")
+                    raise ModelUnavailable(
+                        f"The {settings.model} model was not downloaded (cancelled or failed)")
 
                 print("✅ Model loaded successfully on CPU (fallback)")
                 logger.info("Model loaded on CPU (fallback from CUDA)")
@@ -3966,11 +3980,11 @@ def build_model(settings: Settings):
             except Exception as cpu_e:
                 print(f"❌ CPU fallback also failed: {cpu_e}")
                 logger.error(f"CPU fallback failed: {cpu_e}")
-                raise cpu_e
+                raise
         else:
             print(f"❌ Model loading failed: {e}")
             logger.error(f"Model loading failed: {e}")
-            raise e
+            raise
 
 def parse_args():
     ap = argparse.ArgumentParser(prog="dictate", description="Press-and-hold / toggle dictation for Wayland")
@@ -4060,6 +4074,7 @@ def main():
         gtk_needed = True
 
     if gtk_needed:
+        gtk_ok = False
         try:
             # Import GTK in the main thread
             import gi
@@ -4229,7 +4244,14 @@ def main():
                 except Exception as e:
                     print(f"⚠️  Failed to initialize recording indicator: {e}")
                     logger.error(f"Recording indicator initialization failed: {e}", exc_info=True)
+            gtk_ok = True
+        except Exception as e:
+            print(f"⚠️  Failed to initialize GTK components: {e}")
+            logger.error(f"GTK initialization failed: {e}", exc_info=True)
 
+        # Outside the try above: a model that fails to load is not a GTK
+        # failure, and must not be loaded a second time below.
+        if gtk_ok:
             # If the model still has to be downloaded, do it NOW, before the GTK
             # loop thread starts. The download shows GTK dialogs and runs them on
             # this thread; with Gtk.main() already running on the thread below,
@@ -4248,10 +4270,6 @@ def main():
             gtk_thread = threading.Thread(target=run_gtk_loop, daemon=True)
             gtk_thread.start()
             print("✓ GTK main loop started in background thread")
-
-        except Exception as e:
-            print(f"⚠️  Failed to initialize GTK components: {e}")
-            logger.error(f"GTK initialization failed: {e}", exc_info=True)
 
     if model is None:
         model = _build_model_or_exit(cfg)

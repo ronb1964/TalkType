@@ -130,3 +130,27 @@ def test_cancel_falls_back_to_a_downloaded_model_and_saves_it(monkeypatch):
     assert app._build_model_or_exit(settings) == "model:small"
     assert settings.model == "small" and saved == ["small"]
     assert "Parakeet wasn't downloaded" in notes[0] and "Small" in notes[0]
+
+
+def test_a_cancelled_cpu_retry_is_a_missing_model_not_a_crash(monkeypatch):
+    """CUDA failed, then the processor copy was cancelled. A bare Exception
+    escaped _build_model_or_exit (which handles ModelUnavailable) and crashed
+    the service with a traceback instead of using a downloaded model."""
+    def load(*a, **k):
+        if k.get("device") == "cuda":
+            raise RuntimeError("CUDA driver missing")
+        return None
+
+    monkeypatch.setattr(model_helper, "download_model_with_progress", load)
+    with pytest.raises(app.ModelUnavailable):
+        app.build_model(_settings(device="cuda"))
+
+
+def test_a_model_load_error_is_not_reported_as_a_gtk_failure():
+    """The early build sat inside the GTK setup's try: a load error was logged
+    as "GTK initialization failed", the GTK loop never started, and the model
+    was then built a second time."""
+    main_src = (ROOT / "src/tuxtalk/app.py").read_text().split("\ndef main():", 1)[1]
+    gtk_except = main_src.index('logger.error(f"GTK initialization failed')
+    early_build = main_src.index("if not is_model_cached_fast(cfg.model):")
+    assert gtk_except < early_build
