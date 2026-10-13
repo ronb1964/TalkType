@@ -622,16 +622,9 @@ def _restore_protected(text: str, protected: dict[str, str]) -> str:
     return text
 
 
-# YouTube-specific phrases that are NEVER real dictation.
-# Safe to strip from the end of any transcription.
+# YouTube outro phrases Whisper invents from silence, which nobody says to a
+# text box. Stripped from the end of any transcription.
 _YOUTUBE_HALLUCINATION_PHRASES = [
-    "thanks for watching",
-    "thanks for listening",
-    "thank you for watching",
-    "thank you for listening",
-    "see you next time",
-    "see you in the next video",
-    "see you in the next one",
     # NOT bare "subscribe": it is an ordinary English verb, and stripping it
     # from the end of any transcription silently ate the last word of real
     # sentences ("tell them to subscribe" -> "tell them to"). It also matched
@@ -642,6 +635,20 @@ _YOUTUBE_HALLUCINATION_PHRASES = [
     "please subscribe",
     "don't forget to subscribe",
     "hit the bell",
+]
+
+# Sign-offs Whisper also invents from silence, but which people do dictate at
+# the end of an email or a script ("Great meeting today, see you next time.").
+# Treated like "thank you" below: dropped only when Whisper itself says the
+# audio was probably not speech.
+_SIGN_OFF_PHRASES = [
+    "thanks for watching",
+    "thanks for listening",
+    "thank you for watching",
+    "thank you for listening",
+    "see you next time",
+    "see you in the next video",
+    "see you in the next one",
 ]
 
 # Common words/phrases that Whisper hallucinates from silence.
@@ -662,7 +669,7 @@ _WHOLE_TEXT_HALLUCINATION_PHRASES = [
     "hmm",
     "uh",
     "um",
-]
+] + _SIGN_OFF_PHRASES
 
 # Phrases that Whisper hallucinates at the END of longer dictations.
 # Only stripped when trailing real speech AND no_speech_prob is very high (>0.8),
@@ -676,24 +683,56 @@ _TRAILING_HALLUCINATION_PHRASES = [
     "thank you so much",
     "thanks",
     "you",
-]
+] + _SIGN_OFF_PHRASES
+
+
+def _trailing_phrase_re(phrases):
+    """A pattern for any of *phrases* as whole words at the very end of a text,
+    with the punctuation and spaces around it. Matched on the original text,
+    case-insensitively, so the cut lands in the right place even where
+    lower-casing changes a string's length (Turkish "İ")."""
+    alternatives = "|".join(re.escape(p) for p in sorted(phrases, key=len, reverse=True))
+    return re.compile(r"[\s,.;:!?]*\b(?:" + alternatives + r")[\s.,!?;:]*$", re.IGNORECASE)
+
+
+_YOUTUBE_TAIL_RE = _trailing_phrase_re(_YOUTUBE_HALLUCINATION_PHRASES)
+_TRAILING_TAIL_RE = _trailing_phrase_re(_TRAILING_HALLUCINATION_PHRASES)
+
+
+def _cut_tail(text: str, start: int) -> str:
+    """*text* up to *start*, keeping the sentence's own closing mark: "Great
+    meeting today, see you next time." ends as "Great meeting today."."""
+    kept = text[:start].rstrip(" ,;:")
+    if not kept:
+        return ""
+    # A sentence that ended before the phrase keeps its own mark ("week. Thanks
+    # for watching!" -> "week."); one the phrase finished takes the phrase's.
+    first = text[start:].lstrip()[:1]
+    last = text.rstrip()[-1:]
+    for mark in (first, last):
+        if mark in (".", "!", "?"):
+            return kept + mark
+    return kept
 
 
 def _strip_hallucinations(text: str, no_speech_prob: float = 0.0) -> str:
     """
     Remove common Whisper hallucination phrases from transcribed text.
 
-    Three-tier approach:
-    1. YouTube-specific phrases ("thanks for watching", "like and subscribe")
-       are always stripped from the end - nobody dictates these.
-    2. Common words ("thank you", "bye") are only discarded when they are
-       the ENTIRE transcription AND Whisper's no_speech_prob indicates
-       it likely wasn't real speech. This preserves intentional dictation
-       of phrases like "Thank you."
-    3. Trailing hallucinations ("thank you", "you") are stripped from the
-       end of longer dictations when no_speech_prob is very high (>0.8).
-       This catches the common pattern where Whisper appends hallucinated
-       phrases to real speech during the silence at the end of a recording.
+    Three tiers, checked in this order:
+    1. Whole text: common words ("thank you", "bye") and sign-offs ("see you
+       next time") are discarded when they are the ENTIRE transcription AND
+       Whisper's no_speech_prob says it likely wasn't real speech. This keeps
+       an intentional "Thank you."
+    2. YouTube outros ("like and subscribe", "hit the bell") are always
+       stripped from the end: nobody dictates these.
+    3. Trailing phrases ("thank you", "see you next time") are stripped from
+       the end of longer dictations when no_speech_prob is very high (>0.8).
+       This catches Whisper appending them to real speech during the silence
+       at the end of a recording.
+
+    Parakeet and the Vulkan engine pass no probability (0.0), so for them only
+    tier 2 applies.
 
     Args:
         text: Raw transcribed text
@@ -719,43 +758,23 @@ def _strip_hallucinations(text: str, no_speech_prob: float = 0.0) -> str:
         logger.info(f"Stripped whole-text hallucination (no_speech_prob={no_speech_prob:.2f}): {_loggable(original)}")
         return ""
 
-    # Tier 2: Strip YouTube-specific phrases from the end of text.
-    # These are never real dictation so they're always safe to remove.
-    changed = True
-    while changed:
-        changed = False
-        lower_text = text.lower()
-
-        for phrase in _YOUTUBE_HALLUCINATION_PHRASES:
-            # Check if text ends with this phrase (with optional trailing punctuation)
-            stripped = lower_text.rstrip(" .,!?;:")
-            if stripped.endswith(phrase):
-                # Find where the hallucination starts
-                phrase_start = stripped.rfind(phrase)
-                if phrase_start > 0:
-                    # Remove the hallucination and any trailing punctuation/whitespace
-                    text = text[:phrase_start].rstrip(" .,!?;:")
-                    changed = True
-                    break
-                elif phrase_start == 0:
-                    # The entire text is just the hallucination
-                    text = ""
-                    changed = True
-                    break
+    # Tier 2: Strip YouTube outros from the end of text, repeatedly, since
+    # Whisper sometimes strings two together.
+    while text:
+        match = _YOUTUBE_TAIL_RE.search(text)
+        if not match:
+            break
+        text = _cut_tail(text, match.start())
 
     # Tier 3: Strip trailing hallucination phrases from the end of real sentences.
     # Only when: (a) no_speech_prob is very high (>0.8, Whisper is very uncertain),
     # and (b) there's substantial text before the trailing phrase (>50 chars),
     # so we don't accidentally strip real speech like "Sure, thank you."
     if text and no_speech_prob > 0.8 and len(text) > 50:
-        lower_text = text.lower().rstrip(" .,!?;:")
-        for phrase in _TRAILING_HALLUCINATION_PHRASES:
-            if lower_text.endswith(phrase):
-                phrase_start = lower_text.rfind(phrase)
-                # Only strip if preceded by whitespace (segment boundary)
-                if phrase_start > 0 and text[phrase_start - 1] in " \t":
-                    text = text[:phrase_start].rstrip(" .,!?;:")
-                    break
+        match = _TRAILING_TAIL_RE.search(text)
+        # Only a phrase after real speech, never the whole text (tier 1's job).
+        if match and match.start() > 0:
+            text = _cut_tail(text, match.start())
 
     if text != original:
         logger.info(f"Stripped hallucination: {_loggable(original)} -> {_loggable(text)}")
@@ -2185,9 +2204,9 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
     from .parakeet_gpu import ParakeetGpuModel
     if isinstance(model, (ParakeetModel, ParakeetGpuModel)):
         # Parakeet detects the language itself and has no Whisper-style
-        # decoding options. It also does not invent "thank you" in silence,
-        # but the hallucination filter is still run: its YouTube-phrase tier
-        # is harmless, and it keeps both engines on one path from here on.
+        # decoding options. It also does not invent "thank you" in silence.
+        # The filter still runs, without a probability, so only its YouTube
+        # outro tier ("like and subscribe") can apply.
         raw = model.recognize(audio_f32)
         where = " on GPU" if isinstance(model, ParakeetGpuModel) else ""
         logger.info(f"TIMING: Transcription completed in {time.time() - transcribe_start:.2f}s (Parakeet{where})")
