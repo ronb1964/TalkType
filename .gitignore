@@ -151,8 +151,7 @@ aur-repo/
 talktype-gnome-extension.zip
 tuxtalk-gnome-extension.zip
 test-screenshots/
-icons/
-*.svg.playwright-mcp/
+/*.svg
 
 # ============================================
 # Archive / old files
