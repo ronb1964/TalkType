@@ -1856,10 +1856,23 @@ def show_welcome_dialog(parent=None):
 
     def show_dialog_after_splash():
         """Called after splash screen finishes."""
-        dialog = WelcomeDialog(parent=parent)
-        result_container[0] = dialog.run()
-        dialog.destroy()
-        Gtk.main_quit()
+        dialog = None
+        try:
+            dialog = WelcomeDialog(parent=parent)
+            result_container[0] = dialog.run()
+        except Exception:
+            # An error here would otherwise leave Gtk.main() below running for
+            # good with nothing on screen. None reads as a cancelled onboarding.
+            logger.error("Welcome dialog failed", exc_info=True)
+            result_container[0] = None
+        finally:
+            if dialog is not None:
+                try:
+                    dialog.destroy()
+                except Exception:
+                    pass
+            Gtk.main_quit()
+        return False
 
     # Show splash screen first
     splash = SplashScreen()

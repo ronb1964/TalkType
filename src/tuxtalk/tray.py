@@ -2111,8 +2111,14 @@ def main():
 
             # Schedule the welcome dialog after tray is initialized
             def show_first_run_setup():
-                # Show unified welcome dialog with all setup options
-                result = show_welcome_and_install()
+                # Show unified welcome dialog with all setup options. An error
+                # in onboarding counts as a cancel, so the service still starts
+                # and the welcome comes back next launch.
+                try:
+                    result = show_welcome_and_install()
+                except Exception:
+                    logger.error("Onboarding failed", exc_info=True)
+                    result = None
 
                 # Unsupported desktop (no GlobalShortcuts portal): the user can only
                 # quit — the app cannot function here, so exit instead of starting a
