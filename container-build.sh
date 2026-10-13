@@ -53,22 +53,25 @@ echo ""
 echo "🧹 Cleaning up old build artifacts..."
 rm -rf AppDir /tmp/tuxtalk-build-venv
 
-# Install Poetry globally in container
+# Install Poetry globally in container. Pinned to the version that wrote
+# poetry.lock, so every release resolves dependencies the same way.
 echo "🐍 Installing Poetry..."
-pip3 install -q poetry
+pip3 install -q 'poetry==2.5.1'
 
 # CRITICAL: Configure Poetry to create venv in /tmp, NOT in /build - which is the users project dir
 poetry config virtualenvs.in-project false
 poetry config virtualenvs.path /tmp/tuxtalk-build-venv
 
-# Clear any cached Poetry state
-echo "🗑️  Clearing Poetry cache..."
-rm -rf /tmp/.cache/pypoetry
 export POETRY_CACHE_DIR=/tmp/poetry-cache
 
-# Update lock file if pyproject.toml changed
-echo "🔒 Updating lock file..."
-poetry lock
+# The release installs exactly the versions in the committed poetry.lock. A
+# lock that no longer matches pyproject.toml stops the build here instead of
+# being re-resolved (and rewritten in the project folder) mid-release.
+echo "🔒 Checking the lock file..."
+if ! poetry check --lock; then
+    echo "❌ poetry.lock is out of date: run 'poetry lock' in the project and commit it"
+    exit 1
+fi
 
 # Install Python dependencies (fresh install, no cache)
 echo "📚 Installing dependencies (this takes a few minutes)..."

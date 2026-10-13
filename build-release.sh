@@ -1,7 +1,7 @@
 #!/bin/bash
 # TuxTalk Release Build Script
 # Builds AppImage in Ubuntu 22.04 container for maximum compatibility
-# This is the ONLY build script you need for releases
+# build-deb.sh, build-rpm.sh and package-extension.sh repackage its output
 
 set -e
 
@@ -51,16 +51,9 @@ fi
 echo "📦 Building in Ubuntu 22.04 container..."
 echo ""
 
-# Create pip cache directory if it doesn't exist
-mkdir -p "$HOME/.cache/pip-tuxtalk-build"
-
-echo "💾 Using pip cache: $HOME/.cache/pip-tuxtalk-build"
-echo ""
-
 # Run the container build script
 $CONTAINER_CMD run --rm \
     -v "$PROJECT_DIR:/build:Z" \
-    -v "$HOME/.cache/pip-tuxtalk-build:/root/.cache/pip:Z" \
     -w /build \
     -e HOME=/tmp \
     "${OWNER_ARGS[@]}" \
