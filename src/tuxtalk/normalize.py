@@ -212,8 +212,10 @@ _RE_MULTI_SPACE = re.compile(r"[ ]{2,}")
 _RE_TRAILING_COMMA = re.compile(r",$")
 # What counts as "this line is already punctuated". Colon and semicolon are
 # included: a dictated "colon" is deliberate punctuation, and treating it as
-# unpunctuated appended a full stop straight after it ("the plan:.").
-_RE_NO_END_PUNCT = re.compile(r"[.?!…:;]$")
+# unpunctuated appended a full stop straight after it ("the plan:."). Closing
+# quotes and brackets after the mark are stepped over, since step 11 moves
+# the full stop inside a closing quote ("Hello.”" is finished, not "Hello.”.").
+_RE_NO_END_PUNCT = re.compile(r"[.?!…:;][\"'”’)\]}]*$")
 # Negative lookbehind: don't capitalize after single-letter abbreviations
 # ("e.g. that" / "U.S. economy" must not become "e.g. That" / "U.S. Economy").
 _RE_CAP_AFTER_ENDER = re.compile(r"(?<![A-Za-z]\.[A-Za-z])([.?!…]\s+)([a-z])")
@@ -433,13 +435,10 @@ def _space_after_ender_repl(m: re.Match) -> str:
 # Trailing line-break markers (possibly repeated) at the end of an utterance.
 _RE_TRAILING_BREAKS = re.compile(r"(?:\s*(?:§SHIFT_ENTER§))+\s*$")
 
-# Punctuation that ends an utterance. Colon and semicolon count: a dictated
-# "colon" is deliberate, and appending a full stop after it gave "the plan:.".
-_END_PUNCT = (".", "?", "!", "…", ":", ";")
-
 
 def _ends_punctuated(text: str) -> bool:
-    return text.rstrip().endswith(_END_PUNCT)
+    """Same rule as the per-line pass in normalize_text, so the two agree."""
+    return bool(_RE_NO_END_PUNCT.search(text.rstrip()))
 
 
 def append_auto_punct(text: str, auto_period: bool, auto_space: bool) -> str:

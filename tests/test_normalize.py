@@ -701,3 +701,21 @@ def test_trailing_comma_is_kept_with_auto_period_off():
 
 def test_trailing_comma_at_the_end_still_becomes_a_period():
     assert normalize_text("it was hot comma") == "It was hot."
+
+
+# Only the last character was checked for punctuation, so a full stop or
+# question mark followed by a closing quote or bracket got a second one:
+# "hello close quote" ended as 'Hello.”. '.
+@pytest.mark.parametrize("said, expected", [
+    ("hello close quote", "Hello.” "),
+    ("why question mark close quote", "Why?” "),
+    ("hi exclamation mark close quote", "Hi!” "),
+    ("the end period close quote", "The end.” "),
+    ("see note period close parenthesis", "See note.) "),
+])
+def test_no_second_period_after_a_closing_quote_or_bracket(said, expected):
+    assert append_auto_punct(normalize_text(said), True, True) == expected
+
+
+def test_a_closing_bracket_without_punctuation_still_gets_a_period():
+    assert normalize_text("see the note close parenthesis") == "See the note)."
