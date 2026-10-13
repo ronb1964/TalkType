@@ -502,15 +502,23 @@ class PreferencesWindow:
         except Exception:
             return False
     
-    def _has_nvidia(self):
-        """Whether this computer has an NVIDIA card, asked once per window."""
+    def _nvidia_gpu(self):
+        """The NVIDIA card's name (or True in a Flatpak), False if there is none.
+
+        Asked once per window: nvidia-smi runs on the GTK thread and can take
+        hundreds of milliseconds while the card wakes up.
+        """
         if not hasattr(self, "_nvidia_found"):
             try:
                 from .cuda_helper import detect_nvidia_gpu
-                self._nvidia_found = bool(detect_nvidia_gpu())
+                self._nvidia_found = detect_nvidia_gpu() or False
             except Exception:
                 self._nvidia_found = False
         return self._nvidia_found
+
+    def _has_nvidia(self):
+        """Whether this computer has an NVIDIA card."""
+        return bool(self._nvidia_gpu())
 
     def _refresh_device_options(self):
         """Rebuild the Device dropdown.
@@ -851,7 +859,7 @@ class PreferencesWindow:
         # Check CUDA/GPU availability to gate large-v3
         try:
             from . import cuda_helper as _ch
-            _has_nvidia = bool(_ch.detect_nvidia_gpu())
+            _has_nvidia = self._has_nvidia()
             # has_cuda_libraries() also accepts a system-wide CUDA install —
             # same check the Device dropdown uses. (has_talktype_cuda_libraries
             # is only for download-status display, per its own docstring.)
@@ -3818,11 +3826,11 @@ class PreferencesWindow:
         # If large-v3 is selected, check CUDA availability first
         if new_model == "large-v3":
             try:
-                from .cuda_helper import has_cuda_libraries, detect_nvidia_gpu
+                from .cuda_helper import has_cuda_libraries
                 # Same runtime check the Device dropdown uses (accepts a
                 # system-wide CUDA install, not just TuxTalk's own download)
                 _has_cuda = has_cuda_libraries()
-                _has_nvidia = bool(detect_nvidia_gpu())
+                _has_nvidia = self._has_nvidia()
             except Exception:
                 _has_cuda = False
                 _has_nvidia = False
@@ -4644,7 +4652,7 @@ class PreferencesWindow:
         """Show the NVIDIA card and whether CUDA's files are installed."""
         try:
             from . import cuda_helper
-            gpu_name = cuda_helper.detect_nvidia_gpu()
+            gpu_name = self._nvidia_gpu()
             # TuxTalk's own download only, not a system-wide CUDA install
             has_cuda = cuda_helper.has_talktype_cuda_libraries()
 
