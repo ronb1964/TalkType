@@ -331,3 +331,20 @@ def test_a_failing_autostart_does_not_break_saving(tmp_path, monkeypatch):
 
     assert PreferencesWindow.save_config(d) is True
     assert tomllib.loads((tmp_path / "config.toml").read_text())["launch_at_login"] is True
+
+
+def test_saving_an_unrelated_change_leaves_autostart_alone(tmp_path, monkeypatch):
+    """Every Apply rewrote the autostart entry, so turning TuxTalk off in the
+    desktop's own Autostart settings was undone by the next unrelated change,
+    and with it off every Apply rewrote the Hidden stub."""
+    for launch in (True, False):
+        applied = []
+        d = _saveable(tmp_path, monkeypatch,
+                      {"launch_at_login": launch, "beeps": False, "language_mode": "auto"},
+                      {"launch_at_login": launch, "beeps": True, "language_mode": "auto"})
+        d._handle_autostart = lambda v: applied.append(v)
+
+        assert PreferencesWindow.save_config(d) is True
+        assert PreferencesWindow.save_config(d) is True    # a second Apply
+
+        assert applied == [], "autostart was rewritten though launch at login did not change"

@@ -11,7 +11,7 @@ import sys
 import atexit
 import dbus.mainloop.glib
 from dataclasses import asdict
-from .config import (CONFIG_PATH, ConfigNotLoadedError, Settings, merge_changed_keys,
+from .config import (CONFIG_PATH, ConfigNotLoadedError, Settings, changed_keys, merge_changed_keys,
                      load_custom_commands, save_custom_commands, write_text_atomic,
                      merge_custom_command_edits, CUSTOM_COMMANDS_PATH,
                      _toml_value, CLASSIC_CYAN_HEX)
@@ -541,6 +541,10 @@ class PreferencesWindow:
             # updated with whatever is currently on disk.
             base = dict(self._config_at_open)
             base.update(on_disk)
+            # Only a change made in this window may touch the autostart entry:
+            # rewriting it on every save would undo the user turning TuxTalk
+            # off in their desktop's own Autostart settings.
+            autostart_changed = "launch_at_login" in changed_keys(self._config_at_open, self.config)
             merged = merge_changed_keys(self._config_at_open, self.config, base)
 
             # Build the whole file in memory, then swap it into place in one
@@ -562,12 +566,13 @@ class PreferencesWindow:
             # Apply settings that live outside the config file, now that the
             # save has actually happened. Doing this on toggle instead meant
             # Cancel could not undo it.
-            try:
-                self._handle_autostart(bool(merged.get("launch_at_login", False)))
-            except Exception as e:
-                # A read-only home must not cost the user the settings they
-                # just saved — the file is already written at this point.
-                print(f"Could not update autostart entry: {e}")
+            if autostart_changed:
+                try:
+                    self._handle_autostart(bool(merged.get("launch_at_login", False)))
+                except Exception as e:
+                    # A read-only home must not cost the user the settings they
+                    # just saved — the file is already written at this point.
+                    print(f"Could not update autostart entry: {e}")
 
             # Future saves in this window diff against what we just wrote
             self.config = dict(merged)
@@ -5150,7 +5155,6 @@ class PreferencesWindow:
 
         Must be called before save_config(), which resets the baseline.
         """
-        from .config import changed_keys
         return changed_keys(self._config_at_open, self.config)
 
     def _apply_or_restart(self, changed):
