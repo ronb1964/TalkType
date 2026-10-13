@@ -135,12 +135,10 @@ from .notify import notify as _notify
 # --- Single instance lock (user runtime dir) ---
 def _runtime_dir():
     base = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
-    # Inside a Flatpak, XDG_RUNTIME_DIR (/run/user/N) is shared with the host, so
-    # a host/AppImage service's singleton lock is visible in the sandbox and the
-    # Flatpak service exits as "already running" — dictation never starts. Flatpak
-    # provides a private, per-app tmpfs dir at $XDG_RUNTIME_DIR/app/$FLATPAK_ID;
-    # use it there so the Flatpak's lock never collides with a host instance. On
-    # the host (no FLATPAK_ID) the location is unchanged. Mirrors tray._runtime_dir.
+    # Inside a Flatpak, XDG_RUNTIME_DIR is shared with the host, so a host
+    # service's lock would make the Flatpak service exit as "already running".
+    # The per-app $XDG_RUNTIME_DIR/app/$FLATPAK_ID is private to the sandbox, so
+    # the lock goes there. Mirrors tray._runtime_dir.
     fid = os.environ.get("FLATPAK_ID")
     if fid:
         app_dir = os.path.join(base, "app", fid)
@@ -149,10 +147,9 @@ def _runtime_dir():
     return base
 
 def _acquire_single_instance():
-    """
-    Acquire singleton lock using fcntl to prevent race conditions.
-    Uses file locking which is atomic and prevents multiple instances.
-    The lock is held for the lifetime of the process and auto-released on exit.
+    """Take the single-instance lock, or exit if another service holds it.
+
+    flock is atomic, and the kernel releases the lock when the process exits.
     """
     global _lockfile_handle
     lockfile_path = os.path.join(_runtime_dir(), "talktype.lock")
@@ -164,12 +161,10 @@ def _acquire_single_instance():
 
         # Close-on-exec so an in-place restart (os.execv) releases the lock
         # instead of inheriting the still-locked FD and exiting as "already
-        # running". (Same fix as the tray's singleton lock.)
+        # running". The tray's singleton lock does the same.
         _flags = fcntl.fcntl(lockfile.fileno(), fcntl.F_GETFD)
         fcntl.fcntl(lockfile.fileno(), fcntl.F_SETFD, _flags | fcntl.FD_CLOEXEC)
 
-        # Try to acquire exclusive lock (non-blocking)
-        # LOCK_EX = exclusive lock, LOCK_NB = non-blocking
         try:
             fcntl.flock(lockfile.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
@@ -178,15 +173,12 @@ def _acquire_single_instance():
             print("Another TuxTalk instance is already running. Exiting.", file=sys.stderr)
             sys.exit(0)
 
-        # If we got here, we acquired the lock successfully
-        # Write our PID for informational purposes
+        # The PID is for people inspecting the file; the lock itself is the flock.
         lockfile.truncate(0)
         lockfile.write(str(os.getpid()))
         lockfile.flush()
 
-        # Keep the file open for the process lifetime
-        # The lock will automatically be released when the process exits
-        # Store in global to prevent garbage collection
+        # Held in a global so garbage collection never closes it (and drops the lock).
         _lockfile_handle = lockfile
 
         logger.debug(f"Acquired singleton lock: {lockfile_path}")
@@ -263,12 +255,11 @@ def _get_ydotool_env():
 # The tray owns the D-Bus name and relays signals to the GNOME extension.
 _tray_dbus_proxy = None
 
-# Every call to the tray is made from the input thread, which holds an
-# exclusive grab on all keyboards while recording. dbus-python's default
-# reply timeout is 25 seconds, so a busy tray — one loading a Whisper model
-# on its main loop, say — froze the user's keyboard system-wide for that
-# long, in every application, with no way to recover but to wait.
-# These are fire-and-forget notifications: a late one is worthless anyway.
+# Calls to the tray come from the input thread, which holds an exclusive grab
+# on every keyboard while recording. dbus-python's default reply timeout is 25
+# seconds, so a busy tray (loading a Whisper model on its main loop, say) would
+# freeze the keyboard system-wide for that long. These are fire-and-forget
+# notifications, and a late one is worthless anyway.
 _TRAY_DBUS_TIMEOUT = 1.5
 
 # Thread-safe recording command flags — set by signal handler or D-Bus thread, consumed by evdev loop.
@@ -351,11 +342,10 @@ def _install_signal_handlers():
 def _get_tray_dbus_proxy():
     """Get or create the D-Bus proxy for communicating with the tray process.
 
-    introspect=False matters: the default blocking Introspect() call is itself
-    subject to the 25-second reply timeout, so building the proxy while the
-    tray was busy doubled the worst-case stall to ~50s. The three methods we
-    call take 'b', 's' and no arguments, all of which dbus-python infers
-    correctly from the Python values, so introspection buys us nothing.
+    introspect=False: Introspect() is itself a blocking call with the 25-second
+    reply timeout, so it would double the worst-case stall on a busy tray.
+    Without it dbus-python guesses argument types from the Python values, so
+    wrap anything that isn't a plain str or bool (dbus.Array(..., signature=...)).
     """
     global _tray_dbus_proxy
     import dbus
@@ -436,20 +426,15 @@ _last_words_mtime = None
 def _expand_escapes(replacement: str) -> str:
     """Expand the two escapes the Preferences hint documents, and nothing else.
 
-    Replacements used to be passed to re.sub as a template, which interpreted
-    every backslash sequence — handy for \\n, fatal for anything else. Expanding
-    these two explicitly keeps the documented line-break feature working while
-    leaving a Windows path or a stray \\N as literal text.
+    Any other backslash stays literal, so a Windows path or a stray \\N in a
+    replacement is typed as written.
     """
     return replacement.replace("\\n", "\n").replace("\\t", "\t")
 
 
-# Whisper decides for itself whether a spoken number lands as a word or a digit,
-# and it is not consistent: across 1,073 real dictations a number before a unit
-# came out as a digit 20 times against 3 spelled out, yet the same spoken phrase
-# produced both forms on different days. Commands match the raw transcription, so
-# a trigger containing a number used to fire only when Whisper happened to pick
-# the spelling the user typed.
+# Whisper is inconsistent about writing a spoken number as a word or a digit; the
+# same phrase comes out both ways on different days. Commands match the raw
+# transcription, so a trigger containing a number matches either spelling.
 #
 # Single tokens only, deliberately: compounds like "twenty one" are ambiguous
 # (21? 20 then 1?) and pull in a whole number parser for no real benefit.
@@ -490,9 +475,8 @@ def _command_pattern(phrase: str) -> str:
     """Build the match pattern for one trigger phrase.
 
     Word boundaries are applied only at ends that actually start or finish with
-    a word character. A blanket \\b meant a trigger like "c++" or "#tag" could
-    never match — \\b after "+" requires a following word character, so the
-    phrase silently never fired despite looking configured in Preferences.
+    a word character: \\b after "+" requires a following word character, so a
+    trigger like "c++" or "#tag" could otherwise never match.
 
     Number tokens match either spelling, so the trigger fires whichever one
     Whisper produced.
@@ -567,10 +551,9 @@ def _apply_custom_commands(text: str) -> tuple[str, dict[str, str]]:
     def substitute(match):
         """Return the replacement for one matched phrase.
 
-        Using a function rather than a template string is what makes a
-        replacement a value instead of a pattern: re.sub does not interpret
-        backslashes in what a function returns, so a Windows path or a stray
-        \\N in a user's command can no longer raise and kill every dictation.
+        A function rather than a template string, because re.sub does not
+        interpret backslashes in what a function returns, so a Windows path or
+        a stray \\N in a user's command can't raise.
         """
         nonlocal counter
         replacement = lookup.get(_canonical_command_key(match.group(0)))
@@ -586,9 +569,8 @@ def _apply_custom_commands(text: str) -> tuple[str, dict[str, str]]:
 
         return _expand_escapes(replacement)
 
-    # One pass over the original text. Applying commands one after another to
-    # the running result let an earlier command's output be re-scanned and
-    # rewritten by a later one.
+    # One pass over the original text, so one command's output is never
+    # re-scanned and rewritten by another.
     result = re.sub(combined, substitute, text, flags=re.IGNORECASE)
 
     if result != text:
@@ -617,12 +599,9 @@ def _restore_protected(text: str, protected: dict[str, str]) -> str:
 # YouTube outro phrases Whisper invents from silence, which nobody says to a
 # text box. Stripped from the end of any transcription.
 _YOUTUBE_HALLUCINATION_PHRASES = [
-    # NOT bare "subscribe": it is an ordinary English verb, and stripping it
-    # from the end of any transcription silently ate the last word of real
-    # sentences ("tell them to subscribe" -> "tell them to"). It also matched
-    # before the longer phrases below, so "like and subscribe" was left as
-    # "like and". The multi-word forms below are what Whisper actually
-    # hallucinates, and nobody dictates those.
+    # NOT bare "subscribe": it is an ordinary verb, and stripping it would eat
+    # the last word of real sentences ("tell them to subscribe"). Whisper
+    # hallucinates the multi-word forms, which nobody dictates.
     "like and subscribe",
     "please subscribe",
     "don't forget to subscribe",
@@ -708,32 +687,17 @@ def _cut_tail(text: str, start: int) -> str:
 
 
 def _strip_hallucinations(text: str, no_speech_prob: float = 0.0) -> str:
-    """
-    Remove common Whisper hallucination phrases from transcribed text.
+    """Remove phrases Whisper invents from silence, in three tiers:
 
-    Three tiers, checked in this order:
-    1. Whole text: common words ("thank you", "bye") and sign-offs ("see you
-       next time") are discarded when they are the ENTIRE transcription AND
-       Whisper's no_speech_prob says it likely wasn't real speech. This keeps
-       an intentional "Thank you."
-    2. YouTube outros ("like and subscribe", "hit the bell") are always
-       stripped from the end: nobody dictates these.
-    3. Trailing phrases ("thank you", "see you next time") are stripped from
-       the end of longer dictations when no_speech_prob is very high (>0.8).
-       This catches Whisper appending them to real speech during the silence
-       at the end of a recording.
+    1. A whole text that is only "thank you", "bye" or a sign-off, when
+       no_speech_prob (0-1) is above 0.6; an intentional "Thank you." stays.
+    2. YouTube outros ("like and subscribe") at the end, always.
+    3. "thank you" or a sign-off trailing a longer dictation, when
+       no_speech_prob is above 0.8.
 
-    Parakeet passes no probability (0.0), so for it only tier 2 applies. The
-    Vulkan engine passes 1.0 when the recording has no speech in it and 0.0
-    otherwise, since whisper.cpp's own score can't be trusted.
-
-    Args:
-        text: Raw transcribed text
-        no_speech_prob: Whisper's estimate (0-1) that the audio contained
-            no real speech. High values (>0.6) suggest hallucination.
-
-    Returns:
-        Text with hallucination phrases removed
+    Parakeet passes 0.0, so only tier 2 applies to it. The Vulkan engine passes
+    1.0 for a recording with no speech in it and 0.0 otherwise, since
+    whisper.cpp's own score can't be trusted.
     """
     if not text:
         return text
@@ -797,6 +761,7 @@ def _find_output_device():
     return None  # Fall back to sounddevice default
 
 def _beep(enabled: bool, freq=1000, duration=0.15):
+    """Play a short sine tone, if beeps are on. Audio errors are ignored."""
     if not enabled:
         return
     samplerate = 44100
@@ -808,6 +773,7 @@ def _beep(enabled: bool, freq=1000, duration=0.15):
         pass
 
 def _sd_callback(indata, frames_count, time_info, status):
+    """sounddevice's audio callback: collect frames while recording."""
     if state.is_recording:
         state.frames.append(indata.tobytes())
 
@@ -942,7 +908,7 @@ def _get_device_samplerate(device_idx):
         info = sd.query_devices(device_idx)
         native_sr = int(info['default_samplerate'])
         sd.check_input_settings(device=device_idx, samplerate=native_sr, channels=CHANNELS)
-        print(f"ℹ️  Mic doesn't support {SAMPLE_RATE}Hz, recording at {native_sr}Hz (will resample)")
+        print(f"Mic doesn't support {SAMPLE_RATE}Hz, recording at {native_sr}Hz (will resample)")
         return native_sr
     except Exception:
         return SAMPLE_RATE  # Last resort, let it fail naturally
@@ -985,8 +951,8 @@ DEVICE_RESCAN_SECONDS = 3.0
 # lets an idle service sleep; a key press still wakes it at once.
 INPUT_WAIT_S = 0.05
 
-# The shortest pass through the input loop. A mouse sending 1000 events a
-# second must not spin the loop faster than the old fixed-rate polling did.
+# The shortest pass through the input loop, so a mouse sending 1000 events a
+# second can't spin the loop flat out.
 INPUT_MIN_PASS_S = 0.005
 
 
@@ -1000,8 +966,8 @@ def _devices_with_input(devices, timeout):
         return list(devices)
     return ready
 
-# How often to check whether the config file changed on disk. Preferences no
-# longer restarts the service for settings that can be applied live, so this
+# How often to check whether the config file changed on disk. Preferences
+# doesn't restart the service for settings that can be applied live, so this
 # poll is what makes them take effect. One stat() per second.
 CONFIG_RECHECK_SECONDS = 1.0
 
@@ -1048,9 +1014,7 @@ def _commands_file_changed() -> bool:
     """Whether custom_commands.toml's mtime has moved since the last check.
 
     Custom commands live in their own file, so config.toml's mtime says nothing
-    about them. Without this the service kept whatever commands it loaded at
-    startup, and an edit in the Commands tab never took effect — while the Apply
-    dialog reported the change as already in force.
+    about them; this is what makes an edit in the Commands tab take effect.
 
     Same contract as _config_file_changed(): True once per change, and a missing
     or unreadable file is not a change.
@@ -1249,7 +1213,7 @@ def _is_keyboard_device(dev) -> bool:
 # that asks which keys are held (VM viewers, remote desktop, games) sees F8
 # stuck and auto-repeats it. See freedesktop bug 101796.
 #
-# The fix: before grabbing, send the release the desktop is owed, through the
+# So before grabbing, send the release the desktop is owed, through the
 # same keyboard device, so it sees a balanced press/release. After grabbing,
 # send the press back, which only we see, so we still get the real release
 # when the key comes up. Our own read loop hears both injected events and must
@@ -1343,11 +1307,10 @@ def _release_all_grabs() -> None:
 def _rediscover_devices(devices) -> int:
     """Add keyboards that have appeared since the last scan. Returns how many.
 
-    Devices were enumerated once at startup and never again, so a device
-    dropped by _drop_dead_devices — after a wireless receiver blip, a USB
-    reset or a resume from suspend — was gone for the life of the process.
-    On a single-keyboard machine that means the hotkey silently stops working
-    until TuxTalk is restarted, with only a log line the user never sees.
+    Without this, a device dropped by _drop_dead_devices (after a wireless
+    receiver blip, a USB reset or a resume from suspend) would be gone for the
+    life of the process, and on a single-keyboard machine the hotkey would
+    silently stop working.
 
     Matched on the device node path, which is what identifies a device across
     reconnects here. Non-keyboards are ignored so this never grows the poll
@@ -1379,10 +1342,9 @@ def _input_access_diagnosis() -> str:
     """Explain, in terms the user can act on, why no keyboards are readable.
 
     evdev's list_devices() filters nodes with os.access(R_OK | W_OK) and returns
-    an empty list — never an exception — when the user can open none of them.
-    Without this message the service starts, prints its hotkey and looks
-    perfectly healthy while ignoring every keypress, which is indistinguishable
-    from a broken hotkey and effectively undiagnosable from the outside.
+    an empty list, never an exception, when the user can open none of them.
+    Without this message the service looks healthy while ignoring every
+    keypress.
 
     The two cases need opposite advice, so they are reported separately:
     not in the 'input' group (fixable with usermod + a re-login) versus in the
@@ -1398,12 +1360,10 @@ def _input_access_diagnosis() -> str:
     except KeyError:
         return head + "This system has no 'input' group at all."
 
-    # os.getgroups() is this SESSION's group list, fixed at login. The group's
+    # os.getgroups() is this SESSION's group list, fixed at login; the group's
     # member list is the SYSTEM's, updated the moment usermod runs. They
-    # disagree in exactly one situation — setup has already granted the group
-    # but the session predates it — and that case needs completely different
-    # advice from "you were never added", so report it separately rather than
-    # telling someone to re-run a step that already succeeded.
+    # disagree only when setup granted the group after this session started,
+    # which needs a restart rather than another usermod.
     in_session = group.gr_gid in os.getgroups()
     try:
         username = pwd.getpwuid(os.getuid()).pw_name
@@ -1526,10 +1486,10 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
             logger.info(f"Microphone re-resolved to device {fresh_idx}")
         except Exception as e:
             # Genuinely unavailable: unplugged, or held exclusively by another
-            # app. Undo everything and tell the user — failing silently here is
-            # what left the keyboard grabbed and the machine unusable.
+            # app. Undo everything and tell the user; failing silently would
+            # leave the keyboard grabbed and the machine unusable.
             logger.error(f"Could not start recording: {e}", exc_info=True)
-            print(f"⚠️  Could not start recording: {e}")
+            print(f"Could not start recording: {e}")
             state.is_recording = False
             _stop_stream_safely()
             _release_all_grabs()
@@ -1539,7 +1499,7 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
             return False
 
     _pause_media_players()
-    print("🎙️  Recording…")
+    print("Recording…")
     logger.debug("Recording started")
     _beep(beeps_on, *START_BEEP)
     if notify_on: _notify("TuxTalk", "Recording… (speak now)")
@@ -1553,7 +1513,7 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
             recording_indicator.show_at_position()
             recording_indicator.start_recording()
         except Exception as e:
-            print(f"⚠️  Failed to show recording indicator: {e}")
+            print(f"Failed to show recording indicator: {e}")
             logger.error(f"Failed to show recording indicator: {e}", exc_info=True)
 
     return True
@@ -1575,13 +1535,14 @@ def _stop_stream_safely():
             logger.warning(f"Could not close the microphone stream: {e}")
 
 def cancel_recording(beeps_on: bool, notify_on: bool, reason="Cancelled"):
+    """End a recording without transcribing it, telling the user *reason*."""
     state.is_recording = False
     state.was_cancelled = True
     state.edit_mode = False
     _stop_stream_safely()
     _resume_media_players()
     _beep(beeps_on, *CANCEL_BEEP)
-    print(f"⏸️  {reason}")
+    print(reason)
     logger.debug(f"Recording cancelled: {reason}")
     if notify_on: _notify("TuxTalk", reason)
 
@@ -1635,9 +1596,8 @@ def _ydotool_key(keys, timeout: float = YDOTOOL_TIMEOUT_S, what: str = "keystrok
     """Send raw key codes via ydotool. True only if they were actually delivered.
 
     ydotool exits non-zero when it can't reach ydotoold ("Please check if
-    ydotoold is running"). That result used to be discarded with check=False, so
-    keystrokes that never happened were reported as success — which is how text
-    ended up in the undo buffer that the document had never received.
+    ydotoold is running"), so the exit code is checked: keystrokes that never
+    happened must not reach the undo buffer.
 
     With *raise_on_timeout*, running out of time raises KeystrokesStoppedPartway
     instead of returning False, for a caller that must tell "none of the keys
@@ -1718,10 +1678,8 @@ def _type_text(text: str) -> bool:
                 return False
             if i < len(parts) - 1:  # Not the last part, send Shift+Enter
                 time.sleep(0.05)  # Small delay between text and key
-                # The line break is part of the text. Dropping this return
-                # value reported a partial injection as a complete one, and
-                # the undo buffer then held one character more than the
-                # document had — so "undo that" ate into the user's own text.
+                # The line break is part of the text: a failed one is a
+                # partial injection, and the undo buffer must not count it.
                 if not _send_shift_enter():
                     return False
                 time.sleep(0.05)  # Small delay after key
@@ -1774,12 +1732,10 @@ def _type_on_layout(text: str, delay_ms: int, what: str):
 
 
 def _type_text_raw(text: str):
-    """
-    Type text using ydotool or fallback methods.
-    
-    Uses global _typing_delay for keystroke timing.
-    Higher values are slower but more reliable.
-    Lower values may cause transposed letters.
+    """Type text with ydotool, falling back to wtype. True only if it was typed.
+
+    _typing_delay sets the keystroke timing: lower is faster but can
+    transpose letters.
     """
     if _which("ydotool"):
         layout_result = _type_on_layout(text, max(5, min(50, _typing_delay)), "layout typing")
@@ -1787,9 +1743,8 @@ def _type_text_raw(text: str):
             return layout_result
         try:
             env = _get_ydotool_env()
-            # -d = delay between keydown and keyup (ms)
-            # -H = hold time before next key (ms)
-            # Lower values are faster but may cause letters to arrive out of order
+            # -d = pause between keys, -H = how long each key is held (ms).
+            # Lower values are faster but may cause letters to arrive out of order.
             delay_ms = max(5, min(50, _typing_delay))  # Clamp to 5-50ms
             delay_str = str(delay_ms)
             timeout = _typing_timeout(len(text), delay_ms)
@@ -1819,11 +1774,8 @@ def _type_text_raw(text: str):
             logger.debug(f"ydotool failed: {e}")
     if _which("wtype"):
         # Report wtype's real exit code so the undo buffer only tracks text
-        # that was actually typed, and bound the wait the same way the ydotool
-        # branch above does. Without the timeout a stalled compositor froze
-        # dictation outright: no text, no error, and the service had to be
-        # killed by hand. The comment used to claim consistency with that
-        # branch while matching only its return-value handling.
+        # that was actually typed, and bound the wait like the ydotool branch
+        # so a stalled compositor can't freeze dictation.
         proc = subprocess.Popen(["wtype", "--", text])
         try:
             proc.communicate(timeout=WTYPE_TIMEOUT_S)
@@ -1839,7 +1791,7 @@ def _type_text_raw(text: str):
         try:
             import pyperclip
             pyperclip.copy(text)
-            print("📋 Copied to clipboard. Ctrl+V to paste.")
+            print("Copied to clipboard. Ctrl+V to paste.")
             logger.info("Text copied to clipboard (fallback mode)")
             # Nothing was actually typed into the field — report failure so
             # the undo buffer doesn't track text the user must paste manually.
@@ -1847,7 +1799,7 @@ def _type_text_raw(text: str):
         except Exception:
             pass
     logger.error("Could not type text: no ydotool/wtype/wl-copy available")
-    print("⚠️  Could not type text (no ydotool/wtype).")
+    print("Could not type text (no ydotool/wtype).")
     return False
 
 # Window classes that need Ctrl+Shift+V for paste (terminals).
@@ -1866,7 +1818,7 @@ _TERMINAL_WM_CLASSES = frozenset({
     "Terminator",
     "xterm", "XTerm", "UXTerm",
     "rxvt", "URxvt",
-    # Common on Sway / Hyprland setups, and missing until 2026-10-03.
+    # Common on Sway / Hyprland setups.
     "com.mitchellh.ghostty", "ghostty",
     "org.gnome.Console", "kgx",
     "xfce4-terminal", "Xfce4-terminal",
@@ -1877,9 +1829,9 @@ _TERMINAL_WM_CLASSES = frozenset({
     "Guake", "Tilda", "Roxterm", "cool-retro-term", "Eterm",
 })
 
-# Lower-cased once, because the class now arrives from two independent sources —
-# the GNOME Shell extension and the KWin script on KDE — which are under no
-# obligation to agree on capitalisation.
+# Lower-cased once, because the class arrives from several independent sources
+# (the GNOME Shell extension, the KWin script, the compositors) that don't
+# agree on capitalisation.
 _TERMINAL_WM_CLASSES_LOWER = frozenset(c.lower() for c in _TERMINAL_WM_CLASSES)
 
 
@@ -1904,10 +1856,9 @@ def is_terminal_class(wm_class: str | None) -> bool:
 # (plain character keystrokes still work, per OpenWhispr #240 and others).
 _ELECTRON_PASTE_BROKEN_CLASSES = frozenset({
     "Claude", "claude", "claude-desktop", "Claude Desktop", "anthropic-claude",
-    # Claude Desktop started reporting this reverse-DNS id on 2026-07-21.
-    # Until it was added here the override simply stopped firing — a paste
-    # that silently does nothing, with no error to explain it. Both spellings
-    # are live in the wild depending on how the app was packaged.
+    # Claude Desktop reports this reverse-DNS id or one of the names above,
+    # depending on how it was packaged; a missing one means a paste that
+    # silently does nothing.
     "com.anthropic.Claude",
 })
 
@@ -1930,20 +1881,15 @@ def _query_focused_window_class() -> str | None:
 def _query_reported_window_class() -> str | None:
     """Query the tray's D-Bus service for the currently focused window's wm_class.
 
-    The dictation engine (this process) is a *subprocess* of the tray, so its
-    own in-memory `_focused_window_class` is always None. The tray owns the
-    D-Bus service and receives push updates from the GNOME extension; we ask
-    it across processes via a fast D-Bus call.
-
-    Returns the wm_class string, or None if unknown / D-Bus unavailable.
+    This process is a subprocess of the tray, which owns the D-Bus service and
+    receives the focus updates, so it is asked across processes. Returns None
+    if the class is unknown or D-Bus is unavailable.
     """
     try:
-        # Shared, cached, introspect-free proxy — this used to build a fresh
-        # one on every paste, paying a blocking Introspect() each time, and
-        # neither call carried a timeout. Both waits are 25s by default, on
-        # the thread between the user releasing the hotkey and their text
-        # appearing. This is only a hint for choosing the paste shortcut, so
-        # a slow answer is worth less than a fast "don't know".
+        # The shared, introspect-free proxy with a short timeout: this runs
+        # between the hotkey release and the text appearing, and it is only a
+        # hint for choosing the paste shortcut, so a fast "don't know" beats a
+        # slow answer.
         proxy = _get_tray_dbus_proxy()
         result = proxy.GetFocusedWindowClass(
             dbus_interface="io.github.ronb1964.TalkType",
@@ -1960,9 +1906,8 @@ def _type_text_fast(text: str, delay_ms: int = 1):
     """Type text via ydotool with a very small inter-event delay.
 
     Used for Electron/Chromium apps where clipboard-paste is broken on Wayland.
-    1ms per event is the practical floor — ~415 chars/sec, ~3x faster than
-    the older 3ms default. Going lower risks Electron's input buffer dropping
-    characters under burst.
+    1ms per event (about 415 chars/sec) is the practical floor; going lower
+    risks Electron's input buffer dropping characters under burst.
     """
     if not _which("ydotool"):
         logger.error("Fast-type fallback: ydotool unavailable")
@@ -2035,20 +1980,12 @@ def _paste_text_x11(text: str) -> bool:
 
 
 def _paste_text(text: str) -> bool:
-    """
-    Wayland paste injection: put text on clipboard, then Ctrl+V or Shift+Ctrl+V.
-    
-    Automatically detects terminal applications and uses Shift+Ctrl+V for them,
-    regular Ctrl+V for everything else.
+    """Wayland paste: put *text* on the clipboard with wl-copy, then send the
+    paste keystroke (_send_paste_keystroke picks Ctrl+V or Ctrl+Shift+V).
 
-    Returns True only when the text actually reached the focused app. Reporting
-    success unconditionally caused two silent failures: on a session where the
-    clipboard was never set, Ctrl+V pasted whatever the user had copied earlier;
-    and text that never landed was still recorded in the undo buffer, so a later
-    "undo that" backspaced over the user's own writing.
-
-    Args:
-        text: Text to paste (should NOT contain §SHIFT_ENTER§ markers)
+    Returns True only when the text actually reached the focused app: the undo
+    buffer records it, and a paste over an unset clipboard would insert
+    whatever the user copied earlier. *text* must not contain §SHIFT_ENTER§.
     """
     # wl-copy talks to a Wayland compositor. On an X11 login it fails instantly,
     # and firing Ctrl+V anyway pastes the previous clipboard contents.
@@ -2058,13 +1995,6 @@ def _paste_text(text: str) -> bool:
 
     try:
         if _which("wl-copy") and _which("ydotool"):
-            # Pick paste keystroke from focused window's wm_class:
-            #   - terminals need Ctrl+Shift+V (Ctrl+V is the bash literal-char escape)
-            #   - everything else uses plain Ctrl+V (the canonical paste shortcut,
-            #     and avoids an Electron regression that mishandles synthetic
-            #     Ctrl+Shift+V — drops focus on the input).
-            # wm_class is pushed by the GNOME extension on every focus change.
-
             # Copy text to clipboard
             paste_start = time.time()
             logger.info(f"TIMING: Starting paste operation for {len(text)} chars")
@@ -2079,7 +2009,7 @@ def _paste_text(text: str) -> bool:
                     _clipboard_keeper = clipboard.ClipboardKeeper()
                 _clipboard_keeper.before_paste()
             # --sensitive keeps the dictation out of clipboard managers' history
-            # (Klipper saved every one to disk) where wl-copy supports it.
+            # (Klipper saves every entry to disk) where wl-copy supports it.
             proc = subprocess.Popen(clipboard.wl_copy_command(), stdin=subprocess.PIPE,
                                     stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
             try:
@@ -2226,7 +2156,7 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
         raw, _no_speech = model.transcribe(
             audio_f32, language, **({"prompt": words_prompt} if words_prompt else {}))
         logger.info(f"TIMING: Transcription completed in {time.time() - transcribe_start:.2f}s (Vulkan GPU)")
-        print(f"\U0001f4dd Raw (graphics): {_loggable(raw)}")
+        print(f"Raw (graphics): {_loggable(raw)}")
         logger.info(f"Raw transcription (Vulkan GPU): {_loggable(raw)}")
         # whisper.cpp's no-speech score isn't reliable (0.90 on clear speech,
         # 0.00 on silence, see whisper_vulkan.parse_result), so the recording's
@@ -2249,7 +2179,7 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
         raw = model.recognize(audio_f32)
         where = " on GPU" if isinstance(model, ParakeetGpuModel) else ""
         logger.info(f"TIMING: Transcription completed in {time.time() - transcribe_start:.2f}s (Parakeet{where})")
-        print(f"\U0001f4dd Raw (Parakeet): {_loggable(raw)}")
+        print(f"Raw (Parakeet): {_loggable(raw)}")
         logger.info(f"Raw transcription (Parakeet): {_loggable(raw)}")
         return _strip_hallucinations(raw) or None
 
@@ -2260,8 +2190,7 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
         condition_on_previous_text=True,
         temperature=0.0,
         # Word-level timestamps strengthen Whisper's long-form seek logic,
-        # preventing dropped words at pause boundaries (the v0.5.17 fix —
-        # replaces the old without_timestamps=True footgun).
+        # preventing dropped words at pause boundaries.
         word_timestamps=True,
         # Repetition-loop guards: Whisper can get stuck repeating one phrase
         # many times in a row. A mild penalty plus n-gram blocking breaks
@@ -2285,14 +2214,14 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
     transcribe_time = time.time() - transcribe_start
     logger.info(f"TIMING: Transcription completed in {transcribe_time:.2f}s")
     if transcribe_time > 2.0:
-        logger.warning(f"\u26a0\ufe0f  Transcription took {transcribe_time:.2f}s (first run may be slower due to CUDA compilation)")
+        logger.warning(f"Transcription took {transcribe_time:.2f}s (first run may be slower due to CUDA compilation)")
 
     # Collect segments (generator can only be consumed once)
     seg_list = list(segments)
 
     raw = " ".join(seg.text for seg in seg_list).strip()
     max_no_speech_prob = max((seg.no_speech_prob for seg in seg_list), default=0.0)
-    print(f"\U0001f4dd Raw (before filter): {_loggable(raw)}  [no_speech_prob={max_no_speech_prob:.2f}]")
+    print(f"Raw (before filter): {_loggable(raw)}  [no_speech_prob={max_no_speech_prob:.2f}]")
     logger.info(f"Raw transcription (before hallucination filter): {_loggable(raw)}  [no_speech_prob={max_no_speech_prob:.2f}]")
 
     if custom_words.is_echo(raw, _custom_words):
@@ -2302,7 +2231,7 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
     # Strip common Whisper hallucinations like "thank you" from the end
     raw = _strip_hallucinations(raw, no_speech_prob=max_no_speech_prob)
     if raw:
-        print(f"\U0001f4dd Raw (after filter): {_loggable(raw)}")
+        print(f"Raw (after filter): {_loggable(raw)}")
         logger.info(f"Raw transcription (after hallucination filter): {_loggable(raw)}")
     return raw or None
 
@@ -2319,10 +2248,10 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
     undo_type, count = detected
     label = undo_type if count == 1 else f"{count} {undo_type}s"
     logger.info(f"Undo command detected: {label}")
-    print(f"\U0001f519 Undo command: {label}")
+    print(f"Undo command: {label}")
 
     # 'everything' clears the entire input field via Ctrl+A + Backspace.
-    # No tracked dictation required \u2014 wipes whatever is in the textarea,
+    # No tracked dictation required: it wipes whatever is in the textarea,
     # including text that wasn't typed by TuxTalk.
     if undo_type == 'everything':
         if _output_backend().select_all_delete():
@@ -2331,13 +2260,13 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
             _beep(beeps_on, *READY_BEEP)
             if notify_on: _notify("TuxTalk", "Cleared input field")
         else:
-            print("\u26a0\ufe0f  Could not clear input field (text injection unavailable)")
+            print("Could not clear input field (text injection unavailable)")
             _beep(beeps_on, *CANCEL_BEEP)
             if notify_on: _notify("TuxTalk", "Could not clear field")
         return True
 
     if not state.last_inserted_text:
-        print("\u2139\ufe0f  Nothing to undo (no previous dictation)")
+        print("Nothing to undo (no previous dictation)")
         logger.info("Undo requested but no previous text to undo")
         _beep(beeps_on, *CANCEL_BEEP)
         if notify_on: _notify("TuxTalk", "Nothing to undo")
@@ -2346,20 +2275,19 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
     # Calculate how many characters to delete (iterates `count` times)
     delete_count = calculate_undo_length(state.last_inserted_text, undo_type, count)
     logger.info(f"Undo: deleting {delete_count} characters (last text was {len(state.last_inserted_text)} chars, count={count})")
-    print(f"\U0001f519 Undoing {delete_count} characters ({label})")
+    print(f"Undoing {delete_count} characters ({label})")
 
     if delete_count > 0:
-        # Only shrink the buffer once the deletion is confirmed. Assuming it
-        # worked meant TuxTalk played the success beep while nothing had been
-        # deleted, leaving the buffer out of step with the document — so the
-        # next undo backspaced over text the user had typed themselves.
+        # Only shrink the buffer once the deletion is confirmed; otherwise it
+        # falls out of step with the document and the next undo backspaces
+        # over the user's own text.
         try:
             deleted = _output_backend().backspaces(delete_count)
         except KeystrokesStoppedPartway:
             # Some of the text is gone and some isn't, by an unknown amount,
             # so the buffer no longer matches the document. Forgetting it is
             # the only safe choice: a later undo then deletes nothing.
-            print("⚠️  Undo stopped partway")
+            print("Undo stopped partway")
             logger.error("Undo stopped partway: an unknown number of backspaces landed; undo buffer cleared")
             state.last_inserted_text = ""
             state.continue_mid_sentence = False
@@ -2368,7 +2296,7 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
                 _notify("TuxTalk", "Undo stopped partway, so some of the text may still be there")
             return True
         if not deleted:
-            print("⚠️  Undo failed — nothing was deleted")
+            print("Undo failed — nothing was deleted")
             logger.error("Undo failed: backspaces were not delivered; buffer left unchanged")
             _beep(beeps_on, *CANCEL_BEEP)
             if notify_on:
@@ -2390,7 +2318,7 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
         _beep(beeps_on, *READY_BEEP)
         if notify_on: _notify("TuxTalk", f"Undid last {label}")
     else:
-        print("\u2139\ufe0f  Nothing to undo for this scope")
+        print("Nothing to undo for this scope")
         _beep(beeps_on, *CANCEL_BEEP)
     return True
 
@@ -2402,8 +2330,8 @@ def _safe_to_lowercase_first_word(text: str) -> bool:
     Two kinds of word are capitalized for reasons that have nothing to do with
     where the sentence begins, and lowercasing them corrupts real text:
 
-      * the pronoun "I" (and I'm / I'll / I've / I'd), which became "i"
-      * acronyms, where only the first letter was touched: "NASA" -> "nASA"
+      * the pronoun "I" (and I'm / I'll / I've / I'd), which would become "i"
+      * acronyms, where only the first letter would change: "NASA" -> "nASA"
 
     Proper nouns like "Ron" are genuinely ambiguous — Whisper capitalizes them
     both as names and as sentence starts — so they are left alone here and
@@ -2448,9 +2376,8 @@ def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: b
         processed = fix_spelling(processed, _custom_words)
 
     # Normalize text (capitalization, punctuation, etc.). auto_period is passed
-    # through because this pass ends every line with a full stop of its own \u2014
-    # without it the preference was dead, since append_auto_punct below only
-    # ever saw text that had already been given a period.
+    # through because this pass otherwise ends every line with a full stop of
+    # its own, and append_auto_punct below would never get to decide.
     text = normalize_text(
         processed if smart_quotes else processed.replace("\u201c","\"").replace("\u201d","\""),
         auto_period=auto_period,
@@ -2493,7 +2420,7 @@ def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: b
 
     # Auto-period and auto-space. When the utterance ends with a line-break
     # command, the period lands BEFORE the break and no trailing space is
-    # added (previously "hello new line" left an orphan ". " on the next line).
+    # added, so "hello new line" leaves no orphan ". " on the next line.
     text = append_auto_punct(text, auto_period, auto_space)
     logger.info(f"Normalized text: {_loggable(text)}")
     return text
@@ -2508,8 +2435,8 @@ def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = Fa
 
     Returns how it went: "ok" (all of it arrived), "partial" (some chunks of a
     multi-part dictation arrived, then it stopped) or "failed" (none did).
-    The caller tells the user about anything but "ok"; this function used to
-    return nothing, so a dictation that never arrived failed silently.
+    The caller tells the user about anything but "ok", so a dictation that
+    never arrived doesn't fail silently.
 
     *one_block* (voice editing) pastes text with line breaks in one go, real
     newlines and all. Line by line with Enter in between, an editor continues
@@ -2536,7 +2463,7 @@ def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = Fa
         logger.info(f"Electron-broken check: focused_class={focused_class!r}")
         if focused_class in _ELECTRON_PASTE_BROKEN_CLASSES and not os.environ.get("FLATPAK_ID"):
             logger.info(f"Electron-paste-broken override: class={focused_class!r}, using fast-type")
-            print(f"⌨️  Electron app ({focused_class}): using fast-type fallback")
+            print(f"Electron app ({focused_class}): using fast-type fallback")
 
             # Split on §SHIFT_ENTER§ (line-break voice command) and \n so
             # we send actual Shift+Enter keystrokes between text chunks
@@ -2608,10 +2535,10 @@ def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = Fa
     use_paste = (actual_mode == "paste")
     logger.info(f"Injection mode: configured={injection_mode!r}, actual={actual_mode!r}, reason={reason}")
     if injection_mode == "auto":
-        print(f"\U0001f50d Auto mode: {reason}")
+        print(f"Auto mode: {reason}")
 
     # Tracks whether text actually reached the focused app. Only a confirmed
-    # injection updates the undo buffer \u2014 otherwise a later "undo last word"
+    # injection updates the undo buffer; otherwise a later "undo last word"
     # would backspace characters the user's document never received.
     inject_ok = True
 
@@ -2623,9 +2550,9 @@ def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = Fa
         parts = plan_line_breaks(text, is_terminal_class(_query_focused_window_class()))
         logger.info(f"Smart hybrid mode: {len(parts)} part(s)")
 
-        # Track where delivery stopped. Falling back by re-injecting the whole
-        # text left the document with the chunks that already landed followed by
-        # a complete second copy of everything, which undo could not clean up.
+        # Track where delivery stopped, so the fallback types only the rest:
+        # re-injecting the whole text would duplicate the chunks that already
+        # landed, which undo can't clean up.
         resume_at = None
         needs_break = False
         for i, part in enumerate(parts):
@@ -2639,7 +2566,7 @@ def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = Fa
             if i < len(parts) - 1:
                 logger.info(f"Sending Shift+Enter after part {i+1}")
                 if not _send_shift_enter():
-                    # The chunk landed but its line break didn't \u2014 resume from
+                    # The chunk landed but its line break didn't: resume from
                     # the next chunk and supply the missing break.
                     logger.warning(f"Line break failed after part {i+1}; will type the remainder")
                     resume_at, needs_break = i + 1, True
@@ -2647,7 +2574,7 @@ def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = Fa
                 time.sleep(0.05)
 
         if resume_at is None:
-            print(f"\u2702\ufe0f  Inject (smart paste) {len(parts)} chunks, {len(text)} total chars")
+            print(f"Inject (smart paste) {len(parts)} chunks, {len(text)} total chars")
             logger.info(f"Smart hybrid paste completed: {len(parts)} chunks")
         else:
             remainder = (marker if needs_break else "") + marker.join(parts[resume_at:])
@@ -2656,7 +2583,7 @@ def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = Fa
             # half-dictated command, so the breaks go back to markers and are
             # typed as Shift+Enter, which a terminal ignores.
             remainder = remainder.replace("\n", marker)
-            print(f"\u2328\ufe0f  Inject (type) remainder len={len(remainder)} [paste failed partway]")
+            print(f"Inject (type) remainder len={len(remainder)} [paste failed partway]")
             if _output_backend().type_text(remainder):
                 inject_ok = True  # delivered chunks + typed remainder == full text
             else:
@@ -2720,9 +2647,8 @@ def _toggle_pressed_while_recording(beeps_on: bool) -> bool:
     (the caller must then NOT stop it); False means a normal stop.
 
     A single tap keeps the toggle a plain on/off switch, however long the
-    speaker pauses. Only a double-tap, with the option on, arms auto-stop. A
-    double-tap used to start and cancel a too-short recording, so no existing
-    behaviour is lost.
+    speaker pauses. Only a double-tap, with the option on, arms auto-stop; a
+    double-tap would otherwise just start and cancel a too-short recording.
     """
     started = state.toggle_started_at
     if (_auto_stop_seconds <= 0 or started is None or state.silence is not None
@@ -2732,7 +2658,7 @@ def _toggle_pressed_while_recording(beeps_on: bool) -> bool:
     state.silence = SilenceDetector(
         _auto_stop_seconds, getattr(state, "recording_samplerate", SAMPLE_RATE))
     logger.info("Double-tap: this recording will stop by itself when you go quiet")
-    print("🤚 Hands-free: stops when you stop talking")
+    print("Hands-free: stops when you stop talking")
     _beep(beeps_on, *HANDS_FREE_BEEP)
     return True
 
@@ -2761,7 +2687,7 @@ def _finish_capture(beeps_on: bool, notify_on: bool):
     the captured frames. Returns (frames, rec_sr) or None if the recording was
     cancelled or too short. start_recording() reassigns state.frames to a fresh
     list, so the returned reference stays valid even if a new recording begins
-    immediately â which is what lets Backend B run the slow transcription/typing
+    immediately, which is what lets Backend B run the slow transcription/typing
     on a worker thread without dropping or mixing audio."""
     if state.silence is not None and state.silence.nothing_said:
         # Hands-free with nothing said: drop it. Transcribing room noise can
@@ -2778,7 +2704,7 @@ def _finish_capture(beeps_on: bool, notify_on: bool):
     state.is_recording = False
     _stop_stream_safely()
     _resume_media_players()
-    _notify_tray_recording_state(False)  # Tell GNOME extension recording stopped
+    _notify_tray_recording_state(False)  # the tray icon shows recording stopped
     _trim_auto_stop_tail(frames)
     if state.was_cancelled:
         return None
@@ -2803,9 +2729,8 @@ def _report_undelivered(outcome: str, beeps_on: bool):
     """Tell the user a dictation didn't (fully) reach the window.
 
     Always shown, whatever the notifications setting, like a missing microphone:
-    a Fedora user dictated for minutes on X11 with every word transcribed and
-    none arriving, nothing said why, and he concluded his laptop was too weak.
-    The low cancel beep follows the "done" beep, which has already played, so a
+    otherwise words that are transcribed but never arrive look like a computer
+    too slow to dictate. The low cancel beep follows the "done" beep, which has already played, so a
     desktop without notifications still hears that something went wrong.
     """
     message = _UNDELIVERED_NOTICES[outcome]
@@ -2823,7 +2748,7 @@ def _report_undelivered(outcome: str, beeps_on: bool):
             logger.debug(f"Couldn't work out why typing failed: {e}")
     if _paste_last_hotkey:
         message += f" Or press {_paste_last_hotkey} to type it again where your cursor is."
-    print(f"⚠️  {message}")
+    print(message)
     logger.warning(f"Dictation not delivered ({outcome}); told the user")
     _beep(beeps_on, *CANCEL_BEEP)
     _notify("TuxTalk", message)
@@ -2835,15 +2760,15 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
     """The slow half of stopping: transcribe the captured audio and inject the
     text. It touches no GTK (the indicator was already hidden in _finish_capture)
     and uses only CPU + audio + D-Bus + the output backend, so it is safe on a
-    worker thread â which Backend B uses so the hotkey loop stays live."""
-    print("🛑 Recording stopped. Transcribing…")
+    worker thread, which Backend B uses so the hotkey loop stays live."""
+    print("Recording stopped. Transcribing…")
     t0 = time.time()
     logger.info("Recording stopped, starting transcription")
     try:
         # Convert captured bytes → float32 mono PCM in [-1, 1]
         pcm_int16 = np.frombuffer(b''.join(frames), dtype=np.int16)
         if pcm_int16.size == 0:
-            print("ℹ️  (No audio captured)")
+            print("(No audio captured)")
             return
         audio_f32 = pcm_int16.astype(np.float32) / 32768.0
         if rec_sr != SAMPLE_RATE:
@@ -2853,7 +2778,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         # a word ("Thank you.") in a fraction of a second of room noise.
         from .silence import is_speechless_tap
         if is_speechless_tap(audio_f32, SAMPLE_RATE):
-            print("ℹ️  (Short tap with no speech; nothing typed)")
+            print("(Short tap with no speech; nothing typed)")
             logger.info(f"Skipped a {len(audio_f32) / SAMPLE_RATE:.2f}s recording with no speech in it")
             return
 
@@ -2861,7 +2786,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         raw = _transcribe_audio(audio_f32, language)
         logger.info(f"TIMING: Transcription pipeline took {time.time() - t0:.2f}s")
         if not raw:
-            print("ℹ️  (No speech recognized)")
+            print("(No speech recognized)")
             return
 
         # Stage 2: Check for undo commands ("undo that", "undo word", etc.)
@@ -2873,7 +2798,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
 
         # Beep to confirm transcription is done
         _beep(beeps_on, *READY_BEEP)
-        _ellipsis = "…"  # Must be outside f-string for Python 3.10 compat
+        _ellipsis = "…"
         if notify_on: _notify("TuxTalk", f"Transcribed: {text[:80]}{_ellipsis if len(text)>80 else ''}")
 
         # Stage 4: Inject text into the active application. It goes into the
@@ -2886,8 +2811,8 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                 outcome = _inject_text(text, injection_mode, t0)
             except Exception as e:
                 # The transcription worked; only getting it into the window
-                # didn't. It used to fall to the "Transcription error" handler
-                # below, which says otherwise and shows only with notifications on.
+                # didn't, so this is reported as undelivered, not as the
+                # "Transcription error" below.
                 logger.error(f"Injection error: {e}", exc_info=True)
                 outcome = "failed"
             if outcome in _UNDELIVERED_NOTICES:
@@ -2900,12 +2825,12 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
 
     except Exception as e:
         logger.error(f"Transcription error: {e}", exc_info=True)
-        print(f"❌ Transcription error: {e}")
+        print(f"Transcription error: {e}")
         # The cancel beep and a notice whatever the notifications setting,
         # like _report_undelivered: nothing was typed, and the "done" beep
         # would sound like it worked.
         _beep(beeps_on, *CANCEL_BEEP)
-        _ellipsis = "…"  # Must be outside f-string for Python 3.10 compat
+        _ellipsis = "…"
         _notify("TuxTalk", f"Transcription failed: {str(e)[:60]}{_ellipsis if len(str(e))>60 else ''}")
 
 
@@ -2920,8 +2845,7 @@ def stop_recording(
 ):
     """Stop recording, transcribe audio, and inject text — synchronously.
 
-    Backend A (evdev) path, behaviour unchanged: the whole pipeline runs on the
-    caller's thread. Backend B splits the two halves (see _service_tick) so the
+    Backend A (evdev): the whole pipeline runs on the caller's thread. Backend B splits the two halves (see _service_tick) so the
     slow transcription/typing runs off the hotkey loop.
     """
     edit_mode, state.edit_mode = state.edit_mode, False
@@ -2998,7 +2922,7 @@ def _edit_problem(kind: str, beeps_on: bool) -> None:
     _report_undelivered: otherwise nothing at all would seem to happen."""
     message = _EDIT_NOTICES[kind]
     logger.info(f"Voice edit not done: {kind}")
-    print(f"⚠️  {message}")
+    print(message)
     _beep(beeps_on, *CANCEL_BEEP)
     # Where the user is looking: over the active window (screen_message.py).
     # The notification stays as a backup, in the notification history.
@@ -3066,7 +2990,7 @@ def _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
         return
 
     # The selection first, so "select some text first" comes up even when
-    # nothing was said (Ron tried exactly that and heard nothing).
+    # nothing was said.
     try:
         selected, put_back = clipboard.copy_selection(_send_copy_keystroke)
     except clipboard.ClipboardUnavailable:
@@ -3286,17 +3210,11 @@ def _handle_key_event(event, mode, hold_key, toggle_key,
     if voice_cmds_combo and event.value == 1 and not state.is_recording:
         required_mods, main_key = voice_cmds_combo
         if event.code == main_key and _check_modifiers_held(required_mods, held_modifiers):
-            # Briefly grab the keyboards to stop the keypress leaking into the
-            # focused app. Three things this used to get wrong, all of which
-            # the recording path already had right:
-            #   - it grabbed EVERY device, so the pointer froze too;
-            #   - it tracked them in a local list, invisible to
-            #     _release_all_grabs() and the stranded-grab backstop;
-            #   - an exception from the tray call skipped the ungrab entirely,
-            #     stranding the grabs with no way to recover them.
-            # Same helpers as recording, and a finally that always releases.
-            # The modifiers are balanced too: a stuck Ctrl in the desktop would
-            # be far worse than a stuck F8.
+            # Briefly grab the keyboards (not the pointer) to stop the keypress
+            # leaking into the focused app. The same tracked grabs as recording,
+            # and a finally that always releases, so a failing tray call can't
+            # strand them. The modifiers are balanced too: a stuck Ctrl in the
+            # desktop would be far worse than a stuck F8.
             _grab_keyboards_hiding(devices, {main_key, *held_modifiers})
             try:
                 _show_voice_commands_via_dbus()
@@ -3337,9 +3255,9 @@ def _handle_key_event(event, mode, hold_key, toggle_key,
             _release_all_grabs()
             # Stopping an edit. If Shift is down again, wait for the user to
             # let go, or the Ctrl+C that copies the selection would arrive as
-            # Ctrl+Shift+C. (Hiding it with injected key events, as the hold
-            # key does, replayed those events after a slow edit and started a
-            # new recording by itself.)
+            # Ctrl+Shift+C. Hiding it with injected key events, as the hold key
+            # does, would replay them after a slow edit and start a new
+            # recording by itself.
             if shift and not _wait_for_keys_up(devices, _SHIFT_CODES, EDIT_SHIFT_WAIT_S):
                 cancel_recording(cfg.beeps, cfg.notify,
                                  "Voice edit cancelled: let go of Shift to finish it")
@@ -3366,19 +3284,15 @@ class _ServiceState:
     evdev loop (Backend A) and the portal loop (Backend B) via _service_tick."""
 
     def __init__(self, cfg, input_device_idx=None):
-        # Held, not copied. _reload_live_settings updates cfg IN PLACE, so
-        # reading through it is what makes the auto-timeout live. Snapshotting
-        # these at construction meant unticking "auto-timeout" in Preferences
-        # left the service still exiting on the old value — while Preferences
-        # reported the change as already in effect.
+        # Held, not copied: _reload_live_settings updates cfg IN PLACE, so
+        # reading through it keeps the auto-timeout settings live.
         self._cfg = cfg
         self.last_activity = time.time()
         # 0.0 == "never checked", so the first idle tick reloads immediately.
         self.last_config_check = 0.0
         # The mic is configured by name but recorded from by device number, so
         # the number has to be re-resolved whenever the name changes. Owning it
-        # here keeps one copy: it used to be resolved at startup and passed
-        # around as a parameter, which no reload could reach.
+        # here keeps one copy, which a reload can update.
         self.input_device_idx = input_device_idx
         self._resolved_mic = getattr(cfg, "mic", "")
 
@@ -3467,7 +3381,7 @@ def _service_tick(cfg, svc: "_ServiceState") -> "LiveSettings | None":
             svc.last_activity = now
     if svc.timeout_enabled and not state.is_recording:
         if now - svc.last_activity > svc.timeout_seconds:
-            print(f"⏰ Auto-timeout: No activity for {svc.timeout_minutes} "
+            print(f"Auto-timeout: No activity for {svc.timeout_minutes} "
                   f"minutes, shutting down...")
             if cfg.notify:
                 _notify("TuxTalk Auto-Timeout",
@@ -3561,7 +3475,7 @@ def _loop_evdev(cfg: Settings, input_device_idx):
     if not devices:
         diagnosis = _input_access_diagnosis()
         logger.error(diagnosis)
-        print(f"❌ {diagnosis}", file=sys.stderr)
+        print(diagnosis, file=sys.stderr)
 
     if voice_cmds_combo:
         print(f"Voice Commands hotkey: {vc_hotkey_str}")
@@ -3589,12 +3503,10 @@ def _loop_evdev(cfg: Settings, input_device_idx):
         # enforce the auto-timeout, and pick up Preferences changes (all shared
         # with the portal loop).
         #
-        # This loop keeps the hotkeys and mode in locals, so it has to rebind
-        # them from what the tick reloaded. It used to repeat the
-        # _config_file_changed() check itself instead — but that check is
-        # edge-triggered, and the tick had already consumed the change, so the
-        # rebinding never ran and a new hotkey did nothing until a restart.
-        # One detector, one reload, handed back to whoever needs it.
+        # This loop keeps the hotkeys and mode in locals, so it rebinds them
+        # from what the tick reloaded. It must not check _config_file_changed()
+        # itself: that check is edge-triggered, and the tick has already
+        # consumed the change.
         live = _service_tick(cfg, svc)
         if live is not None:
             hold_key = live.hold_key
@@ -3644,8 +3556,8 @@ def _loop_evdev(cfg: Settings, input_device_idx):
                 logger.warning(f"Input device {getattr(dev, 'name', dev)} failed, dropping it: {e}")
                 dead_devices.append(dev)
             except Exception as e:
-                # Never swallow silently: an unlogged exception here is what
-                # turned a microphone error into an unexplained keyboard lockup.
+                # Never swallow silently: an unlogged exception here would turn
+                # a microphone error into an unexplained keyboard lockup.
                 logger.error(f"Error handling input event: {e}", exc_info=True)
 
         _drop_dead_devices(dead_devices, devices, cfg)
@@ -3753,7 +3665,7 @@ def _build_model_or_exit(settings: Settings):
         fallback = _pick_fallback_model(wanted, downloaded, has_cuda)
         if fallback is None:
             logger.warning(f"Dictation service stopping: {e}, and no other model is downloaded")
-            print(f"⚠️  {e}. Choose a model in Preferences to start dictating.")
+            print(f"{e}. Choose a model in Preferences to start dictating.")
             sys.exit(1)
 
         logger.warning(f"{e}; falling back to the downloaded {fallback} model")
@@ -3798,7 +3710,7 @@ def _build_vulkan_model(settings: Settings):
                 reason = "no graphics chip was found"
             else:
                 model = whisper_vulkan.VulkanWhisperModel(settings.model, device_index)
-                print(f"✅ Model loaded successfully on the GPU through Vulkan (device {device_index})")
+                print(f"Model loaded successfully on the GPU through Vulkan (device {device_index})")
                 logger.info(f"Model loaded: {settings.model} on vulkan device {device_index}")
                 _record_engine(settings.model, "vulkan")
                 return model
@@ -3814,10 +3726,10 @@ def _build_parakeet_gpu_model(settings: Settings):
     """Parakeet on the graphics chip through Vulkan (parakeet_gpu.py), or None
     to use the processor.
 
-    Without its graphics files that's quiet: someone on 0.13.1 with Vulkan as
-    the device and Parakeet as the model never downloaded them, ran Parakeet
-    on the processor, and shouldn't get a warning at every start. Choosing
-    Vulkan again in Preferences sets it up. A real failure is reported."""
+    Without its graphics files that's quiet: a setup with Vulkan as the device
+    and Parakeet as the model can predate those files, and shouldn't get a
+    warning at every start. Choosing Vulkan again in Preferences sets it up.
+    A real failure is reported."""
     from . import parakeet_gpu, whisper_vulkan
     from .parakeet_engine import PARAKEET_MODEL
     if not whisper_vulkan.is_installed(PARAKEET_MODEL):
@@ -3830,7 +3742,7 @@ def _build_parakeet_gpu_model(settings: Settings):
             reason = "no graphics chip was found"
         else:
             model = parakeet_gpu.ParakeetGpuModel(device_index)
-            print(f"✅ Parakeet loaded on the GPU through Vulkan (device {device_index})")
+            print(f"Parakeet loaded on the GPU through Vulkan (device {device_index})")
             logger.info(f"Model loaded: {PARAKEET_MODEL} on vulkan device {device_index}")
             _record_engine(PARAKEET_MODEL, "vulkan")
             return model
@@ -3845,8 +3757,8 @@ def _build_parakeet_gpu_model(settings: Settings):
 # What the service really loaded, as (model, device) with device "cpu", "cuda" or
 # "vulkan". It can differ from the settings: Vulkan or CUDA falls back to the
 # processor, Parakeet can't use CUDA, a missing model is swapped for one that's
-# downloaded. The tray and the GNOME menu showed the settings, so they could
-# say "GPU (Vulkan)" while the processor did the work.
+# downloaded. The tray and the GNOME menu show this rather than the settings,
+# which could say "GPU (Vulkan)" while the processor does the work.
 _running_engine = None
 
 # True once Gtk.main() runs on its own thread. From then on the service's main
@@ -3856,6 +3768,7 @@ _gtk_loop_running = False
 
 
 def _record_engine(model, device):
+    """Remember what was really loaded (see _running_engine)."""
     global _running_engine
     _running_engine = (str(model), str(device).lower())
 
@@ -3875,6 +3788,8 @@ def _notify_tray_running_engine():
 
 
 def build_model(settings: Settings):
+    """Load the speech model on the configured device, falling back to the
+    processor when the graphics card can't be used."""
     from .model_helper import BrokenModelFiles, download_model_with_progress
     from .parakeet_engine import is_parakeet
 
@@ -3916,7 +3831,7 @@ def build_model(settings: Settings):
 
         # Parakeet gets here only on the processor (the graphics route returned above).
         where = "cpu" if is_parakeet(settings.model) else settings.device
-        print(f"✅ Model loaded successfully on {where.upper()}")
+        print(f"Model loaded successfully on {where.upper()}")
         logger.info(f"Model loaded: {settings.model} on {where}")
         _record_engine(settings.model, where)
         return model
@@ -3924,15 +3839,15 @@ def build_model(settings: Settings):
         raise ModelWontLoad(str(e)) from e
     except ModelUnavailable:
         # Never "fall back to CPU" here. That fallback exists for a CUDA load
-        # failure; treating a cancel as one re-ran the download without asking
-        # and ignored the user's Cancel.
+        # failure; treating a cancel as one would re-run the download without
+        # asking and ignore the user's Cancel.
         raise
     except Exception as e:
         if settings.device.lower() == "cuda" and not is_parakeet(settings.model):
-            print(f"❌ CUDA failed: {e}")
+            print(f"CUDA failed: {e}")
             logger.error(f"CUDA error: {type(e).__name__}: {str(e)}")
             logger.debug("CUDA traceback:", exc_info=True)
-            print("🔄 Falling back to CPU...")
+            print("Falling back to CPU...")
             try:
                 # Fall back to CPU — skip confirmation dialog since the user already
                 # chose this model via the preset; a surprise dialog in a background
@@ -3949,11 +3864,11 @@ def build_model(settings: Settings):
                     raise ModelUnavailable(
                         f"The {settings.model} model was not downloaded (cancelled or failed)")
 
-                print("✅ Model loaded successfully on CPU (fallback)")
+                print("Model loaded successfully on CPU (fallback)")
                 logger.info("Model loaded on CPU (fallback from CUDA)")
                 _record_engine(settings.model, "cpu")
                 # This switches the saved device to the processor (below), so
-                # say so: it used to happen with only a console line.
+                # the user is told.
                 _notify("TuxTalk", "Couldn't use your NVIDIA graphics card (CUDA), so TuxTalk "
                                     "switched to the processor. Choose the device again in "
                                     "Preferences to try the graphics card.")
@@ -3974,11 +3889,11 @@ def build_model(settings: Settings):
             except BrokenModelFiles as cpu_e:
                 raise ModelWontLoad(str(cpu_e)) from cpu_e
             except Exception as cpu_e:
-                print(f"❌ CPU fallback also failed: {cpu_e}")
+                print(f"CPU fallback also failed: {cpu_e}")
                 logger.error(f"CPU fallback failed: {cpu_e}")
                 raise
         else:
-            print(f"❌ Model loading failed: {e}")
+            print(f"Model loading failed: {e}")
             logger.error(f"Model loading failed: {e}")
             raise
 
@@ -4048,7 +3963,7 @@ def main():
     _custom_commands = load_custom_commands()
     if _custom_commands:
         logger.info(f"Loaded {len(_custom_commands)} custom voice command(s)")
-        print(f"✓ Loaded {len(_custom_commands)} custom voice command(s)")
+        print(f"Loaded {len(_custom_commands)} custom voice command(s)")
     global _custom_words
     from . import custom_words
     _custom_words = custom_words.load()
@@ -4154,12 +4069,7 @@ def main():
                         """Change the Whisper model (requires service restart).
 
                         Writes through config.save_config, the same path every
-                        other writer uses. This used to hand-roll JSON into
-                        ~/.config/talktype/settings.json — a file this app has
-                        never read or written; the real settings are TOML at
-                        ~/.config/TuxTalk/config.toml. The change therefore
-                        landed nowhere and was gone by the restart it asked
-                        the user to perform.
+                        other writer uses.
                         """
                         try:
                             from .config import VALID_MODELS, load_config, save_config
@@ -4185,9 +4095,8 @@ def main():
 
                     def quit(self):
                         """Quit the application"""
-                        # This used to pkill "talktype" — a substring match that
-                        # also took out the tray, Preferences, and any shell
-                        # command mentioning the project path.
+                        # stop_dictation_service stops only the service; a
+                        # pkill by name would also match the tray and Preferences.
                         from .service_launcher import stop_dictation_service
                         try:
                             stop_dictation_service()
@@ -4205,7 +4114,7 @@ def main():
                 dbus_service.emit_service_state(True)
                 dbus_service.emit_model_changed(cfg.model)
 
-                print("✓ D-Bus service initialized for GNOME extension")
+                print("D-Bus service initialized for GNOME extension")
                 logger.info("D-Bus service started successfully (no tray running)")
             except Exception as e:
                 dbus_service = None
@@ -4213,7 +4122,7 @@ def main():
                     # The normal case: the tray already owns the name.
                     logger.info("The tray owns the D-Bus name; the service doesn't register its own")
                 else:
-                    print(f"⚠️  Failed to initialize D-Bus service: {e}")
+                    print(f"Failed to initialize D-Bus service: {e}")
                     logger.error(f"D-Bus service initialization failed: {e}", exc_info=True)
 
             # Initialize recording indicator if enabled
@@ -4235,14 +4144,14 @@ def main():
                     global _spectrum_processor
                     from .indicator_dsp import SpectrumProcessor
                     _spectrum_processor = SpectrumProcessor(bins=20)
-                    print(f"✓ Recording indicator initialized (position: {cfg.indicator_position}, size: {cfg.indicator_size})")
+                    print(f"Recording indicator initialized (position: {cfg.indicator_position}, size: {cfg.indicator_size})")
                     logger.info(f"Recording indicator initialized at position: {cfg.indicator_position}, size: {cfg.indicator_size}")
                 except Exception as e:
-                    print(f"⚠️  Failed to initialize recording indicator: {e}")
+                    print(f"Failed to initialize recording indicator: {e}")
                     logger.error(f"Recording indicator initialization failed: {e}", exc_info=True)
             gtk_ok = True
         except Exception as e:
-            print(f"⚠️  Failed to initialize GTK components: {e}")
+            print(f"Failed to initialize GTK components: {e}")
             logger.error(f"GTK initialization failed: {e}", exc_info=True)
 
         # Outside the try above: a model that fails to load is not a GTK
@@ -4251,22 +4160,22 @@ def main():
             # If the model still has to be downloaded, do it NOW, before the GTK
             # loop thread starts. The download shows GTK dialogs and runs them on
             # this thread; with Gtk.main() already running on the thread below,
-            # two threads drove GTK at once and the service segfaulted the moment
-            # a startup download finished. An already-downloaded model (the
-            # normal case) loads later, after the loop is up, as before.
+            # two threads would drive GTK at once and crash the service. An
+            # already-downloaded model (the normal case) loads later, after the
+            # loop is up.
             from .model_helper import is_model_cached_fast
             if not is_model_cached_fast(cfg.model):
                 model = _build_model_or_exit(cfg)
 
             # Start single GTK main loop in a background thread for both D-Bus and recording indicator
             def run_gtk_loop():
-                print("🔄 Starting GTK main loop...")
+                print("Starting GTK main loop...")
                 Gtk.main()
 
             gtk_thread = threading.Thread(target=run_gtk_loop, daemon=True)
             gtk_thread.start()
             _gtk_loop_running = True
-            print("✓ GTK main loop started in background thread")
+            print("GTK main loop started in background thread")
 
     if model is None:
         model = _build_model_or_exit(cfg)
@@ -4280,25 +4189,19 @@ def main():
     _cmd_start_from_toggle_key.clear()
 
     # Run the input backend chosen by FLATPAK_ID: evdev+ydotool everywhere
-    # (EvdevInputBackend -> _loop_evdev, unchanged), portals inside a Flatpak.
+    # (EvdevInputBackend -> _loop_evdev), portals inside a Flatpak.
     from .input_backends import get_input_backend
     get_input_backend(cfg=cfg, input_device_idx=input_device_idx).start()
 
 def _run_service_entry():
     """Entry for `python -m tuxtalk.app` (the dictation service).
 
-    `-m tuxtalk.app` executes this file as the module "__main__", but the input
-    backends reach the app via `from . import app` — module "tuxtalk.app", a
-    DIFFERENT object with its own globals. If main() ran here in "__main__"
-    while the recording loop ran over in "tuxtalk.app", every global main()
-    sets (model, _custom_commands, dbus_service, _typing_delay, ...) would be
-    invisible there and transcription would crash with
+    `-m` runs this file as the module "__main__", but the input backends import
+    it as "tuxtalk.app", a DIFFERENT module object with its own globals. Running
+    the package module's main() keeps the whole service in ONE namespace, so the
+    globals main() sets (model, _custom_commands, ...) are the ones the
+    recording loop reads; otherwise transcription fails with
     `NameError: name 'model'`.
-
-    Delegate to the package module's main() so the whole service shares ONE
-    namespace — exactly what the AppImage's bin/dictate console script already
-    does with `from tuxtalk.app import main`. This also keeps BB-9's Flatpak
-    (`python3 -m tuxtalk.app`) on the same single-module path.
     """
     from tuxtalk.app import main
     main()
