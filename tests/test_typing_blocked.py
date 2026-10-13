@@ -147,3 +147,28 @@ def test_the_socket_path_follows_the_environment(monkeypatch):
     assert U.ydotool_socket_path() == "/run/user/1234/.ydotool_socket"
     monkeypatch.setenv("YDOTOOL_SOCKET", "/tmp/custom")
     assert U.ydotool_socket_path() == "/tmp/custom"
+
+
+def test_the_fix_script_touches_only_uinput_and_always_adds_the_group():
+    """`udevadm trigger` with no filter replayed events for every device, and
+    a grep for 'input' in the group list matched 'input-foo' too."""
+    script = U.get_fix_script_content()
+    assert "udevadm trigger --sysname-match=uinput" in script
+    assert "grep" not in script
+    assert 'usermod -a -G input "$TUXTALK_USER"' in script
+
+
+def test_the_root_script_is_private_and_removed_even_on_a_timeout(monkeypatch):
+    import stat
+    seen = {}
+
+    def slow_pkexec(cmd, **k):
+        path = cmd[-1]
+        seen["path"] = path
+        seen["mode"] = stat.S_IMODE(U.os.stat(path).st_mode)
+        raise U.subprocess.TimeoutExpired(cmd, k.get("timeout"))
+    monkeypatch.setattr(U.subprocess, "run", slow_pkexec)
+    ok, _message = U.install_udev_rule_with_pkexec()
+    assert ok is False
+    assert seen["mode"] == 0o600
+    assert not U.os.path.exists(seen["path"])

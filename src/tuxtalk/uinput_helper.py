@@ -689,7 +689,8 @@ def install_portaudio_with_pkexec():
         full_cmd = ['pkexec'] + install_cmd
         logger.info(f"Running: {' '.join(full_cmd)}")
 
-        result = subprocess.run(full_cmd, capture_output=True, text=True, timeout=300)
+        result = subprocess.run(full_cmd, capture_output=True, text=True,
+                                timeout=PKEXEC_INSTALL_TIMEOUT)
 
         if result.returncode == 0:
             # Verify installation
@@ -775,7 +776,8 @@ def install_ydotool_with_pkexec():
         full_cmd = ['pkexec'] + install_cmd
         logger.info(f"Running: {' '.join(full_cmd)}")
 
-        result = subprocess.run(full_cmd, capture_output=True, text=True, timeout=300)
+        result = subprocess.run(full_cmd, capture_output=True, text=True,
+                                timeout=PKEXEC_INSTALL_TIMEOUT)
 
         if result.returncode == 0:
             # Verify installation
@@ -841,17 +843,13 @@ cat > {UDEV_RULE_PATH} << 'RULE'
 
 echo "Created udev rule at {UDEV_RULE_PATH}"
 
-# Add user to input group if not already
-if ! groups "$TUXTALK_USER" | grep -q '\\binput\\b'; then
-    usermod -a -G input "$TUXTALK_USER"
-    echo "Added $TUXTALK_USER to input group"
-else
-    echo "$TUXTALK_USER is already in input group"
-fi
+# Add user to the input group (does nothing when already a member)
+usermod -a -G input "$TUXTALK_USER"
+echo "$TUXTALK_USER is in the input group"
 
-# Reload udev rules
+# Reload udev rules and apply them to /dev/uinput only, not every device
 udevadm control --reload-rules
-udevadm trigger
+udevadm trigger --sysname-match=uinput
 
 echo ""
 echo "Success! Uinput permissions configured."
@@ -862,39 +860,36 @@ echo " session keeps the old group list alive.)"
 '''
 
 
+# How long a pkexec step may take. It includes the time the user spends at
+# the password dialog, and for an install the package download too.
+PKEXEC_SCRIPT_TIMEOUT = 300
+PKEXEC_INSTALL_TIMEOUT = 900
+
+
 def install_udev_rule_with_pkexec():
     """
     Install the udev rule using pkexec for privilege escalation.
-    
+
     Returns:
         tuple: (success: bool, message: str)
     """
     import tempfile
-    import stat
-    
+
     # Create temporary script
     script_content = get_fix_script_content()
-    
+    script_path = None
+
     try:
-        # Write script to temp file
+        # The script runs as root through `bash script_path`, so it needs no
+        # execute bit and stays readable by this user only (mkstemp's 0600).
         with tempfile.NamedTemporaryFile(mode='w', suffix='.sh', delete=False) as f:
             f.write(script_content)
             script_path = f.name
-        
-        # Make executable
-        os.chmod(script_path, stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP)
-        
-        # Run with pkexec
+
         logger.info(f"Running udev fix script with pkexec: {script_path}")
         result = subprocess.run(['pkexec', 'bash', script_path],
-                              capture_output=True, text=True, timeout=60)
-        
-        # Clean up temp file
-        try:
-            os.unlink(script_path)
-        except Exception:
-            pass
-        
+                              capture_output=True, text=True, timeout=PKEXEC_SCRIPT_TIMEOUT)
+
         if result.returncode == 0:
             logger.info("Udev rule installed successfully")
             return (True, "Permissions configured successfully!\n\n"
@@ -917,3 +912,11 @@ def install_udev_rule_with_pkexec():
     except Exception as e:
         logger.error(f"Error running pkexec: {e}")
         return (False, f"Error: {e}")
+    finally:
+        # Removed on every path, a timeout included, so no root script is
+        # left behind in /tmp.
+        if script_path:
+            try:
+                os.unlink(script_path)
+            except OSError:
+                pass
