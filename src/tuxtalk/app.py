@@ -1161,49 +1161,10 @@ def _reload_live_settings(cfg, indicator):
         logger.warning(f"Could not apply reloaded settings: {e}", exc_info=True)
         return None
 
-# Letter keys, used to tell a real keyboard from a device that merely reports
-# key events (power buttons, lid switches, mouse buttons, consumer-control nodes).
-# Built by name, not as a numeric range: evdev codes follow the physical
-# scancode order of a PC keyboard, so KEY_A..KEY_Z spans the home row and
-# several punctuation keys while leaving KEY_M outside it entirely.
-_LETTER_KEYS = frozenset(
-    getattr(ecodes, f"KEY_{letter}") for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-)
-
-
-def _is_keyboard_device(dev) -> bool:
-    """True if *dev* can deliver the hotkey and is therefore worth grabbing.
-
-    Grabbing everything under /dev/input also captures mice, touchpads, audio
-    jacks and the power button, freezing the pointer for the whole recording.
-
-    Two capability checks, in this order:
-
-    1. It must report letter keys. Power buttons, lid switches, audio jacks and
-       consumer-control nodes report none, so this drops them immediately.
-    2. It must not be a pointing device. Logitech Unifying receivers advertise a
-       superset HID descriptor, so a wireless mouse claims all 26 letter keys
-       and all 12 F-keys just like a keyboard does. What separates them is real
-       pointer motion (REL_X) combined with mouse buttons — the same test
-       libinput uses. This also excludes ydotoold's virtual device, which is how
-       TuxTalk types and must never be grabbed.
-
-    Note the check is REL_X specifically, not the EV_REL event type: the K800
-    keyboard declares EV_REL while exposing no motion axis, so testing the type
-    alone would throw out a real keyboard and let the hotkey leak through.
-    """
-    try:
-        caps = dev.capabilities()
-    except Exception:
-        return False
-
-    keys = set(caps.get(ecodes.EV_KEY) or [])
-    if sum(1 for k in keys if k in _LETTER_KEYS) < 3:
-        return False
-
-    rel_axes = set(caps.get(ecodes.EV_REL) or [])
-    is_pointer = ecodes.REL_X in rel_axes and ecodes.BTN_LEFT in keys
-    return not is_pointer
+# The service grabs only real keyboards; the same test tells onboarding and
+# Preferences whether the service will hear the hotkey.
+from .uinput_helper import LETTER_KEYS as _LETTER_KEYS  # noqa: E402,F401
+from .uinput_helper import is_keyboard_device as _is_keyboard_device  # noqa: E402
 
 
 # --- Keeping the desktop's key state honest across a grab --------------------

@@ -42,6 +42,60 @@ KERNEL=="uinput", GROUP="input", MODE="0660", OPTIONS+="static_node=uinput"
 
 UDEV_RULE_PATH = "/etc/udev/rules.d/99-talktype-uinput.rules"
 
+try:
+    from evdev import ecodes as _ecodes
+except Exception:      # no evdev: nothing can read /dev/input anyway
+    _ecodes = None
+
+# Letter keys, used to tell a real keyboard from a device that merely reports
+# key events (power buttons, lid switches, mouse buttons, game controllers,
+# consumer-control nodes). Built by name, not as a numeric range: evdev codes
+# follow the physical scancode order of a PC keyboard, so KEY_A..KEY_Z spans
+# the home row and several punctuation keys while leaving KEY_M outside it.
+LETTER_KEYS = frozenset(
+    getattr(_ecodes, f"KEY_{letter}") for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+) if _ecodes else frozenset()
+
+
+def is_keyboard_device(dev) -> bool:
+    """True if *dev* can deliver the hotkey and is therefore worth grabbing.
+
+    Grabbing everything under /dev/input also captures mice, touchpads, audio
+    jacks and the power button, freezing the pointer for the whole recording.
+    And logind lets any user open a game controller, which reports key events
+    too, so "some device with keys opened" does not mean the keyboard did.
+
+    Two capability checks, in this order:
+
+    1. It must report letter keys. Power buttons, lid switches, audio jacks,
+       game controllers and consumer-control nodes report none, so this drops
+       them immediately.
+    2. It must not be a pointing device. Logitech Unifying receivers advertise a
+       superset HID descriptor, so a wireless mouse claims all 26 letter keys
+       and all 12 F-keys just like a keyboard does. What separates them is real
+       pointer motion (REL_X) combined with mouse buttons — the same test
+       libinput uses. This also excludes ydotoold's virtual device, which is how
+       TuxTalk types and must never be grabbed.
+
+    Note the check is REL_X specifically, not the EV_REL event type: the K800
+    keyboard declares EV_REL while exposing no motion axis, so testing the type
+    alone would throw out a real keyboard and let the hotkey leak through.
+    """
+    if _ecodes is None:
+        return False
+    try:
+        caps = dev.capabilities()
+    except Exception:
+        return False
+
+    keys = set(caps.get(_ecodes.EV_KEY) or [])
+    if sum(1 for k in keys if k in LETTER_KEYS) < 3:
+        return False
+
+    rel_axes = set(caps.get(_ecodes.EV_REL) or [])
+    is_pointer = _ecodes.REL_X in rel_axes and _ecodes.BTN_LEFT in keys
+    return not is_pointer
+
 
 def check_uinput_exists():
     """
@@ -134,6 +188,31 @@ def _readable_input_devices():
                 if os.access(p, os.R_OK | os.W_OK)]
 
 
+def _readable_keyboards():
+    """Readable input nodes that are keyboards, the ones the service listens
+    to. A readable game controller alone does not let a hotkey through."""
+    paths = _readable_input_devices()
+    try:
+        from evdev import InputDevice
+    except Exception:
+        return paths
+    keyboards = []
+    for path in paths:
+        try:
+            dev = InputDevice(path)
+        except Exception:
+            continue
+        try:
+            if is_keyboard_device(dev):
+                keyboards.append(path)
+        finally:
+            try:
+                dev.close()
+            except Exception:
+                pass
+    return keyboards
+
+
 def check_input_read_permission():
     """
     Check whether TuxTalk can read hotkeys from /dev/input.
@@ -141,7 +220,7 @@ def check_input_read_permission():
     Returns:
         tuple: (has_access: bool, reason: str)
     """
-    if _readable_input_devices():
+    if _readable_keyboards():
         return (True, "You can read input devices. Hotkeys should work.")
     return (False, "Cannot read any keyboard under /dev/input, so hotkeys "
                    "cannot work. This usually means you are not in the "

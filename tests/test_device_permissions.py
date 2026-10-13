@@ -31,11 +31,48 @@ def test_reports_failure_when_no_input_device_is_readable(monkeypatch):
     assert "input" in reason.lower()
 
 
-def test_reports_success_when_a_device_is_readable(monkeypatch):
+def test_reports_success_when_a_keyboard_is_readable(monkeypatch):
     monkeypatch.setattr(
-        "tuxtalk.uinput_helper._readable_input_devices",
+        "tuxtalk.uinput_helper._readable_keyboards",
         lambda: ["/dev/input/event3"],
     )
+    ok, _ = check_input_read_permission()
+    assert ok is True
+
+
+class _FakeInputDevice:
+    def __init__(self, keys):
+        self._keys = keys
+        self.closed = False
+
+    def capabilities(self):
+        return {1: self._keys}
+
+    def close(self):
+        self.closed = True
+
+
+def test_a_readable_game_controller_alone_is_not_hotkey_access(monkeypatch):
+    """logind grants every user a game controller, which reports key events;
+    the service still hears no hotkey without a readable keyboard."""
+    evdev = pytest.importorskip("evdev")
+    gamepad_keys = [0x130, 0x131, 0x133, 0x134]          # BTN_SOUTH ... BTN_WEST
+    keyboard_keys = [30, 48, 46, 32, 66]                  # KEY_A ... KEY_D, KEY_F8
+    opened = []
+
+    def device(path):
+        dev = _FakeInputDevice(gamepad_keys if path.endswith("pad") else keyboard_keys)
+        opened.append(dev)
+        return dev
+    monkeypatch.setattr(evdev, "InputDevice", device)
+    monkeypatch.setattr("tuxtalk.uinput_helper._readable_input_devices",
+                        lambda: ["/dev/input/pad"])
+    ok, _ = check_input_read_permission()
+    assert ok is False
+    assert all(d.closed for d in opened)
+
+    monkeypatch.setattr("tuxtalk.uinput_helper._readable_input_devices",
+                        lambda: ["/dev/input/pad", "/dev/input/kbd"])
     ok, _ = check_input_read_permission()
     assert ok is True
 
@@ -60,7 +97,7 @@ def test_setup_is_required_when_only_typing_is_broken(monkeypatch):
         lambda: (False, "Cannot write to /dev/uinput."),
     )
     monkeypatch.setattr(
-        "tuxtalk.uinput_helper._readable_input_devices",
+        "tuxtalk.uinput_helper._readable_keyboards",
         lambda: ["/dev/input/event3"],
     )
 
@@ -76,7 +113,7 @@ def test_no_setup_needed_when_both_halves_work(monkeypatch):
         lambda: (True, "uinput is fine"),
     )
     monkeypatch.setattr(
-        "tuxtalk.uinput_helper._readable_input_devices",
+        "tuxtalk.uinput_helper._readable_keyboards",
         lambda: ["/dev/input/event3"],
     )
 

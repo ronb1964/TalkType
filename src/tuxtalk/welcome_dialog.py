@@ -2384,9 +2384,11 @@ def _flush_pending_events(devices):
             logger.debug(f"Could not flush events from {getattr(dev, 'name', dev)}: {e}")
 
 
-def _open_key_devices(list_devices, input_device, ev_key):
-    """Every input device evdev can open that has keys, as the service opens
-    them; an empty list when /dev/input can't be read."""
+def _open_key_devices(list_devices, input_device):
+    """Every keyboard evdev can open, as the service opens them; an empty list
+    when /dev/input can't be read. Game controllers, which any user may open,
+    are left out: the service would not hear the hotkey through them."""
+    from .uinput_helper import is_keyboard_device
     devices = []
     try:
         paths = list_devices()
@@ -2396,14 +2398,21 @@ def _open_key_devices(list_devices, input_device, ev_key):
     for path in paths:
         try:
             dev = input_device(path)
-            if ev_key in dev.capabilities():
-                # Already non-blocking: evdev opens with O_NONBLOCK.
-                devices.append(dev)
-                logger.info(f"Opened input device: {dev.name} at {path}")
         except PermissionError:
             logger.debug(f"Permission denied for {path}")
+            continue
         except Exception as e:
             logger.debug(f"Could not open {path}: {e}")
+            continue
+        if is_keyboard_device(dev):
+            # Already non-blocking: evdev opens with O_NONBLOCK.
+            devices.append(dev)
+            logger.info(f"Opened input device: {dev.name} at {path}")
+        else:
+            try:
+                dev.close()
+            except Exception:
+                pass
     return devices
 
 
@@ -2829,7 +2838,7 @@ def show_hotkey_test_dialog():
         # Opened here rather than in the reader thread, so the very first key
         # already shows whether the service will hear it.
         if EVDEV_AVAILABLE:
-            keyboards.extend(_open_key_devices(list_devices, InputDevice, ecodes.EV_KEY))
+            keyboards.extend(_open_key_devices(list_devices, InputDevice))
         if not keyboards:
             logger.warning("No keyboards found via evdev")
             keyboard_notice.set_markup(

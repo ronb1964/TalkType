@@ -15,14 +15,18 @@ from tuxtalk import uinput_helper  # noqa: E402
 from tuxtalk import welcome_dialog as wd  # noqa: E402
 
 EV_KEY = 1
+KEYBOARD_KEYS = [30, 48, 46, 32, 66]        # KEY_A, KEY_B, KEY_C, KEY_D, KEY_F8
+GAMEPAD_KEYS = [0x130, 0x131, 0x133, 0x134]  # BTN_SOUTH, BTN_EAST, BTN_NORTH, BTN_WEST
 
 
 class FakeDevice:
     """An evdev device whose select() never fires: a pipe nobody writes."""
 
-    def __init__(self, path, has_keys=True):
+    def __init__(self, path, kind="keyboard"):
         self.path, self.name = path, path
-        self._caps = {EV_KEY: [66]} if has_keys else {2: [0]}
+        self._caps = {"keyboard": {EV_KEY: KEYBOARD_KEYS},
+                      "gamepad": {EV_KEY: GAMEPAD_KEYS, 3: [0, 1]},
+                      "mouse": {2: [0]}}[kind]
         self._r, self._w = os.pipe()
 
     def capabilities(self):
@@ -46,25 +50,33 @@ def _input_device(denied=()):
     def make(path):
         if path in denied:
             raise PermissionError(path)
-        return FakeDevice(path, has_keys=path != "/dev/input/mouse")
+        return FakeDevice(path, kind=path.rpartition("/")[2] if path.endswith(
+            ("gamepad", "mouse")) else "keyboard")
     return make
 
 
-def test_devices_with_keys_are_opened():
+def test_keyboards_are_opened():
     paths = ["/dev/input/kbd", "/dev/input/mouse"]
-    opened = wd._open_key_devices(lambda: paths, _input_device(), EV_KEY)
+    opened = wd._open_key_devices(lambda: paths, _input_device())
     assert [d.path for d in opened] == ["/dev/input/kbd"]
+
+
+def test_a_game_controller_is_not_a_keyboard():
+    """logind lets any user open a game controller, and it reports key events;
+    the service still can't hear F8 through it."""
+    paths = ["/dev/input/gamepad"]
+    assert wd._open_key_devices(lambda: paths, _input_device()) == []
 
 
 def test_no_devices_when_permission_is_denied():
     paths = ["/dev/input/kbd"]
-    assert wd._open_key_devices(lambda: paths, _input_device(denied=paths), EV_KEY) == []
+    assert wd._open_key_devices(lambda: paths, _input_device(denied=paths)) == []
 
 
 def test_no_devices_when_listing_fails():
     def boom():
         raise OSError("no /dev/input")
-    assert wd._open_key_devices(boom, _input_device(), EV_KEY) == []
+    assert wd._open_key_devices(boom, _input_device()) == []
 
 
 def test_a_key_the_service_can_read_shows_working():
@@ -146,6 +158,13 @@ def test_dialog_without_keyboard_access_says_seen_not_working(monkeypatch):
     assert "✓ Seen, not active yet" in texts
     assert "✓ Working!" not in texts
     assert any("restart your computer" in t for t in texts)
+
+
+def test_dialog_with_only_a_game_controller_says_seen_not_working(monkeypatch):
+    paths = ["/dev/input/gamepad", "/dev/input/event3"]
+    texts = _run_dialog_with_f8_release(monkeypatch, paths, denied=paths[1:])
+    assert "✓ Seen, not active yet" in texts
+    assert "✓ Working!" not in texts
 
 
 def test_dialog_with_keyboard_access_still_says_working(monkeypatch):
