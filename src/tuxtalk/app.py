@@ -24,7 +24,7 @@ from evdev import InputDevice, ecodes, list_devices
 
 from typing import NamedTuple
 
-from .normalize import normalize_text, append_auto_punct
+from .normalize import normalize_text, append_auto_punct, swiss_spelling
 from .config import load_config, Settings, load_custom_commands
 # Imported as a module too, so the live-settings reload can read CONFIG_PATH and
 # LIVE_APPLIED_KEYS without pulling each name in separately.
@@ -88,6 +88,7 @@ def _loggable(text):
 # None while that option is off. Both follow config through
 # _apply_cleanup_settings(), at startup and on every live-settings reload.
 _remove_fillers = False
+_swiss_spelling = False     # ß -> ss in the finished text (Swiss Standard German)
 _ai_engine = None
 # Which of the two features using the AI engine are on. The engine runs while
 # either is; each checks its own flag before using it.
@@ -101,10 +102,11 @@ _auto_stop_seconds = 0.0
 def _apply_cleanup_settings(cfg):
     """Bring the cleanup and auto-stop options in line with *cfg*; start or
     stop the AI engine."""
-    global _remove_fillers, _ai_engine, _auto_stop_seconds, _ai_corrections, _voice_editing
+    global _remove_fillers, _ai_engine, _auto_stop_seconds, _ai_corrections, _voice_editing, _swiss_spelling
     _auto_stop_seconds = (float(getattr(cfg, "auto_stop_seconds", 2.0))
                           if getattr(cfg, "auto_stop_silence", False) else 0.0)
     _remove_fillers = bool(getattr(cfg, "remove_fillers", False))
+    _swiss_spelling = bool(getattr(cfg, "swiss_spelling", False))
     _ai_corrections = bool(getattr(cfg, "ai_corrections", False))
     _voice_editing = bool(getattr(cfg, "voice_editing", False))
     want_ai = _ai_corrections or _voice_editing
@@ -2410,6 +2412,11 @@ def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: b
     # processing so that auto-period/space checks see the real final text.
     text = _restore_protected(text, protected)
 
+    # Swiss Standard German writes ss where the engines write ß. Last, so it
+    # also covers snippets, Your Words and the AI's corrections.
+    if _swiss_spelling:
+        text = swiss_spelling(text)
+
     # Handle mid-sentence continuation after undo:
     # lowercase the first letter if we're continuing a sentence
     if state.continue_mid_sentence and text:
@@ -3065,6 +3072,8 @@ def _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
                 # Only spacing changed ("select all" got the line ends
                 # trimmed): not an edit anyone asked for.
                 result = None
+        if result and _swiss_spelling:
+            result = swiss_spelling(result)
         # Exact: for an edit done in code, spacing may be the whole change
         # (indenting one line); the AI's spacing-only answers are dropped above.
         if not result or result == selected:

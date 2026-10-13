@@ -60,6 +60,10 @@ Also new in this one:
   LibreOffice, where TuxTalk just presses Ctrl+B or whatever for you. KWrite has
   no bold at all, so there it tells you so. And select a few lines and you get
   a few lines back, the AI doesn't get to squash them into one.
+- Swiss German spelling. Swiss Standard German never writes ß, but the
+  speech models do, so there's a new option in Preferences, Advanced that types
+  ss instead (Strasse, gross). It's on by itself if your system is set to Swiss
+  German. Thanks to BatmansGehilfe for asking (issue #10).
 - Ctrl+Alt+P types your last dictation again, wherever your cursor is. Handy
   when a dictation lands in the wrong window because something stole the
   focus. You can change the key or turn it off in Preferences, General.

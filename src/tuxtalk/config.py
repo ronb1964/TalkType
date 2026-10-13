@@ -11,7 +11,7 @@ try:
 except ImportError:
     import toml as tomllib  # Python 3.10 fallback
     _USE_TOMLLIB = False  # toml library requires text mode ("r")
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, field, fields
 import sys
 
 from .logger import setup_logger
@@ -113,6 +113,15 @@ VALID_BACKINGS = {"off", "soft", "medium", "strong"}
 CLASSIC_CYAN_HEX = "#4db3ff"
 
 
+def swiss_german_locale(env=None) -> bool:
+    """Whether the system is set to Swiss German (de_CH, or gsw for Swiss
+    German itself), where ß is never written."""
+    env = os.environ if env is None else env
+    values = [env.get(v, "") for v in ("LC_ALL", "LC_MESSAGES", "LANG")]
+    values += (env.get("LANGUAGE") or "").split(":")
+    return any(v.replace("-", "_").startswith(("de_CH", "gsw")) for v in values if v)
+
+
 @dataclass
 class Settings:
     model: str = "parakeet-v3"  # parakeet-v3 or tiny/base/small/medium/large-v3 …
@@ -122,6 +131,8 @@ class Settings:
     hotkey: str = ""            # hold-to-talk hotkey (empty until user picks during onboarding)
     beeps: bool = True          # beeps on/off
     smart_quotes: bool = True   # "smart quotes"
+    # ß -> ss in the finished text (Swiss Standard German); on by default on Swiss German systems
+    swiss_spelling: bool = field(default_factory=swiss_german_locale)
     mode: str = "hold"          # "hold" or "toggle"
     toggle_hotkey: str = ""     # used only when mode="toggle" (empty until user picks during onboarding)
     mic: str = ""               # substring to match input device (empty = default)
@@ -720,6 +731,7 @@ LIVE_APPLIED_KEYS = {
     # Dictation cleanup. Read on each utterance; turning AI corrections on or
     # off starts or stops its engine from the same reload (_apply_cleanup_settings).
     "remove_fillers",
+    "swiss_spelling",
     "ai_corrections",
     "voice_editing",
     # Hands-free auto-stop; read when each toggle recording starts.

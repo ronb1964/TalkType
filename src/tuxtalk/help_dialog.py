@@ -231,6 +231,7 @@ After choosing one, the tray's Device line shows where it really runs.
 <b>Smart Text Processing</b>
 • Auto-punctuation for natural text flow
 • Smart quotes (\u201c \u201d instead of " ")
+• Swiss German spelling: ss instead of ß (on by itself on Swiss German systems)
 • Auto-spacing before new text
 • Optional auto-period at end of sentences
 • Voice-activated undo (word, sentence, paragraph, or everything)

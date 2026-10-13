@@ -660,3 +660,22 @@ def normalize_text(text: str, auto_period: bool = True) -> str:
     text = _fix_email_spacing(text)
 
     return text
+
+
+# A word that holds ß or ẞ, for swiss_spelling.
+_RE_SHARP_S_WORD = re.compile(r"\w*[ßẞ]\w*")
+
+
+def _swiss_word(m: re.Match) -> str:
+    word = m.group()
+    # In an all-caps word ("STRAßE") the sharp s stands for capitals too.
+    letters = [c for c in word if c.isalpha() and c not in "ßẞ"]
+    upper = bool(letters) and all(c.isupper() for c in letters)
+    return word.replace("ẞ", "SS").replace("ß", "SS" if upper else "ss")
+
+
+def swiss_spelling(text: str) -> str:
+    """Swiss Standard German spelling: ß becomes ss, and ẞ becomes SS."""
+    if "ß" not in text and "ẞ" not in text:
+        return text
+    return _RE_SHARP_S_WORD.sub(_swiss_word, text)

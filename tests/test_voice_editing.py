@@ -1000,3 +1000,11 @@ def test_an_image_copied_during_the_probe_is_left_alone(monkeypatch):
     monkeypatch.setattr(cb, "_wl_paste_types", lambda: [board.mime] if board.data is not None else [])
     text, _ = cb.copy_selection(copy_an_image, sleep=lambda s: None)
     assert text is None and board.data == b"\x89PNG"
+
+
+def test_a_rewrite_uses_ss_with_swiss_spelling_on(edit_env, monkeypatch):
+    """The AI writes ß like the speech engines do (issue #10)."""
+    monkeypatch.setattr(app, "_swiss_spelling", True)
+    edit_env["engine"].answer = "Die Straße ist gross."
+    run_edit()
+    assert edit_env["typed"] == ["Die Strasse ist gross."]

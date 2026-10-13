@@ -1758,6 +1758,15 @@ class PreferencesWindow:
 
         return grid
     
+    def _swiss_spelling_check(self):
+        """The "Swiss German spelling" checkbox, bound to swiss_spelling."""
+        check = Gtk.CheckButton(label="Swiss German spelling (ß → ss)")
+        check.set_active(bool(self.config.get("swiss_spelling", False)))
+        check.connect("toggled", lambda x: self.update_config("swiss_spelling", x.get_active()))
+        check.set_tooltip_text("Write ss wherever the speech model writes ß, as Swiss Standard German does\n"
+                               "(Strasse, gross). On by default when the system is set to Swiss German.")
+        return check
+
     def create_advanced_tab(self):
         grid = Gtk.Grid()
         grid.set_column_spacing(10)
@@ -1785,6 +1794,9 @@ class PreferencesWindow:
         grid.attach(quotes_check, 0, row, 2, 1)
         row += 1
         
+        grid.attach(self._swiss_spelling_check(), 0, row, 2, 1)
+        row += 1
+
         # Auto space
         space_check = Gtk.CheckButton(label="Auto-space between utterances")
         space_check.set_active(self.config["auto_space"])
