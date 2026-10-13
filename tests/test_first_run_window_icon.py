@@ -77,3 +77,28 @@ def test_the_tray_writes_it_after_the_rename_and_before_any_window():
     call = body.index("create_hidden_desktop_entry()")
     # The rename moves talktype.desktop only while tuxtalk.desktop is missing.
     assert body.index("adopt_old_install(") < call < body.index("DictationTray()")
+
+
+@pytest.mark.parametrize("name", ["My Apps/TuxTalk-v0.15.0-x86_64.AppImage",
+                                  "Tux $Talk \"q\" `x`\\y.AppImage"])
+def test_a_download_path_with_spaces_still_makes_a_valid_entry(home, monkeypatch, name):
+    """GLib drops an entry whose Exec program it can't find, and an unquoted
+    space splits the path, so GNOME would show the generic icon."""
+    gi_repo = pytest.importorskip("gi.repository")
+    gio, glib = gi_repo.Gio, gi_repo.GLib
+    appimage = home / name
+    appimage.parent.mkdir(parents=True, exist_ok=True)
+    appimage.write_text("#!/bin/sh\n")
+    appimage.chmod(0o755)
+    monkeypatch.setenv("APPIMAGE", str(appimage))
+    assert uc.create_hidden_desktop_entry()
+    info = gio.DesktopAppInfo.new_from_filename(str(home / "apps" / "tuxtalk.desktop"))
+    assert info is not None
+    # GLib splits the command line like this before it expands field codes.
+    argv = glib.shell_parse_argv(info.get_commandline())[1]
+    assert argv[0].replace("%%", "%") == str(appimage)
+
+
+def test_a_percent_in_the_path_is_not_read_as_a_field_code():
+    assert uc._desktop_exec_program("/home/a/100%.AppImage") == "/home/a/100%%.AppImage"
+    assert uc._desktop_exec_program("/home/a/TuxTalk.AppImage") == "/home/a/TuxTalk.AppImage"
