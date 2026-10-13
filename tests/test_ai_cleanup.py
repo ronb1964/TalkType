@@ -24,7 +24,7 @@ SAFE = [
     ("Buy the red paint for the van. Sorry, the blue paint.", "Buy the blue paint for the van."),
     ("Call Dave, sorry, I mean Steve, about it.", "Call Steve about it."),
     # a whole clause restated: the model keeps the first wording and swaps in
-    # the new value (real Qwen answers, 2026-10-10)
+    # the new value (answers taken from the real model)
     ("Send the report to Bob, scratch that, send it to Jim.", "Send the report to Jim."),
     ("I'll pick up the kids at five, no wait, I'll pick them up at six.",
      "I'll pick up the kids at six."),
@@ -69,7 +69,7 @@ UNSAFE = [
     ("Send the report to Bob, scratch that, send it to Jim.", "Send the report to Bob."),
     # restated clause: the new value put in the wrong place
     ("Send the report to Bob, scratch that, send it to Jim.", "Send the Jim to Bob."),
-    # restated clause: took one change and dropped the other (Jim)
+    # restated clause: took one change and dropped the other
     ("Call Bob, scratch that, email Jim.", "Email Bob."),
     ("Call Bob and Sue, scratch that, call Jim and Bob.", "Call Jim and Sue."),
     ("Turn left at the light, no, turn right at the sign.", "Turn right at the light."),
@@ -217,7 +217,7 @@ def test_cleanup_settings_apply_without_a_restart():
 
 def test_orphaned_engines_are_killed_but_live_ones_are_left_alone(monkeypatch):
     """Engines left by an earlier run (parent gone, adopted by systemd) are
-    killed when a new engine starts; ones owned by a live TalkType are not."""
+    killed when a new engine starts; ones owned by a live TuxTalk are not."""
     import signal as _signal
     killed = []
     monkeypatch.setattr(ai, "_engine_processes", lambda: [(100, 1), (200, 50), (300, ai.os.getpid())])
@@ -237,8 +237,8 @@ def test_parent_death_uses_sigkill():
 # Parakeet often writes "Actually book it" with no comma. A sentence opening
 # that way counts as a correction only when the next word repeats a real word
 # of the sentence before (not "the", "it" or "I'll"). Measured on the real
-# model (2026-10-10): of 15 ordinary sentences that pass this gate, all 15
-# were left alone; 4 of 6 real corrections were fixed.
+# model: of 15 ordinary sentences that pass this gate, all 15 were left
+# alone; 4 of 6 real corrections were fixed.
 
 ACTUALLY_CORRECTIONS = [
     "Book the room for Monday. Actually book it for Tuesday.",
@@ -286,7 +286,7 @@ def test_an_unfixed_actually_keeps_its_original_punctuation():
 
 
 @pytest.mark.parametrize("said,asked", [
-    # Ron, 0.14.6 test: two correction phrases in a row, and nothing was fixed.
+    # Two correction phrases in a row.
     ("Meet me at three o'clock. No, actually, make that four o'clock.",
      "Meet me at three o'clock, no actually make that, four o'clock."),
     ("Meet me at three o'clock. Actually make that four o'clock.",
@@ -295,9 +295,8 @@ def test_an_unfixed_actually_keeps_its_original_punctuation():
      "Pick up the red paint, sorry I mean, the blue paint."),
 ])
 def test_stacked_correction_phrases_are_joined_too(said, asked):
-    """Measured on the real model (2026-10-11): fixed once joined, not
-    before, while ordinary sentences opening with "No," "Sorry," or
-    "Actually," stayed as spoken."""
+    """On the real model these are fixed only once joined, while ordinary
+    sentences opening with "No," "Sorry," or "Actually," stay as spoken."""
     engine = FakeEngine({})
     ai.fix_self_corrections(said, engine)
     assert engine.asked == [asked]
@@ -321,8 +320,8 @@ def test_a_plain_no_or_oh_is_not_a_correction_opener(sentence):
     ("Bring 5%, no wait, 6%.", "Bring 6."),
 ])
 def test_a_changed_or_dropped_sign_is_not_safe(said, edited):
-    """The check kept only a-z and 0-9, so a changed currency or a dropped
-    minus or percent sign passed it."""
+    """Signs and other scripts count as words, so a changed currency or a
+    dropped minus or percent sign fails the check."""
     assert ai.edit_is_safe(said, edited) is False
 
 
@@ -364,7 +363,7 @@ def dead_engine(monkeypatch):
 
 
 def test_a_server_that_died_is_started_again(dead_engine):
-    """is_ready() stayed True and every correction and edit failed all session."""
+    """is_ready() notices the dead server, so corrections and edits don't fail all session."""
     assert dead_engine.correct("one, no wait, two") is None
     assert len(dead_engine.started) == 1
     assert dead_engine.is_ready() is False and len(dead_engine.started) == 1   # starting
@@ -380,7 +379,7 @@ def test_a_stopped_engine_is_not_started_again(dead_engine):
 # --- an engine update doesn't leave the old version behind -----------------------------------
 
 def test_unpacking_a_new_engine_removes_older_versions(tmp_path, monkeypatch):
-    """Each version unpacks into its own folder; the old ones stayed for good."""
+    """Each version unpacks into its own folder, so the old ones must be removed."""
     import io
     import tarfile
     monkeypatch.setattr("tuxtalk.config.get_data_dir", lambda: str(tmp_path))

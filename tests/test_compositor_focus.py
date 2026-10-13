@@ -3,7 +3,7 @@
 Each test runs a stand-in compositor on a real Unix socket that speaks that
 compositor's real protocol, so the framing, the parsing and the clean-up are
 all exercised. The real compositors were checked by hand (headless, in a
-container) when this module was written.
+container).
 """
 import json
 import socket

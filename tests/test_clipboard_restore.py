@@ -1,9 +1,8 @@
 """Paste mode and the clipboard (GitHub issue #7).
 
-Every paste replaced the clipboard and nothing put it back, and on KDE every
-dictation was saved into Klipper's history on disk. Now dictations are always
-marked sensitive (clipboard managers skip them), and with "Restore clipboard
-after pasting" on, whatever the user had copied comes back after the paste.
+Dictations are always marked sensitive, so clipboard managers such as Klipper
+don't save them to their history, and with "Restore clipboard after pasting"
+on, whatever the user had copied comes back after the paste.
 """
 import pytest
 
@@ -134,7 +133,7 @@ def test_an_older_wl_copy_still_pastes_without_the_hint(monkeypatch):
 # --- the setting -----------------------------------------------------------------------
 
 def test_restoring_is_off_unless_asked_for():
-    """Ron re-pastes a dictation that landed in the wrong window from the
+    """A dictation that landed in the wrong window can be re-pasted from the
     clipboard; restoring by default would take that away."""
     assert C.Settings().restore_clipboard is False
 
@@ -188,7 +187,7 @@ def test_paste_uses_the_keeper_only_when_the_setting_is_on(monkeypatch):
 # --- a copied password stays a password ---------------------------------------------------
 
 def test_a_password_comes_back_marked_for_clipboard_managers_to_skip(keeper, board):
-    """It came back as plain text, and Klipper saved it in its history."""
+    """Restored as plain text, Klipper would save it in its history."""
     board.data, board.password = b"hunter2", True
     paste(keeper, board, "dictated words")
     board.password = False
@@ -207,8 +206,8 @@ def test_the_sensitive_restore_uses_wl_copy_sensitive(monkeypatch):
 
 
 def test_a_paste_waits_for_a_restore_that_is_under_way(keeper, board, monkeypatch):
-    """The restore read and wrote the clipboard after letting go of the lock,
-    so a new paste could start in between and have its dictation overwritten."""
+    """The restore holds the lock while it reads and writes the clipboard, so
+    a new paste can't start in between and have its dictation overwritten."""
     held = []
     write = board.write
     monkeypatch.setattr(cb, "_wl_copy_bytes",

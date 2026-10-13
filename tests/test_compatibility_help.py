@@ -1,7 +1,7 @@
 """Preferences' "What works with what?" window tells the truth (recommend.py).
 
-Ron, 0.14.6 test: with Parakeet, Whisper, CPU, Vulkan and CUDA there were too
-many choices to know which work together.
+With Parakeet, Whisper, CPU, Vulkan and CUDA there are too many choices to know
+which work together without it.
 """
 import pytest
 
@@ -43,7 +43,6 @@ def test_large_v3_is_shown_needing_a_graphics_card():
     (r.Hardware(None, False), False, "no graphics chip TuxTalk can use"),
 ])
 def test_the_computer_line_fits_every_kind_of_computer(hw, slower, says):
-    """Ron asked how the line reads on other computers: "graphics card" read
-    as "Your computer: graphics card", and a chip that lost the speed check
-    was called no graphics card at all."""
+    """The line reads naturally for every kind of computer ("a graphics card",
+    not "graphics card"), and a chip that lost the speed check is still named."""
     assert says in r.this_computer(hw, slower)

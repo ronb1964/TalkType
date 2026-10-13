@@ -4,8 +4,8 @@ Whisper decides for itself whether a spoken number becomes "one" or "1", and it
 is not consistent. Measured across 1,073 real dictations: a number followed by a
 unit came out as a digit 20 times against 3 spelled out, and counting sequences
 30 against 4 — but the same spoken phrase produced both forms on different days.
-Commands match the raw transcription, so a trigger containing a number fired
-only when Whisper happened to pick the form the user typed.
+Commands match the raw transcription, so without this a trigger containing a
+number would fire only when Whisper happened to pick the form the user typed.
 
 The equivalence is applied to MATCHING only. Dictated text is untouched: what
 gets typed still comes out exactly as Whisper and the normalizer produced it.
@@ -30,7 +30,7 @@ def _run(text):
 
 class TestEitherFormFires:
     def test_a_word_trigger_matches_a_digit_transcription(self, commands):
-        """The exact case that failed: typed 'one', Whisper wrote '1'."""
+        """Typed 'one', Whisper wrote '1'."""
         commands({"test phrase one": "IT WORKED"})
         assert _run("Test Phrase 1") == "IT WORKED"
 

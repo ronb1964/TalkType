@@ -2,8 +2,8 @@
 
 sounddevice finds PortAudio with ctypes.util.find_library("portaudio"), which
 consults the system's linker cache and ignores the AppImage's library folder.
-AppImageHub's test machine has no libportaudio, so TalkType showed its
-"PortAudio library not found" dialog there (2026-09-26).
+Without the fallback, a system with no libportaudio (like AppImageHub's test
+machine) shows the "PortAudio library not found" dialog.
 """
 
 import ctypes.util

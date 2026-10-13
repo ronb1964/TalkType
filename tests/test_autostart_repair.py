@@ -1,11 +1,9 @@
 """Repairing a login entry left pointing at a stale AppImage.
 
-0.10.1 stopped new setups from pointing launch-at-login at the AppImage the
-user happened to run setup from (usually ~/Downloads). Setups done before
-that kept the old entry: on the test VM it still launched
-~/Downloads/TalkType-v0.10.0-x86_64.AppImage, an old version that needs
-libfuse2, so on Ubuntu 26.04 TalkType silently never started at login
-(2026-10-02). The installed AppImage now repairs such an entry on startup.
+Setups before 0.10.1 pointed launch-at-login at the AppImage the user happened
+to run setup from (usually ~/Downloads). Such an entry keeps launching that old
+copy, which may need libfuse2 and then silently never starts at login on
+systems without it, so the installed AppImage repairs it on startup.
 """
 import pytest
 
@@ -83,7 +81,7 @@ def test_no_installed_copy_means_no_repair(env):
     assert autostart.repair_stale_appimage_autostart() is False
 
 
-# --- The entry's description (0.14.7): the old one named Faster-Whisper ---
+# --- The entry's description: an older one names Faster-Whisper ---
 
 @pytest.mark.parametrize("dev, old, new", [
     (False, "AI-powered dictation for Wayland using Faster-Whisper", autostart.AUTOSTART_COMMENT),

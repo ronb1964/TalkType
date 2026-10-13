@@ -1,7 +1,7 @@
 """On the Flatpak, launch-at-login MUST go through the Background portal — a
 sandboxed app writing ~/.config/autostart only reaches its private config, which
-the desktop never reads, so the app would never start at login (the bug a user
-hit). Off Flatpak it must still write the XDG autostart .desktop directly.
+the desktop never reads, so the app would never start at login. Off Flatpak it
+must still write the XDG autostart .desktop directly.
 """
 from tuxtalk import autostart
 
@@ -34,8 +34,8 @@ def test_set_autostart_writes_desktop_file_off_flatpak(tmp_path, monkeypatch):
 
 
 def test_a_background_portal_that_never_answers_gives_up(monkeypatch):
-    """Preferences' Apply waited forever for a portal that took the request
-    and never sent its Response."""
+    """Preferences' Apply must not wait forever for a portal that takes the
+    request and never sends its Response."""
     import threading
     from tuxtalk import portal_common as pc
 

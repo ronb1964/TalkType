@@ -4,8 +4,7 @@ The AppImage copies GObject-Introspection typelibs with two `cp ... || true`
 calls, because only one of the two source directories exists on a given base
 image. That is fine — but the build must then assert the *outcome*, or a
 missing typelib sails through and the app dies on launch with a GI error the
-user cannot act on. For a long time only AppIndicator3 was checked, so a
-missing Gtk, Gdk or GdkPixbuf would have produced a good-looking build.
+user cannot act on.
 
 The distinction that matters is guarded vs unguarded:
 
@@ -20,8 +19,7 @@ The distinction that matters is guarded vs unguarded:
 
 Notify and Atspi are deliberately absent from the AppImage and the code already
 degrades without them. Listing them in REQUIRED_TYPELIBS would hard-fail every
-build for features meant to be optional — which is exactly the mistake this
-test caught while it was being written.
+build for features meant to be optional.
 
 Guardedness is detected from the AST rather than a hand-maintained exempt list,
 so a new optional dependency is classified correctly without editing this file.

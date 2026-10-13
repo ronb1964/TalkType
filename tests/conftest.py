@@ -1,8 +1,8 @@
 """Test-suite wide setup.
 
-Keep the suite's logging out of the user's real TalkType log. Modules create
+Keep the suite's logging out of the user's real TuxTalk log. Modules create
 their file handler at import time, so this has to happen before any test
-module imports talktype, which is why it runs at conftest import rather than
+module imports tuxtalk, which is why it runs at conftest import rather than
 in a fixture. Subprocesses started by tests inherit it through the
 environment.
 """
@@ -24,10 +24,8 @@ atexit.register(shutil.rmtree, _LOG_DIR, ignore_errors=True)
 def _hold_back_notifications():
     """Desktop notifications from tests must never reach the user's desktop.
 
-    A CUDA-fallback test popped "Couldn't use your NVIDIA graphics card" on
-    every suite run, all through a release test. Patched here, at conftest
-    import, so it covers module-level code too; tests that check a message
-    stub app._notify themselves.
+    Patched here, at conftest import, so it covers module-level code too;
+    tests that check a message stub app._notify themselves.
     """
     try:
         import gi

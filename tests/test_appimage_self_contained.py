@@ -1,13 +1,14 @@
 """The AppImage must start on systems that lack libfuse2 or the tray library.
 
-AppImageHub's test (AppImage/appimage.github.io#3511, 2026-09-26) failed the
-0.10.0 AppImage twice over:
+AppImageHub's test (AppImage/appimage.github.io#3511) checks both on a bare
+system:
 
-- The tray crashed with "Could not locate app_indicator_new:
-  libayatana-appindicator3.so.1". Only the typelib was bundled, and a typelib
-  merely describes a library; the real .so still came from the system.
-- It was built by the retired AppImageKit appimagetool, whose runtime needs
-  libfuse2. Ubuntu 26.04 does not ship libfuse2, so the AppImage did not start.
+- The tray library itself (libayatana-appindicator3.so.1) must be bundled. A
+  typelib merely describes a library; without the .so the tray crashes with
+  "Could not locate app_indicator_new".
+- The AppImage must be built by the current appimagetool. The retired
+  AppImageKit one has a runtime that needs libfuse2, which Ubuntu 26.04 does
+  not ship.
 
 These are build-script checks: the real proof is the AppImage, but a revert
 of either line would otherwise go unnoticed until users hit it.
@@ -41,7 +42,7 @@ def test_portaudio_fallback_is_bundled_off_the_library_path():
 
 
 def test_update_information_is_embedded_and_its_zsync_is_released():
-    """AppImageHub warned: no update information (AppImage/appimage.github.io#4598)."""
+    """AppImageHub checks for update information (AppImage/appimage.github.io#4598)."""
     assert '-u "$UPDATE_INFO"' in BUILD
     assert "gh-releases-zsync|ronb1964|TuxTalk|latest|TuxTalk-*x86_64.AppImage.zsync" in BUILD
     claude_md = (pathlib.Path(__file__).resolve().parent.parent / "CLAUDE.md").read_text()

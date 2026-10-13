@@ -84,8 +84,7 @@ def test_cleanup_runs_in_prepare_text_only_when_enabled(monkeypatch):
 
 
 # A spoken "tab" is a real tab character by the time cleanup runs, and the
-# tidy-up step used to treat it as stray whitespace: "hello tab world"
-# came out as "Hello world." whenever "Remove fillers" was on.
+# tidy-up step must keep it rather than treat it as stray whitespace.
 @pytest.mark.parametrize("said, want", [
     ("hello tab world", "Hello \t world."),
     ("name tab tab age", "Name \t \t age."),
