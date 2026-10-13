@@ -460,7 +460,8 @@ def append_auto_punct(text: str, auto_period: bool, auto_space: bool) -> str:
         core, trailing = text[:m.start()], text[m.start():]
         if not core.strip():
             return text  # utterance is only line breaks — nothing to punctuate
-        if auto_period and not _ends_punctuated(core):
+        # A comma before the break is the user's ("Dear John," new line).
+        if auto_period and not _ends_punctuated(core) and not core.rstrip().endswith(","):
             core = core.rstrip() + "."
         return core + trailing
     if auto_period and not _ends_punctuated(text):
@@ -603,13 +604,18 @@ def normalize_text(text: str, auto_period: bool = True) -> str:
     temp_text = text.replace("§SHIFT_ENTER§", "\n")
 
     lines = []
-    for line in temp_text.split("\n"):
+    split_lines = temp_text.split("\n")
+    last = len(split_lines) - 1
+    for idx, line in enumerate(split_lines):
         line = cap_first(line)
-        # Convert trailing comma to period at end of line
-        line = _RE_TRAILING_COMMA.sub(".", line)
+        # A comma before a line break was said on purpose ("Dear John,"), so
+        # only a comma that ends the whole utterance becomes the full stop.
+        if auto_period and idx == last:
+            line = _RE_TRAILING_COMMA.sub(".", line)
         # Add period at end of line if no punctuation exists
         if (auto_period and line and line.strip()
-                and not _RE_NO_END_PUNCT.search(line.rstrip())):
+                and not _RE_NO_END_PUNCT.search(line.rstrip())
+                and not line.rstrip().endswith(",")):
             line = line.rstrip() + "."
         # Capitalize after sentence enders
         line = _RE_CAP_AFTER_ENDER.sub(lambda m: m.group(1) + m.group(2).upper(), line)

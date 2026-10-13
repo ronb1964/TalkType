@@ -673,3 +673,31 @@ def test_run_together_times_get_their_colon(heard, typed):
 def test_numbers_that_cannot_be_times_are_left_alone(heard, number):
     out = normalize_text(heard)
     assert number in out and ":" not in out
+
+
+# Every line's trailing comma used to become a full stop, so a letter
+# greeting said as "dear john comma new line" lost its comma, and the
+# period appeared even with the auto-period preference off.
+@pytest.mark.parametrize("said, expected", [
+    ("dear john comma new line thanks for the update",
+     f"Dear john,{_M}Thanks for the update."),
+    ("hi sarah comma new paragraph how are you",
+     f"Hi sarah,{_M}{_M}How are you."),
+    ("Dear John, new line thanks", f"Dear John,{_M}Thanks."),
+])
+def test_comma_before_a_line_break_is_kept(said, expected):
+    assert normalize_text(said) == expected
+
+
+def test_comma_before_a_final_line_break_gets_no_period():
+    out = normalize_text("dear john comma new line")
+    assert out == f"Dear john,{_M}"
+    assert append_auto_punct(out, True, True) == f"Dear john,{_M}"
+
+
+def test_trailing_comma_is_kept_with_auto_period_off():
+    assert normalize_text("it was hot comma", auto_period=False) == "It was hot,"
+
+
+def test_trailing_comma_at_the_end_still_becomes_a_period():
+    assert normalize_text("it was hot comma") == "It was hot."
