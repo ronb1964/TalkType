@@ -442,6 +442,7 @@ def make_engine_download_func():
                 os.replace(os.path.join(staging, name), target)
             shutil.rmtree(staging, ignore_errors=True)
             os.remove(archive)
+            engine_process.remove_other_versions(os.path.dirname(engine_dir), LLAMA_TAG)
         except Exception as e:
             logger.error(f"Could not unpack the AI engine: {e}")
             progress_callback("Could not unpack the download", 0)

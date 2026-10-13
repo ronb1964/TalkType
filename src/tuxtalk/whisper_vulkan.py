@@ -211,6 +211,7 @@ def make_engine_download_func(model_name=None):
             os.replace(os.path.join(staging, ENGINE_NAME), target)
             shutil.rmtree(staging, ignore_errors=True)
             os.remove(archive)
+            engine_process.remove_other_versions(os.path.dirname(parent), ENGINE_VERSION)
         except Exception as e:
             logger.error(f"Could not unpack the graphics engine: {e}")
             progress_callback("Could not unpack the download", 0)

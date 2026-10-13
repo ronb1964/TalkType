@@ -3,6 +3,8 @@
 The model itself is never trusted, so these tests use a fake engine that
 returns chosen answers, good and bad, and check that only safe edits land.
 """
+import os
+
 import pytest
 
 from tuxtalk import ai_cleanup as ai
@@ -373,3 +375,37 @@ def test_a_stopped_engine_is_not_started_again(dead_engine):
     dead_engine.stop()
     dead_engine.start(_replacing=dead)
     assert dead_engine.started == []
+
+
+# --- an engine update doesn't leave the old version behind -----------------------------------
+
+def test_unpacking_a_new_engine_removes_older_versions(tmp_path, monkeypatch):
+    """Each version unpacks into its own folder; the old ones stayed for good."""
+    import io
+    import tarfile
+    monkeypatch.setattr("tuxtalk.config.get_data_dir", lambda: str(tmp_path))
+    old = tmp_path / "ai-engine" / "b100" / "llama-b100"
+    old.mkdir(parents=True)
+    (old / "llama-server").write_text("old")
+
+    def download_file(url, dest, **kw):
+        with tarfile.open(dest, "w:gz") as tar:
+            data = b"#!/bin/sh\n"
+            info = tarfile.TarInfo(f"llama-{ai.LLAMA_TAG}/llama-server")
+            info.size, info.mode = len(data), 0o755
+            tar.addfile(info, io.BytesIO(data))
+        return True
+    monkeypatch.setattr("tuxtalk.download_utils.download_file", download_file)
+    assert ai.make_engine_download_func()(lambda *a: None, None) is True
+    assert sorted(p.name for p in (tmp_path / "ai-engine").iterdir()) == [ai.LLAMA_TAG]
+    assert os.access(ai._server_binary(), os.X_OK)
+
+
+def test_only_folders_other_than_the_current_version_go(tmp_path):
+    from tuxtalk import engine_process
+    for name in ("1.9.3", "1.9.4"):
+        (tmp_path / name).mkdir()
+    (tmp_path / "notes.txt").write_text("kept")
+    engine_process.remove_other_versions(str(tmp_path), "1.9.4")
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["1.9.4", "notes.txt"]
+    engine_process.remove_other_versions(str(tmp_path / "missing"), "1.9.4")    # never raises

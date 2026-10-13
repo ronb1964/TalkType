@@ -29,6 +29,22 @@ def set_parent_death_signal():
         pass
 
 
+def remove_other_versions(parent, keep):
+    """Delete every engine version folder under *parent* except *keep*. Each
+    version unpacks into its own folder, so without this an update leaves
+    the old one behind for good. Never raises."""
+    import shutil
+    try:
+        names = os.listdir(parent)
+    except OSError:
+        return
+    for name in names:
+        path = os.path.join(parent, name)
+        if name != keep and os.path.isdir(path) and not os.path.islink(path):
+            shutil.rmtree(path, ignore_errors=True)
+            logger.info(f"Removed an older engine version: {path}")
+
+
 def processes_of(binary):
     """(pid, parent pid) of every running process started from *binary*."""
     found = []
