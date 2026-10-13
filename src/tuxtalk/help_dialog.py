@@ -477,6 +477,16 @@ Names and terms TuxTalk should spell your way, in Preferences → Snippets → Y
 • Say <b>undo everything</b> or <b>delete everything</b> to clear the field
 • Also works: <b>delete last word</b>, <b>remove last word</b>, <b>clear all</b>, etc.
 
+<b>Voice Editing:</b>
+• Select some text in any app, hold <b>Shift</b> with your dictation key (Shift+F8),
+  say how to change it, and let go. Or tap Shift with your toggle key to start and stop
+• Say it your own way: <b>make this more formal</b>, <b>shorten this</b>, <b>fix the grammar</b>,
+  <b>turn this into a bullet list</b>, <b>make it friendlier</b>, <b>translate this to Spanish</b>
+• The selection is replaced with the rewrite. <b>Ctrl+Z</b> in the app puts it back
+• Turn it on in Preferences → Advanced (it uses the same AI as self-corrections)
+• Simple, clear changes work best. Asked to write a whole email from one line,
+  the AI can make up details, so read it over
+
 <b>Changing Your Mind:</b>
 • Say <b>no wait</b>, <b>I mean</b>, <b>make that</b>, <b>scratch that</b> or <b>or rather</b>
   to correct yourself: "meet at 3, no wait, 4" → "meet at 4"

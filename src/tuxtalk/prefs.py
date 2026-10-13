@@ -1835,12 +1835,33 @@ class PreferencesWindow:
         grid.attach(self.ai_corrections_check, 0, row, 2, 1)
         row += 1
 
+        # Voice editing (app._transcribe_and_edit): the same AI rewrites the
+        # selected text the way the user says.
+        # Not in the Flatpak: its portal input can't see Shift or send Ctrl+C.
+        if not os.environ.get("FLATPAK_ID"):
+            self.voice_editing_check = Gtk.CheckButton(
+                label="Voice editing: select text, hold Shift with your dictation key, "
+                      "say how to change it")
+            self.voice_editing_check.set_active(
+                bool(self.config.get("voice_editing", False)) and ai_cleanup.is_installed())
+            self.voice_editing_check.set_tooltip_text(
+                "Select some text in any app, hold Shift+F8 (Shift with your hold key, or tap\n"
+                "Shift with your toggle key), and say what you want: \u201cmake this more formal\u201d,\n"
+                "\u201cshorten this\u201d, \u201cfix the grammar\u201d, \u201cturn this into a bullet list\u201d.\n"
+                "The selection is replaced with the rewrite. Ctrl+Z puts it back.\n\n"
+                "Uses the same small AI as self-corrections, on this computer.\n"
+                "Simple, clear changes work best; it can invent details when asked for a whole email.")
+            self.voice_editing_check.connect("toggled", self._on_voice_editing_toggled)
+            grid.attach(self.voice_editing_check, 0, row, 2, 1)
+            row += 1
+
         ai_note = Gtk.Label(xalign=0)
-        ai_note.set_markup('<span>    Runs on your computer, nothing is sent online. '
-                           'One-time download of about 1.1 GB.</span>')
+        ai_note.set_markup('<span>    Both run on your computer, nothing is sent online. '
+                           'One shared download of about 1.1 GB.</span>')
         ai_note.set_opacity(0.7)
         grid.attach(ai_note, 0, row, 2, 1)
         row += 1
+
 
         # ===== PRIVACY SECTION =====
         privacy_sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
@@ -4204,27 +4225,38 @@ class PreferencesWindow:
         self._update_timeout_ui_state()
 
     def _on_ai_corrections_toggled(self, check):
-        """Turn AI self-corrections on or off.
+        """Turn AI self-corrections on or off (see _toggle_ai_feature)."""
+        self._toggle_ai_feature(check, "ai_corrections", self._on_ai_corrections_toggled,
+                                "Download the AI for self-corrections?")
+
+    def _on_voice_editing_toggled(self, check):
+        """Turn voice editing on or off. It uses the same AI as self-corrections."""
+        self._toggle_ai_feature(check, "voice_editing", self._on_voice_editing_toggled,
+                                "Download the AI for voice editing?")
+
+    def _toggle_ai_feature(self, check, key, handler, question):
+        """Turn an option that needs the local AI on or off.
 
         Turning it on the first time downloads the engine and model, after the
         user agrees to the size. If they decline, or the download fails or is
         cancelled, the box goes back to unticked so the setting never claims to
-        be on while it cannot work.
+        be on while it cannot work. Self-corrections and voice editing share
+        the one download.
         """
         if not check.get_active():
-            self.update_config("ai_corrections", False)
+            self.update_config(key, False)
             return
 
         from tuxtalk import ai_cleanup
         if ai_cleanup.is_installed():
-            self.update_config("ai_corrections", True)
+            self.update_config(key, True)
             return
 
         confirm = message_dialog(
             transient_for=self.window, modal=True,
             message_type=Gtk.MessageType.QUESTION,
             buttons=Gtk.ButtonsType.NONE,
-            text="Download the AI for self-corrections?",
+            text=question,
         )
         confirm.format_secondary_text(
             f"This downloads a small AI model ({ai_cleanup.MODEL_SIZE_TEXT}) and the "
@@ -4237,7 +4269,7 @@ class PreferencesWindow:
         response = confirm.run()
         confirm.destroy()
         if response != Gtk.ResponseType.OK:
-            self._untick_ai_corrections()
+            self._untick_ai_feature(check, key, handler)
             return
 
         from tuxtalk.download_progress_dialog import DownloadTask, UnifiedDownloadDialog
@@ -4251,10 +4283,10 @@ class PreferencesWindow:
         results = dialog.run()
 
         if all(r.get("success") for r in results.values()) and ai_cleanup.is_installed():
-            self.update_config("ai_corrections", True)
+            self.update_config(key, True)
             return
 
-        self._untick_ai_corrections()
+        self._untick_ai_feature(check, key, handler)
         if not any(r.get("cancelled") for r in results.values()):
             err = message_dialog(
                 transient_for=self.window, modal=True,
@@ -4371,13 +4403,12 @@ class PreferencesWindow:
         from .vulkan_setup_dialogs import ensure_files
         return ensure_files(self.window, model, confirm)
 
-    def _untick_ai_corrections(self):
-        """Put the AI box back to unticked without re-running its handler."""
-        check = self.ai_corrections_check
-        check.handler_block_by_func(self._on_ai_corrections_toggled)
+    def _untick_ai_feature(self, check, key, handler):
+        """Put an AI box back to unticked without re-running its handler."""
+        check.handler_block_by_func(handler)
         check.set_active(False)
-        check.handler_unblock_by_func(self._on_ai_corrections_toggled)
-        self.update_config("ai_corrections", False)
+        check.handler_unblock_by_func(handler)
+        self.update_config(key, False)
 
     def _on_log_transcripts_toggled(self, check):
         """Toggle transcript logging. Turning it OFF is safe and silent; turning

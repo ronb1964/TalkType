@@ -121,8 +121,52 @@ def _wl_clear():
     subprocess.run(["wl-copy", "--clear"], timeout=3, check=True)
 
 
+def _wl_copy_sensitive(text):
+    """Offer *text* marked sensitive, so clipboard managers don't keep it."""
+    subprocess.run(wl_copy_command(), input=text.encode("utf-8"), timeout=3, check=True)
+
+
+def _read_clipboard():
+    """(bytes, mime) of what is on the clipboard now, _EMPTY, or _NOTHING when
+    it can't be read or is too big to keep."""
+    try:
+        types = _wl_paste_types()
+        if not types:
+            return _EMPTY
+        mime = _best_type(types)
+        data = _wl_paste(mime)
+        if len(data) > _MAX_SAVED_BYTES:
+            logger.info("Clipboard contents too large to keep; not restoring them")
+            return _NOTHING
+        return data, mime
+    except Exception as e:
+        logger.info(f"Couldn't read the clipboard to restore it later: {e}")
+        return _NOTHING
+
+
+def _write_back(saved):
+    """Put a _read_clipboard() result back. Never raises."""
+    if saved is _NOTHING:
+        return
+    try:
+        if saved is _EMPTY:
+            _wl_clear()
+        else:
+            _wl_copy_bytes(*saved)
+    except Exception as e:
+        logger.warning(f"Couldn't restore the clipboard: {e}")
+
+
+# Offered only by a file manager's copy (GNOME Files, Dolphin), never a browser's link.
+_FILE_MANAGER_TYPES = ("x-special/gnome-copied-files", "application/x-kde4-urilist",
+                       "application/x-kde-cutselection")
+
+
 def _best_type(types):
-    """The type to save: plain text if offered, otherwise the first one (an image, say)."""
+    """The type to save: copied files as files, plain text if offered,
+    otherwise the first one (an image, say)."""
+    if "text/uri-list" in types and any(t in types for t in _FILE_MANAGER_TYPES):
+        return "text/uri-list"      # files copied in a file manager, not a link
     for wanted in _TEXT_TYPES:
         if wanted in types:
             return wanted
@@ -154,19 +198,7 @@ class ClipboardKeeper:
         self._generation = 0
 
     def _read(self):
-        try:
-            types = _wl_paste_types()
-            if not types:
-                return _EMPTY
-            mime = _best_type(types)
-            data = _wl_paste(mime)
-            if len(data) > _MAX_SAVED_BYTES:
-                logger.info("Clipboard contents too large to keep; not restoring them")
-                return _NOTHING
-            return data, mime
-        except Exception as e:
-            logger.info(f"Couldn't read the clipboard to restore it later: {e}")
-            return _NOTHING
+        return _read_clipboard()
 
     def before_paste(self):
         with self._lock:
@@ -208,3 +240,95 @@ class ClipboardKeeper:
             logger.info("Clipboard restored after paste")
         except Exception as e:
             logger.warning(f"Couldn't restore the clipboard: {e}")
+
+
+# --- Voice editing: the text selected in the focused app -----------------------------
+
+COPY_WAIT_S = 0.6               # how long an app may take to put its selection on the clipboard
+_COPY_POLL_S = 0.05
+# KeePassXC and friends mark a copied password with this type; Klipper skips it.
+_PASSWORD_HINT = "x-kde-passwordManagerHint"
+
+
+def _read_primary():
+    """The primary selection (the highlighted text) as text, or None."""
+    try:
+        result = subprocess.run(["wl-paste", "--primary", "--no-newline"],
+                                capture_output=True, timeout=1)
+        return result.stdout.decode("utf-8", "replace") if result.returncode == 0 else None
+    except Exception:
+        return None
+
+
+def _read_text():
+    """The clipboard as text, or None when it holds no text."""
+    try:
+        types = _wl_paste_types()
+        mime = next((t for t in _TEXT_TYPES if t in types), None)
+        return _wl_paste(mime).decode("utf-8", "replace") if mime else None
+    except Exception:
+        return None
+
+
+def copy_selection(send_copy, wait=COPY_WAIT_S, sleep=None):
+    """The text selected in the focused app, and put_back() to restore what
+    the user had on the clipboard. The text is None when nothing is selected.
+
+    The app copies its own selection: *send_copy* presses Ctrl+C (Ctrl+Shift+C
+    in a terminal) and returns whether the keystroke went out. A unique marker
+    goes on the clipboard first: an app with nothing selected leaves the
+    clipboard alone, so the marker still being there means no selection.
+    With nothing selected, the clipboard is put back before returning."""
+    import secrets
+    import time
+    sleep = sleep or time.sleep
+    try:
+        password = _PASSWORD_HINT in _wl_paste_types()
+    except Exception:
+        password = False
+    saved = _read_clipboard()
+    marker = f"tuxtalk-selection-probe-{secrets.token_hex(8)}"
+    text = None
+
+    def put_back(also=()):
+        """Restore the user's clipboard, unless something newer is on it:
+        only the marker, the selection or *also* (a pasted rewrite) may be
+        replaced. A password goes back marked sensitive, as it came."""
+        if _read_text() not in {marker, text, *also}:
+            logger.info("Clipboard changed during the voice edit; leaving it as it is")
+            return
+        if password and saved not in (_NOTHING, _EMPTY):
+            try:
+                _wl_copy_sensitive(saved[0].decode("utf-8", "replace"))
+            except Exception as e:
+                logger.warning(f"Couldn't restore the clipboard: {e}")
+            return
+        _write_back(saved)
+
+    try:
+        _wl_copy_sensitive(marker)
+    except Exception as e:
+        logger.warning(f"Couldn't use the clipboard to read the selection: {e}")
+        return None, lambda: None
+    copied = None
+    if send_copy():
+        for _ in range(int(wait / _COPY_POLL_S) + 1):
+            current = _read_text()
+            if current is not None and current != marker:
+                copied = current
+                break
+            sleep(_COPY_POLL_S)
+    # Code editors (VS Code, JetBrains, Sublime) copy the whole current line,
+    # newline and all, when nothing is selected. A real selection is also the
+    # highlighted text (the primary selection); an app without one gets the
+    # benefit of the doubt.
+    primary = _read_primary() if copied and copied.endswith("\n") else None
+    if primary and primary != copied:
+        logger.info("Ctrl+C copied a whole line with nothing selected; not a selection")
+        copied = None
+    if not copied:
+        text = copied
+        put_back()
+        return None, put_back
+    text = copied
+    return text, put_back

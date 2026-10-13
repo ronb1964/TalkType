@@ -158,6 +158,7 @@ class Settings:
     log_transcripts: bool = False        # write full transcribed text to the log (off = redacted); opt-in for troubleshooting only
     remove_fillers: bool = False         # drop "um"/"uh" and accidental repeated words (cleanup.py; rules, no download)
     ai_corrections: bool = False         # fix "3, no wait, 4" with a local AI model (ai_cleanup.py; downloads ~1.1 GB)
+    voice_editing: bool = False          # Shift + dictation key rewrites the selected text with the same AI model
     auto_stop_silence: bool = False      # toggle recordings stop by themselves when you stop talking (silence.py)
     auto_stop_seconds: float = 2.0       # seconds of silence before an auto-stop (0.5-10)
     usage_stats: bool = True             # count words/dictations/speaking time per day (stats.py; numbers only, never text)
@@ -739,6 +740,7 @@ LIVE_APPLIED_KEYS = {
     # off starts or stops its engine from the same reload (_apply_cleanup_settings).
     "remove_fillers",
     "ai_corrections",
+    "voice_editing",
     # Hands-free auto-stop; read when each toggle recording starts.
     "auto_stop_silence",
     "auto_stop_seconds",

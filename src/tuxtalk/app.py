@@ -81,6 +81,10 @@ def _loggable(text):
 # _apply_cleanup_settings(), at startup and on every live-settings reload.
 _remove_fillers = False
 _ai_engine = None
+# Which of the two features using the AI engine are on. The engine runs while
+# either is; each checks its own flag before using it.
+_ai_corrections = False
+_voice_editing = False
 
 # Seconds of silence that end a toggle recording (0 = auto-stop off).
 _auto_stop_seconds = 0.0
@@ -89,18 +93,20 @@ _auto_stop_seconds = 0.0
 def _apply_cleanup_settings(cfg):
     """Bring the cleanup and auto-stop options in line with *cfg*; start or
     stop the AI engine."""
-    global _remove_fillers, _ai_engine, _auto_stop_seconds
+    global _remove_fillers, _ai_engine, _auto_stop_seconds, _ai_corrections, _voice_editing
     _auto_stop_seconds = (float(getattr(cfg, "auto_stop_seconds", 2.0))
                           if getattr(cfg, "auto_stop_silence", False) else 0.0)
     _remove_fillers = bool(getattr(cfg, "remove_fillers", False))
-    want_ai = bool(getattr(cfg, "ai_corrections", False))
+    _ai_corrections = bool(getattr(cfg, "ai_corrections", False))
+    _voice_editing = bool(getattr(cfg, "voice_editing", False))
+    want_ai = _ai_corrections or _voice_editing
     if want_ai and _ai_engine is None:
-        from .ai_cleanup import CorrectionEngine, is_installed
-        if is_installed():
-            _ai_engine = CorrectionEngine()
+        from . import ai_cleanup
+        if ai_cleanup.is_installed():
+            _ai_engine = ai_cleanup.CorrectionEngine()
             _ai_engine.start()
         else:
-            logger.warning("AI corrections are on but not downloaded; turn the option off and on in Preferences")
+            logger.warning("The AI is on but not downloaded; turn the option off and on in Preferences")
     elif not want_ai and _ai_engine is not None:
         engine, _ai_engine = _ai_engine, None
         engine.stop()
@@ -229,6 +235,9 @@ class RecordingState:
     # Paste Last Dictation: {"key", "key_up", "at"} from the combo press until
     # every key of it is let go, else None (see _handle_key_event).
     paste_last: object = None
+    # Voice editing: this recording is an instruction for the selected text
+    # (Shift + the dictation key), not dictation.
+    edit_mode: bool = False
 
     def __post_init__(self):
         if self.frames is None:
@@ -1418,7 +1427,7 @@ def _open_input_stream(device_idx) -> None:
 
 
 def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
-                    from_toggle: bool = False) -> bool:
+                    from_toggle: bool = False, edit_mode: bool = False) -> bool:
     """Begin capturing audio. Returns True only if recording actually started.
 
     *from_toggle* marks a start by the toggle key, so a quick second tap can
@@ -1433,6 +1442,7 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
     state.silence = None
     state.press_t0 = time.time()
     state.toggle_started_at = state.press_t0 if from_toggle else None
+    state.edit_mode = edit_mode
     # Set before the stream starts — _sd_callback drops frames unless it's set.
     state.is_recording = True
     try:
@@ -1492,6 +1502,7 @@ def _stop_stream_safely():
 def cancel_recording(beeps_on: bool, notify_on: bool, reason="Cancelled"):
     state.is_recording = False
     state.was_cancelled = True
+    state.edit_mode = False
     _stop_stream_safely()
     _resume_media_players()
     _beep(beeps_on, *CANCEL_BEEP)
@@ -1742,6 +1753,7 @@ _TERMINAL_WM_CLASSES = frozenset({
     "org.gnome.Ptyxis", "Ptyxis",
     "org.gnome.Terminal", "Gnome-terminal",
     "konsole", "org.kde.konsole",
+    "yakuake", "org.kde.yakuake",
     "kitty",
     "Alacritty",
     "WezTerm", "org.wezfurlong.wezterm",
@@ -2360,9 +2372,9 @@ def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: b
     if _remove_fillers:
         from .cleanup import clean_fillers_and_repeats
         text = clean_fillers_and_repeats(text)
-    if _ai_engine is not None:
-        from .ai_cleanup import fix_self_corrections
-        text = fix_self_corrections(text, _ai_engine)
+    if _ai_corrections and _ai_engine is not None:
+        from . import ai_cleanup
+        text = ai_cleanup.fix_self_corrections(text, _ai_engine)
 
     # Your Words, second pass: "tux talk" -> "TuxTalk" and iPhone's capitals
     # back after a sentence start made it IPhone. After snippets, so a snippet
@@ -2804,12 +2816,129 @@ def stop_recording(
     caller's thread. Backend B splits the two halves (see _service_tick) so the
     slow transcription/typing runs off the hotkey loop.
     """
+    edit_mode, state.edit_mode = state.edit_mode, False
     cap = _finish_capture(beeps_on, notify_on)
     if cap is None:
         return
     frames, rec_sr = cap
+    if edit_mode:
+        _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode)
+        return
     _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                            language, auto_space, auto_period, injection_mode)
+
+
+# --- Voice editing (docs/superpowers/specs/2026-10-12-voice-editing-design.md) ---
+
+# How long after typing the rewrite the user's clipboard is put back: after
+# ClipboardKeeper's own restore (0.5 s) when "Restore clipboard" is on, and
+# after the app has read a pasted rewrite.
+EDIT_RESTORE_DELAY_S = 1.0
+
+_EDIT_NOTICES = {
+    "not_installed": "Voice editing needs its AI. Turn it on in Preferences, Advanced.",
+    "not_ready": "Voice editing's AI is still starting. Try again in a few seconds.",
+    "no_selection": "Select the text to change first, then hold Shift with your dictation "
+                    "key and say how to change it.",
+    "too_long": "That's too much text to edit at once. Select a smaller part.",
+    "no_answer": "The AI didn't come up with a change. Try saying it another way.",
+    "terminal": "Voice editing doesn't work in a terminal: there's no selection there to "
+                "replace.",
+    "window_changed": "You switched windows while the AI was working, so the rewrite "
+                      "wasn't typed. It's in Recent Dictations in the TuxTalk menu.",
+}
+
+
+def _edit_problem(kind: str, beeps_on: bool) -> None:
+    """Tell the user a voice edit didn't happen, and why. Always shown, like
+    _report_undelivered: otherwise nothing at all would seem to happen."""
+    message = _EDIT_NOTICES[kind]
+    logger.info(f"Voice edit not done: {kind}")
+    print(f"⚠️  {message}")
+    _beep(beeps_on, *CANCEL_BEEP)
+    _notify("TuxTalk", message)
+
+
+def _send_copy_keystroke() -> bool:
+    """Ctrl+C. Terminals never get here (_transcribe_and_edit turns them away:
+    Ctrl+C would stop the running program). True if it was sent."""
+    # KEY_LEFTCTRL=29, KEY_C=46
+    return _ydotool_key(["29:1", "46:1", "46:0", "29:0"], what="copy")
+
+
+def _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
+    """Voice editing: the recording is an instruction ("make this more formal")
+    for the text selected in the focused app, which the AI rewrites and the
+    rewrite replaces. Ctrl+Z in the app undoes it."""
+    from . import ai_cleanup, clipboard, history
+    from .silence import is_speechless_tap
+    t0 = time.time()
+    pcm_int16 = np.frombuffer(b''.join(frames), dtype=np.int16)
+    if pcm_int16.size == 0:
+        return
+    audio_f32 = pcm_int16.astype(np.float32) / 32768.0
+    if rec_sr != SAMPLE_RATE:
+        audio_f32 = _resample_audio(audio_f32, rec_sr, SAMPLE_RATE)
+    if is_speechless_tap(audio_f32, SAMPLE_RATE):
+        return
+
+    engine = _ai_engine
+    if engine is None:
+        _edit_problem("not_installed", beeps_on)
+        return
+    instruction = _transcribe_audio(audio_f32, language)
+    if not instruction:
+        return
+    if not engine.is_ready():
+        _edit_problem("not_ready", beeps_on)
+        return
+    focused_class = _query_focused_window_class()
+    if is_terminal_class(focused_class):
+        _edit_problem("terminal", beeps_on)
+        return
+
+    selected, put_back = clipboard.copy_selection(_send_copy_keystroke)
+    if not selected:
+        _edit_problem("no_selection", beeps_on)
+        return
+    result = None
+    try:
+        if len(selected) > ai_cleanup.MAX_EDIT_CHARS:
+            _edit_problem("too_long", beeps_on)
+            return
+        logger.info(f"Voice edit: {_loggable(instruction)} ({len(selected)} characters)")
+        result = engine.edit(selected, instruction)
+        if not result or result.strip() == selected.strip():
+            _edit_problem("no_answer", beeps_on)
+            return
+        logger.info(f"Voice edit result: {_loggable(result)} "
+                    f"(took {time.time() - t0:.2f}s)")
+        history.add_entry(result)
+        if _query_focused_window_class() != focused_class:
+            # Typing now would put the rewrite into whatever window has focus.
+            _edit_problem("window_changed", beeps_on)
+            return
+        # The selection is still active, so typing or pasting replaces it.
+        # Line breaks go in as Shift+Enter, as in a dictation (a chat box
+        # would send the message on a plain Enter).
+        from .history import _LINE_BREAK_MARKER
+        try:
+            outcome = _inject_text(result.replace("\n", _LINE_BREAK_MARKER), injection_mode, t0)
+        except Exception as e:
+            logger.error(f"Voice edit: typing the rewrite failed: {e}", exc_info=True)
+            outcome = "failed"
+        if outcome in _UNDELIVERED_NOTICES:
+            _report_undelivered(outcome, beeps_on)
+        else:
+            _beep(beeps_on, *READY_BEEP)
+    finally:
+        # A pasted rewrite may still be on the clipboard, whole or (pasted a
+        # line at a time) its last line; that may be replaced.
+        also = (result, *result.split("\n")) if result else ()
+        if EDIT_RESTORE_DELAY_S:
+            threading.Timer(EDIT_RESTORE_DELAY_S, put_back, kwargs={"also": also}).start()
+        else:
+            put_back(also=also)
 
 
 def _show_welcome_after_change(cfg, mode):
@@ -2890,6 +3019,37 @@ Right-click the tray icon \u2192 "Help..." for full documentation
 # A combo press whose keys aren't all let go within this long is dropped, so a
 # missed key release can never make TuxTalk paste out of the blue later.
 PASTE_LAST_EXPIRY_S = 5.0
+
+
+_SHIFT_CODES = frozenset({ecodes.KEY_LEFTSHIFT, ecodes.KEY_RIGHTSHIFT})
+
+
+# How long the end of a Shift+toggle edit waits for Shift to be let go.
+EDIT_SHIFT_WAIT_S = 2.0
+
+
+def _wait_for_keys_up(devices, codes, timeout) -> bool:
+    """Wait until none of *codes* is down on any keyboard. False on timeout."""
+    keyboards = [d for d in devices if _is_keyboard_device(d)]
+    deadline = time.time() + timeout
+    while True:
+        down = set()
+        for dev in keyboards:
+            try:
+                down |= set(dev.active_keys())
+            except Exception:
+                pass
+        if not down & set(codes):
+            return True
+        if time.time() >= deadline:
+            return False
+        time.sleep(0.02)
+
+
+def _held_shift(held_modifiers) -> set:
+    """The Shift keys among *held_modifiers*: Shift + the dictation key starts
+    a voice edit instead of a dictation."""
+    return set(held_modifiers) & _SHIFT_CODES
 
 
 def _paste_last_dictation(cfg) -> None:
@@ -2982,9 +3142,12 @@ def _handle_key_event(event, mode, hold_key, toggle_key,
             # Grab the keyboards so the hotkey doesn't reach the focused app,
             # without leaving the desktop thinking the key is still held (see
             # _grab_keyboards_hiding). start_recording releases the grabs itself
-            # if the mic fails to open.
-            _grab_keyboards_hiding(devices, {hold_key})
-            start_recording(cfg.beeps, cfg.notify, input_device_idx)
+            # if the mic fails to open. With Shift (voice editing) Shift is
+            # hidden too, or the Ctrl+C that copies the selection would arrive
+            # as Ctrl+Shift+C.
+            shift = _held_shift(held_modifiers) if _voice_editing else set()
+            _grab_keyboards_hiding(devices, {hold_key, *shift})
+            start_recording(cfg.beeps, cfg.notify, input_device_idx, edit_mode=bool(shift))
         elif event.value == 0 and state.is_recording:
             # Ungrab BEFORE text injection so ydotool can work
             _release_all_grabs()
@@ -2993,8 +3156,28 @@ def _handle_key_event(event, mode, hold_key, toggle_key,
 
     # --- Tap-to-toggle: press once to start, press again to stop ---
     if toggle_key and event.code == toggle_key and event.value == 1:
+        shift = _held_shift(held_modifiers) if _voice_editing else set()
         if not state.is_recording:
-            start_recording(cfg.beeps, cfg.notify, input_device_idx, from_toggle=True)
+            if shift:
+                # An edit: no double-tap hands-free, so not "from_toggle".
+                start_recording(cfg.beeps, cfg.notify, input_device_idx, edit_mode=True)
+            else:
+                start_recording(cfg.beeps, cfg.notify, input_device_idx, from_toggle=True)
+        elif state.edit_mode:
+            # A hold edit holds the keyboards (brushing the toggle key mid-hold
+            # lands here): let go first, or they stay grabbed for the whole edit.
+            _release_all_grabs()
+            # Stopping an edit. If Shift is down again, wait for the user to
+            # let go, or the Ctrl+C that copies the selection would arrive as
+            # Ctrl+Shift+C. (Hiding it with injected key events, as the hold
+            # key does, replayed those events after a slow edit and started a
+            # new recording by itself.)
+            if shift and not _wait_for_keys_up(devices, _SHIFT_CODES, EDIT_SHIFT_WAIT_S):
+                cancel_recording(cfg.beeps, cfg.notify,
+                                 "Voice edit cancelled: let go of Shift to finish it")
+                return
+            stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
+                           cfg.auto_space, cfg.auto_period, cfg.injection_mode)
         elif _toggle_pressed_while_recording(cfg.beeps):
             pass  # second tap of a double-tap: now hands-free, keep recording
         else:

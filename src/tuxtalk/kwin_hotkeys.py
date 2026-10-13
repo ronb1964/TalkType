@@ -99,6 +99,10 @@ def wanted_shortcuts(cfg):
         ("voice-commands", "voice commands", getattr(cfg, "voice_commands_hotkey", "")),
         ("paste-last", "paste last dictation", getattr(cfg, "paste_last_hotkey", "")),
     )
+    if getattr(cfg, "voice_editing", False):
+        # Shift + a dictation key starts a voice edit (app._held_shift).
+        roles += tuple((f"edit-{role}", "voice edit", f"Shift+{name}")
+                       for role, _what, name in roles[:2] if name)
     out, seen = [], set()
     for role, what, name in roles:
         key = qt_key_sequence(name)

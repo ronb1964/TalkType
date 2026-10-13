@@ -246,7 +246,7 @@ def key_env(monkeypatch):
     """Drive _handle_key_event without touching audio hardware."""
     started, stopped = [], []
 
-    def fake_start(beeps_on, notify_on, input_device_idx):
+    def fake_start(beeps_on, notify_on, input_device_idx, from_toggle=False, edit_mode=False):
         app.state.is_recording = True
         started.append(True)
         return True
