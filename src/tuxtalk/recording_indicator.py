@@ -56,16 +56,32 @@ def positioning_available():
     return bool(os.environ.get("DISPLAY"))
 
 
-# TuxTalk Labs, "follow the active window": how far above the bottom edge of
-# the window being dictated into the indicator sits.
-FOLLOW_MARGIN = 40
+# TuxTalk Labs, "follow the active window": how far inside the window being
+# dictated into the indicator sits. More room at the top, to clear the title
+# bar (part of the frame), and at the bottom, to clear a status bar.
+FOLLOW_MARGIN = 40      # above the bottom edge
+FOLLOW_TOP = 50         # below the top edge
+FOLLOW_SIDE = 20        # in from the left and right edges
 
 
-def follow_position(window, width, height, monitor):
-    """Top-left corner for a *width* x *height* indicator centred near the
-    bottom of *window*, kept on *monitor* (window_geometry.Rect values)."""
-    x = window.x + (window.w - width) // 2
-    y = window.y + window.h - height - FOLLOW_MARGIN
+def follow_position(window, width, height, monitor, position="bottom-center"):
+    """Top-left corner for a *width* x *height* indicator at *position* (the
+    Audio tab's choice: "bottom-center", "top-left", "center"...) within
+    *window*, kept on *monitor* (window_geometry.Rect values). The Audio
+    tab's offset is for the whole screen, so it doesn't apply here."""
+    position = (position or "").lower()
+    if "left" in position:
+        x = window.x + FOLLOW_SIDE
+    elif "right" in position:
+        x = window.x + window.w - width - FOLLOW_SIDE
+    else:
+        x = window.x + (window.w - width) // 2
+    if position.startswith("top"):
+        y = window.y + FOLLOW_TOP
+    elif position.startswith("bottom"):
+        y = window.y + window.h - height - FOLLOW_MARGIN
+    else:
+        y = window.y + (window.h - height) // 2
     x = max(monitor.x, min(x, monitor.x + monitor.w - width))
     y = max(monitor.y, min(y, monitor.y + monitor.h - height))
     return x, y
@@ -265,7 +281,7 @@ class RecordingIndicator(Gtk.Window):
         if not rect:
             return None
         monitor = _monitor_rect_at(rect.x + rect.w // 2, rect.y + rect.h // 2)
-        return follow_position(rect, width, height, monitor)
+        return follow_position(rect, width, height, monitor, self.position)
 
     def hide_indicator(self):
         """Hide the indicator and stop animation"""

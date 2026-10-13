@@ -2141,9 +2141,10 @@ class PreferencesWindow:
                 label="Recording indicator follows the window you\u2019re dictating into")
             follow_check.set_active(bool(self.config.get("indicator_follow_window", False)))
             follow_check.set_tooltip_text(
-                "Shows the recording indicator near the bottom of the window you're dictating\n"
-                "into, wherever it is on the screen, instead of at the position set on the Audio tab.\n"
-                "When TuxTalk can't tell where that window is, the usual position is used.")
+                "Shows the recording indicator in the window you're dictating into, wherever it\n"
+                "is on the screen. The position set on the Audio tab (bottom center, top right...)\n"
+                "applies inside that window; the offset doesn't. When TuxTalk can't tell where\n"
+                "the window is, the usual position and offset are used.")
             follow_check.connect("toggled", lambda c: self.update_config(
                 "indicator_follow_window", c.get_active()))
             grid.attach(follow_check, 0, row, 2, 1)

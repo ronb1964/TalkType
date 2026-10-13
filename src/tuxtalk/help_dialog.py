@@ -455,11 +455,13 @@ Say it in your own words; there's no fixed list. Some that work well:
   • <i>The AI didn't come up with a change</i>: try saying it another way.
   • <i>You switched windows</i>: the rewrite wasn't typed; it's in Recent Dictations.
 <span size="large"><b>Indicator Follows Your Window</b></span>
-The recording indicator shows up near the bottom of the window you're dictating
-into, wherever that window is on the screen, instead of always in the same spot.
+The recording indicator shows up in the window you're dictating into, wherever
+that window is on the screen, instead of always in the same spot.
 
   • Turn it on in <b>Preferences → Advanced → TuxTalk Labs</b>.
   • It's placed each time you start talking, so it goes wherever your window is.
+  • The position you pick in <b>Preferences → Audio</b> (bottom center, top right, center…)
+    applies inside the window. The offset there is for the whole screen, so it's skipped.
   • When TuxTalk can't tell where the window is, the indicator uses its usual
     position from <b>Preferences → Audio</b>.
   • Works on KDE, on GNOME with the TuxTalk extension, on Sway and Hyprland, and on

@@ -50,6 +50,7 @@ def test_a_tiny_window_still_gets_the_indicator_inside_its_monitor():
 class _Ind:
     """Just enough of RecordingIndicator for _follow_target."""
     follow_window = True
+    position = "bottom-center"
     _follow_target = ri.RecordingIndicator._follow_target
 
 
@@ -109,3 +110,31 @@ def test_the_labs_help_page_explains_it():
         assert "Indicator Follows Your Window" in text
     finally:
         dialog.destroy()
+
+
+
+# --- Ron, 2026-10-12: the Audio tab's position, inside the window ---------------------------
+
+WIN = Rect(1000, 200, 800, 600)
+MON = Rect(0, 0, 3440, 1440)
+
+
+@pytest.mark.parametrize("position, expected", [
+    ("bottom-center", (1000 + 300, 200 + 600 - 80 - ri.FOLLOW_MARGIN)),
+    ("center", (1300, 200 + 260)),
+    ("top-left", (1000 + ri.FOLLOW_SIDE, 200 + ri.FOLLOW_TOP)),
+    ("top-right", (1000 + 800 - 200 - ri.FOLLOW_SIDE, 200 + ri.FOLLOW_TOP)),
+    ("bottom-left", (1000 + ri.FOLLOW_SIDE, 200 + 600 - 80 - ri.FOLLOW_MARGIN)),
+    ("right-center", (1000 + 800 - 200 - ri.FOLLOW_SIDE, 460)),
+    ("something-unknown", (1300, 460)),
+])
+def test_the_audio_tab_position_applies_inside_the_window(position, expected):
+    assert ri.follow_position(WIN, 200, 80, MON, position) == expected
+
+
+def test_the_indicator_uses_its_configured_position_when_following(monkeypatch):
+    monkeypatch.setattr(wg, "active_window_rect", lambda: WIN)
+    monkeypatch.setattr(ri, "_monitor_rect_at", lambda x, y: MON)
+    ind = _Ind()
+    ind.position = "top-right"
+    assert ind._follow_target(200, 80) == ri.follow_position(WIN, 200, 80, MON, "top-right")
