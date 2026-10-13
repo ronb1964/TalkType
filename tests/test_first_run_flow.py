@@ -108,3 +108,71 @@ def test_failed_graphics_download_also_falls_back_to_small(store, monkeypatch):
     wd._apply_first_run_setup({"model": "large-v3", "device": "vulkan", "dictation_language": "ja"})
     assert (saved["model"], saved["device"]) == ("small", "cpu")
     assert calls == ["small"]
+
+
+def test_a_cancelled_first_run_download_starts_no_other(store, monkeypatch):
+    """Cancel used to start Whisper Small, then Tiny: three Cancels to get out."""
+    saved, calls = store
+
+    def cancelled(m, result_info=None, **k):
+        calls.append(m)
+        result_info["cancelled"] = True
+        return None
+
+    monkeypatch.setattr("tuxtalk.model_helper.download_model_with_progress", cancelled)
+    wd._apply_first_run_setup({"model": "parakeet-v3", "device": "cpu", "dictation_language": "en"})
+    assert calls == ["parakeet-v3"]
+    assert saved["model"] == "parakeet-v3"     # offered again when the service starts
+
+
+def test_a_failed_first_run_download_tries_one_smaller_model(store, monkeypatch):
+    saved, calls = store
+    monkeypatch.setattr("tuxtalk.model_helper.download_model_with_progress",
+                        lambda m, **k: calls.append(m) or None)
+    wd._apply_first_run_setup({"model": "parakeet-v3", "device": "cpu", "dictation_language": "en"})
+    assert calls == ["parakeet-v3", "small"]   # not a third error box for tiny
+
+
+def test_a_failed_download_uses_an_already_downloaded_smaller_model(store, monkeypatch):
+    saved, calls = store
+    monkeypatch.setattr("tuxtalk.model_helper.is_model_cached_fast", lambda m: m == "tiny")
+    monkeypatch.setattr("tuxtalk.model_helper.download_model_with_progress",
+                        lambda m, **k: calls.append(m) or None)
+    wd._apply_first_run_setup({"model": "parakeet-v3", "device": "cpu", "dictation_language": "en"})
+    assert calls == ["parakeet-v3"] and saved["model"] == "tiny"
+
+
+def test_the_emergency_fallback_also_moves_to_the_processor(store, monkeypatch):
+    """whisper.cpp has no copy of Tiny, so vulkan + tiny would not run."""
+    saved, calls = store
+
+    def broken(m):
+        raise RuntimeError("engine check failed")
+
+    monkeypatch.setattr(wd, "_download_vulkan_model_first_run", broken)
+    monkeypatch.setattr("tuxtalk.model_helper.is_model_cached_fast", lambda m: m == "tiny")
+    wd._apply_first_run_setup({"model": "parakeet-v3", "device": "vulkan", "dictation_language": "en"})
+    assert (saved["model"], saved["device"]) == ("tiny", "cpu")
+
+
+def test_model_download_reports_a_cancel(monkeypatch):
+    from tuxtalk import model_helper as mh
+    monkeypatch.setattr(mh, "is_model_cached_fast", lambda m: False)
+
+    class Declined:
+        def format_secondary_text(self, text):
+            pass
+
+        def set_position(self, pos):
+            pass
+
+        def run(self):
+            return mh.Gtk.ResponseType.CANCEL
+
+        def destroy(self):
+            pass
+
+    monkeypatch.setattr(mh, "message_dialog", lambda **k: Declined())
+    info = {}
+    assert mh.download_model_with_progress("small", result_info=info) is None
+    assert info == {"cancelled": True}

@@ -2865,8 +2865,8 @@ def _apply_first_run_setup(result):
         logger.warning(f"Could not save the first-run setup: {e}")
 
     logger.info(f"Setting up {selected_model} on {result['device']}")
+    from tuxtalk.model_helper import download_model_with_progress, is_model_cached_fast
     try:
-        from tuxtalk.model_helper import download_model_with_progress, is_model_cached_fast
         from tuxtalk import whisper_vulkan
 
         # Check if model is already cached
@@ -2887,6 +2887,7 @@ def _apply_first_run_setup(result):
         # download doesn't work out, fall back to the processor so setup
         # still ends with a model that works.
         vulkan_ready = False
+        download_info = {}
         if device.lower() == "vulkan":
             # One download window: it fetches the engine too when it's missing.
             vulkan_ready = (_download_vulkan_model_first_run(selected_model)
@@ -2928,7 +2929,8 @@ def _apply_first_run_setup(result):
                 device=device,
                 compute_type=compute_type,
                 parent=None,
-                show_confirmation=False  # No confirmation - user already chose
+                show_confirmation=False,  # No confirmation - user already chose
+                result_info=download_info,
             )
 
         if model:
@@ -2940,26 +2942,28 @@ def _apply_first_run_setup(result):
                 config.model = selected_model
                 save_config(config)
                 logger.info(f"✅ Config updated to use {selected_model} model")
-                import threading as _th
                 def _free_in_background(m):
                     pass  # m goes out of scope here, freeing memory in background thread
-                _th.Thread(target=_free_in_background, args=(model,), daemon=True).start()
+                threading.Thread(target=_free_in_background, args=(model,), daemon=True).start()
                 del model  # Remove main thread's ref; background thread holds the last ref
             logger.info(f"✅ {selected_model} model ready")
+        elif download_info.get("cancelled"):
+            # "Not now": no surprise downloads after a Cancel. The setting
+            # stays, and the service offers the download when it starts.
+            logger.info(f"First-run download cancelled; leaving {selected_model} for later")
         else:
-            # Download failed or was cancelled - fall back to smaller model
-            logger.warning(f"Model download returned None for {selected_model} (likely cancelled or failed)")
-
-            # Try fallback models in order: small, tiny
+            # The download failed and its error was already shown. Use a
+            # smaller model that is already downloaded, or try ONE smaller
+            # download; a second failure or a Cancel ends it there.
+            logger.warning(f"Model download failed for {selected_model}")
             fallback_models = ["small", "tiny"] if selected_model not in ["small", "tiny"] else ["tiny"]
-
-            for fallback in fallback_models:
-                if is_model_cached_fast(fallback):
-                    logger.info(f"✅ Using cached {fallback} model as fallback")
-                    config.model = fallback
-                    save_config(config)
-                    break
-
+            cached = next((m for m in fallback_models if is_model_cached_fast(m)), None)
+            if cached:
+                logger.info(f"✅ Using cached {cached} model as fallback")
+                config.model = cached
+                save_config(config)
+            else:
+                fallback = fallback_models[0]
                 logger.info(f"Attempting fallback to {fallback} model...")
                 try:
                     fallback_model = download_model_with_progress(
@@ -2969,25 +2973,21 @@ def _apply_first_run_setup(result):
                         parent=None,
                         show_confirmation=False
                     )
-
                     if fallback_model:
                         logger.info(f"✅ Fallback to {fallback} model successful")
                         config.model = fallback
                         save_config(config)
                         del fallback_model
-                        break
                     else:
-                        logger.warning(f"Fallback to {fallback} also failed")
+                        logger.warning(f"Fallback to {fallback} did not download either")
                 except Exception as e:
                     logger.warning(f"Error downloading fallback {fallback}: {e}")
 
-    except Exception as e:
-        logger.warning(f"Error downloading {selected_model} model: {e}")
-        # Try to ensure SOME model is available (tiny as last resort)
+    except Exception:
+        logger.warning(f"First-run setup of {selected_model} failed", exc_info=True)
+        # Try to ensure SOME model is available (tiny on the processor as last
+        # resort; whisper.cpp has no copy of tiny, so the device goes too).
         try:
-            from tuxtalk.model_helper import is_model_cached_fast, download_model_with_progress
-            from tuxtalk.config import load_config, save_config
-
             config = load_config()
 
             if not is_model_cached_fast("tiny"):
@@ -3000,14 +3000,14 @@ def _apply_first_run_setup(result):
                     show_confirmation=False
                 )
                 if tiny_model:
-                    config.model = "tiny"
+                    config.model, config.device = "tiny", "cpu"
                     save_config(config)
                     del tiny_model
             else:
-                config.model = "tiny"
+                config.model, config.device = "tiny", "cpu"
                 save_config(config)
         except Exception:
-            pass  # Last resort failed, app will try to download on first run
+            logger.warning("Emergency Tiny fallback failed", exc_info=True)
 
 
 def show_welcome_and_install():

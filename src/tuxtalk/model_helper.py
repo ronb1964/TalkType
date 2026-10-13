@@ -337,7 +337,8 @@ class BrokenModelFiles(Exception):
 
 
 def download_model_with_progress(model_name, device="cpu", compute_type="int8", parent=None,
-                                 show_confirmation=True, redownload_broken=True):
+                                 show_confirmation=True, redownload_broken=True,
+                                 result_info=None):
     """
     Download a Whisper model with progress dialog.
 
@@ -350,6 +351,9 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
         redownload_broken: False when this thread must not open GTK dialogs
             (another thread runs Gtk.main()); a downloaded model that won't
             load then raises BrokenModelFiles instead of downloading again.
+        result_info: Optional dict; "cancelled" is set True in it when the
+            user declined or cancelled, which a None return can't tell apart
+            from a failed download.
 
     Returns:
         WhisperModel (or ParakeetModel) instance, or None if cancelled/failed
@@ -404,6 +408,8 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
 
         if response != Gtk.ResponseType.OK:
             logger.info(f"User declined model download: {model_name}")
+            if result_info is not None:
+                result_info["cancelled"] = True
             return None
 
     # Show progress dialog with dark theme
@@ -645,6 +651,8 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
     if response == Gtk.ResponseType.CANCEL or response == Gtk.ResponseType.DELETE_EVENT:
         logger.info(f"User cancelled model download: {model_name}")
         cancel_event.set()
+        if result_info is not None:
+            result_info["cancelled"] = True
         return None
 
     # Wait for download to complete
