@@ -316,3 +316,21 @@ def test_an_engine_hyphen_still_joins(monkeypatch):
 def test_short_entries_do_not_hide_an_echo():
     assert cw.is_echo("TuxTalk, AI, GitHub, ydotool.", ["TuxTalk", "AI", "GitHub", "ydotool"])
     assert not cw.is_echo("AI, AI, AI.", ["AI"])
+
+
+def test_an_unreadable_words_file_keeps_the_words_in_force(monkeypatch):
+    """The custom-commands reload next to it already keeps the current set;
+    this one dropped every word on a read error mid-session."""
+    from tuxtalk import app, custom_words
+
+    def unreadable(strict=False):
+        if strict:
+            raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
+        return []
+
+    monkeypatch.setattr(custom_words, "load", unreadable)
+    monkeypatch.setattr(app, "_custom_words", ["TuxTalk"])
+
+    app._reload_custom_words()
+
+    assert app._custom_words == ["TuxTalk"]

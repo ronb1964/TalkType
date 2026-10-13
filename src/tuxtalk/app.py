@@ -169,10 +169,13 @@ def _acquire_single_instance():
     Uses file locking which is atomic and prevents multiple instances.
     The lock is held for the lifetime of the process and auto-released on exit.
     """
+    global _lockfile_handle
     lockfile_path = os.path.join(_runtime_dir(), "talktype.lock")
     try:
-        # Open lock file (create if doesn't exist)
-        lockfile = open(lockfile_path, "w")
+        # Opened without truncating: the running instance's PID stays in the
+        # file until this process actually holds the lock.
+        fd = os.open(lockfile_path, os.O_RDWR | os.O_CREAT, 0o600)
+        lockfile = os.fdopen(fd, "r+")
 
         # Close-on-exec so an in-place restart (os.execv) releases the lock
         # instead of inheriting the still-locked FD and exiting as "already
@@ -182,26 +185,29 @@ def _acquire_single_instance():
 
         # Try to acquire exclusive lock (non-blocking)
         # LOCK_EX = exclusive lock, LOCK_NB = non-blocking
-        fcntl.flock(lockfile.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        try:
+            fcntl.flock(lockfile.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            # Only this error means another process holds the lock. Anything
+            # else (an unwritable runtime folder) is not "already running".
+            print("Another TuxTalk instance is already running. Exiting.", file=sys.stderr)
+            sys.exit(0)
 
         # If we got here, we acquired the lock successfully
         # Write our PID for informational purposes
+        lockfile.truncate(0)
         lockfile.write(str(os.getpid()))
         lockfile.flush()
 
         # Keep the file open for the process lifetime
         # The lock will automatically be released when the process exits
         # Store in global to prevent garbage collection
-        global _lockfile_handle
         _lockfile_handle = lockfile
 
         logger.debug(f"Acquired singleton lock: {lockfile_path}")
 
-    except IOError:
-        # Lock is already held by another process
-        print("Another talktype instance is already running. Exiting.", file=sys.stderr)
-        sys.exit(0)
-    except Exception as e:
+    except OSError as e:
+        logger.warning(f"Could not acquire singleton lock at {lockfile_path}: {e}")
         print(f"Warning: could not acquire singleton lock: {e}", file=sys.stderr)
 
 # Global to keep lock file open
@@ -1112,9 +1118,16 @@ def _words_file_changed() -> bool:
 
 
 def _reload_custom_words() -> None:
+    """Re-read custom_words.txt into the running service. A file that can't
+    be read keeps the words already in force, like _reload_custom_commands."""
     global _custom_words
     from . import custom_words
-    _custom_words = custom_words.load()
+    try:
+        fresh = custom_words.load(strict=True)
+    except (OSError, UnicodeDecodeError) as e:
+        logger.warning(f"Could not reload your words, keeping the current ones: {e}")
+        return
+    _custom_words = fresh
     logger.info(f"Reloaded your words ({len(_custom_words)})")
 
 
