@@ -905,6 +905,37 @@ def test_no_key_goes_to_a_window_switched_to_while_transcribing(edit_env, keys_s
     assert "Recent Dictations" not in edit_env["notices"][0]
 
 
+@pytest.mark.parametrize("said", ["Delete this.", "Make this bold."])
+def test_no_key_is_pressed_when_the_window_is_unknown(edit_env, keys_sent, monkeypatch, said):
+    """Unknown both times (None == None) passed as "the same window", so a
+    switch during transcription went unnoticed."""
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: None)
+    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: said)
+    run_edit()
+    assert keys_sent == [] and edit_env["typed"] == []
+    assert len(edit_env["notices"]) == 1
+
+
+@pytest.mark.parametrize("said", ["Delete this.", "Make this bold.", "make it more professional"])
+def test_a_window_that_cant_be_found_after_transcribing_counts_as_moved(edit_env, keys_sent,
+                                                                       monkeypatch, said):
+    classes = iter(["libreoffice-writer", None])
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: next(classes))
+    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: said)
+    run_edit()
+    assert keys_sent == [] and edit_env["typed"] == []
+    assert len(edit_env["notices"]) == 1 and "switched windows" in edit_env["notices"][0]
+
+
+def test_a_rewrite_is_still_typed_where_the_window_is_never_known(edit_env, monkeypatch):
+    """Refusing would turn voice editing off on desktops that can't report
+    the window; the rewrite is typed like ordinary dictation."""
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: None)
+    run_edit()
+    assert edit_env["typed"] == ["We completed the electrical work today."]
+    assert edit_env["notices"] == []
+
+
 @pytest.mark.parametrize("said, selected, typed", [
     ("Indent this.", "One", "    One"),
     ("Unindent this.", "    One", "One"),
