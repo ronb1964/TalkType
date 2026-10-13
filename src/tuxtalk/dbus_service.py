@@ -28,17 +28,6 @@ DBUS_PATH = "/io/github/ronb1964/TalkType"
 DBUS_INTERFACE = "io.github.ronb1964.TalkType"
 
 
-def get_focused_window_class() -> str | None:
-    """Return the wm_class of the currently focused window, or None if unknown.
-
-    NOTE: This reads the in-memory cache local to *this* process. It only works
-    inside the tray process, where the D-Bus service receives push updates.
-    The dictation engine (tuxtalk.app) runs in a separate subprocess and must
-    query via D-Bus instead — see _query_focused_window_class() in app.py.
-    """
-    return _focused_window_class
-
-
 class TuxTalkDBusService(dbus.service.Object):
     """
     D-Bus service interface for TuxTalk
@@ -47,12 +36,6 @@ class TuxTalkDBusService(dbus.service.Object):
     Object Path: /io/github/ronb1964/TalkType
     Interface: io.github.ronb1964.TalkType
     """
-
-    # Module-level constants above are the single definition; these keep the
-    # long-standing TuxTalkDBusService.DBUS_* attribute names working.
-    DBUS_NAME = DBUS_NAME
-    DBUS_PATH = DBUS_PATH
-    DBUS_INTERFACE = DBUS_INTERFACE
 
     def __init__(self, app_instance, primary=True):
         """Initialize D-Bus service with reference to app instance.
@@ -87,26 +70,26 @@ class TuxTalkDBusService(dbus.service.Object):
 
         if primary:
             self.bus_name = dbus.service.BusName(
-                self.DBUS_NAME, bus=self.bus, replace_existing=True)
+                DBUS_NAME, bus=self.bus, replace_existing=True)
         else:
             self.bus_name = dbus.service.BusName(
-                self.DBUS_NAME, bus=self.bus, allow_replacement=True, do_not_queue=True)
+                DBUS_NAME, bus=self.bus, allow_replacement=True, do_not_queue=True)
 
         # Initialize parent
-        super().__init__(self.bus_name, self.DBUS_PATH)
+        super().__init__(self.bus_name, DBUS_PATH)
 
         if self.owns_name():
-            logger.info(f"D-Bus service started: {self.DBUS_NAME}")
+            logger.info(f"D-Bus service started: {DBUS_NAME}")
         else:
             # Only possible for the tray, behind something that won't let go
             # of the name (a TuxTalk older than this fix).
-            logger.warning(f"D-Bus name {self.DBUS_NAME} is held by another process; "
+            logger.warning(f"D-Bus name {DBUS_NAME} is held by another process; "
                            "waiting in line for it")
 
     def owns_name(self):
         """Whether this process currently owns the TuxTalk bus name."""
         try:
-            return self.bus.get_name_owner(self.DBUS_NAME) == self.bus.get_unique_name()
+            return self.bus.get_name_owner(DBUS_NAME) == self.bus.get_unique_name()
         except Exception:
             return False
 
@@ -188,13 +171,6 @@ class TuxTalkDBusService(dbus.service.Object):
 
         current = getattr(self.app, "current_preset", None)
         status['preset'] = str(current() if current else "custom")
-
-        # Add statistics if available
-        if hasattr(self.app, 'stats'):
-            status['stats'] = {
-                'words': self.app.stats.get('words', 0),
-                'sessions': self.app.stats.get('sessions', 0),
-            }
 
         return status
 
@@ -492,11 +468,6 @@ class TuxTalkDBusService(dbus.service.Object):
         pass
 
     @dbus.service.signal(DBUS_INTERFACE, signature='s')
-    def TranscriptionComplete(self, text: str):
-        """Emitted when a transcription is completed"""
-        pass
-
-    @dbus.service.signal(DBUS_INTERFACE, signature='s')
     def ModelChanged(self, model_name: str):
         """Emitted when the model is changed"""
         pass
@@ -504,11 +475,6 @@ class TuxTalkDBusService(dbus.service.Object):
     @dbus.service.signal(DBUS_INTERFACE, signature='s')
     def InjectionModeChanged(self, mode: str):
         """Emitted when injection mode changes (auto/paste/type)"""
-        pass
-
-    @dbus.service.signal(DBUS_INTERFACE, signature='ss')
-    def ErrorOccurred(self, error_type: str, message: str):
-        """Emitted when an error occurs"""
         pass
 
     @dbus.service.signal(DBUS_INTERFACE, signature='as')
@@ -545,17 +511,9 @@ class TuxTalkDBusService(dbus.service.Object):
 
     # ==================== Helper Methods ====================
 
-    def emit_recording_state(self, is_recording: bool):
-        """Emit recording state change signal"""
-        self.RecordingStateChanged(is_recording)
-
     def emit_service_state(self, is_running: bool):
         """Emit service state change signal"""
         self.ServiceStateChanged(is_running)
-
-    def emit_transcription(self, text: str):
-        """Emit transcription complete signal"""
-        self.TranscriptionComplete(text)
 
     def emit_model_changed(self, model_name: str):
         """Emit model changed signal"""
@@ -564,11 +522,3 @@ class TuxTalkDBusService(dbus.service.Object):
     def emit_injection_mode_changed(self, mode: str):
         """Emit injection mode changed signal"""
         self.InjectionModeChanged(mode)
-
-    def emit_error(self, error_type: str, message: str):
-        """Emit error signal"""
-        self.ErrorOccurred(error_type, message)
-
-    def emit_hotkey_pressed(self, key_name: str):
-        """Emit hotkey pressed signal (during test mode)"""
-        self.HotkeyPressed(key_name)
