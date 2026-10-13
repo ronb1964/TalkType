@@ -10,6 +10,9 @@ AT-SPI accessibility framework. It enables:
 
 Falls back gracefully to ydotool/wtype when AT-SPI is not available or not
 supported by the target application.
+
+Nothing imports this module yet. It is kept as the base for detecting password
+fields (see ROADMAP.md, "Auto-disable in password fields").
 """
 
 import logging

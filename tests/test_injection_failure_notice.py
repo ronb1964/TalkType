@@ -31,7 +31,7 @@ def quiet(monkeypatch):
 
 
 def _paste_mode(monkeypatch):
-    monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", False, "test"))
+    monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
 
 
 # --- _inject_text reports its outcome ------------------------------------------
@@ -66,7 +66,7 @@ def test_some_chunks_landing_is_partial(monkeypatch, quiet):
 
 
 def test_type_mode_failure_is_failed(monkeypatch, quiet):
-    monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("type", False, "test"))
+    monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("type", "test"))
     monkeypatch.setattr(app, "_type_text", lambda t: False)
     assert app._inject_text("hello", "type", 0.0) == "failed"
 

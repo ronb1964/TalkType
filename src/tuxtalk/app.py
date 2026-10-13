@@ -7,11 +7,18 @@ os.environ["HF_HUB_DISABLE_XET"] = "1"
 from .torch_init import init_cuda_for_pytorch
 init_cuda_for_pytorch()
 
-import sys, time, re, shutil, subprocess, tempfile, wave, atexit, argparse, fcntl, signal
+import sys
+import time
+import re
+import shutil
+import subprocess
+import atexit
+import argparse
+import fcntl
+import signal
 from dataclasses import dataclass
 import numpy as np
 import sounddevice as sd
-from faster_whisper import WhisperModel
 from evdev import InputDevice, ecodes, list_devices
 
 from typing import NamedTuple
@@ -139,9 +146,6 @@ def _notify(title: str, body: str):
     except Exception:
         pass
 
-# NOTE: Hotkey test/change dialogs live in welcome_dialog.py (used during onboarding).
-# The old app.py versions were removed — they were unreachable dead code.
-
 # --- Single instance lock (user runtime dir) ---
 def _runtime_dir():
     base = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
@@ -259,13 +263,6 @@ def _get_ydotool_env():
     runtime = env.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
     env.setdefault("YDOTOOL_SOCKET", os.path.join(runtime, ".ydotool_socket"))
     return env
-
-# ---------------------------------------------------------------------------
-# Constants that never change but were being recreated on every call
-# ---------------------------------------------------------------------------
-
-# Hotkey options offered in the setup dialogs (F-keys, listed in preferred order)
-HOTKEY_OPTIONS = ["F8", "F9", "F10", "F11", "F12", "F1", "F2", "F3", "F4", "F5", "F6", "F7"]
 
 # Undo voice-command parsing/length logic lives in tuxtalk.undo so it can
 # be unit-tested without dragging in heavy audio/CUDA imports.
@@ -1065,7 +1062,7 @@ def _reload_live_settings(cfg, indicator):
     object and reads most settings off it at the point of use, so refreshing
     its fields is what makes them live.
 
-    Deliberately leaves model and device alone: those describe the WhisperModel
+    Deliberately leaves model and device alone: those describe the speech model
     that is already loaded, and rewriting them would make the config disagree
     with reality. Changing them still restarts the service.
 
@@ -1678,8 +1675,6 @@ def _type_text_raw(text: str):
     Higher values are slower but more reliable.
     Lower values may cause transposed letters.
     """
-    global _typing_delay
-    
     if _which("ydotool"):
         layout_result = _type_on_layout(text, max(5, min(50, _typing_delay)), "layout typing")
         if layout_result is not None:
@@ -1699,7 +1694,7 @@ def _type_text_raw(text: str):
                 env=env
             )
             try:
-                stdout, stderr = proc.communicate(input=text.encode("utf-8"), timeout=20)
+                _, stderr = proc.communicate(input=text.encode("utf-8"), timeout=20)
             except subprocess.TimeoutExpired:
                 # Kill and reap the hung ydotool so it doesn't linger and keep
                 # typing into whatever is focused later.
@@ -1930,7 +1925,7 @@ def _paste_text_x11(text: str) -> bool:
     return _send_paste_keystroke()
 
 
-def _paste_text(text: str, send_trailing_keys: bool = False):
+def _paste_text(text: str) -> bool:
     """
     Wayland paste injection: put text on clipboard, then Ctrl+V or Shift+Ctrl+V.
     
@@ -1945,7 +1940,6 @@ def _paste_text(text: str, send_trailing_keys: bool = False):
 
     Args:
         text: Text to paste (should NOT contain §SHIFT_ENTER§ markers)
-        send_trailing_keys: If True, send additional key presses after paste
     """
     # wl-copy talks to a Wayland compositor. On an X11 login it fails instantly,
     # and firing Ctrl+V anyway pastes the previous clipboard contents.
@@ -2025,80 +2019,37 @@ def _paste_text(text: str, send_trailing_keys: bool = False):
         logger.error(f"Paste injection timeout: {e}")
     except Exception as e:
         logger.error(f"Paste injection failed: {e}")
-        pass
     return False
 
-def _press_space():
-    # Inject a literal Space keypress via ydotool when possible; fallback to typing a space
-    # KEY_SPACE = 57
-    if _ydotool_key(["57:1", "57:0"], what="space"):
-        return
-    if _which("wtype"):
-        subprocess.run(["wtype", "--", " "], check=False, timeout=YDOTOOL_TIMEOUT_S); return
-
-def _determine_injection_method(injection_mode: str) -> tuple[str, str, str]:
+def _determine_injection_method(injection_mode: str) -> tuple[str, str]:
     """
-    Determine the best injection method based on mode and context.
+    Decide between typing and pasting for this dictation.
 
     Args:
         injection_mode: User's configured mode ("type", "paste", or "auto")
 
     Returns:
-        Tuple of (actual_mode, use_atspi, reason)
+        Tuple of (actual_mode, reason)
         - actual_mode: "type" or "paste" (what to actually use)
-        - use_atspi: bool (whether to try AT-SPI first)
         - reason: str (explanation for logging)
 
-    Note: This function is optimized for speed. Since we use Ctrl+Shift+V for paste
-    (which works universally in terminals and regular apps), we default to paste
-    mode and skip slow AT-SPI detection.
+    Auto always pastes: the paste keystroke is picked per paste from the focused
+    window's class (Ctrl+Shift+V in a terminal), and Electron apps where paste
+    is broken are switched to fast typing in _inject_text.
     """
     # Inside a Flatpak, clipboard-paste needs wl-copy (not bundled) and the libei
     # output backend types directly — always type, never attempt paste.
     if os.environ.get("FLATPAK_ID"):
-        return ("type", False, "Flatpak: libei typing")
+        return ("type", "Flatpak: libei typing")
 
     # If not auto mode, use user's choice directly
     if injection_mode.lower() != "auto":
         if injection_mode.lower() == "paste":
-            return ("paste", False, "User selected paste mode")
+            return ("paste", "User selected paste mode")
         else:
-            return ("type", False, "User selected type mode")
+            return ("type", "User selected type mode")
 
-    # Auto mode: fast detection without AT-SPI (which can hang for 15+ seconds)
-    # Since Ctrl+Shift+V works universally, paste is almost always the right choice
-
-    # Quick process-based detection for common apps
-    try:
-        import subprocess
-        # Single fast pgrep call to detect common terminal/editor processes
-        result = subprocess.run(
-            ["pgrep", "-a", "-u", str(os.getuid())],
-            capture_output=True,
-            text=True,
-            timeout=0.3
-        )
-        if result.returncode == 0:
-            procs = result.stdout.lower()
-            # Check for terminals (all use paste with Ctrl+Shift+V)
-            terminals = ["gnome-terminal", "konsole", "xterm", "kitty", "alacritty",
-                        "terminator", "tilix", "ptyxis", "foot", "wezterm"]
-            for term in terminals:
-                if term in procs:
-                    return ("paste", False, f"Auto: terminal ({term}), using paste")
-
-            # Check for code editors (all work well with paste)
-            editors = ["cursor", "/code", "sublime", "atom", "gedit", "kate", "neovim", "nvim"]
-            for editor in editors:
-                if editor in procs:
-                    return ("paste", False, f"Auto: code editor detected, using paste")
-    except subprocess.TimeoutExpired:
-        logger.debug("Process detection timed out")
-    except Exception as e:
-        logger.debug(f"Process detection failed: {e}")
-
-    # Default: use paste (Ctrl+Shift+V works universally)
-    return ("paste", False, "Auto: defaulting to paste")
+    return ("paste", "Auto: paste")
 
 def plan_line_breaks(text: str, is_terminal: bool) -> list[str]:
     """How to deliver *text*'s line breaks: the chunks to paste, in order.
@@ -2409,7 +2360,8 @@ def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: b
 def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = False) -> str:
     """Determine the best injection method and insert text into the active app.
 
-    Tries AT-SPI first (if auto mode recommends it), then paste, then typing.
+    Pastes or types as _determine_injection_method decides, typing whatever a
+    failed paste could not deliver.
     t0 is the timestamp when stop_recording began (for timing logs).
 
     Returns how it went: "ok" (all of it arrived), "partial" (some chunks of a
@@ -2424,7 +2376,7 @@ def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = Fa
     """
     # Determine injection method (auto mode does smart detection)
     detection_start = time.time()
-    actual_mode, use_atspi, reason = _determine_injection_method(injection_mode)
+    actual_mode, reason = _determine_injection_method(injection_mode)
     detection_time = time.time() - detection_start
     logger.info(f"TIMING: Injection method detection took {detection_time:.3f}s")
     if detection_time > 0.1:
@@ -2507,9 +2459,9 @@ def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = Fa
             text = text.replace("\t", "    ")
 
     use_paste = (actual_mode == "paste")
-    if one_block and "\n" in text and (use_atspi or not use_paste):
+    if one_block and "\n" in text and not use_paste:
         text = text.replace("\n", "\xa7SHIFT_ENTER\xa7")
-    logger.info(f"Injection mode: configured={injection_mode!r}, actual={actual_mode!r}, atspi={use_atspi}, reason={reason}")
+    logger.info(f"Injection mode: configured={injection_mode!r}, actual={actual_mode!r}, reason={reason}")
     if injection_mode == "auto":
         print(f"\U0001f50d Auto mode: {reason}")
 
@@ -2518,26 +2470,8 @@ def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = Fa
     # would backspace characters the user's document never received.
     inject_ok = True
 
-    # --- AT-SPI insertion (accessibility API, fastest when supported) ---
-    if use_atspi:
-        logger.info(f"Attempting AT-SPI insertion: {reason}")
-        print("\U0001f52e Attempting AT-SPI insertion...")
-        try:
-            from .atspi_helper import insert_text_atspi
-            if insert_text_atspi(text):
-                print(f"\u2728 AT-SPI insertion successful! ({len(text)} chars)")
-                logger.info("AT-SPI text insertion succeeded")
-            else:
-                print("\u26a0\ufe0f  AT-SPI insertion failed, falling back to typing")
-                logger.warning("AT-SPI insertion failed, using typing fallback")
-                inject_ok = _output_backend().type_text(text)
-        except Exception as e:
-            logger.error(f"AT-SPI insertion error: {e}")
-            print("\u26a0\ufe0f  AT-SPI error, falling back to typing")
-            inject_ok = _output_backend().type_text(text)
-
     # --- Smart hybrid paste (text with line-break markers) ---
-    elif use_paste and not one_block and ("\xa7SHIFT_ENTER\xa7" in text or "\n" in text):
+    if use_paste and not one_block and ("\xa7SHIFT_ENTER\xa7" in text or "\n" in text):
         marker = "\xa7SHIFT_ENTER\xa7"
         # A terminal ignores Shift+Enter but honours a newline inside a paste,
         # so it gets one chunk carrying real newlines and no keystrokes at all.
@@ -2589,7 +2523,6 @@ def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = Fa
     # --- Simple paste (no markers) ---
     elif use_paste and _paste_text(text):
         injection_time = time.time() - injection_start
-        total_time = time.time() - t0
         logger.info(f"TIMING: Paste injection completed in {injection_time:.2f}s")
         logger.info(f"Text injected via paste: {len(text)} chars in {injection_time:.2f}s")
         if injection_time > 1.0:
@@ -3822,7 +3755,6 @@ def build_model(settings: Settings):
         if settings.device.lower() == "cuda" and not is_parakeet(settings.model):
             print(f"❌ CUDA failed: {e}")
             logger.error(f"CUDA error: {type(e).__name__}: {str(e)}")
-            import traceback
             logger.debug("CUDA traceback:", exc_info=True)
             print("🔄 Falling back to CPU...")
             try:
@@ -3961,7 +3893,7 @@ def main():
             # Import GTK in the main thread
             import gi
             gi.require_version('Gtk', '3.0')
-            from gi.repository import Gtk, GLib
+            from gi.repository import Gtk
 
             # Initialize D-Bus service for GNOME extension integration
             try:

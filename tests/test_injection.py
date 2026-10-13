@@ -180,7 +180,7 @@ def test_failed_chunk_only_retypes_the_remainder(monkeypatch, wayland):
     monkeypatch.setattr(app, "_paste_text", fake_paste)
     monkeypatch.setattr(app, "_type_text", lambda t: typed.append(t) or True)
     monkeypatch.setattr(app, "_send_shift_enter", lambda: True)
-    monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", False, "test"))
+    monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: None)
 
     marker = "\xa7SHIFT_ENTER\xa7"
@@ -200,7 +200,7 @@ def test_undo_buffer_records_only_what_actually_landed(monkeypatch, wayland):
     own writing."""
     monkeypatch.setattr(app, "_paste_text", lambda *a, **k: False)
     monkeypatch.setattr(app, "_type_text", lambda t: False)
-    monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", False, "test"))
+    monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: None)
     app.state.last_inserted_text = "previous dictation"
 
@@ -212,7 +212,7 @@ def test_undo_buffer_records_only_what_actually_landed(monkeypatch, wayland):
 
 def test_undo_buffer_updates_on_a_successful_injection(monkeypatch, wayland):
     monkeypatch.setattr(app, "_paste_text", lambda *a, **k: True)
-    monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", False, "test"))
+    monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: None)
     app.state.last_inserted_text = "previous"
 
@@ -296,9 +296,8 @@ def test_injection_method_forces_type_in_flatpak(monkeypatch):
     from tuxtalk import app
     monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TalkType")
     for mode in ("auto", "paste", "type"):
-        actual, use_atspi, _reason = app._determine_injection_method(mode)
+        actual, _reason = app._determine_injection_method(mode)
         assert actual == "type", mode
-        assert use_atspi is False
 
 
 def test_injection_method_respects_user_choice_on_host(monkeypatch):
@@ -306,3 +305,17 @@ def test_injection_method_respects_user_choice_on_host(monkeypatch):
     monkeypatch.delenv("FLATPAK_ID", raising=False)
     assert app._determine_injection_method("paste")[0] == "paste"
     assert app._determine_injection_method("type")[0] == "type"
+
+
+def test_auto_mode_pastes_without_scanning_processes(monkeypatch):
+    """Auto used to run pgrep over every process on each dictation, and every
+    branch returned "paste" anyway. The answer must not cost a process scan."""
+    from tuxtalk import app
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+    monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
+
+    def no_subprocess(*a, **k):
+        raise AssertionError("auto mode must not start a process")
+    monkeypatch.setattr(app.subprocess, "run", no_subprocess)
+
+    assert app._determine_injection_method("auto")[0] == "paste"

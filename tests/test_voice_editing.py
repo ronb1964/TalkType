@@ -649,20 +649,20 @@ def injection(monkeypatch):
 
 
 def test_one_block_is_pasted_once_with_its_line_breaks(injection, monkeypatch):
-    monkeypatch.setattr(app, "_determine_injection_method", lambda mode: ("paste", False, "test"))
+    monkeypatch.setattr(app, "_determine_injection_method", lambda mode: ("paste", "test"))
     app._inject_text("- 1\n- 2\n- 3", "auto", 0, one_block=True)
     assert injection["pasted"] == ["- 1\n- 2\n- 3"] and injection["shift_enter"] == 0
 
 
 def test_dictation_still_pastes_line_by_line(injection, monkeypatch):
-    monkeypatch.setattr(app, "_determine_injection_method", lambda mode: ("paste", False, "test"))
+    monkeypatch.setattr(app, "_determine_injection_method", lambda mode: ("paste", "test"))
     app._inject_text("one§SHIFT_ENTER§two", "auto", 0)
     assert injection["pasted"] == ["one", "two"] and injection["shift_enter"] == 1
 
 
 def test_a_typed_block_uses_shift_enter_not_enter(injection, monkeypatch):
     """Typing a plain Enter would send the message in a chat box."""
-    monkeypatch.setattr(app, "_determine_injection_method", lambda mode: ("type", False, "test"))
+    monkeypatch.setattr(app, "_determine_injection_method", lambda mode: ("type", "test"))
     app._inject_text("- 1\n- 2", "type", 0, one_block=True)
     assert injection["typed"] == ["- 1§SHIFT_ENTER§- 2"]
 

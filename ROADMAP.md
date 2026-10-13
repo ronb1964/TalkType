@@ -71,9 +71,7 @@ Status markers: `[x]` shipped · `[~]` partly done, see note · `[ ]` not starte
 ## Per-App & Context Features
 
 - [ ] Per-app dictation profiles — different hotkeys/models per application
-- [ ] **Auto-disable in password fields and sensitive inputs** — the detection is written (`atspi_helper.py` reads the AT-SPI `password text` role into `context.is_password`), but two things stand between that and the feature:
-  1. It is only used to *decline the AT-SPI insertion method* and fall back to typing — the text still gets typed into the password field.
-  2. `_determine_injection_method()` returns `use_atspi=False` on every path, so the whole AT-SPI module is currently unreachable.
+- [ ] **Auto-disable in password fields and sensitive inputs** — the detection is written (`atspi_helper.py` reads the AT-SPI `password text` role into `context.is_password`), but nothing calls it: the unused AT-SPI insertion branch was removed from `_inject_text()`, and the module is kept only as the base for this feature. Wiring it up means asking it about the focused field before typing, and skipping the dictation in a password field.
 
   Worth raising in priority: TuxTalk types into whatever holds focus, with no exception for password inputs.
 - [ ] Auto-pause detection when switching apps
