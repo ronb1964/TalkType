@@ -46,8 +46,9 @@ def test_typing_stops_when_a_line_break_fails(monkeypatch, quiet):
 # --- a terminal's paste falling back to typing --------------------------------
 
 def test_terminal_remainder_never_presses_a_plain_enter(monkeypatch, quiet):
-    """A terminal gets one paste with real newlines. If that paste fails, typing
-    the remainder with each newline as Enter would run the command."""
+    """A terminal gets one paste with real newlines. If that paste fails, the
+    remainder is typed with its line breaks as spaces: Enter would run the
+    command, and terminals such as gnome-terminal treat Shift+Enter as Enter."""
     monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "konsole")
     monkeypatch.setattr(app, "_paste_text", lambda t: False)
@@ -60,7 +61,7 @@ def test_terminal_remainder_never_presses_a_plain_enter(monkeypatch, quiet):
 
     assert outcome == "ok"
     assert enters == [], "a plain Enter was pressed in a terminal"
-    assert shift_enters == [1]
+    assert shift_enters == [], "Shift+Enter was pressed in a terminal"
 
 
 def test_auto_mode_types_on_x11(monkeypatch, quiet):

@@ -1629,6 +1629,20 @@ def _ydotool_key(keys, timeout: float = YDOTOOL_TIMEOUT_S, what: str = "keystrok
     return True
 
 
+def _typed_breaks_for(text: str, window_class) -> str:
+    """*text* ready to type into *window_class*. Typed line breaks go in as
+    Shift+Enter, but terminals such as gnome-terminal treat Shift+Enter as
+    Enter and would run the half-dictated command, so in a terminal every
+    line break becomes a space. Pasting (Wayland) keeps them: a terminal takes
+    pasted newlines as text."""
+    if not is_terminal_class(window_class):
+        return text
+    joined = re.sub(r"[ \t]*(?:\xa7SHIFT_ENTER\xa7|\n)+[ \t]*", " ", text)
+    if joined != text:
+        logger.info("Typing into a terminal: line breaks typed as spaces")
+    return joined
+
+
 def _send_shift_enter():
     """Send Shift+Enter keystrokes to create line break without submitting."""
     # KEY_LEFTSHIFT (42), KEY_ENTER (28)
@@ -2552,8 +2566,9 @@ def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = Fa
     # --- Smart hybrid paste (text with line-break markers) ---
     if use_paste and not one_block and ("\xa7SHIFT_ENTER\xa7" in text or "\n" in text):
         marker = "\xa7SHIFT_ENTER\xa7"
-        # A terminal ignores Shift+Enter but honours a newline inside a paste,
-        # so it gets one chunk carrying real newlines and no keystrokes at all.
+        # A terminal honours a newline inside a paste, but treats Shift+Enter
+        # like Enter, so it gets one chunk carrying real newlines and no
+        # keystrokes at all.
         parts = plan_line_breaks(text, is_terminal_class(_query_focused_window_class()))
         logger.info(f"Smart hybrid mode: {len(parts)} part(s)")
 
@@ -2586,10 +2601,11 @@ def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = Fa
         else:
             remainder = (marker if needs_break else "") + marker.join(parts[resume_at:])
             # A terminal's single chunk carries real newlines for bracketed
-            # paste. Typed, a newline is a plain Enter, which would run the
-            # half-dictated command, so the breaks go back to markers and are
-            # typed as Shift+Enter, which a terminal ignores.
-            remainder = remainder.replace("\n", marker)
+            # paste. Typed, a newline is a plain Enter and Shift+Enter is no
+            # safer in a terminal, so _typed_breaks_for turns them into spaces
+            # there; other apps get Shift+Enter.
+            remainder = _typed_breaks_for(remainder.replace("\n", marker),
+                                          _query_focused_window_class())
             print(f"Inject (type) remainder len={len(remainder)} [paste failed partway]")
             if _output_backend().type_text(remainder):
                 inject_ok = True  # delivered chunks + typed remainder == full text
@@ -2621,7 +2637,8 @@ def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = Fa
         # Typed, a real newline is a plain Enter, which sends a chat message or
         # runs a terminal's half-typed command. A snippet's line breaks are real
         # newlines, so they go in as Shift+Enter like a spoken "new line".
-        text = text.replace("\n", "\xa7SHIFT_ENTER\xa7")
+        text = _typed_breaks_for(text.replace("\n", "\xa7SHIFT_ENTER\xa7"),
+                                 _query_focused_window_class())
         backend = _output_backend()
         # The Flatpak's keyboard path types "…" as "..." and "café" as "cafe";
         # recording that form below keeps undo's backspace count right.

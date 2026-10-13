@@ -349,3 +349,45 @@ def test_auto_mode_pastes_without_scanning_processes(monkeypatch):
     monkeypatch.setattr(app.subprocess, "run", no_subprocess)
 
     assert app._determine_injection_method("auto")[0] == "paste"
+
+
+# --- a typed line break must never run a terminal command --------------------
+# Mint (X11) test, 2026-10-13: gnome-terminal treats Shift+Enter as Enter, so
+# "first line new line second line" ran "First line." as a command.
+
+MARK = "\xa7SHIFT_ENTER\xa7"
+
+
+def _typing_into(monkeypatch, window_class, mode="type"):
+    typed = []
+    monkeypatch.setattr(app, "_type_text", lambda t: typed.append(t) or True)
+    monkeypatch.setattr(app, "_determine_injection_method", lambda m: (mode, "test"))
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: window_class)
+    return typed
+
+
+@pytest.mark.parametrize("window", ["Gnome-terminal", "org.kde.konsole", "xfce4-terminal"])
+def test_typed_line_breaks_become_spaces_in_a_terminal(monkeypatch, window):
+    typed = _typing_into(monkeypatch, window)
+    assert app._inject_text(f"First line.{MARK}Second line.", "type", 0.0) == "ok"
+    assert typed == ["First line. Second line."]
+    assert app.state.last_inserted_text == "First line. Second line."
+
+
+def test_a_snippet_newline_becomes_a_space_in_a_terminal(monkeypatch):
+    typed = _typing_into(monkeypatch, "Gnome-terminal")
+    app._inject_text("Best,\nRon", "type", 0.0)
+    assert typed == ["Best, Ron"]
+
+
+def test_typed_line_breaks_stay_line_breaks_in_other_apps(monkeypatch):
+    typed = _typing_into(monkeypatch, "xed")
+    app._inject_text(f"First line.{MARK}Second line.", "type", 0.0)
+    assert typed == [f"First line.{MARK}Second line."]
+
+
+def test_the_typed_remainder_after_a_failed_paste_has_no_breaks_in_a_terminal(monkeypatch, wayland):
+    typed = _typing_into(monkeypatch, "org.kde.konsole", mode="paste")
+    monkeypatch.setattr(app, "_paste_text", lambda *a, **k: False)
+    app._inject_text(f"First line.{MARK}Second line.", "paste", 0.0)
+    assert typed and all(MARK not in t and "\n" not in t for t in typed)
