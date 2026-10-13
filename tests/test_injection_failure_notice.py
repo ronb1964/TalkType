@@ -1,12 +1,10 @@
 """A dictation that never reaches the window must not fail silently.
 
-A Fedora user on X11 (LXQt) dictated Ukrainian for several minutes. Every
-dictation was transcribed perfectly (the Recent Dictations menu held them word
-for word), but none reached the text editor, and nothing said so. The "done"
-beep even played before the attempt to type. From his side TalkType simply
-"didn't work", and he concluded his laptop was too weak.
+Transcription can work perfectly (Recent Dictations holds the text word for
+word) while nothing reaches the window, for example when paste is unavailable
+on X11 and typing fails too. Without a notice the app simply seems not to work.
 
-_inject_text now reports how it went ("ok", "partial" or "failed"), and
+_inject_text reports how it went ("ok", "partial" or "failed"), and
 _transcribe_and_inject tells the user about anything but "ok": always with a
 desktop notification, like a missing microphone, and with the low cancel beep
 when beeps are on. The notification points at Recent Dictations, where the text
@@ -43,7 +41,7 @@ def test_a_paste_that_lands_is_ok(monkeypatch, quiet):
 
 
 def test_nothing_landing_is_failed(monkeypatch, quiet):
-    """Oleksandr's case: paste unavailable on X11, then typing failed too."""
+    """Paste unavailable on X11, then typing fails too."""
     _paste_mode(monkeypatch)
     monkeypatch.setattr(app, "_paste_text", lambda *a, **k: False)
     monkeypatch.setattr(app, "_type_text", lambda t: False)
@@ -146,8 +144,8 @@ def test_success_stays_quiet(dictation):
 
 
 def test_an_exception_while_typing_is_a_failure_too(dictation):
-    """It used to be caught as a "Transcription error", shown only with
-    notifications on, though the transcription had worked."""
+    """It is a typing failure, not a "Transcription error" shown only with
+    notifications on: the transcription worked."""
     notes, beeps = dictation(RuntimeError("ydotoold socket vanished"), beeps_on=True)
     assert len(notes) == 1 and "Recent Dictations" in notes[0]
     assert beeps == [app.READY_BEEP, app.CANCEL_BEEP]

@@ -1,11 +1,12 @@
 """Hotkey test mode must never be able to leave dictation switched off.
 
-It used to be a blind SIGUSR2 toggle: one signal in from Preferences, one out.
-If Preferences crashed with the Test Hotkeys dialog open, the service stayed in
-test mode for good; if the service restarted meanwhile, the "off" signal put
-the NEW one into test mode. Either way every hotkey was silently ignored.
+A blind SIGUSR2 toggle (one signal in from Preferences, one out) can't promise
+that: if Preferences crashes with the Test Hotkeys dialog open, the service
+stays in test mode for good, and if the service restarts meanwhile, the "off"
+signal puts the NEW one into test mode. Either way every hotkey is silently
+ignored.
 
-Now Preferences keeps a flag file fresh while the dialog is open, and the
+So Preferences keeps a flag file fresh while the dialog is open, and the
 service ignores one that has gone stale.
 """
 
@@ -95,9 +96,9 @@ def test_preferences_refreshes_well_within_the_lease():
 
 
 def test_signal_handlers_are_installed_before_anything_slow(monkeypatch):
-    """SIGUSR1 and SIGUSR2 end a process that doesn't handle them. They were
-    installed only after the model loaded, which takes seconds (minutes with a
-    download), so a signal in that window killed the service."""
+    """SIGUSR1 and SIGUSR2 end a process that doesn't handle them. Loading the
+    model takes seconds (minutes with a download), so handlers installed after
+    it would leave a window in which a signal kills the service."""
     saved = {s: signal.getsignal(s) for s in (signal.SIGUSR1, signal.SIGUSR2)}
 
     class Stop(Exception):

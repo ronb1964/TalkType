@@ -6,10 +6,10 @@ open any. So a user missing 'input' group membership gets a service that starts
 cleanly, prints its configured hotkey, reports itself healthy — and then
 silently ignores every keypress forever.
 
-That failure cost a full debugging session on a Fedora KDE VM: the onboarding
-hotkey test passed (it always connects GTK key handlers, so it exercises the
-focused-window path, not evdev), which made the dictation service look like the
-broken part when the real cause was device permissions.
+The onboarding hotkey test still passes in that state (it always connects GTK
+key handlers, so it exercises the focused-window path, not evdev), which makes
+the dictation service look like the broken part when the real cause is device
+permissions.
 
 These tests pin the diagnosis text so the silent-failure mode cannot return.
 """
@@ -59,8 +59,8 @@ def test_names_the_group_when_user_is_not_a_member(monkeypatch):
     assert "input" in msg
     assert "usermod" in msg, "must give the user a command they can actually run"
     # A logout is NOT reliable — a lingering `systemd --user` session keeps the
-    # old group list alive, which stranded real testing on an Ubuntu VM. The
-    # advice has to be "restart", or users follow it and nothing changes.
+    # old group list alive. The advice has to be "restart", or users follow it
+    # and nothing changes.
     assert "restart" in msg.lower(), "group changes need a restart to take effect"
 
 

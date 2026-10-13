@@ -76,7 +76,7 @@ def test_every_help_tab_is_valid_markup(dialog):
 
 
 def test_help_lists_every_tray_preset(dialog):
-    """Help listed 5 of the 7 old presets; it must name each of today's."""
+    """Help must name each of today's tray presets."""
     from tuxtalk import recommend
     text = "\n".join(l.get_text() for l in _help_labels(dialog))
     for preset in recommend.presets("en", recommend.Hardware(None)):

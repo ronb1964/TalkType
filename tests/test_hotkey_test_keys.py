@@ -1,12 +1,12 @@
 """Which keys the first-run hotkey test accepts, reports and saves.
 
-- Change Key took any key (Pause, Scroll_Lock, space, a letter) and said
-  "Working!", but the service understands only F-keys and letters, so the
-  app ended up with no hotkey; a letter started dictation while typing.
-- Closing the test with the window's X saved nothing, and the settings start
-  with no hotkey, so the service watched no key at all.
-- The evdev reader passed on presses only, and only a release marks a key as
-  working, so a key the compositor grabbed never tested as working.
+- Change Key refuses keys the service can't use as a hotkey (Pause,
+  Scroll_Lock, space, a letter): they would leave the app with no hotkey, and
+  a letter would start dictation while typing.
+- Closing the test with the window's X on first run saves the keys shown,
+  since the settings start with no hotkey and the service would watch no key.
+- The evdev reader passes on releases too, since only a release marks a key
+  as working; otherwise a key the compositor grabbed never tests as working.
 """
 from types import SimpleNamespace
 

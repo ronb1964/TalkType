@@ -1,6 +1,6 @@
 """After a hotkey change, Preferences offers the hotkey test and says when
-KDE already uses the key (Ron, 0.14.6: first run tests the key, but a key
-changed later was simply accepted, and KDE's refusal only reached the log)."""
+KDE already uses the key, as first run does, instead of leaving KDE's refusal
+in the log only."""
 import pytest
 
 pytest.importorskip("gi")

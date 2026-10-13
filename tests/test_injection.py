@@ -87,8 +87,8 @@ def wayland(monkeypatch):
 def test_paste_reports_failure_when_the_keystroke_tool_is_down(monkeypatch, wayland):
     """ydotool exits 2 with "Please check if ydotoold is running".
 
-    That result was discarded, so a paste that never happened was reported as
-    success — and the undo buffer then recorded text the document never got.
+    Discarding that result would report a paste that never happened as
+    success, and the undo buffer would record text the document never got.
     """
     monkeypatch.setattr(app.subprocess, "Popen", lambda *a, **k: FakePopen(returncode=0))
     monkeypatch.setattr(app.subprocess, "run",
@@ -115,8 +115,8 @@ def test_paste_reports_success_when_both_tools_succeed(monkeypatch, wayland):
 
 def test_paste_waits_for_wl_copy_to_set_the_clipboard(monkeypatch, wayland):
     """The wl-copy we start exits once the clipboard is set. One still running
-    has not got that far, so Ctrl+V would paste the old clipboard contents;
-    and it used to be killed afterwards, before it could serve the new one."""
+    has not got that far, so Ctrl+V would paste the old clipboard contents,
+    and killing it afterwards would stop it before it could serve the new one."""
     proc = FakePopen(returncode=None)
     monkeypatch.setattr(app.subprocess, "Popen", lambda *a, **k: proc)
     keys = []
@@ -137,8 +137,8 @@ def test_a_wl_copy_that_handed_off_is_not_killed(monkeypatch, wayland):
 
 
 def test_paste_is_refused_outside_a_wayland_session(monkeypatch):
-    """On an X11 login the clipboard tool fails instantly, but Ctrl+V was sent
-    anyway — pasting the user's previous clipboard contents into their document."""
+    """On an X11 login the clipboard tool fails instantly, and sending Ctrl+V
+    anyway would paste the user's previous clipboard contents into their document."""
     monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
     monkeypatch.setattr(app, "_which", lambda name: f"/usr/bin/{name}")
     fired = []
@@ -196,9 +196,9 @@ def test_send_backspaces_reports_success(monkeypatch, wayland):
 # --- partial injection must not re-send what already landed ----------------
 
 def test_failed_chunk_only_retypes_the_remainder(monkeypatch, wayland):
-    """A multi-line dictation whose third chunk fails used to fall back to
-    re-injecting the *entire* text, leaving the document with the first chunks
-    followed by a complete second copy of everything."""
+    """A multi-line dictation whose third chunk fails must not fall back to
+    re-injecting the *entire* text, which leaves the document with the first
+    chunks followed by a complete second copy of everything."""
     typed = []
     pasted = []
 
@@ -265,7 +265,7 @@ def undo_env(monkeypatch):
 
 
 def test_undo_leaves_its_buffer_alone_when_the_backspaces_fail(monkeypatch, undo_env):
-    """Otherwise TalkType reports a successful undo, nothing is deleted, and the
+    """Otherwise TuxTalk reports a successful undo, nothing is deleted, and the
     next undo deletes that many characters of the user's own writing."""
     monkeypatch.setattr(app, "_send_backspaces", lambda count: False)
 
@@ -286,11 +286,10 @@ def test_undo_shrinks_its_buffer_when_the_backspaces_land(monkeypatch, undo_env)
 
 def test_type_text_reports_failure_when_the_enter_key_fails(monkeypatch):
     """A dictation containing "new line" is typed in parts with an Enter key
-    between them. _type_text checked the text parts but threw away the return
-    of _send_enter(), so a dictation whose line breaks never landed was
-    reported as fully injected.
+    between them, so _type_text must check what _send_enter() returns as well
+    as the text parts.
 
-    The undo buffer then records one more character than the document
+    Otherwise the undo buffer records one more character than the document
     actually received per failed break, and "undo that" backspaces that far
     past the dictation — into text the user typed themselves.
     """
@@ -339,8 +338,8 @@ def test_injection_method_respects_user_choice_on_host(monkeypatch):
 
 
 def test_auto_mode_pastes_without_scanning_processes(monkeypatch):
-    """Auto used to run pgrep over every process on each dictation, and every
-    branch returned "paste" anyway. The answer must not cost a process scan."""
+    """Auto always pastes, so the answer must not cost a pgrep over every
+    process on each dictation."""
     from tuxtalk import app
     monkeypatch.delenv("FLATPAK_ID", raising=False)
     monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")

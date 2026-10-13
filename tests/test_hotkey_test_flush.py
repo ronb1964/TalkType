@@ -2,9 +2,9 @@
 
 evdev's InputDevice.read() is a *generator function*: calling it builds a
 generator and runs none of its body, so it never raises BlockingIOError until
-something iterates it. The flush was written as a bare `while True: dev.read()`
-— which therefore never terminated. It spun a thread at 100% CPU and never
-reached the monitoring loop below it, so the hotkey test detected nothing.
+something iterates it. A flush written as a bare `while True: dev.read()`
+therefore never terminates: it spins a thread at 100% CPU and never reaches
+the monitoring loop below it, so the hotkey test detects nothing.
 """
 
 import pytest
@@ -56,7 +56,7 @@ def test_flush_continues_past_a_broken_device():
 
 
 def test_flush_returns_rather_than_spinning():
-    """The original loop never terminated at all — pin that it returns."""
+    """The flush must return rather than spin."""
     dev = FakeDevice([["one"], ["two"], ["three"]])
 
     _flush_pending_events([dev])
