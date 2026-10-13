@@ -335,7 +335,9 @@ class RecordingIndicator(Gtk.Window):
 
         Called from the service's config watcher so Preferences can change
         these without restarting the service, which would reload the Whisper
-        model and leave the hotkey dead for about ten seconds.
+        model and leave the hotkey dead for about ten seconds. That watcher
+        runs on the input thread, so this is safe to call from any thread:
+        the window itself is only resized on the GTK thread.
         """
         self.position = str(position).lower()
         self.offset_x = offset_x
@@ -349,8 +351,15 @@ class RecordingIndicator(Gtk.Window):
             # The window must match the size the positioning maths assumes.
             width = int(BASE_WIDTH * new_scale)
             height = int(BASE_HEIGHT * new_scale)
-            self.set_default_size(width, height)
-            self.resize(width, height)
+
+            def _do_resize():
+                # GTK is not thread-safe: two threads touching it at once
+                # can crash the service.
+                self.set_default_size(width, height)
+                self.resize(width, height)
+                return False
+
+            GLib.idle_add(_do_resize)
 
         if style is not None:
             self.style = style

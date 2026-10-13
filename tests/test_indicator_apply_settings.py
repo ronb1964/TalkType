@@ -94,7 +94,11 @@ class TestWindowSizeMatchesPositioningMaths:
             ind.destroy()
 
     def test_window_resizes_when_size_changes(self, indicator):
+        from gi.repository import Gtk
+
         indicator.apply_settings("center", "large", 0, 0)
+        while Gtk.events_pending():
+            Gtk.main_iteration()
 
         width, height = indicator.get_size_request()
         if width <= 0:
@@ -105,3 +109,20 @@ class TestWindowSizeMatchesPositioningMaths:
             "the positioning maths and the real window disagree again."
         )
         assert height == int(180 * 1.4)
+
+
+def test_the_window_is_resized_on_the_gtk_thread_only(indicator, monkeypatch):
+    """apply_settings runs on the service's input thread while Gtk.main()
+    runs on another. Resizing the window there touched GTK from two threads
+    at once, which can crash the service."""
+    from gi.repository import Gtk
+
+    calls = []
+    monkeypatch.setattr(indicator, "resize", lambda w, h: calls.append((w, h)))
+
+    indicator.apply_settings("center", "large", 0, 0)
+    assert calls == [], "resized straight away, on the caller's thread"
+
+    while Gtk.events_pending():
+        Gtk.main_iteration()
+    assert calls == [(int(200 * 1.4), int(180 * 1.4))]
