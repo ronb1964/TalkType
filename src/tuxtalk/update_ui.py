@@ -4,7 +4,7 @@ Downloads the correct package for the current install type, installs it as root
 via pkexec (the desktop shows a PolicyKit password prompt so it goes through the
 system package manager — dependencies resolved, package DB kept correct), then
 offers to restart. Used by both the tray "Check for Updates" dialog and the
-Preferences → Updates tab so the behaviour stays identical.
+Preferences → Updates & Backup tab so the behaviour stays identical.
 """
 import logging
 import threading
@@ -95,6 +95,7 @@ def run_package_update(release, install_type, restart_callback=None):
 
 
 def _installed_restart_prompt(restart_callback=None):
+    """Say the update is installed and offer Restart Now or Later."""
     done = Gtk.Dialog(title="Update Installed")
     done.set_position(Gtk.WindowPosition.CENTER)
     dc = done.get_content_area()
@@ -149,6 +150,7 @@ def restart_via_tray(get_interface=None) -> bool:
 
 
 def _reopen_to_finish():
+    """Tell the user to quit and reopen TuxTalk, when it can't restart itself."""
     _info("Update installed",
           "Please quit TuxTalk from the tray icon and open it "
           "again to finish updating.")

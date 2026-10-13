@@ -2,7 +2,8 @@
 """
 Update checker for TuxTalk
 
-Checks for updates to AppImage and GNOME extension via GitHub API.
+Checks GitHub for new TuxTalk releases and GNOME extension versions, and
+downloads and installs updates for each install type.
 """
 
 import functools
@@ -403,9 +404,7 @@ def download_update(
         # If the release DOES publish a checksums file and we still cannot get
         # a hash for this filename, that is a failure, not a licence to
         # proceed: the asset may be truncated, malformed, or serving someone
-        # else's content. This used to log "skipping hash check" and install
-        # the download anyway, which made the verification useless in exactly
-        # the situations it exists to catch.
+        # else's content, which are exactly the cases the check exists for.
         expected_sha256 = None
         if checksums_url:
             expected_sha256 = fetch_expected_sha256(checksums_url, filename)
@@ -590,7 +589,7 @@ def get_install_type(*, appimage_env=None, flatpak_env=None,
         return "flatpak"
     if appimage_env:
         # A real, running AppImage. A system path means it is package-managed
-        # (AUR ships /opt/tuxtalk/TuxTalk.AppImage); a home path means the
+        # (the AUR package installs it under /opt); a home path means the
         # user manages it themselves and the app may swap it in place.
         if appimage_env.startswith("/opt/") or appimage_env.startswith("/usr/"):
             return "aur"
@@ -599,7 +598,7 @@ def get_install_type(*, appimage_env=None, flatpak_env=None,
         # Mounted AppImage without the APPIMAGE env — treat as self-managed.
         return "appimage"
     if module_path.startswith("/opt/"):
-        # .deb/.rpm ship the extracted tree under /opt/tuxtalk.
+        # .deb/.rpm ship the extracted tree under /opt/talktype.
         return pkg_query() or "package"
     return "dev"
 
@@ -926,24 +925,23 @@ def _refresh_desktop_menu_cache():
         'kbuildsycoca6', 'kbuildsycoca5',
     ]
 
-    # Try both with and without --noincremental (user reported plain command works better).
-    # List-args with shell=False — same commands, without routing through /bin/sh.
+    # Plain first, then with --noincremental.
     for parts in [['kbuildsycoca6'], ['kbuildsycoca5'],
                   ['kbuildsycoca6', '--noincremental'], ['kbuildsycoca5', '--noincremental']]:
         cmd = ' '.join(parts)
         try:
-            print(f"🔄 Running: {cmd}")
+            print(f"Running: {cmd}")
             result = subprocess.run(parts, capture_output=True, text=True, timeout=15)
             if result.returncode == 0:
                 logger.info(f"Desktop menu cache refreshed using: {cmd}")
-                print(f"✅ Desktop menu refreshed with: {cmd}")
+                print(f"Desktop menu refreshed with: {cmd}")
                 return
             else:
                 logger.debug(f"{cmd} returned {result.returncode}: {result.stderr}")
-                print(f"⚠️ {cmd} returned {result.returncode}")
+                print(f"{cmd} returned {result.returncode}")
         except Exception as e:
             logger.debug(f"Could not run {cmd}: {e}")
-            print(f"❌ Could not run {cmd}: {e}")
+            print(f"Could not run {cmd}: {e}")
 
     # Fallback: try direct path execution
     for cmd in kde_commands:
@@ -1045,7 +1043,7 @@ def _install_app_icon() -> Optional[str]:
 
     if not icon_source:
         logger.warning("Could not find TuxTalk icon to install")
-        print("⚠️ Could not find TuxTalk icon source")
+        print("Could not find TuxTalk icon source")
         return None
 
     try:
@@ -1065,7 +1063,7 @@ def _install_app_icon() -> Optional[str]:
             logger.debug(f"Installed icon to {icon_path}")
 
         logger.info(f"Installed TuxTalk icon to {icons_base} ({len(icon_sizes)} sizes)")
-        print(f"✅ Installed TuxTalk icon ({len(icon_sizes)} sizes)")
+        print(f"Installed TuxTalk icon ({len(icon_sizes)} sizes)")
 
         # Update icon cache (for GTK-based desktops)
         import subprocess
@@ -1089,7 +1087,7 @@ def _install_app_icon() -> Optional[str]:
 
     except Exception as e:
         logger.warning(f"Could not install TuxTalk icon: {e}")
-        print(f"⚠️ Failed to install icon: {e}")
+        print(f"Failed to install icon: {e}")
         return None
 
 
@@ -1116,12 +1114,10 @@ def create_desktop_launcher() -> Tuple[bool, str]:
         # Get the current version for the comment
         version = get_current_version()
 
-        # The file first-run setup and the updater install to. (It was
-        # hardcoded as TalkType.AppImage here, so after the rename a fresh
-        # install got a menu entry that started nothing.)
+        # The file first-run setup and the updater install to.
         appimage_exec_path = APPIMAGE_PATH
         logger.info(f"Desktop launcher Exec path: {appimage_exec_path}")
-        print(f"📍 Desktop launcher will use: {appimage_exec_path}")
+        print(f"Desktop launcher will use: {appimage_exec_path}")
 
         # Desktop file content
         desktop_content = f"""[Desktop Entry]
@@ -1256,7 +1252,7 @@ def check_just_updated() -> Optional[str]:
         return None
 
 
-# For testing
+# Print what the checker sees, for checking it by hand.
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
 
