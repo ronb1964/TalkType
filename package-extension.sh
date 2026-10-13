@@ -87,29 +87,9 @@ fi
 # Refresh the extension's entry in SHA256SUMS.txt so the checksums file
 # published with the release always matches the freshly-packaged zip.
 cd "$SCRIPT_DIR"
-if [ -f "SHA256SUMS.txt" ]; then
-    # grep exits 1 when it selects no lines, which is a legitimate outcome here
-    # (the file may contain only the extension's own entry). It exits 2 on a
-    # real error — unreadable file, bad usage. The old `|| true` treated both
-    # the same and then moved the result into place regardless, so an I/O error
-    # would have replaced SHA256SUMS.txt with an empty file, silently dropping
-    # the AppImage checksum that the in-app updater verifies against.
-    # `|| _grep_status=$?` serves two purposes: it captures the real exit code,
-    # and it keeps `set -e` from aborting on the legitimate exit-1 case.
-    _grep_status=0
-    grep -v -e "tuxtalk-gnome-extension.zip" -e "talktype-gnome-extension.zip" SHA256SUMS.txt > SHA256SUMS.txt.tmp || _grep_status=$?
-
-    if [ "$_grep_status" -le 1 ]; then
-        # 0 = other entries kept, 1 = nothing else in the file. Both are fine.
-        mv SHA256SUMS.txt.tmp SHA256SUMS.txt
-    else
-        rm -f SHA256SUMS.txt.tmp
-        echo "❌ Error: could not read SHA256SUMS.txt (grep exited $_grep_status)." >&2
-        echo "   Leaving the existing file untouched rather than truncating it." >&2
-        exit 1
-    fi
-fi
-sha256sum "tuxtalk-gnome-extension.zip" "talktype-gnome-extension.zip" >> SHA256SUMS.txt
+# shellcheck source=packaging/checksums.sh
+source "$SCRIPT_DIR/packaging/checksums.sh"
+replace_checksums "$SCRIPT_DIR" "tuxtalk-gnome-extension.zip" "talktype-gnome-extension.zip"
 echo "🔐 Updated SHA256SUMS.txt entries for the extension zips"
 
 # Show zip contents

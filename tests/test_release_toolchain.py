@@ -19,6 +19,9 @@ REQUIRED_IN_GIT = [
     "build-release.sh",        # step 3
     "container-build.sh",      # called by build-release.sh
     "package-extension.sh",    # step 10
+    "build-deb.sh",            # step 10
+    "build-rpm.sh",            # step 10
+    "packaging/checksums.sh",  # sourced by the three step 10 scripts
     "fresh-start-for-testing.sh",  # step 6
 ]
 

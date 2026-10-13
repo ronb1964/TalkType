@@ -67,4 +67,4 @@ jobs:
         run: lint-venv/bin/ruff check --select F src/tuxtalk
 
       - name: Shell scripts
-        run: lint-venv/bin/shellcheck -S warning *.sh packaging/collect-licenses.sh packaging/flatpak/build-flatpak.sh
+        run: lint-venv/bin/shellcheck -S warning *.sh packaging/*.sh packaging/flatpak/build-flatpak.sh

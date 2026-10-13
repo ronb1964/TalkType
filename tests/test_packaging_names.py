@@ -30,7 +30,7 @@ def test_the_extension_zip_ships_under_both_names_with_both_checksums():
     s = _read("package-extension.sh")
     assert 'OUTPUT_ZIP="$SCRIPT_DIR/tuxtalk-gnome-extension.zip"' in s
     assert 'cp "$OUTPUT_ZIP" "$COMPAT_ZIP"' in s
-    assert 'sha256sum "tuxtalk-gnome-extension.zip" "talktype-gnome-extension.zip"' in s
+    assert 'replace_checksums "$SCRIPT_DIR" "tuxtalk-gnome-extension.zip" "talktype-gnome-extension.zip"' in s
     # The folder inside keeps the UUID: a new one is a new extension.
     assert 'zip -r tuxtalk-gnome-extension.zip talktype@ronb1964.github.io' in s
 
