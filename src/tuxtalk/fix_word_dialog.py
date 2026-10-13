@@ -36,6 +36,10 @@ def show_fix_word_dialog(index=0, copy_text=None):
     global _active_dialog
     entries = get_entries()
     if _active_dialog is not None:
+        # *index* points into the history as it is now, which may have grown
+        # since the window opened.
+        if entries:
+            _active_dialog.set_entries(entries)
         _active_dialog.select_entry(index)
         from .raise_window import raise_window
         raise_window(_active_dialog.window)
@@ -79,11 +83,10 @@ class _FixWordDialog:
         for text in entries:
             self.combo.append_text(preview(text, 70))
         self.combo.connect("changed", lambda c: self._load(c.get_active()))
-        if len(entries) > 1:
-            row = Gtk.Box(spacing=8)
-            row.pack_start(Gtk.Label(label="Dictation:"), False, False, 0)
-            row.pack_start(self.combo, True, True, 0)
-            box.pack_start(row, False, False, 0)
+        self.combo_row = Gtk.Box(spacing=8)
+        self.combo_row.pack_start(Gtk.Label(label="Dictation:"), False, False, 0)
+        self.combo_row.pack_start(self.combo, True, True, 0)
+        box.pack_start(self.combo_row, False, False, 0)
 
         hint = Gtk.Label(xalign=0)
         hint.set_line_wrap(True)
@@ -148,8 +151,19 @@ class _FixWordDialog:
 
         self.select_entry(index)
         win.show_all()
+        self.combo_row.set_visible(len(entries) > 1)
 
     # --- which dictation --------------------------------------------------
+
+    def set_entries(self, entries):
+        """Show *entries*, the recent dictations as they are now."""
+        self.entries = entries
+        # remove_all() leaves nothing active, so the next select_entry()
+        # always loads its dictation (_load ignores the -1 in between).
+        self.combo.remove_all()
+        for text in entries:
+            self.combo.append_text(preview(text, 70))
+        self.combo_row.set_visible(len(entries) > 1)
 
     def select_entry(self, index):
         index = index if 0 <= index < len(self.entries) else 0
