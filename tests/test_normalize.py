@@ -719,3 +719,24 @@ def test_no_second_period_after_a_closing_quote_or_bracket(said, expected):
 
 def test_a_closing_bracket_without_punctuation_still_gets_a_period():
     assert normalize_text("see the note close parenthesis") == "See the note)."
+
+
+# Every hyphen had all whitespace around it squeezed out, so a dash the
+# engine wrote as a pause joined two words ("going-you know-to") and a tab
+# next to a spoken dash was deleted.
+def test_an_engine_dash_between_words_keeps_its_spaces():
+    assert (normalize_text("I was going - you know - to the store")
+            == "I was going - you know - to the store.")
+
+
+def test_a_tab_before_a_spoken_dash_is_kept():
+    assert normalize_text("first tab dash second") == "First \t-second."
+
+
+@pytest.mark.parametrize("said, expected", [
+    ("well dash known author", "Well-known author."),
+    ("e hyphen mail", "E-mail."),
+    ("the plan colon dash next", "The plan: next."),
+])
+def test_a_spoken_dash_still_joins_the_words(said, expected):
+    assert normalize_text(said) == expected

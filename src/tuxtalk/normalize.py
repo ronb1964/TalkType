@@ -166,7 +166,10 @@ _SINGLE_WORD_REPLACEMENTS = [
     # "em dash" MUST run before the bare hyphen/dash rule — otherwise
     # "em dash" is rewritten to "em -" first and this pattern never matches.
     (re.compile(r"\bem\s*dash\b", re.IGNORECASE), "—"),
-    (re.compile(r"\bhyphen\b|\bdash\b", re.IGNORECASE), "-"),
+    # A spoken hyphen joins the words beside it right away ("well dash
+    # known" -> "well-known"). Only spaces are taken, so a tab stays, and a
+    # " - " the engine wrote for a pause is never mistaken for one.
+    (re.compile(r" *\b(?:hyphen|dash)\b *", re.IGNORECASE), "-"),
 ]
 
 # --- 3) Quotes/brackets spacing ---
@@ -178,7 +181,7 @@ _RE_OPEN_QUOTE_COMMA = re.compile(r"\u201c\s*,+")
 _RE_COMMA_CLOSE_QUOTE = re.compile(r",+\s*\u201d")
 
 # --- 4) Space before punctuation ---
-_RE_SPACE_BEFORE_PUNCT = re.compile(r"\s+([,;:.?!…—-])")
+_RE_SPACE_BEFORE_PUNCT = re.compile(r"\s+([,;:.?!…—])")
 
 # --- 5) Normalize punctuation combos ---
 _RE_WEAK_BEFORE_STRONG = re.compile(r"[,;:]\s*([.?!…])")
@@ -198,9 +201,8 @@ _RE_REPEATED_BANG_Q = re.compile(r"([!?])\1+")
 # --- 7) Space after sentence enders ---
 _RE_SPACE_AFTER_ENDER = re.compile(r"([.?!…])(?!\s|$|[\u201d\)\]\}])")
 
-# --- 8) Em dash / hyphen spacing ---
+# --- 8) Em dash spacing ---
 _RE_EM_DASH_SPACE = re.compile(r"\s*—\s*")
-_RE_HYPHEN_SPACE = re.compile(r"\s*-\s*")
 
 # --- 9) Tidy spaces around newlines ---
 _RE_SPACE_BEFORE_NEWLINE = re.compile(r"[ \t]+\n")
@@ -533,7 +535,9 @@ def normalize_text(text: str, auto_period: bool = True) -> str:
     text = _RE_COMMA_BEFORE_PERIOD.sub(".", text)
     text = _RE_MULTIPLE_COMMAS.sub(",", text)
     text = _RE_DASH_COLON.sub(":", text)
-    text = _RE_COLON_DASH.sub(":", text)
+    # The spoken dash took the space after it, so give the colon one back.
+    text = _RE_COLON_DASH.sub(
+        lambda m: ": " if m.string[m.end():m.end() + 1].isalnum() else ":", text)
 
     # --- 6) Collapse punctuation runs; handle ellipsis ---
     text = _RE_MANY_DOTS.sub("…", text)
@@ -553,9 +557,8 @@ def normalize_text(text: str, auto_period: bool = True) -> str:
     # (callable repl skips decimals like 3.5 and abbreviations like U.S.)
     text = _RE_SPACE_AFTER_ENDER.sub(_space_after_ender_repl, text)
 
-    # --- 8) Em dash spacing; tight hyphens ---
+    # --- 8) Em dash spacing (spoken hyphens were joined in step 2) ---
     text = _RE_EM_DASH_SPACE.sub(" — ", text)
-    text = _RE_HYPHEN_SPACE.sub("-", text)
 
     # --- 9) Tidy spaces around newlines ---
     text = _RE_SPACE_BEFORE_NEWLINE.sub("\n", text)
