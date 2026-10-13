@@ -251,6 +251,50 @@ def _about_icon():
     return image
 
 
+def _themed_icon(*names):
+    """The first of these icon names the current icon theme has, or None."""
+    theme = Gtk.IconTheme.get_default()
+    if theme is None:
+        return None
+    return next((name for name in names if theme.has_icon(name)), None)
+
+
+class _IconToggleItem(Gtk.ImageMenuItem):
+    """An on/off tray menu item showing a checkmark icon instead of a checkbox.
+
+    Keeps Gtk.CheckMenuItem's get_active()/set_active() so callers don't
+    change. set_active() only redraws, like the tray's old _updating_toggle
+    guard; a click flips the state and calls on_toggle(item).
+    """
+
+    def __init__(self, label, on_toggle):
+        super().__init__(label=label)
+        self._active = False
+        self._on_toggle = on_toggle
+        self._check_icon = _themed_icon("object-select-symbolic", "emblem-ok-symbolic")
+        self.set_always_show_image(True)
+        self.connect("activate", self._clicked)
+        self._redraw()
+
+    def get_active(self):
+        return self._active
+
+    def set_active(self, active):
+        self._active = bool(active)
+        self._redraw()
+
+    def _clicked(self, _item):
+        self.set_active(not self._active)
+        self._on_toggle(self)
+
+    def _redraw(self):
+        if self._active and self._check_icon:
+            self.set_image(Gtk.Image.new_from_icon_name(self._check_icon, Gtk.IconSize.MENU))
+        else:
+            # An empty image: the desktop leaves the icon column blank
+            self.set_image(Gtk.Image())
+
+
 def engine_status(cfg_model, cfg_device, running=None):
     """(model id, device text) for the tray's "Active Model" and "Device" lines.
 
@@ -1983,8 +2027,11 @@ class DictationTray:
         )
 
         # Service toggle and status displays
-        self.service_toggle = Gtk.CheckMenuItem(label="Dictation Service")
-        self.service_toggle.connect("toggled", self.toggle_service)
+        # A checkmark ICON rather than a Gtk.CheckMenuItem: KDE gives
+        # checkboxes their own column beside the icon column, so a real
+        # checkbox sat to the left of the Preferences gear with every label
+        # pushed further right. With no checkbox the two share one column.
+        self.service_toggle = _IconToggleItem("Dictation Service", self.toggle_service)
         self.model_display_item = Gtk.MenuItem(label="Active Model: Loading...")
         self.model_display_item.set_sensitive(False)
         self.device_display_item = Gtk.MenuItem(label="Device: Loading...")
@@ -2002,8 +2049,8 @@ class DictationTray:
         restart_item = Gtk.MenuItem(label="Restart Service")
         restart_item.connect("activate", self.restart_service)
 
-        # Action items
-        prefs_item = Gtk.MenuItem(label="Preferences...")
+        # Action items. Preferences alone carries a gear so it is easy to spot.
+        prefs_item = self._gear_menu_item("Preferences...")
         voice_cmds_item = Gtk.MenuItem(label="Voice Commands...")
         stats_item = Gtk.MenuItem(label="Your Stats...")
         help_item = Gtk.MenuItem(label="Help...")
@@ -2040,6 +2087,23 @@ class DictationTray:
         self.update_menu_display()
         return menu
     
+    @staticmethod
+    def _gear_menu_item(label):
+        """A menu item with the desktop's settings gear in front of it.
+
+        The tray menu is drawn by the desktop, not by GTK: AppIndicator sends
+        only the label and an icon NAME, so bold or colour can't survive, but
+        an icon does. "emblem-system-symbolic" is the round gear in both
+        Breeze (KDE) and Adwaita (GNOME, Mint); KDE's "configure" is sliders.
+        """
+        name = _themed_icon("emblem-system-symbolic", "preferences-system-symbolic")
+        if name is None:
+            return Gtk.MenuItem(label=label)
+        item = Gtk.ImageMenuItem(label=label)
+        item.set_image(Gtk.Image.new_from_icon_name(name, Gtk.IconSize.MENU))
+        item.set_always_show_image(True)
+        return item
+
     def refresh_menu(self):
         """Rebuild the tray menu (after onboarding has changed the setup)."""
         self.indicator.set_menu(self.build_menu())

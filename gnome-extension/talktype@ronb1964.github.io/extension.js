@@ -440,8 +440,10 @@ class TuxTalkIndicator extends PanelMenu.Button {
 
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
-        // Preferences
-        let prefsItem = new PopupMenu.PopupMenuItem('Preferences...');
+        // Preferences, with a gear so it is easy to spot (the GTK tray
+        // shows the same gear in front of it)
+        // ("preferences-system-symbolic" is a wrench and screwdriver in Adwaita)
+        let prefsItem = new PopupMenu.PopupImageMenuItem('Preferences...', 'emblem-system-symbolic');
         prefsItem.connect('activate', () => {
             this._proxy?.OpenPreferencesRemote();
         });
