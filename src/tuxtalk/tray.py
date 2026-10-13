@@ -646,7 +646,7 @@ class DictationTray:
 
         The kill/wait/relaunch runs on a background thread so the 1-second
         wait for processes to die never freezes the tray/menu (this fires on
-        every injection-mode and performance-preset change).
+        every model and performance-preset change).
         """
         # CRITICAL: Never restart service during onboarding
         if self.onboarding_in_progress:
@@ -655,7 +655,7 @@ class DictationTray:
 
         # Re-entrancy guard: the old synchronous version was serialized by the
         # blocking sleep on the main loop. Now that the work runs on a thread,
-        # a second restart (injection-mode + preset changes both trigger one)
+        # a second restart (model + preset changes both trigger one)
         # firing within the 1s window could kill the freshly-launched service
         # or leave two backends both grabbing the hotkey (double-typing).
         if getattr(self, '_restarting', False):
@@ -801,7 +801,7 @@ class DictationTray:
             return
 
         try:
-            from .config import load_config, save_config
+            from .config import load_config, needs_service_restart, save_config
             cfg = load_config()
             cfg.injection_mode = mode
 
@@ -826,8 +826,11 @@ class DictationTray:
                 except Exception as e:
                     logger.error(f"Failed to emit injection mode change: {e}")
 
-            # Restart service so new injection mode takes effect immediately
-            self.restart_service(None)
+            # The running service rereads injection_mode from config.toml within
+            # about a second. A restart would reload the model and leave
+            # dictation dead for several seconds for no gain.
+            if needs_service_restart({"injection_mode"}):
+                self.restart_service(None)
 
         except Exception as e:
             logger.error(f"Failed to set injection mode: {e}")
