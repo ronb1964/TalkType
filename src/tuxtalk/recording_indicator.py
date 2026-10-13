@@ -309,9 +309,17 @@ class RecordingIndicator(Gtk.Window):
         GLib.idle_add(_do_hide)
 
     def start_recording(self):
-        """Start recording mode"""
-        self.is_recording = True
-        self.start_time = time.time()
+        """Start recording mode.
+
+        Queued on the GTK loop like show and hide: set straight away from the
+        recording thread, a hide still pending from the previous dictation
+        would run after it and clear it again."""
+        def _do_start():
+            self.is_recording = True
+            self.start_time = time.time()
+            return False
+
+        GLib.idle_add(_do_start)
 
     def stop_recording(self):
         """Stop recording mode"""
@@ -456,17 +464,18 @@ class RecordingIndicator(Gtk.Window):
             st = indicator_styles
             core = st.BACKING_LEVELS.get(self.backing, 0.5)
             color = self._resolved_color()
+            # A copy: the audio thread extends and trims the live list while
+            # this draws.
+            wave = list(self.waveform) if self.waveform is not None else []
             if self.style == "waveform":
-                st.draw_waveform(cr, width, height,
-                                 self.waveform if self.waveform is not None else [],
+                st.draw_waveform(cr, width, height, wave,
                                  self.audio_level, color, core, self.sensitivity)
             elif self.style == "bars":
                 st.draw_bars(cr, width, height,
                              self.spectrum if self.spectrum is not None else [],
                              color, core)
             elif self.style == "radial":
-                st.draw_radial(cr, width, height,
-                               self.waveform if self.waveform is not None else [],
+                st.draw_radial(cr, width, height, wave,
                                self.audio_level, color, core, self.sensitivity,
                                gain=self._radial_gain)
             return
