@@ -2860,6 +2860,21 @@ _EDIT_NOTICES = {
 }
 
 
+# The same problems in a few words, for the label floating over the window
+# (screen_message): glanced at, gone in seconds. The notification keeps the
+# full sentence, in the notification history.
+_EDIT_LABELS = {
+    "not_installed": "Turn on voice editing's AI in Preferences",
+    "not_ready": "The AI is still starting",
+    "no_selection": "Select some text first",
+    "too_long": "Too much text, select less",
+    "no_instruction": "Didn't catch what to change",
+    "no_answer": "No change, try other words",
+    "terminal": "Can't edit in a terminal",
+    "window_changed": "Window changed, see Recent Dictations",
+}
+
+
 def _edit_problem(kind: str, beeps_on: bool) -> None:
     """Tell the user a voice edit didn't happen, and why. Always shown, like
     _report_undelivered: otherwise nothing at all would seem to happen."""
@@ -2871,7 +2886,7 @@ def _edit_problem(kind: str, beeps_on: bool) -> None:
     # The notification stays as a backup, in the notification history.
     try:
         from . import screen_message, window_geometry
-        screen_message.show(message, window_geometry.active_window_center())
+        screen_message.show(_EDIT_LABELS[kind], window_geometry.active_window_center())
     except Exception as e:
         logger.debug(f"Could not float the message over the window: {e}")
     _notify("TuxTalk", message)

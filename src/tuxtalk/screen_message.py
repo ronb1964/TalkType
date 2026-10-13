@@ -15,9 +15,18 @@ from .logger import setup_logger
 
 logger = setup_logger(__name__)
 
-SHOW_SECONDS = 3.0
+# On screen long enough to read: a few seconds plus a little per word, so a
+# short label stays 4 s and a longer one up to 8 (Ron, 2026-10-12: 3 s faded
+# before he had read it). Keep the text short all the same: it's glanced at.
+MIN_SECONDS, MAX_SECONDS, SECONDS_PER_WORD = 4.0, 8.0, 0.4
 _PAD_X, _PAD_Y = 18, 10
 _current = None          # the label on screen, replaced by the next one
+
+
+def reading_seconds(text):
+    """How long *text* stays on screen."""
+    seconds = 2.0 + SECONDS_PER_WORD * len(text.split())
+    return round(min(MAX_SECONDS, max(MIN_SECONDS, seconds)), 1)
 
 
 def place(width, height, center, monitor):
@@ -107,7 +116,7 @@ def _show_now(text, center):
                 _current = None
             win.destroy()
             return False
-        GLib.timeout_add(int(SHOW_SECONDS * 1000), done)
+        GLib.timeout_add(int(reading_seconds(text) * 1000), done)
     except Exception as e:
         logger.warning(f"Could not show the message on screen: {e}")
     return False

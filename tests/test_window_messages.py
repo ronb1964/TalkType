@@ -160,4 +160,27 @@ def test_a_voice_edit_problem_floats_over_the_active_window(monkeypatch):
     monkeypatch.setattr(app, "_notify", lambda *a: None)
     monkeypatch.setattr(app, "_beep", lambda *a: None)
     app._edit_problem("no_selection", False)
-    assert shown and shown[0][1] == (500, 500) and "Select the text" in shown[0][0]
+    assert shown and shown[0][1] == (500, 500) and shown[0][0] == "Select some text first"
+
+
+# --- Ron, 2026-10-12: it faded before he finished reading it ---------------------------------
+
+def test_long_enough_to_read():
+    from tuxtalk import screen_message
+    assert screen_message.reading_seconds("Select some text first") == 4.0
+    assert 4.0 < screen_message.reading_seconds("Window changed, so the rewrite is in Recent Dictations") <= 8.0
+    assert screen_message.reading_seconds(" ".join(["word"] * 60)) == 8.0
+
+
+def test_the_label_says_it_short_and_the_notification_in_full(monkeypatch):
+    from tuxtalk import app, screen_message
+    shown, notified = [], []
+    monkeypatch.setattr(screen_message, "show", lambda text, center=None: shown.append(text))
+    monkeypatch.setattr(wg, "active_window_center", lambda: (1, 1))
+    monkeypatch.setattr(app, "_notify", lambda title, msg: notified.append(msg))
+    monkeypatch.setattr(app, "_beep", lambda *a: None)
+    for kind in app._EDIT_NOTICES:
+        shown.clear(); notified.clear()
+        app._edit_problem(kind, False)
+        assert len(shown[0].split()) <= 7, (kind, shown[0])
+        assert notified[0] == app._EDIT_NOTICES[kind]
