@@ -116,6 +116,82 @@ def test_a_clipboard_that_cannot_be_read_is_not_touched(keeper, board, monkeypat
     assert board.restores == []
 
 
+@pytest.fixture
+def primary(monkeypatch):
+    """The primary selection (what was last highlighted), as wl-paste sees it."""
+    sel = {"text": "my highlighted words", "writes": []}
+
+    def write(text):
+        sel["text"] = text
+        sel["writes"].append(text)
+    monkeypatch.setattr(cb, "_read_primary", lambda: sel["text"])
+    monkeypatch.setattr(cb, "_wl_copy_primary", write)
+    return sel
+
+
+def paste_with_primary(keeper, board, primary, text):
+    """A paste into an unknown window, which puts the dictation on the
+    primary selection as well."""
+    keeper.before_paste()
+    keeper.before_primary()
+    board.data, board.mime = text.encode(), "text/plain;charset=utf-8"
+    primary["text"] = text
+    keeper.after_paste(text)
+
+
+def test_the_primary_selection_comes_back_too(keeper, board, primary):
+    """A middle-click after dictating pastes what the user highlighted, not
+    the dictation."""
+    paste_with_primary(keeper, board, primary, "dictated words")
+    run_pending(keeper)
+    assert primary["text"] == "my highlighted words"
+    assert board.data == b"what I copied"
+
+
+def test_two_quick_dictations_restore_the_original_primary(keeper, board, primary):
+    paste_with_primary(keeper, board, primary, "first")
+    paste_with_primary(keeper, board, primary, "second")
+    run_pending(keeper)
+    assert primary["text"] == "my highlighted words" and primary["writes"] == [
+        "my highlighted words"]
+
+
+def test_a_newer_highlight_is_left_alone(keeper, board, primary):
+    paste_with_primary(keeper, board, primary, "dictated words")
+    primary["text"] = "highlighted right after"
+    run_pending(keeper)
+    assert primary["text"] == "highlighted right after" and primary["writes"] == []
+
+
+def test_an_empty_primary_selection_is_cleared_again(keeper, board, primary):
+    primary["text"] = None
+    paste_with_primary(keeper, board, primary, "dictated words")
+    run_pending(keeper)
+    assert primary["writes"] == [None]
+
+
+def test_the_primary_comes_back_even_when_the_clipboard_cannot(keeper, board, primary,
+                                                                 monkeypatch):
+    monkeypatch.setattr(cb, "_read_clipboard", lambda: cb._NOTHING)
+    paste_with_primary(keeper, board, primary, "dictated words")
+    run_pending(keeper)
+    assert primary["text"] == "my highlighted words"
+    assert board.restores == []
+
+
+def test_a_paste_that_leaves_the_primary_alone_does_not_touch_it(keeper, board, primary):
+    paste(keeper, board, "dictated words")
+    run_pending(keeper)
+    assert primary["writes"] == []
+
+
+def test_the_unknown_window_paste_saves_the_primary_before_setting_it():
+    import pathlib
+    src = (pathlib.Path(cb.__file__).parent / "app.py").read_text()
+    body = src[src.index("def _paste_text("):src.index("def _determine_injection_method")]
+    assert body.index("before_primary()") < body.index("_copy_to_primary(text)")
+
+
 # --- marking dictations sensitive --------------------------------------------------
 
 def test_dictations_are_marked_sensitive_when_wl_copy_can(monkeypatch):

@@ -203,12 +203,17 @@ class ClipboardKeeper:
     the user copied in the meantime is left alone. A second paste before the
     restore keeps the original saved copy, so the user gets back what they
     copied, not the first dictation. Never raises: a clipboard that can't be
-    read is simply not restored."""
+    read is simply not restored.
+
+    before_primary() does the same for the primary selection, for a paste
+    that puts the dictation there too, so a middle-click still pastes what
+    the user last highlighted."""
 
     def __init__(self, schedule=_timer, delay=RESTORE_DELAY_S):
         self._schedule, self._delay = schedule, delay
         self._lock = threading.Lock()
         self._saved = _NOTHING
+        self._primary = _NOTHING    # the user's primary selection: text, or None if empty
         self._cancel = None
         self._generation = 0
 
@@ -227,10 +232,18 @@ class ClipboardKeeper:
                 return
             self._saved = self._read()
 
+    def before_primary(self):
+        """Save the primary selection before the dictation goes on it too. A
+        restore still pending means it holds the last dictation, so the copy
+        already saved is the user's."""
+        with self._lock:
+            if self._primary is _NOTHING:
+                self._primary = _read_primary()
+
     def after_paste(self, text):
         """Schedule the restore, once the app has had time to read *text*."""
         with self._lock:
-            if self._saved is _NOTHING:
+            if self._saved is _NOTHING and self._primary is _NOTHING:
                 return
             generation = self._generation
             self._cancel = self._schedule(self._delay, lambda: self._restore(text, generation))
@@ -244,6 +257,9 @@ class ClipboardKeeper:
             if generation != self._generation:
                 return          # a newer paste took over; it will restore
             saved, self._saved, self._cancel = self._saved, _NOTHING, None
+            primary, self._primary = self._primary, _NOTHING
+            if primary is not _NOTHING:
+                _restore_primary(primary, text)
             if saved is _NOTHING:
                 return
             try:
@@ -255,6 +271,28 @@ class ClipboardKeeper:
                 return
             if _write_back(saved):
                 logger.info("Clipboard restored after paste")
+
+
+def _wl_copy_primary(text):
+    """Put *text* on the primary selection, or clear it when *text* is None."""
+    if text is None:
+        subprocess.run(["wl-copy", "--primary", "--clear"], timeout=3, check=True)
+    else:
+        subprocess.run(wl_copy_command() + ["--primary"], input=text.encode("utf-8"),
+                       timeout=3, check=True)
+
+
+def _restore_primary(saved, text):
+    """Put the user's primary selection back (clear it if *saved* is None),
+    unless something other than the dictation *text* is on it now."""
+    if _read_primary() not in (text, text.rstrip("\n")):
+        logger.info("Primary selection changed after the paste; leaving it as it is")
+        return
+    try:
+        _wl_copy_primary(saved)
+        logger.info("Primary selection restored after paste")
+    except Exception as e:
+        logger.warning(f"Couldn't restore the primary selection: {e}")
 
 
 # --- Voice editing: the text selected in the focused app -----------------------------

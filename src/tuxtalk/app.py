@@ -2043,7 +2043,11 @@ def _paste_text(text: str) -> bool:
                 # With the window unknown, the primary selection gets the text
                 # too, so the paste key works in a terminal as well.
                 focused_class = _query_focused_window_class()
-                primary_holds_text = focused_class is None and _copy_to_primary(text)
+                primary_holds_text = False
+                if focused_class is None:
+                    if keeping:
+                        _clipboard_keeper.before_primary()
+                    primary_holds_text = _copy_to_primary(text)
 
                 ydotool_start = time.time()
                 if not _send_paste_keystroke(focused_class, primary_holds_text):
