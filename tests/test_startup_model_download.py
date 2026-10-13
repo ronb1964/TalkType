@@ -43,6 +43,7 @@ def test_missing_cuda_files_use_the_processor_instead_of_crashing(monkeypatch):
     assert loaded == ["cpu"]
     assert settings.device == "cuda"          # the user's choice is kept
     assert notes and "CUDA" in notes[0][1]
+    assert "General, Device" in notes[0][1]   # where the CUDA download is offered
 
 
 def test_cancel_is_respected_on_an_nvidia_setup(monkeypatch):

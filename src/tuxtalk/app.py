@@ -3742,8 +3742,9 @@ def _guard_large_v3_without_cuda(cfg):
             print("large-v3 requires CUDA (not installed). Falling back to 'medium'.")
             cfg.model = "medium"
             _notify("TuxTalk", "Large-v3 needs the CUDA files, which aren't installed, so "
-                               "TuxTalk is using Medium for now. Download CUDA in "
-                               "Preferences, Advanced, to use Large-v3 again.")
+                               "TuxTalk is using Medium for now. Pick CUDA under "
+                               "Preferences, General, Device to download it and "
+                               "use Large-v3 again.")
     except Exception:
         pass  # If cuda_helper unavailable, let the existing error handling deal with it
 
@@ -3919,7 +3920,8 @@ def build_model(settings: Settings):
             # stays, since downloading CUDA again in Preferences fixes it.
             logger.warning("Device is CUDA but the CUDA libraries are missing; using the processor")
             _notify("TuxTalk", "The CUDA files are missing, so TuxTalk is using the processor "
-                                "for now. Download them again in Preferences, Advanced.")
+                                "for now. Pick CUDA under Preferences, General, Device to "
+                                "download them again.")
             settings = Settings(**{**vars(settings), "device": "cpu"})
 
     compute_type = "float16" if settings.device.lower() == "cuda" else "int8"
