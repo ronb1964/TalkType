@@ -28,17 +28,15 @@ try:
         with open(path, "rb") as f:
             return tomllib.load(f)
 except ImportError:
-    # Python < 3.11 fallback. There is deliberately NO hand-rolled parser
-    # beyond this: the old string-only fallback returned '5' instead of 5
-    # for spinbox values and crashed the window at startup.
+    # Python < 3.11. No hand-rolled parser beyond this: a string-only one
+    # returns '5' instead of 5, and the spinboxes crash on it.
     import toml
     def load_toml(path):
         with open(path, "r") as f:
             return toml.load(f)
 
-# Type coercion for on-disk config values. Configs written by the old
-# hand-rolled parser era (or hand-edited) can hold '5' where an int is
-# expected — Gtk.Adjustment(value='5') then crashes the window at startup.
+# Type coercion for on-disk config values. A hand-edited config can hold '5'
+# where an int is expected, and Gtk.Adjustment(value='5') crashes the window.
 _COERCE_BOOL_TRUE = ("true", "1", "yes", "on")
 
 def _coerce_config_types(config: dict) -> dict:
@@ -328,7 +326,7 @@ def model_setting_warning(model, device, language_mode, language, language_name=
     Parakeet can't run on CUDA: with that device it quietly uses the processor
     while Preferences says "CUDA (GPU)". And it knows 25 languages, detects the
     one spoken and ignores the language setting, so choosing Japanese with it
-    gets nothing useful. Both used to pass without a word.
+    gets nothing useful.
     """
     if model != "parakeet-v3":
         return ""
@@ -345,7 +343,7 @@ def model_setting_warning(model, device, language_mode, language, language_name=
 
 
 # F-keys that apps already use, named in the hotkey dropdowns so nobody picks
-# one blind: dictating with F5 also reloaded the browser page (Ron, 0.14.6).
+# one blind: dictating with F5 also reloads the page in a browser.
 HOTKEY_CLASHES = {
     "F1": "opens Help in many apps",
     "F5": "reloads the page in browsers",
@@ -364,8 +362,8 @@ def hotkey_change_message(cfg, changed, refused):
     """(text, offer the test) for the question after OK or Apply, or None.
 
     *changed*: the settings keys changed; *refused*: keys KDE already uses
-    (kwin_hotkeys.refused_since), None when unknown. First run tests the key;
-    a key changed in Preferences was simply accepted until 0.14.6.
+    (kwin_hotkeys.refused_since), None when unknown. A changed key is offered
+    the same test first run gives it.
     """
     roles = (("hotkey", "hold-to-talk key"), ("toggle_hotkey", "tap-to-start key"))
     lines = [f"Your {what} is now {cfg.get(key)}." for key, what in roles
@@ -374,7 +372,7 @@ def hotkey_change_message(cfg, changed, refused):
     if offer_test:
         lines.append("Try it once in the test to make sure it reaches TuxTalk. On some "
                      "laptops the F-keys change the brightness or volume unless you hold Fn.")
-        # So Not Now isn't a dead end (Ron, 0.14.6: the button was below the fold).
+        # So Not Now isn't a dead end: the Test Hotkeys button can be below the fold.
         lines.append("You can also test it later with Test Hotkeys, under the hotkeys on "
                      "the General tab.")
     # KDE reports keys in Qt's spelling (Super is "Meta"): map back to ours.
@@ -485,29 +483,21 @@ class PreferencesWindow:
             if os.path.exists(css_file):
                 css_provider.load_from_path(css_file)
 
-                # This provider MUST go on the screen, not on the window's own
-                # style context. A window-scoped provider does not reach that
-                # window's children — measured: a child button kept the theme
-                # default while a screen-wide provider styled it correctly. The
-                # stylesheet was attached to the window for years, so every rule
-                # in it except `window` silently did nothing.
-                #
-                # Screen scope alone would restyle every GTK window in this
-                # process, which is what the window scope was trying to avoid.
-                # Instead each selector in prefs_style.css is scoped to the
-                # .talktype-prefs class set below, so the stylesheet reaches the
-                # Preferences widgets and nothing else.
+                # This provider must go on the screen: one on the window's own
+                # style context does not reach the window's children. Each
+                # selector in prefs_style.css is scoped to the class set below,
+                # so the stylesheet styles Preferences and no other window.
                 self.window.get_style_context().add_class(PREFS_STYLE_CLASS)
                 Gtk.StyleContext.add_provider_for_screen(
                     Gdk.Screen.get_default(),
                     css_provider,
                     Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
                 )
-                print("✅ Loaded custom CSS styling (scoped to prefs window)")
+                print("Loaded custom CSS styling (scoped to prefs window)")
             else:
-                print(f"⚠️  CSS file not found: {css_file}")
+                print(f"CSS file not found: {css_file}")
         except Exception as e:
-            print(f"❌ Failed to load CSS: {e}")
+            print(f"Failed to load CSS: {e}")
 
     def _block_combo_scroll(self, combo):
         """
@@ -522,11 +512,8 @@ class PreferencesWindow:
     def load_config(self):
         """Load config from TOML file.
 
-        Defaults come from config.py's Settings dataclass — the single
-        source of truth shared with the service and tray. (The old private
-        defaults here had drifted: device 'cuda' vs 'cpu', hotkey 'F8'
-        vs '', so a missing config file made prefs display settings the
-        running service never had.)
+        Defaults come from config.py's Settings dataclass, shared with the
+        service and tray, so a missing key shows what the service really uses.
         """
         defaults = asdict(Settings())
 
@@ -571,9 +558,9 @@ class PreferencesWindow:
         """Rebuild the Device dropdown.
 
         CUDA is listed on every NVIDIA computer, like Vulkan, not only once
-        Advanced → Download CUDA Libraries has run: people looking for their
-        graphics card look here. Picking it before the download offers the
-        download (_on_device_changed).
+        its files are downloaded: people looking for their graphics card look
+        here. Picking it before the download offers the download
+        (_on_device_changed).
         """
         if not hasattr(self, 'device_combo'):
             return
@@ -588,8 +575,8 @@ class PreferencesWindow:
                 "cuda", self.config.get("model"), self._cuda_ready))
             tooltip_text += ("\n• CUDA (NVIDIA): much faster for the Whisper models, a one-time "
                              "1.4 GB download. Parakeet can't use it")
-        # Set to CUDA without its files, the service runs on the processor
-        # (4bb00a8), so the dropdown shows CPU rather than claim CUDA.
+        # Set to CUDA without its files, the service runs on the processor,
+        # so the dropdown shows CPU rather than claim CUDA.
         if self.config["device"] == "cuda" and not self._cuda_ready:
             self.config["device"] = "cpu"
             # Only the display changes: a saved "cuda" stays on disk unless
@@ -635,9 +622,6 @@ class PreferencesWindow:
         """
         # Keep `language` consistent with the Language Mode dropdown — the
         # service reads only `language` (empty string = auto-detect).
-        # Previously switching back to Auto-detect left the old forced
-        # language in the file, and switching to Manual saved '' unless the
-        # user actively re-picked a language from the combo.
         if self.config.get("language_mode", "auto") == "auto":
             self.config["language"] = ""
         elif hasattr(self, "lang_combo"):
@@ -672,25 +656,15 @@ class PreferencesWindow:
             autostart_changed = "launch_at_login" in changed_keys(self._config_at_open, self.config)
             merged = merge_changed_keys(self._config_at_open, self.config, base)
 
-            # Build the whole file in memory, then swap it into place in one
-            # step. Writing directly into CONFIG_PATH truncated it first, so an
-            # interruption — most realistically a full disk — left the user with
-            # an empty settings file and no hotkey. Shared with save_config()
-            # so both writers get the same guarantee.
-            # Serialise through config._toml_value, the SAME writer
-            # config.save_config() uses. This window used to have its own
-            # copy that wrapped strings in bare quotes, so a microphone
-            # named 'Blue Yeti "Nano" USB' produced a file that would not
-            # parse — and the next load quarantined it and reset every
-            # setting, hotkey included. One writer, one escaping rule.
+            # Same serialiser and atomic write as config.save_config(): one
+            # escaping rule, and a crash mid-write can't leave an empty file.
             lines = ["# TuxTalk config"]
             for key, value in merged.items():
                 lines.append(f"{key} = {_toml_value(value)}")
             write_text_atomic(CONFIG_PATH, "\n".join(lines) + "\n")
 
-            # Apply settings that live outside the config file, now that the
-            # save has actually happened. Doing this on toggle instead meant
-            # Cancel could not undo it.
+            # Apply settings that live outside the config file only now that
+            # the save has happened, so Cancel never has anything to undo.
             if autostart_changed:
                 try:
                     self._handle_autostart(bool(merged.get("launch_at_login", False)))
@@ -819,8 +793,8 @@ class PreferencesWindow:
         sw = Gtk.ScrolledWindow()
         sw.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         # The scrollbar gets its own strip beside the page. Drawn over the
-        # page (overlay scrolling) it sat inside the 20 px right margin, up
-        # against the dropdowns (Ron, 0.14.6).
+        # page (overlay scrolling) it would sit inside the 20 px right margin,
+        # up against the dropdowns.
         sw.set_overlay_scrolling(False)
         sw.add(widget)
         self._install_capture_scroll(sw)
@@ -831,10 +805,9 @@ class PreferencesWindow:
         reaches child widgets like ComboBox/Scale, which otherwise consume it (a combo
         changes selection, a slider changes value) and stop the page from scrolling.
 
-        This works at the GTK widget level via EventControllerScroll, NOT via GdkWindow
-        event masks — masks are honoured inconsistently across Wayland compositors
-        (kwin respects them, mutter does not), which is why the mask approach worked on
-        KDE but not GNOME. Capture-phase interception is compositor-independent.
+        This works at the GTK widget level via EventControllerScroll, not via GdkWindow
+        event masks, which Wayland compositors honour inconsistently (kwin does,
+        mutter does not). Capture-phase interception is compositor-independent.
         """
         try:
             ctrl = Gtk.EventControllerScroll.new(
@@ -875,7 +848,7 @@ class PreferencesWindow:
         header_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         header_row.set_margin_bottom(10)
         header_row.pack_start(model_header, True, True, 0)
-        # Which models run on which device: too many choices to know (Ron, 0.14.6).
+        # Which models run on which device: too many combinations to remember.
         compat_btn = Gtk.Button(label="What works with what?")
         compat_btn.connect("clicked", self._show_compatibility)
         header_row.pack_end(compat_btn, False, False, 0)
@@ -903,7 +876,7 @@ class PreferencesWindow:
             "• Better handling of accents and background noise"
         )
         grid.attach(model_label, 0, row, 1, 1)
-        # Check CUDA/GPU availability to gate large-v3
+        # CUDA/GPU availability decides what the large-v3 row says
         try:
             from . import cuda_helper as _ch
             _has_nvidia = self._has_nvidia()
@@ -936,8 +909,7 @@ class PreferencesWindow:
                     self.model_store.append([_mid,
                         "large-v3 — click to download required CUDA libraries", True])
                 else:
-                    # Selectable. On AMD/Intel, clicking it offers Vulkan; this
-                    # label used to say "requires NVIDIA GPU" even there.
+                    # Selectable. On AMD/Intel, clicking it offers Vulkan.
                     try:
                         from . import whisper_vulkan as _wv
                         _vk = _wv.is_offered()
@@ -951,8 +923,7 @@ class PreferencesWindow:
 
         model_combo = Gtk.ComboBox.new_with_model(self.model_store)
         # Column 0 holds the model id — without this, set_active_id() is a
-        # silent no-op (plain ComboBox has no id column by default), which
-        # broke every programmatic revert/select of the model dropdown.
+        # silent no-op (plain ComboBox has no id column by default).
         model_combo.set_id_column(0)
         model_combo.set_can_focus(True)
         self._block_combo_scroll(model_combo)
@@ -1060,15 +1031,15 @@ class PreferencesWindow:
         for code, name in languages:
             self.lang_combo.append(code, name)
         
-        # Set current selection — default to English if unset or previously set
-        # to auto-detect (empty string, which no longer exists in this list)
+        # Set current selection — English when unset or empty (empty means
+        # auto-detect, which this list doesn't offer)
         current_lang = self.config.get("language", "") or "en"
         self.lang_combo.set_active_id(current_lang)
         if self.lang_combo.get_active_id() is None:
             self.lang_combo.set_active_id("en")  # Safe fallback
 
         self.lang_combo.connect("changed", lambda x: self.update_config("language", x.get_active_id()))
-        # Tooltip moved to label to avoid interference with dropdown popup
+        # The tooltip is on the label: on the combo it gets in the way of the popup
         grid.attach(self.lang_combo, 1, row, 1, 1)
         row += 1
 
@@ -1086,8 +1057,7 @@ class PreferencesWindow:
         row += 1
 
         # The setup first run recommends, one click away (Tray → Performance →
-        # Recommended does the same). Ron, 0.14.6: wandering off to CUDA and
-        # back left no easy way home without closing Preferences.
+        # Recommended does the same), so trying other settings has an easy way back.
         rec_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         rec_row.set_margin_top(8)
         self.recommended_label = Gtk.Label(xalign=0)
@@ -1141,11 +1111,11 @@ class PreferencesWindow:
         # be written back into self.config.
 
         self.hotkey_combo.connect("changed", lambda x: self.update_config("hotkey", x.get_active_id()))
-        # Tooltip moved to label to avoid interference with dropdown popup
+        # The tooltip is on the label: on the combo it gets in the way of the popup
         grid.attach(self.hotkey_combo, 1, row, 1, 1)
         row += 1
         
-        # Toggle hotkey (initially hidden for hold mode)
+        # Tap-to-toggle hotkey (active alongside the hold key)
         self.toggle_label = Gtk.Label(label="Toggle Hotkey 💡:", xalign=0)
         self.toggle_label.set_tooltip_text("Press once to start recording, press again to stop.\nBoth hotkeys are always active simultaneously.\nRecommended: F9 (default).")
         self.toggle_combo = Gtk.ComboBoxText()
@@ -1161,7 +1131,7 @@ class PreferencesWindow:
         self._apply_hotkey_fallbacks(hotkeys)
 
         self.toggle_combo.connect("changed", lambda x: self.update_config("toggle_hotkey", x.get_active_id()))
-        # Tooltip moved to label to avoid interference with dropdown popup
+        # The tooltip is on the label: on the combo it gets in the way of the popup
 
         # Attach toggle elements to grid
         grid.attach(self.toggle_label, 0, row, 1, 1)
@@ -1214,7 +1184,7 @@ class PreferencesWindow:
         # uses evdev, which the sandbox blocks. Hide the editable controls and
         # point the user to where the keys actually live. self.hotkey_combo /
         # self.toggle_combo still exist (hidden) so the save/apply paths that
-        # read them keep working — their values are simply inert under Backend B.
+        # read them keep working — their values simply go unused there.
         if os.environ.get("FLATPAK_ID"):
             from .desktop_detect import flatpak_hotkey_hint
             for w in (self.hotkey_label, self.hotkey_combo,
@@ -1548,7 +1518,7 @@ class PreferencesWindow:
         current_size = self.config.get("indicator_size", "medium")
         size_combo.set_active_id(current_size)
         size_combo.connect("changed", lambda x: self.update_config("indicator_size", x.get_active_id()))
-        # Tooltip moved to label to avoid interference with dropdown popup
+        # The tooltip is on the label: on the combo it gets in the way of the popup
         grid.attach(size_combo, 1, row, 1, 1)
         row += 1
 
@@ -1574,9 +1544,8 @@ class PreferencesWindow:
         grid.attach(style_combo, 1, row, 1, 1)
         row += 1
 
-        # Color mode — two real choices: match the desktop accent, or pick a
-        # color. Cyan is no longer its own mode; the classic cyan lives on as
-        # the first preset swatch in the picker below. American spelling throughout.
+        # Color mode — two choices: match the desktop accent, or pick a color.
+        # The classic cyan is the first preset swatch in the picker below.
         color_mode_label = Gtk.Label(label="  Indicator color:", xalign=0)
         grid.attach(color_mode_label, 0, row, 1, 1)
         color_mode_combo = Gtk.ComboBoxText()
@@ -1584,7 +1553,7 @@ class PreferencesWindow:
         self._block_combo_scroll(color_mode_combo)
         color_mode_combo.append("system", "Use system accent color")
         color_mode_combo.append("custom", "Custom color")
-        # A pre-migration config could still hold 'cyan'; show it as Custom.
+        # An older config can still hold 'cyan'; show it as Custom.
         _mode = self.config.get("indicator_color_mode", "custom")
         color_mode_combo.set_active_id(_mode if _mode in ("system", "custom") else "custom")
         self._color_mode_combo = color_mode_combo
@@ -1714,12 +1683,10 @@ class PreferencesWindow:
         position_combo.set_active_id(current_position)
         position_combo.connect("changed", lambda x: self.update_config("indicator_position", x.get_active_id()))
 
-        # Positioning depends on the indicator getting XWayland, NOT on the
-        # session type and NOT on the GNOME extension. The tray launches the
+        # Positioning depends on the indicator getting XWayland, not on the
+        # session type or the GNOME extension. The tray launches the
         # dictation service with GDK_BACKEND=x11,wayland, so this works on a
-        # Wayland desktop with no extension installed — which is why the old
-        # `is_wayland and not has_extension` test greyed the control out on
-        # machines where it demonstrably worked.
+        # Wayland desktop with no extension installed.
         from .recording_indicator import positioning_available
 
         if positioning_available():
@@ -1734,8 +1701,7 @@ class PreferencesWindow:
         grid.attach(position_combo, 1, row, 1, 1)
         row += 1
 
-        # Warn only when positioning genuinely cannot work. The old message sent
-        # users to install a GNOME extension that never affected positioning.
+        # Warn only when positioning genuinely cannot work.
         if not positioning_available():
             warning_label = Gtk.Label(label="  ⚠️ XWayland is not available, so the indicator always appears centred", xalign=0)
             warning_label.set_line_wrap(True)
@@ -1746,8 +1712,7 @@ class PreferencesWindow:
             row += 1
 
         # Offsets. Which way each box moves the indicator is written right
-        # under it: it used to be only a tooltip on the box, which Ron looked
-        # for on the label and never found (0.14.7). Vertical shows up as
+        # under it, where people look, rather than in a tooltip. Up shows as
         # positive; see OFFSET_DISPLAY_SIGN.
         can_move = positioning_available()
 
@@ -1849,7 +1814,7 @@ class PreferencesWindow:
         inject_combo.append("paste", "Clipboard Paste")
         inject_combo.set_active_id(self.config["injection_mode"])
         inject_combo.connect("changed", lambda x: self.update_config("injection_mode", x.get_active_id()))
-        # Tooltip moved to label to avoid interference with dropdown popup
+        # The tooltip is on the label: on the combo it gets in the way of the popup
         # Host only: the Flatpak always types through the libei portal, so
         # Auto/Type/Paste don't apply — don't show the selector there.
         if not os.environ.get("FLATPAK_ID"):
@@ -2021,8 +1986,8 @@ class PreferencesWindow:
         grid.attach(self.gpu_status_label, 0, row, 2, 1)
         row += 1
 
-        # CUDA Status Label. Its download is no longer a button here: CUDA is
-        # chosen like Vulkan, in General → Device, which offers the download.
+        # CUDA Status Label. There is no download button here: CUDA is chosen
+        # like Vulkan, in General → Device, which offers the download.
         self.cuda_status_label = Gtk.Label(label="", xalign=0)
         self.cuda_status_label.set_line_wrap(True)
         self.cuda_status_label.set_margin_start(10)
@@ -2062,7 +2027,7 @@ class PreferencesWindow:
         grid.attach(typing_header, 0, row, 2, 1)
         row += 1
 
-        # The Typing Setup body is host (Backend A) only — it configures
+        # The Typing Setup body is host-only — it configures
         # /dev/uinput permissions for ydotool. The Flatpak types through the
         # libei portal (nothing to configure), so show a one-line note instead of
         # a "Fix Typing Permissions" button that can't do anything.
@@ -2108,8 +2073,8 @@ class PreferencesWindow:
             GLib.timeout_add(600, self._initial_typing_check)
 
         # Everything from here down is about the GNOME Shell extension. On KDE
-        # and other desktops it could only ever say "not available" above
-        # three greyed-out buttons, so it is hidden there (see end of method).
+        # and other desktops it can only say "not available" above three
+        # greyed-out buttons, so it is hidden there (see end of method).
         # Hidden rather than skipped: install/uninstall code still updates
         # these widgets, and must not trip over missing attributes.
         # Add horizontal separator before Extensions section
@@ -2168,7 +2133,7 @@ class PreferencesWindow:
         row += 1
 
         # ===== TUXTALK LABS =====
-        # Experimental features (Ron, 2026-10-12): they work but are still being
+        # Experimental features: they work but are still being
         # refined, so they live here with a note saying so, the Help page about
         # them, and a feedback link. Hidden in the Flatpak: its portal input
         # can't see Shift or send Ctrl+C, so none of them work there yet.
@@ -2358,6 +2323,7 @@ class PreferencesWindow:
         return path
 
     def _show_backup_folder(self):
+        """Show the backup folder (home shortened to ~), or 'not chosen'."""
         from .settings_backup import backup_folder
         folder = backup_folder()
         if folder:
@@ -2617,7 +2583,7 @@ class PreferencesWindow:
     def select_tab(self, name):
         """Show the tab whose label is *name* (case-insensitive). Looked up by
         label so adding a tab can't make --tab or bring_to_front open the wrong one."""
-        # The Snippets tab was called Commands until 0.15.0.
+        # Older callers still ask for the Snippets tab by its former name.
         name = {"commands": "snippets"}.get(name.lower(), name)
         for i in range(self.notebook.get_n_pages()):
             label = self.notebook.get_tab_label_text(self.notebook.get_nth_page(i)) or ""
@@ -2782,6 +2748,7 @@ class PreferencesWindow:
         self.stats_chart.queue_draw()
 
     def _typing_wpm(self):
+        """The typing speed in the Stats tab's box, or the saved one before it exists."""
         from . import stats as stats_module
         if hasattr(self, "typing_wpm_spin"):
             return stats_module.clamp_typing_wpm(self.typing_wpm_spin.get_value_as_int())
@@ -2910,8 +2877,8 @@ class PreferencesWindow:
         vbox.pack_start(version_row, False, False, 0)
 
         # The result of a check, with its Download & Install / View on GitHub
-        # / Update Extension buttons. Hidden until a check runs: empty, it
-        # took a fifth of the page to say "Click Check for Updates".
+        # / Update Extension buttons. Hidden until a check runs, so the page
+        # spends no space on an empty box.
         self.update_status_frame = Gtk.Frame(label="Update Status")
         self.update_status_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=5)
         for side in ("start", "end", "top", "bottom"):
@@ -3456,6 +3423,7 @@ class PreferencesWindow:
         self._commands_loaded = self._commands_from_store()
 
     def _watch_custom_commands_file(self):
+        """Follow custom_commands.toml, which Fix a Word writes from outside this window."""
         from gi.repository import Gio
         try:
             self._commands_monitor = Gio.File.new_for_path(
@@ -3567,14 +3535,12 @@ class PreferencesWindow:
         """Save custom commands from the list store.
 
         Only the user's edits are applied, on top of what is on disk right
-        now: writing back the list loaded when this window opened deleted any
-        word fixed from the tray in the meantime.
+        now, so a word fixed from the tray in the meantime is kept.
 
-        Returns True if they were written, False if the existing file could
-        not be read — in which case the list on screen is empty because of
-        that failure, not because the user cleared it, and writing it would
-        delete every command they have — and None if writing them failed,
-        which the user has been told about.
+        Returns True if they were written; False if the existing file could
+        not be read (the list on screen is then empty because of that, and
+        writing it would delete every snippet); None if writing failed, which
+        the user has been told about.
         """
         commands = merge_custom_command_edits(
             self._commands_loaded, self._commands_from_store(), load_custom_commands())
@@ -3595,17 +3561,11 @@ class PreferencesWindow:
             return None
     
     def _apply_hotkey_fallbacks(self, hotkeys):
-        """Select the configured hotkeys, falling back to F8/F9 for display —
-        and record that fallback in self.config.
+        """Select the configured hotkeys, falling back to F8/F9 — and record
+        that fallback in self.config, so what the dropdown shows is what OK saves.
 
-        The fallback used to be display-only. A config with no hotkey (the
-        Settings default is "", which happens when onboarding is closed
-        instead of completed) showed "F8" in the dropdown while self.config
-        still held "". Clicking OK then saved the blank, so dictation stayed
-        dead; and because the combo was already on F8, re-selecting it emitted
-        no 'changed' signal, leaving no way to fix it from this screen at all.
-
-        Writing the fallback back means what the user sees is what gets saved.
+        A blank hotkey (onboarding closed early) would otherwise show F8 but
+        save the blank, and re-picking F8 emits no 'changed' to correct it.
         """
         for key, combo, default in (
             ("hotkey", self.hotkey_combo, "F8"),
@@ -3719,13 +3679,8 @@ class PreferencesWindow:
         # (CUDA picked before its files are downloaded never gets here: the
         # Device dropdown offers the download instead, _on_device_changed.)
         self.config[key] = value
-
-        # NOTE: launch_at_login used to write the autostart .desktop file right
-        # here, the instant the box was ticked. Cancel then discarded the config
-        # change but left the file on disk, so the checkbox and the real
-        # autostart state disagreed from then on. The file is now written by
-        # save_config(), so the setting takes effect exactly when the user
-        # saves it — and not at all when they cancel.
+        # launch_at_login's autostart file is written by save_config(), not
+        # here, so it changes only when the user saves and never on Cancel.
 
     def _update_model_combo_hint(self):
         """Show or hide the warning under the model settings."""
@@ -3743,7 +3698,7 @@ class PreferencesWindow:
             self.lang_combo.get_active_id() or "",
             name.split(" ", 1)[-1])     # "🇯🇵 Japanese" -> "Japanese"
         if message:
-            # Amber and bold: as grey italic it was easy to miss (Ron, 0.14.5).
+            # Amber and bold, so it can't be missed.
             label.set_markup(f'<span color="#e6aa3c" weight="bold">⚠️ '
                              f'{GLib.markup_escape_text(message)}</span>')
             label.show()
@@ -4166,18 +4121,15 @@ class PreferencesWindow:
 
         # Calculate statistics (convert to Python floats to avoid numpy type issues)
         samples = [float(s) for s in self._level_samples]
-        avg_level = sum(samples) / len(samples)
         peak_level = float(self._peak_level)
 
         # Filter out silence to get "speaking" samples (above 0.08)
         speaking_samples = [s for s in samples if s > 0.08]
         speaking_avg = sum(speaking_samples) / len(speaking_samples) if speaking_samples else 0
 
-        # Evaluate based on average level while speaking and peak
-        # Thresholds tuned for typical speech:
-        # - speaking_avg < 0.15: Too quiet
-        # - speaking_avg 0.15-0.70: Good
-        # - peak > 0.95: Clipping/distortion risk
+        # Graded on the peak and the average level while speaking, with
+        # thresholds tuned for typical speech: under 5 speaking samples
+        # is too quiet, a peak over 0.95 clips, and an average under 0.20 is quiet.
 
         if len(speaking_samples) < 5:
             # Not enough speech detected
@@ -4374,6 +4326,7 @@ class PreferencesWindow:
             self._volume_timer = GLib.timeout_add(150, self._apply_pending_volume)
 
     def _apply_pending_volume(self):
+        """Apply the slider's latest value once the drag has paused."""
         self._volume_timer = None
         if getattr(self, "_volume_source", None) is not None:
             self.set_system_mic_volume(self._pending_volume, self._volume_source)
@@ -4544,6 +4497,7 @@ class PreferencesWindow:
         GLib.idle_add(self._finish_switch_to_vulkan, combo)
 
     def _finish_switch_to_vulkan(self, combo):
+        """Keep Vulkan if its setup succeeds, otherwise put the dropdown back."""
         if self._setup_vulkan(self.config.get("model")):
             self.update_config("device", "vulkan")
             self._device_before = "vulkan"
@@ -4575,6 +4529,7 @@ class PreferencesWindow:
         return False        # run once
 
     def _vulkan_offered(self):
+        """Whether Vulkan is offered on this computer (whisper_vulkan.is_offered)."""
         try:
             from . import whisper_vulkan
             return whisper_vulkan.is_offered()
@@ -4599,6 +4554,7 @@ class PreferencesWindow:
         return True
 
     def _message(self, kind, title, text, buttons=Gtk.ButtonsType.OK):
+        """Show a modal message dialog and return the button the user pressed."""
         dialog = message_dialog(transient_for=self.window, modal=True,
                                    message_type=kind, buttons=buttons, text=title)
         dialog.format_secondary_text(text)
@@ -4613,6 +4569,7 @@ class PreferencesWindow:
         return set_up(self.window, model, confirm=confirm)
 
     def _download_vulkan_files(self, model, confirm):
+        """Download the Vulkan engine and *model*'s Vulkan copy if missing."""
         from .vulkan_setup_dialogs import ensure_files
         return ensure_files(self.window, model, confirm)
 
@@ -4766,12 +4723,11 @@ class PreferencesWindow:
             self._check_gpu_status()
             self._refresh_device_options()
 
-            # Unlock large-v3 in the model dropdown now that CUDA is available
+            # large-v3 no longer needs its download note now that CUDA is available
             if hasattr(self, 'model_store'):
                 for row in self.model_store:
                     if row[0] == "large-v3":
                         row[1] = "large-v3 — best accuracy"
-                        row[2] = True  # Make selectable
                         break
 
             self._after_cuda_download()
@@ -4791,10 +4747,8 @@ class PreferencesWindow:
         try:
             from . import uinput_helper
             
-            # Both halves, not just uinput: on Fedora a logind ACL grants
-            # /dev/uinput while /dev/input stays unreadable, which reported
-            # "configured correctly" and disabled the fix button for a user
-            # whose hotkeys could not work at all.
+            # Both halves, not just uinput: on Fedora a logind ACL can grant
+            # /dev/uinput while /dev/input, which the hotkeys need, stays unreadable.
             has_access, reason = uinput_helper.check_all_device_permissions()
             
             if has_access:
@@ -4805,12 +4759,10 @@ class PreferencesWindow:
                 self.fix_typing_button.set_sensitive(False)
             else:
                 # Access is missing. "Configured, just needs a restart" is only
-                # true when BOTH halves of setup have actually been performed:
-                # the udev rule (uinput/typing) AND 'input' group membership in
-                # the system database (hotkey reading). Keying this on the udev
-                # rule alone hid the exact Fedora case this changeset fixes — the
-                # rule present but the user never added to 'input', which showed
-                # "please restart" and DISABLED the fix button that runs usermod.
+                # true when BOTH halves of setup have been performed: the udev
+                # rule (uinput/typing) AND 'input' group membership in the
+                # system database (hotkey reading). With only the rule in place
+                # the fix button must stay enabled, since it runs usermod.
                 setup_done = (
                     uinput_helper.check_udev_rule_exists()
                     and uinput_helper.check_user_in_input_group()
@@ -4982,8 +4934,8 @@ class PreferencesWindow:
         """Enable/disable the Restart Info button.
 
         Separate helper because the button is created in a different tab from
-        the status check that governs it, and it was previously left enabled on
-        every desktop — including ones with no GNOME Shell to restart.
+        the status check that governs it. It is off on desktops with no GNOME
+        Shell to restart.
         """
         button = getattr(self, "restart_info_button", None)
         if button is None:
@@ -5248,9 +5200,7 @@ class PreferencesWindow:
 
         # Completeness check on the cached files (no model loading — this
         # runs on every Apply/OK click). A partial cache left by a cancelled
-        # or interrupted download correctly reports "not cached". (The old
-        # directory-exists check reported success for partial caches — the
-        # service then stalled silently finishing the download itself.)
+        # or interrupted download reports "not cached".
         if is_model_cached_fast(model_name):
             print(f"Model {model_name} already cached")
             return (True, False, False)  # Success, but not downloaded
@@ -5294,11 +5244,9 @@ class PreferencesWindow:
 
         dialog.show_all()
 
-        # Download in background thread with REAL cancellation: the
+        # Download in background thread with real cancellation: the
         # model_helper download function checks cancel_event between blocks
-        # and aborts within moments. (The old code ran the blocking
-        # WhisperModel() constructor, so Cancel closed the dialog but the
-        # multi-GB download kept running invisibly in the background.)
+        # and aborts within moments.
         import threading
         cancel_event = threading.Event()
         download_complete = {"done": False, "success": False}
@@ -5346,9 +5294,8 @@ class PreferencesWindow:
 
         cancelled = cancel_event.is_set()
         _ok = download_complete["success"] and not cancelled
-        # Belt and suspenders: trust the downloader only if the cache now
-        # actually contains every file. Checked before the success message,
-        # which would otherwise be followed by "Model download failed!".
+        # Trust the downloader only if the cache now actually contains every
+        # file, and check that before showing the success message.
         if _ok:
             _ok = is_model_cached_fast(model_name)
         if _ok:
@@ -5378,16 +5325,13 @@ class PreferencesWindow:
         the config file on its own within about a second.
 
         Restarting rebuilds the Whisper model, roughly ten seconds during which
-        the hotkey silently does nothing. Doing that for every settings change
-        meant toggling auto-punctuation reloaded a 3 GB model onto the GPU.
+        the hotkey silently does nothing, so a change like auto-punctuation
+        must not cause one.
         """
         from .config import needs_service_restart
 
         if not needs_service_restart(changed):
-            # prefs.py reports through print, not a logger — there is no logger
-            # in this module, and using one here raised NameError on the most
-            # common path until a test caught it.
-            print(f"✓ Applied without restart: {sorted(changed) or 'no changes'}")
+            print(f"Applied without restart: {sorted(changed) or 'no changes'}")
             return True
 
         return self.restart_service()
@@ -5403,13 +5347,10 @@ class PreferencesWindow:
             # Wait a moment for processes to terminate
             time.sleep(1)
 
-            # Start it the same way the tray does. This used to be a separate
-            # hand-rolled spawn that copied THIS process's environment, and
-            # Preferences runs on native Wayland — so the restarted service
-            # inherited Wayland, gtk_window_move() was ignored, and the
-            # recording indicator centred itself no matter what position was
-            # chosen. Only quitting and relaunching fixed it, because that put
-            # the tray back in charge of launching.
+            # Start it the same way the tray does. Preferences runs on native
+            # Wayland, and a service spawned with this process's environment
+            # would inherit it: gtk_window_move() would be ignored and the
+            # recording indicator always centred.
             from .service_launcher import launch_dictation_service
 
             launch_dictation_service()
@@ -5419,10 +5360,9 @@ class PreferencesWindow:
             return False
     
     def on_tab_switched(self, notebook, page, page_num):
-        """Scroll the newly-shown tab back to the top on switch, and strip scroll masks
-        from that tab's inputs once it has laid out (combos in not-yet-shown tabs only
-        create their internal windows when the tab is first displayed)."""
-        # Each tab page is now a ScrolledWindow (see _scrollable_tab); scroll it to top.
+        """Scroll the newly shown tab to the top, and refresh Stats, which the
+        service updates while this window is open."""
+        # Each tab page is a ScrolledWindow (see _scrollable_tab).
         try:
             vadj = page.get_vadjustment()
             if vadj:
@@ -5473,7 +5413,7 @@ class PreferencesWindow:
         """Switch to CUDA now that it's downloaded, through Apply.
 
         Never by saving directly: that moves the baseline Apply diffs against,
-        so the switch was saved but never restarted the service. Parakeet
+        so the switch would be saved without restarting the service. Parakeet
         can't use CUDA, and switching its device would move it from the
         graphics card to the processor, so its user is asked first.
         """
@@ -5557,9 +5497,8 @@ class PreferencesWindow:
         reload, so nothing corrects it.
 
         The second write also repairs the baseline. save_config() resets
-        _config_at_open to whatever it just wrote, so without this the retry
-        finds no change and skips the restart that would load the new setup:
-        Device -> CPU, cancel, OK again kept dictating on the graphics card.
+        _config_at_open to whatever it just wrote, so without this a retry
+        finds no change and skips the restart that would load the new setup.
 
         Only these keys are undone; the user's other edits saved fine and
         stay. The dropdowns go back too, quietly: no model-picked dialogs, and
@@ -5610,9 +5549,7 @@ class PreferencesWindow:
                     text="Settings applied successfully!"
                 )
 
-                # Tell the truth about what happened. Claiming a restart that
-                # did not occur is the same species of defect as a setting that
-                # says it applied when it did not.
+                # Say whether the service really restarted, not just that it applied.
                 from .config import needs_service_restart
                 dialog.format_secondary_text(
                     "Dictation service has been restarted with new settings."
@@ -5751,8 +5688,7 @@ class PreferencesWindow:
             self.window.destroy()
             Gtk.main_quit()
         else:
-            # Same failure dialog as Apply — previously OK silently did
-            # nothing on a save error, leaving the button looking dead.
+            # Same failure dialog as Apply, so OK never looks dead on a save error.
             self._show_save_error()
 
     def _on_test_hotkeys(self, button):
