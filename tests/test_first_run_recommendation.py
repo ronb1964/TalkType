@@ -131,7 +131,7 @@ def test_the_card_shows_on_a_computer_with_nothing_to_fix(monkeypatch):
     monkeypatch.setattr(wd, "detect_uinput_access", lambda: (True, ""))
     monkeypatch.setattr(wd, "detect_ydotoold_status", lambda: {"needs_setup": False})
     monkeypatch.setattr(wd, "detect_portaudio_status", lambda: {"needs_install": False})
-    d = wd.WelcomeDialog(force_gnome=False, force_nvidia=False)
+    d = wd.WelcomeDialog(force_gnome=False)
     try:
         assert hasattr(d, "lang_combo") and d._language() == "de"
         assert d._current_setup().model

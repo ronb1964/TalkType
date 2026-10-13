@@ -20,151 +20,24 @@ gi.require_version('GdkPixbuf', '2.0')
 from gi.repository import Gtk, Gdk, GLib, GdkPixbuf
 from .ui_style import message_dialog
 
-try:
-    from tuxtalk.logger import setup_logger
-    logger = setup_logger(__name__)
-except ImportError:
-    import logging
-    logger = logging.getLogger(__name__)
+from .logger import setup_logger
+from .uinput_helper import (
+    check_all_device_permissions,
+    get_portaudio_status,
+    get_ydotoold_status,
+)
 
+logger = setup_logger(__name__)
 
-def detect_nvidia_gpu():
-    """
-    Detect if NVIDIA GPU is present in the system.
-
-    Returns:
-        bool: True if NVIDIA GPU is detected, False otherwise
-    """
-    import subprocess
-    try:
-        # Check for nvidia-smi command (most reliable). timeout guards against
-        # a hung nvidia-smi (a real NVIDIA driver failure mode) freezing the
-        # welcome dialog indefinitely — os.popen offered no timeout.
-        try:
-            result = subprocess.run(
-                ['nvidia-smi', '--query-gpu=name', '--format=csv,noheader'],
-                capture_output=True, text=True, timeout=5)
-            if result.returncode == 0 and result.stdout.strip():
-                logger.debug(f"NVIDIA GPU detected: {result.stdout.strip()}")
-                return True
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            pass
-
-        # Fallback: Check lspci
-        try:
-            result = subprocess.run(['lspci'], capture_output=True, text=True, timeout=5)
-            if result.returncode == 0 and 'nvidia' in result.stdout.lower():
-                logger.debug("NVIDIA GPU detected via lspci")
-                return True
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            pass
-
-        logger.debug("No NVIDIA GPU detected")
-        return False
-    except Exception as e:
-        logger.warning(f"Error detecting NVIDIA GPU: {e}")
-        return False
-
-
-def detect_uinput_access():
-    """
-    Detect if current user has access to /dev/uinput for keystroke injection.
-
-    Returns:
-        tuple: (has_access: bool, reason: str)
-    """
-    try:
-        # Checks BOTH halves: writing keystrokes (/dev/uinput) and reading
-        # hotkeys (/dev/input). Checking uinput alone skipped setup entirely on
-        # Fedora, where logind's per-user ACL already grants uinput but nothing
-        # grants 'input' group membership — so hotkeys could never be read.
-        from tuxtalk.uinput_helper import check_all_device_permissions
-        return check_all_device_permissions()
-    except ImportError as e:
-        logger.warning(f"Could not import uinput_helper: {e}")
-        # Fallback: basic check
-        if not os.path.exists("/dev/uinput"):
-            return (False, "The /dev/uinput device does not exist.")
-        if os.access("/dev/uinput", os.R_OK | os.W_OK):
-            return (True, "You have access to /dev/uinput.")
-        return (False, "You don't have permission to access /dev/uinput.")
-
-
-def detect_ydotoold_status():
-    """
-    Detect status of ydotoold daemon for keystroke injection.
-
-    Returns:
-        dict: Status with keys:
-            - running: bool - whether ydotoold is running
-            - ydotool_installed: bool - whether ydotool command exists
-            - service_exists: bool - whether systemd service is set up
-            - needs_setup: bool - whether setup is needed
-            - message: str - human-readable status
-    """
-    try:
-        from tuxtalk.uinput_helper import get_ydotoold_status
-        return get_ydotoold_status()
-    except ImportError as e:
-        logger.warning(f"Could not import uinput_helper: {e}")
-        # Fallback: basic check using pgrep
-        import subprocess
-        try:
-            result = subprocess.run(['pgrep', '-f', 'ydotoold'],
-                                   capture_output=True, timeout=2)
-            running = result.returncode == 0
-            return {
-                'running': running,
-                'ydotool_installed': True,  # Assume installed if we got here
-                'service_exists': False,
-                'needs_setup': not running,
-                'message': "ydotoold is running" if running else "ydotoold is not running"
-            }
-        except Exception:
-            return {
-                'running': False,
-                'ydotool_installed': False,
-                'service_exists': False,
-                'needs_setup': True,
-                'message': "Could not check ydotoold status"
-            }
-
-
-def detect_portaudio_status():
-    """
-    Detect if PortAudio library is installed (required for audio recording).
-
-    Returns:
-        dict: Status with keys:
-            - installed: bool - whether PortAudio is available
-            - needs_install: bool - whether installation is needed
-            - message: str - human-readable status
-    """
-    try:
-        from tuxtalk.uinput_helper import get_portaudio_status
-        return get_portaudio_status()
-    except ImportError as e:
-        logger.warning(f"Could not import uinput_helper for PortAudio check: {e}")
-        # Fallback: try to import sounddevice
-        try:
-            import sounddevice
-            return {
-                'installed': True,
-                'needs_install': False,
-                'message': "PortAudio is installed - audio recording ready"
-            }
-        except OSError:
-            return {
-                'installed': False,
-                'needs_install': True,
-                'message': "PortAudio not installed - required for audio recording"
-            }
-        except Exception:
-            return {
-                'installed': True,  # Assume OK if we can't check
-                'needs_install': False,
-                'message': "Could not verify PortAudio status"
-            }
+# Checks BOTH halves: writing keystrokes (/dev/uinput) and reading hotkeys
+# (/dev/input). Checking uinput alone skipped setup entirely on Fedora, where
+# logind's per-user ACL already grants uinput but nothing grants 'input' group
+# membership, so hotkeys could never be read. Returns (has_access, reason).
+detect_uinput_access = check_all_device_permissions
+# A dict with running, ydotool_installed, service_exists, needs_setup, message.
+detect_ydotoold_status = get_ydotoold_status
+# A dict with installed, needs_install, message (PortAudio records the audio).
+detect_portaudio_status = get_portaudio_status
 
 
 class SplashScreen:
@@ -232,6 +105,7 @@ class SplashScreen:
         )
         self.glow_level = 0
         self.image_widget = None
+        self._stop_glow = False
 
         # Try to load icon from standard paths
         icon_path = None
@@ -300,7 +174,7 @@ class SplashScreen:
 
     def _animate_glow(self):
         """Animate the glow effect by expanding once to maximum, then staying there."""
-        if not self.image_widget or getattr(self, '_stop_glow', False):
+        if not self.image_widget or self._stop_glow:
             return False  # Stop animation if widget gone or stop flag set
 
         style_context = self.image_widget.get_style_context()
@@ -330,7 +204,7 @@ class SplashScreen:
         self.window.show_all()
 
         # Start glow animation (100ms per frame for faster animation)
-        self.glow_timer = GLib.timeout_add(100, self._animate_glow)
+        GLib.timeout_add(100, self._animate_glow)
 
         # Fade in over 300ms
         self._fade_in(0.0, callback)
@@ -366,29 +240,24 @@ class WelcomeDialog:
     """
     Adaptive welcome dialog that shows appropriate content based on system detection.
 
-    Scenarios:
-    1. Base only (no GNOME, no NVIDIA)
-    2. Base + GNOME extension option
-    3. Base + CUDA libraries option
-    4. Base + both options
+    Every computer gets the recommended-setup card (language, model, graphics
+    card). Setup sections for typing, PortAudio and the GNOME extension appear
+    only when this computer needs them.
     """
 
-    def __init__(self, parent=None, force_gnome=None, force_nvidia=None, force_uinput=None):
+    def __init__(self, parent=None, force_gnome=None):
         """
         Initialize the welcome dialog.
 
         Args:
             parent: Parent window (optional)
             force_gnome: Override GNOME detection for testing (None/True/False)
-            force_nvidia: Override NVIDIA detection for testing (None/True/False)
-            force_uinput: Override uinput detection for testing (None/True/False)
         """
         self.parent = parent
 
         # Detect system capabilities (or use forced values for testing)
         from .desktop_detect import is_gnome
         self.has_gnome = is_gnome() if force_gnome is None else force_gnome
-        self.has_nvidia = detect_nvidia_gpu() if force_nvidia is None else force_nvidia
         # What to recommend (recommend.py): the graphics chip and the language.
         from . import recommend as _rec
         try:
@@ -401,12 +270,8 @@ class WelcomeDialog:
         self._chosen_model = None      # set when the user picks a model in Other options
         
         # Detect uinput access (for keystroke injection)
-        if force_uinput is None:
-            has_uinput, self.uinput_reason = detect_uinput_access()
-            self.needs_uinput_fix = not has_uinput
-        else:
-            self.needs_uinput_fix = not force_uinput
-            self.uinput_reason = "Forced for testing" if not force_uinput else ""
+        has_uinput, _ = detect_uinput_access()
+        self.needs_uinput_fix = not has_uinput
 
         # Detect ydotoold daemon status (required for keystroke injection)
         self.ydotoold_status = detect_ydotoold_status()
@@ -462,7 +327,8 @@ class WelcomeDialog:
                 additional_height += 180  # PortAudio section
             self.height = base_height + additional_height
 
-        logger.info(f"Welcome dialog: GNOME={self.has_gnome}, NVIDIA={self.has_nvidia}, "
+        logger.info(f"Welcome dialog: GNOME={self.has_gnome}, NVIDIA={self.hardware.has_nvidia} "
+                   f"(graphics: {self.hardware.gpu_name or 'none found'}), "
                    f"needs_uinput_fix={self.needs_uinput_fix}, needs_portaudio={self.needs_portaudio_install}")
 
         # Build the dialog
@@ -478,6 +344,7 @@ class WelcomeDialog:
         self.install_portaudio_button = None
         self.portaudio_status_label = None
         self.portaudio_fixed = False  # Track if user installed PortAudio during this dialog
+        self._syncing = False  # True while _refresh_recommendation sets the model radios
         self._build_dialog()
 
     def _build_dialog(self):
@@ -494,11 +361,6 @@ class WelcomeDialog:
 
         if self.parent:
             self.dialog.set_transient_for(self.parent)
-
-        # Dark theme
-        settings = Gtk.Settings.get_default()
-        if settings:
-            settings.set_property("gtk-application-prefer-dark-theme", True)
 
         # Add CSS for checkbox styling with pulsating glow
         # Note: CSS needs to be applied globally (add_provider_for_screen) for child widgets,
@@ -676,7 +538,7 @@ class WelcomeDialog:
         features_box.set_margin_start(20)
         features_box.set_margin_top(5)
 
-        hotkey_hint = "your desktop assigns the key" if getattr(self, "is_flatpak", False) else "default: F8 key"
+        hotkey_hint = "your desktop assigns the key" if self.is_flatpak else "default: F8 key"
         features = [
             f"🎤 <b>Press-and-hold dictation</b> ({hotkey_hint})",
             "🗣️ <b>Voice commands:</b> \"period\", \"comma\", \"new paragraph\"",
@@ -737,8 +599,7 @@ class WelcomeDialog:
         vbox.pack_start(sep3, False, False, 0)
 
         # The setup this computer should get (recommend.py), with Other options.
-        if not self.hotkey_unsupported:
-            self._build_recommendation(vbox)
+        self._build_recommendation(vbox)
 
         # PortAudio setup section (shown FIRST if needed - required for audio recording)
         if self.needs_portaudio_install:
@@ -773,17 +634,14 @@ class WelcomeDialog:
                 sep_uinput.set_margin_bottom(10)
                 vbox.pack_start(sep_uinput, False, False, 0)
 
-        # Optional Features header (only show if we have GNOME or NVIDIA options)
+        # Optional Features: the GNOME extension is the only one
         if self.has_gnome:
             optional_label = Gtk.Label()
             optional_label.set_markup('<span size="large"><b>⚙️ Optional Features</b></span>')
             optional_label.set_halign(Gtk.Align.START)
             vbox.pack_start(optional_label, False, False, 5)
 
-            # GNOME Extension (if detected)
-            if self.has_gnome:
-                self._build_gnome_extension_option(vbox)
-
+            self._build_gnome_extension_option(vbox)
 
             # Preferences note
             note = Gtk.Label()
@@ -883,7 +741,7 @@ class WelcomeDialog:
     def _on_install_portaudio_clicked(self, button):
         """Handle the Install PortAudio button click."""
         try:
-            from tuxtalk.uinput_helper import install_portaudio_with_pkexec, check_portaudio_installed
+            from tuxtalk.uinput_helper import install_portaudio_with_pkexec
 
             # Disable button while processing
             button.set_sensitive(False)
@@ -961,9 +819,8 @@ class WelcomeDialog:
         needs this portal (KDE/GNOME/Hyprland have it; the xapp backend used by
         XFCE/Cinnamon/MATE does not)."""
         try:
-            import gi
             gi.require_version("Gio", "2.0")
-            from gi.repository import Gio, GLib
+            from gi.repository import Gio
             bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
             res = bus.call_sync(
                 "org.freedesktop.portal.Desktop",
@@ -992,7 +849,6 @@ class WelcomeDialog:
     def _build_unsupported_desktop_section(self, vbox, desktop_name):
         """Shown when the desktop lacks the GlobalShortcuts portal: the Flatpak
         hotkey cannot work, so point the user to the AppImage (Backend A/evdev)."""
-        from gi.repository import GLib
         esc = GLib.markup_escape_text
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         box.set_margin_start(12)
@@ -1000,10 +856,8 @@ class WelcomeDialog:
         box.set_margin_top(10)
         box.set_margin_bottom(10)
 
-        # This is a hard stop: the app cannot function here. Flag it so the footer
-        # disables "Set it up", and pulse the warning red so it can't be skipped.
-        self.hotkey_unsupported = True
-
+        # This is a hard stop: the app cannot function here, so the warning
+        # pulses red so it can't be skipped.
         pulse = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         pulse.get_style_context().add_class('tt-required')
         self.required_pulse_box = pulse  # picked up by the red pulse animation
@@ -1545,7 +1399,7 @@ class WelcomeDialog:
     def _on_install_ydotool_clicked(self, button):
         """Handle the Install ydotool button click."""
         try:
-            from tuxtalk.uinput_helper import install_ydotool_with_pkexec, check_ydotool_available
+            from tuxtalk.uinput_helper import install_ydotool_with_pkexec
 
             # Disable button while processing
             button.set_sensitive(False)
@@ -1773,7 +1627,7 @@ class WelcomeDialog:
                              model=self._chosen_model, use_gpu=self._use_gpu())
 
     def _on_model_radio(self, radio, model):
-        if radio.get_active() and not getattr(self, "_syncing", False):
+        if radio.get_active() and not self._syncing:
             self._chosen_model = model
             self._refresh_recommendation()
 
