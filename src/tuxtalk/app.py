@@ -1525,18 +1525,42 @@ def _is_wayland_session() -> bool:
 # dictation responding at all, with the tray still showing the service as up.
 YDOTOOL_TIMEOUT_S = 5.0
 
-# The wtype fallback gets the same 20s ceiling the ydotool *typing* path uses:
-# it types a whole utterance, so it needs far longer than a single keystroke.
+# The wtype fallback types a whole utterance, so it needs far longer than a
+# single keystroke. wtype has no per-key delay, so a fixed ceiling is enough.
 WTYPE_TIMEOUT_S = 20.0
 
+# ydotool's own default wait after each `ydotool key` event. Backspaces pass it
+# explicitly, so their time limit is worked out from the speed really used.
+BACKSPACE_DELAY_MS = 12
 
-def _ydotool_key(keys, timeout: float = YDOTOOL_TIMEOUT_S, what: str = "keystroke") -> bool:
+
+class KeystrokesStoppedPartway(Exception):
+    """ydotool was stopped by its time limit after sending some of the keys, so
+    an unknown number of them reached the app."""
+
+
+def _typing_timeout(n_chars: int, delay_ms: int) -> float:
+    """Seconds to allow `ydotool type -d D -H D` for *n_chars* characters.
+
+    Each character is a press, a hold and a release, about two delays, and a
+    capital adds a Shift press; the 50% margin covers that and a busy system.
+    It still stops a wedged ydotoold, just not a long dictation.
+    """
+    return 10 + n_chars * 2 * delay_ms / 1000 * 1.5
+
+
+def _ydotool_key(keys, timeout: float = YDOTOOL_TIMEOUT_S, what: str = "keystroke",
+                 raise_on_timeout: bool = False) -> bool:
     """Send raw key codes via ydotool. True only if they were actually delivered.
 
     ydotool exits non-zero when it can't reach ydotoold ("Please check if
     ydotoold is running"). That result used to be discarded with check=False, so
     keystrokes that never happened were reported as success — which is how text
     ended up in the undo buffer that the document had never received.
+
+    With *raise_on_timeout*, running out of time raises KeystrokesStoppedPartway
+    instead of returning False, for a caller that must tell "none of the keys
+    were sent" from "some of them were".
     """
     if not _which("ydotool"):
         return False
@@ -1547,7 +1571,9 @@ def _ydotool_key(keys, timeout: float = YDOTOOL_TIMEOUT_S, what: str = "keystrok
             capture_output=True, text=True, timeout=timeout,
         )
     except subprocess.TimeoutExpired:
-        logger.error(f"ydotool {what} timed out after {timeout}s — is ydotoold wedged?")
+        logger.error(f"ydotool {what} timed out after {timeout:.0f}s — is ydotoold wedged?")
+        if raise_on_timeout:
+            raise KeystrokesStoppedPartway(what)
         return False
     except Exception as e:
         logger.debug(f"ydotool {what} failed: {e}")
@@ -1684,7 +1710,9 @@ def _type_text_raw(text: str):
             # -d = delay between keydown and keyup (ms)
             # -H = hold time before next key (ms)
             # Lower values are faster but may cause letters to arrive out of order
-            delay_str = str(max(5, min(50, _typing_delay)))  # Clamp to 5-50ms
+            delay_ms = max(5, min(50, _typing_delay))  # Clamp to 5-50ms
+            delay_str = str(delay_ms)
+            timeout = _typing_timeout(len(text), delay_ms)
             logger.info(f"ydotool type: delay={delay_str}ms, text_len={len(text)}")
             proc = subprocess.Popen(
                 ["ydotool", "type", "-d", delay_str, "-H", delay_str, "-f", "-"],
@@ -1694,13 +1722,13 @@ def _type_text_raw(text: str):
                 env=env
             )
             try:
-                _, stderr = proc.communicate(input=text.encode("utf-8"), timeout=20)
+                _, stderr = proc.communicate(input=text.encode("utf-8"), timeout=timeout)
             except subprocess.TimeoutExpired:
                 # Kill and reap the hung ydotool so it doesn't linger and keep
                 # typing into whatever is focused later.
                 proc.kill()
                 proc.communicate()
-                logger.error("ydotool type timed out after 20s; killed the process")
+                logger.error(f"ydotool type timed out after {timeout:.0f}s; killed the process")
                 return False
             if proc.returncode != 0:
                 logger.error(f"ydotool type failed: rc={proc.returncode}, stderr={stderr.decode()}")
@@ -1865,6 +1893,7 @@ def _type_text_fast(text: str, delay_ms: int = 1):
     try:
         env = _get_ydotool_env()
         d = str(max(1, delay_ms))
+        timeout = _typing_timeout(len(text), max(1, delay_ms))
         logger.info(f"ydotool fast-type: delay={d}ms, text_len={len(text)}")
         proc = subprocess.Popen(
             ["ydotool", "type", "-d", d, "-H", d, "-f", "-"],
@@ -1872,11 +1901,11 @@ def _type_text_fast(text: str, delay_ms: int = 1):
             env=env,
         )
         try:
-            _stdout, stderr = proc.communicate(input=text.encode("utf-8"), timeout=30)
+            _stdout, stderr = proc.communicate(input=text.encode("utf-8"), timeout=timeout)
         except subprocess.TimeoutExpired:
             proc.kill()
             proc.communicate()
-            logger.error("ydotool fast-type timed out after 30s; killed the process")
+            logger.error(f"ydotool fast-type timed out after {timeout:.0f}s; killed the process")
             return False
         if proc.returncode != 0:
             logger.error(f"ydotool fast-type failed: rc={proc.returncode}, stderr={stderr.decode(errors='replace')}")
@@ -2078,17 +2107,20 @@ def _send_backspaces(count: int) -> bool:
 
     The caller updates the undo buffer from this result, so a wrong answer here
     desynchronises the buffer from the document and the next undo eats the
-    user's own writing.
+    user's own writing. Raises KeystrokesStoppedPartway when the time limit
+    stopped ydotool after some of the backspaces had already landed.
     """
     if count <= 0:
         return True
-    # KEY_BACKSPACE = 14, pressed and released once per character. A long undo
-    # is thousands of events, so the timeout scales with the work requested.
-    key_sequence = []
+    # KEY_BACKSPACE = 14, pressed and released once per character. Each event
+    # is followed by BACKSPACE_DELAY_MS, so a long undo takes seconds and the
+    # time limit grows with it (plus a 50% margin and the startup allowance).
+    key_sequence = ["-d", str(BACKSPACE_DELAY_MS)]
     for _ in range(count):
         key_sequence.extend(["14:1", "14:0"])
-    timeout = max(YDOTOOL_TIMEOUT_S, count * 0.02)
-    return _ydotool_key(key_sequence, timeout=timeout, what=f"{count} backspaces")
+    timeout = YDOTOOL_TIMEOUT_S + count * 2 * BACKSPACE_DELAY_MS / 1000 * 1.5
+    return _ydotool_key(key_sequence, timeout=timeout, what=f"{count} backspaces",
+                        raise_on_timeout=True)
 
 def _transcribe_audio(audio_f32, language: str | None) -> str | None:
     """Transcribe audio with the loaded engine (Whisper or Parakeet) and filter hallucinations.
@@ -2229,7 +2261,21 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
         # worked meant TuxTalk played the success beep while nothing had been
         # deleted, leaving the buffer out of step with the document — so the
         # next undo backspaced over text the user had typed themselves.
-        if not _output_backend().backspaces(delete_count):
+        try:
+            deleted = _output_backend().backspaces(delete_count)
+        except KeystrokesStoppedPartway:
+            # Some of the text is gone and some isn't, by an unknown amount,
+            # so the buffer no longer matches the document. Forgetting it is
+            # the only safe choice: a later undo then deletes nothing.
+            print("⚠️  Undo stopped partway")
+            logger.error("Undo stopped partway: an unknown number of backspaces landed; undo buffer cleared")
+            state.last_inserted_text = ""
+            state.continue_mid_sentence = False
+            _beep(beeps_on, *CANCEL_BEEP)
+            if notify_on:
+                _notify("TuxTalk", "Undo stopped partway, so some of the text may still be there")
+            return True
+        if not deleted:
             print("⚠️  Undo failed — nothing was deleted")
             logger.error("Undo failed: backspaces were not delivered; buffer left unchanged")
             _beep(beeps_on, *CANCEL_BEEP)
