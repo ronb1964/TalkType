@@ -426,6 +426,7 @@ class WelcomeDialog:
         self.portaudio_fixed = False  # Track if user installed PortAudio during this dialog
         self._syncing = False  # True while _refresh_recommendation sets the model radios
         self._busy = 0  # installs running in the background (_run_in_background)
+        self._job_lock = threading.Lock()  # one background install at a time
         self._closed = False  # set once the dialog has closed
         self.continue_button = None  # "Set it up"
         self._build_dialog()
@@ -891,14 +892,16 @@ class WelcomeDialog:
         they froze the window, and the desktop offered to force-quit it. The
         outcome is work's return value, or the exception it raised. "Set it up"
         waits while anything runs, and nothing is updated once the window has
-        closed.
+        closed. Jobs run one after another: two package installs at once would
+        fail on the package manager's lock.
         """
         self._busy += 1
         self._update_continue_button()
 
         def runner():
             try:
-                outcome = work()
+                with self._job_lock:
+                    outcome = work()
             except Exception as e:
                 outcome = e
             GLib.idle_add(self._finish_background, finish, outcome)

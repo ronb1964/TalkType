@@ -119,3 +119,23 @@ def test_nothing_is_updated_after_the_window_closed(dialog, monkeypatch):
     fn, args = queued.pop()
     fn(*args)
     assert finished == []
+
+
+def test_installs_run_one_at_a_time(dialog, monkeypatch):
+    """Install PortAudio and Install ydotool started together: the second
+    package-manager run failed on the first one's lock."""
+    monkeypatch.setattr(wd.GLib, "idle_add", lambda fn, *a: None)
+    first_running = threading.Event()
+    release_first = threading.Event()
+    second_started = threading.Event()
+
+    def first():
+        first_running.set()
+        release_first.wait(2)
+
+    dialog._run_in_background(first, lambda outcome: None)
+    assert first_running.wait(2)
+    dialog._run_in_background(second_started.set, lambda outcome: None)
+    assert not second_started.wait(0.2)      # waits for the first install
+    release_first.set()
+    assert second_started.wait(2)
