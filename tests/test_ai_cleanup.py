@@ -309,3 +309,26 @@ def test_stacked_correction_phrases_are_joined_too(said, asked):
 ])
 def test_a_plain_no_or_oh_is_not_a_correction_opener(sentence):
     assert not ai._RE_OPENS_WITH_CORRECTION.match(sentence.split(". ", 1)[1])
+
+
+# --- signs and other scripts count as words ------------------------------------------------
+
+@pytest.mark.parametrize("said, edited", [
+    ("Pay €50, no wait, €60.", "Pay $60."),
+    ("Set it to -5, no wait, -6.", "Set it to 6."),
+    ("Bring 5%, no wait, 6%.", "Bring 6."),
+])
+def test_a_changed_or_dropped_sign_is_not_safe(said, edited):
+    """The check kept only a-z and 0-9, so a changed currency or a dropped
+    minus or percent sign passed it."""
+    assert ai.edit_is_safe(said, edited) is False
+
+
+@pytest.mark.parametrize("said, edited", [
+    ("Pay €50, no wait, €60.", "Pay €60."),
+    ("Set it to -5, no wait, -6.", "Set it to -6."),
+    ("Send it to Müller, no wait, to Jim.", "Send it to Jim."),
+    ("A well-known van, no wait, a new van.", "A new van."),
+])
+def test_corrections_with_signs_and_accents_are_still_safe(said, edited):
+    assert ai.edit_is_safe(said, edited) is True

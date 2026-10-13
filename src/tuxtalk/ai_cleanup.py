@@ -190,8 +190,14 @@ _LINKING_WORDS = {"the", "a", "an", "of", "for", "to", "in", "on", "at", "and", 
 _LEGIT_DOUBLES = {"that", "had", "is", "do", "very", "so", "bye", "no", "yeah", "ha", "really"}
 
 
+# Words in any script ("café", "Müller", "東京"), and the signs that carry a
+# value as words of their own: a currency, a percent, and a minus or plus
+# before a number (not a hyphen inside "well-known" or a range "5-6").
+_TOKEN = re.compile(r"[\w']+|[€$£¥%]|(?<!\w)[-−+](?=\d)")
+
+
 def _words(text):
-    return re.findall(r"[a-z0-9']+", text.lower().replace("’", "'"))
+    return _TOKEN.findall(text.lower().replace("’", "'"))
 
 
 def _deleted_runs(src, out):
