@@ -42,45 +42,11 @@ def get_current_version() -> str:
     """
     Get current TuxTalk version.
 
-    Tries to read from __version__ first, then falls back to pyproject.toml.
-
     Returns:
         str: Version string like "0.4.0"
     """
-    # Try __version__ first (preferred for runtime)
-    try:
-        from . import __version__
-        if __version__:
-            return __version__
-    except (ImportError, AttributeError):
-        pass
-
-    # Fall back to pyproject.toml
-    try:
-        # Find pyproject.toml - could be in project root or AppImage
-        import sys
-
-        # Try relative to this module
-        this_dir = Path(__file__).parent
-        project_root = this_dir.parent.parent
-        pyproject_path = project_root / "pyproject.toml"
-
-        if not pyproject_path.exists():
-            # Try AppImage location
-            if "/tmp/.mount_" in sys.executable or "squashfs-root" in sys.executable:
-                base = Path(sys.executable).parent.parent
-                pyproject_path = base / "pyproject.toml"
-
-        if pyproject_path.exists():
-            content = pyproject_path.read_text()
-            # Parse version = "X.Y.Z" from TOML
-            match = re.search(r'^version\s*=\s*["\']([^"\']+)["\']', content, re.MULTILINE)
-            if match:
-                return match.group(1)
-    except Exception as e:
-        logger.warning(f"Could not read version from pyproject.toml: {e}")
-
-    return "unknown"
+    from . import __version__
+    return __version__
 
 
 def get_extension_version() -> Optional[int]:
@@ -490,27 +456,8 @@ def download_update(
         return None
 
 
-def get_update_directory() -> str:
-    """Get the directory where updates are downloaded."""
-    return UPDATE_DIR
-
-
-def open_update_directory():
-    """Open the update directory in file manager."""
-    import subprocess
-
-    os.makedirs(UPDATE_DIR, exist_ok=True)
-
-    try:
-        subprocess.run(["xdg-open", UPDATE_DIR], check=True)
-    except Exception as e:
-        logger.error(f"Could not open update directory: {e}")
-
-
 def open_release_page(url: str):
     """Open release page in browser."""
-    import subprocess
-
     try:
         subprocess.run(["xdg-open", url], check=True)
     except Exception as e:
@@ -552,16 +499,6 @@ def get_current_timestamp() -> str:
     """
     from datetime import datetime
     return datetime.now().isoformat()
-
-
-def get_appimage_path() -> str:
-    """Get the standard AppImage installation path."""
-    return APPIMAGE_PATH
-
-
-def get_appimage_dir() -> str:
-    """Get the standard AppImage directory."""
-    return APPIMAGE_DIR
 
 
 def is_running_from_appimage() -> bool:
@@ -1206,25 +1143,6 @@ def desktop_launcher_exists() -> bool:
         bool: True if launcher exists
     """
     return os.path.exists(DESKTOP_FILE_PATH)
-
-
-def remove_desktop_launcher() -> Tuple[bool, str]:
-    """
-    Remove the desktop launcher.
-
-    Returns:
-        Tuple[bool, str]: (success, message)
-    """
-    try:
-        if os.path.exists(DESKTOP_FILE_PATH):
-            os.remove(DESKTOP_FILE_PATH)
-            logger.info("Desktop launcher removed")
-            return (True, "Desktop launcher removed.")
-        else:
-            return (True, "Desktop launcher was not installed.")
-    except Exception as e:
-        logger.error(f"Failed to remove desktop launcher: {e}")
-        return (False, f"Failed to remove launcher: {e}")
 
 
 def ensure_appimage_in_standard_location() -> Tuple[bool, str]:
