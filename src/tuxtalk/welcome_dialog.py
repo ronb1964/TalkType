@@ -2384,6 +2384,51 @@ def _flush_pending_events(devices):
             logger.debug(f"Could not flush events from {getattr(dev, 'name', dev)}: {e}")
 
 
+def _open_key_devices(list_devices, input_device, ev_key):
+    """Every input device evdev can open that has keys, as the service opens
+    them; an empty list when /dev/input can't be read."""
+    devices = []
+    try:
+        paths = list_devices()
+    except Exception as e:
+        logger.error(f"Error listing devices: {e}")
+        return devices
+    for path in paths:
+        try:
+            dev = input_device(path)
+            if ev_key in dev.capabilities():
+                # Already non-blocking: evdev opens with O_NONBLOCK.
+                devices.append(dev)
+                logger.info(f"Opened input device: {dev.name} at {path}")
+        except PermissionError:
+            logger.debug(f"Permission denied for {path}")
+        except Exception as e:
+            logger.debug(f"Could not open {path}: {e}")
+    return devices
+
+
+def _key_seen_markup(service_can_read):
+    """A tested key's status. Without evdev access only this dialog saw the
+    key, and the dictation service, which reads evdev alone, would not."""
+    if service_can_read:
+        return '<span color="#4CAF50">✓ Working!</span>'
+    return '<span color="#FF9800">✓ Seen, not active yet</span>'
+
+
+def _hotkey_test_notice(service_can_read):
+    """What makes the hotkeys work when the service can't read the keyboard
+    yet, or None when it can."""
+    if service_can_read:
+        return None
+    from tuxtalk import uinput_helper
+    if uinput_helper._input_group_pending_restart():
+        return ("TuxTalk can't read the keyboard yet. These keys will work "
+                "once you restart your computer to finish the typing setup.")
+    return ("TuxTalk can't read the keyboard yet. These keys will work after "
+            "Preferences, Advanced, Fix Typing Permissions, and a restart of "
+            "your computer.")
+
+
 def show_hotkey_test_dialog():
     """
     Show hotkey testing dialog for first-run experience.
@@ -2440,6 +2485,7 @@ def show_hotkey_test_dialog():
     capturing_key = [None]  # "hold", "toggle", or None
     dialog_ready = [False]
     stop_evdev = threading.Event()
+    keyboards = []  # evdev devices, opened just before the dialog shows
 
     # Map evdev key codes to key names (like F8, F9, etc.)
     def evdev_code_to_name(code):
@@ -2536,6 +2582,13 @@ def show_hotkey_test_dialog():
     ready_label.set_margin_top(2)
     content.pack_start(ready_label, False, False, 0)
 
+    # Shown when the service can't read the keyboard yet (set before show_all).
+    keyboard_notice = Gtk.Label()
+    keyboard_notice.set_line_wrap(True)
+    keyboard_notice.set_xalign(0)
+    keyboard_notice.set_no_show_all(True)
+    content.pack_start(keyboard_notice, False, False, 0)
+
     # Capture instruction (hidden initially)
     capture_instruction = Gtk.Label()
     _capture_prompt = ('<span background="#FFA500" color="white"> Press F1 to F12 to set the '
@@ -2579,11 +2632,11 @@ def show_hotkey_test_dialog():
             if capturing_key[0] == "hold":
                 current_hold_key[0] = keyname
                 hold_label.set_markup(f'<b>Push-to-talk:</b> {keyname}')
-                hold_status.set_markup('<span color="#4CAF50">✓ Working!</span>')
+                hold_status.set_markup(_key_seen_markup(bool(keyboards)))
             elif capturing_key[0] == "toggle":
                 current_toggle_key[0] = keyname
                 toggle_label.set_markup(f'<b>Toggle mode:</b> {keyname}')
-                toggle_status.set_markup('<span color="#4CAF50">✓ Working!</span>')
+                toggle_status.set_markup(_key_seen_markup(bool(keyboards)))
 
             capturing_key[0] = None
             capture_instruction.hide()
@@ -2596,42 +2649,16 @@ def show_hotkey_test_dialog():
             # release → green "✓ Working!" (requires a physical press+release, phantom-proof)
             if action == "release":
                 if keyname == current_hold_key[0]:
-                    hold_status.set_markup('<span color="#4CAF50">✓ Working!</span>')
+                    hold_status.set_markup(_key_seen_markup(bool(keyboards)))
                 elif keyname == current_toggle_key[0]:
-                    toggle_status.set_markup('<span color="#4CAF50">✓ Working!</span>')
+                    toggle_status.set_markup(_key_seen_markup(bool(keyboards)))
 
         return False  # Don't repeat
 
     # EVDEV key reading thread
     def evdev_key_reader():
         """Background thread that reads keys via evdev (bypasses Wayland)."""
-        if not EVDEV_AVAILABLE:
-            return
-
-        # Find input devices - use the SAME approach as app.py (the dictation service)
-        # Don't filter too strictly - just open all devices that have EV_KEY
-        devices = []
-        try:
-            for path in list_devices():
-                try:
-                    dev = InputDevice(path)
-                    caps = dev.capabilities()
-                    # Just check for EV_KEY capability (same as app.py does)
-                    if ecodes.EV_KEY in caps:
-                        # Already non-blocking: evdev opens with O_NONBLOCK.
-                        devices.append(dev)
-                        logger.info(f"Opened input device: {dev.name} at {path}")
-                except PermissionError:
-                    logger.debug(f"Permission denied for {path}")
-                except Exception as e:
-                    logger.debug(f"Could not open {path}: {e}")
-        except Exception as e:
-            logger.error(f"Error listing devices: {e}")
-
-        keyboards = devices
-
         if not keyboards:
-            logger.warning("No keyboards found via evdev")
             return
 
         print(f"Monitoring {len(keyboards)} keyboard(s) via evdev")
@@ -2799,10 +2826,21 @@ def show_hotkey_test_dialog():
         kill_dictation_service()
         time.sleep(0.3)  # Allow kernel/X server to settle keyboard state
 
+        # Opened here rather than in the reader thread, so the very first key
+        # already shows whether the service will hear it.
+        if EVDEV_AVAILABLE:
+            keyboards.extend(_open_key_devices(list_devices, InputDevice, ecodes.EV_KEY))
+        if not keyboards:
+            logger.warning("No keyboards found via evdev")
+            keyboard_notice.set_markup(
+                f'<span color="#FF9800">'
+                f'{GLib.markup_escape_text(_hotkey_test_notice(False))}</span>')
+            keyboard_notice.show()
+
         dialog.show_all()
 
         # Start evdev reader thread
-        if EVDEV_AVAILABLE:
+        if keyboards:
             evdev_thread = threading.Thread(target=evdev_key_reader, daemon=True)
             evdev_thread.start()
 
@@ -2821,6 +2859,13 @@ def show_hotkey_test_dialog():
         stop_evdev.set()
         if evdev_thread is not None:
             evdev_thread.join(timeout=1.0)
+        else:
+            # The reader thread closes the devices; without it, close them here.
+            for dev in keyboards:
+                try:
+                    dev.close()
+                except Exception:
+                    pass
 
         # Whatever closed the dialog, never leave the settings without a
         # hotkey: the service then watches no key at all.
