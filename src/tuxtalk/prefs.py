@@ -52,7 +52,9 @@ def _coerce_config_types(config: dict) -> dict:
             if fld.type == "bool" and not isinstance(value, bool):
                 config[fld.name] = str(value).strip().lower() in _COERCE_BOOL_TRUE
             elif fld.type == "int" and not isinstance(value, int):
-                config[fld.name] = int(value)
+                config[fld.name] = int(float(value))     # "5.0" too
+            elif fld.type == "float" and not isinstance(value, float):
+                config[fld.name] = float(value)
             elif fld.type == "str" and not isinstance(value, str):
                 config[fld.name] = str(value)
         except Exception:

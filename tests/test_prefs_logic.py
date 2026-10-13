@@ -48,6 +48,18 @@ def test_coerce_config_types_fixes_string_numbers():
     assert out["model"] == "small"
 
 
+def test_coerce_config_types_fixes_string_floats():
+    """indicator_sensitivity = "1.0" reached Scale.set_value() as a string
+    and raised TypeError while the window was being built; "5.0" for an int
+    field was left as a string."""
+    d = {"indicator_sensitivity": "1.5", "auto_stop_seconds": 3,
+         "auto_timeout_minutes": "5.0"}
+    out = _coerce_config_types(d)
+    assert out["indicator_sensitivity"] == 1.5
+    assert isinstance(out["auto_stop_seconds"], float)
+    assert out["auto_timeout_minutes"] == 5
+
+
 def test_coerce_config_types_fixes_string_bools():
     d = {"beeps": "false", "notify": "true"}
     out = _coerce_config_types(d)
