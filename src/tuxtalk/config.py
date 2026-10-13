@@ -827,6 +827,7 @@ def find_input_device(mic_substring: str | None) -> int | None:
     # PipeWire's ALSA "default" device (128 channels) can return clipped
     # garbage audio instead of actual mic input. We ask PipeWire directly
     # for the real default source name, then match it in sounddevice's list.
+    default_source = None   # PipeWire's default source, when it could say
     try:
         result = subprocess.run(
             ["wpctl", "inspect", "@DEFAULT_SOURCE@"],
@@ -842,6 +843,7 @@ def find_input_device(mic_substring: str | None) -> int | None:
                         source_name = parts[1].strip().strip('"').strip()
                         if not source_name:
                             continue
+                        default_source = source_name
                         # Find this device in sounddevice's list, skipping
                         # virtual devices with unrealistically many channels
                         for i, d in enumerate(q):
@@ -858,6 +860,18 @@ def find_input_device(mic_substring: str | None) -> int | None:
         pass  # wpctl not installed — not a PipeWire system
     except Exception:
         pass
+
+    # --- The default is virtual (noise suppression, a remapped source) ---
+    # PortAudio lists only hardware under their own names, so a virtual
+    # default source has no entry. Its "pipewire" device records from
+    # whatever the default source is; a raw sound card would bypass it.
+    if default_source:
+        for i, d in enumerate(q):
+            if d.get("name", "").lower() in ("pipewire", "pulse") and d.get("max_input_channels", 0) > 0:
+                logger.info(f"Auto-detected mic: [{i}] {d['name']}"
+                            f" (the default source {default_source!r} is not a hardware device)")
+                print(f"Auto-detected mic: {d['name']} -> {default_source}")
+                return i
 
     # --- Fallback: pick a real hardware mic, avoiding virtual devices ---
     # Filter out monitors, virtual sinks, and PipeWire wrappers
