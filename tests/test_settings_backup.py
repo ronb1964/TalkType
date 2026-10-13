@@ -354,3 +354,34 @@ def test_your_words_travel_with_the_backup(home):
                             "config.toml": CONFIG_TEXT})
     sb.restore(sb.read_backup(str(home / "old.zip")))
     assert custom_words.load() == ["TuxTalk", "BambuStudio"]
+
+
+# --- damaged files and failed writes -----------------------------------------
+
+def _corrupt_member(path, name):
+    """Overwrite the start of *name*'s compressed data with an invalid
+    deflate block, which zipfile reports as zlib.error, not BadZipFile."""
+    with zipfile.ZipFile(path) as z:
+        info = z.getinfo(name)
+    with open(path, "r+b") as f:
+        f.seek(info.header_offset + 26)
+        name_len = int.from_bytes(f.read(2), "little")
+        extra_len = int.from_bytes(f.read(2), "little")
+        f.seek(info.header_offset + 30 + name_len + extra_len)
+        f.write(b"\xff\xff\xff\xff")
+
+
+def test_damaged_compressed_data_is_turned_away_with_a_message(home):
+    dest = home / "b.zip"
+    sb.write_backup(str(dest))
+    _corrupt_member(dest, "config.toml")
+    with pytest.raises(sb.BackupError):
+        sb.read_backup(str(dest))
+
+
+def test_a_huge_member_is_turned_away_before_it_is_read(home, monkeypatch):
+    dest = home / "b.zip"
+    sb.write_backup(str(dest))
+    monkeypatch.setattr(sb, "_MAX_MEMBER_BYTES", 10)
+    with pytest.raises(sb.BackupError):
+        sb.read_backup(str(dest))

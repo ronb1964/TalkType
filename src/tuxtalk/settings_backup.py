@@ -39,6 +39,9 @@ _STATS = "stats.json"
 _COPY_NAME = re.compile(r"^settings-(\d{8}-\d{6})\.zip$")
 _DEVICE_LINE = re.compile(r'^device\s*=.*$', re.MULTILINE)
 _DEVICE_NAMES = {"cuda": "CUDA", "vulkan": "Vulkan"}
+# Largest member read from a backup. Real ones are a few kilobytes; the cap
+# keeps a damaged or crafted zip from filling memory while Preferences waits.
+_MAX_MEMBER_BYTES = 4 * 1024 * 1024
 
 
 def _parse_toml(text):
@@ -231,12 +234,19 @@ def read_backup(path):
             names = set(z.namelist())
             if MANIFEST not in names:
                 raise BackupError("This file isn't a TuxTalk settings backup.")
+            wanted = [n for n in (MANIFEST, _SETTINGS, _COMMANDS, _WORDS, _STATS) if n in names]
+            if any(z.getinfo(n).file_size > _MAX_MEMBER_BYTES for n in wanted):
+                raise BackupError("This file is far too big to be a TuxTalk settings backup.")
             manifest = json.loads(z.read(MANIFEST))
-            files = {n: z.read(n) for n in (_SETTINGS, _COMMANDS, _WORDS, _STATS) if n in names}
+            files = {n: z.read(n) for n in wanted if n != MANIFEST}
     except BackupError:
         raise
-    except (zipfile.BadZipFile, OSError, ValueError, KeyError) as e:
-        raise BackupError(f"This file isn't a TuxTalk settings backup, or it's damaged ({e}).")
+    except Exception as e:
+        # Only zip reading and JSON parsing happen above, and damaged data
+        # surfaces as many types (zlib.error, EOFError, RuntimeError for an
+        # encrypted member, NotImplementedError for an unknown compression).
+        raise BackupError(
+            f"This file isn't a TuxTalk settings backup, or it's damaged ({e}).") from e
 
     if not isinstance(manifest, dict) or manifest.get("app") not in _OUR_APP_NAMES:
         raise BackupError("This file isn't a TuxTalk settings backup.")
