@@ -713,6 +713,7 @@ class DictationTray:
                 if self.dbus_service:
                     self.dbus_service.clear_claimed_hotkeys()
                     self.dbus_service.clear_running_engine()
+                    self.dbus_service.clear_recording_state()
             if self.dbus_service:
                 try:
                     self.dbus_service.emit_service_state(new_state)

@@ -416,6 +416,14 @@ class TuxTalkDBusService(dbus.service.Object):
         logger.info(f"D-Bus: service is running {model} on {device}")
         self.ModelChanged(str(model))   # the extension re-reads GetStatus on this
 
+    def clear_recording_state(self):
+        """The service stopped, so nothing is recording. A killed or crashed
+        service never reports that itself, and the extension's icon would
+        stay red."""
+        if getattr(self.app, 'is_recording', False):
+            self.app.is_recording = False
+            self.RecordingStateChanged(False)
+
     def clear_running_engine(self):
         """The service stopped; until it reports again, show the settings."""
         self.running_engine = None
