@@ -2963,6 +2963,10 @@ _EDIT_NOTICES = {
     "no_answer": "The AI didn't come up with a change. Try saying it another way.",
     "terminal": "Voice editing doesn't work in a terminal: there's no selection there to "
                 "replace.",
+    "needs_wayland": "Voice editing works only in a Wayland session for now. This desktop "
+                     "is running X11.",
+    "no_clipboard": "TuxTalk couldn't use the clipboard to read the selection, so nothing "
+                    "was changed.",
     "window_changed": "You switched windows while the AI was working, so the rewrite "
                       "wasn't typed. It's in Recent Dictations in the TuxTalk menu.",
     "no_shortcuts": "Bold, italics and underline work in LibreOffice and other word "
@@ -2984,6 +2988,8 @@ _EDIT_LABELS = {
     "no_instruction": "Didn't catch what to change",
     "no_answer": "No change, try other words",
     "terminal": "Can't edit in a terminal",
+    "needs_wayland": "Voice editing needs Wayland",
+    "no_clipboard": "Couldn't read the selection",
     "window_changed": "Window changed, see Recent Dictations",
     "no_shortcuts": "No bold or italics in this app",
     "cant_format": "Can't change font, size or color",
@@ -3043,6 +3049,11 @@ def _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
     if is_speechless_tap(audio_f32, SAMPLE_RATE):
         return
 
+    if not _is_wayland_session():
+        # The selection is read with wl-copy / wl-paste, which have no X11
+        # side; without this every edit would say "select some text first".
+        _edit_problem("needs_wayland", beeps_on)
+        return
     engine = _ai_engine
     if engine is None:
         _edit_problem("not_installed", beeps_on)
@@ -3054,7 +3065,11 @@ def _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
 
     # The selection first, so "select some text first" comes up even when
     # nothing was said (Ron tried exactly that and heard nothing).
-    selected, put_back = clipboard.copy_selection(_send_copy_keystroke)
+    try:
+        selected, put_back = clipboard.copy_selection(_send_copy_keystroke)
+    except clipboard.ClipboardUnavailable:
+        _edit_problem("no_clipboard", beeps_on)
+        return
     if not selected:
         _edit_problem("no_selection", beeps_on)
         return

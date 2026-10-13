@@ -332,6 +332,7 @@ def edit_env(monkeypatch):
     monkeypatch.setattr(history, "add_entry", lambda text: seen["history"].append(text))
     monkeypatch.setattr(app, "EDIT_RESTORE_DELAY_S", 0)
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "org.kde.kwrite")
+    monkeypatch.setattr(app, "_is_wayland_session", lambda: True)
     seen["engine"], seen["selection"] = engine, selection
     return seen
 
@@ -847,3 +848,37 @@ def test_indenting_still_counts_as_a_change(edit_env, monkeypatch):
     edit_env["selection"]["text"] = "One\nTwo"
     run_edit()
     assert edit_env["typed"] == ["    One\n    Two"]
+
+
+# --- X11 and a clipboard that can't be used ----------------------------------------------
+
+def test_on_x11_it_says_voice_editing_needs_wayland(edit_env, monkeypatch):
+    """The selection is read with wl-copy / wl-paste; on X11 every edit said
+    "select some text first" with text selected."""
+    monkeypatch.setattr(app, "_is_wayland_session", lambda: False)
+    copied = []
+    monkeypatch.setattr(cb, "copy_selection", lambda send: copied.append(1))
+    run_edit()
+    assert copied == [] and edit_env["typed"] == []
+    assert len(edit_env["notices"]) == 1 and "Wayland" in edit_env["notices"][0]
+
+
+def test_a_clipboard_that_cannot_be_used_is_not_called_no_selection(monkeypatch):
+    board = FakeBoard()
+    board.install(monkeypatch)
+
+    def broken(text):
+        raise FileNotFoundError("wl-copy")
+    monkeypatch.setattr(cb, "_wl_copy_sensitive", broken)
+    with pytest.raises(cb.ClipboardUnavailable):
+        cb.copy_selection(board.ctrl_c, sleep=lambda s: None)
+    assert board.data == b"what I copied"
+
+
+def test_the_edit_says_the_clipboard_could_not_be_used(edit_env, monkeypatch):
+    def unavailable(send):
+        raise cb.ClipboardUnavailable("wl-copy failed")
+    monkeypatch.setattr(cb, "copy_selection", unavailable)
+    run_edit()
+    assert len(edit_env["notices"]) == 1 and "clipboard" in edit_env["notices"][0]
+    assert "Select" not in edit_env["notices"][0]

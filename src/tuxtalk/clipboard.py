@@ -270,6 +270,11 @@ def _read_text():
         return None
 
 
+class ClipboardUnavailable(Exception):
+    """The clipboard couldn't be used to read the selection (wl-copy failed,
+    or is missing). Not the same as nothing being selected."""
+
+
 def copy_selection(send_copy, wait=COPY_WAIT_S, sleep=None):
     """The text selected in the focused app, and put_back() to restore what
     the user had on the clipboard. The text is None when nothing is selected.
@@ -278,7 +283,8 @@ def copy_selection(send_copy, wait=COPY_WAIT_S, sleep=None):
     in a terminal) and returns whether the keystroke went out. A unique marker
     goes on the clipboard first: an app with nothing selected leaves the
     clipboard alone, so the marker still being there means no selection.
-    With nothing selected, the clipboard is put back before returning."""
+    With nothing selected, the clipboard is put back before returning.
+    Raises ClipboardUnavailable when the marker can't be put on the clipboard."""
     import secrets
     import time
     sleep = sleep or time.sleep
@@ -309,7 +315,7 @@ def copy_selection(send_copy, wait=COPY_WAIT_S, sleep=None):
         _wl_copy_sensitive(marker)
     except Exception as e:
         logger.warning(f"Couldn't use the clipboard to read the selection: {e}")
-        return None, lambda: None
+        raise ClipboardUnavailable(str(e)) from e
     copied = None
     if send_copy():
         for _ in range(int(wait / _COPY_POLL_S) + 1):
