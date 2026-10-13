@@ -1,5 +1,27 @@
 """The Ydotool backend must keep delegating to app._type_text so the non-Flatpak
 typing path is behaviorally unchanged."""
+import os
+
+
+def _portal_fd():
+    """A real fd standing in for the portal's EIS socket."""
+    r, w = os.pipe()
+    os.close(w)
+    return r
+
+
+class _FakeSessionBase:
+    """A LibeiSession stand-in: it owns the fd it is given, like the real one."""
+
+    def __init__(self, fd):
+        self.fd = fd
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        os.close(self.fd)
+        return False
 
 
 def test_ydotool_backend_delegates_to_type_text(monkeypatch):
@@ -28,8 +50,9 @@ def test_libei_backend_types_via_fresh_session(monkeypatch):
     typed = []
     closed = []
 
-    class FakeSession:
+    class FakeSession(_FakeSessionBase):
         def __init__(self, fd):
+            super().__init__(fd)
             self.fd = fd
 
         def pump_until_ready(self):
@@ -39,7 +62,7 @@ def test_libei_backend_types_via_fresh_session(monkeypatch):
             typed.append(t)
             return True
 
-    monkeypatch.setattr(b, "_run_handshake", lambda: (-1, "/org/session/1"))
+    monkeypatch.setattr(b, "_run_handshake", lambda: (_portal_fd(), "/org/session/1"))
     monkeypatch.setattr(b, "_close_session", lambda p: closed.append(p))
     monkeypatch.setattr(libei_ctypes, "LibeiSession", FakeSession)
 
@@ -104,8 +127,9 @@ def test_libei_backend_select_all_delete_via_fresh_session(monkeypatch):
     b = LibeiOutputBackend()
     called, closed = [], []
 
-    class FakeSession:
+    class FakeSession(_FakeSessionBase):
         def __init__(self, fd):
+            super().__init__(fd)
             pass
 
         def pump_until_ready(self):
@@ -115,7 +139,7 @@ def test_libei_backend_select_all_delete_via_fresh_session(monkeypatch):
             called.append("clear")
             return True
 
-    monkeypatch.setattr(b, "_run_handshake", lambda: (-1, "/org/session/1"))
+    monkeypatch.setattr(b, "_run_handshake", lambda: (_portal_fd(), "/org/session/1"))
     monkeypatch.setattr(b, "_close_session", lambda p: closed.append(p))
     monkeypatch.setattr(libei_ctypes, "LibeiSession", FakeSession)
 
@@ -130,8 +154,9 @@ def test_libei_backend_backspaces_via_fresh_session(monkeypatch):
     b = LibeiOutputBackend()
     got, closed = [], []
 
-    class FakeSession:
+    class FakeSession(_FakeSessionBase):
         def __init__(self, fd):
+            super().__init__(fd)
             pass
 
         def pump_until_ready(self):
@@ -141,7 +166,7 @@ def test_libei_backend_backspaces_via_fresh_session(monkeypatch):
             got.append(n)
             return True
 
-    monkeypatch.setattr(b, "_run_handshake", lambda: (-1, "/org/session/2"))
+    monkeypatch.setattr(b, "_run_handshake", lambda: (_portal_fd(), "/org/session/2"))
     monkeypatch.setattr(b, "_close_session", lambda p: closed.append(p))
     monkeypatch.setattr(libei_ctypes, "LibeiSession", FakeSession)
 

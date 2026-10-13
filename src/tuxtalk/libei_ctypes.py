@@ -10,6 +10,7 @@ libei ctypes rules (learned the hard way in the spike):
 - ei_seat_bind_capabilities is variadic — pass explicit ctypes objects.
 """
 import ctypes as C
+import os
 import select
 import time
 
@@ -56,7 +57,7 @@ _SHIFTED = {
     "|": 43, "<": 51, ">": 52, "?": 53,
 }
 
-# char -> base evdev keycode (covers ASCII printable used in dictation output).
+# char -> base evdev keycode, for the printable ASCII a US layout types.
 CHAR_TO_KEYCODE: dict[str, int] = {}
 CHAR_TO_KEYCODE.update(_LETTERS)
 CHAR_TO_KEYCODE.update(_DIGITS)
@@ -67,6 +68,14 @@ for _c, _k in list(_LETTERS.items()):
 
 # Characters that require holding Shift while the base key is pressed.
 SHIFT_CHARS: set[str] = set(_SHIFTED) | {c.upper() for c in _LETTERS}
+
+# Typographic characters dictation produces (smart quotes are on by default),
+# typed as their plain one-key look-alikes. One character each, so undo's
+# backspace count still matches what was typed.
+_PLAIN_LOOKALIKE = {
+    "\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"',
+    "\u2013": "-", "\u2014": "-", "\u00a0": " ",
+}
 
 
 def load_libei() -> C.CDLL:
@@ -104,28 +113,69 @@ def load_libei() -> C.CDLL:
     ei.ei_device_keyboard_key.argtypes = [C.c_void_p, C.c_uint32, C.c_bool]
     ei.ei_device_frame.argtypes = [C.c_void_p, C.c_uint64]
     ei.ei_device_stop_emulating.argtypes = [C.c_void_p]
+    ei.ei_unref.restype = C.c_void_p
+    ei.ei_unref.argtypes = [C.c_void_p]
     try:  # keep the device alive across type_string calls (best-effort)
         ei.ei_device_ref.restype = C.c_void_p
         ei.ei_device_ref.argtypes = [C.c_void_p]
+        ei.ei_device_unref.restype = C.c_void_p
+        ei.ei_device_unref.argtypes = [C.c_void_p]
     except AttributeError:
         pass
     return ei
 
 
+def plan_keys(text: str):
+    """[(keycode, shift)] that type *text*, or None if any character can't be
+    typed. Planned before anything is sent, so a dictation is typed whole or
+    not at all: a character skipped silently left undo deleting more than had
+    been typed."""
+    keys = []
+    i, n = 0, len(text)
+    while i < n:
+        if text.startswith(SHIFT_ENTER_MARKER, i):
+            keys.append((KEY_ENTER, True))          # soft line break
+            i += len(SHIFT_ENTER_MARKER)
+            continue
+        ch = _PLAIN_LOOKALIKE.get(text[i], text[i])
+        if ch == "\n":
+            keys.append((KEY_ENTER, False))         # hard newline
+        else:
+            kc = CHAR_TO_KEYCODE.get(ch)
+            if kc is None:
+                return None
+            keys.append((kc, ch in SHIFT_CHARS))
+        i += 1
+    return keys
+
+
 class LibeiSession:
     """Wraps an EIS connection (fd from the RemoteDesktop portal's ConnectToEIS)
-    and types text through it. Keep one instance alive for the app's lifetime."""
+    and types text through it.
+
+    The session owns *fd* from the moment it is made: libei closes it with the
+    context. Use it as a context manager (or call close()) so the context and
+    the device references are freed."""
 
     def __init__(self, fd: int):
-        self.ei = load_libei()
-        self.ctx = self.ei.ei_new_sender(None)
-        if not self.ctx:
-            raise RuntimeError("ei_new_sender returned NULL")
+        try:
+            self.ei = load_libei()
+            self.ctx = self.ei.ei_new_sender(None)
+            if not self.ctx:
+                raise RuntimeError("ei_new_sender returned NULL")
+        except BaseException:
+            os.close(fd)                    # never handed to libei
+            raise
         rc = self.ei.ei_setup_backend_fd(self.ctx, fd)
         if rc != 0:
+            self.ei.ei_unref(self.ctx)
+            self.ctx = None
             raise RuntimeError(f"ei_setup_backend_fd failed rc={rc}")
         self.fd_ei = self.ei.ei_get_fd(self.ctx)
         self.device = None
+        # Every device this session took a reference on, released by close()
+        # (a PAUSED event clears self.device but not the reference).
+        self._refs = []
         # start_emulating takes a sequence number that must be unique/increasing
         # per call, or the compositor ignores every emulation after the first.
         self._seq = 0
@@ -142,11 +192,31 @@ class LibeiSession:
                 C.c_void_p(seat), C.c_uint(EI_DEVICE_CAP_KEYBOARD), C.c_void_p(0))
         elif etype == EI_EVENT_DEVICE_RESUMED:
             dev = self.ei.ei_event_get_device(ev)
-            if hasattr(self.ei, "ei_device_ref"):
+            if hasattr(self.ei, "ei_device_ref") and dev not in self._refs:
                 self.ei.ei_device_ref(dev)  # keep it alive
+                self._refs.append(dev)
             self.device = dev
         elif etype == EI_EVENT_DEVICE_PAUSED:
             self.device = None
+
+    def close(self):
+        """Free the device references and the libei context (which closes the
+        EIS socket). Safe to call twice."""
+        if hasattr(self.ei, "ei_device_unref"):
+            for dev in self._refs:
+                self.ei.ei_device_unref(dev)
+        self._refs = []
+        self.device = None
+        if self.ctx:
+            self.ei.ei_unref(self.ctx)
+            self.ctx = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+        return False
 
     def _drain(self):
         """Dispatch pending traffic and process every queued event. Servicing the
@@ -224,25 +294,18 @@ class LibeiSession:
 
     def type_string(self, text: str) -> bool:
         """Type `text` via libei. Handles the §SHIFT_ENTER§ soft-break marker
-        (Shift+Enter) and plain newlines (Enter). Returns False if no device
-        became ready."""
-        marker = SHIFT_ENTER_MARKER
+        (Shift+Enter) and plain newlines (Enter). Returns False, typing
+        nothing, if a character can't be typed (only a US layout's ASCII can)
+        or no device became ready, so the caller shows its usual notice."""
+        keys = plan_keys(text)
+        if keys is None:
+            _log.warning("[libei] text holds characters this keyboard path can't type; "
+                         "nothing was typed")
+            return False
 
         def emit():
-            i, n = 0, len(text)
-            while i < n:
-                if text.startswith(marker, i):
-                    self._emit_key(KEY_ENTER, shift=True)   # soft line break
-                    i += len(marker)
-                    continue
-                ch = text[i]
-                if ch == "\n":
-                    self._emit_key(KEY_ENTER, shift=False)  # hard newline
-                else:
-                    kc = CHAR_TO_KEYCODE.get(ch)
-                    if kc is not None:  # skip unsupported characters
-                        self._emit_key(kc, ch in SHIFT_CHARS)
-                i += 1
+            for keycode, shift in keys:
+                self._emit_key(keycode, shift)
 
         return self._run_emitting(emit)
 

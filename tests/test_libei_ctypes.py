@@ -2,6 +2,7 @@
 injection needs a live EIS connection and is exercised by the Flatpak
 integration test (BB-9), not here."""
 import ctypes
+import os
 
 import pytest
 
@@ -106,3 +107,94 @@ def test_libei_backspaces_zero_is_noop(monkeypatch):
     s = _fake_ready_session(monkeypatch)
     assert s.backspaces(0) is True
     assert s.ei.events == []
+
+
+# --- typing only what can be typed ------------------------------------------
+
+def test_smart_quotes_and_dashes_are_typed_as_plain_lookalikes():
+    keys = L.plan_keys("“Hi” — it’s")
+    plain = L.plan_keys('"Hi" - it\'s')
+    assert keys == plain and len(keys) == len("“Hi” — it’s")
+
+
+def test_text_with_an_untypable_character_types_nothing(monkeypatch):
+    """Characters libei can't type were skipped while type_string still said
+    it had typed everything, so undo later deleted the user's own text."""
+    s = _fake_ready_session(monkeypatch)
+    assert s.type_string("café time") is False
+    assert s.ei.events == []
+
+
+def test_line_breaks_are_planned_as_enter_keys():
+    assert L.plan_keys("a" + L.SHIFT_ENTER_MARKER + "b\nc") == [
+        (L.CHAR_TO_KEYCODE["a"], False), (L.KEY_ENTER, True),
+        (L.CHAR_TO_KEYCODE["b"], False), (L.KEY_ENTER, False),
+        (L.CHAR_TO_KEYCODE["c"], False)]
+
+
+# --- freeing each session ----------------------------------------------------
+
+class _LifecycleEi(_FakeEi):
+    """Enough of libei for a whole session: one RESUMED device event, and a
+    count of every ref and unref."""
+
+    def __init__(self, fd):
+        super().__init__()
+        self.fd = fd
+        self.calls = []
+        self.queue = [101]
+
+    def ei_new_sender(self, _):
+        return 7
+
+    def ei_setup_backend_fd(self, ctx, fd):
+        self.backend_fd = fd
+        return 0
+
+    def ei_get_fd(self, ctx):
+        return self.fd
+
+    def ei_get_event(self, ctx):
+        return self.queue.pop() if self.queue else None
+
+    def ei_event_get_type(self, ev):
+        return L.EI_EVENT_DEVICE_RESUMED
+
+    def ei_event_get_device(self, ev):
+        return 55
+
+    def ei_event_unref(self, ev):
+        pass
+
+    def ei_device_ref(self, dev):
+        self.calls.append(("ref", dev))
+
+    def ei_device_unref(self, dev):
+        self.calls.append(("device_unref", dev))
+
+    def ei_unref(self, ctx):
+        self.calls.append(("unref", ctx))
+        os.close(self.backend_fd)       # libei closes the socket it was given
+
+
+def test_each_session_frees_its_context_and_device(monkeypatch):
+    """Every dictation leaked a libei context and a device reference."""
+    from tuxtalk.output_backends import LibeiOutputBackend
+    r, w = os.pipe()
+    os.write(w, b"x")                   # readable, so the select returns at once
+    fake = _LifecycleEi(r)
+    monkeypatch.setattr(L, "load_libei", lambda: fake)
+    monkeypatch.setattr(L.time, "sleep", lambda *a: None)
+    b = LibeiOutputBackend()
+    portal_r, portal_w = os.pipe()
+    os.close(portal_w)
+    monkeypatch.setattr(b, "_run_handshake", lambda: (portal_r, None))
+
+    assert b.type_text("hi") is True
+    assert fake.calls == [("ref", 55), ("device_unref", 55), ("unref", 7)]
+    # The portal's fd and libei's copy were each closed exactly once.
+    for fd in (portal_r, fake.backend_fd):
+        with pytest.raises(OSError):
+            os.fstat(fd)
+    os.close(r)
+    os.close(w)

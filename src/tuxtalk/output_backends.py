@@ -232,11 +232,13 @@ class LibeiOutputBackend(OutputBackend):
                                "(permission denied?)")
                 return False
             from . import libei_ctypes
-            session = libei_ctypes.LibeiSession(fd)
-            if not session.pump_until_ready():
-                logger.warning("libei device did not become ready")
-                return False
-            return bool(action(session))
+            # libei gets its own copy of the socket and closes it with the
+            # session; this function keeps closing the portal's.
+            with libei_ctypes.LibeiSession(os.dup(fd)) as session:
+                if not session.pump_until_ready():
+                    logger.warning("libei device did not become ready")
+                    return False
+                return bool(action(session))
         except Exception as e:
             logger.error("libei session action failed: %s", e)
             return False
