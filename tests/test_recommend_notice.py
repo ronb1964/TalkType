@@ -17,7 +17,7 @@ def env(monkeypatch):
     notes, saved = [], []
     monkeypatch.setattr("tuxtalk.config.load_config", lambda: cfg)
     monkeypatch.setattr("tuxtalk.config.save_config", lambda c: saved.append(c.recommend_notice_shown))
-    monkeypatch.setattr("tuxtalk.app._notify", lambda t, b: notes.append(b))
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda t, b: notes.append(b))
     monkeypatch.setattr("tuxtalk.cuda_helper.is_first_run", lambda: False)
     monkeypatch.setattr("tuxtalk.service_launcher.find_service_pids", lambda: [4242])
     monkeypatch.setattr(r, "detect_hardware", lambda cfg=None: NVIDIA)

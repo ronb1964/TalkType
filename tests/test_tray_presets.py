@@ -47,7 +47,7 @@ def env(monkeypatch):
     monkeypatch.setattr("tuxtalk.config.save_config", lambda c: saved.append((c.model, c.device)))
     monkeypatch.setattr(r, "detect_hardware", lambda cfg=None: NVIDIA)
     monkeypatch.setattr("tuxtalk.model_helper.is_model_cached_fast", lambda m: True)
-    monkeypatch.setattr("tuxtalk.app._notify", lambda t, b: None)
+    monkeypatch.setattr("tuxtalk.notify.notify", lambda t, b: None)
     monkeypatch.setattr("tuxtalk.whisper_vulkan.is_offered", lambda: True)
     return cfg, saved
 

@@ -13,7 +13,7 @@ The distinction that matters is guarded vs unguarded:
     from gi.repository import GdkPixbuf      # welcome_dialog.py, first run
 
     try:                                      # optional → must NOT be required
-        gi.require_version('Notify', '0.7')   # app.py, sets _notify_ready
+        gi.require_version('Notify', '0.7')   # notify.py, sets _ready
         from gi.repository import Notify
     except Exception:
         ...

@@ -202,7 +202,7 @@ def maybe_show_recommend_notice():
             return False
         better = recommend.differs_from_recommendation(cfg, recommend.detect_hardware(cfg))
         if better is not None:
-            from .app import _notify
+            from .notify import notify as _notify
             _notify("TuxTalk", recommend_notice_text(better))
             logger.info(f"Told the user about the recommended setup: {better.title}")
         cfg.recommend_notice_shown = True
@@ -809,7 +809,7 @@ class DictationTray:
             save_config(cfg)
 
             # Notify user
-            from .app import _notify
+            from .notify import notify as _notify
             mode_names = {
                 "auto": "Auto (Smart Detection)",
                 "type": "Keyboard Typing",
@@ -908,7 +908,7 @@ class DictationTray:
                     for key, _ in battery.extras:
                         setattr(cfg, key, getattr(Settings, key))
             save_config(cfg)
-            from .app import _notify
+            from .notify import notify as _notify
             try:
                 from . import whisper_vulkan as _wv
                 _gpu_offered = _wv.is_offered()

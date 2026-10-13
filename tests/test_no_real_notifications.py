@@ -9,7 +9,7 @@ import gi
 gi.require_version("Notify", "0.7")
 from gi.repository import Notify  # noqa: E402
 
-from tuxtalk import app  # noqa: E402
+from tuxtalk import app, notify  # noqa: E402
 
 
 def test_notifications_are_held_back_during_tests():
@@ -17,5 +17,6 @@ def test_notifications_are_held_back_during_tests():
 
 
 def test_app_notify_does_not_reach_the_desktop(monkeypatch):
-    monkeypatch.setattr(app, "_notify_ready", True)
-    app._notify("TalkType", "should not appear")    # would pop up without the guard
+    assert app._notify is notify.notify
+    monkeypatch.setattr(notify, "_ready", True)
+    notify.notify("TalkType", "should not appear")    # would pop up without the guard

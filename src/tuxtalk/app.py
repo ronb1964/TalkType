@@ -129,25 +129,8 @@ def _which(name):
         _tool_cache[name] = shutil.which(name)
     return _tool_cache[name]
 
-# Optional desktop notifications via libnotify (gi)
-_notify_ready = False
-try:
-    import gi
-    gi.require_version("Notify", "0.7")
-    from gi.repository import Notify
-    Notify.init("TuxTalk")
-    _notify_ready = True
-except Exception:
-    _notify_ready = False
-
-def _notify(title: str, body: str):
-    if not _notify_ready:
-        return
-    try:
-        n = Notify.Notification.new(title, body)
-        n.show()
-    except Exception:
-        pass
+# Optional desktop notifications via libnotify
+from .notify import notify as _notify
 
 # --- Single instance lock (user runtime dir) ---
 def _runtime_dir():
