@@ -26,9 +26,10 @@ from .logger import setup_logger
 
 logger = setup_logger(__name__)
 
+# Kept from TalkType, so every backup ever saved still loads.
 MANIFEST = "talktype-backup.json"
 # The app names a backup may carry: TuxTalk, and TalkType for backups saved
-# before the 0.15.0 rename (they must keep loading).
+# before the rename (they must keep loading).
 _OUR_APP_NAMES = ("TuxTalk", "TalkType")
 KEEP = 10                       # automatic copies kept
 LIST_MAX = 15                   # restore points listed; more opens as a grid on Wayland
@@ -46,8 +47,8 @@ _MAX_MEMBER_BYTES = 4 * 1024 * 1024
 
 def _parse_toml(text):
     """config's TOML reader: tomllib from Python 3.11, the toml package on
-    3.10, which the AppImage runs. Importing tomllib here crashed the 0.14.6
-    test build at startup."""
+    3.10, which the AppImage runs, so importing tomllib directly here would
+    crash the AppImage at startup."""
     return config._parse_toml_text(text)
 
 
@@ -58,6 +59,7 @@ class BackupError(Exception):
 
 @dataclass
 class Backup:
+    """The contents of a backup file or automatic copy."""
     version: str                # the TuxTalk version that made it
     created: str                # ISO date and time
     files: dict                 # name in the zip -> bytes
@@ -65,6 +67,7 @@ class Backup:
 
 @dataclass
 class Snapshot:
+    """A restore point Preferences lists: where it is and when it was made."""
     path: str
     when: datetime.datetime
     kind: str = "auto"          # "auto": a copy TuxTalk took; "file": the user's backup
@@ -136,6 +139,7 @@ def _read_bytes(path):
 
 
 def _current_files(with_stats):
+    """This computer's settings files (and stats, if *with_stats*) by their name in a backup."""
     files = {}
     for name, path in _setting_files().items():
         data = _read_bytes(path)
