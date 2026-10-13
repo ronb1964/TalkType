@@ -1,121 +1,45 @@
-# TalkType GNOME Extension
+# TuxTalk GNOME Extension
 
-Native GNOME Shell integration for TalkType speech recognition.
+Stock GNOME has no tray, so on GNOME TuxTalk's menu lives in this extension: a microphone icon in the top bar that turns red while you're recording, with the same menu the tray has everywhere else. It also tells TuxTalk which window has focus, which GNOME doesn't let regular apps find out.
 
-## Features
+It works on GNOME Shell 45 through 51.
 
-- **Panel Indicator** - Shows recording state in GNOME top bar
-- **Quick Model Switcher** - Change Whisper models from the panel menu
-- **Service Control** - Start/stop dictation service
-- **Visual Feedback** - Icon changes color when recording
-- **D-Bus Integration** - Communicates with TalkType Python backend
+## Installing it
 
-## Installation
+You normally don't have to. On GNOME, TuxTalk's first run offers to install it, and Preferences → Advanced → Install Extension does the same later. Both download `tuxtalk-gnome-extension.zip` from the latest release. GNOME only loads a new extension after you log out and back in.
 
-### Option 1: Manual Installation (Development)
+To try a copy from this folder instead:
 
 ```bash
-# From TalkType project root
 cd gnome-extension
 cp -r talktype@ronb1964.github.io ~/.local/share/gnome-shell/extensions/
 ```
 
-Then:
-1. Log out and log back in (or restart GNOME Shell with Alt+F2, type `r`, press Enter)
-2. Enable the extension:
-   ```bash
-   gnome-extensions enable talktype@ronb1964.github.io
-   ```
+Then log out and back in, and run `gnome-extensions enable talktype@ronb1964.github.io`. On Wayland there's no restarting GNOME Shell in place, so after every change to `extension.js` it's another log out and in.
 
-### Option 2: Install from ZIP
+`./package-extension.sh` at the top of the project builds the release zip.
 
-```bash
-# Build extension package
-cd gnome-extension
-zip -r talktype@ronb1964.github.io.zip talktype@ronb1964.github.io/
+## The old names
 
-# Install
-gnome-extensions install talktype@ronb1964.github.io.zip
-gnome-extensions enable talktype@ronb1964.github.io
-```
+The folder is still `talktype@ronb1964.github.io` and it still talks to TuxTalk over D-Bus as `io.github.ronb1964.TalkType`. Both are on purpose. A new UUID would be a brand new extension that people have to enable again, and an extension that's still loaded from before an update keeps calling the old D-Bus name until the next logout.
 
-## Usage
-
-1. **Start TalkType Python backend** first:
-   ```bash
-   ./TalkType-v0.3.7-x86_64.AppImage
-   ```
-   Or if installed:
-   ```bash
-   talktype-tray
-   ```
-
-2. **Extension will automatically connect** to the D-Bus service
-
-3. **Click the microphone icon** in the top panel to:
-   - Toggle dictation service on/off
-   - Switch between Whisper models
-   - Open preferences
-
-## Requirements
-
-- GNOME Shell 45-48
-- TalkType Python backend running with D-Bus service
-- Wayland session
-
-## Troubleshooting
-
-### Extension not appearing
+## When something's wrong
 
 ```bash
-# Check if extension is installed
-gnome-extensions list | grep talktype
+# Is it installed and enabled?
+gnome-extensions info talktype@ronb1964.github.io
 
-# Check extension logs
+# GNOME Shell's log, where the extension's errors end up
 journalctl -f -o cat /usr/bin/gnome-shell
 
-# Restart GNOME Shell
-Alt+F2 → type 'r' → Enter
+# Is TuxTalk answering on D-Bus?
+gdbus call --session --dest io.github.ronb1964.TalkType \
+  --object-path /io/github/ronb1964/TalkType \
+  --method io.github.ronb1964.TalkType.GetStatus
 ```
 
-### D-Bus connection issues
-
-```bash
-# Check if TalkType D-Bus service is running
-dbus-send --session --print-reply \
-  --dest=io.github.ronb1964.TalkType \
-  /io/github/ronb1964/TalkType \
-  io.github.ronb1964.TalkType.GetStatus
-```
-
-## Development
-
-### Testing
-
-```bash
-# Watch extension logs
-journalctl -f -o cat /usr/bin/gnome-shell | grep -i talktype
-
-# Reload extension after changes
-gnome-extensions disable talktype@ronb1964.github.io
-gnome-extensions enable talktype@ronb1964.github.io
-```
-
-### Debugging D-Bus
-
-```bash
-# Monitor D-Bus signals
-dbus-monitor --session "interface='io.github.ronb1964.TalkType'"
-```
-
-## Future Features
-
-- [ ] On-Screen Display (OSD) for recording state
-- [ ] Visual waveform during recording
-- [ ] Quick settings integration (GNOME 43+)
-- [ ] Keyboard shortcuts integration
-- [ ] Session statistics display
+If TuxTalk isn't running, the last one fails with a ServiceUnknown error, and the extension hides its icon until TuxTalk starts again.
 
 ## License
 
-MIT License - Same as TalkType parent project
+MIT, same as TuxTalk.
