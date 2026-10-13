@@ -16,19 +16,21 @@ class FakeClipboard:
 
     def __init__(self, data=b"what I copied", mime="text/plain;charset=utf-8"):
         self.data, self.mime = data, mime
+        self.password = False
         self.restores = []
 
     def types(self):
         if self.data is None:
             return []
-        return [self.mime] + (["TEXT"] if self.mime.startswith("text/") else [])
+        return ([self.mime] + (["TEXT"] if self.mime.startswith("text/") else [])
+                + (["x-kde-passwordManagerHint"] if self.password else []))
 
     def read(self, mime):
         return self.data
 
-    def write(self, data, mime):
-        self.data, self.mime = data, mime
-        self.restores.append((data, mime))
+    def write(self, data, mime, sensitive=False):
+        self.data, self.mime, self.password = data, mime, sensitive
+        self.restores.append((data, mime) + (("sensitive",) if sensitive else ()))
 
     def clear(self):
         self.data = None
@@ -181,3 +183,24 @@ def test_paste_uses_the_keeper_only_when_the_setting_is_on(monkeypatch):
     monkeypatch.setattr(app, "_restore_clipboard", True)
     assert app._paste_text("hello") is True
     assert events == ["save", ("restore", "hello")]
+
+
+# --- a copied password stays a password ---------------------------------------------------
+
+def test_a_password_comes_back_marked_for_clipboard_managers_to_skip(keeper, board):
+    """It came back as plain text, and Klipper saved it in its history."""
+    board.data, board.password = b"hunter2", True
+    paste(keeper, board, "dictated words")
+    board.password = False
+    run_pending(keeper)
+    assert board.restores == [(b"hunter2", "text/plain;charset=utf-8", "sensitive")]
+
+
+def test_the_sensitive_restore_uses_wl_copy_sensitive(monkeypatch):
+    runs = []
+    monkeypatch.setattr(cb, "_sensitive_supported", lambda: True)
+    monkeypatch.setattr(cb.subprocess, "run", lambda cmd, **kw: runs.append(cmd))
+    cb._wl_copy_bytes(b"hunter2", "text/plain", sensitive=True)
+    cb._wl_copy_bytes(b"words", "text/plain")
+    assert runs == [["wl-copy", "--sensitive", "--type", "text/plain"],
+                    ["wl-copy", "--type", "text/plain"]]

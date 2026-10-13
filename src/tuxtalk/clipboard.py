@@ -80,6 +80,8 @@ _MAX_SAVED_BYTES = 20 * 1024 * 1024
 _TEXT_TYPES = ("text/plain;charset=utf-8", "text/plain", "UTF8_STRING", "STRING", "TEXT")
 _NOTHING = object()             # nothing saved (setting off, or the clipboard couldn't be read)
 _EMPTY = object()               # the clipboard was empty before the paste
+# KeePassXC and friends mark a copied password with this type; Klipper skips it.
+_PASSWORD_HINT = "x-kde-passwordManagerHint"
 
 
 def _wl_copy_help():
@@ -113,8 +115,11 @@ def _wl_paste(mime):
     return result.stdout
 
 
-def _wl_copy_bytes(data, mime):
-    subprocess.run(["wl-copy", "--type", mime], input=data, timeout=3, check=True)
+def _wl_copy_bytes(data, mime, sensitive=False):
+    """Offer *data* as *mime*; *sensitive* keeps it out of clipboard managers,
+    as it came (a password copied from KeePassXC)."""
+    flag = ["--sensitive"] if sensitive and _sensitive_supported() else []
+    subprocess.run(["wl-copy", *flag, "--type", mime], input=data, timeout=3, check=True)
 
 
 def _wl_clear():
@@ -127,8 +132,9 @@ def _wl_copy_sensitive(text):
 
 
 def _read_clipboard():
-    """(bytes, mime) of what is on the clipboard now, _EMPTY, or _NOTHING when
-    it can't be read or is too big to keep."""
+    """(bytes, mime, sensitive) of what is on the clipboard now, _EMPTY, or
+    _NOTHING when it can't be read or is too big to keep. *sensitive* is
+    whether a password manager marked it, so it goes back marked too."""
     try:
         types = _wl_paste_types()
         if not types:
@@ -138,23 +144,25 @@ def _read_clipboard():
         if len(data) > _MAX_SAVED_BYTES:
             logger.info("Clipboard contents too large to keep; not restoring them")
             return _NOTHING
-        return data, mime
+        return data, mime, _PASSWORD_HINT in types
     except Exception as e:
         logger.info(f"Couldn't read the clipboard to restore it later: {e}")
         return _NOTHING
 
 
 def _write_back(saved):
-    """Put a _read_clipboard() result back. Never raises."""
+    """Put a _read_clipboard() result back. True if it was. Never raises."""
     if saved is _NOTHING:
-        return
+        return False
     try:
         if saved is _EMPTY:
             _wl_clear()
         else:
             _wl_copy_bytes(*saved)
+        return True
     except Exception as e:
         logger.warning(f"Couldn't restore the clipboard: {e}")
+        return False
 
 
 # Offered only by a file manager's copy (GNOME Files, Dolphin), never a browser's link.
@@ -164,7 +172,11 @@ _FILE_MANAGER_TYPES = ("x-special/gnome-copied-files", "application/x-kde4-urili
 
 def _best_type(types):
     """The type to save: copied files as files, plain text if offered,
-    otherwise the first one (an image, say)."""
+    otherwise the first one (an image, say).
+
+    Only one type is kept, because wl-copy offers only one: rich text comes
+    back as plain text, and files cut in a file manager come back as copied
+    (the cut marker is a second type)."""
     if "text/uri-list" in types and any(t in types for t in _FILE_MANAGER_TYPES):
         return "text/uri-list"      # files copied in a file manager, not a link
     for wanted in _TEXT_TYPES:
@@ -232,22 +244,14 @@ class ClipboardKeeper:
         if current != text.encode("utf-8"):
             logger.info("Clipboard changed after the paste; leaving it as it is")
             return
-        try:
-            if saved is _EMPTY:
-                _wl_clear()
-            else:
-                _wl_copy_bytes(*saved)
+        if _write_back(saved):
             logger.info("Clipboard restored after paste")
-        except Exception as e:
-            logger.warning(f"Couldn't restore the clipboard: {e}")
 
 
 # --- Voice editing: the text selected in the focused app -----------------------------
 
 COPY_WAIT_S = 0.6               # how long an app may take to put its selection on the clipboard
 _COPY_POLL_S = 0.05
-# KeePassXC and friends mark a copied password with this type; Klipper skips it.
-_PASSWORD_HINT = "x-kde-passwordManagerHint"
 
 
 def _read_primary():
@@ -288,10 +292,6 @@ def copy_selection(send_copy, wait=COPY_WAIT_S, sleep=None):
     import secrets
     import time
     sleep = sleep or time.sleep
-    try:
-        password = _PASSWORD_HINT in _wl_paste_types()
-    except Exception:
-        password = False
     saved = _read_clipboard()
     marker = f"tuxtalk-selection-probe-{secrets.token_hex(8)}"
     text = None
@@ -302,12 +302,6 @@ def copy_selection(send_copy, wait=COPY_WAIT_S, sleep=None):
         replaced. A password goes back marked sensitive, as it came."""
         if _read_text() not in {marker, text, *also}:
             logger.info("Clipboard changed during the voice edit; leaving it as it is")
-            return
-        if password and saved not in (_NOTHING, _EMPTY):
-            try:
-                _wl_copy_sensitive(saved[0].decode("utf-8", "replace"))
-            except Exception as e:
-                logger.warning(f"Couldn't restore the clipboard: {e}")
             return
         _write_back(saved)
 

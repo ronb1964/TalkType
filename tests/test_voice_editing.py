@@ -26,8 +26,9 @@ class FakeBoard:
         monkeypatch.setattr(cb, "_wl_clear", lambda: self.write(None, None))
         monkeypatch.setattr(cb, "_wl_copy_sensitive", self.write_sensitive)
 
-    def write(self, data, mime):
+    def write(self, data, mime, sensitive=False):
         self.data, self.mime = data, mime or self.mime
+        self.written_sensitive = sensitive
 
     def write_sensitive(self, text):
         self.sensitive_writes.append(text)
@@ -515,9 +516,8 @@ def test_a_password_is_restored_marked_sensitive(monkeypatch):
     monkeypatch.setattr(cb, "_wl_paste_types",
                         lambda: [board.mime, "x-kde-passwordManagerHint"] if board.data == b"hunter2" else [board.mime])
     _, put_back = cb.copy_selection(board.ctrl_c, sleep=lambda s: None)
-    board.sensitive_writes.clear()
     put_back()
-    assert board.sensitive_writes == ["hunter2"]
+    assert board.data == b"hunter2" and board.written_sensitive is True
 
 
 def test_copied_files_come_back_as_files(monkeypatch):
@@ -526,7 +526,8 @@ def test_copied_files_come_back_as_files(monkeypatch):
     types = ["text/plain;charset=utf-8", "text/uri-list", "application/x-kde4-urilist"]
     monkeypatch.setattr(cb, "_wl_paste_types", lambda: types if board.data.startswith(b"file:") else [board.mime])
     written = []
-    monkeypatch.setattr(cb, "_wl_copy_bytes", lambda data, mime: written.append(mime) or board.write(data, mime))
+    monkeypatch.setattr(cb, "_wl_copy_bytes",
+                        lambda data, mime, sensitive=False: written.append(mime) or board.write(data, mime))
     _, put_back = cb.copy_selection(board.ctrl_c, sleep=lambda s: None)
     put_back()
     assert written[-1] == "text/uri-list"
