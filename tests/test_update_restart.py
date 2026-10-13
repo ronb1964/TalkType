@@ -269,3 +269,87 @@ def test_preferences_update_paths_use_the_tray():
     assert "install_appimage_update(" in body
     assert "update_ui.restart_via_tray()" in body
     assert "restart_callback=update_ui.restart_via_tray" in body
+
+
+# ---- package updates ----------------------------------------------------
+
+def _package(tmp_path):
+    path = tmp_path / "tuxtalk_9.9.9_amd64.deb"
+    path.write_bytes(b"package")
+    return path
+
+
+@pytest.mark.parametrize("returncode", [0, 1, 126])
+def test_the_package_is_deleted_once_installed_or_refused(tmp_path, monkeypatch, returncode):
+    package = _package(tmp_path)
+
+    class Proc:
+        def __init__(self):
+            self.returncode = returncode
+
+        def communicate(self, timeout=None):
+            return ("", "")
+
+    monkeypatch.setattr(uc, "package_install_argv", lambda t, p: ["pkexec", "dpkg", "-i", p])
+    monkeypatch.setattr(uc.subprocess, "Popen", lambda *a, **k: Proc())
+
+    uc.install_package_update(str(package), "deb")
+
+    assert not package.exists(), "a package hundreds of MB big was left behind"
+
+
+def test_a_slow_installer_keeps_its_pipes_read_and_its_package(tmp_path, monkeypatch):
+    import subprocess
+    import threading
+    package = _package(tmp_path)
+    finish = threading.Event()
+    drained = threading.Event()
+
+    class SlowProc:
+        returncode = None
+
+        def communicate(self, timeout=None):
+            if timeout is not None:
+                raise subprocess.TimeoutExpired(cmd="pkexec", timeout=timeout)
+            finish.wait(5)
+            self.returncode = 0
+            drained.set()
+            return ("", "")
+
+        def kill(self):
+            pytest.fail("a package manager must never be killed mid-transaction")
+
+    monkeypatch.setattr(uc, "package_install_argv", lambda t, p: ["pkexec", "dpkg", "-i", p])
+    monkeypatch.setattr(uc.subprocess, "Popen", lambda *a, **k: SlowProc())
+
+    ok, _ = uc.install_package_update(str(package), "deb")
+
+    assert not ok
+    assert package.exists(), "the installer may still be reading the package"
+    finish.set()
+    assert drained.wait(5), "nothing kept reading the installer's output"
+    for _ in range(100):
+        if not package.exists():
+            break
+        threading.Event().wait(0.02)
+    assert not package.exists()
+
+
+def test_download_progress_is_passed_on_once_per_percent(tmp_path, monkeypatch):
+    monkeypatch.setattr(uc, "UPDATE_DIR", str(tmp_path))
+    total = 1000 * 65536
+
+    def fake_download(url, dest, progress_hook=None, **k):
+        for done in range(0, total + 1, 65536):
+            progress_hook(done, total)
+        pathlib.Path(dest).write_bytes(b"")
+        return True
+    monkeypatch.setattr("tuxtalk.download_utils.download_file", fake_download)
+    seen = []
+
+    uc.download_update("https://example.invalid/x", "x.deb",
+                       lambda msg, pct: seen.append(pct))
+
+    downloading = [p for p in seen if 0 <= p <= 100]
+    assert len(downloading) <= 103, f"{len(seen)} progress callbacks for one download"
+    assert 100 in seen

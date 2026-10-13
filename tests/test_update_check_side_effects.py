@@ -65,7 +65,7 @@ class TestPackageInstallIsBounded:
         from tuxtalk import update_checker
         return update_checker
 
-    def test_a_hung_package_manager_returns_instead_of_blocking(self, monkeypatch):
+    def test_a_hung_package_manager_returns_instead_of_blocking(self, monkeypatch, tmp_path):
         uc = self._checker()
 
         class HungProc:
@@ -78,12 +78,12 @@ class TestPackageInstallIsBounded:
                             lambda t, p: ["pkexec", "apt", "install", "-y", p])
         monkeypatch.setattr(uc.subprocess, "Popen", lambda *a, **k: HungProc())
 
-        ok, message = uc.install_package_update("/tmp/x.deb", "deb")
+        ok, message = uc.install_package_update(str(tmp_path / "x.deb"), "deb")
 
         assert ok is False
         assert "still" in message.lower() or "taking" in message.lower()
 
-    def test_a_normal_install_still_succeeds(self, monkeypatch):
+    def test_a_normal_install_still_succeeds(self, monkeypatch, tmp_path):
         uc = self._checker()
 
         class GoodProc:
@@ -95,11 +95,11 @@ class TestPackageInstallIsBounded:
                             lambda t, p: ["pkexec", "apt", "install", "-y", p])
         monkeypatch.setattr(uc.subprocess, "Popen", lambda *a, **k: GoodProc())
 
-        ok, _ = uc.install_package_update("/tmp/x.deb", "deb")
+        ok, _ = uc.install_package_update(str(tmp_path / "x.deb"), "deb")
 
         assert ok is True
 
-    def test_a_cancelled_authorization_is_still_reported(self, monkeypatch):
+    def test_a_cancelled_authorization_is_still_reported(self, monkeypatch, tmp_path):
         uc = self._checker()
 
         class CancelledProc:
@@ -111,7 +111,7 @@ class TestPackageInstallIsBounded:
                             lambda t, p: ["pkexec", "apt", "install", "-y", p])
         monkeypatch.setattr(uc.subprocess, "Popen", lambda *a, **k: CancelledProc())
 
-        ok, message = uc.install_package_update("/tmp/x.deb", "deb")
+        ok, message = uc.install_package_update(str(tmp_path / "x.deb"), "deb")
 
         assert ok is False
         assert "cancel" in message.lower()

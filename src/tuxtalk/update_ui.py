@@ -41,6 +41,11 @@ def run_package_update(release, install_type, restart_callback=None):
         return
 
     progress = Gtk.Dialog(title="Updating TuxTalk", flags=Gtk.DialogFlags.MODAL)
+    # The download and the password prompt carry on whatever happens to this
+    # window, so it stays until they finish rather than vanishing and leaving
+    # a password prompt to appear later with no context.
+    progress.set_deletable(False)
+    progress.connect("delete-event", lambda *_a: True)
     progress.set_default_size(440, 130)
     progress.set_position(Gtk.WindowPosition.CENTER)
     progress.set_keep_above(True)
@@ -55,7 +60,12 @@ def run_package_update(release, install_type, restart_callback=None):
     content.pack_start(bar, False, False, 10)
     progress.show_all()
 
+    # download_update reports why it failed (e.g. a checksum that doesn't
+    # match) only through its progress messages.
+    last_message = [""]
+
     def progress_cb(message, percent):
+        last_message[0] = message
         GLib.idle_add(lambda: status.set_text(message))
         GLib.idle_add(lambda: bar.set_fraction(percent / 100.0))
         GLib.idle_add(lambda: bar.set_text(f"{percent}%"))
@@ -72,9 +82,9 @@ def run_package_update(release, install_type, restart_callback=None):
             url, filename, progress_cb,
             checksums_url=release.get("checksums_url"))
         if not path:
+            reason = last_message[0].rstrip(".!") or "The download could not be completed"
             GLib.idle_add(lambda: finish(
-                False, "The download could not be completed. "
-                "Please try again or update from GitHub."))
+                False, f"{reason}.\n\nPlease try again or update from GitHub."))
             return
         GLib.idle_add(lambda: status.set_text(
             "Waiting for your password to install…"))

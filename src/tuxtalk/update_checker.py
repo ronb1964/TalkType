@@ -446,9 +446,16 @@ def download_update(
                 return None
             logger.info(f"Verifying download against published sha256 for {filename}")
 
+        # Each 64 KB chunk calls this; only a new whole percent is passed on,
+        # since every callback queues GTK redraws on the main loop.
+        last_percent = [-1]
+
         def progress_hook(downloaded, total):
             if progress_callback and total > 0:
                 percent = min(100, int((downloaded / total) * 100))
+                if percent == last_percent[0]:
+                    return
+                last_percent[0] = percent
                 downloaded_mb = downloaded / (1024 * 1024)
                 total_mb = total / (1024 * 1024)
                 progress_callback(
@@ -736,9 +743,37 @@ def package_install_argv(install_type: str, package_path: str,
 PACKAGE_INSTALL_TIMEOUT_S = 300.0
 
 
+def _remove_package(package_path: str) -> None:
+    """Delete a downloaded update package. It wraps the whole AppImage, and
+    every version has its own file name, so each one left behind is
+    hundreds of MB."""
+    try:
+        os.remove(package_path)
+    except OSError:
+        pass
+
+
+def _finish_in_background(proc, package_path: str) -> None:
+    """Wait for an installer that outlived PACKAGE_INSTALL_TIMEOUT_S on a
+    background thread. Its output pipes must keep being read: once they close,
+    the installer's next write kills it with SIGPIPE, part-way through."""
+    import threading
+
+    def drain():
+        try:
+            proc.communicate()
+            logger.info(f"Background package install finished with exit code {proc.returncode}")
+        except Exception as e:
+            logger.warning(f"Background package install: {e}")
+        _remove_package(package_path)
+
+    threading.Thread(target=drain, name="package-install", daemon=True).start()
+
+
 def install_package_update(package_path: str, install_type: str) -> Tuple[bool, str]:
     """Install a downloaded .rpm/.deb as root via pkexec (PolicyKit prompts for
-    the password). Returns (success, message). Does NOT restart TuxTalk."""
+    the password). Returns (success, message). Does NOT restart TuxTalk.
+    The package file is deleted once the installer is done with it."""
     argv = package_install_argv(install_type, package_path)
     if not argv:
         return (False, "No supported package manager was found to install the update.")
@@ -761,17 +796,18 @@ def install_package_update(package_path: str, install_type: str) -> Tuple[bool, 
         logger.warning(
             f"Package install still running after {PACKAGE_INSTALL_TIMEOUT_S}s; "
             f"leaving it to finish")
+        _finish_in_background(proc, package_path)
         return (False, "The installer is taking longer than expected — your system "
                        "may be waiting on another package operation. It will keep "
                        "running in the background; check again in a few minutes.")
-    proc.stdout_text, proc.stderr_text = out, err
+    _remove_package(package_path)
     if proc.returncode == 0:
         return (True, "Update installed. Restart TuxTalk to use the new version.")
     if proc.returncode == 126:
         return (False, "Authorization was cancelled — the update was not installed.")
     if proc.returncode == 127:
         return (False, "Could not start the installer (authorization failed).")
-    detail = (proc.stderr_text or proc.stdout_text or "").strip()
+    detail = (err or out or "").strip()
     return (False, f"Install failed: {detail or ('exit code ' + str(proc.returncode))}")
 
 
