@@ -9,7 +9,6 @@ import os
 import subprocess
 import sys
 import atexit
-import dbus
 import dbus.mainloop.glib
 from dataclasses import asdict
 from .config import (CONFIG_PATH, ConfigNotLoadedError, Settings, merge_changed_keys,
@@ -17,49 +16,10 @@ from .config import (CONFIG_PATH, ConfigNotLoadedError, Settings, merge_changed_
                      merge_custom_command_edits, CUSTOM_COMMANDS_PATH,
                      _toml_value, CLASSIC_CYAN_HEX)
 
-# D-Bus interface for communicating with the TuxTalk service
 # Set on the Preferences window so prefs_style.css — which must be installed
 # screen-wide to reach child widgets — matches only this window's widgets.
 # Every selector in that file is prefixed with it; keep the two in step.
 PREFS_STYLE_CLASS = "talktype-prefs"
-
-DBUS_SERVICE = "io.github.ronb1964.TalkType"
-DBUS_OBJECT = "/io/github/ronb1964/TalkType"
-DBUS_INTERFACE = "io.github.ronb1964.TalkType"
-
-def _get_dbus_interface():
-    """Get the D-Bus interface for TuxTalk service, or None if not available."""
-    try:
-        bus = dbus.SessionBus()
-        proxy = bus.get_object(DBUS_SERVICE, DBUS_OBJECT)
-        return dbus.Interface(proxy, DBUS_INTERFACE)
-    except Exception:
-        return None
-
-
-def apply_dark_dialog_style(dialog):
-    """Apply consistent dark styling to dialogs to match other windows."""
-    # Set dark theme preference
-    settings = Gtk.Settings.get_default()
-    if settings:
-        settings.set_property("gtk-application-prefer-dark-theme", True)
-
-    # Apply custom CSS for darker background (matching welcome screen)
-    css_provider = Gtk.CssProvider()
-    css_provider.load_from_data(b"""
-        dialog {
-            background-color: #2b2b2b;
-        }
-        dialog box {
-            background-color: #2b2b2b;
-        }
-        dialog label {
-            color: #ffffff;
-        }
-    """)
-
-    style_context = dialog.get_style_context()
-    style_context.add_provider(css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 
 # Use tomllib (Python 3.11+) or fallback to toml
 try:
@@ -182,10 +142,6 @@ class SegmentedVUMeter(Gtk.DrawingArea):
         """Set the meter level (0.0 to 1.0)."""
         self.level = max(0.0, min(1.0, level))
         self.queue_draw()  # Trigger redraw
-
-    def get_value(self):
-        """Get the current meter level."""
-        return self.level
 
     def _get_segment_color(self, segment_index, is_lit):
         """Get the color for a segment based on its position and lit state."""
@@ -395,7 +351,6 @@ class PreferencesWindow:
         # Note: Don't use set_keep_above - it interferes with combo box popups
 
         # Initialize UI state after window is shown
-        GLib.timeout_add(200, self._update_hotkey_ui_state)
         GLib.timeout_add(200, self._update_language_ui_state)
         # Don't auto-start level monitoring - only when user clicks record button
 
@@ -471,23 +426,12 @@ class PreferencesWindow:
         return _coerce_config_types(defaults)
 
     def _check_cuda_availability(self):
-        """Check if CUDA is available for faster-whisper."""
-        # Use cuda_helper for reliable detection
+        """Whether CUDA libraries (downloaded or system-wide) are present."""
         try:
             from . import cuda_helper
             return cuda_helper.has_cuda_libraries()
-        except ImportError:
-            # Fallback to old method if cuda_helper not available
-            try:
-                from faster_whisper import WhisperModel
-                print("🔍 Checking CUDA availability in preferences...")
-                model = WhisperModel("tiny", device="cuda")
-                del model
-                print("✅ CUDA availability check passed!")
-                return True
-            except Exception as e:
-                print(f"❌ CUDA availability check failed: {e}")
-                return False
+        except Exception:
+            return False
     
     def _has_nvidia(self):
         """Whether this computer has an NVIDIA card, asked once per window."""
@@ -882,7 +826,6 @@ class PreferencesWindow:
         model_combo.add_attribute(_renderer, "sensitive", 2)
 
         # Set active row to match current config model
-        from .config import Settings
         _current = self.config.get("model", Settings.model)
         for _i, _row in enumerate(self.model_store):
             if _row[0] == _current:
@@ -903,8 +846,6 @@ class PreferencesWindow:
         device_combo.connect("button-press-event", self._on_combo_button_press)
         self._block_combo_scroll(device_combo)
 
-        device_combo.append("cpu", "CPU")
-        
         # Store device combo for later refresh
         self.device_combo = device_combo
         
@@ -1175,8 +1116,6 @@ class PreferencesWindow:
                     "clicked", lambda _b: show_notification_help_window())
                 grid.attach(notif_btn, 0, row, 2, 1)
                 row += 1
-
-        # Both hotkeys are always shown (no mode-based hiding)
 
         # Voice Commands hotkey (optional combo shortcut to open quick reference)
         vc_label = Gtk.Label(label="Voice Commands Hotkey:", xalign=0)
@@ -3243,10 +3182,6 @@ class PreferencesWindow:
 
     def _on_cell_editing_started(self, renderer, editable, path, column_idx):
         """Handle when a cell starts being edited - setup focus-out commit and Tab navigation."""
-        # Store current editing state
-        self._current_edit_path = path
-        self._current_edit_column = column_idx
-        
         # Connect to focus-out to commit the edit
         def on_focus_out(widget, event):
             # Commit the current text
@@ -3664,7 +3599,7 @@ class PreferencesWindow:
         Apply puts it in effect, like any other choice."""
         from . import recommend
         from .vulkan_setup_dialogs import ensure_files, run_speed_check
-        hw, rec = self._recommendation()
+        _hw, rec = self._recommendation()
         model, device = rec.model, rec.device
         if device == "vulkan":
             if not ensure_files(self.window, model, confirm=True):
@@ -3849,11 +3784,6 @@ class PreferencesWindow:
                 text="Large Model Selected"
             )
 
-            # Apply dark theme
-            settings = Gtk.Settings.get_default()
-            if settings:
-                settings.set_property("gtk-application-prefer-dark-theme", True)
-
             dialog.format_secondary_text(
                 "The large-v3 model is approximately 3 GB in size.\n\n"
                 "⏱️  First-time load: 30-60 seconds\n"
@@ -3908,17 +3838,6 @@ class PreferencesWindow:
         tuxtalk.autostart so onboarding and Preferences stay in lock-step."""
         from . import autostart
         autostart.set_autostart(enable)
-
-    def _get_launch_command(self):
-        """Launch command for the autostart file. Delegates to tuxtalk.autostart
-        so onboarding and Preferences write the exact same command."""
-        from . import autostart
-        return autostart.get_launch_command()
-
-    def _get_icon_path(self):
-        """Icon path for the autostart file. Delegates to tuxtalk.autostart."""
-        from . import autostart
-        return autostart.get_icon_path()
 
     def _get_device_samplerate(self, device_idx):
         """Get the native sample rate for a device, falling back to 16000.
@@ -4162,7 +4081,6 @@ class PreferencesWindow:
         Get the current system microphone volume.
         Supports both PipeWire (wpctl) and PulseAudio (pactl).
         """
-        import subprocess
 
         # Try PipeWire first (modern systems like Fedora, Nobara, newer Ubuntu)
         try:
@@ -4222,7 +4140,6 @@ class PreferencesWindow:
         Set the system microphone volume.
         Supports both PipeWire (wpctl) and PulseAudio (pactl).
         """
-        import subprocess
 
         # Try PipeWire first (modern systems)
         try:
@@ -4270,9 +4187,6 @@ class PreferencesWindow:
             self.lang_label.set_visible(True)
             self.lang_combo.set_visible(True)
     
-    def _update_hotkey_ui_state(self):
-        """Both hotkeys are always visible — nothing to show/hide."""
-        return False  # Don't repeat
     
     def _update_language_ui_state(self):
         """Update language UI state based on current config."""
@@ -5212,11 +5126,6 @@ class PreferencesWindow:
                 text="Model Downloaded Successfully!"
             )
 
-            # Apply dark theme
-            settings = Gtk.Settings.get_default()
-            if settings:
-                settings.set_property("gtk-application-prefer-dark-theme", True)
-
             success_dialog.format_secondary_text(f"The {model_name} model has been downloaded and is ready to use.")
             success_dialog.run()
             success_dialog.destroy()
@@ -5267,20 +5176,7 @@ class PreferencesWindow:
     def restart_service(self):
         """Restart the dictation service."""
         try:
-            import subprocess
             import time
-
-            # Debug: print what config will be loaded
-            print(f"📄 Config file: {CONFIG_PATH}")
-            if os.path.exists(CONFIG_PATH):
-                with open(CONFIG_PATH, "r") as f:
-                    content = f.read()
-                    # Extract model and device for debug
-                    for line in content.split("\n"):
-                        if line.startswith("model =") or line.startswith("device ="):
-                            print(f"   {line}")
-            else:
-                print(f"   ⚠️  Config file does not exist!")
 
             # Kill existing dictation-service processes
             from .service_launcher import stop_dictation_service
@@ -5348,11 +5244,6 @@ class PreferencesWindow:
                 buttons=Gtk.ButtonsType.OK,
                 text="Model download failed!"
             )
-
-            # Apply dark theme
-            settings = Gtk.Settings.get_default()
-            if settings:
-                settings.set_property("gtk-application-prefer-dark-theme", True)
 
             dialog.format_secondary_text("Failed to download the Whisper model. Please check your internet connection.")
             dialog.run()
@@ -5499,11 +5390,6 @@ class PreferencesWindow:
                     buttons=Gtk.ButtonsType.OK,
                     text="Settings applied successfully!"
                 )
-
-                # Apply dark theme
-                settings = Gtk.Settings.get_default()
-                if settings:
-                    settings.set_property("gtk-application-prefer-dark-theme", True)
 
                 # Tell the truth about what happened. Claiming a restart that
                 # did not occur is the same species of defect as a setting that
