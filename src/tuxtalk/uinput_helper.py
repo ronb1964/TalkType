@@ -843,8 +843,10 @@ cat > {UDEV_RULE_PATH} << 'RULE'
 
 echo "Created udev rule at {UDEV_RULE_PATH}"
 
-# Add user to the input group (does nothing when already a member)
-usermod -a -G input "$TUXTALK_USER"
+# Add user to the input group. Members are skipped: usermod fails for users
+# outside /etc/passwd (LDAP, SSSD, systemd-homed) even when nothing would change.
+# The group list is split one name per line so "input-foo" never counts.
+id -nG "$TUXTALK_USER" | tr ' ' '\\n' | grep -qx input || usermod -a -G input "$TUXTALK_USER"
 echo "$TUXTALK_USER is in the input group"
 
 # Reload udev rules and apply them to /dev/uinput only, not every device

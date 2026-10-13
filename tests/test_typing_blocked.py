@@ -149,13 +149,32 @@ def test_the_socket_path_follows_the_environment(monkeypatch):
     assert U.ydotool_socket_path() == "/tmp/custom"
 
 
-def test_the_fix_script_touches_only_uinput_and_always_adds_the_group():
+def test_the_fix_script_touches_only_uinput_and_matches_the_group_exactly():
     """`udevadm trigger` with no filter replayed events for every device, and
-    a grep for 'input' in the group list matched 'input-foo' too."""
+    a grep for 'input' in the group list matched 'input-foo' too. Members are
+    still skipped, because usermod fails for users outside /etc/passwd."""
     script = U.get_fix_script_content()
     assert "udevadm trigger --sysname-match=uinput" in script
-    assert "grep" not in script
-    assert 'usermod -a -G input "$TUXTALK_USER"' in script
+    assert ("id -nG \"$TUXTALK_USER\" | tr ' ' '\\n' | grep -qx input "
+            '|| usermod -a -G input "$TUXTALK_USER"') in script
+
+
+def test_the_fix_script_group_check_runs_in_bash(tmp_path):
+    """Run the membership line for real with fake id/usermod commands."""
+    import subprocess
+    script = U.get_fix_script_content()
+    line = next(l for l in script.splitlines() if l.startswith("id -nG"))
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "usermod").write_text(f"#!/bin/sh\ntouch {tmp_path}/ran\nexit 6\n")
+    (bin_dir / "usermod").chmod(0o755)
+    for groups, should_run in (("ron wheel input", False), ("ron input-foo", True)):
+        (bin_dir / "id").write_text(f"#!/bin/sh\necho '{groups}'\n")
+        (bin_dir / "id").chmod(0o755)
+        (tmp_path / "ran").unlink(missing_ok=True)
+        subprocess.run(["bash", "-c", f"TUXTALK_USER=ron; {line}"],
+                       env={"PATH": f"{bin_dir}:/usr/bin:/bin"})
+        assert (tmp_path / "ran").exists() is should_run, groups
 
 
 def test_the_root_script_is_private_and_removed_even_on_a_timeout(monkeypatch):
