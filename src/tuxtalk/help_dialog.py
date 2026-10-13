@@ -174,7 +174,7 @@ def show_help_dialog(tab=None):
         tab_label.set_hexpand(True)             # Expand to fill tab width
         notebook.append_page(scrolled, tab_label)
 
-    # Tab 1: Getting Started
+    # Tab: Getting Started (tabs appear in the order they are created)
     create_tab("🚀 Getting Started", f'''<span size="large"><b>Quick Start Guide</b></span>
 
 <b>✨ TuxTalk is ready to use!</b>
@@ -207,7 +207,7 @@ system resources. Adjust this in Preferences → Advanced.
 
 <b>Need more help?</b> Check the other tabs for detailed information.''')
 
-    # Tab 2: Features
+    # Tab: Features
     create_tab("✨ Features", f'''<span size="large"><b>Key Features</b></span>
 
 <b>Two Keys, Always Active</b>
@@ -288,7 +288,7 @@ After choosing one, the tray's Device line shows where it really runs.
 • Notification sounds (optional)
 • Desktop notifications (optional)''')
 
-    # Tab 3: AI Models
+    # Tab: AI Models
     create_tab("🤖 AI Models", '''<span size="large"><b>Choosing the Right AI Model</b></span>
 
 Configure in: Preferences → General → Model
@@ -352,7 +352,7 @@ faster results.
 For any other language, use Whisper: "small" on the processor, or
 "large-v3" on a graphics card for the best accuracy.''')
 
-    # Tab 4: Advanced
+    # Tab: Advanced
     create_tab("⚙️ Advanced", f'''<span size="large"><b>Advanced Features</b></span>
 
 <b>🎮 GPU Acceleration</b>
@@ -483,7 +483,7 @@ that window is on the screen, instead of always in the same spot.
     X11 desktops like Cinnamon and XFCE. On a scaled screen it may sit a little off.'''
     create_tab("🧪 TuxTalk Labs", labs_text)
 
-    # Tab 5: Voice Commands
+    # Tab: Voice Commands
     create_tab("🗣️ Voice Commands", '''<span size="large"><b>Voice Commands Reference</b></span>
 
 Use these spoken commands during dictation to insert punctuation and formatting.
@@ -580,7 +580,7 @@ See the <b>TuxTalk Labs</b> tab.
 • Auto-period added if a sentence has no punctuation
 • Smart quote placement and spacing''')
 
-    # Tab 6: Tips
+    # Tab: Tips
     create_tab("💡 Tips", f'''<span size="large"><b>Tips &amp; Troubleshooting</b></span>
 
 <b>Keyboard Shortcuts:</b>

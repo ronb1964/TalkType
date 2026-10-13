@@ -166,6 +166,7 @@ class _FixWordDialog:
         self.combo_row.set_visible(len(entries) > 1)
 
     def select_entry(self, index):
+        """Show dictation *index*, or the newest when it is out of range."""
         index = index if 0 <= index < len(self.entries) else 0
         if self.combo.get_active() == index:
             self._load(index)
@@ -213,6 +214,7 @@ class _FixWordDialog:
     # --- labels and the save button ----------------------------------------
 
     def _update(self):
+        """Refresh the "It heard" line, the warnings and the save button."""
         phrase = self._phrase()
         replacement = self.entry.get_text().strip()
         if phrase:
@@ -272,6 +274,7 @@ class _FixWordDialog:
         self.window.destroy()
 
     def _confirm_risky(self, phrase, replacement):
+        """Ask before fixing a common word everywhere; True to go ahead."""
         msg = message_dialog(
             transient_for=self.window, modal=True,
             message_type=Gtk.MessageType.WARNING, buttons=Gtk.ButtonsType.NONE,

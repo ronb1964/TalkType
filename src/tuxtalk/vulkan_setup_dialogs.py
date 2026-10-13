@@ -157,7 +157,8 @@ def _wait_dialog(parent, work):
 
 
 def _remember_speed_result(processor_won):
-    """recommend.py stops proposing the graphics chip once it lost (vulkan_slower)."""
+    """Save whether the processor won (vulkan_slower), so recommend.py stops
+    proposing a graphics chip that lost."""
     try:
         from .config import load_config, save_config
         cfg = load_config()

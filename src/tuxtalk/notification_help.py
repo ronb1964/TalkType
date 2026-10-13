@@ -1,12 +1,9 @@
-"""A small, persistent, always-on-top window that walks a KDE user through
-turning off the per-dictation "Remote control session started" popup.
+"""A small, always-on-top window that walks a KDE user through turning off
+the per-dictation "Remote control session started" popup.
 
-Onboarding text can't solve this: by the time the popup actually appears (after
-the user finishes setup and dictates), any instructions shown during onboarding
-are long gone — and the user needs them ON SCREEN while they dig through System
-Settings. This window floats above other windows (including System Settings) and
-can be reopened any time from Preferences, so the steps stay visible while the
-user performs them.
+The popup only appears after setup, when the user first dictates, so the steps
+have to stay on screen while they work through System Settings. This window
+floats above it and can be reopened any time from Preferences.
 """
 import logging
 
@@ -39,6 +36,7 @@ _STEPS = [
 
 
 def _install_css_once():
+    """Install the opaque-background CSS for the whole screen, once."""
     global _css_installed
     if _css_installed:
         return

@@ -35,11 +35,10 @@ combobox {
 """
 
 # The color picker's preset swatches draw a checkmark on the SELECTED color.
-# The theme's default left that checkmark white, so on the white swatch it was
-# invisible — you couldn't tell white was selected. GTK already tags each swatch
-# .light or .dark by its own luminance, so key off that: a near-black check on
-# light swatches (white, amber…) and a near-white check on dark ones (black,
-# purple…). The checkmark is a symbolic icon that follows the node's `color`, so
+# The theme draws that checkmark white, which is invisible on the white swatch.
+# GTK already tags each swatch .light or .dark by its own luminance, so key off
+# that: a near-black check on light swatches (white, amber…) and a near-white
+# check on dark ones (black, purple…). The checkmark is a symbolic icon that follows the node's `color`, so
 # setting `color` on the swatch and its overlay child recolors just the check.
 _SWATCH_CSS = b"""
 colorswatch.light,
@@ -92,8 +91,8 @@ def _drop_down_below(combo):
     """Give a combo a wrap width, so on Wayland its popup hangs below the button.
 
     Plain menu mode lines the selected item up over the button and fixes its
-    scroll position after the compositor has placed it, which on KDE opened
-    squashed, with scroll arrows, until the mouse moved. In wrap mode GTK
+    scroll position after the compositor has placed it, which on KDE opens it
+    squashed, with scroll arrows, until the mouse moves. In wrap mode GTK
     anchors the menu below the button and the compositor places it, right on
     any monitor. A long list (the 33 languages) gets columns: GTK doesn't
     scroll a wrap-mode menu to the current choice, and as a grid it all fits.
@@ -152,15 +151,11 @@ def apply_dropdown_list_style():
 def forward_combo_scroll(combo):
     """Make scrolling over a ComboBox scroll the *page*, not change the combo.
 
-    GTK ComboBoxes eat scroll events to cycle their selection. The old fix just
-    returned True to swallow the event — which stopped the value from changing
-    but also left the surrounding ScrolledWindow stuck whenever the pointer sat
-    over a dropdown (you had to move the mouse off the combo to scroll at all).
-
-    Instead, forward the scroll to the nearest ScrolledWindow ancestor so the
-    page scrolls under the cursor, and still return True so the combo's own
-    value never changes. Never raises — a scroll-handler failure must not break
-    the dialog.
+    GTK ComboBoxes eat scroll events to cycle their selection. Swallowing the
+    event alone would also stop the page scrolling while the pointer is over
+    a dropdown, so the scroll is forwarded to the nearest ScrolledWindow
+    ancestor, and True is still returned so the combo's value never changes.
+    Never raises — a scroll-handler failure must not break the dialog.
     """
     def _on_scroll(widget, event):
         try:
@@ -190,13 +185,10 @@ def fit_dialog_to_screen(dialog, width, desired_height, min_height=320, margin=9
     """Size a dialog to (width, desired_height) but never taller than the monitor's
     work area, and always make it resizable.
 
-    First-run / onboarding dialogs are tall. On a screen shorter than the dialog — a
-    1080p VM, a laptop, a scaled/HiDPI display — a fixed height with resizable=False
-    runs the footer buttons off the bottom edge with no way to reach them: GNOME on
-    Wayland won't reliably let the user move, resize, or maximize such a window, so
-    they get stuck (this is exactly what happened on the Ubuntu 26.04 VM test).
-    Capping the height to the work area guarantees the whole window — action buttons
-    included — stays on-screen, and resizable=True lets the user fine-tune it.
+    Onboarding dialogs are tall. On a shorter screen (a laptop, a VM, a scaled
+    display) a fixed height runs the footer buttons off the bottom edge, and
+    GNOME on Wayland won't reliably let the user move or resize such a window.
+    Capping the height to the work area keeps the buttons on screen.
 
     Pass desired_height < 0 to keep GTK's content-based auto-height (still resizable).
     For content that can exceed the cap, wrap it in a Gtk.ScrolledWindow so the
