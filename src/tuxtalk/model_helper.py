@@ -44,8 +44,7 @@ def _download_is_usable(failed_files, model_name=None) -> bool:
     Paths may be nested (list_repo_tree is recursive), so match on the file
     name rather than the whole path.
     """
-    import os as _os
-    failed_names = {_os.path.basename(p) for p in failed_files}
+    failed_names = {os.path.basename(p) for p in failed_files}
     return not (failed_names & set(_essential_files(model_name)))
 
 
@@ -474,7 +473,6 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
     progress_state = {
         'total_bytes': 0,
         'downloaded_bytes': 0,
-        'current_file': '',
         'last_percent': -1
     }
 
@@ -588,7 +586,6 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
                 if cancel_event.is_set():
                     raise InterruptedError("Download cancelled")
 
-                progress_state['current_file'] = filename
                 bytes_before = progress_state['downloaded_bytes']
 
                 try:
