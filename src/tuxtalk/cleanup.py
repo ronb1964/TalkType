@@ -41,7 +41,9 @@ _COMMA_WORDS = {"okay", "ok", "yes", "yeah", "no", "well", "so", "alright", "rig
                 "sure", "oh", "hey", "hi", "hello", "thanks", "now", "anyway", "also"}
 
 # A filler with the commas and spaces around it:  ", um,"  "Um, "  " uh "
-_RE_FILLER = re.compile(rf"(?i)(, *)?\b{_FILLER}\b[,.]? *")
+# One joined to a hyphen or apostrophe is part of a real word ("uh-huh",
+# "uh-oh"), so it stays.
+_RE_FILLER = re.compile(rf"(?i)(, *)?(?<![-'’])\b{_FILLER}\b(?![-'’])[,.]? *")
 
 # One to three words repeated immediately with only spaces between them:
 # "the the", "will will", "I think I think". A comma between the copies

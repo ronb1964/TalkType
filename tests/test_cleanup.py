@@ -46,6 +46,10 @@ LEFT_ALONE = [
     # A capitalized repeat in mid-sentence is a name.
     "We went to Walla Walla.",
     "We flew to Bora Bora today.",
+    # A filler sound joined by a hyphen is a real word.
+    "uh-huh that works",
+    "Uh-oh, we missed it.",
+    "She said huh-uh.",
 ]
 
 
