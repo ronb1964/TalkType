@@ -100,3 +100,47 @@ def test_tray_adopts_the_old_install_on_start():
     src = (pathlib.Path(rm.__file__).parent / "tray.py").read_text()
     main = src[src.index("def main():"):]
     assert "adopt_old_install(" in main[:3000]
+
+
+# --- Ubuntu VM test, 2026-10-13: renamed entries finished off on a later start ---
+
+def test_a_later_start_points_renamed_entries_at_the_new_appimage(tmp_path, monkeypatch):
+    """TuxTalk first ran from a download folder (entries renamed, AppImage
+    not), then the real update arrived: the entries still ran TalkType.AppImage."""
+    h = str(tmp_path)
+    monkeypatch.setattr(rm, "_install_tuxtalk_icon", lambda: "tuxtalk")
+    _old_appimage_install(h)
+    rm.adopt_old_install(home=h, running_appimage=f"{h}/Downloads/TuxTalk-v0.15.0.AppImage")
+    assert "TalkType.AppImage" in open(f"{h}/.config/autostart/tuxtalk.desktop").read()
+    rm.adopt_old_install(home=h, running_appimage=f"{h}/AppImages/TalkType.AppImage")
+    for folder in (".config/autostart", ".local/share/applications"):
+        text = open(f"{h}/{folder}/tuxtalk.desktop").read()
+        assert f"Exec={h}/AppImages/TuxTalk.AppImage\n" in text, folder
+
+
+def test_upgraded_entries_get_tuxtalks_icon(tmp_path, monkeypatch):
+    h = str(tmp_path)
+    monkeypatch.setattr(rm, "_install_tuxtalk_icon", lambda: "tuxtalk")
+    _old_appimage_install(h)
+    rm.adopt_old_install(home=h, running_appimage=f"{h}/AppImages/TalkType.AppImage")
+    text = open(f"{h}/.local/share/applications/tuxtalk.desktop").read()
+    assert "Icon=tuxtalk\n" in text and "Icon=talktype" not in text
+
+
+def test_the_old_icon_stays_when_the_new_one_cannot_be_installed(tmp_path, monkeypatch):
+    """A blank menu icon is worse than the old picture."""
+    h = str(tmp_path)
+    monkeypatch.setattr(rm, "_install_tuxtalk_icon", lambda: None)
+    _old_appimage_install(h)
+    rm.adopt_old_install(home=h, running_appimage=f"{h}/AppImages/TalkType.AppImage")
+    assert "Icon=talktype\n" in open(f"{h}/.local/share/applications/tuxtalk.desktop").read()
+
+
+def test_the_dev_launchers_are_left_alone(tmp_path, monkeypatch):
+    h = str(tmp_path)
+    called = []
+    monkeypatch.setattr(rm, "_install_tuxtalk_icon", lambda: called.append(1) or "tuxtalk")
+    _write(f"{h}/.local/share/applications/tuxtalk-dev.desktop", _entry("/x/run-dev.sh", name="TuxTalk (Dev)"))
+    rm.adopt_old_install(home=h, dev=True)
+    assert "Icon=talktype" in open(f"{h}/.local/share/applications/tuxtalk-dev.desktop").read()
+    assert called == []

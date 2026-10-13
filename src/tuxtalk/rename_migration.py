@@ -178,6 +178,51 @@ def _rewrite_entry(text, dev):
     return "".join(out)
 
 
+def _install_tuxtalk_icon():
+    """TuxTalk's icon installed for the menu ("tuxtalk"), or None if it
+    couldn't be: then an entry keeps the old icon rather than a blank one."""
+    try:
+        from .update_checker import _install_app_icon
+        return _install_app_icon()
+    except Exception:
+        return None
+
+
+def _refresh_renamed_entries(home):
+    """Finish entries an earlier start already renamed: point Exec at
+    TuxTalk.AppImage once that file exists, and give them TuxTalk's icon.
+    A first start from a download folder renames the entries but not the
+    AppImage, so the real update arriving later must still repoint them."""
+    done, icon = [], ...
+    for folder in (".config/autostart", ".local/share/applications"):
+        path = os.path.join(home, folder, "tuxtalk.desktop")
+        if not os.path.isfile(path):
+            continue
+        try:
+            with open(path) as f:
+                text = f.read()
+            out = []
+            for line in text.splitlines(keepends=True):
+                if line.startswith("Exec="):
+                    line = _rewrite_exec(line)
+                elif line.rstrip("\n") == "Icon=talktype":
+                    if icon is ...:
+                        icon = _install_tuxtalk_icon()
+                    if icon:
+                        line = f"Icon={icon}\n"
+                out.append(line)
+            new_text = "".join(out)
+            if new_text != text:
+                tmp = path + ".tmp"
+                with open(tmp, "w") as f:
+                    f.write(new_text)
+                os.replace(tmp, path)
+                done.append(f"updated {folder}/tuxtalk.desktop for the TuxTalk AppImage and icon")
+        except OSError as e:
+            done.append(f"could not update {folder}/tuxtalk.desktop: {e}")
+    return done
+
+
 def adopt_old_install(home=None, dev=False, running_appimage=None):
     """Move an installed TalkType's AppImage, menu launcher and launch-at-login
     entry to TuxTalk's names. Called by the tray on start; returns log lines.
@@ -229,6 +274,8 @@ def adopt_old_install(home=None, dev=False, running_appimage=None):
             os.remove(old)
         except OSError as e:
             done.append(f"could not move {folder}/talktype{suffix}.desktop: {e}")
+    if not dev:
+        done += _refresh_renamed_entries(home)
     return done
 
 
