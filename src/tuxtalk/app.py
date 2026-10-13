@@ -3440,6 +3440,10 @@ def _service_tick(cfg, svc: "_ServiceState") -> "LiveSettings | None":
         if _words_file_changed():
             _reload_custom_words()
         if _config_file_changed():
+            # Saving settings is activity too. Switching the auto-timeout on
+            # must not stop the service a second later because the clock still
+            # counts from the last D-Bus command.
+            svc.last_activity = now
             live = _reload_live_settings(cfg, recording_indicator)
             # cfg.mic is fresh now; the device number behind it may not be.
             svc.refresh_input_device()
@@ -3579,8 +3583,11 @@ def _loop_evdev(cfg: Settings, input_device_idx):
                             elif event.value == 0:  # release
                                 held_modifiers.discard(event.code)
 
-                        # Reset timeout on any hotkey activity
-                        if svc.timeout_enabled and event.code in (hold_key, toggle_key, ecodes.KEY_ESC, voice_cmds_main_key):
+                        # Any hotkey counts as activity, whether or not the
+                        # auto-timeout is on now: it can be switched on later,
+                        # and must then count from the last real use.
+                        if event.code in (hold_key, toggle_key, ecodes.KEY_ESC, voice_cmds_main_key,
+                                          paste_last_combo[1] if paste_last_combo else None):
                             svc.last_activity = current_time
                         _handle_key_event(
                             event, mode, hold_key, toggle_key,

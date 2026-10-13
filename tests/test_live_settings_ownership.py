@@ -130,3 +130,27 @@ class TestAutoTimeoutIsLive:
         cfg.auto_timeout_enabled = False
 
         app._service_tick(cfg, svc)  # must not raise SystemExit
+
+    def test_switching_the_timeout_on_does_not_stop_the_service_at_once(self, monkeypatch):
+        """The clock only moved on D-Bus commands while the option was off, so
+        after a long session of F8 dictation, ticking it on stopped the service
+        on the next pass, right after the user turned the option on."""
+        _idle(monkeypatch)
+        monkeypatch.setattr(app, "_commands_file_changed", lambda: False)
+        monkeypatch.setattr(app, "_words_file_changed", lambda: False)
+        cfg = _cfg(auto_timeout_enabled=False, auto_timeout_minutes=5)
+        svc = app._ServiceState(cfg)
+        svc.last_activity = 0.0       # no D-Bus command since the epoch
+        svc.last_config_check = 0.0
+
+        def reload(c, indicator):
+            c.auto_timeout_enabled = True   # what Preferences just saved
+            return None
+
+        monkeypatch.setattr(app, "_config_file_changed", lambda: True)
+        monkeypatch.setattr(app, "_reload_live_settings", reload)
+        monkeypatch.setattr(svc, "refresh_input_device", lambda: None)
+        app._service_tick(cfg, svc)
+
+        monkeypatch.setattr(app, "_config_file_changed", lambda: False)
+        app._service_tick(cfg, svc)   # must not raise SystemExit
