@@ -3131,7 +3131,7 @@ def _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
             put_back(also=also)
 
 
-def _show_welcome_after_change(cfg, mode):
+def _show_welcome_after_change(cfg):
     """Show 'Hotkeys Updated!' dialog after user changed keys via Preferences.
 
     This runs once before the main event loop when a flag file is present.
@@ -3155,8 +3155,8 @@ def _show_welcome_after_change(cfg, mode):
         content.set_margin_end(25)
         content.set_spacing(15)
 
-        # Build dynamic hotkey message based on mode
-        if mode == "toggle":
+        # Both hotkeys work whatever the mode setting says, so list both.
+        if cfg.toggle_hotkey:
             hotkey_msg = f'''<b>\U0001f3a4 Your New Hotkeys:</b>
 \u2022 Press <b>{cfg.hotkey}</b> to hold and record (hold mode)
 \u2022 Press <b>{cfg.toggle_hotkey}</b> to start/stop recording (toggle mode)'''
@@ -3617,7 +3617,7 @@ def _loop_evdev(cfg: Settings, input_device_idx):
             logger.info("Removed welcome flag, will show welcome dialog")
         except Exception as e:
             logger.error(f"Failed to remove welcome flag: {e}")
-        _show_welcome_after_change(cfg, mode)
+        _show_welcome_after_change(cfg)
 
     # Main event loop
     dead_devices = []
