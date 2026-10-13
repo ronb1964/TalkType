@@ -8,7 +8,7 @@ launcher (.desktop file). Without it every TuxTalk window reports itself as
 Each install type names its launcher differently, so the name follows the
 install:
 
-  AppImage   ~/.local/share/applications/tuxtalk.desktop  (made at first run)
+  AppImage   ~/.local/share/applications/tuxtalk.desktop  (hidden until setup ends)
   AUR        /usr/share/applications/tuxtalk.desktop
   deb / rpm  /usr/share/applications/io.github.ronb1964.TuxTalk.desktop
   Flatpak    io.github.ronb1964.TuxTalk

@@ -1169,14 +1169,53 @@ Terminal=false
         return (False, f"Failed to create launcher: {e}")
 
 
-def desktop_launcher_exists() -> bool:
-    """
-    Check if desktop launcher already exists.
+# Marks the hidden entry below, so first run still writes the real launcher.
+_HIDDEN_ENTRY_MARK = "X-TuxTalk-Hidden-Entry=true"
 
-    Returns:
-        bool: True if launcher exists
-    """
-    return os.path.exists(DESKTOP_FILE_PATH)
+
+def desktop_launcher_exists() -> bool:
+    """True when the menu launcher exists (the hidden entry doesn't count)."""
+    try:
+        with open(DESKTOP_FILE_PATH) as f:
+            return _HIDDEN_ENTRY_MARK not in f.read()
+    except OSError:
+        return False
+
+
+def create_hidden_desktop_entry() -> bool:
+    """Write a hidden tuxtalk.desktop for a self-managed AppImage that has no
+    launcher yet. KDE and GNOME find a window's icon through the .desktop file
+    its program name names, so without this first-run setup shows the
+    desktop's generic icon. NoDisplay keeps it out of the app menu, and the
+    Ready screen replaces it with the real launcher. Returns True if written."""
+    try:
+        if get_install_type(pkg_query=lambda: "package") != "appimage":
+            return False        # other installs ship their own launcher
+        if os.path.lexists(DESKTOP_FILE_PATH):
+            return False
+        icon_name = _install_app_icon() or "audio-input-microphone"
+        os.makedirs(os.path.dirname(DESKTOP_FILE_PATH), exist_ok=True)
+        # Exec is required for a valid entry; the running AppImage exists now.
+        exec_path = get_running_appimage_path() or APPIMAGE_PATH
+        tmp = DESKTOP_FILE_PATH + ".tmp"
+        with open(tmp, "w") as f:
+            f.write("[Desktop Entry]\n"
+                    "Name=TuxTalk\n"
+                    f"Exec={exec_path}\n"
+                    f"Icon={icon_name}\n"
+                    "Type=Application\n"
+                    "NoDisplay=true\n"
+                    "Terminal=false\n"
+                    f"{_HIDDEN_ENTRY_MARK}\n")
+        os.replace(tmp, DESKTOP_FILE_PATH)
+        # Plasma 5's menu cache doesn't rebuild by itself; this takes a moment.
+        import threading
+        threading.Thread(target=_refresh_desktop_menu_cache, daemon=True).start()
+        logger.info("Hidden desktop entry written so setup windows show TuxTalk's icon")
+        return True
+    except Exception as e:
+        logger.warning(f"Could not write the hidden desktop entry: {e}")
+        return False
 
 
 def ensure_appimage_in_standard_location() -> Tuple[bool, str]:

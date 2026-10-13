@@ -2089,6 +2089,9 @@ def main():
                 logger.info(f"Rename to TuxTalk: {line}")
         except Exception as e:      # never stop the tray from starting
             logger.warning(f"Rename to TuxTalk: could not move the launchers: {e}")
+        # After the rename, which treats an existing tuxtalk.desktop as done.
+        from .update_checker import create_hidden_desktop_entry
+        create_hidden_desktop_entry()   # TuxTalk's icon on first-run windows
 
     # A copy of the settings to roll back to (Preferences → Advanced →
     # Restore Earlier Settings), taken before this version touches them.
