@@ -72,7 +72,7 @@ def test_libei_backend_types_via_fresh_session(monkeypatch):
 
 
 def test_save_token_creates_missing_data_dir(tmp_path, monkeypatch):
-    # On a fresh CPU-only Flatpak install the data dir (data/TalkType/) doesn't
+    # On a fresh CPU-only Flatpak install the data dir (data/TuxTalk/) doesn't
     # exist yet — nothing has written CUDA libs or the first-run flag there. If
     # _save_token can't create it, the RemoteDesktop restore token never
     # persists and GNOME re-prompts "Allow remote interaction?" on every single
@@ -100,8 +100,8 @@ def test_output_backend_accessor_returns_ydotool_on_host(monkeypatch):
 
 # --- Editing key-combos must route through the backend, not hardcoded ydotool ---
 # The 'delete everything' and char-undo commands press special keys (Ctrl+A,
-# Backspace). They used to call ydotool directly, which does nothing in the
-# Flatpak sandbox (no ydotoold), so the commands silently failed there.
+# Backspace). Calling ydotool directly does nothing in the Flatpak sandbox (no
+# ydotoold), so the commands would silently fail there.
 
 def test_ydotool_backend_select_all_delete_delegates(monkeypatch):
     from tuxtalk import app
@@ -286,8 +286,8 @@ def _handshake_in_a_thread(backend, seconds=10):
 
 
 def test_an_error_inside_a_portal_answer_ends_the_handshake(monkeypatch):
-    """A failure inside a response callback was swallowed and the dictation
-    thread waited forever."""
+    """A failure inside a response callback must end the handshake, not leave
+    the dictation thread waiting forever."""
     from tuxtalk import portal_common as pc
     from tuxtalk.output_backends import LibeiOutputBackend
     bus = _PortalBus({"CreateSession": (0, {})})        # no session_handle in it

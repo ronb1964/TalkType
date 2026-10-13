@@ -2,17 +2,15 @@
 
 Onboarding order (show_welcome_and_install):
 
-    welcome → optional downloads → hotkey test
-        → show_tips_and_features_dialog   ("You're All Set!", picks the model)
+    welcome (chooses the setup) → optional downloads → hotkey test
+        → show_tips_and_features_dialog   ("You're All Set!", tips)
         → the model actually downloads
         → show_setup_complete_dialog      ("Ready!", the last thing shown)
 
-The button was first added to the tips screen, which is wrong: at that point the
-user has not yet chosen a model or downloaded it, so sending them into
-Preferences interrupts setup halfway. The last screen is where they are done and
-genuinely choosing what to do next — start dictating, or go and adjust settings.
-
-These tests pin the placement so it cannot drift back.
+On the tips screen the model has not been downloaded yet, so sending the user
+into Preferences there interrupts setup halfway. The last screen is where they
+are done and genuinely choosing what to do next — start dictating, or go and
+adjust settings.
 """
 
 import pathlib

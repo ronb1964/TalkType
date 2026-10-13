@@ -159,8 +159,8 @@ def test_a_restart_on_a_short_lived_thread_outlives_that_thread(fake):
 
 
 def test_a_helper_that_never_answers_is_stopped(fake, monkeypatch):
-    """A helper that timed out while starting kept running, holding graphics
-    memory, for the rest of the session."""
+    """A helper that times out while starting must not keep running, holding
+    graphics memory, for the rest of the session."""
     monkeypatch.setattr(parakeet_gpu, "START_TIMEOUT", 0.5)
     started = []
     real_popen = parakeet_gpu.subprocess.Popen

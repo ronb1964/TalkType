@@ -28,7 +28,7 @@ def test_parakeet_is_offered_valid_and_downloadable():
 
 def test_every_offered_model_has_a_label_on_every_picker():
     """The picker indexes a label dict by model id; a missing key crashes the
-    screen as it opens. (First run's card has no full picker any more.)"""
+    screen as it opens. (First run's card has no full picker.)"""
     from tuxtalk.model_helper import OFFERED_MODELS
 
     for path, dict_name in (("src/tuxtalk/prefs.py", "_MODEL_DISPLAY"),):

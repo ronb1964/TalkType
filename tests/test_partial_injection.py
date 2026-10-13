@@ -25,7 +25,7 @@ def quiet(monkeypatch):
 # --- typing stops at the first failure ---------------------------------------
 
 def test_typing_stops_at_the_first_part_that_fails(monkeypatch, quiet):
-    """Typing on after a failed line ran the later lines into the earlier ones."""
+    """Typing on after a failed line would run the later lines into the earlier ones."""
     typed = []
     monkeypatch.setattr(app, "_type_text_raw", lambda t: typed.append(t) or t != "two")
     monkeypatch.setattr(app, "_send_shift_enter", lambda: True)
@@ -46,8 +46,8 @@ def test_typing_stops_when_a_line_break_fails(monkeypatch, quiet):
 # --- a terminal's paste falling back to typing --------------------------------
 
 def test_terminal_remainder_never_presses_a_plain_enter(monkeypatch, quiet):
-    """A terminal gets one paste with real newlines. When that paste failed, the
-    remainder was typed with each newline as Enter, running the command."""
+    """A terminal gets one paste with real newlines. If that paste fails, typing
+    the remainder with each newline as Enter would run the command."""
     monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "konsole")
     monkeypatch.setattr(app, "_paste_text", lambda t: False)
@@ -71,7 +71,7 @@ def test_auto_mode_types_on_x11(monkeypatch, quiet):
 
 def test_typed_snippet_newline_is_shift_enter_on_x11(monkeypatch, quiet):
     """A snippet keeps real newlines. Typed as a plain Enter, the first line of
-    a signature sent a chat message or ran a terminal command."""
+    a signature would send a chat message or run a terminal command."""
     monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "kwrite")
     keys = []
@@ -99,8 +99,8 @@ def test_failed_typing_empties_the_undo_buffer(monkeypatch, quiet):
 
 
 def test_smart_paste_records_the_line_break_that_landed(monkeypatch, quiet):
-    """Part 1 and the break after it landed, then part 2's paste failed. The
-    buffer left out that break, so an undo left a stray blank line behind."""
+    """Part 1 and the break after it land, then part 2's paste fails. The
+    buffer must include that break, or an undo leaves a stray blank line."""
     monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: None)
     monkeypatch.setattr(app, "_paste_text", lambda t: t == "first")

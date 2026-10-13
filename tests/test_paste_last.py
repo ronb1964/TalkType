@@ -244,9 +244,9 @@ def test_the_setup_tip_really_appears(monkeypatch):
 
 
 def test_a_hold_started_while_the_combo_is_pending_still_stops(keys, monkeypatch):
-    """While the combo waited for its keys to be let go, every key release
-    was swallowed, the hold key's too, so an F8 recording started in that
-    moment kept running after F8 was let go."""
+    """While the combo waits for its keys to be let go, the hold key's release
+    must still get through, or an F8 recording started in that moment keeps
+    running after F8 is let go."""
     stopped = []
     monkeypatch.setattr(app, "start_recording",
                         lambda *a, **k: setattr(app.state, "is_recording", True) or True)
