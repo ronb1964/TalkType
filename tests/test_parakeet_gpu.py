@@ -20,12 +20,15 @@ from tuxtalk import parakeet_gpu_worker as worker
 #   refuse  reports an error instead of becoming ready
 #   die     becomes ready, then exits on the first request
 #   once    answers the first request, then exits
+#   silent  never answers at all
 FAKE_WORKER = textwrap.dedent("""
     import json, struct, sys
     mode = sys.argv[1]
     out, inp = sys.stdout.buffer, sys.stdin.buffer
     def reply(obj):
         out.write((json.dumps(obj) + "\\n").encode()); out.flush()
+    if mode == "silent":
+        import time; time.sleep(60)
     if mode == "refuse":
         reply({"error": "no graphics chip"}); sys.exit(1)
     reply({"ready": True})
@@ -153,3 +156,19 @@ def test_a_restart_on_a_short_lived_thread_outlives_that_thread(fake):
         assert model.recognize(_audio(3)) == "48000 samples"
     finally:
         model.close()
+
+
+def test_a_helper_that_never_answers_is_stopped(fake, monkeypatch):
+    """A helper that timed out while starting kept running, holding graphics
+    memory, for the rest of the session."""
+    monkeypatch.setattr(parakeet_gpu, "START_TIMEOUT", 0.5)
+    started = []
+    real_popen = parakeet_gpu.subprocess.Popen
+
+    def recording_popen(*a, **k):
+        started.append(real_popen(*a, **k))
+        return started[-1]
+    monkeypatch.setattr(parakeet_gpu.subprocess, "Popen", recording_popen)
+    with pytest.raises(RuntimeError):
+        parakeet_gpu.ParakeetGpuModel(0, command=fake("silent"))
+    assert started and started[0].poll() is not None

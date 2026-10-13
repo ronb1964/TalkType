@@ -73,7 +73,13 @@ class ParakeetGpuModel:
             stderr=self._stderr, preexec_fn=engine_process.set_parent_death_signal).result()
         logger.info(f"Parakeet graphics helper starting (pid {self._proc.pid}, "
                     f"device {self.device_index})")
-        reply = self._read_reply(START_TIMEOUT)
+        try:
+            reply = self._read_reply(START_TIMEOUT)
+        except BaseException:
+            # A helper that never answered would otherwise keep running
+            # (and holding graphics memory) for the rest of the session.
+            self._stop()
+            raise
         if not reply.get("ready"):
             self._stop()
             raise RuntimeError(reply.get("error") or "the helper did not start")

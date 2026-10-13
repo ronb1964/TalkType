@@ -42,6 +42,7 @@ import time
 import urllib.request
 import uuid
 import wave
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 
@@ -388,7 +389,16 @@ class VulkanWhisperModel:
         self._port = None
         # Re-entrant: a restart inside transcribe() runs a warm-up transcribe().
         self._lock = threading.RLock()
-        self._start()
+        # The server dies with the thread that started it (PR_SET_PDEATHSIG
+        # is per thread), and a restart can happen on a short-lived dictation
+        # thread (the Flatpak build makes one per dictation). So every start
+        # goes through this one thread, which lives as long as the model.
+        self._launcher = ThreadPoolExecutor(max_workers=1, thread_name_prefix="vulkan-whisper")
+        try:
+            self._start()
+        except BaseException:
+            self._launcher.shutdown(wait=False)
+            raise
 
     def _start(self):
         engine_process.kill_orphans(engine_process.processes_of(_binary("whisper-server")),
@@ -396,29 +406,38 @@ class VulkanWhisperModel:
         with socket.socket() as s:
             s.bind(("127.0.0.1", 0))
             self._port = s.getsockname()[1]
-        self._proc = subprocess.Popen(
+        # Unlike llama-server (ai_cleanup.py), whisper-server has no API key
+        # option. It listens on 127.0.0.1 only and sends nothing of the user's
+        # back, so another local program could at most borrow the graphics chip.
+        self._proc = self._launcher.submit(
+            subprocess.Popen,
             [_binary("whisper-server"), "-m", model_path(self.model_name),
              "--host", "127.0.0.1", "--port", str(self._port),
              "-t", str(self.threads), "-dev", str(self.device_index)],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=_engine_env(),
-            preexec_fn=engine_process.set_parent_death_signal)
+            preexec_fn=engine_process.set_parent_death_signal).result()
         logger.info(f"Graphics engine starting (pid {self._proc.pid}, device {self.device_index})")
-        deadline = time.time() + 120
-        while time.time() < deadline:
-            if self._proc.poll() is not None:
-                raise RuntimeError("the graphics engine stopped while starting")
-            try:
-                urllib.request.urlopen(f"http://127.0.0.1:{self._port}/health", timeout=1)
-                break
-            except Exception:
-                time.sleep(0.25)
-        else:
-            self.close()
-            raise RuntimeError("the graphics engine did not start in time")
-        # One short practice run: the first request on a graphics chip pays
-        # one-time shader setup, which would otherwise land on the first dictation.
-        started = time.time()
-        self.transcribe(np.zeros(16000, dtype=np.float32), "en")
+        try:
+            deadline = time.time() + 120
+            while time.time() < deadline:
+                if self._proc.poll() is not None:
+                    raise RuntimeError("the graphics engine stopped while starting")
+                try:
+                    urllib.request.urlopen(f"http://127.0.0.1:{self._port}/health", timeout=1)
+                    break
+                except Exception:
+                    time.sleep(0.25)
+            else:
+                raise RuntimeError("the graphics engine did not start in time")
+            # One short practice run: the first request on a graphics chip pays
+            # one-time shader setup, which would otherwise land on the first dictation.
+            started = time.time()
+            self.transcribe(np.zeros(16000, dtype=np.float32), "en")
+        except BaseException:
+            # A server that never got ready would otherwise keep the model in
+            # graphics memory for the rest of the session.
+            self._stop()
+            raise
         logger.info(f"Graphics engine ready (warm-up took {time.time() - started:.1f}s)")
 
     def transcribe(self, audio_f32, language=None, timeout=120, prompt=None):
@@ -435,7 +454,7 @@ class VulkanWhisperModel:
             with urllib.request.urlopen(request, timeout=timeout) as response:
                 return parse_result(json.load(response))
 
-    def close(self):
+    def _stop(self):
         proc, self._proc = self._proc, None
         if proc and proc.poll() is None:
             proc.terminate()
@@ -443,3 +462,8 @@ class VulkanWhisperModel:
                 proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 proc.kill()
+                proc.wait()
+
+    def close(self):
+        self._stop()
+        self._launcher.shutdown(wait=False)

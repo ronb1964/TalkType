@@ -5,6 +5,7 @@ hand on an RTX 4070 Super and a Ryzen 7800X3D's built-in Radeon; these cover
 everything around them.
 """
 import io
+import time
 import types
 import wave
 
@@ -440,3 +441,79 @@ def test_speed_check_remembers_which_won(monkeypatch, times, slower):
     monkeypatch.setattr(vsd, "_wait_dialog", lambda parent, work: work())
     vsd.run_speed_check(None, "small")
     assert saved == {"slower": slower}
+
+
+# --- the server process ------------------------------------------------------
+
+# A stand-in whisper-server: /health answers once it is up, /inference
+# answers with fixed text, or with an error when started with --fail-inference
+# in its environment (so the warm-up fails).
+FAKE_SERVER = '''
+import json, os, sys
+from http.server import BaseHTTPRequestHandler, HTTPServer
+port = int(sys.argv[sys.argv.index("--port") + 1])
+fail = os.environ.get("FAKE_FAIL_INFERENCE") == "1"
+class H(BaseHTTPRequestHandler):
+    def log_message(self, *a):
+        pass
+    def do_GET(self):
+        self.send_response(200); self.end_headers(); self.wfile.write(b"ok")
+    def do_POST(self):
+        self.rfile.read(int(self.headers["Content-Length"]))
+        if fail:
+            self.send_response(500); self.end_headers(); return
+        body = json.dumps({"text": "hello", "segments": []}).encode()
+        self.send_response(200); self.send_header("Content-Length", str(len(body)))
+        self.end_headers(); self.wfile.write(body)
+HTTPServer(("127.0.0.1", port), H).serve_forever()
+'''
+
+
+@pytest.fixture
+def fake_server(tmp_path, monkeypatch):
+    import sys
+    script = tmp_path / "whisper-server"
+    script.write_text(f"#!{sys.executable}\n" + FAKE_SERVER)
+    script.chmod(0o755)
+    monkeypatch.setattr(wv, "_binary", lambda name: str(script))
+    monkeypatch.setattr(wv, "model_path", lambda name: "model.bin")
+    monkeypatch.setattr(wv.engine_process, "kill_orphans", lambda *a, **k: 0)
+    return monkeypatch
+
+
+def test_a_restarted_server_outlives_the_short_lived_thread_that_restarted_it(fake_server):
+    """The server dies with the thread that started it. A restart from a
+    dictation thread that then ends must leave a server that keeps working."""
+    import threading
+    model = wv.VulkanWhisperModel("small", 0, threads=1)
+    try:
+        model._proc.kill()
+        model._proc.wait()
+        results = []
+        t = threading.Thread(target=lambda: results.append(model.transcribe(np.zeros(16000, np.float32))))
+        t.start()
+        t.join()                                   # restarted the server, then ended
+        assert results == [("hello", 0.0)]
+        restarted = model._proc
+        time.sleep(0.3)
+        assert restarted.poll() is None            # still running
+        assert model.transcribe(np.zeros(16000, np.float32)) == ("hello", 0.0)
+        assert model._proc is restarted            # no second restart
+    finally:
+        model.close()
+
+
+def test_a_failed_warm_up_stops_the_server(fake_server, monkeypatch):
+    """A warm-up that failed left whisper-server holding the model in
+    graphics memory for the whole session."""
+    monkeypatch.setenv("FAKE_FAIL_INFERENCE", "1")
+    started = []
+    real_popen = wv.subprocess.Popen
+
+    def recording_popen(*a, **k):
+        started.append(real_popen(*a, **k))
+        return started[-1]
+    monkeypatch.setattr(wv.subprocess, "Popen", recording_popen)
+    with pytest.raises(Exception):
+        wv.VulkanWhisperModel("small", 0, threads=1)
+    assert started and started[0].poll() is not None
