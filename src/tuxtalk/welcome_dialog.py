@@ -1373,6 +1373,47 @@ class WelcomeDialog:
 
         vbox.pack_start(typing_box, False, False, 0)
 
+    def _typing_fix_pending(self):
+        """Whether the typing setup this computer needs hasn't been done."""
+        if self.is_flatpak:
+            return False
+        return ((self.needs_uinput_fix and not self.uinput_fixed)
+                or (self.needs_ydotoold_setup and not self.ydotoold_fixed))
+
+    def _on_set_it_up(self, _button):
+        """"Set it up" does the typing setup first when it's needed, so a user
+        who never scrolls to Fix Typing doesn't end up with no hotkey."""
+        if not self._typing_fix_pending():
+            self.dialog.response(Gtk.ResponseType.OK)
+            return
+        button = self.fix_typing_button
+        if button is not None and button.get_sensitive():
+            self._continue_after_fix = True
+            self._on_fix_typing_clicked(button)
+        else:
+            # Fix Typing can't run yet (ydotool still to be installed).
+            self._continue_without_typing()
+
+    def _continue_without_typing(self):
+        """Warn that the hotkey and typing won't work; continue if the user
+        says so, otherwise stay on this screen."""
+        msg = message_dialog(
+            transient_for=self.dialog,
+            modal=True,
+            message_type=Gtk.MessageType.WARNING,
+            buttons=Gtk.ButtonsType.NONE,
+            text="Typing isn't set up yet",
+        )
+        msg.format_secondary_text(
+            "Without it your dictation key and typing won't work. Go back and "
+            "click Fix Typing, or continue and set it up later in Preferences.")
+        msg.add_button("Go Back", Gtk.ResponseType.CANCEL)
+        msg.add_button("Continue Anyway", Gtk.ResponseType.OK)
+        answer = msg.run()
+        msg.destroy()
+        if answer == Gtk.ResponseType.OK:
+            self.dialog.response(Gtk.ResponseType.OK)
+
     def _on_fix_typing_clicked(self, button):
         """Handle the Fix Typing button click - sets up both ydotoold and uinput permissions."""
         # Disable button while processing
@@ -1387,6 +1428,17 @@ class WelcomeDialog:
             lambda outcome: self._finish_fix_typing(button, outcome))
 
     def _finish_fix_typing(self, button, outcome):
+        """Show the result of Fix Typing (GTK thread), then carry on with
+        "Set it up" if that is what started it."""
+        self._report_fix_typing(button, outcome)
+        if getattr(self, "_continue_after_fix", False):
+            self._continue_after_fix = False
+            if self._typing_fix_pending():
+                self._continue_without_typing()
+            else:
+                self.dialog.response(Gtk.ResponseType.OK)
+
+    def _report_fix_typing(self, button, outcome):
         """Show the result of Fix Typing (GTK thread)."""
         if isinstance(outcome, Exception):
             logger.error(f"Error fixing typing setup: {outcome}")
@@ -1802,7 +1854,7 @@ class WelcomeDialog:
         continue_btn = Gtk.Button(label="Set it up")
         continue_btn.set_size_request(200, 40)
         continue_btn.get_style_context().add_class("suggested-action")
-        continue_btn.connect("clicked", lambda w: self.dialog.response(Gtk.ResponseType.OK))
+        continue_btn.connect("clicked", self._on_set_it_up)
         self.continue_button = continue_btn
 
         button_box.pack_start(continue_btn, False, False, 0)

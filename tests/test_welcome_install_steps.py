@@ -139,3 +139,91 @@ def test_installs_run_one_at_a_time(dialog, monkeypatch):
     assert not second_started.wait(0.2)      # waits for the first install
     release_first.set()
     assert second_started.wait(2)
+
+
+# --- "Set it up" runs the typing fix it needs (fedora44-KDE test, 2026-10-13) ---
+# The Fix Typing button sat below the window's edge at 1080p; "Set it up"
+# finished onboarding without it, and the hotkey and typing never worked.
+
+@pytest.fixture
+def needs_uinput(monkeypatch):
+    if not Gtk.init_check()[0]:
+        pytest.skip("no display")
+    monkeypatch.setattr(r, "detect_hardware", lambda cfg=None: r.Hardware(None, False))
+    monkeypatch.setattr(r, "system_language", lambda env=None: "en")
+    monkeypatch.setattr(wd, "detect_uinput_access", lambda: (False, "not in input group"))
+    monkeypatch.setattr(wd, "detect_ydotoold_status",
+                        lambda: {"needs_setup": False, "ydotool_installed": True})
+    monkeypatch.setattr(wd, "detect_portaudio_status", lambda: {"needs_install": False})
+    d = wd.WelcomeDialog(force_gnome=False)
+    responses = []
+    monkeypatch.setattr(d.dialog, "response", lambda r: responses.append(r))
+    monkeypatch.setattr(wd, "message_dialog", lambda **k: _Answer(k, d.answer))
+    d.answer = Gtk.ResponseType.OK
+    d.responses = responses
+    yield d
+    d.destroy()
+
+
+class _Answer:
+    """A message box that answers by itself, recording what it said."""
+    shown = []
+
+    def __init__(self, kwargs, answer):
+        self.kwargs, self.answer = kwargs, answer
+        _Answer.shown.append(kwargs.get("text", ""))
+
+    def format_secondary_text(self, text):
+        _Answer.shown.append(text)
+
+    def add_button(self, *a):
+        pass
+
+    def run(self):
+        return self.answer
+
+    def destroy(self):
+        pass
+
+
+def _fix_outcome(ok):
+    return {"results": [] if ok else ["❌ Permissions: cancelled"], "ydotoold_fixed": False,
+            "uinput_fixed": ok, "ydotoold_running": True}
+
+
+def test_set_it_up_runs_the_typing_fix_first(needs_uinput, monkeypatch):
+    d = needs_uinput
+    ran = []
+    monkeypatch.setattr(d, "_on_fix_typing_clicked",
+                        lambda button: ran.append(1) or d._finish_fix_typing(button, _fix_outcome(True)))
+    d.continue_button.clicked()
+    assert ran == [1]
+    assert d.responses == [Gtk.ResponseType.OK]
+
+
+def test_a_cancelled_fix_warns_and_can_go_back(needs_uinput, monkeypatch):
+    d = needs_uinput
+    d.answer = Gtk.ResponseType.CANCEL           # "Go back"
+    monkeypatch.setattr(d, "_on_fix_typing_clicked",
+                        lambda button: d._finish_fix_typing(button, _fix_outcome(False)))
+    _Answer.shown.clear()
+    d.continue_button.clicked()
+    assert d.responses == []
+    assert any("won't work" in t for t in _Answer.shown)
+
+
+def test_a_cancelled_fix_can_still_continue(needs_uinput, monkeypatch):
+    d = needs_uinput
+    d.answer = Gtk.ResponseType.OK               # "Continue anyway"
+    monkeypatch.setattr(d, "_on_fix_typing_clicked",
+                        lambda button: d._finish_fix_typing(button, _fix_outcome(False)))
+    d.continue_button.clicked()
+    assert d.responses == [Gtk.ResponseType.OK]
+
+
+def test_set_it_up_goes_straight_on_when_nothing_is_needed(dialog, monkeypatch):
+    responses = []
+    monkeypatch.setattr(dialog.dialog, "response", lambda r: responses.append(r))
+    dialog.ydotoold_fixed = True                 # the fixture's only pending step, done
+    dialog.continue_button.clicked()
+    assert responses == [Gtk.ResponseType.OK]
