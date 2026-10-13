@@ -2335,6 +2335,12 @@ class PreferencesWindow:
             return
         if not path.lower().endswith(".zip"):
             path += ".zip"
+            # The file dialog only asked about the name as typed, not this one.
+            if os.path.exists(path) and self._message(
+                    Gtk.MessageType.QUESTION, "Replace the existing backup?",
+                    f"{path} already exists. Saving replaces it.",
+                    Gtk.ButtonsType.OK_CANCEL) != Gtk.ResponseType.OK:
+                return
         try:
             settings_backup.write_backup(path)
         except (settings_backup.BackupError, OSError) as e:
