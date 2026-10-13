@@ -37,12 +37,15 @@ Also new in this one:
   into TuxTalk. Heads up, Parakeet can't be told about words ahead of time, so
   if it hears one as something else entirely, Fix a Word is still the way.
   Words you fix with Fix a Word get added to Your Words too.
-- Voice editing. Select some text, hold Shift+F8 and say how to change it,
+- TuxTalk Labs, a new spot at the bottom of Preferences, Advanced, for
+  features that work but are still being worked on. There's a Labs page in
+  Help that explains them, and a link to tell me how they're working for you.
+- Voice editing, the first thing in Labs. Select some text, hold Shift+F8 and say how to change it,
   like "make this more formal", "shorten this" or "turn this into a bullet
   list". Say it however you want, there's no fixed wording. The text gets
   replaced with the rewrite, and Ctrl+Z puts it back. It uses the same small AI
   as the self-corrections, so if you already have that, there's nothing more to
-  download. It's off unless you turn it on in Preferences, Advanced. Heads up,
+  download. It's off unless you turn it on in TuxTalk Labs. Heads up,
   it's a small model: quick changes come out well, but ask it to write a whole
   email from one line and it'll make stuff up.
 - Ctrl+Alt+P types your last dictation again, wherever your cursor is. Handy

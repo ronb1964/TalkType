@@ -594,13 +594,6 @@ def test_a_window_change_while_the_ai_works_keeps_the_rewrite_safe(edit_env, mon
     assert "Recent Dictations" in edit_env["notices"][0]
 
 
-def test_the_switch_is_hidden_in_the_flatpak():
-    import pathlib
-    prefs = (pathlib.Path(app.__file__).parent / "prefs.py").read_text()
-    block = prefs[prefs.index("self.voice_editing_check = Gtk.CheckButton"):][:2000]
-    assert 'os.environ.get("FLATPAK_ID")' in prefs[prefs.index("# Voice editing (app._transcribe_and_edit)"):][:400]
-
-
 
 # --- re-review fixes ------------------------------------------------------------------------
 
@@ -687,3 +680,52 @@ def test_a_selection_with_nothing_said_says_so(edit_env, monkeypatch):
     assert edit_env["typed"] == []
     assert len(edit_env["notices"]) == 1 and "didn't catch" in edit_env["notices"][0]
     assert edit_env["put_back"] == 1
+
+
+# --- TuxTalk Labs (Ron, 2026-10-12): experimental features, with Help and feedback -----
+
+import pathlib
+
+SRC = pathlib.Path(app.__file__).parent
+
+
+def test_help_has_a_labs_tab_and_can_open_on_it():
+    import gi
+    gi.require_version("Gtk", "3.0")
+    from gi.repository import Gtk
+    from tuxtalk import help_dialog
+    dialog = help_dialog.show_help_dialog(tab="labs")
+    try:
+        notebook = next(w for w in _walk(dialog) if isinstance(w, Gtk.Notebook))
+        page = notebook.get_nth_page(notebook.get_current_page())
+        assert "Labs" in notebook.get_tab_label_text(page)
+        text = " ".join(w.get_text() for w in _walk(page) if isinstance(w, Gtk.Label))
+        for must in ("experimental", "Shift", "Ctrl+Z", "make this more formal", "terminal"):
+            assert must in text, must
+    finally:
+        dialog.destroy()
+
+
+def _walk(widget):
+    from gi.repository import Gtk
+    yield widget
+    if isinstance(widget, Gtk.Container):
+        for child in widget.get_children():
+            yield from _walk(child)
+
+
+def test_preferences_has_a_labs_section_with_both_links():
+    prefs = (SRC / "prefs.py").read_text()
+    labs = prefs[prefs.index("# ===== TUXTALK LABS ====="):]
+    labs = labs[:labs.index("return grid")]
+    assert "TuxTalk Labs" in labs and "experimental" in labs.lower()
+    assert "self.voice_editing_check" in labs
+    assert 'show_help_dialog(tab="labs")' in labs
+    assert "FEEDBACK_URL" in labs
+    assert 'os.environ.get("FLATPAK_ID")' in labs
+
+
+def test_voice_editing_is_no_longer_in_dictation_cleanup():
+    prefs = (SRC / "prefs.py").read_text()
+    cleanup = prefs[prefs.index("Dictation Cleanup"):prefs.index("# ===== PRIVACY SECTION =====")]
+    assert "voice_editing_check" not in cleanup

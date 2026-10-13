@@ -1835,29 +1835,9 @@ class PreferencesWindow:
         grid.attach(self.ai_corrections_check, 0, row, 2, 1)
         row += 1
 
-        # Voice editing (app._transcribe_and_edit): the same AI rewrites the
-        # selected text the way the user says.
-        # Not in the Flatpak: its portal input can't see Shift or send Ctrl+C.
-        if not os.environ.get("FLATPAK_ID"):
-            self.voice_editing_check = Gtk.CheckButton(
-                label="Voice editing: select text, hold Shift with your dictation key, "
-                      "say how to change it")
-            self.voice_editing_check.set_active(
-                bool(self.config.get("voice_editing", False)) and ai_cleanup.is_installed())
-            self.voice_editing_check.set_tooltip_text(
-                "Select some text in any app, hold Shift+F8 (Shift with your hold key, or tap\n"
-                "Shift with your toggle key), and say what you want: \u201cmake this more formal\u201d,\n"
-                "\u201cshorten this\u201d, \u201cfix the grammar\u201d, \u201cturn this into a bullet list\u201d.\n"
-                "The selection is replaced with the rewrite. Ctrl+Z puts it back.\n\n"
-                "Uses the same small AI as self-corrections, on this computer.\n"
-                "Simple, clear changes work best; it can invent details when asked for a whole email.")
-            self.voice_editing_check.connect("toggled", self._on_voice_editing_toggled)
-            grid.attach(self.voice_editing_check, 0, row, 2, 1)
-            row += 1
-
         ai_note = Gtk.Label(xalign=0)
-        ai_note.set_markup('<span>    Both run on your computer, nothing is sent online. '
-                           'One shared download of about 1.1 GB.</span>')
+        ai_note.set_markup('<span>    Runs on your computer, nothing is sent online. '
+                           'One-time download of about 1.1 GB.</span>')
         ai_note.set_opacity(0.7)
         grid.attach(ai_note, 0, row, 2, 1)
         row += 1
@@ -2107,6 +2087,67 @@ class PreferencesWindow:
 
         grid.attach(ext_button_box, 0, row, 2, 1)
         row += 1
+
+        # ===== TUXTALK LABS =====
+        # Experimental features (Ron, 2026-10-12): they work but are still being
+        # refined, so they live here with a note saying so, the Help page about
+        # them, and a feedback link. Hidden in the Flatpak: its portal input
+        # can't see Shift or send Ctrl+C, so none of them work there yet.
+        if not os.environ.get("FLATPAK_ID"):
+            labs_sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+            labs_sep.set_margin_top(20)
+            labs_sep.set_margin_bottom(15)
+            grid.attach(labs_sep, 0, row, 2, 1)
+            row += 1
+
+            labs_header = Gtk.Label(xalign=0)
+            labs_header.set_markup('<b>🧪 TuxTalk Labs</b>')
+            labs_header.set_margin_bottom(4)
+            grid.attach(labs_header, 0, row, 2, 1)
+            row += 1
+
+            labs_note = Gtk.Label(xalign=0)
+            labs_note.set_markup(
+                '<span>Experimental features. They work, but they’re still being '
+                'refined, so they may change and won’t always get it right.</span>')
+            labs_note.set_line_wrap(True)
+            labs_note.set_opacity(0.7)
+            labs_note.set_margin_bottom(8)
+            grid.attach(labs_note, 0, row, 2, 1)
+            row += 1
+
+            # Voice editing (app._transcribe_and_edit): the AI that fixes
+            # self-corrections rewrites the selected text the way the user says.
+            self.voice_editing_check = Gtk.CheckButton(
+                label="Voice editing: select text, hold Shift with your dictation key, "
+                      "say how to change it")
+            self.voice_editing_check.set_active(
+                bool(self.config.get("voice_editing", False)) and ai_cleanup.is_installed())
+            self.voice_editing_check.set_tooltip_text(
+                "Select some text in any app, hold Shift+F8 (Shift with your hold key, or tap\n"
+                "Shift with your toggle key), and say what you want: “make this more formal”,\n"
+                "“shorten this”, “fix the grammar”, “turn this into a bullet list”.\n"
+                "The selection is replaced with the rewrite. Ctrl+Z puts it back.\n\n"
+                "Uses the same small AI as self-corrections (one shared 1.1 GB download),\n"
+                "on this computer. Simple, clear changes work best.")
+            self.voice_editing_check.connect("toggled", self._on_voice_editing_toggled)
+            grid.attach(self.voice_editing_check, 0, row, 2, 1)
+            row += 1
+
+            # How these work (Help, on its Labs tab) and Send feedback.
+            from .help_dialog import FEEDBACK_URL, show_help_dialog
+            labs_links = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+            labs_links.set_margin_top(6)
+            labs_help = Gtk.Button(label="How these work")
+            labs_help.set_tooltip_text("Open Help on the TuxTalk Labs page")
+            labs_help.connect("clicked", lambda _b: show_help_dialog(tab="labs"))
+            labs_links.pack_start(labs_help, False, False, 0)
+            labs_feedback = Gtk.LinkButton.new_with_label(FEEDBACK_URL, "Send feedback")
+            labs_feedback.set_tooltip_text("Tell us how the Labs features work for you "
+                                           "(TuxTalk Discussions on GitHub)")
+            labs_links.pack_start(labs_feedback, False, False, 0)
+            grid.attach(labs_links, 0, row, 2, 1)
+            row += 1
 
         if _on_gnome():
             # Initial extension check
