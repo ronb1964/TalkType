@@ -1,19 +1,10 @@
 """The one place that knows how to start and stop the dictation service.
 
-The service is launched from two places — the tray (at startup and on "Restart
-Service") and Preferences (on Apply/OK). They used to hand-roll the spawn
-separately, and only the tray's copy set GDK_BACKEND.
-
-That was invisible while AppRun exported GDK_BACKEND=x11 for the whole app, so
-every process inherited it. Once the backend was scoped to the tray's spawn (so
-GTK dropdowns would work on Wayland), a service restarted from Preferences
-inherited Preferences' environment instead — native Wayland — where
-gtk_window_move() is ignored. The recording indicator then centred itself no
-matter what indicator_position said, and only a full quit-and-relaunch fixed
-it, because that put the tray back in charge of launching.
-
-Keeping the spawn in one place is the actual fix; the backend is just the
-symptom that exposed the duplication.
+The service is launched from the tray (at startup and on "Restart Service")
+and from Preferences (on Apply/OK). Both go through here so the service always
+gets the same environment, in particular its own GDK_BACKEND: Preferences runs
+on native Wayland, where gtk_window_move() is ignored and the recording
+indicator could not be positioned.
 """
 
 import logging
@@ -66,11 +57,11 @@ def is_service_argv(argv) -> bool:
         runs as ``<python> /path/bin/dictate`` (or ``/path/bin/dictate``).
 
     So this compares whole arguments, never substrings of the command line.
-    A substring match ("tuxtalk.app" anywhere) is how a shell running
-    ``bash -c "pgrep -f tuxtalk.app"`` once passed for the service: the tray
-    cached that shell's PID, and toggle_recording would have sent SIGUSR1 to
-    it, which kills a process that doesn't handle it. Exact arguments also keep
-    the tray safe: "-m tuxtalk.tray" and bin/dictate-tray never match.
+    A substring match ("tuxtalk.app" anywhere) would accept a shell running
+    ``bash -c "pgrep -f tuxtalk.app"``, and the tray's toggle_recording would
+    send it SIGUSR1, which kills a process that doesn't handle it. Exact
+    arguments also keep the tray safe: "-m tuxtalk.tray" and bin/dictate-tray
+    never match.
     """
     argv = list(argv)
     for i, arg in enumerate(argv[:-1]):
@@ -128,7 +119,8 @@ def find_service_pids():
     """PIDs of every dictation service this user is running, read from /proc.
 
     No subprocess: the tray polls this, and pgrep/pkill only offer substring
-    matching on the joined command line, which is the bug is_service_argv fixes.
+    matching on the joined command line, which is too loose (see
+    is_service_argv).
     """
     me = os.getpid()
     try:
@@ -176,8 +168,8 @@ def build_service_env(base_env=None, dev_pythonpath=None):
     """Return the environment the dictation service must be started with.
 
     Always overrides GDK_BACKEND rather than deferring to what the caller
-    happens to have. Preferences runs on native Wayland by design, so
-    inheriting its backend is precisely the bug this module exists to prevent.
+    happens to have: Preferences runs on native Wayland by design, and the
+    service must not inherit that.
     """
     env = dict(os.environ if base_env is None else base_env)
     env["GDK_BACKEND"] = SERVICE_GDK_BACKEND
@@ -198,8 +190,8 @@ def dev_pythonpath():
 def launch_dictation_service():
     """Start the dictation service. Returns the Popen object, or None on failure.
 
-    Callers must not spawn it themselves — tests/test_service_launch_parity.py
-    fails if they do, because that is how the two paths drifted apart.
+    Callers must not spawn it themselves, so every path starts it the same way
+    (tests/test_service_launch_parity.py checks this).
     """
     # Every install runs the module. The AppImage, .deb and .rpm child inherits
     # PYTHONPATH and the library paths from dictate-tray; in a source checkout

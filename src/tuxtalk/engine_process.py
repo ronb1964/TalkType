@@ -1,10 +1,10 @@
 """
 Keeping TuxTalk's helper engines on a short leash.
 
-TuxTalk runs two optional background engines as separate programs: the AI
-cleanup engine (llama-server, ai_cleanup.py) and the Vulkan graphics
-engine (whisper-server, whisper_vulkan.py). Each can hold a gigabyte or more
-of memory, so neither may outlive the dictation service that started it.
+TuxTalk runs its optional background engines as separate programs: the AI
+cleanup engine (llama-server, ai_cleanup.py) and the Vulkan graphics engine
+(whisper_vulkan.py, and parakeet_gpu.py for Parakeet). Each can hold a gigabyte
+or more of memory, so none may outlive the dictation service that started it.
 """
 import os
 import signal
@@ -20,8 +20,11 @@ def set_parent_death_signal():
     gigabyte of memory.
 
     SIGKILL, not SIGTERM: llama-server sometimes stalls in its graceful
-    shutdown and then ignores SIGTERM. That left orphaned engines running for
-    hours on a real machine (2026-09-26). Neither engine holds state worth saving."""
+    shutdown and then ignores SIGTERM, and no engine holds state worth saving.
+
+    The signal fires when the thread that called Popen exits, not the
+    process, so spawn from a thread that lives as long as the engine (see
+    parakeet_gpu's _launcher)."""
     try:
         import ctypes
         ctypes.CDLL("libc.so.6", use_errno=True).prctl(1, signal.SIGKILL)  # PR_SET_PDEATHSIG

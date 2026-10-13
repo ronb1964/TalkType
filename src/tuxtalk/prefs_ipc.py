@@ -19,6 +19,7 @@ FRONT = signal.SIGUSR1
 
 
 def pidfile_path():
+    """Where the open Preferences window keeps its pid."""
     base = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
     return os.path.join(base, "talktype-prefs.pid")
 
