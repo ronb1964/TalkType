@@ -715,6 +715,15 @@ def test_a_wrong_typed_value_costs_only_that_setting(config_path):
     assert not list(config_path.parent.glob("config.toml.corrupt-*"))
 
 
+def test_an_infinite_number_in_a_whole_number_setting_costs_only_that_setting(config_path):
+    """int(inf) raises OverflowError rather than ValueError."""
+    config_path.write_text('model = "small"\ntyping_delay = inf\n')
+    loaded = config.load_config()
+    assert loaded.model == "small"
+    assert loaded.typing_delay == config.Settings().typing_delay
+    assert not list(config_path.parent.glob("config.toml.corrupt-*"))
+
+
 def test_recovery_from_backup_skips_only_the_bad_field(config_path):
     config_path.write_text("this is = = not toml")
     (config_path.parent / "config.toml.bak").write_text(

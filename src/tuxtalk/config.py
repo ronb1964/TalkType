@@ -315,7 +315,8 @@ def _apply_toml(s: Settings, data: dict) -> list[str]:
         cast = _TYPE_CASTERS.get(fld.type, str)
         try:
             setattr(s, fld.name, cast(data[fld.name]))
-        except (TypeError, ValueError) as e:
+        except (TypeError, ValueError, OverflowError) as e:
+            # int() raises OverflowError, not ValueError, for a TOML `inf`.
             logger.warning(f"Ignoring setting {fld.name!r} = {data[fld.name]!r}: {e}")
             skipped.append(fld.name)
     return skipped
