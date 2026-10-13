@@ -67,3 +67,26 @@ def test_cleanup_runs_in_prepare_text_only_when_enabled(monkeypatch):
     assert "um" in app._prepare_text("um so the the van is ready", False, True, False).lower()
     monkeypatch.setattr(app, "_remove_fillers", True)
     assert app._prepare_text("um so the the van is ready", False, True, False) == "So the van is ready."
+
+
+# A spoken "tab" is a real tab character by the time cleanup runs, and the
+# tidy-up step used to treat it as stray whitespace: "hello tab world"
+# came out as "Hello world." whenever "Remove fillers" was on.
+@pytest.mark.parametrize("said, want", [
+    ("hello tab world", "Hello \t world."),
+    ("name tab tab age", "Name \t \t age."),
+    ("tab tab indented", "\t\t Indented."),
+    ("first tab second tab third", "First \t second \t third."),
+    ("total tab total", "Total \t total."),
+    ("hello tab um world", "Hello \t world."),
+    ("hello um tab world", "Hello \t world."),
+    ("tab um hello there", "\tHello there."),
+])
+def test_spoken_tabs_survive_cleanup(said, want):
+    from tuxtalk.normalize import normalize_text
+    assert clean(normalize_text(said)) == want
+
+
+def test_text_with_nothing_to_remove_is_returned_untouched():
+    text = "Spacing  left \t as it was ,"
+    assert clean(text) == text

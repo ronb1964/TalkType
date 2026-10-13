@@ -8,7 +8,8 @@ are handled separately by the optional AI step (ai_cleanup.py).
 
 Runs on the normalized text, after spoken commands have been turned into
 punctuation, so an intentional "new line new line" (two line breaks) has
-already become markers and is never mistaken for a stutter.
+already become markers and is never mistaken for a stutter. A spoken "tab"
+is a real tab character by then, so these rules only ever touch spaces.
 """
 import re
 
@@ -26,18 +27,19 @@ _COMMA_WORDS = {"okay", "ok", "yes", "yeah", "no", "well", "so", "alright", "rig
                 "sure", "oh", "hey", "hi", "hello", "thanks", "now", "anyway", "also"}
 
 # A filler with the commas and spaces around it:  ", um,"  "Um, "  " uh "
-_RE_FILLER = re.compile(rf"(?i)(,\s*)?\b{_FILLER}\b[,.]?\s*")
+_RE_FILLER = re.compile(rf"(?i)(, *)?\b{_FILLER}\b[,.]? *")
 
 # One to three words repeated immediately with only spaces between them:
 # "the the", "will will", "I think I think". A comma between the copies
-# ("no, no, no", "again, again") usually means the repeat was deliberate.
-_RE_REPEAT = re.compile(r"(?i)\b((?:[\w']+[ \t]+){0,2}[\w']+)(?:[ \t]+\1\b)+")
+# ("no, no, no", "again, again") usually means the repeat was deliberate, and
+# so does a tab ("total<tab>total" is two fields).
+_RE_REPEAT = re.compile(r"(?i)\b((?:[\w']+ +){0,2}[\w']+)(?: +\1\b)+")
 
 
 def _remove_fillers(text: str) -> str:
     def repl(m):
         start = m.start()
-        at_line_start = start == 0 or text[:start].endswith(("\xa7", "\n"))
+        at_line_start = start == 0 or text[:start].endswith(("\xa7", "\n", "\t"))
         # "Um, so we..." -> "So we...": when the filler opened a sentence (it
         # was capitalized), the word that now opens it takes the capital.
         capitalize = m.group(0).lstrip(", ")[:1].isupper()
@@ -55,7 +57,7 @@ def _remove_fillers(text: str) -> str:
         return sep + ("\x00" if capitalize else "")
     out = _RE_FILLER.sub(repl, text)
     # \x00 marks "capitalize the next letter"; resolve it now.
-    out = re.sub(r"\x00\s*(\w)", lambda m: m.group(1).upper(), out)
+    out = re.sub(r"\x00(\s*)(\w)", lambda m: m.group(1) + m.group(2).upper(), out)
     return out.replace("\x00", "")
 
 
@@ -70,10 +72,10 @@ def _collapse_repeats(text: str) -> str:
 
 def _tidy(text: str, original: str) -> str:
     """Fix the spacing, punctuation and capitals the deletions left behind."""
-    text = re.sub(r"[ \t]{2,}", " ", text)
-    text = re.sub(r"\s+([,.!?;:])", r"\1", text)          # "word ," -> "word,"
-    text = re.sub(r",(\s*[,.!?;:])", r"\1", text)         # ",." or ",," -> "."
-    text = re.sub(r"^[\s,]+", "", text)                    # leading comma/space
+    text = re.sub(r" {2,}", " ", text)
+    text = re.sub(r" +([,.!?;:])", r"\1", text)           # "word ," -> "word,"
+    text = re.sub(r",( *[,.!?;:])", r"\1", text)          # ",." or ",," -> "."
+    text = re.sub(r"^[ ,]+", "", text)                      # leading comma/space
     # Keep the original's trailing space (auto-space adds one).
     if original.endswith(" ") and not text.endswith(" "):
         text += " "
@@ -88,4 +90,6 @@ def clean_fillers_and_repeats(text: str) -> str:
     # A filler between two copies of a word ("the um the") becomes a repeat
     # only after the filler is gone, so collapse once more.
     cleaned = _collapse_repeats(cleaned)
+    if cleaned == text:
+        return text  # nothing removed, so nothing for _tidy to repair
     return _tidy(cleaned, text)
