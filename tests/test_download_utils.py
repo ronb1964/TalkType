@@ -90,3 +90,28 @@ def test_free_space_bytes(tmp_path):
     # a not-yet-created subdirectory (checks the nearest existing parent).
     assert free_space_bytes(str(tmp_path)) > 0
     assert free_space_bytes(str(tmp_path / "not" / "yet" / "created")) > 0
+
+
+def test_each_download_has_its_own_temp_file(tmp_path):
+    """Two downloads of one file at once must not share a temp file: one could
+    overwrite the bytes the other already hash-checked."""
+    src, content = _make_source(tmp_path)
+    out = tmp_path / "out"
+    out.mkdir()
+    dest = out / "dest.bin"
+    others = out / "dest.bin.tmp"
+    others.write_bytes(b"another download in progress")
+
+    assert download_file(src.as_uri(), str(dest)) is True
+
+    assert dest.read_bytes() == content
+    assert others.read_bytes() == b"another download in progress"
+    assert sorted(p.name for p in out.iterdir()) == ["dest.bin", "dest.bin.tmp"]
+    assert (dest.stat().st_mode & 0o777) == 0o644
+
+
+def test_a_failed_download_leaves_no_temp_file(tmp_path):
+    src, _ = _make_source(tmp_path)
+    out = tmp_path / "out"
+    assert download_file(src.as_uri(), str(out / "dest.bin"), expected_sha256="0" * 64) is False
+    assert list(out.iterdir()) == []

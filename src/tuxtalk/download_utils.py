@@ -7,8 +7,8 @@ Replaces three divergent download implementations that each had a gap:
 - extension_helper used urlretrieve the same way
 - update_checker had its own loop but no truncation check and no checksum
 
-Every download goes to a ".tmp" file first and is atomically renamed into
-place only after size and (when provided) sha256 checks pass — so an
+Every download goes to its own ".tmp" file first and is atomically renamed
+into place only after size and (when provided) sha256 checks pass — so an
 interrupted download can never be mistaken for a complete file.
 """
 
@@ -16,6 +16,7 @@ import hashlib
 import logging
 import os
 import shutil
+import tempfile
 import urllib.request
 
 logger = logging.getLogger(__name__)
@@ -50,17 +51,21 @@ def download_file(
     On any failure the partial ".tmp" file is removed and dest_path is left
     untouched.
     """
-    tmp_path = dest_path + ".tmp"
+    tmp_path = None
     sha = hashlib.sha256()
     try:
         request = urllib.request.Request(url, headers={"User-Agent": user_agent})
         with urllib.request.urlopen(request, timeout=timeout) as response:
             total = int(response.headers.get("Content-Length", 0) or 0)
             downloaded = 0
-            parent = os.path.dirname(tmp_path)
-            if parent:
-                os.makedirs(parent, exist_ok=True)
-            with open(tmp_path, "wb") as f:
+            parent = os.path.dirname(dest_path) or "."
+            os.makedirs(parent, exist_ok=True)
+            # A temp name of its own: the tray and Preferences can download the
+            # same file at once, and a shared name would let one overwrite the
+            # bytes the other has already checked.
+            fd, tmp_path = tempfile.mkstemp(
+                dir=parent, prefix=os.path.basename(dest_path) + ".", suffix=".tmp")
+            with os.fdopen(fd, "wb") as f:
                 while True:
                     if cancel_event is not None and cancel_event.is_set():
                         raise InterruptedError("Download cancelled")
@@ -89,6 +94,7 @@ def download_file(
                 _remove_quiet(tmp_path)
                 return False
 
+        os.chmod(tmp_path, 0o644)  # mkstemp makes it owner-only
         os.replace(tmp_path, dest_path)
         return True
 
@@ -102,7 +108,9 @@ def download_file(
         return False
 
 
-def _remove_quiet(path: str) -> None:
+def _remove_quiet(path: str | None) -> None:
+    if not path:
+        return
     try:
         os.remove(path)
     except OSError:
