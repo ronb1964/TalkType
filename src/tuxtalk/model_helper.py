@@ -226,8 +226,11 @@ def make_model_download_func(model_name, repo_id=None, only_files=None):
             # Disk-space check before committing to a multi-GB download —
             # otherwise the failure surfaces later as a confusing per-file
             # error instead of a clear message.
+            # HF_HUB_CACHE follows HF_HOME, HF_HUB_CACHE and XDG_CACHE_HOME (set
+            # inside the Flatpak), so this measures the disk the files land on.
+            from huggingface_hub.constants import HF_HUB_CACHE
             from .download_utils import free_space_bytes
-            free = free_space_bytes(os.path.expanduser("~/.cache/huggingface"))
+            free = free_space_bytes(HF_HUB_CACHE)
             if total_bytes and free and free < total_bytes * 1.1:
                 need_gb = (total_bytes * 1.1) / (1024 ** 3)
                 free_gb = free / (1024 ** 3)
