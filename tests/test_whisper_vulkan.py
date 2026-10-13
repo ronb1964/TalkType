@@ -241,7 +241,7 @@ def _audio(voiced):
 
 def test_vulkan_drops_a_sign_off_invented_from_silence(monkeypatch):
     """whisper.cpp's no-speech score is 0.00 on silence, so without a stand-in
-    a held key with nothing said typed "Thanks for watching!"."""
+    a held key with nothing said would type "Thanks for watching!"."""
     from tuxtalk import app
     monkeypatch.setattr(app, "model", SignOffEngine(), raising=False)
     assert app._transcribe_audio(_audio(voiced=False), "en") is None
@@ -353,7 +353,7 @@ def test_parakeet_on_the_graphics_chip_transcribes(monkeypatch):
 
 def test_transcription_ignores_the_engines_no_speech_score(monkeypatch):
     """A real "Thank you." must survive even though the engine scored it 0.95.
-    Real means the recording has speech in it; silence now has its own test."""
+    Real means the recording has speech in it; silence has its own test."""
     from tuxtalk import app
     monkeypatch.setattr(app, "model", FakeEngine("small", 1), raising=False)
     assert app._transcribe_audio(_audio(voiced=True), "en") == "Thank you."
@@ -407,8 +407,8 @@ def test_first_run_vulkan_download_reports_a_cancel(monkeypatch):
 
 
 def test_first_run_vulkan_uses_the_preferences_speed_check(monkeypatch):
-    """First run switched to Vulkan without timing it, so weak built-in
-    graphics could end up slower than the processor."""
+    """First run times Vulkan before switching to it, so weak built-in
+    graphics can't end up slower than the processor."""
     from tuxtalk import welcome_dialog as wd
     seen = []
     monkeypatch.setattr("tuxtalk.vulkan_setup_dialogs.run_speed_check",
@@ -429,7 +429,7 @@ def test_first_run_speed_check_error_keeps_the_processor(monkeypatch):
 
 @pytest.mark.parametrize("times,slower", [((1.0, 5.0), False), ((5.0, 1.0), True)])
 def test_speed_check_remembers_which_won(monkeypatch, times, slower):
-    """Review focus 1: recommend.py must not keep proposing a slower chip."""
+    """recommend.py must not keep proposing a slower chip."""
     from tuxtalk import vulkan_setup_dialogs as vsd
     saved = {}
     cfg = types.SimpleNamespace(vulkan_slower=not slower)
@@ -504,7 +504,7 @@ def test_a_restarted_server_outlives_the_short_lived_thread_that_restarted_it(fa
 
 
 def test_a_failed_warm_up_stops_the_server(fake_server, monkeypatch):
-    """A warm-up that failed left whisper-server holding the model in
+    """A failed warm-up must not leave whisper-server holding the model in
     graphics memory for the whole session."""
     monkeypatch.setenv("FAKE_FAIL_INFERENCE", "1")
     started = []

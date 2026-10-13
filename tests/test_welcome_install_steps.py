@@ -1,9 +1,9 @@
 """The welcome screen's install buttons: no frozen window, honest results.
 
-Package installs and the pkexec script ran on the GTK thread for up to five
-minutes, freezing the window. Fix Typing also reported "Device permissions
-configured" and disabled itself when only the ydotoold step was needed and
-it had failed. Raw installer output went into Pango markup unescaped.
+Package installs and the pkexec script can take up to five minutes, so they
+run off the GTK thread. Fix Typing must not report "Device permissions
+configured" and disable itself when only the ydotoold step was needed and it
+failed. Raw installer output is escaped before it goes into Pango markup.
 """
 import threading
 
@@ -122,8 +122,8 @@ def test_nothing_is_updated_after_the_window_closed(dialog, monkeypatch):
 
 
 def test_installs_run_one_at_a_time(dialog, monkeypatch):
-    """Install PortAudio and Install ydotool started together: the second
-    package-manager run failed on the first one's lock."""
+    """Started together, Install PortAudio and Install ydotool would make the
+    second package-manager run fail on the first one's lock."""
     monkeypatch.setattr(wd.GLib, "idle_add", lambda fn, *a: None)
     first_running = threading.Event()
     release_first = threading.Event()

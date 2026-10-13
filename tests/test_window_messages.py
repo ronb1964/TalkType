@@ -170,7 +170,8 @@ def test_a_voice_edit_problem_floats_over_the_active_window(monkeypatch):
 
 def test_gdk_is_only_used_on_the_gtk_thread(sources, monkeypatch):
     """The voice-edit problem is raised on the dictation thread; asking GDK
-    where the window is from there raced the GTK thread drawing the indicator."""
+    where the window is from there would race the GTK thread drawing the
+    indicator."""
     from gi.repository import GLib
     from tuxtalk import screen_message
     queued, gdk_calls, shown = [], [], []
@@ -200,7 +201,7 @@ def test_on_x11_the_window_manager_is_asked_on_the_gtk_thread(sources, monkeypat
     assert shown == [(60, 60)]
 
 
-# --- Ron, 2026-10-12: it faded before he finished reading it ---------------------------------
+# --- on screen long enough to read, and short ------------------------------------------------
 
 def test_long_enough_to_read():
     from tuxtalk import screen_message
@@ -240,8 +241,8 @@ class _FakeBus:
 
 
 def test_the_service_holding_the_name_reads_its_own_cache(monkeypatch):
-    """Calling its own bus name from the GTK thread waited out the timeout
-    every time the indicator followed a window."""
+    """Calling its own bus name from the GTK thread would wait out the timeout
+    every time the indicator follows a window."""
     import sys
     import types
     from tuxtalk import dbus_service

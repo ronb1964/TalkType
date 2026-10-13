@@ -13,11 +13,11 @@ But `find_ydotoold_path()` feeds a systemd user unit, and a unit cannot point
 at an AppImage mount that vanishes when the app exits -- so that one, and only
 that one, sanitises PATH.
 
-The trap: `check_ydotool_available()` was once named check_system_ydotool_installed(),
-which reads like it should also be sanitising PATH. "Fixing" it to match its old
-name would make the welcome screen show "ydotool not installed (required)" to
-every AppImage user who has a perfectly good bundled copy, and would make
-install_ydotool_with_pkexec() prompt for a package that is already there.
+The trap: `check_ydotool_available()` can look like it should also sanitise
+PATH. "Fixing" it that way would make the welcome screen show "ydotool not
+installed (required)" to every AppImage user who has a perfectly good bundled
+copy, and would make install_ydotool_with_pkexec() prompt for a package that
+is already there.
 
 These tests exist so that change fails loudly instead of shipping.
 """
@@ -41,7 +41,7 @@ def _fake_which(path, monkeypatch):
 
 
 def test_bundled_appimage_ydotool_counts_as_available(monkeypatch):
-    """The regression guard: a bundled copy is a usable copy."""
+    """A bundled copy is a usable copy."""
     _fake_which("/tmp/.mount_TalkTyabc123/usr/bin/ydotool", monkeypatch)
 
     available, path = check_ydotool_available()

@@ -1,8 +1,8 @@
 """An error while building the welcome dialog must not hang onboarding.
 
 show_welcome_dialog runs a nested Gtk.main() that only the welcome dialog's
-callback quits. An exception there left the loop running for good: nothing
-on screen, onboarding never finished, and the service never started.
+callback quits. An exception there would leave the loop running for good:
+nothing on screen, onboarding never finishing, and the service never starting.
 """
 import pytest
 
