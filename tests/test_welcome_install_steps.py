@@ -227,3 +227,23 @@ def test_set_it_up_goes_straight_on_when_nothing_is_needed(dialog, monkeypatch):
     dialog.ydotoold_fixed = True                 # the fixture's only pending step, done
     dialog.continue_button.clicked()
     assert responses == [Gtk.ResponseType.OK]
+
+
+# --- the extension offer (Ubuntu VM test, 2026-10-13) --------------------------
+
+@pytest.mark.parametrize("active, offered", [(True, False), (False, True)])
+def test_the_extension_is_offered_only_when_it_is_not_running(monkeypatch, active, offered):
+    if not Gtk.init_check()[0]:
+        pytest.skip("no display")
+    monkeypatch.setattr(r, "detect_hardware", lambda cfg=None: r.Hardware(None, False))
+    monkeypatch.setattr(r, "system_language", lambda env=None: "en")
+    monkeypatch.setattr(wd, "detect_uinput_access", lambda: (True, ""))
+    monkeypatch.setattr(wd, "detect_ydotoold_status",
+                        lambda: {"needs_setup": False, "ydotool_installed": True})
+    monkeypatch.setattr(wd, "detect_portaudio_status", lambda: {"needs_install": False})
+    monkeypatch.setattr(wd, "_extension_already_active", lambda: active)
+    d = wd.WelcomeDialog(force_gnome=True)
+    try:
+        assert (d.extension_check is not None) is offered
+    finally:
+        d.destroy()

@@ -312,6 +312,15 @@ class SplashScreen:
             callback()
 
 
+def _extension_already_active():
+    """Whether TuxTalk's GNOME extension is installed and enabled."""
+    try:
+        from .extension_helper import is_extension_enabled
+        return bool(is_extension_enabled())
+    except Exception:
+        return False
+
+
 class WelcomeDialog:
     """
     Adaptive welcome dialog that shows appropriate content based on system detection.
@@ -334,6 +343,9 @@ class WelcomeDialog:
         # Detect system capabilities (or use forced values for testing)
         from .desktop_detect import is_gnome
         self.has_gnome = is_gnome() if force_gnome is None else force_gnome
+        # The extension is offered only when it isn't already running;
+        # updating an installed one is Preferences' job.
+        self.offer_extension = self.has_gnome and not _extension_already_active()
         # What to recommend (recommend.py): the graphics chip and the language.
         from . import recommend as _rec
         try:
@@ -389,7 +401,7 @@ class WelcomeDialog:
         else:
             base_height = 700
             additional_height = 0
-            if self.has_gnome:
+            if self.offer_extension:
                 additional_height += 160  # GNOME extension section
             additional_height += 225  # recommendation card + its options button
             if self.is_flatpak:
@@ -683,7 +695,7 @@ class WelcomeDialog:
             self._build_portaudio_setup_section(vbox)
 
             # Separator after PortAudio section
-            if self.needs_uinput_fix or self.needs_ydotoold_setup or self.has_gnome:
+            if self.needs_uinput_fix or self.needs_ydotoold_setup or self.offer_extension:
                 sep_portaudio = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
                 sep_portaudio.set_margin_top(15)
                 sep_portaudio.set_margin_bottom(10)
@@ -694,7 +706,7 @@ class WelcomeDialog:
         if self.is_flatpak:
             self._build_shortcut_setup_section(vbox)
 
-            if self.has_gnome:
+            if self.offer_extension:
                 sep_sc = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
                 sep_sc.set_margin_top(15)
                 sep_sc.set_margin_bottom(10)
@@ -705,14 +717,14 @@ class WelcomeDialog:
             self._build_typing_setup_section(vbox)
 
             # Separator after typing setup section
-            if self.has_gnome:
+            if self.offer_extension:
                 sep_uinput = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
                 sep_uinput.set_margin_top(15)
                 sep_uinput.set_margin_bottom(10)
                 vbox.pack_start(sep_uinput, False, False, 0)
 
         # Optional Features: the GNOME extension is the only one
-        if self.has_gnome:
+        if self.offer_extension:
             optional_label = Gtk.Label()
             optional_label.set_markup('<span size="large"><b>⚙️ Optional Features</b></span>')
             optional_label.set_halign(Gtk.Align.START)
@@ -1608,13 +1620,13 @@ class WelcomeDialog:
         self.extension_check = Gtk.CheckButton()
         self.extension_check.get_style_context().add_class('welcome-checkbox')
         ext_label = Gtk.Label()
-        ext_label.set_markup('📦 <b>Install GNOME Extension</b> <span size="small">(~3KB)</span>')
+        ext_label.set_markup('📦 <b>Install GNOME Extension</b> <span size="small">(~10KB)</span>')
         ext_label.set_halign(Gtk.Align.START)
         self.extension_check.add(ext_label)
         self.extension_check.set_tooltip_text(
             "Install native GNOME Shell extension for enhanced integration.\n"
             "Adds panel indicator, service controls, and enables custom recording indicator positioning on Wayland.\n"
-            "Lightweight (~3KB) and requires logging out/in after installation."
+            "Lightweight (~10KB) and requires logging out/in after installation."
         )
         ext_box.pack_start(self.extension_check, False, False, 0)
 
