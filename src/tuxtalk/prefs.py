@@ -5643,10 +5643,12 @@ class PreferencesWindow:
         """Show hotkey test dialog.
 
         Instead of stopping the dictation service (which releases the evdev grab and
-        causes XWayland phantom key-repeat floods), we put the app.py process into
-        "hotkey test mode" via SIGUSR2. In this mode, the evdev grab stays active
-        (no phantom floods) and hotkey presses are reported back via D-Bus
-        HotkeyPressed signals instead of starting/stopping recording.
+        causes XWayland phantom key-repeat floods), we put it into "hotkey test
+        mode" with a flag file that this dialog keeps fresh while it is open. In
+        this mode the evdev grab stays active (no phantom floods) and hotkey
+        presses are reported back via D-Bus HotkeyPressed signals instead of
+        starting/stopping recording. The flag goes stale by itself if this
+        process dies, so dictation can't be left switched off.
         """
         # The service tests against the SAVED hotkeys, but this dialog labels its
         # rows from the pending dropdown selections. If the user changed a hotkey
@@ -5668,29 +5670,6 @@ class PreferencesWindow:
             warn.run()
             warn.destroy()
             return
-
-        # Find the dictation service's PID. This used `pgrep -f tuxtalk.app`,
-        # which also matches any shell or editor whose command line merely
-        # mentions it, and SIGUSR2 kills a process that doesn't handle it.
-        app_pid = None
-        try:
-            from .service_launcher import find_service_pids
-            pids = find_service_pids()
-            if pids:
-                app_pid = pids[0]
-        except Exception:
-            pass
-
-        # Put app.py into test mode (SIGUSR2 toggles hotkey test mode)
-        test_mode_active = False
-        if app_pid:
-            try:
-                import signal as _sig
-                os.kill(app_pid, _sig.SIGUSR2)
-                test_mode_active = True
-                print(f"[hotkey-test] Sent SIGUSR2 to app PID {app_pid} — test mode ON", flush=True)
-            except Exception as e:
-                print(f"[hotkey-test] Could not send SIGUSR2: {e}", flush=True)
 
         dialog = Gtk.Dialog(title="Test Hotkeys", transient_for=self.window)
         dialog.set_default_size(450, 280)
@@ -5773,24 +5752,40 @@ class PreferencesWindow:
         close_button.connect("clicked", lambda w: dialog.destroy())
         dialog.add_action_widget(close_button, Gtk.ResponseType.CLOSE)
 
-        dialog.show_all()
-        dialog.run()
-        dialog.destroy()
+        # Hotkey test mode lasts while the flag is fresh: start it now and keep
+        # it fresh while the dialog is open (see service_launcher).
+        from .service_launcher import (HOTKEY_TEST_REFRESH_S,
+                                       hotkey_test_flag_path)
+        flag = hotkey_test_flag_path()
 
-        # Disconnect D-Bus signal listener
-        try:
-            signal_match.remove()
-        except Exception:
-            pass
-
-        # Resume normal hotkey processing (SIGUSR2 toggles test mode off)
-        if test_mode_active and app_pid:
+        def _refresh_test_flag():
             try:
-                import signal as _sig
-                os.kill(app_pid, _sig.SIGUSR2)
-                print(f"[hotkey-test] Sent SIGUSR2 to app PID {app_pid} — test mode OFF", flush=True)
-            except Exception as e:
-                print(f"[hotkey-test] Could not resume hotkeys: {e}", flush=True)
+                os.makedirs(os.path.dirname(flag), exist_ok=True)
+                with open(flag, "a"):
+                    pass
+                os.utime(flag)
+            except OSError as e:
+                print(f"[hotkey-test] Could not refresh the test flag: {e}", flush=True)
+            return True  # keep the timer running
+
+        _refresh_test_flag()
+        refresh_timer = GLib.timeout_add_seconds(HOTKEY_TEST_REFRESH_S, _refresh_test_flag)
+        try:
+            dialog.show_all()
+            dialog.run()
+            dialog.destroy()
+        finally:
+            # Resume normal hotkey processing, whatever happened in the dialog.
+            GLib.source_remove(refresh_timer)
+            try:
+                os.remove(flag)
+            except OSError:
+                pass
+            # Disconnect D-Bus signal listener
+            try:
+                signal_match.remove()
+            except Exception:
+                pass
 
     def on_help(self, button):
         """Show help dialog with TuxTalk features and instructions."""

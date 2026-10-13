@@ -288,10 +288,30 @@ _cmd_stop_recording = threading.Event()
 _cmd_start_from_toggle_key = threading.Event()
 _inject_lock = threading.Lock()  # serialise Backend B transcribe/inject workers
 
-# Hotkey test mode: when set, hotkey presses are reported via D-Bus HotkeyPressed
-# signal instead of starting/stopping recording. This keeps the evdev grab alive
-# and avoids XWayland phantom key-repeat floods in the Test Hotkeys dialog.
-_hotkey_test_mode = threading.Event()
+# Hotkey test mode: while Preferences' Test Hotkeys dialog keeps its flag file
+# fresh (service_launcher.hotkey_test_flag_path), hotkey presses are reported via
+# the D-Bus HotkeyPressed signal instead of starting/stopping recording. This
+# keeps the evdev grab alive and avoids XWayland phantom key-repeat floods.
+_hotkey_test_flag = None    # the flag's path, worked out on first use
+_hotkey_test_was_on = False  # for logging when test mode starts and ends
+
+
+def _hotkey_test_active() -> bool:
+    """Whether the Test Hotkeys dialog is open: its flag exists and is fresh."""
+    global _hotkey_test_flag, _hotkey_test_was_on
+    from . import service_launcher
+    if _hotkey_test_flag is None:
+        _hotkey_test_flag = service_launcher.hotkey_test_flag_path()
+    try:
+        age = time.time() - os.path.getmtime(_hotkey_test_flag)
+        on = age < service_launcher.HOTKEY_TEST_LEASE_S
+    except OSError:
+        on = False
+    if on != _hotkey_test_was_on:
+        _hotkey_test_was_on = on
+        logger.info(f"Hotkey test mode {'on' if on else 'off'}")
+    return on
+
 
 def _handle_sigusr1(signum, frame):
     """SIGUSR1 = toggle recording. Sent by the tray process via os.kill().
@@ -324,15 +344,17 @@ def _notify_tray_recording_state(is_recording: bool):
         logger.debug(f"Could not notify tray of recording state: {e}")
 
 def _handle_sigusr2(signum, frame):
-    """SIGUSR2 = toggle hotkey test mode. Sent by the tray's prefs dialog.
-    When active, hotkey presses are reported via D-Bus instead of recording.
-    """
-    if _hotkey_test_mode.is_set():
-        _hotkey_test_mode.clear()
-        print("[hotkey-test] Test mode DISABLED (SIGUSR2)", flush=True)
-    else:
-        _hotkey_test_mode.set()
-        print("[hotkey-test] Test mode ENABLED (SIGUSR2)", flush=True)
+    """SIGUSR2 is accepted and ignored: unhandled, it ends the process, and an
+    older Preferences may still send one to switch hotkey test mode."""
+    logger.info("Ignored SIGUSR2 (hotkey test mode follows Preferences' flag file)")
+
+
+def _install_signal_handlers():
+    """Handle SIGUSR1 and SIGUSR2 from the very start. Both end a process
+    that doesn't handle them, and the tray and Preferences can send them
+    while the model is still loading."""
+    signal.signal(signal.SIGUSR1, _handle_sigusr1)
+    signal.signal(signal.SIGUSR2, _handle_sigusr2)
 
 def _get_tray_dbus_proxy():
     """Get or create the D-Bus proxy for communicating with the tray process.
@@ -382,7 +404,7 @@ def _claim_desktop_hotkeys(cfg):
 def _notify_tray_hotkey_pressed(key_name: str):
     """Send hotkey press notification to tray D-Bus service during test mode.
 
-    Called from the evdev loop when _hotkey_test_mode is set. The tray's D-Bus
+    Called from the evdev loop while hotkey test mode is on. The tray's D-Bus
     service emits a HotkeyPressed signal that the prefs dialog listens for.
     """
     try:
@@ -3174,7 +3196,7 @@ def _handle_key_event(event, mode, hold_key, toggle_key,
     exception inside start_recording — releases the keyboard.
     """
     # --- Hotkey test mode: report presses via D-Bus instead of recording ---
-    if _hotkey_test_mode.is_set() and event.value == 1:
+    if event.value == 1 and _hotkey_test_active():
         key_name = None
         if event.code == hold_key:
             key_name = "hold"
@@ -3897,6 +3919,7 @@ def main():
     global model
     model = None
     _acquire_single_instance()
+    _install_signal_handlers()
 
     cfg = load_config()
     args = parse_args()
@@ -4160,11 +4183,11 @@ def main():
     print(f"Config: model={cfg.model} device={cfg.device} lang={cfg.language or 'auto'} auto_space={cfg.auto_space} auto_period={cfg.auto_period}")
     logger.info(f"Configuration: model={cfg.model}, device={cfg.device}, language={cfg.language or 'auto'}, auto_space={cfg.auto_space}, auto_period={cfg.auto_period}")
     _notify_tray_running_engine()
-    # Register signal handlers:
-    # SIGUSR1: toggle recording (sent by tray for D-Bus toggle commands)
-    # SIGUSR2: toggle hotkey test mode (sent by prefs dialog for Test Hotkeys)
-    signal.signal(signal.SIGUSR1, _handle_sigusr1)
-    signal.signal(signal.SIGUSR2, _handle_sigusr2)
+    # A toggle sent while the model was loading would otherwise start a
+    # recording seconds later, out of the blue, when the input loop starts.
+    _cmd_start_recording.clear()
+    _cmd_stop_recording.clear()
+    _cmd_start_from_toggle_key.clear()
 
     # Run the input backend chosen by FLATPAK_ID: evdev+ydotool everywhere
     # (EvdevInputBackend -> _loop_evdev, unchanged), portals inside a Flatpak.

@@ -74,3 +74,27 @@ def _no_real_media_players(monkeypatch):
         raise RuntimeError("tests must not talk to real media players")
 
     monkeypatch.setattr(media_pause.SessionBus, "_bus", _refuse)
+
+
+_HOTKEY_TEST_FLAG = os.path.join(_LOG_DIR, ".hotkey_test_mode")
+
+
+@pytest.fixture(autouse=True)
+def _no_real_hotkey_test_flag(monkeypatch):
+    """Keep tests off the real hotkey test flag in the user's data folder.
+
+    Test Hotkeys open in the real Preferences would otherwise turn every key
+    press a test sends into a test-mode report. Tests of the flag write here.
+    """
+    import sys
+    from tuxtalk import service_launcher
+
+    monkeypatch.setattr(service_launcher, "hotkey_test_flag_path", lambda: _HOTKEY_TEST_FLAG)
+    app = sys.modules.get("tuxtalk.app")
+    if app is not None:
+        monkeypatch.setattr(app, "_hotkey_test_flag", None)
+    yield
+    try:
+        os.remove(_HOTKEY_TEST_FLAG)
+    except OSError:
+        pass

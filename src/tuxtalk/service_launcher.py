@@ -31,6 +31,21 @@ logger = logging.getLogger(__name__)
 # entirely to protect a cosmetic window position.
 SERVICE_GDK_BACKEND = "x11,wayland"
 
+# Hotkey test mode (Preferences, Test Hotkeys). While this flag file is fresh,
+# the service reports hotkey presses instead of recording. Preferences touches
+# it every HOTKEY_TEST_REFRESH_S while its dialog is open and removes it on
+# close. One older than HOTKEY_TEST_LEASE_S is ignored, so a Preferences that
+# crashed or was killed can't leave dictation switched off.
+HOTKEY_TEST_LEASE_S = 6.0
+HOTKEY_TEST_REFRESH_S = 2
+
+
+def hotkey_test_flag_path() -> str:
+    """Where Preferences keeps the hotkey test flag for the service to see."""
+    from .config import get_data_dir
+    return os.path.join(get_data_dir(), ".hotkey_test_mode")
+
+
 # Python site-package paths to expose in dev mode, so the service can find the
 # system PyGObject that the venv cannot see.
 _DEV_SITE_PACKAGES = (
