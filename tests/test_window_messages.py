@@ -161,12 +161,43 @@ def test_the_label_stays_on_the_monitor():
 def test_a_voice_edit_problem_floats_over_the_active_window(monkeypatch):
     from tuxtalk import app, screen_message
     shown = []
-    monkeypatch.setattr(screen_message, "show", lambda text, center=None: shown.append((text, center)))
-    monkeypatch.setattr(wg, "active_window_center", lambda: (500, 500))
+    monkeypatch.setattr(screen_message, "show_over_active_window", shown.append)
     monkeypatch.setattr(app, "_notify", lambda *a: None)
     monkeypatch.setattr(app, "_beep", lambda *a: None)
     app._edit_problem("no_selection", False)
-    assert shown and shown[0][1] == (500, 500) and shown[0][0] == "Select some text first"
+    assert shown == ["Select some text first"]
+
+
+def test_gdk_is_only_used_on_the_gtk_thread(sources, monkeypatch):
+    """The voice-edit problem is raised on the dictation thread; asking GDK
+    where the window is from there raced the GTK thread drawing the indicator."""
+    from gi.repository import GLib
+    from tuxtalk import screen_message
+    queued, gdk_calls, shown = [], [], []
+    monkeypatch.setattr(wg, "_reported", lambda: "100,200,800,600|DP-6|0,0,3440,1440")
+    monkeypatch.setattr(wg, "screen_monitors",
+                        lambda: gdk_calls.append("monitors") or [("DP-6", Rect(0, 0, 3440, 1440))])
+    monkeypatch.setattr(GLib, "idle_add", lambda fn, *args: queued.append((fn, args)))
+    monkeypatch.setattr(screen_message, "_show_now", lambda text, center: shown.append((text, center)))
+    screen_message.show_over_active_window("Select some text first")
+    assert gdk_calls == [] and len(queued) == 1        # nothing from GDK yet
+    fn, args = queued[0]
+    fn(*args)                                           # the GTK thread
+    assert gdk_calls == ["monitors"]
+    assert shown == [("Select some text first", (500, 500))]
+
+
+def test_on_x11_the_window_manager_is_asked_on_the_gtk_thread(sources, monkeypatch):
+    from gi.repository import GLib
+    from tuxtalk import screen_message
+    queued, shown = [], []
+    monkeypatch.setattr(wg, "_x11_active_rect", lambda: Rect(10, 10, 100, 100))
+    monkeypatch.setattr(GLib, "idle_add", lambda fn, *args: queued.append((fn, args)))
+    monkeypatch.setattr(screen_message, "_show_now", lambda text, center: shown.append(center))
+    screen_message.show_over_active_window("x")
+    assert queued[0][1][1] is None                      # no answer without GDK
+    queued[0][0](*queued[0][1])
+    assert shown == [(60, 60)]
 
 
 # --- Ron, 2026-10-12: it faded before he finished reading it ---------------------------------
@@ -181,8 +212,7 @@ def test_long_enough_to_read():
 def test_the_label_says_it_short_and_the_notification_in_full(monkeypatch):
     from tuxtalk import app, screen_message
     shown, notified = [], []
-    monkeypatch.setattr(screen_message, "show", lambda text, center=None: shown.append(text))
-    monkeypatch.setattr(wg, "active_window_center", lambda: (1, 1))
+    monkeypatch.setattr(screen_message, "show_over_active_window", shown.append)
     monkeypatch.setattr(app, "_notify", lambda title, msg: notified.append(msg))
     monkeypatch.setattr(app, "_beep", lambda *a: None)
     for kind in app._EDIT_NOTICES:

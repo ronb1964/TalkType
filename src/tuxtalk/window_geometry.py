@@ -130,21 +130,37 @@ def _x11_active_rect():
         return None
 
 
-def active_window_rect():
-    """The active window's frame where TuxTalk's own windows are drawn, or
-    None when nothing could say."""
+_ASK = object()          # active_window_rect(): look the window up now
+
+
+def active_window_report():
+    """(window Rect, output name, output Rect) in the compositor's coordinates,
+    from the sources that need no GDK (the tray's cache, Sway / Hyprland), or
+    None. Safe from any thread."""
     from . import compositor_focus
-    monitors = screen_monitors()
     reported = _reported()
     parsed = parse_reported(reported) if reported else None
     if parsed:
-        return to_screen_rect(*parsed, monitors)
-    rect = compositor_focus.focused_rect() or _x11_active_rect()
-    return to_screen_rect(rect, "", None, monitors) if rect else None
+        return parsed
+    rect = compositor_focus.focused_rect()
+    return (rect, "", None) if rect else None
 
 
-def active_window_center():
+def active_window_rect(report=_ASK):
+    """The active window's frame where TuxTalk's own windows are drawn, or
+    None when nothing could say. *report* is an active_window_report() taken
+    earlier. GTK thread only: GDK lists the monitors, and finds the window
+    in an X11 session."""
+    if report is _ASK:
+        report = active_window_report()
+    if report is None:
+        rect = _x11_active_rect()
+        report = (rect, "", None) if rect else None
+    return to_screen_rect(*report, screen_monitors()) if report else None
+
+
+def active_window_center(report=_ASK):
     """The middle of the active window where TuxTalk's own windows are drawn,
-    or None when nothing could say."""
-    rect = active_window_rect()
+    or None when nothing could say. GTK thread only, as active_window_rect."""
+    rect = active_window_rect(report)
     return (round(rect.x + rect.w / 2), round(rect.y + rect.h / 2)) if rect else None

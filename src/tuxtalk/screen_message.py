@@ -49,6 +49,28 @@ def show(text, center=None):
         logger.debug(f"Could not show the message: {e}")
 
 
+def show_over_active_window(text):
+    """Show *text* over the middle of the active window. Safe from any thread:
+    the lookups that need no GDK run here, the GDK ones on the GTK thread,
+    since GDK may only be used from the thread that runs Gtk.main()."""
+    try:
+        from gi.repository import GLib
+        from . import window_geometry
+        GLib.idle_add(_show_over_window_now, text, window_geometry.active_window_report())
+    except Exception as e:
+        logger.debug(f"Could not show the message: {e}")
+
+
+def _show_over_window_now(text, report):
+    try:
+        from . import window_geometry
+        center = window_geometry.active_window_center(report)
+    except Exception as e:
+        logger.debug(f"Could not find the active window: {e}")
+        center = None
+    return _show_now(text, center)
+
+
 def _show_now(text, center):
     global _current
     try:

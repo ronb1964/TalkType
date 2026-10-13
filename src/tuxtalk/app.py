@@ -3001,8 +3001,8 @@ def _edit_problem(kind: str, beeps_on: bool) -> None:
     # Where the user is looking: over the active window (screen_message.py).
     # The notification stays as a backup, in the notification history.
     try:
-        from . import screen_message, window_geometry
-        screen_message.show(_EDIT_LABELS[kind], window_geometry.active_window_center())
+        from . import screen_message
+        screen_message.show_over_active_window(_EDIT_LABELS[kind])
     except Exception as e:
         logger.debug(f"Could not float the message over the window: {e}")
     _notify("TuxTalk", message)
