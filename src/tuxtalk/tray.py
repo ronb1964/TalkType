@@ -1635,8 +1635,7 @@ class DictationTray:
                         GLib.idle_add(lambda: self._show_update_result_dialog(result))
                     elif has_ext_update:
                         # Extension-only update: a quiet notification, no windows.
-                        latest = result.get("latest_version", "unknown")
-                        GLib.idle_add(lambda: self._show_update_notification(latest, has_update, has_ext_update))
+                        GLib.idle_add(self._show_update_notification)
                     else:
                         logger.info("No updates available")
                 else:
@@ -1649,34 +1648,15 @@ class DictationTray:
         thread.start()
         return False  # Don't repeat GLib timeout
 
-    def _show_update_notification(self, latest_version, has_app_update, has_ext_update):
-        """Show desktop notification about available update."""
-        try:
-            import subprocess
-
-            if has_app_update and has_ext_update:
-                title = "TuxTalk Updates Available"
-                body = f"TuxTalk {latest_version} and extension update available"
-            elif has_app_update:
-                title = "TuxTalk Update Available"
-                body = f"TuxTalk {latest_version} is now available"
-            else:
-                title = "Extension Update Available"
-                body = "A new GNOME extension version is available"
-
-            # Show notification using notify-send
-            subprocess.run([
-                "notify-send",
-                "--app-name=TuxTalk",
-                "--icon=software-update-available",
-                title,
-                body + "\nClick 'Check for Updates' in menu for details."
-            ], capture_output=True)
-
-            logger.info(f"Showed update notification: {title}")
-
-        except Exception as e:
-            logger.error(f"Could not show update notification: {e}")
+    def _show_update_notification(self):
+        """Tell the user a GNOME extension update is out. Check for Updates
+        covers only the app, so point to the tab that installs it."""
+        from .notify import notify
+        notify("Extension Update Available",
+               "A new version of the TuxTalk GNOME extension is available. "
+               "Open Preferences → Updates & Backup to install it.")
+        logger.info("Showed extension update notification")
+        return False
 
     def restart_app(self, _=None):
         """Cleanly restart the whole app after an update: launch a detached
