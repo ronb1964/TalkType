@@ -2969,6 +2969,7 @@ _EDIT_NOTICES = {
                     "was changed.",
     "window_changed": "You switched windows while the AI was working, so the rewrite "
                       "wasn't typed. It's in Recent Dictations in the TuxTalk menu.",
+    "focus_moved": "You switched windows before the edit was done, so nothing was changed.",
     "no_shortcuts": "Bold, italics and underline work in LibreOffice and other word "
                     "processors. This app has no formatting TuxTalk can use.",
     "cant_format": "Voice editing changes the words. It can't change the font, size or color.",
@@ -2991,6 +2992,7 @@ _EDIT_LABELS = {
     "needs_wayland": "Voice editing needs Wayland",
     "no_clipboard": "Couldn't read the selection",
     "window_changed": "Window changed, see Recent Dictations",
+    "focus_moved": "Window changed, nothing done",
     "no_shortcuts": "No bold or italics in this app",
     "cant_format": "Can't change font, size or color",
     "shortcut_failed": "Couldn't press the keys",
@@ -3031,6 +3033,12 @@ def _send_format_shortcut(kind: str) -> bool:
     key = shortcut_keycode(_FORMAT_LETTERS[kind])
     # KEY_LEFTCTRL=29
     return _ydotool_key(["29:1", f"{key}:1", f"{key}:0", "29:0"], what=kind)
+
+
+def _focus_moved(focused_class) -> bool:
+    """Whether another window has the focus than when the edit started. Only
+    the class is known, so a second window of the same app is not noticed."""
+    return _query_focused_window_class() != focused_class
 
 
 def _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
@@ -3085,6 +3093,11 @@ def _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
         logger.info(f"Voice edit: {_loggable(instruction)} ({len(selected)} characters)")
         # Deleting, formatting and exact jobs need no AI (voice_edit_rules.py).
         if voice_edit_rules.is_delete(instruction):
+            # Transcribing can take seconds; Delete must not reach a window
+            # the user has switched to meanwhile.
+            if _focus_moved(focused_class):
+                _edit_problem("focus_moved", beeps_on)
+                return
             # KEY_DELETE=111: the selection is still selected.
             if _ydotool_key(["111:1", "111:0"], what="delete"):
                 logger.info("Voice edit: deleted the selection")
@@ -3100,6 +3113,9 @@ def _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
             if not voice_edit_rules.has_formatting_shortcuts(focused_class):
                 logger.info(f"Voice edit: no formatting shortcuts in {focused_class!r}")
                 _edit_problem("no_shortcuts", beeps_on)
+                return
+            if _focus_moved(focused_class):
+                _edit_problem("focus_moved", beeps_on)
                 return
             # The selection is still selected, so the app's shortcut formats it.
             if all(_send_format_shortcut(kind) for kind in fmt):
@@ -3126,7 +3142,7 @@ def _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
         logger.info(f"Voice edit result: {_loggable(result)} "
                     f"(took {time.time() - t0:.2f}s)")
         history.add_entry(result)
-        if _query_focused_window_class() != focused_class:
+        if _focus_moved(focused_class):
             # Typing now would put the rewrite into whatever window has focus.
             _edit_problem("window_changed", beeps_on)
             return

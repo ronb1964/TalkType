@@ -882,3 +882,22 @@ def test_the_edit_says_the_clipboard_could_not_be_used(edit_env, monkeypatch):
     run_edit()
     assert len(edit_env["notices"]) == 1 and "clipboard" in edit_env["notices"][0]
     assert "Select" not in edit_env["notices"][0]
+
+
+# --- the window must still be the same one before any key is pressed ----------------------
+
+@pytest.mark.parametrize("said, focused", [
+    ("Delete this.", "org.kde.kwrite"),
+    ("Make this bold.", "libreoffice-writer"),
+])
+def test_no_key_goes_to_a_window_switched_to_while_transcribing(edit_env, keys_sent, monkeypatch,
+                                                                said, focused):
+    """Delete and Ctrl+B were sent after transcription without checking, so
+    they could land in whatever window the user had clicked into."""
+    classes = iter([focused, "org.kde.konsole"])
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: next(classes))
+    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: said)
+    run_edit()
+    assert keys_sent == [] and edit_env["typed"] == []
+    assert len(edit_env["notices"]) == 1 and "switched windows" in edit_env["notices"][0]
+    assert "Recent Dictations" not in edit_env["notices"][0]
