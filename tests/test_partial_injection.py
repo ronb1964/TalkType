@@ -69,6 +69,23 @@ def test_auto_mode_types_on_x11(monkeypatch, quiet):
     assert app._determine_injection_method("auto")[0] == "type"
 
 
+def test_typed_snippet_newline_is_shift_enter_on_x11(monkeypatch, quiet):
+    """A snippet keeps real newlines. Typed as a plain Enter, the first line of
+    a signature sent a chat message or ran a terminal command."""
+    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "kwrite")
+    keys = []
+    monkeypatch.setattr(app, "_type_text_raw", lambda t: keys.append(t) or True)
+    monkeypatch.setattr(app, "_send_enter", lambda: keys.append("ENTER") or True)
+    monkeypatch.setattr(app, "_send_shift_enter", lambda: keys.append("SHIFT+ENTER") or True)
+
+    outcome = app._inject_text("Best regards,\nRon ", "auto", 0.0)
+
+    assert outcome == "ok"
+    assert keys == ["Best regards,", "SHIFT+ENTER", "Ron "]
+    assert app.state.last_inserted_text == "Best regards,\nRon "
+
+
 # --- the undo buffer after a partial failure ----------------------------------
 
 def test_failed_typing_empties_the_undo_buffer(monkeypatch, quiet):

@@ -2523,7 +2523,8 @@ def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = Fa
     *one_block* (voice editing) pastes text with line breaks in one go, real
     newlines and all. Line by line with Enter in between, an editor continues
     each "- " list line and the dashes pile up. Typed, the breaks still go in
-    as Shift+Enter, since a plain Enter would send a chat message.
+    as Shift+Enter, since a plain Enter would send a chat message; that holds
+    for every typed line break, not only voice editing's.
     """
     # Determine injection method (auto mode does smart detection)
     detection_start = time.time()
@@ -2614,8 +2615,6 @@ def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = Fa
             text = text.replace("\t", "    ")
 
     use_paste = (actual_mode == "paste")
-    if one_block and "\n" in text and not use_paste:
-        text = text.replace("\n", "\xa7SHIFT_ENTER\xa7")
     logger.info(f"Injection mode: configured={injection_mode!r}, actual={actual_mode!r}, reason={reason}")
     if injection_mode == "auto":
         print(f"\U0001f50d Auto mode: {reason}")
@@ -2694,8 +2693,10 @@ def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = Fa
 
     # --- Typing fallback ---
     else:
-        if one_block:
-            text = text.replace("\n", "\xa7SHIFT_ENTER\xa7")   # a paste that failed
+        # Typed, a real newline is a plain Enter, which sends a chat message or
+        # runs a terminal's half-typed command. A snippet's line breaks are real
+        # newlines, so they go in as Shift+Enter like a spoken "new line".
+        text = text.replace("\n", "\xa7SHIFT_ENTER\xa7")
         inject_ok = _output_backend().type_text(text)
         injection_time = time.time() - injection_start
         logger.info(f"TIMING: Typing injection completed in {injection_time:.2f}s")
