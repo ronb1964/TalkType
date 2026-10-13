@@ -809,12 +809,15 @@ def _install_appimage_file(src: str, dest: str = APPIMAGE_PATH) -> None:
     into place: os.replace() unlinks a running AppImage rather than writing
     into it ("Text file busy"), and a full disk or a quit part-way through
     leaves dest untouched. Raises on failure, after removing the partial copy."""
+    import glob
     import shutil
     import tempfile
+    from .download_utils import STALE_PARTIAL_S, remove_stale_files
     dest_dir = os.path.dirname(dest)
     os.makedirs(dest_dir, exist_ok=True)
-    fd, staging_path = tempfile.mkstemp(
-        dir=dest_dir, prefix=f".{os.path.basename(dest)}.", suffix=".part")
+    prefix = f".{os.path.basename(dest)}."
+    remove_stale_files(dest_dir, glob.escape(prefix) + "*.part", STALE_PARTIAL_S)
+    fd, staging_path = tempfile.mkstemp(dir=dest_dir, prefix=prefix, suffix=".part")
     os.close(fd)
     try:
         shutil.copy2(src, staging_path)

@@ -12,11 +12,14 @@ into place only after size and (when provided) sha256 checks pass — so an
 interrupted download can never be mistaken for a complete file.
 """
 
+import fnmatch
+import glob
 import hashlib
 import logging
 import os
 import shutil
 import tempfile
+import time
 import urllib.request
 
 logger = logging.getLogger(__name__)
@@ -24,6 +27,11 @@ logger = logging.getLogger(__name__)
 # Read in 64 KiB chunks — large enough for throughput, small enough that
 # cancellation and progress updates stay responsive.
 _CHUNK_SIZE = 65536
+
+# A temp file nobody has written to for this long belongs to a download the
+# process never finished (killed, logged out, rebooted). A live download writes
+# every chunk, and a stalled one gives up after its socket timeout.
+STALE_PARTIAL_S = 10 * 60
 
 
 def download_file(
@@ -60,6 +68,8 @@ def download_file(
             downloaded = 0
             parent = os.path.dirname(dest_path) or "."
             os.makedirs(parent, exist_ok=True)
+            remove_stale_files(parent, glob.escape(os.path.basename(dest_path)) + ".*.tmp",
+                               STALE_PARTIAL_S)
             # A temp name of its own: the tray and Preferences can download the
             # same file at once, and a shared name would let one overwrite the
             # bytes the other has already checked.
@@ -115,6 +125,27 @@ def _remove_quiet(path: str | None) -> None:
         os.remove(path)
     except OSError:
         pass
+
+
+def remove_stale_files(directory: str, pattern: str, max_age_s: float) -> None:
+    """Delete the files in *directory* matching the glob *pattern* that have
+    not been modified for *max_age_s* seconds. Temp names are random, so a
+    copy cut off by a kill or a reboot is never overwritten by the next try;
+    without this sweep each one stays on disk for good."""
+    cutoff = time.time() - max_age_s
+    try:
+        entries = list(os.scandir(directory))
+    except OSError:
+        return
+    for entry in entries:
+        try:
+            if (fnmatch.fnmatchcase(entry.name, pattern)
+                    and entry.is_file(follow_symlinks=False)
+                    and entry.stat(follow_symlinks=False).st_mtime < cutoff):
+                os.remove(entry.path)
+                logger.info(f"Removed a leftover partial file: {entry.path}")
+        except OSError:
+            pass
 
 
 def parse_sha256sums(text: str) -> dict:

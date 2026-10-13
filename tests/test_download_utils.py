@@ -109,3 +109,26 @@ def test_a_failed_download_leaves_no_temp_file(tmp_path):
     out = tmp_path / "out"
     assert download_file(src.as_uri(), str(out / "dest.bin"), expected_sha256="0" * 64) is False
     assert list(out.iterdir()) == []
+
+
+def test_a_temp_file_left_by_a_killed_download_is_swept(tmp_path):
+    """A kill skips the cleanup and temp names are random, so the next
+    download of the same file removes old leftovers."""
+    src, content = _make_source(tmp_path)
+    out = tmp_path / "out"
+    out.mkdir()
+    stale = out / "dest.bin.k1ll3d.tmp"
+    stale.write_bytes(b"half")
+    hours_ago = os.path.getmtime(stale) - 3600
+    os.utime(stale, (hours_ago, hours_ago))
+    live = out / "dest.bin.busy01.tmp"
+    live.write_bytes(b"another download")
+    other = out / "other.bin.old999.tmp"
+    other.write_bytes(b"not ours")
+    os.utime(other, (hours_ago, hours_ago))
+
+    assert download_file(src.as_uri(), str(out / "dest.bin")) is True
+
+    assert not stale.exists()
+    assert live.exists(), "a download still being written was deleted"
+    assert other.exists(), "another file's download was touched"

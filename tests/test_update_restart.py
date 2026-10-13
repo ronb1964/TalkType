@@ -77,6 +77,24 @@ def test_a_failed_copy_keeps_the_working_appimage(tmp_path, appimages, monkeypat
         "a partial copy was left in ~/AppImages"
 
 
+def test_a_copy_cut_off_by_a_kill_is_swept_next_time(tmp_path, appimages):
+    """A kill or reboot mid-copy skips the cleanup, and each staging name is
+    random, so the next install removes old leftovers itself."""
+    appimages.mkdir()
+    stale = appimages / ".TuxTalk.AppImage.k1ll3d.part"
+    stale.write_bytes(b"half a copy")
+    hours_ago = os.path.getmtime(stale) - 3600
+    os.utime(stale, (hours_ago, hours_ago))
+    in_progress = appimages / ".TuxTalk.AppImage.busy01.part"
+    in_progress.write_bytes(b"another copy still running")
+
+    ok, _ = uc.install_appimage_update(_download(tmp_path))
+
+    assert ok
+    assert not stale.exists()
+    assert in_progress.exists(), "a copy still being written was deleted"
+
+
 def test_install_refuses_when_the_disk_is_too_full(tmp_path, appimages, monkeypatch):
     monkeypatch.setattr("tuxtalk.download_utils.free_space_bytes", lambda p: 1024)
     ok, message = uc.install_appimage_update(_download(tmp_path))
