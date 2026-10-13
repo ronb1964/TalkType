@@ -7,11 +7,15 @@ apt-get install -y -qq build-essential cmake git wget xz-utils libvulkan-dev ca-
 
 # Vulkan SDK for glslc and current Vulkan headers (22.04 has neither).
 cd /cache
+# Unpacked beside sdk/ and moved in only when complete, so a failed unpack
+# is not cached and reused by the next build.
 if [ ! -d sdk ]; then
     wget -q -O sdk.tar.xz "https://sdk.lunarg.com/sdk/download/latest/linux/vulkan-sdk.tar.xz"
-    mkdir sdk && tar xf sdk.tar.xz -C sdk && rm sdk.tar.xz
+    rm -rf sdk.partial && mkdir sdk.partial
+    tar xf sdk.tar.xz -C sdk.partial && rm sdk.tar.xz && mv sdk.partial sdk
 fi
-export VULKAN_SDK="/cache/sdk/$(ls /cache/sdk | head -1)/x86_64"
+SDK_VERSION_DIR="$(ls /cache/sdk | head -1)"
+export VULKAN_SDK="/cache/sdk/$SDK_VERSION_DIR/x86_64"
 export PATH="$VULKAN_SDK/bin:$PATH"
 
 WORK=/tmp/whisper-build

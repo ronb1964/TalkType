@@ -235,7 +235,7 @@ cd ydotool
 git checkout -q "$YDOTOOL_COMMIT"
 mkdir build && cd build
 cmake -DCMAKE_BUILD_TYPE=Release .. > /dev/null 2>&1
-make -j$(nproc) > /dev/null 2>&1
+make -j"$(nproc)" > /dev/null 2>&1
 cp ydotool ydotoold /build/AppDir/usr/bin/
 cd /build
 

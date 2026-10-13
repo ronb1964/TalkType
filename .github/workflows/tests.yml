@@ -47,3 +47,24 @@ jobs:
       # D-Bus session bus so no test reaches anything real.
       - name: Run the tests
         run: PYTHONPATH=src xvfb-run -a dbus-run-session -- venv/bin/python -m pytest tests/ -q
+
+  # Pyflakes catches undefined names and similar mistakes that only crash when
+  # that line finally runs; shellcheck does the same for the build and release
+  # scripts. Neither needs GTK, so this runs separately from the tests.
+  lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # A venv because Ubuntu's own Python refuses pip installs (PEP 668).
+      - name: Install ruff and shellcheck
+        run: |
+          python3 -m venv lint-venv
+          lint-venv/bin/pip install -q ruff==0.17.0 shellcheck-py==0.11.0.1
+
+      - name: Python (pyflakes rules)
+        run: lint-venv/bin/ruff check --select F src/tuxtalk
+
+      - name: Shell scripts
+        run: lint-venv/bin/shellcheck -S warning *.sh packaging/collect-licenses.sh packaging/flatpak/build-flatpak.sh
