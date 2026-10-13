@@ -210,8 +210,8 @@ def test_setting_follows_config(monkeypatch):
 
 # --- an accidental tap of the hold key ------------------------------------------
 # A tap just over the minimum hold time records a fraction of a second of room
-# noise and the key's click, and Parakeet can "hear" a word in that: "Thank
-# you." was typed into Konsole while testing 0.14.0 (2026-10-03).
+# noise and the key's click, and Parakeet can "hear" a word in that, such as a
+# stray "Thank you.".
 
 from tuxtalk.silence import is_speechless_tap  # noqa: E402
 
@@ -238,8 +238,8 @@ def test_a_tap_with_a_key_click_has_no_speech():
 
 def test_a_tap_on_a_noisy_desk_mic_has_no_speech():
     """Shaped like real taps from a Sennheiser Profile: a noisy background
-    and a key thump about 4x louder for 40 ms. The first version of this check
-    (1.5x) let such taps through, and Parakeet typed "Yeah." for them."""
+    and a key thump about 4x louder for 40 ms. A 1.5x threshold lets such taps
+    through, and Parakeet types "Yeah." for them."""
     audio = noise(0.3, 100).astype(np.float64)
     start = int(0.02 * SR)
     audio[start:start + 640] += rng.normal(0, 380, 640)
@@ -260,8 +260,8 @@ def test_a_quick_quiet_word_is_kept_too():
 
 
 def test_a_word_that_fills_the_whole_tap_is_kept():
-    """Real speech has no neat gaps; with a 4x ratio this dropped 224 of 510
-    real half-second clips, because the clip's quietest blocks were speech."""
+    """Real speech has no neat gaps; a plain 4x ratio drops 224 of 510 real
+    half-second clips, because the clip's quietest blocks are speech."""
     t = np.arange(int(0.45 * SR)) / SR
     voice = np.sin(2 * np.pi * 180 * t) * (2000 + 800 * np.sin(2 * np.pi * 4 * t))
     assert not is_speechless_tap(f32((voice + rng.normal(0, 60, t.size)).astype(np.int16)), SR)
@@ -280,8 +280,8 @@ def test_the_service_skips_a_speechless_tap(monkeypatch):
 
 
 # --- Nothing said at all -----------------------------------------------------
-# Ron, 0.14.6 test: double-tap, say nothing, and the recording stayed open
-# until a third press. Before the first word only, a fixed limit applies.
+# Double-tap and say nothing: the recording must not stay open until a third
+# press. Before the first word only, a fixed limit applies.
 
 def test_nothing_said_for_the_limit_stops_and_says_so():
     at, det = run(noise(12.0), 1.5)

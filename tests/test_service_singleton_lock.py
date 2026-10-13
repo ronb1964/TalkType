@@ -1,9 +1,9 @@
 """The service's single-instance lock.
 
-Any error opening the lock file used to be read as "another copy is already
-running", with a success exit code, which sends anyone debugging the wrong
-way. And the file was opened with "w", wiping the running instance's PID
-before the lock was even tried.
+An error opening the lock file is not "another copy is already running" with
+a success exit code, which would send anyone debugging the wrong way. And
+opening the file must not wipe the running instance's PID before the lock is
+even tried.
 """
 
 import os

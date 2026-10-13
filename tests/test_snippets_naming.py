@@ -2,7 +2,7 @@
 
 "Commands" was easy to confuse with the built-in voice commands ("period",
 "new line", "undo last word"). The saved file and the code keep their old
-names; only the words on screen changed.
+names; only the words on screen say Snippets.
 """
 import pathlib
 import types

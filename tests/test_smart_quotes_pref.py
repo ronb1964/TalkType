@@ -1,8 +1,9 @@
 """The "Use smart quotes" preference must decide every quote in the output.
 
 A lone "open quote" or "close quote" is turned into a curly quote inside
-normalize_text, after the preference had already been applied to the raw
-text, so curly quotes still reached the document with the preference off.
+normalize_text, after the preference is applied to the raw text, so the
+preference must cover those too or curly quotes reach the document with it
+off.
 """
 from tuxtalk import app
 

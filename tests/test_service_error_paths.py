@@ -1,5 +1,5 @@
-"""Error paths in the dictation service that used to look like success or
-block the hotkeys."""
+"""Error paths in the dictation service must not look like success or block
+the hotkeys."""
 
 import threading
 
@@ -8,8 +8,8 @@ from tuxtalk import app
 
 def test_turning_the_ai_off_does_not_block_the_caller(monkeypatch):
     """stop() waits up to 5 s for the AI server to exit, and the settings
-    reload that calls it runs on the input thread: no hotkey was read
-    meanwhile."""
+    reload that calls it runs on the input thread, so waiting there would
+    stop hotkeys being read."""
     release = threading.Event()
     stopped = threading.Event()
 

@@ -1,29 +1,22 @@
 """Killing the dictation service must never kill the tray that owns it.
 
-Process identification was hand-rolled at six call sites with four different
-patterns, and they disagreed:
+One helper owns the rule, because the obvious patterns hit the wrong processes:
 
-  * app.py's D-Bus quit handler used a bare "talktype", which matches the tray,
-    Preferences, and any shell command that merely mentions the project path.
-    Measured live during a review: six matching processes, including the dev
-    tray the user runs all day.
-  * tray.py and welcome_dialog.py used "-m tuxtalk", which matches
-    "-m tuxtalk.tray" — the tray's own command line. It has never actually run:
-    pkill reads a pattern starting with a dash as an option and aborts. The
-    obvious repair (adding "--") would make the tray SIGKILL itself, so the
-    pattern has to be narrowed rather than merely made parseable.
+  * a bare "talktype" matches the tray, Preferences, and any shell command that
+    merely mentions the project path;
+  * "-m tuxtalk" matches "-m tuxtalk.tray", the tray's own command line (and
+    pkill reads a pattern starting with a dash as an option and aborts);
   * "bin/dictate" is a prefix of "bin/dictate-tray", which is the only launcher
     the shipped AppImage actually contains.
 
-One helper now owns the rule, and these tests pin the property that matters:
-it hits the service, and nothing else, above all not the tray.
+These tests pin the property that matters: it hits the service, and nothing
+else, above all not the tray.
 
 The rule compares whole arguments, not substrings. pkill/pgrep -f match a regex
 against the joined command line, so a shell running
-`bash -c "pgrep -f tuxtalk.app"` passed for the service. The tray cached that
-PID and toggle_recording would have sent it SIGUSR1; the Preferences hotkey test
-sent SIGUSR2 to the first pgrep hit. Both signals kill a process that doesn't
-handle them.
+`bash -c "pgrep -f tuxtalk.app"` would pass for the service and be sent SIGUSR1
+by the tray or SIGUSR2 by the Preferences hotkey test. Both signals kill a
+process that doesn't handle them.
 """
 
 import os
@@ -59,7 +52,7 @@ NOT_THE_SERVICE_ARGVS = [
     ["/tmp/.mount_TalkTyabc/usr/bin/python3", "-m", "tuxtalk.prefs"],
     ["/bin/bash", "-c", "cd /home/ron/Projects/TalkType && ./build-release.sh"],
     ["node", "/home/ron/.local/share/talktype-notes/index.js"],
-    # The ones the old substring match got wrong:
+    # The ones a substring match gets wrong:
     ["/bin/bash", "-c", "pgrep -af tuxtalk.app"],
     ["grep", "-rn", "tuxtalk.app", "src/"],
     ["less", "/tmp/tuxtalk.app.log"],
@@ -85,7 +78,7 @@ class TestTheRuleSparesEverythingElse:
         )
 
     def test_the_tray_is_spared_specifically(self):
-        """The regression that mattered: '-m tuxtalk' matches '-m tuxtalk.tray'."""
+        """'-m tuxtalk' as a pattern would match '-m tuxtalk.tray'."""
         assert not service_launcher.is_service_argv(
             ["/usr/bin/python3", "-m", "tuxtalk.tray"]
         )
@@ -197,8 +190,8 @@ class TestStopDictationService:
 
 class TestNobodyHandRollsItAnyMore:
     def test_nobody_pkills_or_pgreps_for_the_service(self):
-        """Six call sites with four patterns is how they drifted apart, and the
-        substring matching pkill/pgrep -f do is the bug in its own right."""
+        """Separate patterns at each call site drift apart, and the substring
+        matching pkill/pgrep -f do is wrong in its own right."""
         offenders = []
         for path in (ROOT / "src" / "tuxtalk").glob("*.py"):
             if path.name == "service_launcher.py":

@@ -1,22 +1,15 @@
 """The dictation service must be launched identically from everywhere.
 
 Two places start it: the tray (at startup, and on "Restart Service") and
-Preferences (on Apply/OK). They kept separate spawn code, and only the tray's
-copy set GDK_BACKEND.
+Preferences (on Apply/OK). Both go through launch_dictation_service(), so there
+is one place that knows how to start it.
 
-That was harmless while AppRun exported GDK_BACKEND=x11 for the whole app —
-every process inherited it. Once the backend was scoped to the tray's spawn so
-that dropdowns would work on Wayland, Preferences began restarting the service
-with its own environment, which has no GDK_BACKEND. The service then ran on
-native Wayland, where gtk_window_move() is ignored, so the recording indicator
-snapped to centre no matter what indicator_position said.
-
-The user-visible symptom pointed at the wrong subsystem entirely: "changing the
-indicator position does nothing unless I quit and restart the app" — because
-quitting made the *tray* launch it again, with the right backend.
-
-Both call sites now go through launch_dictation_service(), so there is one
-place that knows how to start it.
+Separate spawn code drifts apart. GDK_BACKEND is scoped to the service's spawn
+so that dropdowns work on Wayland; a service started without it runs on native
+Wayland, where gtk_window_move() is ignored, and the recording indicator snaps
+to centre no matter what indicator_position says. The symptom then points at
+the wrong subsystem: "changing the indicator position does nothing unless I
+quit and restart the app".
 """
 
 import pathlib
@@ -70,7 +63,7 @@ def test_launcher_does_not_inherit_a_stale_backend(monkeypatch):
 
 @pytest.mark.parametrize("module", LAUNCHERS)
 def test_no_module_spawns_the_service_on_its_own(module):
-    """A second hand-rolled spawn is how the two paths drifted apart."""
+    """A second hand-rolled spawn would let the two paths drift apart."""
     text = (SRC / module).read_text()
 
     # Popen calls naming the service directly, outside the shared launcher.

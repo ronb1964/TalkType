@@ -388,7 +388,7 @@ def test_a_huge_member_is_turned_away_before_it_is_read(home, monkeypatch):
 
 
 def test_a_damaged_stats_file_is_left_alone_by_a_restore(home):
-    """Loading a backup used to replace an unreadable (maybe recoverable)
+    """Loading a backup must not replace an unreadable (maybe recoverable)
     stats file with only the backup's days."""
     set_stats({"2026-10-01": day(50)})
     dest = home / "b.zip"
@@ -423,8 +423,8 @@ def test_a_failed_stats_write_does_not_suggest_resetting_stats(home, monkeypatch
 
 
 def test_nothing_is_restored_when_the_undo_copy_cannot_be_saved(home, monkeypatch):
-    """The copy that lets a restore be undone used to fail silently, and the
-    settings were replaced anyway."""
+    """If the copy that lets a restore be undone can't be saved, the settings
+    are not replaced."""
     dest = home / "b.zip"
     sb.write_backup(str(dest))
     backup = sb.read_backup(str(dest))

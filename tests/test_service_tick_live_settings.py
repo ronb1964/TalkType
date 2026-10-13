@@ -3,7 +3,7 @@ main loop. The evdev loop is where settings changed in Preferences get picked up
 without a restart (_config_file_changed -> _reload_live_settings). If _service_tick
 doesn't do the same, the recording indicator's style/position and every other live
 setting never update in the Flatpak, even though Preferences reports "Applied
-without restart". This regression test pins the reload into _service_tick.
+without restart". This test pins the reload into _service_tick.
 """
 
 import types

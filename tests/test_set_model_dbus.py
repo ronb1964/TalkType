@@ -1,16 +1,13 @@
 """SetModel over D-Bus must actually change the model.
 
 The D-Bus interface declares SetModel and the GNOME extension's interface XML
-lists it, but nothing implemented it where it counts:
+lists it, so both sides must really implement it:
 
-  * DBusService._dispatch only forwards when hasattr(app, name) is true, and
-    TrayAppInstance — the object the tray registers — had no set_model, so
-    the call was silently dropped with no error anywhere.
-  * The one implementation that did exist wrote to
-    ~/.config/talktype/settings.json, a JSON path this app has never read;
-    its real settings live in ~/.config/TalkType/config.toml.
-
-So the method existed, was advertised, and did nothing on either side.
+  * DBusService._dispatch only forwards when hasattr(app, name) is true, so
+    TrayAppInstance — the object the tray registers — needs set_model, or the
+    call is silently dropped with no error anywhere.
+  * The service's implementation must save through config.save_config(), not
+    to a settings.json this app never reads.
 """
 
 from types import SimpleNamespace
@@ -69,11 +66,10 @@ def test_set_model_rejects_an_unknown_model(monkeypatch):
 # --- the dictation service's own implementation -----------------------------
 
 def test_the_service_does_not_write_a_phantom_settings_json():
-    """app.py's AppInstance.set_model wrote to ~/.config/talktype/settings.json
-    — a JSON file this app has never read or written. Real settings live in
-    ~/.config/TalkType/config.toml, reached through config.save_config(). So
-    the model "change" landed nowhere and was gone after the restart it told
-    the user was required.
+    """AppInstance.set_model must not write ~/.config/talktype/settings.json,
+    a file this app never reads. Real settings go to config.toml through
+    config.save_config(); anything else is gone after the restart it tells
+    the user is required.
 
     Checked structurally because AppInstance is defined inline inside app.py's
     startup path and cannot be constructed in isolation.
@@ -85,8 +81,8 @@ def test_the_service_does_not_write_a_phantom_settings_json():
            / "src" / "tuxtalk" / "app.py").read_text()
     tree = ast.parse(src)
 
-    # Docstrings may legitimately mention the old path when explaining the
-    # bug; only real string values in code count.
+    # Docstrings may mention the path when explaining the rule; only real
+    # string values in code count.
     docstrings = set()
     for node in ast.walk(tree):
         if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef,
