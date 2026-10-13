@@ -332,3 +332,44 @@ def test_a_changed_or_dropped_sign_is_not_safe(said, edited):
 ])
 def test_corrections_with_signs_and_accents_are_still_safe(said, edited):
     assert ai.edit_is_safe(said, edited) is True
+
+
+# --- an engine that dies is started again ---------------------------------------------------
+
+class _Proc:
+    def __init__(self, code=None):
+        self.returncode, self.pid = code, 42
+
+    def poll(self):
+        return self.returncode
+
+
+@pytest.fixture
+def dead_engine(monkeypatch):
+    """A ready engine whose server has since exited, with starting faked."""
+    e = ai.CorrectionEngine()
+    e._proc, e._port, e._key = _Proc(code=-9), 1234, "k"
+    e._ready.set()
+    started = []
+    monkeypatch.setattr(ai, "is_installed", lambda: True)
+    monkeypatch.setattr(ai, "kill_orphaned_engines", lambda: 0)
+    monkeypatch.setattr(ai, "_server_binary", lambda: "/x/llama-server")
+    monkeypatch.setattr(ai, "_model_path", lambda: "/x/model.gguf")
+    monkeypatch.setattr(ai.subprocess, "Popen", lambda *a, **k: started.append(a) or _Proc())
+    monkeypatch.setattr(e, "_wait_until_ready", lambda: None)
+    e.started = started
+    return e
+
+
+def test_a_server_that_died_is_started_again(dead_engine):
+    """is_ready() stayed True and every correction and edit failed all session."""
+    assert dead_engine.correct("one, no wait, two") is None
+    assert len(dead_engine.started) == 1
+    assert dead_engine.is_ready() is False and len(dead_engine.started) == 1   # starting
+
+
+def test_a_stopped_engine_is_not_started_again(dead_engine):
+    dead = dead_engine._proc
+    dead_engine.stop()
+    dead_engine.start(_replacing=dead)
+    assert dead_engine.started == []

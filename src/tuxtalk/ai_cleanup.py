@@ -485,9 +485,13 @@ class CorrectionEngine:
         self._ready = threading.Event()
         self._lock = threading.Lock()
 
-    def start(self):
-        """Start the server in the background. Returns immediately."""
+    def start(self, _replacing=None):
+        """Start the server in the background. Returns immediately.
+        *_replacing* is a server that exited: started again only if it is
+        still this engine's (not stopped, nor restarted, meanwhile)."""
         with self._lock:
+            if _replacing is not None and self._proc is not _replacing:
+                return
             if self._proc and self._proc.poll() is None:
                 return
             if not is_installed():
@@ -548,18 +552,32 @@ class CorrectionEngine:
                 proc.kill()
             logger.info("AI cleanup engine stopped")
 
+    def _restart_if_exited(self):
+        """A server that died after it was ready (out of memory, a graphics
+        driver reset) is started again; otherwise every request would fail
+        until the option was turned off and on."""
+        proc = self._proc
+        if proc is None or not self._ready.is_set() or proc.poll() is None:
+            return
+        logger.warning(f"AI cleanup engine exited (code {proc.returncode}); starting it again")
+        self._ready.clear()
+        self.start(_replacing=proc)
+
     def correct(self, sentence: str, timeout: float = 6.0):
         """The model's cleaned version of *sentence*, or None on any problem."""
+        self._restart_if_exited()
         if not self._ready.is_set():
             return None
         return self._ask(sentence, timeout)
 
     def is_ready(self) -> bool:
+        self._restart_if_exited()
         return self._ready.is_set()
 
     def edit(self, text: str, instruction: str):
         """*text* rewritten as *instruction* says (voice editing), or None on
         any problem or before the engine is ready."""
+        self._restart_if_exited()
         if not self._ready.is_set():
             return None
         result = self._edit_once(text, instruction)
