@@ -118,8 +118,8 @@ def _no_other_cuda(monkeypatch):
 
 
 def test_system_cuda_without_cudnn_is_not_enough(monkeypatch):
-    """A distro CUDA runtime without cuDNN passed the check, the model loaded
-    on CUDA, and the first dictation crashed."""
+    """With a distro CUDA runtime but no cuDNN, the model would load on CUDA
+    and the first dictation would crash."""
     _no_other_cuda(monkeypatch)
     monkeypatch.setattr("subprocess.run", lambda *a, **k: _ldconfig(
         "libcudart.so.12", "libcublas.so.12", "libcublasLt.so.12"))

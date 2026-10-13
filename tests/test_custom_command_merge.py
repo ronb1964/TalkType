@@ -1,9 +1,9 @@
 """Preferences must not undo a fix saved while it was open.
 
-Preferences loads the voice commands when it opens and used to write that
-whole list back on Apply/OK. A word fixed from the tray (Fix a Word) while
-Preferences was open was therefore deleted by the next Apply. It now applies
-only the user's own edits on top of what is on disk at save time.
+Preferences loads the voice commands when it opens, so writing that whole list
+back on Apply/OK would delete a word fixed from the tray (Fix a Word) in the
+meantime. It applies only the user's own edits on top of what is on disk at
+save time.
 """
 from tuxtalk.config import merge_custom_command_edits as merge
 

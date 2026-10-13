@@ -2,8 +2,8 @@
 
 With no tray running, the dictation service owns the bus name itself, and its
 app object exposes is_recording as a read-only property. NotifyRecordingState
-tried to assign it, raised, and never emitted RecordingStateChanged, so the
-extension's icon never turned red.
+must not assign it: that raises, RecordingStateChanged is never emitted, and
+the extension's icon never turns red.
 """
 
 import types

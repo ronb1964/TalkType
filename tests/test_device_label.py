@@ -1,9 +1,8 @@
 """The Device dropdown says what each choice really does.
 
-CUDA used to appear only after Preferences → Advanced → Download CUDA
-Libraries, so NVIDIA owners looking under Device never found it. Now it's
-always listed on NVIDIA, with its download size until it's installed. And with
-Parakeet it said "CUDA (GPU)" while Parakeet ran on the processor.
+On NVIDIA, CUDA is always listed under Device, with its download size until
+it's installed, so NVIDIA owners find it there. With Parakeet it says that
+Parakeet runs on the processor rather than "CUDA (GPU)".
 """
 import pytest
 

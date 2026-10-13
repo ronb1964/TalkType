@@ -1,8 +1,8 @@
 """Tray > Performance > Custom opens Preferences.
 
-It was a greyed-out marker. Clicking a radio item moves the dot to it, so
-after opening Preferences the dot must go back to the setup that's really in
-use: Custom only shows the dot when the settings match no preset.
+Clicking a radio item moves the dot to it, so after opening Preferences the
+dot must go back to the setup that's really in use: Custom only shows the dot
+when the settings match no preset.
 """
 import types
 
@@ -48,7 +48,7 @@ def test_clicking_custom_opens_preferences_then_puts_the_dot_back(run_timeouts_n
     tray = fake_tray()
     DictationTray._on_custom_preset(tray, Item(active=True))
     assert tray.calls == ["prefs", "revert"]
-    # Deferred: done in the same pass, KDE showed two dots (see the handler).
+    # Deferred: done in the same pass, KDE shows two dots (see the handler).
     assert run_timeouts_now and run_timeouts_now[0] > 0
 
 

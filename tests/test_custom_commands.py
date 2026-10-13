@@ -1,13 +1,13 @@
 """Tests for custom voice commands (phrase → replacement).
 
 Custom commands run on the text of every dictation, so a fault here doesn't
-degrade one phrase — it breaks all dictation. These tests cover the four ways
-that happened:
+degrade one phrase — it breaks all dictation. These tests cover four ways that
+can happen:
 
-  * a backslash in a replacement crashed every transcription
-  * one command's output was rewritten by another command
-  * a trigger containing punctuation silently never matched
-  * a quoted "inject exactly as written" replacement got a period appended
+  * a backslash in a replacement crashing every transcription
+  * one command's output being rewritten by another command
+  * a trigger containing punctuation silently never matching
+  * a quoted "inject exactly as written" replacement getting a period appended
 """
 
 import pytest
@@ -43,11 +43,10 @@ def pipeline(monkeypatch):
 # --- backslashes must never be treated as regex syntax ---------------------
 
 def test_backslash_escape_in_a_replacement_does_not_break_dictation(commands):
-    """The worst version of this bug: it fired even without the trigger.
+    """A replacement is a *value*, not a pattern.
 
-    A replacement is a *value*, not a pattern. Treating it as one meant a single
-    bad command took down every dictation, including ones that had nothing to do
-    with that command.
+    Treating it as one would let a single bad command take down every
+    dictation, even ones without its trigger.
     """
     apply = commands({"sign off": r"Best,\NRon"})
 
@@ -83,15 +82,15 @@ def test_backslash_t_still_inserts_a_tab(commands):
 # --- one pass: a command's output is final ---------------------------------
 
 def test_one_commands_replacement_is_not_rewritten_by_another(commands):
-    """Commands were applied in sequence to the running result, so text
-    produced by one command was re-scanned and mangled by the next."""
+    """Commands are applied in one pass, so text produced by one command is
+    never re-scanned and mangled by the next."""
     apply = commands({"sign off": "Thanks, Ron", "thanks": "Thank you"})
 
     assert apply("that is all sign off") == "that is all Thanks, Ron"
 
 
 def test_the_longest_matching_phrase_still_wins(commands):
-    """Regression guard for the real overlapping RBrand commands."""
+    """Overlapping phrases, where one trigger is the start of another."""
     apply = commands({
         "our brand customs llc": "RBrand Customs LLC",
         "our brand customs": "RBrand Customs",
@@ -110,7 +109,7 @@ def test_a_replacement_containing_another_trigger_is_left_alone(commands):
 # --- triggers containing punctuation ---------------------------------------
 
 def test_trigger_ending_in_punctuation_matches(commands):
-    """`c++` looked configured in Preferences and silently never fired."""
+    """A trigger like `c++` must fire, not just look configured in Preferences."""
     apply = commands({"c++": "C++"})
 
     assert apply("I write c++ every day") == "I write C++ every day"
@@ -139,7 +138,7 @@ def test_matching_is_case_insensitive(commands):
 # --- quoted replacements are injected exactly as written -------------------
 
 def test_quoted_replacement_keeps_its_trailing_space(pipeline):
-    """Ron's real command: "by the way" = "/btw " — was coming out as `/btw .`"""
+    """A real command, "by the way" = "/btw ", must not come out as `/btw .`"""
     run = pipeline({"by the way": '"/btw "'})
 
     assert run("by the way") == "/btw "
@@ -166,7 +165,7 @@ def test_quoted_replacement_ending_in_a_word_still_ends_the_sentence(pipeline):
 
 
 def test_unquoted_replacements_are_still_normalized(pipeline):
-    """Unquoted replacements keep flowing through normalization as before."""
+    """Unquoted replacements still go through normalization."""
     run = pipeline({"talk type": "TalkType"})
 
     assert run("talk type is great") == "TalkType is great."

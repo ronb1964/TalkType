@@ -32,8 +32,8 @@ def config_path(tmp_path, monkeypatch):
 # --- atomic writes ---------------------------------------------------------
 
 def test_save_never_leaves_a_truncated_file(config_path, monkeypatch):
-    """A full disk mid-write used to leave the file empty, deterministically,
-    losing every setting including the hotkey."""
+    """A full disk mid-write must not leave the file empty, which would lose
+    every setting including the hotkey."""
     settings = config.Settings()
     settings.model = "large-v3"
     config.save_config(settings)
@@ -120,7 +120,7 @@ def test_a_corrupt_config_is_restored_from_backup(config_path):
 
 
 def test_an_empty_config_is_treated_as_damaged(config_path):
-    """Zero bytes parses fine as TOML, so it silently produced all-defaults —
+    """Zero bytes parses fine as TOML and would silently give all-defaults,
     including a blank hotkey, which kills dictation with no message."""
     good = config.Settings()
     good.model = "tiny"
@@ -149,9 +149,8 @@ def test_a_missing_config_is_not_treated_as_damaged(config_path):
 # --- validation must not kill the caller ------------------------------------
 
 def test_invalid_settings_raise_instead_of_exiting():
-    """validate_config() called sys.exit() from inside a library function that
-    the tray runs once per second, so one bad value made the tray icon vanish
-    from the panel within a second, with no dialog and no way to tell why."""
+    """The tray runs validate_config() once per second, so exiting on one bad
+    value would make the tray icon vanish with no dialog and no way to tell why."""
     settings = config.Settings()
     settings.injection_mode = "nonsense"
 
@@ -198,9 +197,8 @@ def commands_path(tmp_path, monkeypatch):
 
 def test_a_damaged_commands_file_is_not_replaced_with_an_empty_one(commands_path):
     """load_custom_commands() returns {} when the file cannot be parsed, and
-    Preferences writes its list back on every Apply/OK — so one damaged byte
-    turned into zero commands on disk, permanently, with no quarantine copy
-    and a .bak that had already been overwritten with the damaged file."""
+    Preferences writes its list back on every Apply/OK, so saving must refuse
+    to turn one damaged byte into zero commands on disk."""
     commands_path.write_text('[commands]\n"talk type" = "TalkType"\nbroken {{{\n')
     damaged = commands_path.read_text()
 
@@ -248,10 +246,9 @@ def test_custom_commands_round_trip(commands_path):
 
 
 def test_a_quote_in_a_spoken_phrase_does_not_destroy_every_command(commands_path):
-    """The replacement was escaped on write but the phrase was not, so one
-    command containing a double quote made the whole file unparseable — every
-    custom command stopped working at once, and Preferences then showed an
-    empty list and wrote it back."""
+    """The phrase is escaped on write like the replacement, so one command
+    containing a double quote can't make the whole file unparseable and stop
+    every custom command at once."""
     commands = {
         'say "hello"': "greeting",
         "talk type": "TalkType",
@@ -289,9 +286,9 @@ def test_custom_commands_are_written_atomically(commands_path, monkeypatch):
 # --- recovery must actually repair, not just paper over ---------------------
 
 def test_recovered_settings_are_written_back_to_disk(config_path):
-    """Recovery used to happen in memory only, so the damaged file stayed
-    damaged: every process start (tray, service, prefs) quarantined it again
-    and showed the user the same alarming warning forever."""
+    """Recovery writes the repaired settings back; otherwise every process
+    start (tray, service, prefs) would quarantine the file again and show the
+    user the same alarming warning forever."""
     good = config.Settings()
     good.model = "tiny"
     config.save_config(good)
@@ -404,11 +401,11 @@ def test_repair_failure_does_not_crash_the_app(config_path, monkeypatch):
 # --- concurrent writers ------------------------------------------------------
 
 def test_concurrent_saves_do_not_collide(tmp_path):
-    """Three TalkType processes run at once — tray, dictation service and
-    Preferences — and all of them save settings.
+    """Three TuxTalk processes run at once (tray, dictation service and
+    Preferences) and all of them save settings.
 
-    A fixed temp filename meant they truncated each other's half-written file
-    and then failed to rename it, raising FileNotFoundError out of save_config.
+    Each needs its own temp file, or they truncate each other's half-written
+    file and then fail to rename it, raising FileNotFoundError out of save_config.
     """
     import threading
 
@@ -450,11 +447,10 @@ def test_no_temp_files_are_left_behind(tmp_path):
 def test_an_unreadable_config_is_never_overwritten(config_path):
     """A config the app cannot READ is not a damaged config.
 
-    load_config catches any exception, so a permission error looked like
-    corruption. The quarantine copy then failed for the same reason — it was
-    only logged — and the file was replaced anyway, because os.replace needs
-    write permission on the DIRECTORY, not the file. A perfectly valid config
-    was destroyed with no copy kept and no backup.
+    load_config catches any exception, so a permission error must not be
+    taken for corruption. The quarantine copy would fail for the same reason,
+    yet os.replace (which needs write permission on the DIRECTORY, not the
+    file) would still replace a valid config with no copy kept.
     """
     good = config.Settings()
     good.model = "large-v3"
@@ -502,8 +498,8 @@ def test_repair_is_skipped_when_the_damaged_file_cannot_be_quarantined(config_pa
 # --- the repair must produce valid TOML -------------------------------------
 
 def test_a_setting_containing_a_quote_survives_a_save(config_path):
-    """_toml_value wrapped strings in quotes without escaping, so a mic named
-    'Blue Yeti "Nano" USB' produced a file that would not parse."""
+    """_toml_value escapes quotes, so a mic named 'Blue Yeti "Nano" USB' still
+    produces a file that parses."""
     s = config.Settings()
     s.mic = 'Blue Yeti "Nano" USB'
     config.save_config(s)
@@ -524,9 +520,9 @@ def test_a_setting_containing_a_backslash_survives_a_save(config_path):
 
 
 def test_repair_never_leaves_the_file_unparseable(config_path):
-    """The livelock: a recovered value containing a quote was written back
-    unescaped, so the next poll re-detected damage and rewrote it again —
-    one quarantine file and one disk write every second, forever."""
+    """An unparseable repair would be re-detected as damage on the next poll
+    and rewritten again: one quarantine file and one disk write every second,
+    forever."""
     backup = config_path.with_suffix(config_path.suffix + ".bak")
     backup.write_text('# TalkType config\nmodel = "small"\nmic = "Blue Yeti \\"Nano\\" USB"\nhotkey = "F8"\n')
     config_path.write_text("garbage {{{")
@@ -582,10 +578,9 @@ def test_a_transient_read_error_does_not_pin_the_process_to_defaults(config_path
                                                                      monkeypatch):
     """A one-off read failure must not poison the cache.
 
-    _config_mtime was updated *before* the read, so after an EACCES the
-    defaults were cached under the real file's mtime and every later
-    load_config() returned them from cache — the good file on disk was
-    never read again for the life of the process.
+    If the defaults were cached under the real file's mtime after an EACCES,
+    every later load_config() would return them from cache and the good file
+    on disk would never be read again for the life of the process.
     """
     settings = config.Settings()
     settings.model = "large-v3"
@@ -613,10 +608,9 @@ def test_a_transient_read_error_does_not_pin_the_process_to_defaults(config_path
 
 def test_an_unreadable_config_is_not_overwritten_with_defaults(config_path,
                                                                monkeypatch):
-    """The killer combination: the tray's update check calls
-    save_config(load_config()) five seconds after launch. If the config
-    could not be READ, load_config returns defaults — and saving them
-    destroys a file whose contents were perfectly good.
+    """The tray's update check calls save_config(load_config()) five seconds
+    after launch. If the config could not be READ, load_config returns
+    defaults, and saving them must not destroy a file whose contents are good.
     """
     settings = config.Settings()
     settings.model = "large-v3"
@@ -634,7 +628,7 @@ def test_an_unreadable_config_is_not_overwritten_with_defaults(config_path,
     loaded = config.load_config()
     assert loaded.model == config.Settings.model  # defaults, as designed
 
-    # The tray now writes that back — this must not destroy the file.
+    # The tray writes that back; this must not destroy the file.
     with pytest.raises(config.ConfigNotLoadedError):
         config.save_config(loaded)
 
@@ -689,8 +683,8 @@ def test_saving_a_fresh_install_is_never_blocked(config_path):
     "emoji 🎤 ok", 'mixed "q" \\ \r\n',
 ])
 def test_any_string_round_trips_as_valid_toml(value):
-    """A raw \\r or other control character made tomllib reject the whole
-    file, so one pasted Windows line break broke every custom command."""
+    """A raw \\r or other control character makes tomllib reject the whole
+    file, so one pasted Windows line break would break every custom command."""
     import tomllib
     assert tomllib.loads(f"k = {config._toml_string(value)}")["k"] == value
 
@@ -705,7 +699,7 @@ def test_a_setting_with_a_carriage_return_survives_a_save(config_path):
 
 
 def test_a_wrong_typed_value_costs_only_that_setting(config_path):
-    """typing_delay = "fast" used to make the whole file count as damaged:
+    """typing_delay = "fast" must not make the whole file count as damaged,
     quarantined and rolled back to the .bak copy."""
     config_path.write_text('model = "small"\nhotkey = "F8"\ntyping_delay = "fast"\n')
     loaded = config.load_config()
@@ -735,8 +729,8 @@ def test_recovery_from_backup_skips_only_the_bad_field(config_path):
 
 
 def test_changing_a_loaded_object_without_saving_changes_nothing_else(config_path):
-    """load_config() handed every caller the same cached object, so a change
-    that was never saved showed up everywhere and was written by the next
+    """load_config() gives each caller its own copy, so a change that was
+    never saved doesn't show up everywhere or get written by the next
     unrelated save."""
     config.save_config(config.Settings(model="small"))
     first = config.load_config()

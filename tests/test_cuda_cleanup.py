@@ -3,8 +3,8 @@
 download_cuda_libraries() cleans up on failure by rmtree'ing the whole CUDA
 directory. That is right when the directory is a half-finished download this
 run created. It is wrong when a complete 1.4 GB installation was already
-there: an early failure — no network, pip missing, a cancelled dialog —
-then destroyed a working GPU setup the user has to spend 1.4 GB re-fetching.
+there: an early failure (no network, pip missing, a cancelled dialog) would
+destroy a working GPU setup the user has to spend 1.4 GB re-fetching.
 """
 
 import os
@@ -55,8 +55,8 @@ def test_a_partial_download_is_cleaned_up(cuda_dir):
 
 
 def test_the_real_nested_layout_counts_as_complete(cuda_dir):
-    """The check only listed lib/ itself, which holds folders, so a real
-    install never counted and a failed re-download deleted it."""
+    """lib/ itself holds only folders, so the check must look inside them, or
+    a real install never counts and a failed re-download deletes it."""
     _install_complete_cuda(cuda_dir)
     assert cuda_helper._cuda_install_looks_complete(str(cuda_dir))
     assert cuda_helper.has_talktype_cuda_libraries()

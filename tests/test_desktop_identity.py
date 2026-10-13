@@ -1,16 +1,16 @@
-"""TalkType's windows name the launcher they belong to.
+"""TuxTalk's windows name the launcher they belong to.
 
-Nothing set the program name, so on Wayland every TalkType window reported
-itself as "python3" and KDE showed its generic "W" icon in the title bar and
-taskbar instead of TalkType's microphone. The desktop finds the icon by
-matching the program name to a launcher (.desktop file), and each install
-type names its launcher differently:
+Without a program name, every window reports itself as "python3" on Wayland
+and KDE shows its generic "W" icon in the title bar and taskbar instead of
+TuxTalk's microphone. The desktop finds the icon by matching the program name
+to a launcher (.desktop file), and each install type names its launcher
+differently:
 
-  AppImage   ~/.local/share/applications/talktype.desktop  (first run)
-  AUR        /usr/share/applications/talktype.desktop
+  AppImage   ~/.local/share/applications/tuxtalk.desktop  (first run)
+  AUR        /usr/share/applications/tuxtalk.desktop
   deb / rpm  /usr/share/applications/io.github.ronb1964.TuxTalk.desktop
   Flatpak    io.github.ronb1964.TuxTalk
-  dev        ~/.local/share/applications/talktype-dev.desktop
+  dev        ~/.local/share/applications/tuxtalk-dev.desktop
 """
 import pathlib
 import re

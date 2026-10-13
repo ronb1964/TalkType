@@ -123,12 +123,12 @@ def test_positive_timeout():
 
 
 # =====================================================================
-# v0.5.17 Tier-2 fixes: language_mode round-trip + anti-clobber merge
+# language_mode round-trip and merging only the keys the user changed
 # =====================================================================
 
 def test_settings_has_language_mode_and_launch_at_login():
-    """These keys were prefs-only before: any save by the tray/service
-    dropped them from config.toml. They must round-trip via Settings."""
+    """These keys must round-trip via Settings, or any save by the tray or
+    service would drop them from config.toml."""
     s = Settings()
     assert s.language_mode == "auto"
     assert s.launch_at_login is False
@@ -185,8 +185,8 @@ def test_parakeet_is_the_default_model():
 
 
 def test_first_run_and_preferences_recommend_parakeet():
-    """Both pickers used to call Small "recommended" and preselect it.
-    First run now recommends through recommend.py (the welcome card)."""
+    """Parakeet, not Small, is the recommended model in Preferences; first
+    run recommends through recommend.py (the welcome card)."""
     import pathlib
     from tuxtalk import recommend
     assert recommend.recommend("en", recommend.Hardware(None)).model == "parakeet-v3"

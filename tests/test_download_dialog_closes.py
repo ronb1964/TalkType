@@ -1,9 +1,8 @@
 """The model download window closes on every path, including the fallback.
 
-When Hugging Face's file list couldn't be fetched, a Whisper model was loaded
-through WhisperModel() and the worker returned early, past the code that
-closes the window. It then sat at 50% until the user pressed Cancel, which
-threw the finished model away.
+When Hugging Face's file list can't be fetched, a Whisper model is loaded
+through WhisperModel() instead. The window must still close then, rather than
+sit at 50% until the user presses Cancel, which throws the finished model away.
 """
 import sys
 import threading

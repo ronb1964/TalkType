@@ -1,14 +1,13 @@
-"""The tray, not the dictation service, owns TalkType's D-Bus name.
+"""The tray, not the dictation service, owns the app's D-Bus name.
 
-Both register the name. They used to request it the same way, so the
-service queued behind the tray and inherited the name whenever the tray
-restarted while the service kept running. The GNOME extension's menu then
-reached the service's stub, which had no FixWordInDictation ("unknown
-method", 2026-09-29), and the service's recording-state reports went to
-itself instead of the tray.
+Both register the name. If they requested it the same way, the service would
+queue behind the tray and inherit the name whenever the tray restarted while
+the service kept running. The GNOME extension's menu would then reach the
+service's stub, which has no FixWordInDictation, and the service's
+recording-state reports would go to itself instead of the tray.
 
 Runs real processes on a private bus (dbus-run-session), so it never touches
-the desktop session's TalkType.
+the desktop session's TuxTalk.
 """
 import os
 import shutil

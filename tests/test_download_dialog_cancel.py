@@ -1,10 +1,9 @@
 """Closing the download window must stop the downloads it started.
 
 Each task carries a threading.Event that the download loop checks between
-chunks. The per-task Cancel button sets it; closing the window did not. The
-dialog was destroyed, run() returned, and multi-gigabyte downloads carried on
-in background threads writing to disk — invisible, uncancellable, and
-reported to the caller as failures.
+chunks. The per-task Cancel button sets it, and closing the window must too;
+otherwise multi-gigabyte downloads carry on in background threads writing to
+disk, invisible, uncancellable, and reported to the caller as failures.
 """
 
 import threading

@@ -220,7 +220,7 @@ def test_the_vulkan_request_carries_the_prompt_only_when_there_is_one():
     assert wv.request_fields(None)["language"] == "auto"
 
 
-# --- review fixes -----------------------------------------------------------------
+# --- contractions, possessives and echoes ------------------------------------------
 
 @pytest.mark.parametrize("heard, words", [
     ("she'll be there", ["Shell"]),
@@ -271,8 +271,8 @@ def test_a_lowercase_first_word_keeps_its_case_at_a_sentence_start(monkeypatch):
 
 
 def test_a_snippet_spoken_as_the_joined_word_still_fires(with_words, monkeypatch):
-    """Whisper, told about TuxTalk, now hears 'TuxTalk website'; the snippet
-    was saved as 'tux talk website'."""
+    """Whisper, told about TuxTalk, hears 'TuxTalk website' while the snippet
+    is saved as 'tux talk website'."""
     monkeypatch.setattr(app, "_custom_commands", {"tux talk website": '"https://tuxtalk.example"'})
     assert "https://tuxtalk.example" in app._prepare_text("open TuxTalk website", True, False, False)
 
@@ -289,7 +289,7 @@ def test_continuing_mid_sentence_keeps_multi_word_and_possessive_names(raw, firs
     assert app._prepare_text(raw, True, False, False).startswith(first)
 
 
-# --- second review --------------------------------------------------------------
+# --- whitespace, hyphens and short entries ----------------------------------------
 
 def test_only_plain_spaces_join_pieces():
     assert cw.fix_spelling("tux \t talk.", ["TuxTalk"]) == "tux \t talk."
@@ -320,8 +320,8 @@ def test_short_entries_do_not_hide_an_echo():
 
 
 def test_an_unreadable_words_file_keeps_the_words_in_force(monkeypatch):
-    """The custom-commands reload next to it already keeps the current set;
-    this one dropped every word on a read error mid-session."""
+    """Like the custom-commands reload, a read error mid-session keeps the
+    current words instead of dropping them all."""
     from tuxtalk import app, custom_words
 
     def unreadable(strict=False):

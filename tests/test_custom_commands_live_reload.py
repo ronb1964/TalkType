@@ -1,11 +1,9 @@
 """Custom voice commands must take effect without restarting the service.
 
-The service loaded them exactly once, at startup. The live-settings watcher
-stats config.toml only, and custom commands live in their own file, so an edit
-in the Commands tab reached disk and stopped there. Preferences made it worse
-from both directions: the Apply dialog said "your changes are already in
-effect" (it diffs config.toml keys, and none had changed), while the tab's own
-tip said to restart the service. One of them had to become true.
+Custom commands live in their own file, not config.toml, so the service must
+watch that file as well; otherwise an edit in the Commands tab reaches disk and
+stops there, while Preferences' Apply dialog says "your changes are already in
+effect".
 
 A damaged commands file must never wipe the commands the service is already
 running with — the same rule the config reload follows.
