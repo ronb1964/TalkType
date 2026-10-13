@@ -2000,6 +2000,13 @@ def _show_rename_notice_once():
 def main():
     from . import desktop_identity
     desktop_identity.apply()        # TuxTalk's icon on its windows, not KDE's generic one
+    # Before anything opens the shared D-Bus connection: one opened without
+    # the GLib main loop can't export the tray's D-Bus service later.
+    try:
+        import dbus.mainloop.glib
+        dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+    except ImportError:
+        pass
     _acquire_tray_singleton()
 
     # The TalkType -> TuxTalk folder move ran at package import, before any

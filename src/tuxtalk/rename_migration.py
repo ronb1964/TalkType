@@ -303,8 +303,15 @@ def _default_plasma_runner():
 
     def run(script):
         import dbus
-        shell = dbus.SessionBus().get_object("org.kde.plasmashell", "/PlasmaShell")
-        return str(shell.evaluateScript(script, dbus_interface="org.kde.PlasmaShell"))
+        # A private connection: this runs before the tray sets the GLib main
+        # loop, and the shared one opened now would lack it, so exporting the
+        # tray's D-Bus service on it would fail for the whole session.
+        bus = dbus.SessionBus(private=True)
+        try:
+            shell = bus.get_object("org.kde.plasmashell", "/PlasmaShell")
+            return str(shell.evaluateScript(script, dbus_interface="org.kde.PlasmaShell"))
+        finally:
+            bus.close()
     return run
 
 

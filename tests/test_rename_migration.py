@@ -178,3 +178,29 @@ def test_the_tray_shows_it():
     tray = (pathlib.Path(rm.__file__).parent / "tray.py").read_text()
     assert "rename_migration.notice_pending(" in tray
     assert "TalkType is now TuxTalk" in tray
+
+
+def test_the_plasma_script_uses_its_own_bus_connection(monkeypatch):
+    """On KDE the tray's D-Bus service failed on every first start: this ran
+    dbus.SessionBus() before the tray set the GLib main loop, so the shared
+    connection had none and exporting the service failed (fedora44-KDE test,
+    2026-10-13). A private connection, closed after use, leaves it alone."""
+    import sys
+    import types
+    from tuxtalk import rename_migration as rm
+    calls = []
+
+    class Bus:
+        def __init__(self, **kwargs):
+            calls.append(("open", kwargs))
+
+        def get_object(self, *a):
+            return types.SimpleNamespace(evaluateScript=lambda script, dbus_interface: "1")
+
+        def close(self):
+            calls.append(("close", {}))
+
+    monkeypatch.setitem(sys.modules, "dbus", types.SimpleNamespace(SessionBus=Bus))
+    monkeypatch.setenv("XDG_CURRENT_DESKTOP", "KDE")
+    assert rm._default_plasma_runner()("print(1)") == "1"
+    assert calls == [("open", {"private": True}), ("close", {})]
