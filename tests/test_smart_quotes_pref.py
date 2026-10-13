@@ -1,0 +1,28 @@
+"""The "Use smart quotes" preference must decide every quote in the output.
+
+A lone "open quote" or "close quote" is turned into a curly quote inside
+normalize_text, after the preference had already been applied to the raw
+text, so curly quotes still reached the document with the preference off.
+"""
+from tuxtalk import app
+
+
+def _prep(text, smart_quotes):
+    return app._prepare_text(text, smart_quotes, True, False)
+
+
+def test_lone_open_quote_is_straight_with_smart_quotes_off(monkeypatch):
+    monkeypatch.setattr(app, "_ai_engine", None)
+    out = _prep("he said open quote hello", False)
+    assert "“" not in out and '"hello' in out
+
+
+def test_lone_close_quote_is_straight_with_smart_quotes_off(monkeypatch):
+    monkeypatch.setattr(app, "_ai_engine", None)
+    out = _prep("hello close quote", False)
+    assert "”" not in out and out.endswith('"')
+
+
+def test_lone_quote_stays_curly_with_smart_quotes_on(monkeypatch):
+    monkeypatch.setattr(app, "_ai_engine", None)
+    assert _prep("he said open quote hello", True) == "He said “hello."

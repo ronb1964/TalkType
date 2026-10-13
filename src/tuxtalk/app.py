@@ -2472,6 +2472,10 @@ def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: b
         processed if smart_quotes else processed.replace("\u201c","\"").replace("\u201d","\""),
         auto_period=auto_period,
     )
+    # A lone "open quote" or "close quote" becomes a curly quote inside
+    # normalize_text, so the preference is applied to its output as well.
+    if not smart_quotes:
+        text = text.replace("\u201c", "\"").replace("\u201d", "\"")
 
     # Optional cleanup, while quoted custom-command replacements are still
     # placeholders, so a literal replacement is never "cleaned". Rules first
