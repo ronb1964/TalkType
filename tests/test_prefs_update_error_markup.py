@@ -1,0 +1,27 @@
+"""An update error containing & or < must still show in the status line.
+
+The text went into set_markup() unescaped, so Pango rejected it and the
+label went blank exactly when the user needed the error.
+"""
+from types import SimpleNamespace
+
+import pytest
+
+gi = pytest.importorskip("gi")
+gi.require_version("Pango", "1.0")
+from gi.repository import Pango  # noqa: E402
+
+from tuxtalk.prefs import PreferencesWindow  # noqa: E402
+
+
+def test_a_check_error_with_markup_characters_stays_readable():
+    shown = []
+    d = SimpleNamespace(update_status_label=SimpleNamespace(set_markup=shown.append))
+    button = SimpleNamespace(set_sensitive=lambda v: None)
+    error = "[Errno 13] Permission denied: '/home/x/R&D/<AppImages>'"
+
+    PreferencesWindow._handle_update_result(d, {"success": False, "error": error}, button)
+
+    ok, _attrs, text, _accel = Pango.parse_markup(shown[0], -1, "\0")
+    assert ok
+    assert error in text

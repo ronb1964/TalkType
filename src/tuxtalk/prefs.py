@@ -2948,8 +2948,11 @@ class PreferencesWindow:
         button.set_sensitive(True)
 
         if not result.get("success"):
+            # The error carries exception text and paths, which can hold the
+            # & or < that make Pango reject the whole label.
+            error = GLib.markup_escape_text(str(result.get("error", "Unknown error")))
             self.update_status_label.set_markup(
-                f"<span color='red'>Check failed: {result.get('error', 'Unknown error')}</span>"
+                f"<span color='red'>Check failed: {error}</span>"
             )
             return
 
@@ -3149,7 +3152,7 @@ class PreferencesWindow:
 
             error_msg = result_holder.get("error", "Unknown error")
             self.update_status_label.set_markup(
-                f"<span color='red'>Update failed: {error_msg}</span>\n"
+                f"<span color='red'>Update failed: {GLib.markup_escape_text(str(error_msg))}</span>\n"
                 f"Please try again or download manually from GitHub."
             )
 
