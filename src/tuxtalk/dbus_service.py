@@ -13,8 +13,8 @@ from .logger import setup_logger
 logger = setup_logger(__name__)
 
 
-# Cache of the currently focused window's wm_class, pushed from the GNOME
-# extension whenever focus changes. Read by app._paste_text to decide between
+# Cache of the currently focused window's wm_class, pushed by the GNOME
+# extension or the KWin focus script whenever focus changes. Read by app._paste_text to decide between
 # plain Ctrl+V (regular apps) and Ctrl+Shift+V (terminals).
 _focused_window_class: str | None = None
 # "x,y,w,h|output|ox,oy,ow,oh" from the same reporters (window_geometry.py).
@@ -45,16 +45,10 @@ class TuxTalkDBusService(dbus.service.Object):
         state to it over D-Bus. The dictation service registers too
         (primary=False), only as a stand-in for when no tray is running.
 
-        Both used to request the name the same way, so the second one queued
-        behind the first. When the tray restarted while the service kept
-        running, the queued service inherited the name: the extension's menu
-        actions reached a stub that didn't know newer methods
-        (FixWordInDictation failed as "unknown method"), and the service's
-        recording-state reports went to itself instead of the tray.
-
-        Now the tray always takes the name, from a stand-in service too, and
-        the service never queues for it, so it can't inherit it. If the tray
-        already has the name, the service gets NameExistsException.
+        The tray always takes the name, from a stand-in service too. The
+        service never queues for it, so it can't inherit the name from a
+        restarting tray; if the tray already has it, the service gets
+        NameExistsException.
         """
         self.app = app_instance
         # Hotkeys the running service asked the GNOME extension to hold back.
@@ -81,8 +75,8 @@ class TuxTalkDBusService(dbus.service.Object):
         if self.owns_name():
             logger.info(f"D-Bus service started: {DBUS_NAME}")
         else:
-            # Only possible for the tray, behind something that won't let go
-            # of the name (a TuxTalk older than this fix).
+            # Only possible for the tray, behind an older TuxTalk that does
+            # not allow its name to be replaced.
             logger.warning(f"D-Bus name {DBUS_NAME} is held by another process; "
                            "waiting in line for it")
 
@@ -98,9 +92,8 @@ class TuxTalkDBusService(dbus.service.Object):
     def _dispatch(self, method_name, *args):
         """Dispatch a D-Bus method call to the app instance via GLib main loop.
 
-        All D-Bus action methods follow the same pattern: log the call,
-        check if the app has the method, then schedule it on the main loop.
-        This helper eliminates that repetition.
+        Logs the call and schedules the app's method on the main loop; a
+        method the app does not have is ignored.
         """
         logger.debug(f"D-Bus: {method_name} called" +
                       (f" with {args}" if args else ""))
@@ -132,7 +125,7 @@ class TuxTalkDBusService(dbus.service.Object):
 
     @dbus.service.method(DBUS_INTERFACE, out_signature='s')
     def GetDeviceType(self):
-        """Get the device the model really runs on (cpu/cuda). This is what
+        """Get the device the model really runs on (cpu, cuda or vulkan). This is what
         the GNOME extension's Device line shows, so it matches the tray."""
         running = getattr(self, "running_engine", None)
         if running:
@@ -154,11 +147,9 @@ class TuxTalkDBusService(dbus.service.Object):
             'injection_mode': self.GetInjectionMode(),
         }
 
-        # The auto-timeout is the ONLY thing separating the "Battery Saver" and
-        # "Fastest" presets — both are tiny/CPU. Without it here, the GNOME
-        # extension cannot tell which one is active and always reports Fastest.
-        # Adding keys to this dict is backward-compatible: older extensions
-        # ignore what they do not read.
+        # Older GNOME extensions tell the battery-saving preset apart by its
+        # auto-timeout; current ones read 'preset' below. Adding keys to this
+        # dict is backward-compatible: extensions ignore what they do not read.
         if hasattr(self.app, 'config'):
             status['auto_timeout_enabled'] = bool(
                 getattr(self.app.config, 'auto_timeout_enabled', False))
@@ -208,7 +199,7 @@ class TuxTalkDBusService(dbus.service.Object):
 
     @dbus.service.method(DBUS_INTERFACE, in_signature='s')
     def SetModel(self, model_name: str):
-        """Change the Whisper model"""
+        """Change the speech model"""
         self._dispatch('set_model', model_name)
 
     @dbus.service.method(DBUS_INTERFACE, out_signature='s')
@@ -225,7 +216,7 @@ class TuxTalkDBusService(dbus.service.Object):
 
     @dbus.service.method(DBUS_INTERFACE, in_signature='s')
     def SetFocusedWindowClass(self, wm_class: str):
-        """Receive the focused window's wm_class from the GNOME extension.
+        """Receive the focused window's wm_class from the GNOME extension or KWin script.
 
         Called on every focus change. Cached for cross-process query via
         GetFocusedWindowClass — the dictation engine runs in a separate
@@ -255,7 +246,7 @@ class TuxTalkDBusService(dbus.service.Object):
         """Return the currently focused window's wm_class (empty string if unknown).
 
         Used by the dictation engine subprocess (tuxtalk.app) to read the cache
-        that the GNOME extension pushes into this tray-side service.
+        that the focus reporters push into this tray-side service.
         """
         return _focused_window_class or ''
 
@@ -425,10 +416,9 @@ class TuxTalkDBusService(dbus.service.Object):
                 from . import update_checker
                 result = update_checker.check_for_updates()
 
-                # Show a PERSISTENT result window via the app — a dialog the user
-                # dismisses with OK — instead of relying on the extension's fleeting
-                # GNOME notification (easy to miss). Only the manual, extension-triggered
-                # check reaches this D-Bus method; the background auto-check does not.
+                # Show a result window the user dismisses, since the extension's
+                # GNOME notification is easy to miss. Only the manual check from
+                # the extension reaches this method; the auto-check does not.
                 if result.get("success") and hasattr(self.app, "show_update_result"):
                     self.app.show_update_result(result)
 
