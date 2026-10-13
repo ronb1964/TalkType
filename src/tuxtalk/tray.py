@@ -6,13 +6,10 @@ os.environ["HF_HUB_DISABLE_XET"] = "1"
 
 import gi
 gi.require_version("Gtk", "3.0")
-# Ayatana is the maintained successor to the dead libappindicator project, and
-# it is what build-deb.sh and build-rpm.sh actually declare as a dependency.
-# The old "AppIndicator3" typelib references libappindicator3.so.1, a library
-# Debian/Ubuntu still provide as a compat shim but Fedora does not ship at all —
-# so bundling the old typelib crashed the tray on launch on Fedora. Imported
-# under the historical name to keep the call sites below unchanged. The Flatpak
-# bundles libayatana-appindicator too, so this require_version holds everywhere.
+# Ayatana is the maintained successor to libappindicator and is what the
+# .deb, .rpm and Flatpak ship. The old "AppIndicator3" typelib needs
+# libappindicator3.so.1, which Fedora does not provide at all. Imported under
+# the old name so the call sites below read the same.
 gi.require_version("AyatanaAppIndicator3", "0.1")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gtk, Gdk, GLib
@@ -170,9 +167,9 @@ def engine_status(cfg_model, cfg_device, running=None):
 
     *running* is (model, device) as reported by the dictation service, or None
     when it hasn't reported (stopped, starting, or an older service). The lines
-    used to show the settings only, so after a fallback they said "GPU (Vulkan)"
-    while the processor did the work. When what runs differs from the setting,
-    the device text says why in a few words.
+    show what really runs, so a fallback to the processor is not reported as
+    the graphics card; when that differs from the setting, the device text
+    says why in a few words.
     """
     from .parakeet_engine import effective_device
     names = {'cpu': 'CPU', 'cuda': 'GPU (CUDA)', 'vulkan': 'GPU (Vulkan)'}
@@ -194,11 +191,8 @@ def engine_status(cfg_model, cfg_device, running=None):
 def preset_notice(label, model, device, gpu_offered):
     """The notification after choosing a Performance preset.
 
-    It used to say only "Performance: Balanced / Restarting service...", though
-    "Balanced (GPU if available)" often ends up on the processor and "Fast &
-    Accurate" always did, even next to a fast graphics card. Now it says where
-    the model really runs and, if that's the processor on a computer with a
-    usable graphics chip, how to move it there.
+    It says where the model really runs and, if that's the processor on a
+    computer with a usable graphics chip, how to move it there.
     """
     from .model_helper import model_display_name
     _, where = engine_status(model, device)
@@ -220,7 +214,7 @@ def recommend_notice_text(setup):
 
 def maybe_show_recommend_notice():
     """Once, on the first start after updating: tell existing users when the
-    recommended setup differs from theirs (Ron, 2026-10-06). Never on first run
+    recommended setup differs from theirs. Never on first run
     (first run sets recommend_notice_shown) or the Flatpak. Runs as a GLib
     timeout: True (ask again) until the dictation service is up, then False."""
     try:
@@ -249,12 +243,9 @@ def maybe_show_recommend_notice():
 
 class DictationTray:
     def __init__(self):
-        # TuxTalk is a dark-themed app: Preferences and the onboarding windows
-        # each set gtk-application-prefer-dark-theme individually. The dialogs the
-        # TRAY spawns (About, "Check for Updates" result) did not, so they rendered
-        # in the light system GTK theme on a dark desktop. This is a global Gtk
-        # setting, so setting it once here — before any tray dialog is built —
-        # makes every tray window match the rest of the app.
+        # TuxTalk is a dark-themed app. This is a global Gtk setting, so setting
+        # it once here, before any tray dialog is built, makes the tray's own
+        # windows (About, update results) match Preferences and onboarding.
         try:
             _settings = Gtk.Settings.get_default()
             if _settings is not None:
@@ -305,7 +296,7 @@ class DictationTray:
             # holding the hotkeys back from every app.
             self._release_desktop_hotkeys()
 
-        # Check service status every 1 second and update menu (faster sync in dev mode)
+        # Check service status every second to keep the icon and menu current
         GLib.timeout_add_seconds(1, self.update_status_and_menu)
 
         # Once after updating: point existing users at the recommended setup.
@@ -437,11 +428,7 @@ class DictationTray:
                     GLib.idle_add(self.tray.set_injection_mode, mode)
 
                 def set_model(self, model_name: str):
-                    """Change the model via tray (called from GNOME extension D-Bus).
-
-                    Without this method, DBusService._dispatch's hasattr check
-                    failed and SetModel was silently discarded.
-                    """
+                    """Change the model via tray (called from GNOME extension D-Bus SetModel)."""
                     GLib.idle_add(self.tray.set_model, model_name)
 
                 def quit(self):
@@ -473,9 +460,9 @@ class DictationTray:
             logger.warning(f"Failed to initialize D-Bus service: {e}")
             self.dbus_service = None
 
-        # On KDE, nothing fills the focused-window cache the way the GNOME
-        # extension does, so paste never learned it was aiming at a terminal.
-        # Load the KWin reporter now that the service exists to receive it.
+        # On KDE nothing else fills the focused-window cache the way the GNOME
+        # extension does, and paste needs it to recognise a terminal. Load the
+        # KWin reporter now that the D-Bus service exists to receive it.
         self._start_kwin_focus_provider()
 
     def _start_kwin_focus_provider(self):
@@ -613,11 +600,8 @@ class DictationTray:
 
     def _launch_service(self):
         """Launch the dictation service subprocess (see service_launcher)."""
-        # Delegated so the tray and Preferences start the service identically.
-        # They used to spawn it separately and only this copy set GDK_BACKEND,
-        # so a restart from Preferences ran the service on native Wayland and
-        # the recording indicator ignored indicator_position. See
-        # service_launcher for why the backend matters.
+        # Delegated so the tray and Preferences start the service identically,
+        # including its GDK_BACKEND (see service_launcher for why it matters).
         from .service_launcher import launch_dictation_service
 
         proc = launch_dictation_service()
@@ -785,14 +769,10 @@ class DictationTray:
             logger.error(f"Failed to emit model change: {e}")
 
     def set_model(self, model_name: str):
-        """Change the Whisper model. Reachable over D-Bus as SetModel.
+        """Change the speech model. Reachable over D-Bus as SetModel.
 
-        The D-Bus interface has always advertised SetModel, but nothing
-        implemented it here — and DBusService._dispatch silently drops calls
-        for methods the app object does not have, so it failed without a
-        word. (The one implementation that did exist wrote to a JSON path
-        this app has never read.) Follows the same sequence as applying a
-        performance preset: persist, tell the extension, restart.
+        Follows the same sequence as applying a performance preset: persist,
+        tell the extension, restart.
         """
         from .config import VALID_MODELS, load_config, save_config
 
@@ -930,7 +910,7 @@ class DictationTray:
             if not preset.extras:
                 # Leaving Battery saver: put back the settings it changed
                 # (2-minute auto-stop) to their defaults, unless the user has
-                # since chosen their own in Preferences (Ron, 2026-10-06).
+                # since chosen their own in Preferences.
                 from .config import Settings
                 battery = next((p for p in self._current_presets() if p.id == "battery"), None)
                 if battery and all(getattr(cfg, k, None) == v for k, v in battery.extras):
@@ -1208,11 +1188,9 @@ class DictationTray:
         # Close button
         dialog.add_button("Close", Gtk.ResponseType.CLOSE)
 
-        # Show non-blocking. dialog.run() spins a nested main loop, and the tray's
-        # GTK loop runs in a background thread, where a nested run() can fail to
-        # map the window on Wayland — that is why About showed nothing on GNOME.
-        # Use a response callback + present() instead (same fix the update dialogs
-        # got in 0.7.0).
+        # Shown with a response callback and present() rather than run(): a
+        # nested run() loop started from a tray menu callback can fail to map
+        # the window on Wayland.
         dialog.connect("response", lambda d, _r: d.destroy())
         dialog.show_all()
         dialog.present()
@@ -1256,14 +1234,12 @@ class DictationTray:
                 logger.error(f"Update check raised: {e}", exc_info=True)
                 result_holder[0] = {"success": False, "error": str(e)}
             r = result_holder[0] or {}
-            print(f"Update check done: success={r.get('success')}, "
-                  f"update_available={r.get('update_available')}, error={r.get('error')}",
-                  flush=True)
+            logger.debug(f"Update check done: success={r.get('success')}, "
+                         f"update_available={r.get('update_available')}, error={r.get('error')}")
             GLib.idle_add(show_result)
 
         def show_result():
             """Show the result in the main thread."""
-            print("Update check: presenting result window", flush=True)
             progress_dialog.destroy()
 
             result = result_holder[0]
@@ -1291,12 +1267,10 @@ class DictationTray:
         thread.start()
 
     def _show_update_result_dialog(self, result):
-        """Show dialog with update check results.
+        """Show the result of an update check for the app itself.
 
-        Note: GTK tray only shows AppImage updates. Extension updates are handled
-        by the GNOME extension menu, which opens Preferences -> Updates tab.
-        GTK tray users are either non-GNOME (can't use extension) or GNOME users
-        who chose not to install the extension.
+        GNOME extension updates are installed from Preferences → Updates &
+        Backup instead (see _show_update_notification).
         """
         from . import update_checker
 
@@ -1324,9 +1298,7 @@ class DictationTray:
             dialog.format_secondary_markup(message)
             dialog.set_position(Gtk.WindowPosition.CENTER)
             dialog.set_keep_above(True)
-            # Show non-blocking (destroy on response) instead of run(): the tray's GTK
-            # loop is in a background thread, and a nested run() loop there can fail to
-            # map the dialog on Wayland — the cause of "no result window appears".
+            # Non-blocking (destroy on response) rather than run(), as in About.
             dialog.connect("response", lambda d, _r: d.destroy())
             dialog.show_all()
             dialog.present()
@@ -1419,8 +1391,8 @@ class DictationTray:
         elif has_update and release.get("html_url"):
             view_btn.get_style_context().add_class("suggested-action")
 
-        # Non-blocking (no nested run() loop from the background GTK thread — that can
-        # fail to map the window on Wayland). Handle the button response in a callback.
+        # Non-blocking rather than run(), as in About: the response callback
+        # handles the buttons.
         def _on_update_response(dlg, response):
             if response == Gtk.ResponseType.ACCEPT:
                 update_checker.open_release_page(release.get("html_url", ""))
@@ -1603,10 +1575,9 @@ class DictationTray:
             try:
                 result = update_checker.check_for_updates()
 
-                # Record the timestamp against a FRESH read. `config` was
-                # snapshotted before the network call above, which can take
-                # ~30s; saving it back wrote all 36 fields and silently
-                # reverted anything the user changed in Preferences meanwhile.
+                # Record the timestamp against a fresh read: `config` was loaded
+                # before the network call, which can take ~30 s, and saving it
+                # back would revert anything changed in Preferences meanwhile.
                 record_update_check(
                     update_checker.get_current_timestamp(), _stale=config)
 
@@ -1731,8 +1702,8 @@ class DictationTray:
         self.injection_mode_group = None
 
         # Each handler checks get_active(): GTK also fires "activate" on the
-        # radio being unselected, which re-applied the old mode (and restarted
-        # the service) before the new one.
+        # radio being unselected, which would re-apply the old mode (and
+        # restart the service) before the new one.
         self.injection_mode_auto = Gtk.RadioMenuItem(label="Auto (Smart Detection)")
         self.injection_mode_auto.connect("activate", lambda w: w.get_active() and self.set_injection_mode("auto"))
         submenu.append(self.injection_mode_auto)
@@ -1794,7 +1765,7 @@ class DictationTray:
 
         # Delayed: KDE ticks the clicked item in its own copy of the menu, and
         # a move there and back in the same main-loop pass reaches it as no
-        # change, which left two dots.
+        # change and leaves two dots.
         GLib.timeout_add(150, put_dot_back)
 
     def _build_history_submenu(self):
@@ -1980,7 +1951,7 @@ class DictationTray:
         return menu
     
     def refresh_menu(self):
-        """Rebuild and refresh the tray menu (useful after CUDA installation)."""
+        """Rebuild the tray menu (after onboarding has changed the setup)."""
         self.indicator.set_menu(self.build_menu())
 
 
@@ -2113,9 +2084,8 @@ def main():
             tray.onboarding_in_progress = True
 
             # Kill any existing service that might be running - use SIGKILL for
-            # immediate termination. The patterns live in service_launcher so
-            # this can never again include one ("-m tuxtalk") that matches the
-            # tray's own command line.
+            # immediate termination. service_launcher's patterns never match
+            # the tray's own command line.
             from tuxtalk.service_launcher import stop_dictation_service
             stop_dictation_service(force=True)
             time.sleep(0.5)  # Give processes time to die
