@@ -537,6 +537,11 @@ class PreferencesWindow:
         # (4bb00a8), so the dropdown shows CPU rather than claim CUDA.
         if self.config["device"] == "cuda" and not self._cuda_ready:
             self.config["device"] = "cpu"
+            # Only the display changes: a saved "cuda" stays on disk unless
+            # the user picks another device, so an unrelated OK can't drop
+            # the choice while CUDA's files are missing for a while.
+            if self._config_at_open.get("device") == "cuda":
+                self._config_at_open["device"] = "cpu"
 
         # Any graphics card through Vulkan (whisper_vulkan.py): the only GPU
         # option on AMD / Intel, and the light one on NVIDIA. Offered when a
