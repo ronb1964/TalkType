@@ -53,6 +53,7 @@ _RE_REPEAT = re.compile(r"(?i)\b((?:[\w']+ +){0,2}[\w']+)(?: +\1\b)+")
 
 
 def _remove_fillers(text: str) -> str:
+    """Delete hesitation sounds, with the commas that were only there for them."""
     def repl(m):
         start = m.start()
         at_line_start = start == 0 or text[:start].endswith(("\xa7", "\n", "\t"))
@@ -87,6 +88,7 @@ def _is_name(m) -> bool:
 
 
 def _collapse_repeats(text: str) -> str:
+    """Collapse accidental repeats, keeping numbers, names and words meant twice."""
     def repl(m):
         phrase = m.group(1)
         if phrase.lower() in _LEGIT_DOUBLES:

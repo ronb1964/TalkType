@@ -31,6 +31,8 @@ MAX_PIECES = 4          # a word split into at most this many pieces
 ECHO_MIN_WORDS = 3      # Whisper reading the list back, not a short real phrase
 
 _WORD_RE = re.compile(r"\S+")
+# A token's leading punctuation, core and trailing punctuation. Every part is
+# optional, so it always matches.
 _EDGE_RE = re.compile(r"^([^\w]*)(.*?)([^\w]*)$", re.DOTALL)
 
 
@@ -74,6 +76,7 @@ def load(strict=False):
 
 
 def save(words):
+    """Write *words* to custom_words.txt, under a header comment."""
     lines = ["# TuxTalk: your words, one per line (Preferences > Snippets > Your Words)"]
     config.write_text_atomic(path(), "\n".join(lines + list(words)) + "\n")
 
@@ -86,6 +89,7 @@ MAX_WORD_CHARS = 40
 
 
 def is_word_like(text):
+    """Whether *text* is short and plain enough to be one of Your Words."""
     text = text.strip()
     if not text or len(text) > MAX_WORD_CHARS or any(m in text for m in _NOT_A_WORD):
         return False
@@ -127,6 +131,7 @@ def prompt(words):
 
 
 def _letters(text):
+    """*text* folded to lower case, letters and digits only, for comparing words."""
     return "".join(c for c in text.casefold() if c.isalnum())
 
 
@@ -206,9 +211,9 @@ def is_echo(text, words):
     sometimes 'hears' it in silence or noise.
 
     Only whole entries count, in the list's own order, at least
-    ECHO_MIN_WORDS of them (of 4+ letters) and nothing else. Real speech made of listed words
-    ("the new bank" with "New York" listed, or the user's own terms in another
-    order) is never dropped."""
+    ECHO_MIN_WORDS of them (of 4+ letters) and nothing else. Real speech made
+    of listed words ("the new bank" with "New York" listed, or the user's own
+    terms in another order) is never dropped."""
     order = {}
     for i, word in enumerate(words):
         key = _letters(word)

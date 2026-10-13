@@ -23,6 +23,7 @@ from . import config
 _WORD_RE = re.compile(r"\S+")
 # Punctuation hugging the ends of a selection: quotes, commas, full stops,
 # brackets. Apostrophes inside a word ("it's") are not at an edge and stay.
+# Every part is optional, so it always matches.
 _EDGE_RE = re.compile(r"^([^\w]*)(.*?)([^\w]*)$", re.DOTALL)
 
 # Single words so common that "always fix" them would rewrite ordinary
@@ -90,6 +91,7 @@ def is_risky(phrase):
 
 
 def _matching_keys(commands, phrase):
+    """The command phrases equal to *phrase* once lowercased and single-spaced."""
     # Preferences stores phrases lowercased, but a hand-edited file may not.
     return [k for k in commands if " ".join(k.split()).lower() == phrase]
 

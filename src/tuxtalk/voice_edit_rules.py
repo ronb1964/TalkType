@@ -1,9 +1,9 @@
 """Voice edits that don't go to the AI.
 
 The voice-editing model (Qwen2.5-1.5B) is good at rewording and poor at exact,
-letter-by-letter jobs: asked for all caps it wrote "DRYWALL ScreWz", it never
-removed a comma, and "remove the word testing" lost a whole line (Ron's test,
-2026-10-12). Those jobs are done here in code, exactly.
+letter-by-letter jobs: asked for all caps it can write "DRYWALL ScreWz", it
+doesn't reliably remove a comma, and "remove the word testing" can lose a
+whole line. Those jobs are done here in code, exactly.
 
 Formatting is not text at all: the edit is pasted back as plain words. Bold,
 italics and underline are the app's own Ctrl+B / Ctrl+I / Ctrl+U, sent only to
@@ -102,6 +102,7 @@ def _tidy(body: str) -> str:
 
 
 def _remove_marks(text: str, marks: str) -> str:
+    """*text* without the punctuation *marks*, line by line."""
     cls = re.escape(marks)
     # A mark goes unless it sits between two digits. Dashes become a space, so
     # "well-known" reads "well known" rather than "wellknown".
@@ -115,6 +116,7 @@ def _remove_marks(text: str, marks: str) -> str:
 
 
 def _remove_phrase(text: str, phrase: str):
+    """*text* without *phrase* (whole words, any case), or None if it isn't there."""
     phrase = phrase.strip(" '\"“”‘’")
     if not phrase:
         return None
@@ -159,6 +161,7 @@ def _capitalise_first(segment: str):
 
 
 def _title(body: str) -> str:
+    """Title Case: every word's first letter in upper case."""
     # Not after an apostrophe: "don't" must not become "Don'T".
     return re.sub(r"(?<![\w'’])([a-z])", lambda m: m.group(1).upper(), body)
 
@@ -202,8 +205,8 @@ _DELETE = re.compile(rf"^(?:delete|remove|erase|clear|get rid of|take out)\s+"
 
 
 def is_delete(instruction: str) -> bool:
-    """"Delete this": the selection goes, with the Delete key. Asked, the AI
-    answered "None." and that replaced the text (Ron, 2026-10-12)."""
+    """"Delete this": the selection goes, with the Delete key. Sent to the AI,
+    it can come back as "None.", which would replace the text."""
     return bool(_DELETE.match(_norm(instruction)))
 
 
@@ -267,6 +270,7 @@ _WORD_PROCESSORS = {
 
 
 def has_formatting_shortcuts(window_class) -> bool:
+    """Whether the focused app is a word processor, where Ctrl+B/I/U format text."""
     return bool(window_class) and window_class.lower() in _WORD_PROCESSORS
 
 
