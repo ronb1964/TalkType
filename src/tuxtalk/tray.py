@@ -310,11 +310,6 @@ class DictationTray:
 
         # Once after updating: point existing users at the recommended setup.
         GLib.timeout_add_seconds(15, maybe_show_recommend_notice)
-        # Find the graphics chip now, off the main loop: the Performance menu
-        # needs it, and the first lookup runs nvidia-smi (cached after that).
-        import threading
-        from . import recommend as _recommend
-        threading.Thread(target=_recommend.detect_hardware, daemon=True).start()
 
         # Auto-start will be triggered after welcome dialog on first run
         # or immediately if not first run (handled in main())
