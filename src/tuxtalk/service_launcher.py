@@ -93,6 +93,38 @@ def pre_rename_service_pids():
             if is_pre_rename_service_argv(_read_argv(pid) or [])]
 
 
+def is_pre_rename_tray_argv(argv) -> bool:
+    """True for a tray from before the 0.15.0 rename (``-m talktype.tray``).
+    It shares TuxTalk's single-instance lock, so it keeps TuxTalk from starting."""
+    argv = list(argv)
+    return any(a == "-m" and b == "talktype.tray" for a, b in zip(argv, argv[1:]))
+
+
+def pre_rename_tray_pids():
+    """PIDs of this user's running pre-rename (TalkType) trays.
+
+    Exact arguments, as for the service, so nothing but an old tray matches.
+    """
+    me = os.getpid()
+    try:
+        entries = os.listdir("/proc")
+    except OSError:
+        return []
+    pids = []
+    for entry in entries:
+        if not entry.isdigit() or int(entry) == me:
+            continue
+        pid = int(entry)
+        try:
+            if os.stat(f"/proc/{pid}").st_uid != os.getuid():
+                continue
+        except OSError:
+            continue
+        if is_pre_rename_tray_argv(_read_argv(pid) or []):
+            pids.append(pid)
+    return pids
+
+
 def _read_argv(pid):
     """A process's argument list from /proc, or None if it can't be read."""
     try:

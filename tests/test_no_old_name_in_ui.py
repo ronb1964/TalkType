@@ -31,6 +31,11 @@ ALLOWED_EXACT = {
     "tray.py": {
         "TalkType is now TuxTalk",
         "Why the change: another company owns the name TalkType for dictation software.",
+        # An old TalkType tray that would not quit: its menu still says TalkType.
+        "An older TalkType is still running",
+        "TuxTalk is the new name for TalkType, and only one of them can run at a "
+        "time. Click the TalkType microphone icon in the system tray, choose Quit "
+        "TalkType, then start TuxTalk again.",
     },
 }
 

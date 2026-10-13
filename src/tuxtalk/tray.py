@@ -101,8 +101,21 @@ def _acquire_tray_singleton():
         except BlockingIOError:
             # Only this error means another tray holds the lock. Anything else
             # (an unwritable runtime folder) is not "already running".
-            print("Another tray instance is already running. Exiting.", file=sys.stderr)
-            sys.exit(0)
+            # A TalkType tray from before the rename is old code: stop it and
+            # take its place. Another TuxTalk stays, and this one says so.
+            from .service_launcher import pre_rename_tray_pids
+            old_trays = pre_rename_tray_pids()
+            if old_trays:
+                logger.info(f"Stopping the pre-0.15.0 tray (PID {old_trays}) so TuxTalk can start")
+                for pid in old_trays:
+                    try:
+                        os.kill(pid, signal.SIGTERM)
+                    except OSError:
+                        pass  # exited between the scan and the kill
+            if not (old_trays and _wait_for_lock(lockfile, _OLD_TRAY_EXIT_WAIT_S)):
+                print("Another tray instance is already running. Exiting.", file=sys.stderr)
+                _show_already_running(older_talktype=bool(pre_rename_tray_pids()))
+                sys.exit(0)
 
         # If we got here, we acquired the lock successfully
         # Write our PID for informational purposes
@@ -124,6 +137,55 @@ def _acquire_tray_singleton():
 
 # Global to keep lock file open
 _tray_lockfile_handle = None
+
+# How long an older TalkType tray gets to exit after SIGTERM. It has no handler
+# for it, so it is normally gone at once.
+_OLD_TRAY_EXIT_WAIT_S = 3.0
+
+
+def _wait_for_lock(lockfile, timeout_s):
+    """Take the lock on *lockfile* once its holder lets go; False after *timeout_s*."""
+    deadline = time.monotonic() + timeout_s
+    while True:
+        try:
+            fcntl.flock(lockfile.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return True
+        except BlockingIOError:
+            if time.monotonic() >= deadline:
+                return False
+            time.sleep(0.1)
+
+
+def already_running_message(older_talktype):
+    """The (heading, explanation) shown when another tray holds the lock."""
+    if older_talktype:
+        return ("An older TalkType is still running",
+                "TuxTalk is the new name for TalkType, and only one of them can "
+                "run at a time. Click the TalkType microphone icon in the system "
+                "tray, choose Quit TalkType, then start TuxTalk again.")
+    return ("TuxTalk is already running",
+            "Look for its microphone icon in the system tray. Its menu has "
+            "Preferences, Help and Quit TuxTalk.")
+
+
+def _show_already_running(older_talktype):
+    """Tell the user why no second tray appears; started from a menu, nothing
+    else would show."""
+    heading, body = already_running_message(older_talktype)
+    logger.info(f"Not starting: {heading}")
+    try:
+        dialog = message_dialog(
+            message_type=Gtk.MessageType.INFO,
+            buttons=Gtk.ButtonsType.OK,
+            text=heading,
+        )
+        dialog.format_secondary_text(body)
+        dialog.set_position(Gtk.WindowPosition.CENTER)
+        dialog.set_keep_above(True)
+        dialog.run()
+        dialog.destroy()
+    except Exception as e:      # no display: the stderr line is all there is
+        logger.debug(f"Could not show the already-running notice: {e}")
 
 def about_icon_source(theme_has_icon):
     """Where the About dialog's icon comes from: ("file", path), ("icon",
