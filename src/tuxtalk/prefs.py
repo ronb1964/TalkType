@@ -427,9 +427,8 @@ class PreferencesWindow:
         # Create window FIRST
         self.window = Gtk.Window(title="TuxTalk Preferences")
         self.window.set_name("preferences_window")  # Give window a name for CSS targeting
-        self.window.set_default_size(500, 600)
+        # Size is set in create_ui (_fit_to_screen), once the content can be measured.
         self.window.set_position(Gtk.WindowPosition.CENTER)
-        self.window.set_resizable(True)  # Allow resizing for smaller screens
 
         # Load custom CSS styling (after window is created)
         self._load_css()
@@ -721,9 +720,14 @@ class PreferencesWindow:
         advanced_tab = self.create_advanced_tab()
         notebook.append_page(self._scrollable_tab(advanced_tab), Gtk.Label(label="Advanced"))
 
-        # Snippets tab (custom voice commands) — keeps its own internal list scroll
+        # Snippets tab (custom voice commands). Its snippet list has a scroll of
+        # its own, which the wheel must still reach, so the page scroll leaves
+        # the wheel alone; the tab has no dropdowns or sliders to protect.
+        # Its whole content sets the window's opening height (see below).
         commands_tab = self.create_commands_tab()
-        notebook.append_page(commands_tab, Gtk.Label(label="Snippets"))
+        commands_page = self._scrollable_tab(commands_tab, capture_wheel=False)
+        commands_page.set_propagate_natural_height(True)
+        notebook.append_page(commands_page, Gtk.Label(label="Snippets"))
 
         # Stats tab (usage stats: words dictated, time saved)
         stats_tab = self.create_stats_tab()
@@ -780,15 +784,34 @@ class PreferencesWindow:
 
         main_vbox.pack_start(button_box, False, False, 0)
         self.window.add(main_vbox)
+        self._fit_to_screen(main_vbox)
         # Wheel scrolling over combos/sliders is handled by the per-tab capture-phase
         # scroll controller installed in _scrollable_tab (compositor-independent).
 
-    def _scrollable_tab(self, widget):
+    def _fit_to_screen(self, content):
+        """Open at the height the content asks for, capped to the monitor.
+
+        Every tab scrolls, so the window's minimum height is small and it can
+        always fit the screen with the button row showing. The opening height
+        is the content's natural height: the whole Snippets tab, the tallest
+        page that is not expected to scroll.
+        """
+        from .ui_style import fit_dialog_to_screen
+        try:
+            # Hidden widgets measure as zero; window.show_all() follows anyway.
+            content.show_all()
+            desired = content.get_preferred_height()[1]
+        except Exception:
+            desired = 0
+        fit_dialog_to_screen(self.window, 500, desired if desired > 0 else 600)
+
+    def _scrollable_tab(self, widget, capture_wheel=True):
         """Wrap a notebook tab's content in a vertical ScrolledWindow.
 
         A notebook inside one outer ScrolledWindow does not scroll (it clips its page
         rather than overflowing), so each tall tab needs its own scroll to stay usable
-        on a screen shorter than the tab's content.
+        on a screen shorter than the tab's content. capture_wheel=False leaves the
+        wheel to scrollable children (see _install_capture_scroll).
         """
         sw = Gtk.ScrolledWindow()
         sw.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
@@ -797,7 +820,8 @@ class PreferencesWindow:
         # up against the dropdowns.
         sw.set_overlay_scrolling(False)
         sw.add(widget)
-        self._install_capture_scroll(sw)
+        if capture_wheel:
+            self._install_capture_scroll(sw)
         return sw
 
     def _install_capture_scroll(self, scrolled):
