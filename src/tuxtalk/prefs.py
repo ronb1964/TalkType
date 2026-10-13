@@ -2999,12 +2999,12 @@ class PreferencesWindow:
         # Build status message
         if has_update:
             status_lines = [
-                f"<span color='#4CAF50'><b>Update available!</b></span>",
+                "<span color='#4CAF50'><b>Update available!</b></span>",
                 f"TuxTalk: {current} → <b>{latest}</b>"
             ]
         else:
             status_lines = [
-                f"<span color='#4CAF50'>You're up to date!</span>",
+                "<span color='#4CAF50'>You're up to date!</span>",
                 f"TuxTalk {current} is the latest version."
             ]
 

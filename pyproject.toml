@@ -40,6 +40,8 @@ line-length = 100
 
 [tool.ruff]
 line-length = 100
+
+[tool.ruff.lint]
 select = ["E","F","I"]
 
 [tool.pytest.ini_options]

@@ -70,7 +70,7 @@ def init_cuda_for_pytorch():
     if not nvidia_link.exists():
         try:
             nvidia_link.symlink_to(lib_path)
-            print(f"Created nvidia symlink for PyTorch")
+            print("Created nvidia symlink for PyTorch")
         except Exception as e:
             print(f"Failed to create nvidia symlink: {e}")
 

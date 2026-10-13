@@ -5,7 +5,6 @@ Shows one or more downloads (the Vulkan engine, speech models, CUDA libraries,
 the GNOME extension) in one window, each with its own progress bar and Cancel.
 """
 
-import os
 import threading
 import gi
 gi.require_version('Gtk', '3.0')

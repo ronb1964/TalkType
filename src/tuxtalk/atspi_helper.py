@@ -554,7 +554,6 @@ def is_terminal_window_by_title() -> bool:
         True if window title suggests it's a terminal, False otherwise
     """
     try:
-        import shutil
         title = _get_active_window_title()
         if not title:
             return False

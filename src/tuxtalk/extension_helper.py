@@ -9,7 +9,6 @@ import shutil
 import subprocess
 import urllib.error
 import urllib.request
-from pathlib import Path
 from typing import Optional, Callable
 
 from . import desktop_detect
@@ -375,7 +374,7 @@ def uninstall_extension() -> bool:
 
             # Remove the extension files
             shutil.rmtree(target_dir)
-            print(f"Extension uninstalled")
+            print("Extension uninstalled")
             return True
         else:
             print("Extension not installed")

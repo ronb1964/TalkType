@@ -997,7 +997,6 @@ def _install_app_icon() -> Optional[str]:
         str: Icon name to use in .desktop file, or None if installation failed
     """
     import shutil
-    import sys
 
     icons_base = os.path.expanduser("~/.local/share/icons/hicolor")
     primary_icon_path = os.path.join(icons_base, "256x256", "apps", "tuxtalk.png")
@@ -1143,7 +1142,7 @@ Terminal=false
         _refresh_desktop_menu_cache()
 
         logger.info(f"Desktop launcher created at {DESKTOP_FILE_PATH}")
-        return (True, f"Desktop launcher created!\n\nTuxTalk is now in your Applications menu.")
+        return (True, "Desktop launcher created!\n\nTuxTalk is now in your Applications menu.")
 
     except Exception as e:
         logger.error(f"Failed to create desktop launcher: {e}")
