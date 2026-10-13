@@ -190,3 +190,9 @@ def test_radial_gain_recovers_when_dictation_starts_mid_word():
     g.update(np.array(_speech(0.03)), 0.0)
     g.update(np.array(_speech(0.03 * 0.02)), 0.064)   # first gap between words
     assert g.normalize(0.03) > 0.9
+
+
+def test_a_malformed_custom_color_falls_back_to_cyan():
+    """It is drawn every frame; raising left the indicator blank."""
+    for bad in ("red", "#fff", "", "#12345g", None):
+        assert S.resolve_color("custom", bad, (0, 0, 0)) == S.CYAN

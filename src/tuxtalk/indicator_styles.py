@@ -25,8 +25,15 @@ def resolve_color(mode, custom_hex, accent_rgb):
     control governs every style, including the orb.
     """
     if mode == "custom":
-        h = custom_hex.lstrip("#")
-        return tuple(int(h[i:i + 2], 16) / 255.0 for i in (0, 2, 4))
+        h = str(custom_hex or "").lstrip("#")
+        try:
+            if len(h) != 6:
+                raise ValueError(h)
+            return tuple(int(h[i:i + 2], 16) / 255.0 for i in (0, 2, 4))
+        except ValueError:
+            # A hand-edited or restored value that isn't #rrggbb. This runs on
+            # every frame, so raising would leave the indicator blank.
+            return CYAN
     if mode == "system":
         return tuple(accent_rgb)
     return CYAN
