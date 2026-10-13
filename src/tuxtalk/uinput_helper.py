@@ -252,6 +252,11 @@ WantedBy=default.target
 '''
 
 
+# The standard system program folders, for lookups that must never find the
+# AppImage's bundled copies.
+_SYSTEM_PATH = "/usr/sbin:/sbin:/usr/bin:/bin:/usr/local/bin:/usr/local/sbin"
+
+
 def find_ydotoold_path():
     """
     Find the actual path to ydotoold binary on the SYSTEM (not inside AppImage).
@@ -278,42 +283,15 @@ def find_ydotoold_path():
     if appdir:
         logger.info(f"Running from AppImage (APPDIR={appdir}) - will only use system ydotoold")
 
-    # First try 'which' command with CLEAN PATH (only standard system dirs)
-    # This avoids any PATH contamination from AppImage
-    try:
-        env = os.environ.copy()
-        # Use ONLY standard system paths - no user or AppImage paths
-        env['PATH'] = "/usr/sbin:/sbin:/usr/bin:/bin:/usr/local/bin:/usr/local/sbin"
-        result = subprocess.run(['which', 'ydotoold'],
-                               capture_output=True, text=True, timeout=2, env=env)
-        if result.returncode == 0:
-            found_path = result.stdout.strip()
-            # Verify it's not an AppImage path (sanity check)
-            if not is_appimage_path(found_path):
-                logger.info(f"Found system ydotoold via which: {found_path}")
-                return found_path
-            else:
-                logger.warning(f"Rejecting AppImage path from which: {found_path}")
-    except Exception as e:
-        logger.debug(f"which ydotoold failed: {e}")
-
-    # Check common SYSTEM locations directly (never AppImage paths)
-    common_paths = [
-        '/usr/bin/ydotoold',
-        '/usr/sbin/ydotoold',
-        '/usr/local/bin/ydotoold',
-        '/bin/ydotoold',
-        '/sbin/ydotoold',
-    ]
-
-    logger.debug(f"Checking common paths for ydotoold: {common_paths}")
-    for path in common_paths:
-        exists = os.path.isfile(path)
-        executable = os.access(path, os.X_OK) if exists else False
-        logger.debug(f"  {path}: exists={exists}, executable={executable}")
-        if exists and executable:
-            logger.info(f"Found ydotoold at: {path}")
-            return path
+    # Search ONLY the standard system dirs, never the inherited PATH, which
+    # inside the AppImage starts with the AppImage's own usr/bin. In-process,
+    # so it works where no `which` binary is installed (minimal Arch).
+    found_path = shutil.which("ydotoold", path=_SYSTEM_PATH)
+    if found_path and not is_appimage_path(found_path):
+        logger.info(f"Found system ydotoold: {found_path}")
+        return found_path
+    if found_path:
+        logger.warning(f"Rejecting AppImage path: {found_path}")
 
     logger.warning("ydotoold not found in any common location")
     return None
@@ -372,14 +350,8 @@ def check_ydotool_available():
     Returns:
         tuple: (available: bool, path: str or None)
     """
-    try:
-        result = subprocess.run(['which', 'ydotool'],
-                               capture_output=True, text=True, timeout=2)
-        if result.returncode == 0:
-            return (True, result.stdout.strip())
-        return (False, None)
-    except Exception:
-        return (False, None)
+    path = shutil.which("ydotool")
+    return (True, path) if path else (False, None)
 
 
 def setup_ydotoold_service():
