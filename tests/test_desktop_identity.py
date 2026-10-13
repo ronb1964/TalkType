@@ -48,14 +48,14 @@ def test_the_launchers_really_have_those_names():
 
 def test_apply_sets_the_program_name(monkeypatch):
     names = []
-    monkeypatch.setattr("tuxtalk.update_checker.get_install_type", lambda: "appimage")
+    monkeypatch.setattr("tuxtalk.update_checker.get_install_type", lambda **k: "appimage")
     monkeypatch.setattr(desktop_identity.GLib, "set_prgname", names.append)
     desktop_identity.apply()
     assert names == ["tuxtalk"]
 
 
 def test_apply_never_raises(monkeypatch):
-    def broken():
+    def broken(**k):
         raise RuntimeError("no idea how this is installed")
     monkeypatch.setattr("tuxtalk.update_checker.get_install_type", broken)
     desktop_identity.apply()
@@ -69,3 +69,19 @@ def test_every_program_with_windows_names_itself_first(module):
     body = re.search(r"\ndef main\(\):\n(.*?)(?=\ndef |\nif __name__)", src, re.S).group(1)
     first_lines = [l for l in body.splitlines() if l.strip() and not l.strip().startswith("#")][:3]
     assert any("desktop_identity.apply()" in l for l in first_lines), first_lines
+
+
+def test_apply_does_not_query_the_package_database(monkeypatch):
+    """rpm/deb/package all map to one launcher name, so startup skips the
+    rpm -q / dpkg-query calls."""
+    from tuxtalk import update_checker
+    names = []
+    monkeypatch.setattr(update_checker, "_detect_system_package_manager",
+                        lambda: pytest.fail("queried the package database at startup"))
+    monkeypatch.setattr(update_checker.os.path, "realpath",
+                        lambda p: "/opt/tuxtalk/usr/src/tuxtalk/update_checker.py")
+    monkeypatch.delenv("APPIMAGE", raising=False)
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+    monkeypatch.setattr(desktop_identity.GLib, "set_prgname", names.append)
+    desktop_identity.apply()
+    assert names == ["io.github.ronb1964.TuxTalk"]

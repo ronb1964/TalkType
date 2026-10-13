@@ -5,6 +5,7 @@ Update checker for TuxTalk
 Checks for updates to AppImage and GNOME extension via GitHub API.
 """
 
+import functools
 import json
 import logging
 import os
@@ -524,10 +525,12 @@ def get_running_appimage_path() -> Optional[str]:
     return os.environ.get("APPIMAGE")
 
 
+@functools.lru_cache(maxsize=None)
 def _detect_system_package_manager() -> Optional[str]:
     """Return 'rpm', 'deb', or None by asking the system package DB about
     tuxtalk (or talktype, its name before 0.15.0), falling back to the distro
-    family from /etc/os-release."""
+    family from /etc/os-release. Cached: it runs up to four package queries,
+    and the answer can't change while TuxTalk runs."""
     import shutil
     import subprocess
     for pkg in ("tuxtalk", "talktype"):

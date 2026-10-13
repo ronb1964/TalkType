@@ -39,6 +39,8 @@ def apply() -> None:
     a missing icon is cosmetic, a crash at startup is not."""
     try:
         from .update_checker import get_install_type
-        GLib.set_prgname(desktop_id(get_install_type()))
+        # Every package type has the same launcher name, so the slow query
+        # of the package database (rpm or deb?) is skipped at startup.
+        GLib.set_prgname(desktop_id(get_install_type(pkg_query=lambda: "package")))
     except Exception:
         pass

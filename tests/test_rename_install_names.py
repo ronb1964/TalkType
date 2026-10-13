@@ -62,8 +62,14 @@ def test_package_detection_asks_for_tuxtalk_first(monkeypatch):
         return R(0 if cmd[-1] == "tuxtalk" else 1)
     monkeypatch.setattr(shutil, "which", lambda n: "/usr/bin/" + n if n == "rpm" else None)
     monkeypatch.setattr(subprocess, "run", fake_run)
-    assert uc._detect_system_package_manager() == "rpm"
-    assert asked[0] == "tuxtalk"
+    uc._detect_system_package_manager.cache_clear()
+    try:
+        assert uc._detect_system_package_manager() == "rpm"
+        assert asked[0] == "tuxtalk"
+        uc._detect_system_package_manager()
+        assert asked.count("tuxtalk") == 1, "the package database was queried twice"
+    finally:
+        uc._detect_system_package_manager.cache_clear()
 
 
 def test_package_restart_uses_the_tuxtalk_launcher(monkeypatch):
