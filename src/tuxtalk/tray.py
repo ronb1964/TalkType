@@ -1715,7 +1715,12 @@ class DictationTray:
 
         # Quit the GTK main loop; main() returns and the process exits.
         Gtk.main_quit()
-    
+
+        # Only fires when Quit is picked while a dialog.run() or nested
+        # Gtk.main() is open: main_quit() cannot end the outer loop from there,
+        # and the tray and its icon would stay until the dialog is closed.
+        GLib.timeout_add(100, lambda: os._exit(0))
+
     def _build_injection_submenu(self):
         """Build the Text Injection Mode submenu (Auto / Keyboard Typing / Clipboard Paste).
 
