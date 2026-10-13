@@ -1,3 +1,7 @@
+"""
+Spoken punctuation and commands to text: "comma" becomes ",", "new line" a
+line-break marker, and the result gets tidy punctuation, spacing and capitals.
+"""
 import re
 
 # =====================================================================
@@ -215,8 +219,8 @@ _RE_MULTI_SPACE = re.compile(r"[ ]{2,}")
 # --- 10) Capitalization ---
 _RE_TRAILING_COMMA = re.compile(r",$")
 # What counts as "this line is already punctuated". Colon and semicolon are
-# included: a dictated "colon" is deliberate punctuation, and treating it as
-# unpunctuated appended a full stop straight after it ("the plan:."). Closing
+# included: a dictated "colon" is deliberate punctuation and must not get a
+# full stop straight after it ("the plan:."). Closing
 # quotes and brackets after the mark are stepped over, since step 11 moves
 # the full stop inside a closing quote ("Hello.”" is finished, not "Hello.”.").
 _RE_NO_END_PUNCT = re.compile(r"[.?!…:;][\"'”’)\]}]*$")
@@ -228,7 +232,7 @@ _RE_CAP_AFTER_ENDER = re.compile(r"(?<![A-Za-z]\.[A-Za-z])([.?!…]\s+)([a-z])")
 # "I" is left alone. Words like "in", "it", "iPad" are not matched because
 # they have no word boundary on the right side of the "i".
 # The negative lookahead keeps "i.e." intact: the dot is a word boundary, so
-# \bi\b matched the abbreviation's first letter and produced "I.e." mid-sentence.
+# \bi\b alone would match its first letter and write "I.e." mid-sentence.
 _RE_STANDALONE_I = re.compile(r"\bi\b(?!\.\s*e\.)")
 
 # --- 11) Smart quote punctuation placement ---
@@ -238,7 +242,7 @@ _RE_PUNCT_OUTSIDE_QUOTE = re.compile(r"\u201d( ?)([!?,;:.])")
 # Country endings (.no .it .my .in .us ...) are also words that start
 # sentences, so they only count written joined to the domain ("example.de");
 # with spaces around the dot ("gmail. com") only endings that can't be words
-# do. Otherwise "Look at this. My car" became "Look@this.My car".
+# do. Otherwise "Look at this. My car" would become "Look@this.My car".
 _EMAIL_TLDS_SAFE = "com|org|net|edu|gov|io"
 _EMAIL_TLDS_ALL = (_EMAIL_TLDS_SAFE + "|co|uk|ca|de|fr|us|au|jp|cn|in|br|mx|ru|kr|es|it|nl|se|"
                    "no|fi|pl|cz|hu|ro|gr|pt|ie|nz|za|ae|il|tr|th|vn|ph|id|my|sg|hk|tw")
@@ -343,21 +347,15 @@ def _fix_email_spacing(text: str) -> str:
         text = fixed
 
 
-# --- 15) Time formatting ---
-# Fix Whisper's mangled time output: "11. 30 p. m." → "11:30 PM", "11 p. m." → "11 PM"
-# Minutes are optional — handles both "11:30 p. m." and bare "11 p. m."
-# AM/PM variants handled: "p. m.", "p. M.", "p.m.", "PM", "a. m.", "a.m.", "AM" (any case/spacing).
-# The trailing (?![A-Za-z]) stops the AM/PM group from matching the start of
-# ordinary words: "5 among us" / "3 amazing" are not times.
+# --- Guards for the spacing (7) and capitalization (10) passes ---
 # Characters that can precede the first word of a line without being the word:
 # straight and smart quotes, and opening brackets.
 _LINE_OPENERS = "\"'“‘([{"
 
 # An email address, URL, or bare domain at the start of a line. These are
 # written the way the user said them, so sentence capitalization leaves them be.
-# Matched against the rest of the line rather than its first word: the pass that
-# puts a space after a sentence period runs first, so by the time capitalization
-# happens "github.com" has already become "github. com".
+# A bare domain may have a space after its dot: the space-after-period pass runs
+# first and can split a domain it doesn't recognise ("Example. Com").
 _RE_ADDRESSY = re.compile(
     r'(?:'
     r'[\w.-]*@'                                                 # email
@@ -380,6 +378,12 @@ _FILE_EXTENSIONS = (
 )
 _RE_FILE_EXT = re.compile(rf"\.(?:{_FILE_EXTENSIONS})\b", re.IGNORECASE)
 
+# --- 6.5) Time formatting ---
+# Fix the engines' mangled times: "11. 30 p. m." → "11:30 PM", "11 p. m." → "11 PM".
+# Minutes are optional, and AM/PM may be written "p. m.", "p. M.", "p.m.", "PM",
+# "a. m.", "a.m." or "AM" (any case or spacing). The trailing (?![A-Za-z]) stops
+# the AM/PM group from matching the start of ordinary words: "5 among us" and
+# "3 amazing" are not times.
 # Minutes may also come run together with the hour: Parakeet writes a spoken
 # "six forty-one p.m." as "6.41 p.m." one time and "641 p.m." the next. Only an
 # hour of 1-12 and minutes of 00-59 count, so "2000 pm" is left alone.
@@ -391,18 +395,11 @@ _RE_TIME_FORMAT = re.compile(
 def _fix_time_ampm(m: re.Match) -> str:
     """Normalize a matched time string to HH:MM AM/PM or HH AM/PM format.
 
-    The trailing period of "a.m." can be doing double duty as the sentence's
-    full stop, and rewriting the abbreviation to "AM" dropped it — so text
-    ending in "p.m." came out with no terminating punctuation at all.
-
-    The period is restored ONLY when the abbreviation ends the text, where it is
-    unambiguous. Mid-text is deliberately left alone: "9 a.m. We should be
-    early" and "8 a.m. Tuesday" are grammatically identical, and a following
-    capital does not distinguish them because Whisper capitalizes proper nouns
-    as well as sentence starts. Guessing there split ordinary sentences in two
-    ("We start at 8 AM. Tuesday."), which is worse than the missing period —
-    a wrong split corrupts text the user has to notice and repair, while a
-    missing full stop between two sentences merely reads a little short.
+    The trailing period of "a.m." can double as the sentence's full stop, which
+    rewriting it to "AM" would drop. It is kept only when the abbreviation ends
+    the text. Mid-text it is left out: "9 a.m. We should be early" and "8 a.m.
+    Tuesday" look the same (the engines capitalize names as well as sentence
+    starts), and a wrong sentence break is worse than a missing full stop.
     """
     hour = m.group(1)
     minute = m.group(2) or m.group(3)  # "6.41" / "641"; None if no minutes
@@ -438,9 +435,8 @@ def _space_after_ender_repl(m: re.Match) -> str:
         if prev.isalpha() and not prev2.isalpha() and nxt.isalpha() and nxt2 == ".":
             return ch
         # Filenames: the dot binds a name to its extension, so splitting here
-        # invents a sentence break and the capitalization pass then upper-cases
-        # the extension ("report.pdf" -> "report. Pdf"). Domains were already
-        # protected by _RE_ADDRESSY; filenames had no equivalent guard.
+        # would invent a sentence break and the capitalization pass would then
+        # upper-case the extension ("report.pdf" -> "report. Pdf").
         if (prev.isalnum() or prev in "_-") and _RE_FILE_EXT.match(s, i):
             return ch
         # Domains written joined ("example.com", "a.co.uk"): same reason.
@@ -462,13 +458,12 @@ def append_auto_punct(text: str, auto_period: bool, auto_space: bool) -> str:
     """Append the automatic period/space to a finished utterance.
 
     When the utterance ends with line-break markers ("hello new line"),
-    the period must land BEFORE the break — appending it after produced
-    an orphan ". " at the start of the next line. No trailing space is
-    added after a line break (the cursor is already on a fresh line).
+    the period goes BEFORE the break; after it, it would start the next line
+    with an orphan ". ". No trailing space is added after a line break (the
+    cursor is already on a fresh line).
     """
-    # Whitespace with nothing in it is not an utterance. Punctuating it put a
-    # lone "." into the document — a full stop appearing out of a recording
-    # that captured nothing.
+    # Whitespace alone is not an utterance: punctuating it would type a lone
+    # "." out of a recording that captured nothing.
     if not text or not text.strip():
         return text
     m = _RE_TRAILING_BREAKS.search(text)
@@ -495,9 +490,9 @@ def normalize_text(text: str, auto_period: bool = True) -> str:
     """Spoken punctuation -> symbols; tidy punctuation; auto-capitalize; keep newlines/tabs.
 
     auto_period mirrors the "Ensure period at end of sentences" preference.
-    It has to be honoured *here* as well as in append_auto_punct: this pass
-    ends every line with a full stop, and it runs first, so leaving it
-    unconditional made the preference do nothing when the user unchecked it.
+    It is honoured *here* as well as in append_auto_punct: this pass ends every
+    line with a full stop and runs first, so otherwise unchecking the
+    preference would do nothing.
     """
     if not text:
         return text
@@ -562,9 +557,8 @@ def normalize_text(text: str, auto_period: bool = True) -> str:
 
     # --- 6.5) Fix time formatting ---
     # "11. 30 p. m." → "11:30 PM", "3:15 a. m." → "3:15 AM", etc.
-    # This MUST run before the spacing and capitalization passes below. It used
-    # to run at the very end, by which point those passes had already read the
-    # "m." of "a. m." as a sentence ending and capitalized the following word
+    # Before the spacing and capitalization passes, which would otherwise read
+    # the "m." of "a. m." as a sentence end and capitalize the next word
     # ("meet at 9 a. m. tomorrow" → "9 AM Tomorrow").
     text = _RE_TIME_FORMAT.sub(_fix_time_ampm, text)
 
@@ -601,9 +595,8 @@ def normalize_text(text: str, auto_period: bool = True) -> str:
     def cap_first(s: str) -> str:
         """Capitalize the first word of a line, or leave the line alone.
 
-        Only the *first* thing on the line is a candidate. Scanning ahead to the
-        first letter anywhere meant a line opening with a number or symbol
-        capitalized the second word instead: "2024 was a good year" became
+        Only the *first* thing on the line is a candidate, so a line opening
+        with a number or symbol is left as it is: "2024 was a good year", not
         "2024 Was a good year".
         """
         i = 0
@@ -652,7 +645,7 @@ def normalize_text(text: str, auto_period: bool = True) -> str:
     # --- 12.5) Re-capitalize line starts after literal restore ---
     # cap_first() ran while protected words were placeholders like
     # "__LIT_RETURN__" (whose first letter is already uppercase), so a line
-    # STARTING with a protected word came back lowercase ("return to sender
+    # STARTING with a protected word would stay lowercase ("return to sender
     # was..."). Idempotent: lines already capitalized are left untouched.
     temp_text = text.replace("§SHIFT_ENTER§", "\n")
     temp_text = "\n".join(cap_first(line) for line in temp_text.split("\n"))
@@ -665,7 +658,5 @@ def normalize_text(text: str, auto_period: bool = True) -> str:
     # --- 14) Fix email/URL formatting ---
     text = _RE_EMAIL_AT_WORD.sub(_join_spaced_email, text)
     text = _fix_email_spacing(text)
-
-    # (Time formatting moved to step 6.5 — see the note there.)
 
     return text
