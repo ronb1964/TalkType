@@ -112,6 +112,26 @@ def _write(days):
         raise
 
 
+def merge_days(theirs):
+    """Add *theirs* (a backup's {day: counts}) to the stored days, keeping the
+    higher word count for a day both have. Returns False, and writes nothing,
+    when the stored file exists but can't be read: like record(), it leaves
+    what might be recoverable alone."""
+    days = _read()
+    if days is None:
+        return False
+    for day, value in (theirs.items() if isinstance(theirs, dict) else []):
+        try:
+            datetime.date.fromisoformat(day)
+        except (TypeError, ValueError):
+            continue
+        value = _clean_day(value)
+        if day not in days or value["words"] > days[day]["words"]:
+            days[day] = value
+    _write(days)
+    return True
+
+
 def record(words, seconds, today=None):
     """Add one dictation to today's counts. Never raises: stats must not get
     in the way of the dictation itself. A file that can't be read is left

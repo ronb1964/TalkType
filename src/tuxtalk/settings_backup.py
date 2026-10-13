@@ -305,23 +305,23 @@ def _fit_device(text, notes):
     return _DEVICE_LINE.sub(f'device = "{keep}"', text, count=1)
 
 
-def _merge_stats(data):
+def _merge_stats(data, notes):
     """Add the backup's days to this computer's, keeping the higher count for
     a day both have, so loading a backup never loses any dictation."""
     try:
         theirs = json.loads(data).get("days", {})
     except (ValueError, AttributeError):
         return
-    days = stats.load()
-    for day, value in (theirs.items() if isinstance(theirs, dict) else []):
-        try:
-            datetime.date.fromisoformat(day)
-        except (TypeError, ValueError):
-            continue
-        value = stats._clean_day(value)
-        if day not in days or value["words"] > days[day]["words"]:
-            days[day] = value
-    stats._write(days)
+    try:
+        merged = stats.merge_days(theirs)
+    except OSError as e:
+        # The settings are already in place; a failed stats write must not
+        # turn the whole restore into an error.
+        logger.warning(f"Could not add the backup's stats: {e}")
+        merged = False
+    if not merged:
+        notes.append("Your usage stats couldn't be read, so the backup's stats weren't "
+                     "added to them. Reset Stats on the Stats tab starts them fresh.")
 
 
 def restore(backup):
@@ -332,7 +332,11 @@ def restore(backup):
     Returns notes for the user, such as a device kept for this computer.
     """
     notes = []
-    snapshot_if_changed()
+    try:
+        _snapshot()
+    except Exception as e:
+        raise BackupError("Your current settings couldn't be saved as a copy first, "
+                          f"so nothing was changed ({e}).") from e
     text = _fit_device(backup.files[_SETTINGS].decode("utf-8"), notes)
     config.write_text_atomic(config.CONFIG_PATH, text)
     if _COMMANDS in backup.files:
@@ -342,7 +346,7 @@ def restore(backup):
         from . import custom_words
         config.write_text_atomic(custom_words.path(), backup.files[_WORDS].decode("utf-8"))
     if _STATS in backup.files:
-        _merge_stats(backup.files[_STATS])
+        _merge_stats(backup.files[_STATS], notes)
     logger.info(f"Settings restored from a backup made {backup.created} "
                 f"by TuxTalk {backup.version}")
     return notes
@@ -398,36 +402,47 @@ def restore_points():
     return sorted(points, key=lambda p: (p.when, p.kind == "file"), reverse=True)[:LIST_MAX]
 
 
-def snapshot_if_changed():
+def _snapshot():
     """Save the settings and commands as an automatic copy, unless they are
     the same as in the newest copy. Keeps the last KEEP. Returns the new
-    copy's path, or None. Never raises: a missed copy mustn't stop TuxTalk
-    starting."""
-    try:
-        files = _current_files(with_stats=False)
-        if _SETTINGS not in files:
-            return None
-        copies = list_snapshots()
-        if copies:
-            try:
-                if read_backup(copies[0].path).files == files:
-                    return None
-            except BackupError:
-                pass                    # a damaged newest copy: take a fresh one
-        # Named by the second, and a copy taken the same second as the last
-        # one (a restore right after startup) must not overwrite it.
-        when = _now()
-        while True:
-            path = os.path.join(snapshots_dir(), f"settings-{when:%Y%m%d-%H%M%S}.zip")
-            if not os.path.exists(path):
-                break
-            when += datetime.timedelta(seconds=1)
-        os.makedirs(snapshots_dir(), mode=0o700, exist_ok=True)
-        _write_zip(path, files)
-        for old in list_snapshots()[KEEP:]:
+    copy's path, or None when nothing needed saving. Raises when the copy
+    could not be written."""
+    files = _current_files(with_stats=False)
+    if _SETTINGS not in files:
+        return None
+    copies = list_snapshots()
+    if copies:
+        try:
+            if read_backup(copies[0].path).files == files:
+                return None
+        except BackupError:
+            pass                    # a damaged newest copy: take a fresh one
+    # Named by the second, and a copy taken the same second as the last
+    # one (a restore right after startup) must not overwrite it.
+    when = _now()
+    while True:
+        path = os.path.join(snapshots_dir(), f"settings-{when:%Y%m%d-%H%M%S}.zip")
+        if not os.path.exists(path):
+            break
+        when += datetime.timedelta(seconds=1)
+    os.makedirs(snapshots_dir(), mode=0o700, exist_ok=True)
+    _write_zip(path, files)
+    logger.info(f"Saved a copy of the settings: {os.path.basename(path)}")
+    # Once the new copy exists the undo point is there; failing to trim the
+    # old ones is only untidy.
+    for old in list_snapshots()[KEEP:]:
+        try:
             os.remove(old.path)
-        logger.info(f"Saved a copy of the settings: {os.path.basename(path)}")
-        return path
+        except OSError as e:
+            logger.warning(f"Could not remove an old settings copy: {e}")
+    return path
+
+
+def snapshot_if_changed():
+    """_snapshot() for the tray's startup. Never raises: a missed copy
+    mustn't stop TuxTalk starting."""
+    try:
+        return _snapshot()
     except Exception as e:
         logger.warning(f"Could not save a copy of the settings: {e}")
         return None

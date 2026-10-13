@@ -2463,7 +2463,7 @@ class PreferencesWindow:
         from . import settings_backup
         try:
             notes = settings_backup.restore(backup)
-        except OSError as e:
+        except (OSError, settings_backup.BackupError) as e:
             self._message(Gtk.MessageType.ERROR, "The settings weren't restored", str(e))
             return
         self._message(Gtk.MessageType.INFO, "Settings restored",

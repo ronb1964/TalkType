@@ -385,3 +385,47 @@ def test_a_huge_member_is_turned_away_before_it_is_read(home, monkeypatch):
     monkeypatch.setattr(sb, "_MAX_MEMBER_BYTES", 10)
     with pytest.raises(sb.BackupError):
         sb.read_backup(str(dest))
+
+
+def test_a_damaged_stats_file_is_left_alone_by_a_restore(home):
+    """Loading a backup used to replace an unreadable (maybe recoverable)
+    stats file with only the backup's days."""
+    set_stats({"2026-10-01": day(50)})
+    dest = home / "b.zip"
+    sb.write_backup(str(dest))
+    damaged = "{ not json"
+    with open(stats.stats_path(), "w") as f:
+        f.write(damaged)
+
+    notes = sb.restore(sb.read_backup(str(dest)))
+
+    assert read(stats.stats_path()) == damaged
+    assert any("stats" in n for n in notes)
+    assert read(config.CONFIG_PATH) == CONFIG_TEXT      # the settings still came across
+
+
+def test_nothing_is_restored_when_the_undo_copy_cannot_be_saved(home, monkeypatch):
+    """The copy that lets a restore be undone used to fail silently, and the
+    settings were replaced anyway."""
+    dest = home / "b.zip"
+    sb.write_backup(str(dest))
+    backup = sb.read_backup(str(dest))
+    with open(config.CONFIG_PATH, "w") as f:
+        f.write('hotkey = "F9"\n')
+
+    def full_disk(path, files):
+        raise OSError(28, "No space left on device")
+    monkeypatch.setattr(sb, "_write_zip", full_disk)
+
+    with pytest.raises(sb.BackupError):
+        sb.restore(backup)
+    assert read(config.CONFIG_PATH) == 'hotkey = "F9"\n'
+    assert sb.snapshot_if_changed() is None             # startup copy still never raises
+
+
+def test_preferences_shows_a_refused_restore_as_a_message():
+    import pathlib
+    text = (pathlib.Path(sb.__file__).parent / "prefs.py").read_text()
+    body = text[text.index("def _restore_backup"):]
+    body = body[:body.index("\n    def ")]
+    assert "settings_backup.BackupError" in body
