@@ -30,14 +30,15 @@ def test_newlines_tabs():
 
 def test_return_commands():
     """Test various voice commands for line breaks"""
-    # Test "return" - returns \u00a7SHIFT_ENTER\u00a7 markers, auto-adds periods
-    # Space after marker due to normalize logic
+    # Test "return" - returns \u00a7SHIFT_ENTER\u00a7 markers, auto-adds periods.
+    # Like "new line", it takes the spaces around it, so the next line
+    # doesn't start with one.
     s = "first line return second line"
-    assert normalize_text(s) == "First line.\u00a7SHIFT_ENTER\u00a7 Second line."
+    assert normalize_text(s) == "First line.\u00a7SHIFT_ENTER\u00a7Second line."
 
     # Test "line break"
     s = "first line line break second line"
-    assert normalize_text(s) == "First line.\u00a7SHIFT_ENTER\u00a7 Second line."
+    assert normalize_text(s) == "First line.\u00a7SHIFT_ENTER\u00a7Second line."
 
     # Test "new paragraph" for double line break
     # Note: the regex for "new paragraph" eats surrounding whitespace/punctuation,
@@ -95,7 +96,7 @@ def test_his_return_preserved():
 def test_return_still_works_as_line_break():
     """Bare 'return' between clauses still acts as line break."""
     s = "first line return second line"
-    assert normalize_text(s) == "First line.\u00a7SHIFT_ENTER\u00a7 Second line."
+    assert normalize_text(s) == "First line.\u00a7SHIFT_ENTER\u00a7Second line."
 
 def test_dash_of_salt_preserved():
     """'dash of [word]' is recipe/measurement noun usage."""
@@ -683,10 +684,28 @@ def test_numbers_that_cannot_be_times_are_left_alone(heard, number):
      f"Dear john,{_M}Thanks for the update."),
     ("hi sarah comma new paragraph how are you",
      f"Hi sarah,{_M}{_M}How are you."),
-    ("Dear John, new line thanks", f"Dear John,{_M}Thanks."),
 ])
 def test_comma_before_a_line_break_is_kept(said, expected):
     assert normalize_text(said) == expected
+
+
+# A comma the engine writes before a spoken "new line" is a pause, not the
+# user's comma, so it goes and the line gets its full stop, as with paragraphs.
+@pytest.mark.parametrize("said, expected", [
+    ("Dear John, new line thanks", f"Dear John.{_M}Thanks."),
+    ("I finished the van, new line, next I'll do the bed.",
+     f"I finished the van.{_M}Next I'll do the bed."),
+    ("Buy milk, newline, eggs, newline, bread.",
+     f"Buy milk.{_M}Eggs.{_M}Bread."),
+    ("first line, line break, second", f"First line.{_M}Second."),
+    ("Okay, new line.", f"Okay.{_M}"),
+])
+def test_engine_comma_before_a_line_break_goes(said, expected):
+    assert normalize_text(said) == expected
+
+
+def test_engine_comma_before_a_final_line_break_with_auto_period_off():
+    assert normalize_text("Okay, new line.", auto_period=False) == f"Okay{_M}"
 
 
 def test_comma_before_a_final_line_break_gets_no_period():
