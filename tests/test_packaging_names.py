@@ -50,6 +50,12 @@ def test_deb_and_rpm_replace_the_talktype_package():
         assert "exec /opt/talktype/AppRun" in s, name
 
 
+def test_docs_name_the_folder_the_packages_install_to():
+    # The published license notice points readers at the license texts.
+    assert "`/opt/talktype/usr/share/licenses/`" in _read("THIRD_PARTY_LICENSES.md")
+    assert "Both packages install to `/opt/talktype`" in _read("README.md")
+
+
 def test_aur_package_replaces_talktype_appimage():
     s = _read("aur/PKGBUILD")
     assert "pkgname=tuxtalk-appimage" in s

@@ -138,7 +138,8 @@ Download `tuxtalk-*.x86_64.rpm` from [Releases](https://github.com/ronb1964/TuxT
 sudo dnf install ./tuxtalk-*.x86_64.rpm
 ```
 
-Both packages install to `/opt/tuxtalk`, add a `tuxtalk` command and an
+Both packages install to `/opt/talktype` (the folder kept its old name so
+upgrades from TalkType replace files in place), add a `tuxtalk` command and an
 Applications menu entry, and pull in the few system libraries they need.
 
 ### AppImage (All Distros)
@@ -160,8 +161,9 @@ The AppImage includes everything needed - just download and run!
 
 ### Flatpak
 
-A sandboxed Flatpak build of TuxTalk already works, but it isn't published for
-download yet. **Want a Flatpak version?**
+There's a sandboxed Flatpak build in `packaging/flatpak`, but it isn't published
+for download yet, and it hasn't been rebuilt since the rename to TuxTalk.
+**Want a Flatpak version?**
 👉 **[Vote in the poll](https://github.com/ronb1964/TuxTalk/discussions/6)** —
 enough interest and I'll make it happen.
 
@@ -363,7 +365,7 @@ auto_period = true        # Add period at end of sentences
 <summary><b>Troubleshooting</b></summary>
 
 ### Text not appearing?
-- Check ydotoold is running: `systemctl --user status ydotoold`
+- Check ydotoold is running: `pgrep -a ydotoold` (TuxTalk starts it for you)
 - Verify socket exists: `ls $XDG_RUNTIME_DIR/.ydotool_socket`
 
 ### Hotkey not working?
@@ -399,45 +401,35 @@ permission to *read keys*, so typing can work while hotkeys do not.
 
 ### From Source
 
+GTK's Python bindings can't be installed with pip, so they come from your
+system and the rest goes in a venv. `run-dev.sh` puts the two together.
+
 ```bash
-# Prerequisites (Fedora/Nobara)
-sudo dnf install -y portaudio-devel ffmpeg ydotool wl-clipboard \
+# Prerequisites (Fedora/Nobara; other distros have the same packages under similar names)
+sudo dnf install -y portaudio-devel ydotool wl-clipboard \
                     python3-gobject libayatana-appindicator-gtk3 libnotify
 
 # Clone and install
 git clone https://github.com/ronb1964/TuxTalk.git
 cd TuxTalk
-poetry install
+python3 -m venv .venv
+.venv/bin/pip install poetry
+.venv/bin/poetry install
 
 # Run
-poetry run dictate-tray
+./run-dev.sh
 ```
 
-### ydotool Setup
+You don't need to set up ydotoold yourself. TuxTalk starts it when it needs it.
 
-TuxTalk requires ydotool for text injection:
+To run the tests (swap in your Python version, `python3 --version` shows it):
 
 ```bash
-# Create systemd service
-mkdir -p ~/.config/systemd/user
-cat > ~/.config/systemd/user/ydotoold.service <<'EOF'
-[Unit]
-Description=ydotool daemon
-After=graphical-session.target
-
-[Service]
-Environment=XDG_RUNTIME_DIR=%t
-ExecStart=/usr/bin/ydotoold --socket-path=%t/.ydotool_socket
-Restart=on-failure
-
-[Install]
-WantedBy=default.target
-EOF
-
-# Enable and start
-systemctl --user daemon-reload
-systemctl --user enable --now ydotoold.service
+PYTHONPATH=./src:/usr/lib64/python3.14/site-packages:/usr/lib/python3.14/site-packages \
+    .venv/bin/python -m pytest tests -q
 ```
+
+More in [DEV_SETUP.md](DEV_SETUP.md).
 
 </details>
 

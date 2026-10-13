@@ -5,7 +5,8 @@ TuxTalk itself is MIT-licensed (see [LICENSE](LICENSE)). The AppImage, .deb and
 license. All of their license texts are installed with TuxTalk:
 
 - AppImage: `usr/share/licenses/` inside it
-- .deb and .rpm: `/opt/tuxtalk/usr/share/licenses/`
+- .deb and .rpm: `/opt/talktype/usr/share/licenses/` (the folder kept its old name)
+- AUR: inside the AppImage at `/opt/tuxtalk/TuxTalk.AppImage`
 
 ## Programs built from source
 

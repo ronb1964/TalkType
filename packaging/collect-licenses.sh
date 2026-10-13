@@ -3,7 +3,7 @@
 #
 # Runs INSIDE the Ubuntu 22.04 build container, from container-build.sh, after
 # every file has been copied into AppDir. The .deb and .rpm repackage the
-# AppImage's tree, so they carry these too (under /opt/tuxtalk).
+# AppImage's tree, so they carry these too (under /opt/talktype).
 #
 #   packaging/collect-licenses.sh <AppDir> <ydotool source> <wl-clipboard source>
 #
