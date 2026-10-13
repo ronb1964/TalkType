@@ -312,3 +312,49 @@ def test_the_electron_fast_path_is_layout_aware_too(typing, monkeypatch):
     monkeypatch.setattr(kl, "active_layout", lambda: ("ch", ""))
     assert app._type_text_fast("z") is True
     assert calls and calls[0][0] == "key" and "21:1" in calls[0][1]
+
+
+# --- the layout registry (Sway names layouts by description) ---------------
+
+class _FakeRegistry:
+    """Enough of libxkbregistry for the description lookup, counting how
+    often the registry is parsed and freed."""
+
+    LAYOUTS = [(b"German (Switzerland)", b"ch", b""), (b"English (US)", b"us", b""),
+               (b"English (US)", b"us", b"intl")]
+
+    def __init__(self):
+        self.parsed = self.freed = 0
+        reg = self
+
+        def fn(f):
+            return type("Fn", (), {"__call__": staticmethod(f)})()
+        self.rxkb_context_new = fn(lambda flags: 1)
+        self.rxkb_context_parse_default_ruleset = fn(self._parse)
+        self.rxkb_context_unref = fn(self._unref)
+        self.rxkb_layout_first = fn(lambda ctx: 1)
+        self.rxkb_layout_next = fn(lambda i: i + 1 if i < len(reg.LAYOUTS) else None)
+        self.rxkb_layout_get_description = fn(lambda i: reg.LAYOUTS[i - 1][0])
+        self.rxkb_layout_get_name = fn(lambda i: reg.LAYOUTS[i - 1][1])
+        self.rxkb_layout_get_variant = fn(lambda i: reg.LAYOUTS[i - 1][2])
+
+    def _parse(self, ctx):
+        self.parsed += 1
+        return True
+
+    def _unref(self, ctx):
+        self.freed += 1
+
+
+def test_the_registry_is_parsed_once_and_freed(monkeypatch):
+    """Every typed chunk on Sway parsed the whole XKB registry again and
+    never freed it."""
+    import ctypes
+    from tuxtalk import keyboard_layout as kl
+    fake = _FakeRegistry()
+    monkeypatch.setattr(kl, "_registry_table", None)
+    monkeypatch.setattr(ctypes, "CDLL", lambda name: fake)
+    assert kl._layout_from_description("German (Switzerland)") == ("ch", "")
+    assert kl._layout_from_description("English (US)") == ("us", "")   # first match wins
+    assert kl._layout_from_description("Klingon") is None
+    assert (fake.parsed, fake.freed) == (1, 1)

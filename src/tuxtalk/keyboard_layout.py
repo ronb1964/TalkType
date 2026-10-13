@@ -269,14 +269,25 @@ def _sway_inputs():
                      _I3_MAGIC + struct.pack("<II", 0, get_inputs), _i3_reply)
 
 
-def _layout_from_description(description):
-    """(layout, variant) for a description like "German (Switzerland)", from
-    libxkbregistry, which holds the names every layout picker shows."""
+# Description -> (layout, variant) for every layout libxkbregistry knows,
+# built once: active_layout() runs before every typed chunk, and parsing the
+# whole registry each time cost tens of milliseconds on every Sway dictation.
+_registry_table = None
+
+
+def _registry_layouts():
+    """{description: (layout, variant)} from libxkbregistry, which holds the
+    names every layout picker shows. The first layout with a description wins."""
+    global _registry_table
+    if _registry_table is not None:
+        return _registry_table
     reg = C.CDLL("libxkbregistry.so.0")
     P = C.c_void_p
     reg.rxkb_context_new.restype = P
     reg.rxkb_context_new.argtypes = [C.c_int]
     reg.rxkb_context_parse_default_ruleset.argtypes = [P]
+    reg.rxkb_context_unref.restype = P
+    reg.rxkb_context_unref.argtypes = [P]
     reg.rxkb_layout_first.restype = P
     reg.rxkb_layout_first.argtypes = [P]
     reg.rxkb_layout_next.restype = P
@@ -285,15 +296,28 @@ def _layout_from_description(description):
         getattr(reg, fn).restype = C.c_char_p
         getattr(reg, fn).argtypes = [P]
     ctx = reg.rxkb_context_new(0)
-    if not ctx or not reg.rxkb_context_parse_default_ruleset(ctx):
-        return None
-    layout = reg.rxkb_layout_first(ctx)
-    while layout:
-        if (reg.rxkb_layout_get_description(layout) or b"").decode() == description:
-            return ((reg.rxkb_layout_get_name(layout) or b"").decode(),
-                    (reg.rxkb_layout_get_variant(layout) or b"").decode())
-        layout = reg.rxkb_layout_next(layout)
-    return None
+    if not ctx:
+        return {}
+    table = {}
+    try:
+        if not reg.rxkb_context_parse_default_ruleset(ctx):
+            return {}               # not cached: the next call tries again
+        layout = reg.rxkb_layout_first(ctx)
+        while layout:
+            # Copied into Python strings: the layout objects belong to ctx.
+            description = (reg.rxkb_layout_get_description(layout) or b"").decode()
+            table.setdefault(description, ((reg.rxkb_layout_get_name(layout) or b"").decode(),
+                                           (reg.rxkb_layout_get_variant(layout) or b"").decode()))
+            layout = reg.rxkb_layout_next(layout)
+    finally:
+        reg.rxkb_context_unref(ctx)
+    _registry_table = table
+    return table
+
+
+def _layout_from_description(description):
+    """(layout, variant) for a description like "German (Switzerland)", or None."""
+    return _registry_layouts().get(description)
 
 
 def _sway_layout():
