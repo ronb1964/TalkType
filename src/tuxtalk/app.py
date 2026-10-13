@@ -3136,81 +3136,6 @@ def _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
             put_back(also=also)
 
 
-def _show_welcome_after_change(cfg):
-    """Show 'Hotkeys Updated!' dialog after user changed keys via Preferences.
-
-    This runs once before the main event loop when a flag file is present.
-    """
-    print("\U0001f44b Showing welcome dialog after hotkey change...")
-    logger.info("Showing welcome dialog after user changed hotkeys")
-    try:
-        gi.require_version('Gtk', '3.0')
-        from gi.repository import Gtk
-
-        ready_dialog = Gtk.Dialog(title="Hotkeys Updated!")
-        from .ui_style import fit_dialog_to_screen
-        fit_dialog_to_screen(ready_dialog, 500, 300)
-        ready_dialog.set_modal(True)
-        ready_dialog.set_position(Gtk.WindowPosition.CENTER)
-
-        content = ready_dialog.get_content_area()
-        content.set_margin_top(20)
-        content.set_margin_bottom(20)
-        content.set_margin_start(25)
-        content.set_margin_end(25)
-        content.set_spacing(15)
-
-        # Both hotkeys work whatever the mode setting says, so list both.
-        if cfg.toggle_hotkey:
-            hotkey_msg = f'''<b>\U0001f3a4 Your New Hotkeys:</b>
-\u2022 Press <b>{cfg.hotkey}</b> to hold and record (hold mode)
-\u2022 Press <b>{cfg.toggle_hotkey}</b> to start/stop recording (toggle mode)'''
-        else:
-            hotkey_msg = f'''<b>\U0001f3a4 Your New Hotkey:</b>
-\u2022 Press and hold <b>{cfg.hotkey}</b> to record (push-to-talk mode)'''
-
-        message = Gtk.Label()
-        message.set_markup(f'''<span size="large"><b>\u2705 You're All Set!</b></span>
-
-<b>\U0001f389 Hotkeys Updated Successfully!</b>
-
-Your new hotkeys are ready to use.
-
-{hotkey_msg}
-
-<b>\u23f1\ufe0f Auto-Timeout:</b>
-The service will automatically stop after 5 minutes of inactivity
-to conserve system resources. Just press your hotkey to wake it up!
-
-<b>\U0001f4da Need Help?</b>
-Right-click the tray icon \u2192 "Help..." for full documentation
-
-<b>Happy dictating! \U0001f680</b>''')
-        message.set_line_wrap(True)
-        message.set_xalign(0)
-        message.set_yalign(0)
-        content.pack_start(message, True, True, 0)
-
-        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        button_box.set_halign(Gtk.Align.CENTER)
-        button_box.set_margin_top(10)
-
-        ok_btn = Gtk.Button(label="Let's Go!")
-        ok_btn.get_style_context().add_class("suggested-action")
-        ok_btn.connect("clicked", lambda w: ready_dialog.response(Gtk.ResponseType.OK))
-        button_box.pack_start(ok_btn, False, False, 0)
-
-        content.pack_start(button_box, False, False, 0)
-
-        ready_dialog.show_all()
-        ready_dialog.run()
-        ready_dialog.destroy()
-        logger.info("Welcome dialog closed, continuing to main loop")
-
-    except Exception as e:
-        logger.error(f"Failed to show welcome dialog after hotkey change: {e}")
-
-
 # A combo press whose keys aren't all let go within this long is dropped, so a
 # missed key release can never make TuxTalk paste out of the blue later.
 PASTE_LAST_EXPIRY_S = 5.0
@@ -3612,17 +3537,6 @@ def _loop_evdev(cfg: Settings, input_device_idx):
 
     # Track which modifier keys are currently held (for combo detection)
     held_modifiers: set[int] = set()
-
-    # Show welcome dialog if user just changed hotkeys via Preferences
-    from .config import get_data_dir
-    welcome_flag_file = os.path.join(get_data_dir(), ".show_welcome_on_restart")
-    if os.path.exists(welcome_flag_file):
-        try:
-            os.remove(welcome_flag_file)
-            logger.info("Removed welcome flag, will show welcome dialog")
-        except Exception as e:
-            logger.error(f"Failed to remove welcome flag: {e}")
-        _show_welcome_after_change(cfg)
 
     # Main event loop
     dead_devices = []
