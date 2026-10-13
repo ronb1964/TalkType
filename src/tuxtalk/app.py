@@ -3136,7 +3136,9 @@ def _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
                 # Only spacing changed ("select all" got the line ends
                 # trimmed): not an edit anyone asked for.
                 result = None
-        if not result or result.strip() == selected.strip():
+        # Exact: for an edit done in code, spacing may be the whole change
+        # (indenting one line); the AI's spacing-only answers are dropped above.
+        if not result or result == selected:
             _edit_problem("no_answer", beeps_on)
             return
         logger.info(f"Voice edit result: {_loggable(result)} "

@@ -901,3 +901,15 @@ def test_no_key_goes_to_a_window_switched_to_while_transcribing(edit_env, keys_s
     assert keys_sent == [] and edit_env["typed"] == []
     assert len(edit_env["notices"]) == 1 and "switched windows" in edit_env["notices"][0]
     assert "Recent Dictations" not in edit_env["notices"][0]
+
+
+@pytest.mark.parametrize("said, selected, typed", [
+    ("Indent this.", "One", "    One"),
+    ("Unindent this.", "    One", "One"),
+])
+def test_indenting_one_line_counts_as_a_change(edit_env, monkeypatch, said, selected, typed):
+    """The only change is spacing, which the old strip() comparison removed."""
+    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: said)
+    edit_env["selection"]["text"] = selected
+    run_edit()
+    assert edit_env["typed"] == [typed] and edit_env["notices"] == []
