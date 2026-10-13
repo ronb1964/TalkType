@@ -62,15 +62,15 @@ def copy_text_on_gtk_thread(text, timeout=1.0):
     return done.wait(timeout) and bool(result and result[0])
 
 
-# --- Paste mode and the user's clipboard (GitHub issue #7) ----------------------------
-# Paste mode puts each dictation on the clipboard and sends Ctrl+V. That used to
-# throw away whatever the user had copied, and KDE's Klipper saved every
-# dictation into its history on disk. Dictations are now always offered with
-# wl-copy --sensitive, the x-kde-passwordManagerHint=secret marker KeePassXC
+# --- Paste mode and the user's clipboard (see issue #7) -------------------------------
+# Paste mode puts each dictation on the clipboard and sends Ctrl+V, which
+# replaces what the user had copied, and clipboard managers such as KDE's
+# Klipper would save every dictation to disk. Dictations are therefore offered
+# with wl-copy --sensitive, the x-kde-passwordManagerHint=secret marker KeePassXC
 # uses, which Klipper and other clipboard managers skip. With the
 # restore_clipboard setting on, ClipboardKeeper also puts the old contents back
-# once the app has had time to read the paste. It's off by default: some people
-# (Ron among them) re-paste a dictation that landed in the wrong window.
+# once the app has had time to read the paste. It's off by default because some
+# people re-paste a dictation that landed in the wrong window.
 
 import functools
 import threading
@@ -104,11 +104,13 @@ def wl_copy_command():
 
 
 def _wl_paste_types():
+    """The types the clipboard offers now; [] when it is empty."""
     result = subprocess.run(["wl-paste", "--list-types"], capture_output=True, text=True, timeout=1)
     return [t for t in result.stdout.splitlines() if t.strip()] if result.returncode == 0 else []
 
 
 def _wl_paste(mime):
+    """The clipboard's contents as *mime*, in bytes. Raises OSError on failure."""
     result = subprocess.run(["wl-paste", "--no-newline", "--type", mime], capture_output=True, timeout=1)
     if result.returncode != 0:
         raise OSError(f"wl-paste exited {result.returncode}")
@@ -186,6 +188,7 @@ def _best_type(types):
 
 
 def _timer(delay, fn):
+    """Run *fn* after *delay* seconds on a daemon thread; returns its cancel()."""
     t = threading.Timer(delay, fn)
     t.daemon = True
     t.start()
@@ -213,6 +216,7 @@ class ClipboardKeeper:
         return _read_clipboard()
 
     def before_paste(self):
+        """Save the user's clipboard before a dictation replaces it."""
         with self._lock:
             self._generation += 1
             if self._cancel is not None:
@@ -224,6 +228,7 @@ class ClipboardKeeper:
             self._saved = self._read()
 
     def after_paste(self, text):
+        """Schedule the restore, once the app has had time to read *text*."""
         with self._lock:
             if self._saved is _NOTHING:
                 return

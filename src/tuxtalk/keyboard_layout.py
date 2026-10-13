@@ -3,15 +3,15 @@ Type text correctly on any keyboard layout.
 
 ydotool's `type` turns each character into the key it sits on in a US layout,
 and the compositor then reads that key with the user's real layout. On a Swiss
-German (QWERTZ) keyboard "my keyboard is lazy" arrived as "mz kezboard is
-layz", punctuation moved, and umlauts couldn't be typed at all (GitHub issue
-#8). So for any layout other than plain US this module works out the real
+German (QWERTZ) keyboard "my keyboard is lazy" arrives as "mz kezboard is
+layz", punctuation moves, and umlauts can't be typed at all (see issue #8).
+So for any layout other than plain US this module works out the real
 keys: it loads the active layout into libxkbcommon (the library compositors
 use to turn key presses into characters) and finds, for each character, the
 key plus Shift / AltGr that produces it. A character the layout has no key
 for, like a capital Ä on a Swiss keyboard, is typed as its accent's dead key
 followed by the letter. The keys go out through `ydotool key`, the same
-uinput path as before, so no new permission is needed.
+uinput path `ydotool type` uses, so no extra permission is needed.
 
 US layouts keep using `ydotool type` for plain ASCII. Anything else on a US
 layout goes through the planner too: `ydotool type` turns Cyrillic into junk.
@@ -27,7 +27,7 @@ Finding the active layout depends on the desktop:
              with libxkbregistry
   X11        setxkbmap -query for the list, XkbGetState for which one is on
   otherwise  the system default (xorg.conf.d / /etc/default/keyboard)
-Anything that fails just means "unknown", and unknown means the old US path.
+Anything that fails just means "unknown", and unknown means the US path.
 """
 import ctypes as C
 import ctypes.util
@@ -115,6 +115,7 @@ class KeyPlanner:
         self._index()
 
     def _index(self):
+        """Map every keysym to its cheapest key: fewest of Shift and AltGr."""
         x = _lib()
         shift = x.xkb_keymap_mod_get_index(self.keymap, b"Shift")
         altgr = x.xkb_keymap_mod_get_index(self.keymap, b"Mod5")
@@ -145,6 +146,7 @@ class KeyPlanner:
             self._altgr = _KEY_RIGHTALT if _KEY_RIGHTALT in altgr_keys else altgr_keys[0]
 
     def _press(self, entry, tokens):
+        """Add the key events for *entry* to *tokens*; False if AltGr is needed but missing."""
         keycode, shift, altgr = entry
         if altgr and self._altgr is None:
             return False
@@ -192,11 +194,11 @@ def planner_for(layout_variant):
 
 def needs_layout_typing(layout_variant, text) -> bool:
     """Whether text should be typed key by key for this layout: anything but
-    ASCII on plain US. Unknown layouts (None) keep the old path.
+    ASCII on plain US. Unknown layouts (None) keep `ydotool type`.
 
     Non-ASCII on US goes through the planner as well, so that Cyrillic or an
     emoji ends up pasted (UntypableText) rather than handed to `ydotool type`,
-    which only knows US key positions and typed Ukrainian as a row of 9s."""
+    which only knows US key positions and types Ukrainian as a row of 9s."""
     if not layout_variant:
         return False
     layout, variant = layout_variant
@@ -215,6 +217,7 @@ def _desktop():
 
 
 def _first(csv, index=0):
+    """Item *index* of a comma-separated list, or the first item if out of range."""
     items = [s.strip() for s in (csv or "").split(",")]
     return items[index] if 0 <= index < len(items) else (items[0] if items else "")
 
@@ -234,6 +237,7 @@ def _gsettings(key):
 
 
 def _gnome_layout():
+    """GNOME's current (layout, variant), or None for an input method."""
     for key in ("mru-sources", "sources"):
         found = re.findall(r"\('(\w+)',\s*'([^']*)'\)", _gsettings(key))
         if found:
@@ -271,7 +275,7 @@ def _sway_inputs():
 
 # Description -> (layout, variant) for every layout libxkbregistry knows,
 # built once: active_layout() runs before every typed chunk, and parsing the
-# whole registry each time cost tens of milliseconds on every Sway dictation.
+# whole registry takes tens of milliseconds.
 _registry_table = None
 
 
@@ -342,10 +346,9 @@ def _x11_active_group():
     """Which of the configured layouts is on (its XKB group), or None.
 
     setxkbmap -query lists every layout ("us,ua") and says nothing about which
-    one is active, so the first was always used. On a Ukrainian desktop with
-    English listed first, Cyrillic was typed with US keys and came out as 9s,
-    with commas and full stops turning into б and ю. XkbGetState is the Xlib
-    call that knows; the group is the first byte of XkbStateRec.
+    one is active; assuming the first would type Cyrillic with US keys on a
+    Ukrainian desktop that lists English first. XkbGetState is the Xlib call
+    that knows; the group is the first byte of XkbStateRec.
     """
     x11 = C.CDLL(C.util.find_library("X11") or "libX11.so.6")
     x11.XOpenDisplay.restype = C.c_void_p
