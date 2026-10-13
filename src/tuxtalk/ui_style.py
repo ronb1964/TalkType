@@ -230,9 +230,12 @@ def fit_dialog_to_screen(dialog, width, desired_height, min_height=320, margin=9
     return dialog
 
 
-def message_dialog(**kwargs):
+def message_dialog(closable=True, **kwargs):
     """A Gtk.MessageDialog in the desktop's own window frame. Takes the same
     keyword arguments; use it instead of Gtk.MessageDialog everywhere.
+
+    closable=False drops the title bar's close button, for a box that closes
+    itself when its work is done ("Checking for Updates...").
 
     Gtk.MessageDialog installs an empty titlebar of its own, which makes GTK
     draw the frame instead of the desktop. On KDE that frame has square
@@ -244,8 +247,8 @@ def message_dialog(**kwargs):
     dialog.set_titlebar(None)
     if not dialog.get_title():
         dialog.set_title("TuxTalk")
-    # A box with no buttons ("Checking for Updates...") closes itself when the
-    # work is done; don't offer an X to close it halfway.
-    if kwargs.get("buttons", Gtk.ButtonsType.NONE) == Gtk.ButtonsType.NONE:
+    # Asked for, not guessed from buttons=NONE: most questions pass NONE and
+    # add their own buttons afterwards, and those keep their X.
+    if not closable:
         dialog.set_deletable(False)
     return dialog

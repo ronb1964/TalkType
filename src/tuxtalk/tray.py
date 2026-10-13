@@ -1230,6 +1230,7 @@ class DictationTray:
 
         # Create progress dialog
         progress_dialog = message_dialog(
+            closable=False,
             message_type=Gtk.MessageType.INFO,
             buttons=Gtk.ButtonsType.NONE,
             text="Checking for Updates..."
@@ -1501,6 +1502,7 @@ class DictationTray:
                 # Success - automatically install and restart
                 # Show brief status dialog
                 status_dialog = message_dialog(
+                    closable=False,
                     message_type=Gtk.MessageType.INFO,
                     buttons=Gtk.ButtonsType.NONE,
                     text="Installing Update..."

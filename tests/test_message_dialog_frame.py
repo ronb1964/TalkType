@@ -32,13 +32,30 @@ def test_the_desktop_draws_the_frame(Gtk):
     assert dialog.get_deletable()  # an X, like Escape, answers the box
 
 
-def test_a_box_without_buttons_has_no_close_button(Gtk):
+def test_a_self_closing_box_has_no_close_button(Gtk):
     """'Checking for Updates...' style boxes close themselves when the work
     is done. Closing one early isn't something to invite with an X."""
     from tuxtalk.ui_style import message_dialog
-    dialog = message_dialog(buttons=Gtk.ButtonsType.NONE, text="Working...")
+    dialog = message_dialog(closable=False, buttons=Gtk.ButtonsType.NONE, text="Working...")
     assert not dialog.get_deletable()
-    assert not message_dialog(text="Working...").get_deletable()
+
+
+def test_a_question_that_adds_its_own_buttons_keeps_its_close_button(Gtk):
+    """No buttons at construction used to mean "self-closing", but most
+    questions pass buttons=NONE and add theirs afterwards, so every one of
+    them lost the X that every other dialog has."""
+    from tuxtalk.ui_style import message_dialog
+    dialog = message_dialog(buttons=Gtk.ButtonsType.NONE, text="Replace it?")
+    dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+    dialog.add_button("Replace", Gtk.ResponseType.OK)
+    assert dialog.get_deletable()
+
+
+def test_the_tray_progress_boxes_stay_without_one():
+    source = (SRC / "tray.py").read_text()
+    for text in ('"Checking for Updates..."', '"Installing Update..."'):
+        call = source[source.rindex("message_dialog(", 0, source.index(text)):source.index(text)]
+        assert "closable=False" in call, text
 
 
 def test_an_explicit_title_is_kept(Gtk):
