@@ -1,20 +1,16 @@
-"""First-run setup and Preferences must offer the same models.
-
-They kept separate hardcoded lists and drifted: Preferences offered tiny, base,
-small, medium and large-v3, while the first-run setup screen offered only four —
-"base" was missing. A user choosing a starting model was shown a smaller menu
-than the one they would see later, with no indication anything was hidden.
+"""Model pickers offer exactly the models that can be downloaded.
 
 MODEL_REPOS is the real source of truth: a model can only be offered if there is
 a repository to download it from. OFFERED_MODELS fixes the display order and is
-what both screens must build from, so a model added to one appears in both.
+what every model picker must build from, so a separate hardcoded list can't
+drift and hide a model.
 """
 
 import pathlib
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
-# First run no longer has a full picker: its card offers three models chosen
+# First run has no full picker: its card offers three models chosen
 # by recommend.py, and points to Preferences for the rest.
 SCREENS_WITH_MODEL_PICKERS = [
     "src/tuxtalk/prefs.py",
@@ -41,7 +37,7 @@ def test_offered_models_has_no_duplicates():
 
 
 def test_every_model_picker_builds_from_the_shared_list():
-    """Neither screen may keep its own hardcoded list — that is how they drifted."""
+    """No picker may keep its own hardcoded list, or the lists drift apart."""
     offenders = []
     for path in SCREENS_WITH_MODEL_PICKERS:
         if "OFFERED_MODELS" not in (ROOT / path).read_text():

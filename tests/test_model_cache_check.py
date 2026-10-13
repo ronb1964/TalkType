@@ -1,11 +1,11 @@
 """Checking whether a model is downloaded must not load it.
 
-The old is_model_cached() built a whole WhisperModel on the processor just to
-answer yes or no, then the service loaded the model again for real. With
-large-v3 that's an extra second or two and gigabytes of memory on every start,
-plus ctranslate2's "float16 ... converted to float32" warning in the output.
-The file check answers the same question, and a cached model that turns out
-broken is still downloaded again.
+Building a whole WhisperModel on the processor just to answer yes or no, before
+the service loads the model again for real, costs an extra second or two and
+gigabytes of memory on every start with large-v3, plus ctranslate2's "float16
+... converted to float32" warning in the output. The file check answers the
+same question, and a cached model that turns out broken is still downloaded
+again.
 """
 
 import pytest

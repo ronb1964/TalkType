@@ -1,10 +1,9 @@
 """A model download must fail on missing weights, not on a missing README.
 
 The downloader walks every file in the HuggingFace repo — including
-.gitattributes, README.md and other files faster-whisper never loads — and
-treated any single failure as total failure. A flaky fetch of a text file
-therefore threw away a completed multi-gigabyte model download and told the
-user it had failed.
+.gitattributes, README.md and other files faster-whisper never loads — so
+treating any single failure as total failure would let a flaky fetch of a text
+file throw away a completed multi-gigabyte model download.
 
 What faster-whisper actually needs is already spelled out in this module:
 model.bin, config.json, tokenizer.json.
@@ -55,7 +54,7 @@ def test_a_missing_vocabulary_fails():
 
 def test_a_file_asked_for_by_name_is_never_optional(monkeypatch):
     """The AI model is fetched as one named file, which isn't on the Whisper
-    list, so a failed download of it used to count as a success."""
+    list; a failed download of it must still count as a failure."""
     import huggingface_hub
     from tuxtalk import model_helper as M
 
@@ -70,7 +69,7 @@ def test_a_file_asked_for_by_name_is_never_optional(monkeypatch):
 
 def test_the_disk_space_check_looks_where_the_files_go(monkeypatch):
     """HF_HOME / XDG_CACHE_HOME (the Flatpak sets the latter) move the cache;
-    measuring ~/.cache/huggingface checked the wrong disk."""
+    measuring ~/.cache/huggingface would check the wrong disk."""
     import huggingface_hub.constants
     from tuxtalk import download_utils
     from tuxtalk import model_helper as M

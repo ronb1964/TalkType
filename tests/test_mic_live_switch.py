@@ -1,17 +1,16 @@
 """Switching microphone in Preferences must affect the next dictation.
 
-The mic is stored as a name but recorded from as a device *number*, resolved
-once at startup and then threaded through the loop as a parameter.
-_reload_live_settings refreshed cfg.mic — 'mic' is in LIVE_APPLIED_KEYS, so
-Preferences reported it applied without a restart — but nothing ever re-resolved
-the number, so the service kept recording from the device it started with.
+The mic is stored as a name but recorded from as a device *number*. 'mic' is in
+LIVE_APPLIED_KEYS, so Preferences reports it applied without a restart, and
+refreshing cfg.mic is not enough: the number must be re-resolved too, or the
+service keeps recording from the device it started with.
 
-The one existing re-resolve is the failure path in start_recording: it fires
-only when opening the old device *raises*. Switching between two microphones
-that both work therefore did nothing at all.
+The failure path in start_recording re-resolves only when opening the old
+device *raises*, so on its own it does nothing when switching between two
+microphones that both work.
 
-The resolved number now lives on _ServiceState next to the cfg it came from,
-so there is one owner rather than a snapshot and a parameter that disagree.
+The resolved number lives on _ServiceState next to the cfg it came from, so
+there is one owner rather than a snapshot and a parameter that disagree.
 """
 
 import types

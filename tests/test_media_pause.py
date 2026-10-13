@@ -1,7 +1,7 @@
 """Pause music and videos while dictating (config pause_media).
 
-YouTube playing through the speakers reached the microphone and turned "isn't
-it" into "Venezuela". TuxTalk now pauses every MPRIS player that is playing
+Sound from the speakers reaches the microphone (a YouTube video can turn "isn't
+it" into "Venezuela"), so TuxTalk pauses every MPRIS player that is playing
 when a recording starts and, when it ends, resumes only the ones it paused.
 """
 import threading

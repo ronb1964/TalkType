@@ -1,11 +1,10 @@
 """Settings must apply without restarting the dictation service.
 
-Preferences restarted the service on every Apply/OK, so toggling
-auto-punctuation tore it down and reloaded a 3 GB Whisper model onto the GPU —
-about ten seconds during which F8 did nothing, with no beep, no indicator and
-no message.
+Restarting the service on every Apply/OK would make toggling auto-punctuation
+tear it down and reload a 3 GB Whisper model onto the GPU — about ten seconds
+during which F8 does nothing, with no beep, no indicator and no message.
 
-Almost none of that was necessary. Most settings are read off the long-lived
+Most settings don't need that. They are read off the long-lived
 `cfg` object at the moment they are used (every dictation ends by passing
 cfg.beeps, cfg.auto_period and the rest into stop_recording), so refreshing
 that object's fields makes them live. Only `model` and `device` require
@@ -75,8 +74,7 @@ class TestRestartDecision:
 
         Expressed as a model/device denylist instead, a setting added later
         would default to "live", silently fail to apply, and present as a
-        setting that lies about itself — the class of bug v0.6.0 spent four
-        commits removing.
+        setting that lies about itself.
         """
         assert config.needs_service_restart({"some_future_setting"}) is True
 

@@ -1,8 +1,8 @@
-"""The test suite must never write to the user's real TalkType log.
+"""The test suite must never write to the user's real TuxTalk log.
 
-It used to: every run left fake entries there (a made-up AppImage mount
-path, simulated wtype timeouts, "Custom commands applied"), which then looked
-like real problems when the log was read to diagnose one (2026-09-29).
+Fake entries there (a made-up AppImage mount path, simulated wtype timeouts,
+"Custom commands applied") look like real problems when the log is read to
+diagnose one.
 """
 import logging
 from pathlib import Path

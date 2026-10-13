@@ -28,9 +28,8 @@ def test_logger_has_handlers():
 
 def test_logger_file_handler_exists(tmp_path):
     """Test that file handler creates log file"""
-    # Note: The actual logger writes to ~/.config/talktype/
-    # We can't easily change that without modifying the logger module
-    # So this test just verifies the handler type exists
+    # conftest points the log at a temporary folder (TUXTALK_LOG_DIR), so this
+    # only checks that a file handler is attached.
     logger = setup_logger("test_file")
     file_handlers = [h for h in logger.handlers if isinstance(h, logging.FileHandler)]
     assert len(file_handlers) > 0
@@ -90,8 +89,8 @@ def _fresh_handler(monkeypatch, tmp_path):
 
 
 def test_lines_follow_the_log_after_another_process_rolls_it_over(monkeypatch, tmp_path):
-    """The tray's handlers kept writing into tuxtalk.log.old after the
-    service rolled the log over, and into a deleted file after the next."""
+    """After the service rolls the log over, the tray's lines go into the new
+    tuxtalk.log, not into tuxtalk.log.old or a deleted file."""
     tlog = _fresh_handler(monkeypatch, tmp_path)
     log = tlog.setup_logger("test_rollover_follow")
     try:
@@ -122,8 +121,8 @@ def test_one_handler_per_process_and_one_line_per_message(monkeypatch, tmp_path)
 
 
 def test_package_loggers_reach_the_log_even_without_setup_logger():
-    """config.py and others used plain logging.getLogger(__name__), whose
-    lines never reached tuxtalk.log."""
+    """config.py and others use plain logging.getLogger(__name__), and those
+    lines must still reach tuxtalk.log."""
     from tuxtalk import config, logger as tlog  # noqa: F401  (config installs the handler)
     package = logging.getLogger("tuxtalk")
     assert tlog._handler in package.handlers

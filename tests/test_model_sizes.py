@@ -1,12 +1,11 @@
 """The download sizes shown are the real ones.
 
-Before 0.14.2 every Whisper size for the processor was about half the real
-download (tiny "39 MB", small "244 MB"): they were the models' sizes in
-millions of parameters. The first-run card told a new user Small was 250 MB
-and it downloaded 486 MB.
+A model's size in millions of parameters (tiny 39M, small 244M) looks like
+megabytes but is about half the real download, so the sizes shown are the
+measured downloads.
 
 Real sizes, read from Hugging Face on 2026-10-06 (decimal MB, whole repo for
-the processor models, since TalkType downloads all of it):
+the processor models, since TuxTalk downloads all of it):
   Systran/faster-whisper-*: tiny 78, base 148, small 486, medium 1531, large-v3 3091
   istupakov parakeet int8 files: 670
   ggerganov/whisper.cpp: tiny-q8 44, base-q8 82, small-q8 264, medium-q5 539, large-v3-q5 1081

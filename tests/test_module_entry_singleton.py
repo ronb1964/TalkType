@@ -8,15 +8,12 @@ _typing_delay and friends as module globals; if main() runs in "__main__" while
 the recording loop runs in "tuxtalk.app", every one of those globals is
 invisible over there and transcription dies with `NameError: name 'model'`.
 
-The Backend B seam first exposed this: BB-6's main() called _loop_evdev()
-directly (same namespace, worked); BB-8 routed the entry through
-EvdevInputBackend.start(), which does `from . import app`, so the loop began
-running in "tuxtalk.app" while main() had set its globals in "__main__".
-
-The AppImage's bin/dictate never hit it — a setuptools console script that does
-`from tuxtalk.app import main`, the correct package name. The `-m` entry must
-behave the same by delegating to the package module's main(). BB-9's Flatpak
-also launches with `python3 -m tuxtalk.app`, so this guard protects it too.
+The loop is reached through EvdevInputBackend.start(), which does
+`from . import app`, so it always runs in "tuxtalk.app". The AppImage's
+bin/dictate is a setuptools console script that does
+`from tuxtalk.app import main`, the correct package name; the `-m` entry must
+behave the same by delegating to the package module's main(). The Flatpak also
+launches with `python3 -m tuxtalk.app`, so this guard protects it too.
 """
 
 import subprocess
@@ -46,8 +43,8 @@ def test_dash_m_entry_delegates_to_package_module():
     call tuxtalk.app.main, not a second local main() defined in "__main__".
 
     The child pre-imports tuxtalk.app and replaces its main() with a probe that
-    raises the moment it is called. After the fix the "__main__" guard delegates
-    through `from tuxtalk.app import main`, so the probe fires and we confirm
+    raises the moment it is called. The "__main__" guard delegates through
+    `from tuxtalk.app import main`, so the probe fires and we confirm
     both that it ran and that it is the same module the backends import.
     """
     child = textwrap.dedent(

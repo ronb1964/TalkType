@@ -1,8 +1,8 @@
 """Running the tests never pops a notification on the developer's desktop.
 
-test_a_real_cuda_failure_still_falls_back_to_cpu sent a real "Couldn't use
-your NVIDIA graphics card (CUDA)" notification on every suite run, and Ron saw
-it pop up through a whole release test without being on CUDA.
+Tests such as test_a_real_cuda_failure_still_falls_back_to_cpu go through the
+real notification path, so conftest holds back Notify.Notification.show for
+the whole suite.
 """
 import gi
 

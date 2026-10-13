@@ -95,7 +95,7 @@ def test_all_valid_models():
 
 
 def test_valid_devices():
-    """Test both valid device types"""
+    """Test that cpu and cuda pass validation in either case"""
     for device in ["cpu", "cuda", "CPU", "CUDA"]:  # Case insensitive
         s = Settings(device=device)
         validate_config(s)  # Should not raise

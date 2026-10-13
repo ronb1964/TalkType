@@ -1,10 +1,9 @@
-"""Every TalkType message box gets the desktop's own window frame.
+"""Every TuxTalk message box gets the desktop's own window frame.
 
 Gtk.MessageDialog installs an empty titlebar of its own, so GTK draws the
 frame and the desktop never does. On KDE that frame has square corners while
-every other TalkType window gets KDE's rounded one (Ron, 2026-10-10, on the
-"You're Up to Date!" box). ui_style.message_dialog() removes that titlebar;
-checked in the fedora44-KDE and ubuntu26.04 VMs.
+every other TuxTalk window gets KDE's rounded one. ui_style.message_dialog()
+removes that titlebar.
 """
 import pathlib
 import re
@@ -41,9 +40,9 @@ def test_a_self_closing_box_has_no_close_button(Gtk):
 
 
 def test_a_question_that_adds_its_own_buttons_keeps_its_close_button(Gtk):
-    """No buttons at construction used to mean "self-closing", but most
-    questions pass buttons=NONE and add theirs afterwards, so every one of
-    them lost the X that every other dialog has."""
+    """No buttons at construction does not mean "self-closing": most
+    questions pass buttons=NONE and add theirs afterwards, and they keep the
+    X that every other dialog has."""
     from tuxtalk.ui_style import message_dialog
     dialog = message_dialog(buttons=Gtk.ButtonsType.NONE, text="Replace it?")
     dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)

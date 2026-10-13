@@ -1,7 +1,7 @@
 """Preferences warns about model settings that don't do what they say.
 
 Parakeet with Device CUDA quietly runs on the processor, and Parakeet
-ignores a language it doesn't know. Both used to pass without a word.
+ignores a language it doesn't know. Both get a warning.
 """
 import pytest
 

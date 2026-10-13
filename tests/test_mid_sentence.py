@@ -3,10 +3,10 @@
 Whisper capitalizes the first word of every utterance, so when the user is
 resuming mid-sentence that capital is wrong and gets undone. But some words
 are capitalized for reasons that have nothing to do with sentence position,
-and lowercasing those corrupts them: the pronoun "I" became "i", and the
-acronym "NASA" became "nASA".
+and lowercasing those corrupts them: the pronoun "I" would become "i", and the
+acronym "NASA" "nASA".
 
-Proper nouns ("Ron") are genuinely ambiguous — Whisper capitalizes them both
+Proper nouns ("Paris") are genuinely ambiguous — Whisper capitalizes them both
 as sentence starts and as names — so those are left as-is by design.
 """
 

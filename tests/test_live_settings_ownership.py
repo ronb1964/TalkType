@@ -1,23 +1,18 @@
 """One owner for the config-change signal, and no snapshots of live settings.
 
-Two separate bugs, one shape: a setting Preferences reports as "applied without
-restart" that the running service never actually picks up.
+Both rules prevent the same failure: a setting Preferences reports as "applied
+without restart" that the running service never actually picks up.
 
-1. The change signal was being consumed twice. _config_file_changed() is
-   edge-triggered — it compares mtime against a module global and returns True
-   once per change. The evdev loop calls _service_tick() first and then runs its
-   own copy of the same check to rebind hold_key/toggle_key/mode. Once
-   _service_tick gained the recheck (for Backend B, which runs no evdev loop),
-   it consumed every change first, so the inline block always saw False and the
-   loop kept the hotkey it started with. Changing your hotkey did nothing until
-   a restart, on every non-Flatpak build.
+1. _config_file_changed() is edge-triggered — it compares mtime against a
+   module global and returns True once per change. _service_tick() is the
+   single detector (Backend B runs no evdev loop, so the tick must check) and
+   hands the reloaded settings back to the evdev loop, which rebinds
+   hold_key/toggle_key/mode from them. A second check in the loop would always
+   see False, and a changed hotkey would do nothing until a restart.
 
-   The fix makes _service_tick the single detector and hands the result back to
-   whoever needs to rebind.
-
-2. _ServiceState snapshotted the auto-timeout at construction. _reload_live_settings
-   refreshes cfg in place, but the snapshot never moved, so switching the timeout
-   off left the service still exiting on it (and switching it on did nothing).
+2. _reload_live_settings refreshes cfg in place, so _ServiceState must read the
+   auto-timeout from cfg rather than a snapshot taken at construction, or
+   switching the timeout off leaves the service still exiting on it.
 """
 
 import types
@@ -68,9 +63,8 @@ class TestChangeSignalHasOneOwner:
     def test_a_new_hotkey_survives_the_tick(self, monkeypatch):
         """End to end: the change is detected once and the new key comes back.
 
-        This is the regression. The old code detected it inside the tick,
-        discarded the result, and left the caller to detect it a second time —
-        which could never succeed.
+        If the tick discarded the result, the caller would have to detect the
+        change a second time, which can never succeed.
         """
         _idle(monkeypatch)
         monkeypatch.setattr(app, "_config_file_changed", lambda: True)
@@ -132,9 +126,9 @@ class TestAutoTimeoutIsLive:
         app._service_tick(cfg, svc)  # must not raise SystemExit
 
     def test_switching_the_timeout_on_does_not_stop_the_service_at_once(self, monkeypatch):
-        """The clock only moved on D-Bus commands while the option was off, so
-        after a long session of F8 dictation, ticking it on stopped the service
-        on the next pass, right after the user turned the option on."""
+        """The idle clock must not count only D-Bus commands while the option is
+        off, or after a long session of F8 dictation, ticking it on stops the
+        service on the next pass, right after the user turned the option on."""
         _idle(monkeypatch)
         monkeypatch.setattr(app, "_commands_file_changed", lambda: False)
         monkeypatch.setattr(app, "_words_file_changed", lambda: False)
