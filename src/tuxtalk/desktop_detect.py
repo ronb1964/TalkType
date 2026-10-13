@@ -13,7 +13,7 @@ def get_desktop_environment() -> str:
     Detect the current desktop environment
 
     Returns:
-        str: Desktop environment name ('gnome', 'kde', 'xfce', 'unknown')
+        str: 'gnome', 'kde', 'xfce', 'cinnamon', 'mate' or 'unknown'
     """
     # Check environment variables
     desktop = os.environ.get('XDG_CURRENT_DESKTOP', '').lower()
@@ -234,9 +234,8 @@ def enable_extension(uuid: str) -> bool:
       1. `gnome-extensions enable` activates it live — but ONLY if the running
          shell already knows the extension. On Wayland a just-installed
          extension is unknown to the running shell, so this fails until a
-         restart. (This was the whole bug: the old code stopped here and
-         returned False, so the extension was never actually enabled — a fresh
-         GNOME install rebooted to no tray icon.)
+         restart, and on its own would leave a fresh install with no tray icon
+         after the reboot.
 
       2. Writing the UUID directly into org.gnome.shell enabled-extensions
          persists regardless. The shell reads that key on its next start — the
@@ -274,7 +273,7 @@ def enable_extension(uuid: str) -> bool:
 
 
 if __name__ == '__main__':
-    # Test detection
+    # Print what this computer reports, for checking detection by hand.
     print(f"Desktop Environment: {get_desktop_environment()}")
     print(f"Is GNOME: {is_gnome()}")
     print(f"GNOME Shell Version: {get_gnome_shell_version()}")

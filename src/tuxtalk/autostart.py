@@ -7,7 +7,7 @@ itself — the command that a fresh install writes and the command Preferences
 writes can never drift apart.
 
 The launch command specifically must resolve to the env-setting wrapper
-(`/usr/bin/talktype` → AppRun), not a bare `python3 -m tuxtalk.tray`: the bundled
+(`/usr/bin/tuxtalk` → AppRun), not a bare `python3 -m tuxtalk.tray`: the bundled
 interpreter has no PYTHONPATH/LD_LIBRARY_PATH/GI_TYPELIB_PATH, so a raw-Python
 autostart line dies silently at login with ModuleNotFoundError.
 """
@@ -43,10 +43,10 @@ def get_launch_command(prefer_installed_appimage: bool = False) -> str:
     lookup → bare interpreter (last resort). See the module docstring for why the
     packaged launcher must win over a bare-Python invocation.
 
-    From an AppImage, the installed copy (~/AppImages/TalkType.AppImage) wins
+    From an AppImage, the installed copy (~/AppImages/TuxTalk.AppImage) wins
     over the file actually running, which on first run is usually the one in
-    ~/Downloads. Pointing autostart at the download meant cleaning up Downloads
-    silently stopped TuxTalk starting at login. Setup copies the AppImage in
+    ~/Downloads, so cleaning up Downloads can't silently stop TuxTalk starting
+    at login. Setup copies the AppImage in
     the background, so it passes *prefer_installed_appimage* rather than
     relying on the copy having finished.
     """
@@ -117,8 +117,8 @@ def get_icon_path() -> str:
 
 
 # The description KDE's Autostart page (and other desktops) shows for the entry.
-# Same wording as the store listing's summary. The old text named Faster-Whisper
-# and Wayland only, both stale since Parakeet became the default and X11 works.
+# Same wording as the store listing's summary. _OLD_COMMENTS are earlier
+# descriptions that refresh_autostart_comment() replaces.
 AUTOSTART_COMMENT = "Hold a key, talk, and your words are typed for you"
 AUTOSTART_COMMENT_DEV = AUTOSTART_COMMENT + " (development version)"
 _OLD_COMMENTS = ("AI-powered dictation for Wayland using Faster-Whisper",
@@ -126,6 +126,7 @@ _OLD_COMMENTS = ("AI-powered dictation for Wayland using Faster-Whisper",
 
 
 def _autostart_desktop_path() -> str:
+    """The autostart .desktop file for this build (dev or installed)."""
     from . import config
     autostart_dir = os.path.expanduser("~/.config/autostart")
     filename = "tuxtalk-dev.desktop" if config.DEV_MODE else "tuxtalk.desktop"
@@ -137,8 +138,7 @@ def _set_autostart_flatpak(enable: bool) -> bool:
 
     A sandboxed app CANNOT make itself autostart by writing ~/.config/autostart:
     inside the sandbox that path is the app's PRIVATE config, which the host
-    desktop never reads (verified — this is why "start at login" silently did
-    nothing on the Flatpak). RequestBackground(autostart=…) is the sanctioned
+    desktop never reads. RequestBackground(autostart=…) is the sanctioned
     path: the portal writes a HOST autostart entry whose Exec is
     `flatpak run … talktype-launcher` — the only command that launches with the
     bundled environment. The desktop may prompt the user the first time.
@@ -302,12 +302,10 @@ def refresh_autostart_comment() -> bool:
 def repair_stale_appimage_autostart() -> bool:
     """Point an existing launch-at-login entry at the installed AppImage.
 
-    Before 0.10.1, setup pointed the entry at whichever AppImage the user ran
-    it from, usually the one in ~/Downloads. 0.10.1 fixed that for new setups
-    only. Existing entries kept launching that copy: an old version, or one
-    that was deleted when Downloads got cleaned, and on Ubuntu 26.04 an old
-    one that needs libfuse2 and never starts. TuxTalk just silently stopped
-    starting at login.
+    Entries written by older setups launch whichever AppImage the user ran
+    setup from, usually the one in ~/Downloads: an old version, one deleted
+    when Downloads is cleaned, or (on Ubuntu 26.04) one that needs libfuse2
+    and never starts. TuxTalk then silently stops starting at login.
 
     Only the AppImage repairs, only when the installed copy exists, and only
     an enabled entry that launches some other TuxTalk AppImage. Disabled

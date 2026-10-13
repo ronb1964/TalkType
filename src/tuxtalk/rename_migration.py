@@ -1,7 +1,7 @@
 """Move a TalkType install's folders to their TuxTalk names (0.15.0 rename).
 
 TalkType became TuxTalk because "TALKTYPE" is another company's registered
-trademark for dictation software. Users must not notice beyond the new name:
+trademark for dictation software. Users should notice nothing but the new name.
 
 Runs first in every entry point (tray, dictation service, Preferences), before
 anything reads a path. Each old folder is renamed to its new name and replaced
@@ -19,6 +19,7 @@ _AUTO_CREATED = {"tuxtalk.log", "tuxtalk.log.old"}
 
 
 def _only_auto_created(folder):
+    """True if *folder* holds nothing but files TuxTalk made by itself on start."""
     try:
         names = os.listdir(folder)
     except OSError:
@@ -34,10 +35,12 @@ NOTICE_FILE = ".rename-notice-pending"
 
 
 def notice_pending(config_dir):
+    """True if the "TalkType is now TuxTalk" notice is still to be shown."""
     return os.path.isfile(os.path.join(config_dir, NOTICE_FILE))
 
 
 def notice_shown(config_dir):
+    """Record that the rename notice has been shown."""
     try:
         os.remove(os.path.join(config_dir, NOTICE_FILE))
     except OSError:
@@ -184,8 +187,8 @@ def adopt_old_install(home=None, dev=False, running_appimage=None):
     AppImage is renamed (safe while it runs) and a symlink keeps the old path
     working; an existing TuxTalk.AppImage is never overwritten, and only the
     AppImage that is actually running is renamed (*running_appimage*, the
-    APPIMAGE variable): a downloaded TuxTalk run beside an installed 0.14.6
-    must not turn that old file into the installed TuxTalk. The .desktop
+    APPIMAGE variable): a downloaded TuxTalk run beside an installed older
+    TalkType must not turn that old file into the installed TuxTalk. The .desktop
     entries are rewritten under the new name and the old ones removed, so the
     menu never lists both and login never starts both.
     """
@@ -233,9 +236,9 @@ def adopt_old_install(home=None, dev=False, running_appimage=None):
 # Pinned dock and favourite entries
 # ---------------------------------------------------------------------------
 # The menu entries were renamed (adopt_old_install above; the .deb/.rpm and
-# AUR packages install the new names). A dock that had pinned the old name
-# then shows a blank, generic icon on KDE (Ron's own panel, 2026-10-11) and
-# GNOME silently drops it from the favourites, so those lists are rewritten.
+# AUR packages install the new names). A dock that pinned the old name shows a
+# blank, generic icon on KDE and GNOME silently drops it from the favourites,
+# so those lists are rewritten.
 
 LAUNCHER_RENAMES = {
     "talktype.desktop": "tuxtalk.desktop",
