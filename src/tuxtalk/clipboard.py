@@ -231,21 +231,25 @@ class ClipboardKeeper:
             self._cancel = self._schedule(self._delay, lambda: self._restore(text, generation))
 
     def _restore(self, text, generation):
+        # Under the lock throughout: a paste starting meanwhile waits (the
+        # wl-paste / wl-copy calls are time-limited), so it can neither save
+        # this dictation as the user's copy nor have its own dictation
+        # overwritten by this restore before the app reads it.
         with self._lock:
             if generation != self._generation:
                 return          # a newer paste took over; it will restore
             saved, self._saved, self._cancel = self._saved, _NOTHING, None
-        if saved is _NOTHING:
-            return
-        try:
-            current = _wl_paste(_best_type(_wl_paste_types()) or "text/plain")
-        except Exception:
-            current = None
-        if current != text.encode("utf-8"):
-            logger.info("Clipboard changed after the paste; leaving it as it is")
-            return
-        if _write_back(saved):
-            logger.info("Clipboard restored after paste")
+            if saved is _NOTHING:
+                return
+            try:
+                current = _wl_paste(_best_type(_wl_paste_types()) or "text/plain")
+            except Exception:
+                current = None
+            if current != text.encode("utf-8"):
+                logger.info("Clipboard changed after the paste; leaving it as it is")
+                return
+            if _write_back(saved):
+                logger.info("Clipboard restored after paste")
 
 
 # --- Voice editing: the text selected in the focused app -----------------------------

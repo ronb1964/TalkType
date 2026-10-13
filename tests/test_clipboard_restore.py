@@ -204,3 +204,15 @@ def test_the_sensitive_restore_uses_wl_copy_sensitive(monkeypatch):
     cb._wl_copy_bytes(b"words", "text/plain")
     assert runs == [["wl-copy", "--sensitive", "--type", "text/plain"],
                     ["wl-copy", "--type", "text/plain"]]
+
+
+def test_a_paste_waits_for_a_restore_that_is_under_way(keeper, board, monkeypatch):
+    """The restore read and wrote the clipboard after letting go of the lock,
+    so a new paste could start in between and have its dictation overwritten."""
+    held = []
+    write = board.write
+    monkeypatch.setattr(cb, "_wl_copy_bytes",
+                        lambda *a, **k: held.append(keeper._lock.locked()) or write(*a, **k))
+    paste(keeper, board, "dictated words")
+    run_pending(keeper)
+    assert held == [True] and board.data == b"what I copied"
