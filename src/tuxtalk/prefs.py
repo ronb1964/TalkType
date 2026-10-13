@@ -344,15 +344,20 @@ class PreferencesWindow:
         # Connect window close event to cleanup
         self.window.connect("delete-event", self.on_window_close)
         
-        # Show window - force it to appear
+        self._show_window()
+        # Don't auto-start level monitoring - only when user clicks record button
+
+    def _show_window(self):
+        """Show the window with the rows that depend on a setting already hidden."""
         self.window.show_all()
+        # show_all() makes every child visible, so rows hidden while the tabs
+        # were built come back. Hide them again here, before the main loop
+        # draws anything, so they never flash on screen.
+        self._update_timeout_ui_state()
+        self._update_language_ui_state()
         self.ok_btn.grab_default()  # Now safe to grab default after window is shown
         self.window.present()  # Bring window to front
         # Note: Don't use set_keep_above - it interferes with combo box popups
-
-        # Initialize UI state after window is shown
-        GLib.timeout_add(200, self._update_language_ui_state)
-        # Don't auto-start level monitoring - only when user clicks record button
 
     def _load_css(self):
         """Load custom CSS stylesheet for preferences window ONLY (not globally)."""
@@ -936,7 +941,7 @@ class PreferencesWindow:
         grid.attach(self.lang_combo, 1, row, 1, 1)
         row += 1
 
-        # Initial visibility will be set by _update_language_ui_state
+        # Initial visibility is set by _show_window
 
         # A warning for model/device/language combinations that don't do what
         # they say: Parakeet with CUDA runs on the processor, and Parakeet
@@ -1856,9 +1861,6 @@ class PreferencesWindow:
         self.timeout_spin.set_tooltip_text("Number of minutes of inactivity before automatically stopping dictation.\n• 1-5 minutes: Very aggressive (good for short sessions)\n• 5-15 minutes: Balanced (recommended for laptop use)\n• 15-30 minutes: Conservative (good for desktop use)")
         grid.attach(self.timeout_spin, 1, row, 1, 1)
         row += 1
-
-        # Set initial visibility of timeout controls
-        self._update_timeout_ui_state()
 
         # Add horizontal separator before GPU section
         separator2 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
