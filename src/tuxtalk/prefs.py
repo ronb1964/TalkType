@@ -5229,6 +5229,8 @@ class PreferencesWindow:
 
     def on_window_close(self, widget, event):
         """Handle window close event: stop the mic test, clean up PID file."""
+        if getattr(self, "_waiting_for_kde", False):
+            return True     # Apply/OK is still using the window
         self._stop_mic_test()
         self._release_pidfile()
         Gtk.main_quit()
@@ -5648,7 +5650,10 @@ class PreferencesWindow:
         deadline = time.monotonic() + 6
         # The wait keeps the window drawn by running the main loop, which
         # would also let a second Apply, OK or Cancel run inside this one.
+        # The title bar's close button is the window manager's, so
+        # on_window_close refuses it separately while the flag is set.
         self.window.set_sensitive(False)
+        self._waiting_for_kde = True
         try:
             while time.monotonic() < deadline:
                 found = kwin_hotkeys.refused_since(since)
@@ -5659,6 +5664,7 @@ class PreferencesWindow:
                 time.sleep(0.1)
             return None
         finally:
+            self._waiting_for_kde = False
             self.window.set_sensitive(True)
 
     def _after_hotkey_change(self, changed, since):
