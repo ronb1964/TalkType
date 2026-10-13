@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 
 
 EXTENSION_UUID = 'talktype@ronb1964.github.io'
+# Every release publishes the zip under this TalkType name and as
+# tuxtalk-gnome-extension.zip, so older installs find it too.
 EXTENSION_ZIP_NAME = 'talktype-gnome-extension.zip'
 EXTENSION_DOWNLOAD_URL = f'https://github.com/ronb1964/TuxTalk/releases/latest/download/{EXTENSION_ZIP_NAME}'
 # The release publishes SHA256SUMS.txt alongside the zip. The extension
@@ -43,9 +45,8 @@ def _fetch_extension_sha256() -> Optional[str]:
 
     Raises ChecksumUnavailableError when the checksums file exists but the
     extension is not listed in it, or when the fetch fails for any other
-    reason. Swallowing those returned None too, so an unverifiable zip was
-    treated exactly like a release that never published checksums — which
-    made the verification useless in the cases it exists to catch.
+    reason: an unverifiable zip must not be treated like a release that never
+    published checksums, or the check would miss the very cases it exists for.
     """
     from .download_utils import parse_sha256sums
     try:
@@ -133,19 +134,19 @@ def install_extension_from_local(source_dir: str, auto_enable: bool = True) -> b
         # Copy extension files
         shutil.copytree(source_dir, target_dir)
 
-        print(f"✅ Extension installed to {target_dir}")
+        print(f"Extension installed to {target_dir}")
 
         # Auto-enable if requested
         if auto_enable:
             if enable_extension():
-                print("✅ Extension enabled - will be active after logout/login")
+                print("Extension enabled - will be active after logout/login")
             else:
-                print("⚠️  Failed to auto-enable extension - you can enable it manually")
+                print("Failed to auto-enable extension - you can enable it manually")
 
         return True
 
     except Exception as e:
-        print(f"❌ Failed to install extension: {e}")
+        print(f"Failed to install extension: {e}")
         return False
 
 
@@ -189,7 +190,7 @@ def get_bundled_extension_path() -> Optional[str]:
         normalized = os.path.normpath(path)
         metadata_file = os.path.join(normalized, 'metadata.json')
         if os.path.isfile(metadata_file):
-            print(f"✅ Found bundled extension at: {normalized}")
+            print(f"Found bundled extension at: {normalized}")
             return normalized
 
     return None
@@ -225,13 +226,13 @@ def install_extension(progress_callback: Optional[Callable] = None) -> bool:
 
             # Enable the extension
             if enable_extension():
-                print("✅ Extension enabled - will be active after logout/login")
+                print("Extension enabled - will be active after logout/login")
             else:
-                print("⚠️  Failed to auto-enable extension - you can enable it manually from Extensions app")
+                print("Failed to auto-enable extension - you can enable it manually from Extensions app")
 
             return True
         else:
-            print("⚠️  Failed to install bundled extension, trying download...")
+            print("Failed to install bundled extension, trying download...")
 
     # Fall back to downloading from GitHub
     return download_and_install_extension(progress_callback)
@@ -271,9 +272,8 @@ def download_and_install_extension(progress_callback: Optional[Callable] = None)
                     percent = min(90, 10 + int((downloaded / total_size) * 70))
                     progress_callback(f"Downloading... {int((downloaded / total_size) * 100)}%", percent)
 
-            # Download extension zip. The timeout matters: the old
-            # urlretrieve call had none, so a stalled connection hung the
-            # install dialog forever with no way out. The sha256 (when the
+            # Download extension zip. The timeout keeps a stalled connection
+            # from hanging the install dialog forever. The sha256 (when the
             # release publishes it) verifies the JS bundle before install.
             from .download_utils import download_file
             try:
@@ -328,16 +328,16 @@ def download_and_install_extension(progress_callback: Optional[Callable] = None)
                 progress_callback("Enabling extension...", 95)
 
             if enable_extension():
-                print("✅ Extension enabled - will be active after logout/login")
+                print("Extension enabled - will be active after logout/login")
             else:
-                print("⚠️  Failed to auto-enable extension - you can enable it manually from Extensions app")
+                print("Failed to auto-enable extension - you can enable it manually from Extensions app")
 
             return True
 
     except Exception as e:
         if progress_callback:
             progress_callback(f"Installation failed: {e}", 0)
-        print(f"❌ Failed to download/install extension: {e}")
+        print(f"Failed to download/install extension: {e}")
         return False
 
 
@@ -375,19 +375,19 @@ def uninstall_extension() -> bool:
 
             # Remove the extension files
             shutil.rmtree(target_dir)
-            print(f"✅ Extension uninstalled")
+            print(f"Extension uninstalled")
             return True
         else:
             print("Extension not installed")
             return False
 
     except Exception as e:
-        print(f"❌ Failed to uninstall extension: {e}")
+        print(f"Failed to uninstall extension: {e}")
         return False
 
 
 if __name__ == '__main__':
-    # Test
+    # Print the extension's status, for checking by hand.
     print("Testing extension helper...")
     status = get_extension_status()
 
