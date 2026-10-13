@@ -3683,26 +3683,30 @@ _QUALITY_ORDER = ("large-v3", "parakeet-v3", "medium", "small", "base", "tiny")
 
 
 def _guard_large_v3_without_cuda(cfg):
-    """large-v3 on CUDA without TuxTalk's CUDA libraries runs as medium.
+    """large-v3 without any CUDA libraries runs as medium.
 
-    It keeps the service usable for someone who set up large-v3 with CUDA and
-    later lost the libraries (a fresh profile, a cleaned data folder). It must
-    leave Vulkan alone: large-v3 runs there without any CUDA library, and this
-    check predates Vulkan, so AMD and Intel users who set up large-v3 on their
-    graphics card silently got medium while the tray said "Large". Vulkan has
-    its own fallback, which tells the user.
+    Without CUDA, large-v3 would run on the processor, far too slowly to use.
+    This keeps the service usable for someone who set up large-v3 with CUDA
+    and later lost the libraries (a fresh profile, a cleaned data folder). It
+    uses the same check as Preferences, which accepts a system-wide CUDA
+    install, so a model Preferences offers is never swapped here. It applies
+    to every device but Vulkan: large-v3 runs there without any CUDA library,
+    and Vulkan has its own fallback, which tells the user.
     """
     if cfg.model != "large-v3" or str(cfg.device).lower() == "vulkan":
         return
     try:
-        from .cuda_helper import has_talktype_cuda_libraries
-        if not has_talktype_cuda_libraries():
+        from .cuda_helper import has_cuda_libraries
+        if not has_cuda_libraries():
             logger.warning(
                 "large-v3 selected but CUDA libraries not found — "
                 "falling back to 'medium' to prevent non-functional state."
             )
-            print("⚠️  large-v3 requires CUDA (not installed). Falling back to 'medium'.")
+            print("large-v3 requires CUDA (not installed). Falling back to 'medium'.")
             cfg.model = "medium"
+            _notify("TuxTalk", "Large-v3 needs the CUDA files, which aren't installed, so "
+                               "TuxTalk is using Medium for now. Download CUDA in "
+                               "Preferences, Advanced, to use Large-v3 again.")
     except Exception:
         pass  # If cuda_helper unavailable, let the existing error handling deal with it
 
@@ -3736,8 +3740,8 @@ def _build_model_or_exit(settings: Settings):
     except ModelUnavailable as e:
         from .model_helper import OFFERED_MODELS, is_model_cached_fast, model_display_name
         try:
-            from .cuda_helper import has_talktype_cuda_libraries
-            has_cuda = has_talktype_cuda_libraries()
+            from .cuda_helper import has_cuda_libraries
+            has_cuda = has_cuda_libraries()
         except Exception:
             has_cuda = False
         wanted = settings.model

@@ -121,7 +121,7 @@ def test_cancel_falls_back_to_a_downloaded_model_and_saves_it(monkeypatch):
     saved, notes = [], []
     monkeypatch.setattr(model_helper, "download_model_with_progress", download)
     monkeypatch.setattr(model_helper, "is_model_cached_fast", lambda m: m in ("small", "large-v3"))
-    monkeypatch.setattr(cuda_helper, "has_talktype_cuda_libraries", lambda: False)
+    monkeypatch.setattr(cuda_helper, "has_cuda_libraries", lambda: False)
     monkeypatch.setattr(config, "load_config", lambda: SimpleNamespace(model="parakeet-v3"))
     monkeypatch.setattr(config, "save_config", lambda cfg: saved.append(cfg.model))
     monkeypatch.setattr(app, "_notify", lambda title, body: notes.append(body))
