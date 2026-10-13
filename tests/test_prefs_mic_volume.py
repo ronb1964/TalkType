@@ -1,8 +1,8 @@
 """The Input Volume slider must control the mic TuxTalk records from.
 
-It always changed @DEFAULT_SOURCE@, so with a specific mic picked in the
-Microphone dropdown it showed and changed a different device: the test
-recording didn't change and another app's mic got turned down.
+Changing @DEFAULT_SOURCE@ while a specific mic is picked in the Microphone
+dropdown would show and change a different device: the test recording
+wouldn't change and another app's mic would get turned down.
 """
 from types import SimpleNamespace
 
@@ -40,7 +40,7 @@ def test_a_pipewire_device_maps_by_its_description():
 
 
 def test_a_second_input_on_a_card_is_not_mistaken_for_its_first():
-    """hw:2,2 matched the card's hw:2,0 source just by the card number."""
+    """hw:2,2 must not match the card's hw:2,0 source just by the card number."""
     assert P._pulse_source_for_mic("HD-Audio Generic: ALC897 Alt Analog (hw:2,2)",
                                    SOURCES) is None
 
@@ -104,7 +104,7 @@ def test_system_default_keeps_the_default_source(monkeypatch):
 
 def test_a_mic_that_is_no_longer_listed_uses_the_default_source(monkeypatch):
     """An unplugged mic: the dropdown shows System Default and the service
-    records from the default, but the slider was disabled for the old name."""
+    records from the default, so the slider follows the default too."""
     monkeypatch.setattr(P, "_list_pulse_sources", lambda: SOURCES)
     d = _stub("Unplugged USB Mic (hw:5,0)")
 
@@ -127,7 +127,7 @@ def test_a_mic_with_no_source_disables_the_slider(monkeypatch):
 
 
 def test_a_drag_sets_the_volume_once_on_the_chosen_source(monkeypatch):
-    """Each slider tick ran wpctl/pactl on the GTK thread."""
+    """A drag must not run wpctl/pactl on the GTK thread for each slider tick."""
     timers = []
     monkeypatch.setattr(P.GLib, "timeout_add", lambda ms, fn: timers.append(fn) or len(timers))
     calls = []
@@ -168,8 +168,9 @@ Source #61
 
 
 def test_pactl_without_json_is_read_from_its_text_output(monkeypatch):
-    """pactl before 16 (Ubuntu 22.04, Mint 21) has no -f json, so every
-    specific mic got no source and the slider was always disabled."""
+    """pactl before 16 (Ubuntu 22.04, Mint 21) has no -f json; without the text
+    fallback no specific mic would get a source and the slider would stay
+    disabled."""
     calls = []
 
     def run(cmd, **kw):

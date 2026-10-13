@@ -1,9 +1,8 @@
 """Rows that depend on a setting must be hidden when Preferences opens.
 
-The timeout row was hidden while the Advanced tab was built, then
-window.show_all() made it visible again, so a user with auto-timeout off saw
-a minutes spinner that did nothing. The language row was hidden 200 ms later
-by a timer, so it flashed on screen first.
+Hiding a row while its tab is built isn't enough: window.show_all() makes it
+visible again, so a user with auto-timeout off would see a minutes spinner
+that does nothing. Hiding it later on a timer makes it flash on screen first.
 """
 from types import SimpleNamespace
 

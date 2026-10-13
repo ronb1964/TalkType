@@ -1,8 +1,8 @@
 """nvidia-smi runs at most once per Preferences window.
 
 The General tab, the Device dropdown, the GPU status line and the large-v3
-check each ran it again on the GTK thread, delaying the window on a card in
-a low-power state.
+check all need its answer; running it for each on the GTK thread delays the
+window on a card in a low-power state.
 """
 from types import SimpleNamespace
 

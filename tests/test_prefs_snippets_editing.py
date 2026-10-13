@@ -33,8 +33,8 @@ def _window(rows):
 
 
 def test_an_untouched_new_row_is_not_saved():
-    """Add Snippet put the hint text into the row itself, so OK saved a live
-    snippet: saying "new phrase" typed "replacement text"."""
+    """The hint text in a new row is not a snippet; saving it would make
+    saying "new phrase" type "replacement text"."""
     d = _window([["talk type", "TalkType"]])
 
     d._on_add_command(None)
@@ -43,7 +43,7 @@ def test_an_untouched_new_row_is_not_saved():
 
 
 def test_a_duplicate_phrase_is_refused_and_explained(monkeypatch):
-    """Two rows with one phrase saved as one, silently dropping a row."""
+    """Two rows with one phrase would save as one, silently dropping a row."""
     monkeypatch.setattr(P.GLib, "idle_add", lambda fn, *a: fn(*a))
     d = _window([["talk type", "TalkType"], ["", ""]])
 
@@ -77,8 +77,9 @@ def test_a_row_may_keep_its_own_phrase():
 
 
 def test_a_write_error_is_reported_not_raised(tmp_path, monkeypatch):
-    """OSError (full disk, read-only folder) escaped from the OK handler, so
-    neither the snippets nor the settings were saved and nothing was said."""
+    """An OSError (full disk, read-only folder) must not escape the OK
+    handler, where neither the snippets nor the settings get saved and
+    nothing is said."""
     from tuxtalk import config as C
 
     monkeypatch.setattr(C, "CUSTOM_COMMANDS_PATH", str(tmp_path / "custom_commands.toml"))
@@ -94,8 +95,8 @@ def test_a_write_error_is_reported_not_raised(tmp_path, monkeypatch):
 
 
 def test_ok_stays_open_when_the_snippets_could_not_be_written():
-    """OK went on to close the window right after saying the snippets
-    weren't saved, throwing the unsaved edits away."""
+    """Closing right after saying the snippets weren't saved would throw the
+    unsaved edits away."""
     steps = []
     d = SimpleNamespace(commands_store=FakeStore([]),
                         _save_custom_commands=lambda: None,

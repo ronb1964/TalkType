@@ -1,7 +1,7 @@
 """While Preferences waits for KDE's verdict on a new hotkey, its buttons
-must not work: the wait runs the main loop, and a second Apply, OK or Cancel
-clicked then ran inside the first Apply (Cancel destroyed the window it was
-still using)."""
+must not work: the wait runs the main loop, so a second Apply, OK or Cancel
+clicked then would run inside the first Apply (Cancel would destroy the window
+it is still using)."""
 from types import SimpleNamespace
 
 from tuxtalk import kwin_hotkeys, service_launcher
@@ -40,8 +40,8 @@ def test_an_error_while_waiting_still_unlocks_it(monkeypatch):
 
 
 def test_the_title_bar_close_waits_too(monkeypatch):
-    """The window manager's close button isn't covered by set_sensitive:
-    closing then destroyed the window the first Apply went on to use."""
+    """The window manager's close button isn't covered by set_sensitive, and
+    closing then would destroy the window the first Apply goes on to use."""
     closed = []
     seen = []
     answers = iter([None, ["F8"]])

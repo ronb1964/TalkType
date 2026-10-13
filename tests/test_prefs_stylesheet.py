@@ -1,22 +1,19 @@
 """prefs_style.css must actually reach the widgets it styles.
 
-The stylesheet was attached to the Preferences *window's* style context. In
-GTK3 a window-scoped provider does not reach that window's children — measured
-with a real widget: a child button kept the theme default (50,50,50) under a
-window-scoped provider that set it red, and took the colour correctly from a
-screen-wide one. So every rule in the file except `window` silently did nothing
-for as long as it existed: roughly 70 selectors covering buttons, tabs, entries,
-switches, scales and scrollbars had never once rendered.
+In GTK3 a provider attached to a *window's* style context does not reach that
+window's children — measured with a real widget: a child button kept the theme
+default (50,50,50) under a window-scoped provider that set it red, and took the
+colour correctly from a screen-wide one. Window-scoped, every rule in the file
+except `window` silently does nothing.
 
-The fix has two halves and BOTH are required:
+So two things are required, and BOTH matter:
 
   1. install the provider screen-wide, so it reaches child widgets at all
   2. scope every selector to .talktype-prefs, so it does not restyle the help
-     dialog and every other GTK window in the process — which is exactly what
-     the original window-scoping was trying to prevent
+     dialog and every other GTK window in the process
 
-Half a fix is worse than none: screen-wide with unscoped selectors would repaint
-unrelated windows.
+Half of this is worse than none: screen-wide with unscoped selectors would
+repaint unrelated windows.
 """
 
 import pathlib
@@ -57,7 +54,7 @@ def test_every_selector_is_scoped_to_the_prefs_window():
 
 
 def test_stylesheet_is_installed_screen_wide():
-    """Window scope was the original bug — it never reached child widgets."""
+    """A window-scoped provider never reaches child widgets."""
     text = PREFS.read_text()
     loader = text.split("def _load_css", 1)[1].split("\n    def ", 1)[0]
     assert "add_provider_for_screen" in loader, (

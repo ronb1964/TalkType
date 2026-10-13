@@ -23,8 +23,8 @@ def _dummy(config=None):
 
 def test_update_config_ignores_none_value():
     """A GTK combo emits 'changed' with get_active_id()=None during
-    remove_all(); writing that None to config produced 'device = None'
-    in the TOML file, which is unparseable and wiped all settings."""
+    remove_all(); writing that None to config would produce 'device = None'
+    in the TOML file, which is unparseable and wipes all settings."""
     d = _dummy({"device": "cpu"})
     PreferencesWindow.update_config(d, "device", None)
     assert d.config["device"] == "cpu"  # unchanged
@@ -39,8 +39,8 @@ def test_update_config_sets_real_values():
 # --- type coercion of on-disk values against Settings field types ---
 
 def test_coerce_config_types_fixes_string_numbers():
-    """Configs written by the old hand-rolled parser era can contain
-    '5' instead of 5 — which crashed the window at build time."""
+    """Configs written by the old hand-rolled parser can contain '5' instead
+    of 5, which would crash the window at build time."""
     d = {"auto_timeout_minutes": "5", "indicator_offset_x": "0", "model": "small"}
     out = _coerce_config_types(d)
     assert out["auto_timeout_minutes"] == 5
@@ -49,9 +49,9 @@ def test_coerce_config_types_fixes_string_numbers():
 
 
 def test_coerce_config_types_fixes_string_floats():
-    """indicator_sensitivity = "1.0" reached Scale.set_value() as a string
-    and raised TypeError while the window was being built; "5.0" for an int
-    field was left as a string."""
+    """indicator_sensitivity = "1.0" must not reach Scale.set_value() as a
+    string (TypeError while the window is built), and "5.0" for an int field
+    must not stay a string."""
     d = {"indicator_sensitivity": "1.5", "auto_stop_seconds": 3,
          "auto_timeout_minutes": "5.0"}
     out = _coerce_config_types(d)
@@ -89,11 +89,10 @@ def _saveable(tmp_path, monkeypatch, config, at_open=None):
 def test_save_config_escapes_double_quotes(tmp_path, monkeypatch):
     """A microphone name containing a double quote must survive Apply.
 
-    config.py's writer escapes these via _toml_string, but the Preferences
-    window had its own unescaped copy of the serializer: one Apply click
-    wrote `mic = "Blue Yeti "Nano" USB"`, which is invalid TOML, so the
-    next load quarantined the file and reset every setting — including the
-    hotkey, which defaults to blank and silently kills dictation.
+    The Preferences window must escape them like config.py's _toml_string:
+    `mic = "Blue Yeti "Nano" USB"` is invalid TOML, so the next load would
+    quarantine the file and reset every setting — including the hotkey,
+    which defaults to blank and silently kills dictation.
     """
     d = _saveable(tmp_path, monkeypatch,
                   {"mic": 'Blue Yeti "Nano" USB', "hotkey": "F8", "language_mode": "auto"})
@@ -146,7 +145,7 @@ def _commands_window(rows, loaded=None):
 
 
 def test_saving_commands_over_a_damaged_file_does_not_raise(tmp_path, monkeypatch):
-    """save_custom_commands now refuses to overwrite a file it could not
+    """save_custom_commands refuses to overwrite a file it could not
     read. _save_custom_commands runs FIRST in both on_apply and on_ok, so
     letting that propagate would make clicking OK do nothing at all — the
     window would not even close. It must degrade, not wedge.
@@ -180,8 +179,8 @@ def test_saving_commands_normally_reports_success(tmp_path, monkeypatch):
 
 
 def test_apply_keeps_a_word_fixed_from_the_tray_while_prefs_was_open(tmp_path, monkeypatch):
-    """Preferences used to write back the list it loaded at open, deleting a
-    Fix a Word fix saved from the tray in the meantime."""
+    """Writing back the list loaded at open would delete a Fix a Word fix
+    saved from the tray in the meantime."""
     from tuxtalk import config as C
 
     path = tmp_path / "custom_commands.toml"
@@ -203,9 +202,9 @@ def test_apply_keeps_a_word_fixed_from_the_tray_while_prefs_was_open(tmp_path, m
 # --- Preferences must not write over a config it could not read ------------
 
 def test_save_config_refuses_when_the_file_on_disk_is_damaged(tmp_path, monkeypatch):
-    """Opening Preferences over an unparseable config showed bare defaults
-    (hotkey blank, model small). Clicking OK then wrote those defaults AND
-    copied the damaged file over config.toml.bak — destroying the only
+    """Opening Preferences over an unparseable config shows bare defaults
+    (hotkey blank, model small). Clicking OK must not write those defaults
+    AND copy the damaged file over config.toml.bak, destroying the only
     surviving copy of the user's real settings in one click.
     """
     cfg = tmp_path / "config.toml"
@@ -259,12 +258,12 @@ class FakeCombo:
 
 def test_hotkey_fallback_is_written_into_the_config(monkeypatch):
     """When no hotkey is configured (Settings default is ""), the dropdown
-    falls back to displaying F8 — but self.config kept "".
+    falls back to displaying F8, and self.config must say F8 too.
 
-    Clicking OK therefore saved a blank hotkey while the screen said F8, and
+    Otherwise OK saves a blank hotkey while the screen says F8, and
     re-selecting F8 emits no 'changed' signal because it is already active.
-    A user whose onboarding was interrupted has dead dictation and the one
-    screen they would use to fix it cannot fix it.
+    A user whose onboarding was interrupted would have dead dictation, and
+    the one screen they would use to fix it could not fix it.
     """
     d = SimpleNamespace(config={"hotkey": "", "toggle_hotkey": ""},
                         hotkey_combo=FakeCombo(),
@@ -292,10 +291,10 @@ def test_a_configured_hotkey_is_left_alone(monkeypatch):
 # --- "Launch at login" must follow the save, not the click ------------------
 
 def test_toggling_launch_at_login_does_not_take_effect_immediately():
-    """update_config wrote the autostart .desktop file the moment the box was
-    ticked. Clicking Cancel then discarded the config change but left the file
-    behind, so the checkbox and reality disagreed from then on — permanently,
-    since the next open reads the checkbox state from the config."""
+    """Writing the autostart .desktop file the moment the box is ticked would
+    survive a Cancel that discards the config change, so the checkbox and
+    reality would disagree from then on: the next open reads the checkbox
+    state from the config."""
     applied = []
     d = SimpleNamespace(config={"launch_at_login": False},
                         _handle_autostart=lambda v: applied.append(v))
@@ -346,9 +345,8 @@ def test_a_failing_autostart_does_not_break_saving(tmp_path, monkeypatch):
 
 
 def test_saving_an_unrelated_change_leaves_autostart_alone(tmp_path, monkeypatch):
-    """Every Apply rewrote the autostart entry, so turning TuxTalk off in the
-    desktop's own Autostart settings was undone by the next unrelated change,
-    and with it off every Apply rewrote the Hidden stub."""
+    """Rewriting the autostart entry on every Apply would undo turning TuxTalk
+    off in the desktop's own Autostart settings at the next unrelated change."""
     for launch in (True, False):
         applied = []
         d = _saveable(tmp_path, monkeypatch,

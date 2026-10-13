@@ -1,11 +1,9 @@
 """Preferences opened on a tab highlights that tab.
 
-Opening Preferences straight to a tab (tray -> Your Stats..., or --tab) showed
-the right page while the tab bar still highlighted "General" on KDE. The tabs
-had a 150 ms CSS transition, and Preferences switches tab before the window's
-first frame, so the transition never ran and the old highlight stayed until
-something forced a redraw. Reproduced on KDE Plasma 6.7 and fixed by removing
-only that transition (2026-10-08).
+Preferences can open straight to a tab (tray -> Your Stats..., or --tab), and
+switches tab before the window's first frame. A CSS transition on the tabs
+never runs then, so on KDE the tab bar would keep highlighting "General" until
+something forced a redraw; the tabs therefore have no transition.
 """
 import pathlib
 import re

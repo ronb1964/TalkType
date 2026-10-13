@@ -1,15 +1,15 @@
 """A model whose download did not finish must not stay in config.toml.
 
 Apply/OK save the config *before* downloading, because the downloader reads the
-model name out of the merged config. That ordering is deliberate, but it left a
-gap: cancel or fail the download and config.toml still names the new model,
+model name out of the merged config. That ordering is deliberate, but it leaves
+a gap: cancel or fail the download and config.toml still names the new model,
 while the running service is loaded with the old one. Model changes are
-deliberately excluded from the live-settings reload, so nothing corrects it.
+deliberately excluded from the live-settings reload, so nothing else corrects it.
 
-The second half is worse than the first. save_config() also resets
-_config_at_open to what it just wrote, so the retry sees no change at all:
-Preferences reports "your changes are already in effect" and skips the restart,
-leaving the service on the old model indefinitely.
+save_config() also resets _config_at_open to what it just wrote, so without the
+rollback a retry would see no change at all: Preferences would report "your
+changes are already in effect" and skip the restart, leaving the service on
+the old model indefinitely.
 
 These tests drive on_apply/on_ok with a stub `self`, which reaches the real
 ordering logic without constructing a GTK window. The failure path returns
@@ -51,8 +51,8 @@ class StubPrefs:
         return True
 
     def _changed_since_open(self):
-        # The real implementation — this is the baseline behaviour the bug
-        # corrupts, so it must not be stubbed out with something simpler.
+        # The real implementation: the rollback depends on this baseline
+        # behaviour, so it must not be stubbed out with something simpler.
         from tuxtalk.prefs import PreferencesWindow
 
         return PreferencesWindow._changed_since_open(self)
@@ -111,9 +111,7 @@ class TestApply:
         assert stub.restart_calls == 0
 
     def test_after_a_cancelled_download_a_retry_still_sees_a_change(self, prefs_cls):
-        """The 'already in effect' half of the bug.
-
-        Once rolled back, re-picking the model must register as a change so the
+        """Once rolled back, re-picking the model must register as a change so the
         next Apply actually restarts the service onto it.
         """
         stub = StubPrefs(on_disk_model="small", chosen_model="large-v3")
@@ -170,9 +168,8 @@ class FakeCombo:
 
 class TestDropdownFollowsTheRollback:
     def test_the_dropdown_goes_back_to_the_model_in_use(self, prefs_cls):
-        """Cancelling the Medium download left the dropdown on Medium while
-        the service kept running the old model, so Preferences showed a
-        model that wasn't in use."""
+        """After a cancelled Medium download the dropdown must not stay on
+        Medium while the service keeps running the old model."""
         stub = StubPrefs(on_disk_model="parakeet-v3", chosen_model="medium")
         stub.model_combo = FakeCombo(stub, "medium")
         stub.download_result = False
@@ -205,9 +202,9 @@ class FakeDeviceCombo:
 
 
 class TestADeviceChangeIsRolledBackToo:
-    """Ron, 0.14.5 test: Device from Vulkan to CPU, OK, cancel the download
-    of the processor copy of Parakeet, OK again. config.toml said "cpu", the
-    retry saw no change, and dictation kept running on the graphics card."""
+    """Device from Vulkan to CPU, OK, cancel the download of the processor
+    copy of Parakeet, OK again: the retry must see a change, or config.toml
+    says "cpu" while dictation keeps running on the graphics card."""
 
     def _stub(self):
         stub = StubPrefs(on_disk_model="parakeet-v3", chosen_model="parakeet-v3",

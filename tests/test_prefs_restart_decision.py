@@ -1,8 +1,8 @@
 """Preferences must restart the service only when the change requires it.
 
-Apply/OK used to restart unconditionally, so toggling auto-punctuation rebuilt
-the Whisper model — about ten seconds with the hotkey dead. Only model and
-device need that.
+Restarting unconditionally on Apply/OK would make toggling auto-punctuation
+rebuild the Whisper model — about ten seconds with the hotkey dead. Only model
+and device need that.
 
 These tests drive the decision helpers directly with a stub `self`, so they
 exercise the real logic without constructing a GTK window.
@@ -52,7 +52,7 @@ class TestChangedSinceOpen:
 
 class TestApplyOrRestart:
     def test_live_change_does_not_restart(self, prefs_cls):
-        """The common case — and the one that used to cost ten seconds."""
+        """The common case, which would otherwise cost ten seconds."""
         stub = StubPrefs({}, {})
 
         result = prefs_cls._apply_or_restart(stub, {"auto_period", "beeps"})
