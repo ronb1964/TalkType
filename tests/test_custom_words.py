@@ -280,6 +280,7 @@ def test_a_snippet_spoken_as_the_joined_word_still_fires(with_words, monkeypatch
 @pytest.mark.parametrize("raw, first", [
     ("New York is big", "New York"),
     ("TuxTalk's menu", "TuxTalk's"),
+    ("TuxTalk's, menu", "TuxTalk's,"),
 ])
 def test_continuing_mid_sentence_keeps_multi_word_and_possessive_names(raw, first, monkeypatch):
     monkeypatch.setattr(app, "_custom_words", ["New York", "TuxTalk"])
@@ -334,3 +335,8 @@ def test_an_unreadable_words_file_keeps_the_words_in_force(monkeypatch):
     app._reload_custom_words()
 
     assert app._custom_words == ["TuxTalk"]
+
+
+def test_a_possessive_followed_by_punctuation_is_still_the_word():
+    assert cw.starts_with_word("TuxTalk's, menu", ["TuxTalk"])
+    assert cw.starts_with_word("TuxTalk\u2019s.", ["TuxTalk"])

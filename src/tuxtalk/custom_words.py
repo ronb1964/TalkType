@@ -238,10 +238,10 @@ def starts_with_word(text, words):
     tokens = _WORD_RE.findall(text)[:MAX_PIECES]
     joined = ""
     for token in tokens:
-        piece = token
-        for a in _APOSTROPHES:
-            if piece.endswith(a + "s") or piece.endswith(a + "s."):
-                piece = piece[:piece.rfind(a)]
+        # Punctuation after a possessive ("TuxTalk's,") would hide its "'s".
+        piece = token.rstrip(".,;:!?…\"”)]}")
+        if piece.endswith(tuple(a + "s" for a in _APOSTROPHES)):
+            piece = piece[:-2]
         joined += _letters(piece)
         if joined in keys:
             return True
