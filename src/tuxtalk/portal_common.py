@@ -8,28 +8,13 @@ import logging
 
 import gi
 gi.require_version("Gio", "2.0")
-from gi.repository import Gio, GLib  # noqa: E402
+from gi.repository import Gio  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
 BUS_NAME = "org.freedesktop.portal.Desktop"
 OBJ_PATH = "/org/freedesktop/portal/desktop"
-from .config import APP_ID  # noqa: E402  (one app ID, defined in config)
 _counter = 0
-
-
-def register_app_id(bus, app_id: str = APP_ID) -> None:
-    """xdg-desktop-portal >=1.21 requires non-Flatpak apps to declare their app
-    id via the host Registry before GlobalShortcuts. Inside a real Flatpak the id
-    is supplied automatically and Register is refused — so this is a no-op there
-    and callers skip it when FLATPAK_ID is set. Failure here is non-fatal."""
-    try:
-        bus.call_sync(BUS_NAME, OBJ_PATH, "org.freedesktop.host.portal.Registry",
-                      "Register", GLib.Variant("(sa{sv})", (app_id, {})),
-                      None, Gio.DBusCallFlags.NONE, -1, None)
-        logger.info("Registered app id with the host portal Registry: %s", app_id)
-    except GLib.GError as e:
-        logger.debug("Registry.Register skipped: %s", e.message)
 
 
 def new_request_token() -> str:

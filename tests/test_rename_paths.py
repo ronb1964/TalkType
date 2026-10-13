@@ -1,5 +1,5 @@
 """Folder names, log name and app ID after the rename (TuxTalk, 0.15.0)."""
-from tuxtalk import config, desktop_identity, logger, portal_common
+from tuxtalk import config, desktop_identity, logger
 
 
 def test_new_folder_names():
@@ -10,7 +10,6 @@ def test_new_folder_names():
 def test_one_app_id_everywhere():
     assert config.APP_ID == "io.github.ronb1964.TuxTalk"
     assert desktop_identity.APP_ID == config.APP_ID
-    assert portal_common.APP_ID == config.APP_ID
 
 
 def test_log_lives_in_the_new_folder(monkeypatch):

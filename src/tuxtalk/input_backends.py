@@ -139,10 +139,6 @@ class PortalInputBackend(InputBackend):
         bus.signal_subscribe(None, self.IFACE, "Deactivated", None, None,
                              Gio.DBusSignalFlags.NONE, self._on_deactivated)
 
-        # Inside a Flatpak the app id is intrinsic; Registry is refused there.
-        if not os.environ.get("FLATPAK_ID"):
-            pc.register_app_id(bus)
-
         self._svc = app._ServiceState(self.cfg, self.input_device_idx)
         GLib.timeout_add(50, self._tick)
         create_session()
