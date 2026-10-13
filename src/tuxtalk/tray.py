@@ -21,7 +21,6 @@ from gi.repository import AyatanaAppIndicator3 as AppIndicator3
 import subprocess
 import time
 import sys
-import atexit
 import fcntl
 from .logger import setup_logger
 logger = setup_logger(__name__)
@@ -188,11 +187,10 @@ def maybe_show_recommend_notice():
     (first run sets recommend_notice_shown) or the Flatpak. Runs as a GLib
     timeout: True (ask again) until the dictation service is up, then False."""
     try:
-        import os as _os
         from . import recommend
         from .config import load_config, save_config
         from .cuda_helper import is_first_run
-        if _os.environ.get("FLATPAK_ID") or is_first_run():
+        if os.environ.get("FLATPAK_ID") or is_first_run():
             return False
         from .service_launcher import find_service_pids
         if not find_service_pids():
@@ -555,8 +553,12 @@ class DictationTray:
             self.indicator.set_icon_full("microphone-sensitivity-muted", "TuxTalk: Stopped")
         return True  # Continue the timer
 
-    def _emit_service_state_after_check(self, expected_state):
-        """Emit D-Bus service state signal after verifying actual state."""
+    def _emit_service_state_after_check(self):
+        """Send the service's real state to the GNOME extension.
+
+        The extension's switch flips as soon as it is clicked. When nothing
+        changed (a start that failed), update_status_and_menu stays silent,
+        so this is what puts the switch back."""
         if not self.dbus_service:
             return False
 
@@ -623,7 +625,7 @@ class DictationTray:
 
             # Emit D-Bus signal if available
             if self.dbus_service:
-                GLib.timeout_add_seconds(1, lambda: self._emit_service_state_after_check(True))
+                GLib.timeout_add_seconds(1, lambda: self._emit_service_state_after_check())
         except Exception as e:
             logger.error(f"Failed to start service: {e}", exc_info=True)
         GLib.timeout_add_seconds(1, lambda: self.update_status_and_menu(repeat=False))
@@ -636,7 +638,7 @@ class DictationTray:
 
             # Emit D-Bus signal if available
             if self.dbus_service:
-                GLib.timeout_add_seconds(1, lambda: self._emit_service_state_after_check(False))
+                GLib.timeout_add_seconds(1, lambda: self._emit_service_state_after_check())
         except Exception as e:
             logger.error(f"Failed to stop service: {e}")
         GLib.timeout_add_seconds(1, lambda: self.update_status_and_menu(repeat=False))
@@ -1138,7 +1140,7 @@ class DictationTray:
 
         # App name and version
         title_label = Gtk.Label()
-        title_label.set_markup(f'<span size="x-large"><b>TuxTalk</b></span>')
+        title_label.set_markup('<span size="x-large"><b>TuxTalk</b></span>')
         content.pack_start(title_label, False, False, 0)
 
         version_label = Gtk.Label(label=f"Version {__version__}")
@@ -1744,12 +1746,8 @@ class DictationTray:
                 logger.error(f"Error unregistering D-Bus service: {e}")
             self.dbus_service = None
 
-        # Quit the GTK main loop
+        # Quit the GTK main loop; main() returns and the process exits.
         Gtk.main_quit()
-
-        # Force exit to ensure process terminates
-        # Use a small delay to allow GTK cleanup
-        GLib.timeout_add(100, lambda: sys.exit(0))
     
     def _build_injection_submenu(self):
         """Build the Text Injection Mode submenu (Auto / Keyboard Typing / Clipboard Paste).
