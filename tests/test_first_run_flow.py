@@ -14,7 +14,7 @@ def env(monkeypatch):
     monkeypatch.setattr("tuxtalk.config.load_config", lambda: cfg)
     monkeypatch.setattr("tuxtalk.config.save_config", lambda c: calls.append(("save", c.model, c.device)))
     monkeypatch.setattr(wd, "_setup_vulkan_engine_first_run", lambda: calls.append(("engine",)), raising=False)
-    monkeypatch.setattr(wd, "_download_vulkan_model_first_run", lambda m: calls.append(("vk", m)) or True)
+    monkeypatch.setattr(wd, "_download_vulkan_model_first_run", lambda m, **k: calls.append(("vk", m)) or True)
     monkeypatch.setattr(wd, "_vulkan_speed_check_first_run", lambda m: calls.append(("speed", m)) or True)
     monkeypatch.setattr("tuxtalk.model_helper.is_model_cached_fast", lambda m: False)
     monkeypatch.setattr("tuxtalk.model_helper.download_model_with_progress",
@@ -64,7 +64,7 @@ def store(monkeypatch):
     calls = []
     monkeypatch.setattr("tuxtalk.config.load_config", lambda: types.SimpleNamespace(**saved))
     monkeypatch.setattr("tuxtalk.config.save_config", lambda c: saved.update(vars(c)))
-    monkeypatch.setattr(wd, "_download_vulkan_model_first_run", lambda m: True)
+    monkeypatch.setattr(wd, "_download_vulkan_model_first_run", lambda m, **k: True)
     monkeypatch.setattr("tuxtalk.model_helper.is_model_cached_fast", lambda m: False)
     monkeypatch.setattr("tuxtalk.model_helper.download_model_with_progress",
                         lambda m, **k: calls.append(m) or object())
@@ -103,7 +103,7 @@ def test_large_v3_becomes_small_when_it_ends_up_on_the_processor(store, monkeypa
 
 def test_failed_graphics_download_also_falls_back_to_small(store, monkeypatch):
     saved, calls = store
-    monkeypatch.setattr(wd, "_download_vulkan_model_first_run", lambda m: False)
+    monkeypatch.setattr(wd, "_download_vulkan_model_first_run", lambda m, **k: False)
     monkeypatch.setattr(wd, "_vulkan_speed_check_first_run", lambda m: True)
     wd._apply_first_run_setup({"model": "large-v3", "device": "vulkan", "dictation_language": "ja"})
     assert (saved["model"], saved["device"]) == ("small", "cpu")
@@ -123,6 +123,23 @@ def test_a_cancelled_first_run_download_starts_no_other(store, monkeypatch):
     wd._apply_first_run_setup({"model": "parakeet-v3", "device": "cpu", "dictation_language": "en"})
     assert calls == ["parakeet-v3"]
     assert saved["model"] == "parakeet-v3"     # offered again when the service starts
+
+
+def test_a_cancelled_graphics_download_starts_no_processor_download(store, monkeypatch):
+    """Cancel in the graphics download window went straight on to a
+    processor download of the same model: two Cancels to get out."""
+    saved, calls = store
+    speed = []
+
+    def cancelled(m, result_info=None):
+        result_info["cancelled"] = True
+        return False
+
+    monkeypatch.setattr(wd, "_download_vulkan_model_first_run", cancelled)
+    monkeypatch.setattr(wd, "_vulkan_speed_check_first_run", lambda m: speed.append(m) or True)
+    wd._apply_first_run_setup({"model": "parakeet-v3", "device": "vulkan", "dictation_language": "en"})
+    assert calls == [] and speed == []
+    assert (saved["model"], saved["device"]) == ("parakeet-v3", "cpu")   # offered when the service starts
 
 
 def test_a_failed_first_run_download_tries_one_smaller_model(store, monkeypatch):
@@ -146,7 +163,7 @@ def test_the_emergency_fallback_also_moves_to_the_processor(store, monkeypatch):
     """whisper.cpp has no copy of Tiny, so vulkan + tiny would not run."""
     saved, calls = store
 
-    def broken(m):
+    def broken(m, **k):
         raise RuntimeError("engine check failed")
 
     monkeypatch.setattr(wd, "_download_vulkan_model_first_run", broken)

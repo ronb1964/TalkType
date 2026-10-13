@@ -381,8 +381,28 @@ def test_first_run_parakeet_on_vulkan_fetches_an_engine_that_can_run_it(monkeypa
     monkeypatch.setattr(wv, "is_engine_installed", lambda *a: not a or a[0] != "parakeet-v3")
     monkeypatch.setattr(wv, "model_path", lambda m: None)
     monkeypatch.setattr(dpd, "UnifiedDownloadDialog", Dialog)
-    assert wd._download_vulkan_model_first_run("parakeet-v3") is False
+    info = {}
+    assert wd._download_vulkan_model_first_run("parakeet-v3", result_info=info) is False
     assert added == ["Graphics engine", "Speech model"]
+    assert info == {}          # it failed; nobody cancelled
+
+
+def test_first_run_vulkan_download_reports_a_cancel(monkeypatch):
+    from tuxtalk import welcome_dialog as wd
+    import tuxtalk.download_progress_dialog as dpd
+
+    class Dialog:
+        def __init__(self, **kw): pass
+        def add_task(self, task): pass
+        def run(self):
+            return {"Speech model": {"success": False, "cancelled": True, "completed": False}}
+
+    monkeypatch.setattr(wv, "is_engine_installed", lambda *a: True)
+    monkeypatch.setattr(wv, "model_path", lambda m: None)
+    monkeypatch.setattr(dpd, "UnifiedDownloadDialog", Dialog)
+    info = {}
+    assert wd._download_vulkan_model_first_run("small", result_info=info) is False
+    assert info == {"cancelled": True}
 
 
 def test_first_run_vulkan_uses_the_preferences_speed_check(monkeypatch):

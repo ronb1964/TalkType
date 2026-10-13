@@ -2816,9 +2816,14 @@ def _vulkan_speed_check_first_run(model):
         return False
 
 
-def _download_vulkan_model_first_run(model):
+def _download_vulkan_model_first_run(model, result_info=None):
     """Download *model* in whisper.cpp's format (and an engine that can run
-    it, if the one there can't). True when both are on disk."""
+    it, if the one there can't). True when both are on disk.
+
+    result_info: optional dict; "cancelled" is set True in it when the user
+    cancelled a download or closed the window, which False alone can't tell
+    apart from a failed download.
+    """
     try:
         from tuxtalk import whisper_vulkan as wv
         from tuxtalk.download_progress_dialog import DownloadTask, UnifiedDownloadDialog
@@ -2833,8 +2838,12 @@ def _download_vulkan_model_first_run(model):
         if wv.model_path(model) is None:
             dialog.add_task(DownloadTask("Speech model", wv.MODEL_FILES[model][1],
                                          wv.make_model_download_func(model)))
-        dialog.run()
-        return wv.is_installed(model)
+        results = dialog.run() or {}
+        installed = wv.is_installed(model)
+        if (not installed and result_info is not None
+                and any(r.get("cancelled") for r in results.values())):
+            result_info["cancelled"] = True
+        return installed
     except Exception as e:
         logger.warning(f"Vulkan model download failed: {e}")
         return False
@@ -2897,7 +2906,8 @@ def _apply_first_run_setup(result):
         download_info = {}
         if device.lower() == "vulkan":
             # One download window: it fetches the engine too when it's missing.
-            vulkan_ready = (_download_vulkan_model_first_run(selected_model)
+            vulkan_ready = (_download_vulkan_model_first_run(selected_model,
+                                                             result_info=download_info)
                             and _vulkan_speed_check_first_run(selected_model))
             # Re-read: the steps above saved what they learned (the speed
             # check records vulkan_slower), and saving the copy loaded before
@@ -2929,6 +2939,10 @@ def _apply_first_run_setup(result):
             config.model = selected_model
             save_config(config)
             model = True  # Treat as success so the flow continues normally
+        elif download_info.get("cancelled"):
+            # Cancel in the graphics download window: no processor download
+            # straight after it. The service offers that one when it starts.
+            model = None
         else:
             # Model not on disk yet — download it with a progress bar
             model = download_model_with_progress(
