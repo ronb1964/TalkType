@@ -87,6 +87,46 @@ def follow_position(window, width, height, monitor, position="bottom-center"):
     return x, y
 
 
+# How far the fixed positions (top-left, bottom-center...) keep from the
+# monitor's edges.
+EDGE_MARGIN = 20
+
+
+def fixed_position(position, width, height, monitor, offset_x=0, offset_y=0):
+    """Top-left corner for a *width* x *height* indicator at *position*
+    ("center", "top-left", "bottom-center", "right-center"...) on *monitor*
+    (a window_geometry.Rect), moved by the Audio tab's offset and kept on that
+    monitor. Unknown names mean the centre."""
+    position = (position or "").lower()
+    if "left" in position:
+        x = EDGE_MARGIN
+    elif "right" in position:
+        x = monitor.w - width - EDGE_MARGIN
+    else:
+        x = (monitor.w - width) // 2
+    if position.startswith("top"):
+        y = EDGE_MARGIN
+    elif position.startswith("bottom"):
+        y = monitor.h - height - EDGE_MARGIN
+    else:
+        y = (monitor.h - height) // 2
+    x = monitor.x + x + offset_x
+    y = monitor.y + y + offset_y
+    x = max(monitor.x, min(x, monitor.x + monitor.w - width))
+    y = max(monitor.y, min(y, monitor.y + monitor.h - height))
+    return x, y
+
+
+def _main_monitor_rect():
+    """The primary monitor (or the first one), as a window_geometry.Rect.
+    The screen's own size spans every monitor, which put "center" on the
+    seam between two side-by-side screens."""
+    from .window_geometry import Rect
+    display = Gdk.Display.get_default()
+    g = (display.get_primary_monitor() or display.get_monitor(0)).get_geometry()
+    return Rect(g.x, g.y, g.width, g.height)
+
+
 def _monitor_rect_at(x, y):
     """The monitor holding (x, y), as a window_geometry.Rect."""
     from .window_geometry import Rect
@@ -189,48 +229,10 @@ class RecordingIndicator(Gtk.Window):
         # Must be called from GTK main thread
         def _do_show():
             try:
-                # Get screen dimensions
-                screen = self.get_screen()
-                screen_width = screen.get_width()
-                screen_height = screen.get_height()
-
                 # Window dimensions — same expression used to size the window,
                 # so the maths and the real window cannot disagree.
                 window_width = int(BASE_WIDTH * self.scale)
                 window_height = int(BASE_HEIGHT * self.scale)
-
-                # Calculate base position based on configured anchor
-                if self.position == "center":
-                    window_x = (screen_width - window_width) // 2
-                    window_y = (screen_height - window_height) // 2
-                elif self.position == "top-left":
-                    window_x = 20
-                    window_y = 20
-                elif self.position == "top-center":
-                    window_x = (screen_width - window_width) // 2
-                    window_y = 20
-                elif self.position == "top-right":
-                    window_x = screen_width - window_width - 20
-                    window_y = 20
-                elif self.position == "bottom-left":
-                    window_x = 20
-                    window_y = screen_height - window_height - 20
-                elif self.position == "bottom-center":
-                    window_x = (screen_width - window_width) // 2
-                    window_y = screen_height - window_height - 20
-                elif self.position == "bottom-right":
-                    window_x = screen_width - window_width - 20
-                    window_y = screen_height - window_height - 20
-                elif self.position == "left-center":
-                    window_x = 20
-                    window_y = (screen_height - window_height) // 2
-                elif self.position == "right-center":
-                    window_x = screen_width - window_width - 20
-                    window_y = (screen_height - window_height) // 2
-                else:
-                    # Default to center if position unknown
-                    window_x = (screen_width - window_width) // 2
-                    window_y = (screen_height - window_height) // 2
 
                 follow = self._follow_target(window_width, window_height)
                 if follow:
@@ -238,13 +240,9 @@ class RecordingIndicator(Gtk.Window):
                     # dictated into; the configured offset doesn't apply.
                     window_x, window_y = follow
                 else:
-                    # Apply custom offset
-                    window_x += self.offset_x
-                    window_y += self.offset_y
-
-                    # Ensure window stays on screen
-                    window_x = max(0, min(window_x, screen_width - window_width))
-                    window_y = max(0, min(window_y, screen_height - window_height))
+                    window_x, window_y = fixed_position(
+                        self.position, window_width, window_height,
+                        _main_monitor_rect(), self.offset_x, self.offset_y)
 
                 self.show_all()
                 # Don't call present() - it might steal focus from the text entry field
