@@ -326,7 +326,7 @@ def edit_env(monkeypatch):
             seen["put_back"] += 1
         return selection["text"], put_back
     monkeypatch.setattr(cb, "copy_selection", copy_selection)
-    monkeypatch.setattr(app, "_inject_text", lambda text, mode, t0: seen["typed"].append(text) or "ok")
+    monkeypatch.setattr(app, "_inject_text", lambda text, mode, t0, one_block=False: seen["typed"].append(text) or "ok")
     monkeypatch.setattr(app, "_notify", lambda title, msg: seen["notices"].append(msg))
     monkeypatch.setattr(app, "_beep", lambda on, *a: seen["beeps"].append(a))
     monkeypatch.setattr(history, "add_entry", lambda text: seen["history"].append(text))
@@ -349,10 +349,14 @@ def test_an_edit_replaces_the_selection(edit_env):
     assert edit_env["put_back"] == 1 and edit_env["notices"] == []
 
 
-def test_line_breaks_go_in_as_shift_enter(edit_env):
+def test_a_multi_line_rewrite_goes_in_as_one_block(edit_env, monkeypatch):
+    """Line by line with Enter in between, KWrite continued each "- " list
+    line and the dashes piled up ("- - 2", "- - - 3"); Ron, 2026-10-12."""
+    calls = []
+    monkeypatch.setattr(app, "_inject_text", lambda text, mode, t0, one_block=False: calls.append((text, one_block)) or "ok")
     edit_env["engine"].answer = "- Buy plywood\n- Call George"
     run_edit()
-    assert edit_env["typed"] == ["- Buy plywood§SHIFT_ENTER§- Call George"]
+    assert calls == [("- Buy plywood\n- Call George", True)]
 
 
 @pytest.mark.parametrize("setup, words", [
@@ -377,7 +381,7 @@ def test_without_the_ai_downloaded_it_says_where_to_turn_it_on(edit_env, monkeyp
 
 
 def test_the_clipboard_comes_back_even_when_typing_fails(edit_env, monkeypatch):
-    monkeypatch.setattr(app, "_inject_text", lambda text, mode, t0: (_ for _ in ()).throw(RuntimeError("boom")))
+    monkeypatch.setattr(app, "_inject_text", lambda text, mode, t0, one_block=False: (_ for _ in ()).throw(RuntimeError("boom")))
     run_edit()
     assert edit_env["put_back"] == 1
 
@@ -630,3 +634,56 @@ def test_tapping_the_toggle_key_during_a_hold_edit_lets_go_of_the_keyboard(keylo
     key(F8, 1, {SHIFT})                      # hold edit: keyboards grabbed
     key(F9, 1, set())                        # brush the toggle key
     assert keyloop["stops"] == 1 and released
+
+
+
+# --- Ron's first live test, 2026-10-12 ----------------------------------------------------
+
+@pytest.fixture
+def injection(monkeypatch):
+    """_inject_text with the desktop faked: what was pasted, typed, keyed."""
+    seen = {"pasted": [], "typed": [], "shift_enter": 0}
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "org.kde.kwrite")
+    monkeypatch.setattr(app, "_paste_text", lambda t: seen["pasted"].append(t) or True)
+    monkeypatch.setattr(app, "_send_shift_enter", lambda: seen.__setitem__("shift_enter", seen["shift_enter"] + 1) or True)
+
+    class Backend:
+        def type_text(self, t):
+            seen["typed"].append(t)
+            return True
+    monkeypatch.setattr(app, "_output_backend", lambda: Backend())
+    return seen
+
+
+def test_one_block_is_pasted_once_with_its_line_breaks(injection, monkeypatch):
+    monkeypatch.setattr(app, "_determine_injection_method", lambda mode: ("paste", False, "test"))
+    app._inject_text("- 1\n- 2\n- 3", "auto", 0, one_block=True)
+    assert injection["pasted"] == ["- 1\n- 2\n- 3"] and injection["shift_enter"] == 0
+
+
+def test_dictation_still_pastes_line_by_line(injection, monkeypatch):
+    monkeypatch.setattr(app, "_determine_injection_method", lambda mode: ("paste", False, "test"))
+    app._inject_text("one§SHIFT_ENTER§two", "auto", 0)
+    assert injection["pasted"] == ["one", "two"] and injection["shift_enter"] == 1
+
+
+def test_a_typed_block_uses_shift_enter_not_enter(injection, monkeypatch):
+    """Typing a plain Enter would send the message in a chat box."""
+    monkeypatch.setattr(app, "_determine_injection_method", lambda mode: ("type", False, "test"))
+    app._inject_text("- 1\n- 2", "type", 0, one_block=True)
+    assert injection["typed"] == ["- 1§SHIFT_ENTER§- 2"]
+
+
+def test_nothing_selected_says_so_even_with_nothing_said(edit_env, monkeypatch):
+    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: None)
+    edit_env["selection"]["text"] = None
+    run_edit()
+    assert len(edit_env["notices"]) == 1 and "Select the text" in edit_env["notices"][0]
+
+
+def test_a_selection_with_nothing_said_says_so(edit_env, monkeypatch):
+    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: None)
+    run_edit()
+    assert edit_env["typed"] == []
+    assert len(edit_env["notices"]) == 1 and "didn't catch" in edit_env["notices"][0]
+    assert edit_env["put_back"] == 1

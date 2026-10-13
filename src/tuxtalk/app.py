@@ -2405,7 +2405,7 @@ def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: b
     return text
 
 
-def _inject_text(text: str, injection_mode: str, t0: float) -> str:
+def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = False) -> str:
     """Determine the best injection method and insert text into the active app.
 
     Tries AT-SPI first (if auto mode recommends it), then paste, then typing.
@@ -2415,6 +2415,11 @@ def _inject_text(text: str, injection_mode: str, t0: float) -> str:
     multi-part dictation arrived, then it stopped) or "failed" (none did).
     The caller tells the user about anything but "ok"; this function used to
     return nothing, so a dictation that never arrived failed silently.
+
+    *one_block* (voice editing) pastes text with line breaks in one go, real
+    newlines and all. Line by line with Enter in between, an editor continues
+    each "- " list line and the dashes pile up. Typed, the breaks still go in
+    as Shift+Enter, since a plain Enter would send a chat message.
     """
     # Determine injection method (auto mode does smart detection)
     detection_start = time.time()
@@ -2501,6 +2506,8 @@ def _inject_text(text: str, injection_mode: str, t0: float) -> str:
             text = text.replace("\t", "    ")
 
     use_paste = (actual_mode == "paste")
+    if one_block and "\n" in text and (use_atspi or not use_paste):
+        text = text.replace("\n", "\xa7SHIFT_ENTER\xa7")
     logger.info(f"Injection mode: configured={injection_mode!r}, actual={actual_mode!r}, atspi={use_atspi}, reason={reason}")
     if injection_mode == "auto":
         print(f"\U0001f50d Auto mode: {reason}")
@@ -2529,7 +2536,7 @@ def _inject_text(text: str, injection_mode: str, t0: float) -> str:
             inject_ok = _output_backend().type_text(text)
 
     # --- Smart hybrid paste (text with line-break markers) ---
-    elif use_paste and ("\xa7SHIFT_ENTER\xa7" in text or "\n" in text):
+    elif use_paste and not one_block and ("\xa7SHIFT_ENTER\xa7" in text or "\n" in text):
         marker = "\xa7SHIFT_ENTER\xa7"
         # A terminal ignores Shift+Enter but honours a newline inside a paste,
         # so it gets one chunk carrying real newlines and no keystrokes at all.
@@ -2589,6 +2596,8 @@ def _inject_text(text: str, injection_mode: str, t0: float) -> str:
 
     # --- Typing fallback ---
     else:
+        if one_block:
+            text = text.replace("\n", "\xa7SHIFT_ENTER\xa7")   # a paste that failed
         inject_ok = _output_backend().type_text(text)
         injection_time = time.time() - injection_start
         logger.info(f"TIMING: Typing injection completed in {injection_time:.2f}s")
@@ -2841,6 +2850,8 @@ _EDIT_NOTICES = {
     "no_selection": "Select the text to change first, then hold Shift with your dictation "
                     "key and say how to change it.",
     "too_long": "That's too much text to edit at once. Select a smaller part.",
+    "no_instruction": "I didn't catch what to change. Hold Shift with your dictation key "
+                      "and say it, like \u201cmake this more formal\u201d.",
     "no_answer": "The AI didn't come up with a change. Try saying it another way.",
     "terminal": "Voice editing doesn't work in a terminal: there's no selection there to "
                 "replace.",
@@ -2886,17 +2897,13 @@ def _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
     if engine is None:
         _edit_problem("not_installed", beeps_on)
         return
-    instruction = _transcribe_audio(audio_f32, language)
-    if not instruction:
-        return
-    if not engine.is_ready():
-        _edit_problem("not_ready", beeps_on)
-        return
     focused_class = _query_focused_window_class()
     if is_terminal_class(focused_class):
         _edit_problem("terminal", beeps_on)
         return
 
+    # The selection first, so "select some text first" comes up even when
+    # nothing was said (Ron tried exactly that and heard nothing).
     selected, put_back = clipboard.copy_selection(_send_copy_keystroke)
     if not selected:
         _edit_problem("no_selection", beeps_on)
@@ -2905,6 +2912,13 @@ def _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
     try:
         if len(selected) > ai_cleanup.MAX_EDIT_CHARS:
             _edit_problem("too_long", beeps_on)
+            return
+        instruction = _transcribe_audio(audio_f32, language)
+        if not instruction:
+            _edit_problem("no_instruction", beeps_on)
+            return
+        if not engine.is_ready():
+            _edit_problem("not_ready", beeps_on)
             return
         logger.info(f"Voice edit: {_loggable(instruction)} ({len(selected)} characters)")
         result = engine.edit(selected, instruction)
@@ -2918,12 +2932,10 @@ def _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
             # Typing now would put the rewrite into whatever window has focus.
             _edit_problem("window_changed", beeps_on)
             return
-        # The selection is still active, so typing or pasting replaces it.
-        # Line breaks go in as Shift+Enter, as in a dictation (a chat box
-        # would send the message on a plain Enter).
-        from .history import _LINE_BREAK_MARKER
+        # The selection is still active, so typing or pasting replaces it, in
+        # one block (see _inject_text).
         try:
-            outcome = _inject_text(result.replace("\n", _LINE_BREAK_MARKER), injection_mode, t0)
+            outcome = _inject_text(result, injection_mode, t0, one_block=True)
         except Exception as e:
             logger.error(f"Voice edit: typing the rewrite failed: {e}", exc_info=True)
             outcome = "failed"
