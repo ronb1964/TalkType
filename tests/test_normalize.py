@@ -534,6 +534,8 @@ def test_tld_space_fix_only_touches_email_addresses(said):
 def test_tld_space_fix_still_joins_a_split_address():
     assert normalize_text("write to john@gmail. Com today") == "Write to john@gmail.com today."
     assert normalize_text("mail a@b. co. uk now") == "Mail a@b.co.uk now."
+    assert normalize_text("mail a@b. Co. Uk now") == "Mail a@b.co.uk now."
+    assert normalize_text("write to john@gmail. Net today") == "Write to john@gmail.net today."
 
 
 # The space-fix also took every country ending (it, in, my, no, us) across a
@@ -549,6 +551,12 @@ def test_tld_space_fix_still_joins_a_split_address():
     ("email bob at work dot com. no rush", "Email bob@work.com. No rush."),
     ("my email is john at gmail dot com period in the morning",
      "My email is john@gmail.com. In the morning."),
+    # "Net" and "Gov" are endings too, but a finished address doesn't take
+    # a second capitalized one.
+    ("email bob@work.com. Net profit was up",
+     "Email bob@work.com. Net profit was up."),
+    ("email bob at work dot com. gov contracts too",
+     "Email bob@work.com. Gov contracts too."),
 ])
 def test_sentence_after_an_email_address_stays_a_sentence(said, expected):
     assert normalize_text(said) == expected

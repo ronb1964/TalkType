@@ -261,6 +261,7 @@ _RE_EMAIL_SPLIT_TLD = re.compile(
     r"((?i:" + _EMAIL_TLDS_SAFE + r"|uk|co(?=\s*\.\s*uk\b)))\b"
 )
 _RE_EMAIL_AT_SPACE = re.compile(r"@\s+")
+_RE_ENDS_IN_TLD = re.compile(r"\.(?:" + _EMAIL_TLDS_ALL + r")$")
 # A dot written joined to a lowercase web ending is part of an address, and
 # so is one followed by more lowercase parts that end in one ("www.example.org").
 _RE_JOINED_TLD = re.compile(r"\.(?:[a-z0-9-]+\.)*(?:" + _EMAIL_TLDS_ALL + r"|dev)\b")
@@ -319,12 +320,24 @@ def _join_spaced_email(m):
     return m.group(0) if name.lower() in _NOT_EMAIL_NAMES else f"{name}@{domain}.{tld}".lower()
 
 
+def _close_tld_gap(m):
+    """Join the ending to the address, unless the address is already complete
+    and the "ending" is capitalized: that is a new sentence ("bob@work.com.
+    Net profit was up"), not a split address ("john@gmail. Net"). "Uk" after
+    ".co" is still the address: the "co." before it got it capitalized."""
+    address, tld = m.groups()
+    if (tld != tld.lower() and _RE_ENDS_IN_TLD.search(address)
+            and not (tld.lower() == "uk" and address.lower().endswith(".co"))):
+        return m.group(0)
+    return f"{address}.{tld.lower()}"
+
+
 def _fix_email_spacing(text: str) -> str:
     """Close the gaps the punctuation passes open inside an address:
     "john@gmail. Com" -> "john@gmail.com", "a@b. co. uk" -> "a@b.co.uk"."""
     text = _RE_EMAIL_AT_SPACE.sub("@", text)
     while True:
-        fixed = _RE_EMAIL_SPLIT_TLD.sub(lambda m: f"{m.group(1)}.{m.group(2).lower()}", text)
+        fixed = _RE_EMAIL_SPLIT_TLD.sub(_close_tld_gap, text)
         if fixed == text:
             return text
         text = fixed
