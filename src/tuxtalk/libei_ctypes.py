@@ -1,11 +1,9 @@
 """libei access via ctypes — the sandbox-friendly way to emulate keystrokes.
 
 Fedora (and the GNOME Flatpak runtime) ship libei.so.1 but no `Ei` GObject-
-Introspection typelib, so we drive the C library directly with ctypes. This is
-the productionized form of the proven spike code
-(`spikes/flatpak-portal/type_portal.py`).
+Introspection typelib, so we drive the C library directly with ctypes.
 
-libei ctypes rules (learned the hard way in the spike):
+libei ctypes rules:
 - set restype/argtypes on every non-variadic call or 64-bit pointers truncate;
 - ei_seat_bind_capabilities is variadic — pass explicit ctypes objects.
 """
@@ -115,7 +113,7 @@ def load_libei() -> C.CDLL:
     ei.ei_device_stop_emulating.argtypes = [C.c_void_p]
     ei.ei_unref.restype = C.c_void_p
     ei.ei_unref.argtypes = [C.c_void_p]
-    try:  # keep the device alive across type_string calls (best-effort)
+    try:  # device ref/unref keep the device alive while a session uses it (optional)
         ei.ei_device_ref.restype = C.c_void_p
         ei.ei_device_ref.argtypes = [C.c_void_p]
         ei.ei_device_unref.restype = C.c_void_p
@@ -149,8 +147,8 @@ def typeable_text(text: str) -> str:
 def plan_keys(text: str):
     """[(keycode, shift)] that type *text*, or None if any character can't be
     typed. Planned before anything is sent, so a dictation is typed whole or
-    not at all: a character skipped silently left undo deleting more than had
-    been typed."""
+    not at all: a silently skipped character would leave undo deleting more
+    than was typed."""
     text = typeable_text(text)
     keys = []
     i, n = 0, len(text)
@@ -241,10 +239,8 @@ class LibeiSession:
         return False
 
     def _drain(self):
-        """Dispatch pending traffic and process every queued event. Servicing the
-        connection like this — continuously, not only when typing — is what keeps
-        a persistent libei sender alive; an idle, undispatched sender has its
-        keystrokes silently dropped by the compositor (the bug this fixes)."""
+        """Dispatch pending libei traffic and handle every queued event, which
+        binds the keyboard and keeps self.device current."""
         self.ei.ei_dispatch(self.ctx)
         while True:
             ev = self.ei.ei_get_event(self.ctx)
@@ -254,8 +250,8 @@ class LibeiSession:
             self.ei.ei_event_unref(ev)
 
     def pump_until_ready(self, timeout: float = 10.0) -> bool:
-        """Block (via select) until the keyboard device is ready to emulate.
-        Used for the initial handshake before the GLib pump takes over."""
+        """Block (via select) until the keyboard device is ready to emulate,
+        servicing the connection meanwhile. False if *timeout* runs out."""
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline and self.device is None:
             select.select([self.fd_ei], [], [], 0.5)

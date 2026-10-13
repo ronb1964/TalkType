@@ -38,7 +38,7 @@ class OutputBackend:
 
 
 class YdotoolOutputBackend(OutputBackend):
-    """Backend A: the existing ydotool path, unchanged."""
+    """Backend A: app.py's ydotool path."""
 
     def type_text(self, text: str) -> bool:
         from . import app
@@ -56,9 +56,9 @@ class YdotoolOutputBackend(OutputBackend):
 class LibeiOutputBackend(OutputBackend):
     """Backend B: type via the RemoteDesktop portal + libei (Flatpak).
 
-    Establishes one long-lived RemoteDesktop/EIS session (the user approves the
-    "Allow remote control?" dialog once; a restore token remembers it), then
-    streams keystrokes over it. type_text never raises — it returns False so the
+    Opens a fresh RemoteDesktop/EIS session for each typing action (the user
+    approves the "Allow remote control?" dialog once; a restore token
+    remembers it) and sends the keystrokes over it. type_text never raises — it returns False so the
     recording core surfaces its usual "couldn't type" notice."""
 
     IFACE = "org.freedesktop.portal.RemoteDesktop"
@@ -85,12 +85,9 @@ class LibeiOutputBackend(OutputBackend):
         import os
         path = self._token_path()
         try:
-            # Create data/TuxTalk/ if it doesn't exist yet. On a fresh CPU-only
-            # Flatpak install nothing else has written there (no CUDA libs, and
-            # the first-run flag may land elsewhere), so without this the write
-            # fails silently, the restore token never persists, and GNOME
-            # re-prompts "Allow remote interaction?" on every dictation. Mirrors
-            # mark_first_run_complete() and save_config().
+            # On a fresh CPU-only Flatpak install nothing else may have created
+            # the data folder yet, and without a saved restore token the desktop
+            # asks "Allow remote interaction?" on every dictation.
             os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(path, "w") as f:
                 f.write(token or "")
@@ -121,10 +118,9 @@ class LibeiOutputBackend(OutputBackend):
         from . import portal_common as pc
 
         logger = logging.getLogger(__name__)
-        # Own GMainContext: the per-dictation handshake now runs on a worker
-        # thread (Backend B moved transcription + typing off the hotkey loop).
-        # Two threads may not iterate the same (default) context, so push a
-        # private one — the portal's async callbacks are then delivered on it.
+        # Own GMainContext: the handshake runs on a worker thread, and two
+        # threads may not iterate the same (default) context. The portal's
+        # async callbacks are then delivered on this private one.
         ctx = GLib.MainContext.new()
         ctx.push_thread_default()
         bus = pc.session_bus()
@@ -163,7 +159,7 @@ class LibeiOutputBackend(OutputBackend):
             def b(token):
                 opts = {"handle_token": GLib.Variant("s", token),
                         "types": GLib.Variant("u", self.KEYBOARD),
-                        "persist_mode": GLib.Variant("u", 2)}
+                        "persist_mode": GLib.Variant("u", 2)}  # until revoked
                 saved = self._load_token()
                 if saved:
                     opts["restore_token"] = GLib.Variant("s", saved)
@@ -220,10 +216,9 @@ class LibeiOutputBackend(OutputBackend):
 
     def _with_session(self, action) -> bool:
         """Run `action(session)` inside a FRESH RemoteDesktop/EIS session. A
-        persistent session only ever types once — KDE's EIS delivers keystrokes
-        on a fresh DEVICE_RESUMED, so re-establishing per call is what emits
-        reliably (proven by the portal spike). The saved restore_token means the
-        approval dialog appears only the first time. Returns action's bool result,
+        reused session types only once, because KDE's EIS delivers keystrokes
+        on a fresh DEVICE_RESUMED. The saved restore_token means the approval
+        dialog appears only the first time. Returns action's bool result,
         or False if the handshake/device wasn't ready. Never raises."""
         import logging
         import os

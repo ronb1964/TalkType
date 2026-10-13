@@ -36,8 +36,8 @@ class EvdevInputBackend(InputBackend):
 class PortalInputBackend(InputBackend):
     """Backend B: the GlobalShortcuts portal (Flatpak).
 
-    Registers one "dictate" shortcut; the desktop assigns the key and sends
-    Activated (press) / Deactivated (release) signals, which we translate into
+    Registers the hold and toggle shortcuts; the desktop assigns their keys and
+    sends Activated (press) / Deactivated (release) signals, which we translate into
     the same app._cmd_start_recording / app._cmd_stop_recording events the evdev
     loop sets. A GLib timeout runs the shared app._service_tick so the recording
     core and auto-timeout work identically."""
