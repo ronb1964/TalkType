@@ -1,8 +1,8 @@
 """The recording indicator's fixed positions sit on one monitor.
 
-They were worked out over the whole screen, which spans every monitor, so
-with two side-by-side screens "center" landed on the seam, split across
-both, and "bottom-*" could land below a shorter monitor.
+Worked out over the whole screen, which spans every monitor, "center" would
+land on the seam between two side-by-side screens, split across both, and
+"bottom-*" could land below a shorter monitor.
 """
 import pytest
 

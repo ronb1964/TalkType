@@ -5,11 +5,10 @@ time rather than at construction, so applying new settings to a running
 service is just updating those attributes — the next press of F8 shows the
 indicator in the new place. That is what lets Preferences skip the restart.
 
-Also covers a pre-existing sizing bug found while scoping this work:
-__init__ called set_default_size(200, 180) unscaled while show_at_position()
-computed int(200 * scale) for its positioning maths. At size="large" (1.4x)
-the maths assumed a 280x252 window that was really 200x180, putting right- and
-bottom-anchored positions roughly 80px away from where they belonged.
+Also covers the window size: show_at_position() computes int(200 * scale) for
+its positioning maths, so the window must be scaled the same way. An unscaled
+200x180 window at size="large" (1.4x) would put right- and bottom-anchored
+positions roughly 80px away from where they belong.
 """
 
 import pytest
@@ -113,8 +112,8 @@ class TestWindowSizeMatchesPositioningMaths:
 
 def test_the_window_is_resized_on_the_gtk_thread_only(indicator, monkeypatch):
     """apply_settings runs on the service's input thread while Gtk.main()
-    runs on another. Resizing the window there touched GTK from two threads
-    at once, which can crash the service."""
+    runs on another. Resizing the window there would touch GTK from two
+    threads at once, which can crash the service."""
     from gi.repository import Gtk
 
     calls = []

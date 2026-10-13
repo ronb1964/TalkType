@@ -1,7 +1,8 @@
 """The indicator works out its color once, not on every frame.
 
-on_draw runs about 60 times a second while recording, and each call built a
-fresh Gtk.Label to look up the theme accent, even when the accent wasn't used.
+on_draw runs about 60 times a second while recording, too often to build a
+fresh Gtk.Label each time to look up the theme accent (which may not even be
+used).
 """
 from tuxtalk import indicator_styles as S
 from tuxtalk import recording_indicator as ri

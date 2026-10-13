@@ -13,8 +13,8 @@ from tuxtalk import config
 def test_new_indicator_fields_have_approved_defaults():
     s = config.Settings()
     assert s.indicator_style == "orb"
-    # "Cyan" is no longer a standalone mode; the out-of-box look is the classic
-    # cyan expressed as a custom color, so the orb is byte-identical to before.
+    # "Cyan" is not a mode of its own: the out-of-box look is the classic cyan
+    # expressed as a custom color, so the orb keeps its classic gradient.
     assert s.indicator_color_mode == "custom"
     assert s.indicator_color == config.CLASSIC_CYAN_HEX
     assert s.indicator_backing == "medium"
@@ -23,7 +23,7 @@ def test_new_indicator_fields_have_approved_defaults():
 
 def test_valid_sets_exist():
     assert config.VALID_INDICATOR_STYLES == {"orb", "waveform", "bars", "radial"}
-    # Only two real choices remain: match the desktop accent, or pick a color.
+    # There are two choices: match the desktop accent, or pick a color.
     assert config.VALID_COLOR_MODES == {"system", "custom"}
     assert config.VALID_BACKINGS == {"off", "soft", "medium", "strong"}
 
@@ -79,8 +79,7 @@ def test_sensitivity_out_of_range_is_reported():
 
 
 def test_float_sensitivity_round_trips_as_a_float():
-    """A float field must survive save/reload as a float, not a string — the
-    TOML writer had no float branch and the loader had no float caster, so
-    indicator_sensitivity was the first float field to expose both."""
+    """A float field must survive save/reload as a float, not a string: the
+    TOML writer writes it bare and the loader casts it back."""
     assert config._toml_value(1.3) == "1.3"          # bare, not quoted
     assert config._TYPE_CASTERS["float"] is float     # loader casts it back

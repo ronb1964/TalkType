@@ -40,8 +40,8 @@ def test_silence_is_zero():
 
 def test_steady_dc_offset_is_removed():
     """A constant (pure DC) signal must not show as spectrum energy — the mean
-    is subtracted before the FFT, so once the ring is filled it reads as zero.
-    This is the fix for the low bar that used to sit pinned high."""
+    is subtracted before the FFT, so once the ring is filled it reads as zero
+    and the lowest bar doesn't sit pinned high."""
     sp = SpectrumProcessor(sample_rate=SR, bins=20)
     const = np.full(1600, 0.8, dtype=np.float32)
     out = None
@@ -77,9 +77,9 @@ def _voice(db, start=0):
 
 
 def test_silence_does_not_grow_into_tall_bars():
-    """Ron, 0.14.6: with nothing said, the bars grew higher and higher. The
-    per-band ceiling decayed with no floor, so it shrank onto the room's own
-    noise and stretched that to full height (half height within a second)."""
+    """With nothing said, the bars stay low. A per-band ceiling that decays
+    with no floor would shrink onto the room's own noise and stretch that to
+    full height (half height within a second)."""
     _proc, bars = _bars_over(_room(-55), 10)
     assert bars[100:].mean() < 0.1          # after the first second
     assert bars[-100:].max() < 0.35         # and still low ten seconds in

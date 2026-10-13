@@ -1,8 +1,8 @@
 """The recording indicator lets clicks through to the window underneath.
 
 input_shape_combine_region(None) removes the input shape instead of emptying
-it, so the whole transparent indicator window took the clicks meant for the
-app underneath, right where the "follow the window" option puts it.
+it, so the whole transparent indicator window would take the clicks meant for
+the app underneath, right where the "follow the window" option puts it.
 """
 import pathlib
 

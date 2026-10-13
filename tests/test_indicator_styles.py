@@ -1,8 +1,9 @@
 """Color/backing helpers and the waveform/bars/radial renderers.
 
 Pure cairo — every renderer is exercised by drawing onto a headless
-ImageSurface, so these run without a display. Geometry and colors were settled
-by live prototyping; see the design spec dated 2026-08-14.
+ImageSurface, so these run without a display. Geometry and colors come from
+live prototyping; see
+docs/superpowers/specs/2026-08-14-recording-indicator-styles-design.md.
 """
 import numpy as np
 import pytest
@@ -50,9 +51,8 @@ def test_is_cyan_matches_the_classic_color_and_its_hex():
 
 
 def test_orb_palette_for_cyan_is_none_so_the_classic_path_runs():
-    """A cyan color returns None → the orb draws its original hand-tuned
-    gradient (byte-identical to prior releases). Any other color returns a
-    palette that recolors the orb."""
+    """A cyan color returns None → the orb draws its classic hand-tuned
+    gradient. Any other color returns a palette that recolors the orb."""
     assert S.orb_palette_for(S.CYAN) is None
     assert S.orb_palette_for(S.resolve_color("custom", "#4db3ff", (0, 0, 0))) is None
     red = (0.9, 0.2, 0.2)
@@ -107,7 +107,7 @@ def test_empty_data_does_not_crash():
     _has_ink(lambda cr: S.draw_radial(cr, 200, 120, [], 0.0, (0.3, 0.7, 0.96), 0.5, 1.0))
 
 
-# --- Radial (reworked for 0.14.7: too small, and barely moved with speech) ---
+# --- Radial: big enough to see, and moving with ordinary speech ---
 
 def _speech(peak, n=1024):
     """A speech-like window: a 220 Hz tone whose loudness swells to `peak`."""
@@ -116,8 +116,8 @@ def _speech(peak, n=1024):
 
 
 def test_radial_moves_well_for_normal_speech_at_default_sensitivity():
-    # Speech peaks around 0.15. The old ring moved ~15% of its range for that,
-    # so Ron had to turn sensitivity almost all the way up (0.14.6 testing).
+    # Speech peaks around 0.15, and at default sensitivity that must move the
+    # ring well, without turning sensitivity almost all the way up.
     offs = S.radial_offsets(_speech(0.15), 1.0)
     assert len(offs) == S.RADIAL_BINS
     assert sum(offs) / len(offs) > 0.35
@@ -135,8 +135,8 @@ def test_radial_short_window_does_not_crash():
 
 
 def test_radial_fills_its_window():
-    # The old ring reached only 22% of the window's shorter side, so "small"
-    # was a speck. Loud speech should now reach well past a third of it.
+    # Loud speech reaches well past a third of the window's shorter side, so
+    # even "small" is more than a speck.
     import cairo
     w, h = 200, 180
     surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, w, h)
@@ -162,7 +162,7 @@ def _run_gain(scale, seconds=2.0):
 
 
 def test_radial_gain_makes_a_quiet_mic_move_like_a_loud_one():
-    # Ron's mic: at sensitivity 1.9 he had to almost yell (2026-10-11).
+    # A quiet mic must not make its user almost yell, even at high sensitivity.
     quiet, loud = _run_gain(0.03), _run_gain(0.3)
     avg = lambda g, pk: sum(S.radial_offsets(_speech(pk), 1.0, gain=g)) / S.RADIAL_BINS
     q, l = avg(quiet, 0.03), avg(loud, 0.3)
@@ -193,6 +193,6 @@ def test_radial_gain_recovers_when_dictation_starts_mid_word():
 
 
 def test_a_malformed_custom_color_falls_back_to_cyan():
-    """It is drawn every frame; raising left the indicator blank."""
+    """It is drawn every frame, so raising would leave the indicator blank."""
     for bad in ("red", "#fff", "", "#12345g", None):
         assert S.resolve_color("custom", bad, (0, 0, 0)) == S.CYAN

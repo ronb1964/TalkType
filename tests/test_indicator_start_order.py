@@ -1,9 +1,9 @@
 """A quick re-press keeps the indicator in recording mode.
 
-start_recording set is_recording straight away on the recording thread, while
-show and hide wait for the GTK loop. A hide still queued from the previous
-dictation then ran afterwards and cleared it: no red border, and the orb
-pulsed instead of following the voice.
+start_recording runs on the recording thread, while show and hide wait for the
+GTK loop, so a hide still queued from the previous dictation must not clear
+is_recording afterwards. That would leave no red border, and the orb would
+pulse instead of following the voice.
 """
 from tuxtalk import recording_indicator as ri
 

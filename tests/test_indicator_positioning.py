@@ -1,17 +1,14 @@
 """The indicator position control must reflect what actually works.
 
-Preferences used to grey out the position dropdown whenever the session was
-Wayland and the GNOME extension was absent, with a tooltip saying positioning
-"requires the GNOME extension". That is not how positioning works.
-
 The indicator positions itself with gtk_window_move(). XWayland honours it and
 native Wayland ignores it, and the tray launches the dictation service with
 GDK_BACKEND=x11,wayland — so the indicator gets XWayland whenever an X display
-exists, on any desktop, with no extension involved. Measured on a KDE Plasma
-Wayland session with the extension not installed: top-left landed at (20, 20).
+exists, on any desktop, with no extension involved. On a KDE Plasma Wayland
+session without the extension, top-left lands at (20, 20).
 
-So the control was disabled on a machine where it demonstrably works, telling
-the user to install an extension that has nothing to do with it.
+So Preferences must not grey out the position dropdown on Wayland just because
+the GNOME extension is absent, or tell the user positioning "requires the
+GNOME extension".
 """
 
 import pathlib
@@ -51,7 +48,7 @@ def test_positioning_does_not_depend_on_the_gnome_extension(monkeypatch):
 
 
 def test_prefs_uses_the_helper_rather_than_guessing_from_the_session():
-    """Guards against the old `is_wayland and not has_extension` condition."""
+    """Not an `is_wayland and not has_extension` guess."""
     text = (ROOT / "src/tuxtalk/prefs.py").read_text()
     assert "positioning_available" in text, (
         "prefs.py must ask whether positioning actually works instead of "

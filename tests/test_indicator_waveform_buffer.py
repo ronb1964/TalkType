@@ -1,10 +1,10 @@
 """The waveform/radial indicator must draw from a rolling window of recent audio,
 not just the latest raw block.
 
-Showing only the latest block made the waveform hostage to the audio driver's
+Showing only the latest block makes the waveform hostage to the audio driver's
 block size: the system PortAudio hands small varied blocks ~193x/sec, but the
 Flatpak's bundled PortAudio hands uniform 384-frame blocks ~115x/sec, so the same
-code rendered a lively wave on one and a stretched sine on the other. A rolling
+code would render a lively wave on one and a stretched sine on the other. A rolling
 window makes the display identical regardless of block size. And stop_recording
 must clear it, or a bright dash lingers for seconds after releasing the key.
 """

@@ -1,6 +1,6 @@
 """TuxTalk Labs: the recording indicator follows the window you're dictating
-into, centred near its bottom edge (Ron, 2026-10-12). Uses the same
-active-window position as the floating messages (window_geometry).
+into, centred near its bottom edge. Uses the same active-window position as
+the floating messages (window_geometry).
 """
 import pathlib
 
@@ -113,7 +113,7 @@ def test_the_labs_help_page_explains_it():
 
 
 
-# --- Ron, 2026-10-12: the Audio tab's position, inside the window ---------------------------
+# --- the Audio tab's position, inside the window ---------------------------------------------
 
 WIN = Rect(1000, 200, 800, 600)
 MON = Rect(0, 0, 3440, 1440)
