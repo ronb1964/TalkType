@@ -149,8 +149,8 @@ Needs <b>Fix self-corrections with AI</b> turned on in Preferences → Advanced
 (a one-time download of about 1.1 GB).
 
 <b>Literal Words</b>
-Say <b>literal</b> or <b>the word</b> before any punctuation or formatting word
-to type the word itself:
+Say <b>literal</b> or <b>the word</b> before a basic punctuation or line-break word
+(period, comma, quote, dash, new line…) to type the word itself:
   <b>literal period</b> → "period"    <b>the word comma</b> → "comma"
   <b>literal new line</b> → "new line"
 

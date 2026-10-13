@@ -32,9 +32,27 @@ def test_alternate_wordings_are_listed_and_work():
     assert "remove last" in TEXT
 
 
-def test_literal_covers_every_command_word():
-    assert "any punctuation or formatting word" in TEXT
+def test_literal_names_words_it_really_covers():
+    """It claimed "any punctuation or formatting word", but brackets, em dash
+    and full stop are not covered: "literal open parenthesis" types "(".
+    The words it now names as examples must all work with "literal"."""
+    assert "any punctuation" not in TEXT
     assert "the word" in TEXT
+    for word in ("period", "comma", "quote", "dash", "new line"):
+        assert word in normalize.LITERAL_REPLACEMENTS, word
+
+
+def test_help_lists_exactly_the_literal_words():
+    """Help said "Works with any punctuation or formatting command" and that
+    "literal new line" types "newline" (it types "new line")."""
+    from pathlib import Path
+    from tuxtalk import help_dialog
+    source = Path(help_dialog.__file__).read_text()
+    line = next(l for l in source.splitlines() if l.startswith("Works with: "))
+    listed = line[len("Works with: "):].rstrip(".").replace(" and ", ", ").split(", ")
+    assert sorted(listed) == sorted(normalize.LITERAL_REPLACEMENTS)
+    assert '<b>literal new line</b> → "new line"' in source
+    assert normalize.normalize_text("literal new line").lower().startswith("new line")
 
 
 def test_says_commands_are_english_words():

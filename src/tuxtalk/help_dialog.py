@@ -527,11 +527,11 @@ To output the word instead of executing the command, say <b>literal</b> or <b>th
 • <b>literal period</b> or <b>the word period</b> → "period" (not .)
 • <b>literal comma</b> or <b>the word comma</b> → "comma" (not ,)
 • <b>literal tab</b> or <b>the word tab</b> → "tab" (not a tab character)
-• <b>literal new line</b> or <b>the word newline</b> → "newline" (not a line break)
+• <b>literal new line</b> → "new line", <b>the word newline</b> → "newline" (not a line break)
 • <b>literal question mark</b> → "question mark" (not ?)
 • <b>literal exclamation point</b> → "exclamation point" (not !)
 
-Works with any punctuation or formatting command.
+Works with: period, comma, colon, semicolon, question mark, exclamation point, exclamation mark, apostrophe, quote, hyphen, dash, ellipsis, dot dot dot, tab, return, new line, newline, line break, new paragraph and paragraph break.
 
 <b>Usage Examples:</b>
 Say: <i>Hello world comma how are you question mark</i>
