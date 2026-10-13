@@ -104,11 +104,8 @@ def single_unit_length(text: str, undo_type: str) -> int:
         return len(text)
 
     if undo_type == 'paragraph':
-        marker = "§SHIFT_ENTER§"
-        marker_pos = text_to_analyze.rfind(marker)
+        # The buffer stores line breaks as '\n', like the word case above.
         newline_pos = text_to_analyze.rfind('\n')
-        if marker_pos > newline_pos:
-            return len(text) - marker_pos - len(marker)
         if newline_pos != -1:
             return len(text) - newline_pos - 1
         return len(text)
@@ -201,20 +198,6 @@ def calculate_undo_length(text: str, undo_type: str, count: int = 1) -> int:
             remaining = remaining[:len(remaining) - single]
             completed += 1
             continue
-        # single == 0 means we're sitting right at a paragraph boundary
-        # (single_unit_length for 'paragraph' subtracts the marker length,
-        # so when the marker is at the very end, it returns 0). Step past
-        # the trailing marker/newline so the next iteration can find the
-        # previous paragraph instead of looping on the same position.
-        if undo_type == 'paragraph':
-            marker = "§SHIFT_ENTER§"
-            if remaining.endswith(marker):
-                total += len(marker)
-                remaining = remaining[:-len(marker)]
-                continue
-            if remaining.endswith('\n'):
-                total += 1
-                remaining = remaining[:-1]
-                continue
+        # Nothing measurable is left to remove; stop rather than loop forever.
         break
     return total

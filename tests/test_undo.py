@@ -128,26 +128,32 @@ def test_sentence_clamps_to_available():
     assert calculate_undo_length(text, "sentence", count=5) == len(text)
 
 
-def test_paragraph_with_markers():
-    text = "First.§SHIFT_ENTER§Second.§SHIFT_ENTER§Third."
-    # Last paragraph "Third." is after the second marker
+# The undo buffer holds line breaks as '\n' (app.py replaces the
+# line-break markers before storing it), so these use '\n' too.
+def test_paragraph_with_line_breaks():
+    text = "First.\nSecond.\nThird."
+    # Last paragraph "Third." is after the second line break
     result = calculate_undo_length(text, "paragraph")
     assert result == len("Third.")
 
 
 def test_paragraph_count_two():
-    text = "First.§SHIFT_ENTER§Second.§SHIFT_ENTER§Third."
-    # Removes "Third." + the marker + "Second." = 6 + 13 + 7 = 26 chars.
-    # Trailing marker between "First." and "Second." is left intact, matching
-    # the single-paragraph-undo convention.
+    text = "First.\nSecond.\nThird."
+    # Removes "Third." + the break + "Second.". The break between "First."
+    # and "Second." is left intact, matching the single-paragraph-undo
+    # convention.
     result = calculate_undo_length(text, "paragraph", count=2)
-    assert result == len("Second.§SHIFT_ENTER§Third.")
+    assert result == len("Second.\nThird.")
     # Sanity-check the remaining text
-    assert text[:-result] == "First.§SHIFT_ENTER§"
+    assert text[:-result] == "First.\n"
+
+
+def test_paragraph_count_with_blank_lines():
+    assert calculate_undo_length("a\n\n\n", "paragraph", 3) == 4
 
 
 def test_paragraph_count_clamps():
-    text = "First.§SHIFT_ENTER§Second.§SHIFT_ENTER§Third."
+    text = "First.\nSecond.\nThird."
     # Asking for more than available wipes everything in the buffer
     assert calculate_undo_length(text, "paragraph", count=10) == len(text)
 
