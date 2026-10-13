@@ -94,7 +94,46 @@ def test_a_pin_is_left_alone_when_the_new_entry_is_not_installed(tmp_path):
     assert favs["v"] == ["org.gnome.Nautilus.desktop", "io.github.ronb1964.TalkType.desktop",
                          "tuxtalk.desktop"]
     assert "io.github.ronb1964.TuxTalk.desktop" not in scripts[0].split("\n")[0]   # nor on KDE
-    assert not marker.exists()      # tried again once the new entry is installed
+    assert marker.read_text().split() == ["waiting", "talktype.desktop"]
+
+
+def test_a_waiting_pin_does_not_rerun_every_start(tmp_path):
+    """Until a new entry is installed, a start doesn't ask plasmashell again:
+    that call blocks the tray, and the TuxTalk Flatpak may never arrive."""
+    marker = tmp_path / "launchers-renamed"
+    favs = {"v": ["io.github.ronb1964.TalkType.desktop"]}
+    scripts = []
+
+    def plasma(script):
+        scripts.append(script)
+        return "0 1"
+    apps = _apps(tmp_path, "tuxtalk.desktop")
+    gnome = (lambda: favs["v"], lambda v: favs.update(v=v))
+    rm.repin_launchers(str(marker), run_plasma_script=plasma, gnome_favorites=gnome,
+                       app_dirs=apps)
+    assert rm.repin_launchers(str(marker), run_plasma_script=plasma, gnome_favorites=gnome,
+                              app_dirs=apps) == []
+    assert len(scripts) == 1
+
+    _apps(tmp_path, "io.github.ronb1964.TuxTalk.desktop")      # the Flatpak arrives
+    rm.repin_launchers(str(marker), run_plasma_script=lambda s: scripts.append(s) or "1 0",
+                       gnome_favorites=gnome, app_dirs=apps)
+    assert len(scripts) == 2
+    assert favs["v"] == ["io.github.ronb1964.TuxTalk.desktop"]
+    assert marker.read_text() == "done\n"
+    assert rm.repin_launchers(str(marker), run_plasma_script=plasma, gnome_favorites=gnome,
+                              app_dirs=apps) == []
+    assert len(scripts) == 2
+
+
+def test_an_old_done_marker_still_means_done(tmp_path):
+    marker = tmp_path / "launchers-renamed"
+    marker.write_text("done\n")
+
+    def plasma(script):
+        raise AssertionError("must not run")
+    assert rm.repin_launchers(str(marker), run_plasma_script=plasma, gnome_favorites=None,
+                              app_dirs=_apps(tmp_path, "tuxtalk.desktop")) == []
 
 
 def test_the_pin_follows_once_the_new_entry_is_installed(tmp_path):

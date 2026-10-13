@@ -414,32 +414,53 @@ def _default_gnome_favorites():
 _DEFAULT = object()
 
 
+def _marker_waiting_on(marker_path):
+    """The renames that were installed when the marker was written with an old
+    pin still waiting, or None when the marker means everything is done."""
+    try:
+        with open(marker_path) as f:
+            lines = f.read().split()
+    except OSError:
+        return None
+    if not lines or lines[0] != "waiting":
+        return None
+    return set(lines[1:])
+
+
 def repin_launchers(marker_path, run_plasma_script=_DEFAULT, gnome_favorites=_DEFAULT,
                     app_dirs=None):
     """Rename pinned TalkType launchers on the KDE dock and in GNOME's
     favourites, once. The marker file records success; after a failure (say
-    plasmashell wasn't up yet at login), or while an old pin waits for its new
-    entry to be installed, the next start tries again."""
+    plasmashell wasn't up yet at login) the next start tries again. While an
+    old pin waits for its new entry, the marker lists the entries installed
+    then, and only a newly installed one makes a start try again."""
+    renames = None
     if os.path.exists(marker_path):
-        return []
+        waiting_on = _marker_waiting_on(marker_path)
+        if waiting_on is None:
+            return []
+        renames = installed_renames(app_dirs)
+        if set(renames) <= waiting_on:
+            return []
     if run_plasma_script is _DEFAULT:
         run_plasma_script = _default_plasma_runner()
     if gnome_favorites is _DEFAULT:
         gnome_favorites = _default_gnome_favorites()
-    renames = installed_renames(app_dirs)
-    done, ok = [], True
+    if renames is None:
+        renames = installed_renames(app_dirs)
+    done, failed, waiting = [], False, False
     if run_plasma_script:
         try:
             counts = str(run_plasma_script(_plasma_script(renames))).split()
             n = counts[0] if counts else "0"
-            waiting = int(counts[1]) if len(counts) > 1 else 0
+            left = int(counts[1]) if len(counts) > 1 else 0
             if n != "0":
                 done.append(f"KDE: renamed pinned launchers in {n} task manager(s)")
-            if waiting:
-                ok = False
-                done.append(f"KDE: left {waiting} old pin(s) alone; the new entry isn't installed")
+            if left:
+                waiting = True
+                done.append(f"KDE: left {left} old pin(s) alone; the new entry isn't installed")
         except Exception as e:
-            ok = False
+            failed = True
             done.append(f"KDE: could not update pinned launchers yet: {e}")
     if gnome_favorites:
         get, put = gnome_favorites
@@ -449,16 +470,19 @@ def repin_launchers(marker_path, run_plasma_script=_DEFAULT, gnome_favorites=_DE
                 put(new)
                 done.append("GNOME: renamed TuxTalk in the favourites")
             if waiting_launchers(new, renames):
-                ok = False
+                waiting = True
                 done.append("GNOME: left an old favourite alone; the new entry isn't installed")
         except Exception as e:
-            ok = False
+            failed = True
             done.append(f"GNOME: could not update the favourites yet: {e}")
-    if ok:
+    if not failed:
+        content = "done\n"
+        if waiting:
+            content = "\n".join(["waiting", *sorted(renames)]) + "\n"
         try:
             os.makedirs(os.path.dirname(marker_path), exist_ok=True)
             with open(marker_path, "w") as f:
-                f.write("done\n")
+                f.write(content)
         except OSError:
             pass
     return done
