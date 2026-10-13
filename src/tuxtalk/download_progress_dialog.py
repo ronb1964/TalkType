@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 Unified Download Progress Dialog for TuxTalk
-Handles CUDA libraries and GNOME extension downloads with individual progress tracking
+Shows one or more downloads (the Vulkan engine, speech models, CUDA libraries,
+the GNOME extension) in one window, each with its own progress bar and Cancel.
 """
 
 import os
@@ -184,7 +185,7 @@ class UnifiedDownloadDialog:
         vbox.set_margin_top(5)
         vbox.set_margin_bottom(5)
 
-        # Header row: Icon + Title + Size + Cancel button
+        # Header row: title, size and Cancel button
         header_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
 
         # Task title
@@ -244,10 +245,9 @@ class UnifiedDownloadDialog:
     def _cancel_unfinished_tasks(self):
         """Stop any download still running when the window goes away.
 
-        The download loops check cancel_event between chunks. Closing the
-        window used to leave them running: the dialog was destroyed, run()
-        returned, and a multi-gigabyte transfer carried on writing to disk
-        with no window, no progress and no way to stop it.
+        The download loops check cancel_event between chunks. Without this, a
+        multi-gigabyte transfer would carry on writing to disk after the
+        window closed, with no progress shown and no way to stop it.
 
         Completed tasks are left untouched so a finished download is not
         retrospectively marked cancelled.
@@ -447,11 +447,10 @@ def show_unified_download_dialog(cuda=False, extension=False, model=None, parent
 
 
 if __name__ == '__main__':
-    # Test the dialog
+    # Show the dialog with two dummy downloads, for checking it by hand.
     import sys
     Gtk.init(sys.argv)
 
-    # Create a test dialog with dummy tasks
     def dummy_download(progress_callback, cancel_event):
         import time
         for i in range(0, 101, 10):

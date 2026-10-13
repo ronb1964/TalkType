@@ -1,11 +1,9 @@
 """
 Shared download helpers: timeouts, cancellation, integrity verification.
 
-Replaces three divergent download implementations that each had a gap:
-- cuda_helper used urlretrieve (supports no timeout — a stalled connection
-  hung forever and the Cancel button stopped working)
-- extension_helper used urlretrieve the same way
-- update_checker had its own loop but no truncation check and no checksum
+Used for the CUDA libraries, the Vulkan engine, models, the GNOME extension
+and updates, so every download has a timeout, can be cancelled, and is checked
+for truncation (and against a sha256 when one is known).
 
 Every download goes to its own ".tmp" file first and is atomically renamed
 into place only after size and (when provided) sha256 checks pass — so an
@@ -119,6 +117,7 @@ def download_file(
 
 
 def _remove_quiet(path: str | None) -> None:
+    """Delete *path* if there is one, ignoring errors."""
     if not path:
         return
     try:
