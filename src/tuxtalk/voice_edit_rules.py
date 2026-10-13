@@ -220,8 +220,11 @@ _CANT = {"font", "fonts", "typeface", "size", "bigger", "larger", "smaller", "ti
 _FILLER = {"make", "this", "it", "that", "these", "the", "text", "selection", "selected",
            "word", "words", "all", "everything", "in", "into", "to", "put", "turn", "set",
            "change", "and", "a", "an", "style", "letters", "be", "of", "whole", "thing",
-           "font", "type", "please", "point", "pt", "red", "blue", "green", "yellow",
-           "orange", "purple", "black", "white", "gray", "grey", "pink", "brown"}
+           "font", "type", "please", "point", "pt"}
+# One colour is a colour to make the text ("make this red"); two are words to
+# swap ("change red to blue"), which is about the wording.
+_COLOURS = {"red", "blue", "green", "yellow", "orange", "purple", "black", "white", "gray",
+            "grey", "pink", "brown"}
 
 
 def formatting(instruction: str):
@@ -230,13 +233,19 @@ def formatting(instruction: str):
     shortcut does (font, size, colour)."""
     said = _norm(instruction)
     said = re.sub(r"\b(?:strike ?through|strike ?out|cross(?:ed)? out)\b", "strikethrough", said)
+    said = re.sub(r"\b(\d+)\s*-?\s*(?:pt|points?)\b", r"\1 point", said)     # "14pt", "14-point"
     words = said.split()
     keys = [_SHORTCUTS[w] for w in words if w in _SHORTCUTS]
     cant = [w for w in words if w in _CANT]
+    colours = [w for w in words if w in _COLOURS]
+    if len(colours) == 1:
+        cant += colours
+    if "point" in words and any(w.isdigit() for w in words):
+        cant.append("point")                        # a font size: "make it 14 point"
     if not keys and not cant:
         return None
     leftover = [w for w in words if w not in _SHORTCUTS and w not in _CANT
-                and w not in _FILLER and not w.isdigit()]
+                and w not in _FILLER and w not in _COLOURS and not w.isdigit()]
     if leftover:
         return None
     if cant:

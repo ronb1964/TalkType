@@ -232,3 +232,19 @@ def test_lines_without_the_word_are_left_exactly_as_they_were():
 
 def test_lines_without_the_mark_are_left_exactly_as_they_were():
     assert r.mechanical_edit("a, b\nx  y : z", "remove the commas") == "a b\nx  y : z"
+
+
+@pytest.mark.parametrize("said", [
+    "Make this red.", "make it blue", "Make the text green.", "Make it 14 point.",
+    "make this 12pt", "Make it 16-point font.", "Make it red and bold.",
+])
+def test_a_colour_or_point_size_is_an_honest_cant(said):
+    """"Make this red" went to the AI, which reworded the selection."""
+    assert r.formatting(said) == r.CANT_FORMAT
+
+
+@pytest.mark.parametrize("said", [
+    "Change red to blue.", "Add an exclamation point.", "Make it say red.", "Make this point clearer.",
+])
+def test_colour_and_point_words_about_the_wording_still_go_to_the_ai(said):
+    assert r.formatting(said) is None
