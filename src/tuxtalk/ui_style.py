@@ -181,6 +181,20 @@ def forward_combo_scroll(combo):
     combo.connect("scroll-event", _on_scroll)
 
 
+def workarea_height():
+    """The primary monitor's usable height (minus panels) in pixels, or None."""
+    try:
+        display = Gdk.Display.get_default()
+        if display is None:
+            return None
+        monitor = display.get_primary_monitor()
+        if monitor is None and display.get_n_monitors() > 0:
+            monitor = display.get_monitor(0)
+        return monitor.get_workarea().height if monitor is not None else None
+    except Exception:
+        return None
+
+
 def fit_dialog_to_screen(dialog, width, desired_height, min_height=320, margin=96):
     """Size a dialog to (width, desired_height) but never taller than the monitor's
     work area, and always make it resizable.
@@ -202,14 +216,7 @@ def fit_dialog_to_screen(dialog, width, desired_height, min_height=320, margin=9
             dialog.set_default_size(width, -1)
             return dialog
 
-        avail = None
-        display = Gdk.Display.get_default()
-        if display is not None:
-            monitor = display.get_primary_monitor()
-            if monitor is None and display.get_n_monitors() > 0:
-                monitor = display.get_monitor(0)
-            if monitor is not None:
-                avail = monitor.get_workarea().height
+        avail = workarea_height()
         if avail is not None:
             desired_height = min(desired_height, max(min_height, avail - margin))
         dialog.set_default_size(width, desired_height)

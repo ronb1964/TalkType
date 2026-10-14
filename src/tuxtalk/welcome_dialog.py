@@ -2030,10 +2030,11 @@ def show_tips_and_features_dialog(extension_installed=False):
     """
     dialog = Gtk.Dialog(title="TuxTalk - Setup Complete!")
     dialog.set_border_width(0)
-    # Cap height to the screen + allow resizing so the "Continue" button is always
-    # reachable; the content is wrapped in a ScrolledWindow below for overflow.
-    from .ui_style import fit_dialog_to_screen
-    fit_dialog_to_screen(dialog, 600, 860 if extension_installed else 700)
+    # The height follows the content (a fixed 700 px left the Continue button
+    # half hidden once a sixth tip was added). Only on a screen too short for
+    # it does the content scroll; Continue sits below, outside the scrolling.
+    from .ui_style import fit_dialog_to_screen, workarea_height
+    fit_dialog_to_screen(dialog, 600, -1)
 
     # Add CSS for pulsing logout reminder
     if extension_installed:
@@ -2078,17 +2079,24 @@ def show_tips_and_features_dialog(extension_installed=False):
     content = dialog.get_content_area()
     content.set_spacing(0)
 
-    # Scroll the content so the footer (Continue) stays reachable on short screens.
+    # The tips scroll only when the screen is too short for all of them:
+    # the scroller asks for the content's full height, up to the screen's
+    # usable height less room for the title bar and the Continue footer.
     scrolled = Gtk.ScrolledWindow()
     scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+    scrolled.set_propagate_natural_height(True)
+    avail = workarea_height()
+    tips_cap = max(240, avail - 96 - 80) if avail else None
+    if tips_cap:
+        scrolled.set_max_content_height(tips_cap)
     content.pack_start(scrolled, True, True, 0)
 
     # Main container with padding
-    vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=15)
+    vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
     vbox.set_margin_start(30)
     vbox.set_margin_end(30)
-    vbox.set_margin_top(25)
-    vbox.set_margin_bottom(25)
+    vbox.set_margin_top(18)
+    vbox.set_margin_bottom(6)
     scrolled.add(vbox)
 
     # Success header
@@ -2114,7 +2122,7 @@ def show_tips_and_features_dialog(extension_installed=False):
     vbox.pack_start(sep, False, False, 0)
 
     # Tips section
-    tips_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+    tips_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=9)
 
     tips = []
 
@@ -2204,8 +2212,8 @@ def show_tips_and_features_dialog(extension_installed=False):
 
     # Bottom section - encourage exploration
     sep2 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
-    sep2.set_margin_top(15)
-    sep2.set_margin_bottom(10)
+    sep2.set_margin_top(8)
+    sep2.set_margin_bottom(6)
     vbox.pack_start(sep2, False, False, 0)
 
     encourage_label = Gtk.Label()
@@ -2218,12 +2226,20 @@ def show_tips_and_features_dialog(extension_installed=False):
     encourage_label.set_opacity(0.85)
     vbox.pack_start(encourage_label, False, False, 0)
 
-    # Continue button with proper padding
+    # GTK sizes the scroller at the narrowest width, where the wrapped tips are
+    # taller, and still came up ~20 px short: ask for their height at the
+    # window's real width (600 less the 30 px side margins). Hidden widgets
+    # measure 0, hence show_all() first.
+    vbox.show_all()
+    _minimum, natural = vbox.get_preferred_height_for_width(600 - 60)
+    scrolled.set_min_content_height(min(natural, tips_cap) if tips_cap else natural)
+
+    # Continue button, in a footer below the scrolling tips
     button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
     button_box.set_margin_top(10)
-    button_box.set_margin_bottom(10)
-    button_box.set_margin_start(20)
-    button_box.set_margin_end(20)
+    button_box.set_margin_bottom(16)
+    button_box.set_margin_start(30)
+    button_box.set_margin_end(30)
 
     get_started_button = Gtk.Button(label="Continue")
     get_started_button.get_style_context().add_class("suggested-action")
@@ -2270,7 +2286,7 @@ def show_tips_and_features_dialog(extension_installed=False):
     get_started_button.connect("clicked", on_get_started_clicked)
 
     button_box.pack_end(get_started_button, False, False, 0)
-    vbox.pack_start(button_box, False, False, 0)
+    content.pack_start(button_box, False, False, 0)
 
     # Start pulsing animation for logout reminder if extension was installed
     pulse_timer_id = None
