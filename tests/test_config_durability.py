@@ -684,8 +684,10 @@ def test_saving_a_fresh_install_is_never_blocked(config_path):
 ])
 def test_any_string_round_trips_as_valid_toml(value):
     """A raw \\r or other control character makes tomllib reject the whole
-    file, so one pasted Windows line break would break every custom command."""
-    import tomllib
+    file, so one pasted Windows line break would break every custom command.
+    tomllib arrived in Python 3.11; CI runs 3.10 like the AppImage, so there
+    the strict parser this guards against isn't present to test."""
+    tomllib = pytest.importorskip("tomllib")
     assert tomllib.loads(f"k = {config._toml_string(value)}")["k"] == value
 
 
