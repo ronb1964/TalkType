@@ -80,7 +80,7 @@ Claude checks every item against the log too
 
 First run (since 0.14.2 it recommends one setup; CUDA is not offered here):
 - [ ] Welcome screen appears, and its card names the graphics card and language ("Parakeet on your NVIDIA ..., For English")
-- [ ] Other options: changing the language, model or graphics-card tickbox updates the card and its download size
+- [ ] Other options: changing the language, model or graphics-card tickbox updates the card and its download size. The language list reads "Spanish (Español)", "Japanese (日本語)" and so on, with no flags; Preferences → General → Language (Manual) shows the same list
 - [ ] Hotkey test, then the tips screen (no model picker)
 - [ ] Downloads show progress bars: the Vulkan engine and Parakeet for the graphics card. The log must show a real download, not "cached"
 - [ ] The speed check runs, and the log shows its result (`Speed check (parakeet-v3): graphics …s, processor …s`)

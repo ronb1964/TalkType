@@ -1042,47 +1042,13 @@ class PreferencesWindow:
         self.lang_combo.connect("button-press-event", self._on_combo_button_press)
         self._block_combo_scroll(self.lang_combo)
 
-        # Add language options with flags
-        # Note: Auto-detect is NOT listed here — it is handled by the Language Mode
-        # dropdown above. This list is only shown when "Manual selection" is active.
-        languages = [
-            ("en", "🇺🇸 English"),
-            ("es", "🇪🇸 Spanish"),
-            ("fr", "🇫🇷 French"),
-            ("de", "🇩🇪 German"),
-            ("it", "🇮🇹 Italian"),
-            ("pt", "🇵🇹 Portuguese"),
-            ("ru", "🇷🇺 Russian"),
-            ("ja", "🇯🇵 Japanese"),
-            ("ko", "🇰🇷 Korean"),
-            ("zh", "🇨🇳 Chinese"),
-            ("ar", "🇸🇦 Arabic"),
-            ("hi", "🇮🇳 Hindi"),
-            ("nl", "🇳🇱 Dutch"),
-            ("sv", "🇸🇪 Swedish"),
-            ("no", "🇳🇴 Norwegian"),
-            ("da", "🇩🇰 Danish"),
-            ("fi", "🇫🇮 Finnish"),
-            ("pl", "🇵🇱 Polish"),
-            ("tr", "🇹🇷 Turkish"),
-            ("he", "🇮🇱 Hebrew"),
-            ("th", "🇹🇭 Thai"),
-            ("vi", "🇻🇳 Vietnamese"),
-            ("uk", "🇺🇦 Ukrainian"),
-            ("cs", "🇨🇿 Czech"),
-            ("hu", "🇭🇺 Hungarian"),
-            ("ro", "🇷🇴 Romanian"),
-            ("bg", "🇧🇬 Bulgarian"),
-            ("hr", "🇭🇷 Croatian"),
-            ("sk", "🇸🇰 Slovak"),
-            ("sl", "🇸🇮 Slovenian"),
-            ("et", "🇪🇪 Estonian"),
-            ("lv", "🇱🇻 Latvian"),
-            ("lt", "🇱🇹 Lithuanian")
-        ]
-        
-        for code, name in languages:
-            self.lang_combo.append(code, name)
+        # The same languages first run offers, each with its own name for
+        # itself ("Spanish (Español)"; no flags, see recommend._NATIVE).
+        # Auto-detect is NOT listed here: the Language Mode dropdown above
+        # handles it, and this list shows only with "Manual selection".
+        from . import recommend
+        for code, _name in recommend.LANGUAGES:
+            self.lang_combo.append(code, recommend.language_label(code))
         
         # Set current selection — English when unset or empty (empty means
         # auto-detect, which this list doesn't offer)
@@ -3809,12 +3775,12 @@ class PreferencesWindow:
         model = self.model_store.get_value(it, 0) if it is not None else ""
         self._relabel_cuda_option(model)
         self._update_recommended_row(model)
-        name = self.lang_combo.get_active_text() or ""
+        from .recommend import language_name
+        code = self.lang_combo.get_active_id() or ""
         message = model_setting_warning(
             model, self.device_combo.get_active_id() or "",
             self.lang_mode_combo.get_active_id() or "auto",
-            self.lang_combo.get_active_id() or "",
-            name.split(" ", 1)[-1])     # "🇯🇵 Japanese" -> "Japanese"
+            code, language_name(code))
         if message:
             # Amber and bold, so it can't be missed.
             label.set_markup(f'<span color="{WARNING_AMBER}" weight="bold">⚠️ '

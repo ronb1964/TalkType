@@ -29,6 +29,22 @@ LANGUAGES = [
 ]
 _NAMES = dict(LANGUAGES)
 
+# Each language's name in itself, so someone who doesn't read English can
+# still find theirs in the pickers. Spellings checked against Qt's
+# QLocale.nativeLanguageName(), capitalised for a list. No flags: a language
+# isn't a country, and a flag can turn political.
+_NATIVE = {
+    "es": "Español", "fr": "Français", "de": "Deutsch", "it": "Italiano",
+    "pt": "Português", "ru": "Русский", "ja": "日本語", "ko": "한국어",
+    "zh": "中文", "ar": "العربية", "hi": "हिन्दी", "nl": "Nederlands",
+    "sv": "Svenska", "no": "Norsk", "da": "Dansk", "fi": "Suomi",
+    "pl": "Polski", "tr": "Türkçe", "he": "עברית", "th": "ไทย",
+    "vi": "Tiếng Việt", "uk": "Українська", "cs": "Čeština", "hu": "Magyar",
+    "ro": "Română", "bg": "Български", "hr": "Hrvatski", "sk": "Slovenčina",
+    "sl": "Slovenščina", "et": "Eesti", "lv": "Latviešu", "lt": "Lietuvių",
+    "el": "Ελληνικά", "mt": "Malti",
+}
+
 _TITLES = {PARAKEET: "Parakeet", "small": "Whisper Small", "large-v3": "Whisper Large-v3",
            "base": "Whisper Base", "tiny": "Whisper Tiny"}
 
@@ -52,6 +68,14 @@ _DOWNLOAD = {
 def language_name(code):
     """English name of a language code, or the code itself if unknown."""
     return _NAMES.get(code, code)
+
+
+def language_label(code):
+    """How the language pickers show *code*: "Spanish (Español)", the
+    English name first so the list keeps its order. English is just
+    "English"."""
+    native = _NATIVE.get(code)
+    return f"{language_name(code)} ({native})" if native else language_name(code)
 
 
 def _locale_code(value):

@@ -17,6 +17,11 @@ before 0.15.0, so older entries use that name.
   pressing it opened the Emoji Selector and started dictating with no warning
   at all. Now the question after changing the key says which app KDE opens with
   it.
+- The language lists show each language in its own words too, like "Spanish
+  (Español)" and "Japanese (日本語)", so you can find yours even if you don't
+  read English. Preferences had little flags in its list, and those are gone,
+  since a language isn't a country. Its list was also missing Maltese. The
+  first-run screen now says "(the language you speak)" next to "I dictate in".
 - Quit now also stops the typing helper (ydotoold) if TuxTalk started it. It
   was left running after you quit. One started by a system service is left
   alone.
