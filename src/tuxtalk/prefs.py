@@ -359,39 +359,56 @@ def hotkey_label(key):
 
 
 def hotkey_change_message(cfg, changed, refused, apps=None):
-    """(text, offer the test) for the question after OK or Apply, or None.
+    """(title, text, offer the test) for the question after OK or Apply, or None.
 
     *changed*: the settings keys changed; *refused*: keys KDE already uses
     (kwin_hotkeys.refused_since), None when unknown; *apps*: {key: app} for
     those that open an app (kwin_hotkeys.app_shortcuts_since). A changed key
     is offered the same test first run gives it.
+
+    A key KDE also uses comes first, in the title as well: someone who reads
+    only the top of the window must still learn that the key does two things.
     """
+    # KDE reports keys in Qt's spelling (Super is "Meta"): map back to ours.
+    from .kwin_hotkeys import qt_key_sequence
+    all_keys = ("hotkey", "toggle_hotkey", "voice_commands_hotkey", "paste_last_hotkey")
+    ours = {qt_key_sequence(cfg.get(k)): cfg.get(k) for k in all_keys if cfg.get(k)}
+    clashes = []        # (our name for the key, the app or None)
+    if changed & set(all_keys):
+        clashes = [(ours[key], (apps or {}).get(key)) for key in refused or [] if key in ours]
+    lines = []
+    for name, app in clashes:
+        if app:
+            lines.append(f"KDE opens {app} with {name}, so pressing {name} does that too. "
+                         f"Pick another key, or change that shortcut in System Settings, "
+                         f"Keyboard, Shortcuts.")
+        else:
+            lines.append(f"KDE already uses {name} for one of its own shortcuts, so "
+                         f"pressing it does that too. Pick another key if that gets in the way.")
+
     roles = (("hotkey", "hold-to-talk key"), ("toggle_hotkey", "tap-to-start key"))
-    lines = [f"Your {what} is now {cfg.get(key)}." for key, what in roles
-             if key in changed and cfg.get(key)]
-    offer_test = bool(lines)
+    new_keys = [f"Your {what} is now {cfg.get(key)}." for key, what in roles
+                if key in changed and cfg.get(key)]
+    offer_test = bool(new_keys)
+    lines += new_keys
     if offer_test:
         lines.append("Try it once in the test to make sure it reaches TuxTalk. On some "
                      "laptops the F-keys change the brightness or volume unless you hold Fn.")
         # So Not Now isn't a dead end: the Test Hotkeys button can be below the fold.
         lines.append("You can also test it later with Test Hotkeys, under the hotkeys on "
                      "the General tab.")
-    # KDE reports keys in Qt's spelling (Super is "Meta"): map back to ours.
-    from .kwin_hotkeys import qt_key_sequence
-    all_keys = ("hotkey", "toggle_hotkey", "voice_commands_hotkey", "paste_last_hotkey")
-    ours = {qt_key_sequence(cfg.get(k)): cfg.get(k) for k in all_keys if cfg.get(k)}
-    for key in refused or []:
-        if key not in ours or not changed & set(all_keys):
-            continue
-        app = (apps or {}).get(key)
-        if app:
-            lines.append(f"KDE opens {app} with {ours[key]}, so pressing it does that too. "
-                         f"Pick another key, or change that shortcut in System Settings, "
-                         f"Keyboard, Shortcuts.")
-        else:
-            lines.append(f"KDE already uses {ours[key]} for one of its own shortcuts, so "
-                         f"pressing it does that too. Pick another key if that gets in the way.")
-    return ("\n\n".join(lines), offer_test) if lines else None
+    if not lines:
+        return None
+
+    if len(clashes) > 1:
+        title = "Heads up: KDE already uses some of these keys"
+    elif clashes and clashes[0][1]:
+        title = f"Heads up: {clashes[0][0]} also opens {clashes[0][1]}"
+    elif clashes:
+        title = f"Heads up: KDE already uses {clashes[0][0]}"
+    else:
+        title = "Try your new hotkey?"
+    return title, "\n\n".join(lines), offer_test
 
 
 def device_label(device, model, cuda_ready):
@@ -5770,12 +5787,12 @@ class PreferencesWindow:
                                         app_shortcuts_since(since) if refused else None)
         if message is None:
             return False
-        text, offer_test = message
+        title, text, offer_test = message
+        clash = title.startswith("Heads up")
         dialog = message_dialog(transient_for=self.window, modal=True,
-                                message_type=Gtk.MessageType.QUESTION if offer_test
-                                else Gtk.MessageType.WARNING,
-                                buttons=Gtk.ButtonsType.NONE,
-                                text="Try your new hotkey?" if offer_test else "Heads up")
+                                message_type=Gtk.MessageType.QUESTION
+                                if offer_test and not clash else Gtk.MessageType.WARNING,
+                                buttons=Gtk.ButtonsType.NONE, text=title)
         dialog.format_secondary_text(text)
         if offer_test:
             dialog.add_button("Not Now", Gtk.ResponseType.CANCEL)
