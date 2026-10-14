@@ -642,6 +642,11 @@ _WHOLE_TEXT_HALLUCINATION_PHRASES = [
     "hmm",
     "uh",
     "um",
+    # Parakeet's word for silence
+    "mm-hmm",
+    "mhm",
+    "mm",
+    "uh-huh",
 ] + _SIGN_OFF_PHRASES
 
 # Phrases that Whisper hallucinates at the END of longer dictations.
@@ -2189,15 +2194,18 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
     from .parakeet_gpu import ParakeetGpuModel
     if isinstance(model, (ParakeetModel, ParakeetGpuModel)):
         # Parakeet detects the language itself and has no Whisper-style
-        # decoding options. It also does not invent "thank you" in silence.
-        # The filter still runs, without a probability, so only its YouTube
-        # outro tier ("like and subscribe") can apply.
+        # decoding options. It has no no-speech score either, yet it does
+        # invent a word in silence: an F9 tap with nothing said typed
+        # "Mm-hmm." So, as for the Vulkan engine, a recording with nobody
+        # talking counts as no speech, and a filler alone is dropped.
         raw = model.recognize(audio_f32)
         where = " on GPU" if isinstance(model, ParakeetGpuModel) else ""
         logger.info(f"TIMING: Transcription completed in {time.time() - transcribe_start:.2f}s (Parakeet{where})")
         print(f"Raw (Parakeet): {_loggable(raw)}")
         logger.info(f"Raw transcription (Parakeet): {_loggable(raw)}")
-        return _strip_hallucinations(raw) or None
+        from .silence import has_no_speech
+        no_speech = 1.0 if raw and has_no_speech(audio_f32, SAMPLE_RATE) else 0.0
+        return _strip_hallucinations(raw, no_speech_prob=no_speech) or None
 
     segments, _ = model.transcribe(
         audio_f32,
@@ -2801,9 +2809,12 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         # A quick tap of the key with nothing said: speech engines can invent
         # a word ("Thank you.") in a fraction of a second of room noise.
         from .silence import is_speechless_tap
+        # Both stop with the cancel beep, as a too-short F8 tap and the
+        # hands-free "nothing said" stop do: silence there read as broken.
         if is_speechless_tap(audio_f32, SAMPLE_RATE):
             print("(Short tap with no speech; nothing typed)")
             logger.info(f"Skipped a {len(audio_f32) / SAMPLE_RATE:.2f}s recording with no speech in it")
+            _beep(beeps_on, *CANCEL_BEEP)
             return
 
         # Stage 1: Transcribe audio → raw text
@@ -2811,6 +2822,8 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         logger.info(f"TIMING: Transcription pipeline took {time.time() - t0:.2f}s")
         if not raw:
             print("(No speech recognized)")
+            logger.info("Nothing recognized, so nothing was typed")
+            _beep(beeps_on, *CANCEL_BEEP)
             return
 
         # Stage 2: Check for undo commands ("undo that", "undo word", etc.)

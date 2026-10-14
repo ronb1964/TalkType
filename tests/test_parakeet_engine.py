@@ -148,3 +148,38 @@ def test_parakeet_is_on_the_graphics_chip_only_once_its_vulkan_files_are_there(m
     svc = TuxTalkDBusService.__new__(TuxTalkDBusService)
     svc.app = SimpleNamespace(config=SimpleNamespace(model="parakeet-v3", device="cuda"))
     assert TuxTalkDBusService.GetDeviceType(svc) == "cpu"
+
+
+def _parakeet_saying(monkeypatch, text, nobody_talked):
+    from tuxtalk import app, silence
+    from tuxtalk.parakeet_engine import ParakeetModel
+    fake = ParakeetModel.__new__(ParakeetModel)
+    fake.recognize = lambda audio: text
+    monkeypatch.setattr(app, "model", fake, raising=False)
+    monkeypatch.setattr(silence, "has_no_speech", lambda a, sr: nobody_talked)
+    return app._transcribe_audio(np.zeros(16000, dtype=np.float32), language=None)
+
+
+def test_parakeet_inventing_mm_hmm_in_silence_types_nothing(monkeypatch):
+    """0.15.0 testing: an F9 tap with nothing said typed "Mm-hmm." into Konsole."""
+    assert _parakeet_saying(monkeypatch, "Mm-hmm.", nobody_talked=True) is None
+
+
+def test_parakeet_keeps_a_real_mm_hmm(monkeypatch):
+    assert _parakeet_saying(monkeypatch, "Mm-hmm.", nobody_talked=False) == "Mm-hmm."
+
+
+def test_parakeet_keeps_real_words_even_in_a_quiet_recording(monkeypatch):
+    """Only stock fillers are judged, never a real sentence."""
+    assert _parakeet_saying(monkeypatch, "Hello there.", nobody_talked=True) == "Hello there."
+
+
+def test_nothing_recognized_plays_the_cancel_beep(monkeypatch):
+    """A recording that types nothing ends with the cancel beep, not silence."""
+    from tuxtalk import app, silence
+    beeps = []
+    monkeypatch.setattr(app, "_beep", lambda on, *tone: beeps.append(tone))
+    monkeypatch.setattr(silence, "is_speechless_tap", lambda a, sr: False)
+    monkeypatch.setattr(app, "_transcribe_audio", lambda *a: None)
+    app._transcribe_and_inject([np.ones(16000, dtype=np.int16).tobytes()], 16000, True, False, False)
+    assert beeps == [app.CANCEL_BEEP]
