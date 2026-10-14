@@ -89,6 +89,10 @@ def _loggable(text):
 # _apply_cleanup_settings(), at startup and on every live-settings reload.
 _remove_fillers = False
 _swiss_spelling = False     # ß -> ss in the finished text (Swiss Standard German)
+# Spoken numbers as digits: None (off), "all" or "small_as_words" (one to nine
+# stay words), and the language to read them in. See spoken_numbers.py.
+_numbers_mode = None
+_numbers_language = "en"
 _ai_engine = None
 # Which of the two features using the AI engine are on. The engine runs while
 # either is; each checks its own flag before using it.
@@ -103,10 +107,17 @@ def _apply_cleanup_settings(cfg):
     """Bring the cleanup and auto-stop options in line with *cfg*; start or
     stop the AI engine."""
     global _remove_fillers, _ai_engine, _auto_stop_seconds, _ai_corrections, _voice_editing, _swiss_spelling
+    global _numbers_mode, _numbers_language
     _auto_stop_seconds = (float(getattr(cfg, "auto_stop_seconds", 2.0))
                           if getattr(cfg, "auto_stop_silence", False) else 0.0)
     _remove_fillers = bool(getattr(cfg, "remove_fillers", False))
     _swiss_spelling = bool(getattr(cfg, "swiss_spelling", False))
+    if getattr(cfg, "numbers_as_digits", False):
+        _numbers_mode = "small_as_words" if getattr(cfg, "numbers_small_as_words", False) else "all"
+    else:
+        _numbers_mode = None
+    from .recommend import effective_language
+    _numbers_language = effective_language(cfg)
     _ai_corrections = bool(getattr(cfg, "ai_corrections", False))
     _voice_editing = bool(getattr(cfg, "voice_editing", False))
     want_ai = _ai_corrections or _voice_editing
@@ -2385,6 +2396,14 @@ def _safe_to_lowercase_first_word(text: str) -> bool:
     return True
 
 
+def _numbers_to_digits(text: str) -> str:
+    """*text* with spoken numbers as digits, when that option is on."""
+    if not _numbers_mode:
+        return text
+    from .spoken_numbers import to_digits
+    return to_digits(text, _numbers_language, small_as_words=_numbers_mode == "small_as_words")
+
+
 def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: bool) -> str:
     """Apply voice commands, normalize, handle mid-sentence, add auto-period/space.
 
@@ -2429,6 +2448,10 @@ def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: b
     if _custom_words:
         from .custom_words import fix_spelling
         text = fix_spelling(text, _custom_words, hyphens=False)
+
+    # Spoken numbers as digits. Before the quoted snippets come back, so a
+    # literal snippet is typed exactly as written.
+    text = _numbers_to_digits(text)
 
     # Restore quoted (literal) custom command replacements before any further
     # processing so that auto-period/space checks see the real final text.
@@ -3104,6 +3127,8 @@ def _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
                 result = None
         if result and _swiss_spelling:
             result = swiss_spelling(result)
+        if result:
+            result = _numbers_to_digits(result)
         # Exact: for an edit done in code, spacing may be the whole change
         # (indenting one line); the AI's spacing-only answers are dropped above.
         if not result or result == selected:

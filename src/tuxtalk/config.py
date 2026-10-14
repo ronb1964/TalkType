@@ -133,6 +133,10 @@ class Settings:
     smart_quotes: bool = True   # "smart quotes"
     # ß -> ss in the finished text (Swiss Standard German); on by default on Swiss German systems
     swiss_spelling: bool = field(default_factory=swiss_german_locale)
+    # Spoken numbers written as digits ("twenty-five" -> 25) in the finished text
+    numbers_as_digits: bool = False
+    # ...but a lone one to nine stays a word ("three cats", "25 chickens")
+    numbers_small_as_words: bool = False
     mode: str = "hold"          # "hold" or "toggle"
     toggle_hotkey: str = ""     # used only when mode="toggle" (empty until user picks during onboarding)
     mic: str = ""               # substring to match input device (empty = default)
@@ -732,6 +736,8 @@ LIVE_APPLIED_KEYS = {
     # off starts or stops its engine from the same reload (_apply_cleanup_settings).
     "remove_fillers",
     "swiss_spelling",
+    "numbers_as_digits",
+    "numbers_small_as_words",
     "ai_corrections",
     "voice_editing",
     # Hands-free auto-stop; read when each toggle recording starts.

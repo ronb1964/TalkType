@@ -1791,6 +1791,56 @@ class PreferencesWindow:
                                "(Strasse, gross). On by default when the system is set to Swiss German.")
         return check
 
+    def _numbers_option(self):
+        """The "Write numbers as digits" tickbox with its two choices indented
+        beneath it, greyed while the tickbox is off: all numbers, or one to
+        nine spelled out. Returned as one box: the tickbox, then the choices."""
+        check = Gtk.CheckButton(label="Write numbers as digits")
+        check.set_active(bool(self.config.get("numbers_as_digits", False)))
+        check.set_tooltip_text("Type spoken numbers as digits: \"twenty-five chickens\" becomes \"25 chickens\",\n"
+                               "\"october fifteenth\" becomes \"october 15th\" and \"seven thirty\" after at becomes \"7:30\".\n"
+                               "\"One\" and \"two\" on their own stay words (\"one of them\"), and so do fractions.\n"
+                               "Works in English, German, Spanish, French, Italian, Portuguese, Dutch and Danish.")
+        every = Gtk.RadioButton.new_with_label(None, "All numbers (3 cats, 25 chickens)")
+        small = Gtk.RadioButton.new_with_label_from_widget(
+            every, "Spell out one to nine (three cats, 25 chickens)")
+        small.set_tooltip_text("Many writing styles spell out one to nine and use digits from 10 up.\n"
+                               "Digits read out one at a time, like a zip code, are joined into one number either way.")
+        (small if self.config.get("numbers_small_as_words", False) else every).set_active(True)
+
+        choices = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        choices.set_margin_start(28)   # under the tickbox's label, not its box
+        choices.pack_start(every, False, False, 0)
+        choices.pack_start(small, False, False, 0)
+        choices.set_sensitive(check.get_active())
+
+        def toggled(button):
+            self.update_config("numbers_as_digits", button.get_active())
+            choices.set_sensitive(button.get_active())
+
+        check.connect("toggled", toggled)
+        # Both buttons fire "toggled" on a change; one handler is enough.
+        small.connect("toggled", lambda b: self.update_config("numbers_small_as_words", b.get_active()))
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        box.pack_start(check, False, False, 0)
+        box.pack_start(choices, False, False, 0)
+        return box
+
+    def _section_header(self, grid, row, title):
+        """A divider line and a bold section title across the grid; returns the
+        next free row."""
+        sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        sep.set_margin_top(20)
+        sep.set_margin_bottom(15)
+        grid.attach(sep, 0, row, 2, 1)
+        header = Gtk.Label()
+        header.set_markup(f"<b>{title}</b>")
+        header.set_xalign(0)
+        header.set_margin_bottom(10)
+        grid.attach(header, 0, row + 1, 2, 1)
+        return row + 2
+
     def create_advanced_tab(self):
         grid = Gtk.Grid()
         grid.set_column_spacing(10)
@@ -1819,6 +1869,9 @@ class PreferencesWindow:
         row += 1
         
         grid.attach(self._swiss_spelling_check(), 0, row, 2, 1)
+        row += 1
+
+        grid.attach(self._numbers_option(), 0, row, 2, 1)
         row += 1
 
         # Auto space
@@ -1854,8 +1907,14 @@ class PreferencesWindow:
         # Host only: the Flatpak always types through the libei portal, so
         # Auto/Type/Paste don't apply — don't show the selector there.
         if not os.environ.get("FLATPAK_ID"):
-            grid.attach(inject_label, 0, row, 1, 1)
-            grid.attach(inject_combo, 1, row, 1, 1)
+            # How the text gets typed is its own section, not formatting.
+            row = self._section_header(grid, row, "Inserting Text")
+            # The dropdown sits right beside its label at its own width, so
+            # the two read as one setting.
+            inject_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+            inject_row.pack_start(inject_label, False, False, 0)
+            inject_row.pack_start(inject_combo, False, False, 0)
+            grid.attach(inject_row, 0, row, 2, 1)
             row += 1
 
             # Paste puts the dictation on the clipboard, replacing whatever was
@@ -1874,18 +1933,7 @@ class PreferencesWindow:
             row += 1
 
         # ===== DICTATION CLEANUP SECTION =====
-        cleanup_sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
-        cleanup_sep.set_margin_top(20)
-        cleanup_sep.set_margin_bottom(15)
-        grid.attach(cleanup_sep, 0, row, 2, 1)
-        row += 1
-
-        cleanup_header = Gtk.Label()
-        cleanup_header.set_markup('<b>Dictation Cleanup</b>')
-        cleanup_header.set_xalign(0)
-        cleanup_header.set_margin_bottom(10)
-        grid.attach(cleanup_header, 0, row, 2, 1)
-        row += 1
+        row = self._section_header(grid, row, "Dictation Cleanup")
 
         fillers_check = Gtk.CheckButton(label="Remove \u201cum\u201d, \u201cuh\u201d and accidentally repeated words")
         fillers_check.set_active(bool(self.config.get("remove_fillers", False)))
@@ -1926,6 +1974,48 @@ class PreferencesWindow:
         row += 1
 
 
+        # ===== POWER MANAGEMENT SECTION =====
+        separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        separator.set_margin_top(20)
+        separator.set_margin_bottom(15)
+        grid.attach(separator, 0, row, 2, 1)
+        row += 1
+
+        power_header = Gtk.Label()
+        power_header.set_markup('<b>Power Management</b>')
+        power_header.set_xalign(0)
+        power_header.set_margin_bottom(10)
+        grid.attach(power_header, 0, row, 2, 1)
+        row += 1
+
+        # Auto timeout checkbox
+        self.auto_timeout_check = Gtk.CheckButton(label="Enable auto-timeout after inactivity")
+        self.auto_timeout_check.set_active(self.config.get("auto_timeout_enabled", False))
+        self.auto_timeout_check.connect("toggled", lambda x: self.update_config("auto_timeout_enabled", x.get_active()))
+        self.auto_timeout_check.connect("toggled", self._on_auto_timeout_toggled)
+        self.auto_timeout_check.set_tooltip_text("Automatically stop the dictation service after a period of inactivity.\nThis helps save battery life on laptops and reduces CPU usage.")
+        grid.attach(self.auto_timeout_check, 0, row, 2, 1)
+        row += 1
+
+        # Timeout duration (only visible when timeout is enabled)
+        self.timeout_label = Gtk.Label(label="Timeout after (minutes):", xalign=0)
+
+        self.timeout_spin = Gtk.SpinButton()
+        self.timeout_spin.set_range(1, 60)  # 1 to 60 minutes
+        self.timeout_spin.set_increments(1, 5)
+        self.timeout_spin.set_value(self.config.get("auto_timeout_minutes", 5))
+        self.timeout_spin.connect("value-changed", lambda x: self.update_config("auto_timeout_minutes", int(x.get_value())))
+        self.timeout_spin.connect("scroll-event", lambda *a: True)  # Disable scroll wheel to prevent accidental changes
+        self.timeout_spin.set_tooltip_text("Number of minutes of inactivity before automatically stopping dictation.\n• 1-5 minutes: Very aggressive (good for short sessions)\n• 5-15 minutes: Balanced (recommended for laptop use)\n• 15-30 minutes: Conservative (good for desktop use)")
+        # Indented under the tickbox it belongs to, with the number right
+        # beside its label. The label and the box hide with the tickbox off.
+        timeout_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        timeout_row.set_margin_start(28)
+        timeout_row.pack_start(self.timeout_label, False, False, 0)
+        timeout_row.pack_start(self.timeout_spin, False, False, 0)
+        grid.attach(timeout_row, 0, row, 2, 1)
+        row += 1
+
         # ===== PRIVACY SECTION =====
         privacy_sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
         privacy_sep.set_margin_top(20)
@@ -1962,43 +2052,6 @@ class PreferencesWindow:
         clear_log_btn.connect("clicked", self._on_clear_log_clicked)
         clear_log_box.pack_start(clear_log_btn, False, False, 0)
         grid.attach(clear_log_box, 0, row, 2, 1)
-        row += 1
-
-        # ===== POWER MANAGEMENT SECTION =====
-        separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
-        separator.set_margin_top(20)
-        separator.set_margin_bottom(15)
-        grid.attach(separator, 0, row, 2, 1)
-        row += 1
-
-        power_header = Gtk.Label()
-        power_header.set_markup('<b>Power Management</b>')
-        power_header.set_xalign(0)
-        power_header.set_margin_bottom(10)
-        grid.attach(power_header, 0, row, 2, 1)
-        row += 1
-
-        # Auto timeout checkbox
-        self.auto_timeout_check = Gtk.CheckButton(label="Enable auto-timeout after inactivity")
-        self.auto_timeout_check.set_active(self.config.get("auto_timeout_enabled", False))
-        self.auto_timeout_check.connect("toggled", lambda x: self.update_config("auto_timeout_enabled", x.get_active()))
-        self.auto_timeout_check.connect("toggled", self._on_auto_timeout_toggled)
-        self.auto_timeout_check.set_tooltip_text("Automatically stop the dictation service after a period of inactivity.\nThis helps save battery life on laptops and reduces CPU usage.")
-        grid.attach(self.auto_timeout_check, 0, row, 2, 1)
-        row += 1
-
-        # Timeout duration (only visible when timeout is enabled)
-        self.timeout_label = Gtk.Label(label="Timeout after (minutes):", xalign=0)
-        grid.attach(self.timeout_label, 0, row, 1, 1)
-
-        self.timeout_spin = Gtk.SpinButton()
-        self.timeout_spin.set_range(1, 60)  # 1 to 60 minutes
-        self.timeout_spin.set_increments(1, 5)
-        self.timeout_spin.set_value(self.config.get("auto_timeout_minutes", 5))
-        self.timeout_spin.connect("value-changed", lambda x: self.update_config("auto_timeout_minutes", int(x.get_value())))
-        self.timeout_spin.connect("scroll-event", lambda *a: True)  # Disable scroll wheel to prevent accidental changes
-        self.timeout_spin.set_tooltip_text("Number of minutes of inactivity before automatically stopping dictation.\n• 1-5 minutes: Very aggressive (good for short sessions)\n• 5-15 minutes: Balanced (recommended for laptop use)\n• 15-30 minutes: Conservative (good for desktop use)")
-        grid.attach(self.timeout_spin, 1, row, 1, 1)
         row += 1
 
         # Add horizontal separator before GPU section

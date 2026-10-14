@@ -28,8 +28,8 @@ least three years after the last TuxTalk release that includes it.
 
 - **Python 3.10** (PSF License), from Ubuntu 22.04.
 - **Python packages** (faster-whisper, CTranslate2, onnxruntime, onnx-asr,
-  NumPy, sounddevice, Hugging Face Hub, tokenizers, PyAV and the libraries they
-  use): each package's license is in its own `*.dist-info` folder under
+  text2num, NumPy, sounddevice, Hugging Face Hub, tokenizers, PyAV and the
+  libraries they use): each package's license is in its own `*.dist-info` folder under
   `usr/lib/python3.10/site-packages/`. CTranslate2 (MIT) and tokenizers
   (Apache-2.0) don't include theirs, so they're added under
   `usr/share/licenses/`.

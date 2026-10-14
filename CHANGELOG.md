@@ -3,6 +3,16 @@
 All notable changes to TuxTalk are documented here. It was called TalkType
 before 0.15.0, so older entries use that name.
 
+## [Unreleased]
+
+- Numbers can be typed as digits. Parakeet likes to write "twenty-five" and
+  "october fifteenth" out in words, so there's a new option in Preferences,
+  Advanced, Write numbers as digits. You get 25, 15th, 7:30 and 1984, and zip
+  codes read out one digit at a time come out as one number. You can also have
+  it spell out one to nine the way a lot of style guides do. Works in English,
+  German, Spanish, French, Italian, Portuguese, Dutch and Danish. Thanks to
+  thecommedore64 for asking (Discussion #11).
+
 ## [0.15.0] - 2026-10-13
 
 TalkType is now TuxTalk.

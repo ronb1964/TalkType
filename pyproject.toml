@@ -25,6 +25,9 @@ evdev = "*"
 numpy = "*"
 pyperclip = "*"
 toml = "*"
+# "Write numbers as digits" (numbers.py): twenty-five -> 25 in eight languages.
+# A small Rust-built wheel (~380 KB) with wheels for every Python we support.
+text2num = "^3.1"
 # pygobject - using system package (copied manually in build script)
 # pycairo - using system package (copied manually in build script)
 # NOTE: torch was removed 2026-08-15 — it was never actually used. Inference runs on

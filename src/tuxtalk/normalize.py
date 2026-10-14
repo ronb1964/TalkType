@@ -415,6 +415,11 @@ def _fix_time_ampm(m: re.Match) -> str:
     return f"{hour} {ampm}{tail}"
 
 
+def format_times(text: str) -> str:
+    """Tidy every time in *text*: "7:15 p. m." -> "7:15 PM" (see _fix_time_ampm)."""
+    return _RE_TIME_FORMAT.sub(_fix_time_ampm, text)
+
+
 def _space_after_ender_repl(m: re.Match) -> str:
     """Insert a space after a sentence ender — except inside numbers,
     single-letter abbreviations and filenames, where the period is part of
