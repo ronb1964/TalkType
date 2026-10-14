@@ -22,6 +22,7 @@ The solution:
 """
 
 import os
+import signal
 import subprocess
 import grp
 import pwd
@@ -539,13 +540,55 @@ def ensure_ydotoold_running():
         logger.info("Starting ydotoold daemon for text injection...")
         # The socket named explicitly, so the daemon listens where ydotool
         # looks even when XDG_RUNTIME_DIR is unset (ydotoold then uses /tmp).
-        subprocess.Popen(["ydotoold", f"--socket-path={ydotool_socket_path()}"],
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        proc = subprocess.Popen(["ydotoold", f"--socket-path={ydotool_socket_path()}"],
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        _remember_our_ydotoold(proc.pid)
         logger.info("ydotoold launch requested")
     except FileNotFoundError:
         logger.warning("ydotoold not found in PATH - text injection may not work")
     except Exception as e:
         logger.error(f"Failed to start ydotoold: {e}")
+
+
+def _our_ydotoold_pidfile():
+    """Where the ydotoold TuxTalk started itself is noted, so Quit can stop
+    that one and only that one."""
+    runtime = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+    return os.path.join(runtime, "tuxtalk-ydotoold.pid")
+
+
+def _remember_our_ydotoold(pid):
+    try:
+        with open(_our_ydotoold_pidfile(), "w") as f:
+            f.write(str(pid))
+    except OSError as e:
+        logger.debug(f"Could not note the ydotoold we started: {e}")
+
+
+def stop_ydotoold_we_started():
+    """Stop the ydotoold TuxTalk started, on Quit. Never raises.
+
+    Only ours: a ydotoold run by a systemd service (Fix Typing can set one
+    up) or by another program may still be needed, so it's left alone. The
+    noted process must still be a ydotoold, as the number may have been
+    handed to another program since."""
+    path = _our_ydotoold_pidfile()
+    try:
+        with open(path) as f:
+            pid = int(f.read().strip())
+    except (OSError, ValueError):
+        return
+    try:
+        with open(f"/proc/{pid}/comm") as f:
+            if f.read().strip() == "ydotoold":
+                os.kill(pid, signal.SIGTERM)
+                logger.info("Stopped the ydotoold TuxTalk started")
+    except (OSError, ValueError) as e:
+        logger.debug(f"The ydotoold TuxTalk started is already gone: {e}")
+    try:
+        os.remove(path)
+    except OSError:
+        pass
 
 
 # Why a dictation couldn't be typed, for the "didn't reach the window" notice.

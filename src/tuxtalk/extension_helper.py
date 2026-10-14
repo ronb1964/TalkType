@@ -55,9 +55,13 @@ def _fetch_extension_sha256() -> Optional[str]:
             sums = parse_sha256sums(response.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         if e.code == 404:
+            # A 404 is also what a release that can't be found at all gives
+            # (the 0.15.0 test run, before the repo was renamed), so the log
+            # says both, with the address, rather than blaming the release.
             logger.info(
-                "Release publishes no SHA256SUMS.txt — installing the extension "
-                "with size verification only"
+                f"No SHA256SUMS.txt at {EXTENSION_CHECKSUMS_URL} (404): either the "
+                "release publishes none, or the release can't be found. Installing "
+                "the extension with size verification only"
             )
             return None
         raise ChecksumUnavailableError(f"Could not fetch extension checksums: {e}")
@@ -371,6 +375,12 @@ def uninstall_extension() -> bool:
                 )
             except Exception:
                 pass  # Ignore errors - extension might not be recognized
+
+            # Disabling puts it on disabled-extensions, and a failed disable
+            # (a shell that never loaded it) leaves it on enabled-extensions:
+            # an uninstall leaves it on neither.
+            desktop_detect.forget_extension(
+                EXTENSION_UUID, ("disabled-extensions", "enabled-extensions"))
 
             # Remove the extension files
             shutil.rmtree(target_dir)

@@ -4558,7 +4558,7 @@ class PreferencesWindow:
 
         from tuxtalk.download_progress_dialog import DownloadTask, UnifiedDownloadDialog
         dialog = UnifiedDownloadDialog(
-            parent=self.window, title="Downloading AI Cleanup",
+            parent=self.window, title="Downloading the AI",
             description="One-time download. Everything runs on this computer.")
         dialog.add_task(DownloadTask("AI engine", ai_cleanup.LLAMA_SIZE_TEXT,
                                      ai_cleanup.make_engine_download_func()))
@@ -5050,6 +5050,8 @@ class PreferencesWindow:
                 self._set_restart_info_sensitive(True)
             else:
                 self.extension_status_label.set_markup('<span color="#FF9800">⊘ Extension not installed</span>')
+                # It said "✓ Installed" until an uninstall in this window.
+                self.install_extension_button.set_label("Install Extension")
                 self.install_extension_button.set_sensitive(True)
                 self.uninstall_extension_button.set_sensitive(False)
                 self._set_restart_info_sensitive(True)

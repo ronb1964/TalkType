@@ -17,6 +17,12 @@ before 0.15.0, so older entries use that name.
   pressing it opened the Emoji Selector and started dictating with no warning
   at all. Now the question after changing the key says which app KDE opens with
   it.
+- Quit now also stops the typing helper (ydotoold) if TuxTalk started it. It
+  was left running after you quit. One started by a system service is left
+  alone.
+- GNOME: after Uninstall Extension, the Install button no longer still says
+  "Installed", and installing it again later starts it properly on the next
+  login. Uninstalling had left it on GNOME's list of disabled extensions.
 
 ## [0.15.0] - 2026-10-13
 

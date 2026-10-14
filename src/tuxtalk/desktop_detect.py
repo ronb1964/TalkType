@@ -180,7 +180,16 @@ def _is_extension_enabled_via_dbus(uuid: str) -> bool:
 
 
 def _read_enabled_extensions():
-    """Return org.gnome.shell enabled-extensions as a list of UUIDs, or None.
+    return _read_extension_list("enabled-extensions")
+
+
+def _write_enabled_extensions(uuids: list) -> bool:
+    return _write_extension_list("enabled-extensions", uuids)
+
+
+def _read_extension_list(key):
+    """Return org.gnome.shell *key* (enabled-extensions or disabled-extensions)
+    as a list of UUIDs, or None.
 
     gsettings prints a GVariant array — either an empty typed array `@as []`
     or a populated `['a@x', 'b@y']`. Both parse cleanly once the `@as` prefix
@@ -194,7 +203,7 @@ def _read_enabled_extensions():
     """
     try:
         result = subprocess.run(
-            ['gsettings', 'get', 'org.gnome.shell', 'enabled-extensions'],
+            ['gsettings', 'get', 'org.gnome.shell', key],
             capture_output=True, text=True, timeout=10,
         )
         if result.returncode != 0:
@@ -209,20 +218,33 @@ def _read_enabled_extensions():
         return None
 
 
-def _write_enabled_extensions(uuids: list) -> bool:
-    """Overwrite org.gnome.shell enabled-extensions with *uuids*.
+def _write_extension_list(key, uuids: list) -> bool:
+    """Overwrite org.gnome.shell *key* with *uuids*.
 
     repr() of a list of UUIDs is a valid GVariant array literal (single-quoted),
     and UUIDs never contain quotes, so no escaping is needed.
     """
     try:
         result = subprocess.run(
-            ['gsettings', 'set', 'org.gnome.shell', 'enabled-extensions', repr(uuids)],
+            ['gsettings', 'set', 'org.gnome.shell', key, repr(uuids)],
             capture_output=True, text=True, timeout=10,
         )
         return result.returncode == 0
     except (subprocess.TimeoutExpired, FileNotFoundError):
         return False
+
+
+def forget_extension(uuid: str, keys=("disabled-extensions",)) -> None:
+    """Take *uuid* out of org.gnome.shell's extension lists named by *keys*.
+
+    `gnome-extensions disable` puts an extension on disabled-extensions,
+    which outlasts an uninstall and would keep a later reinstall from
+    starting on the next login. Each list is read first and left alone if
+    the read fails, so the user's other extensions are never lost."""
+    for key in keys:
+        current = _read_extension_list(key)
+        if current is not None and uuid in current:
+            _write_extension_list(key, [u for u in current if u != uuid])
 
 
 def enable_extension(uuid: str) -> bool:
@@ -266,6 +288,9 @@ def enable_extension(uuid: str) -> bool:
         enabled.append(uuid)
         if _write_enabled_extensions(enabled):
             print(f"Added {uuid} to enabled-extensions (activates on next login)")
+
+    # An earlier uninstall's "disable" may have left it on disabled-extensions.
+    forget_extension(uuid)
 
     # Success if it is enabled now, or will be on the next shell start.
     final = _read_enabled_extensions()

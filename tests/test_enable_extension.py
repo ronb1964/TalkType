@@ -17,12 +17,19 @@ UUID = "talktype@ronb1964.github.io"
 
 
 def _fake_run(*, enable_rc, get_out, set_rc=0, get_rc=0):
-    """Build a subprocess.run stand-in keyed on which gsettings/CLI call it is."""
-    state = {"written": None, "set_calls": 0}
+    """Build a subprocess.run stand-in keyed on which gsettings/CLI call it is.
+    *get_out* and the state are enabled-extensions; disabled-extensions is
+    empty unless a test sets state["disabled"]."""
+    state = {"written": None, "set_calls": 0, "disabled": "@as []"}
 
     def run(argv, capture_output=True, text=True, timeout=10):
         if argv[0] == "gnome-extensions" and argv[1] == "enable":
             return types.SimpleNamespace(returncode=enable_rc, stdout="", stderr="not found")
+        if argv[:2] == ["gsettings", "get"] and argv[3] == "disabled-extensions":
+            return types.SimpleNamespace(returncode=0, stdout=state["disabled"], stderr="")
+        if argv[:2] == ["gsettings", "set"] and argv[3] == "disabled-extensions":
+            state["disabled"] = argv[4]
+            return types.SimpleNamespace(returncode=0, stdout="", stderr="")
         if argv[:3] == ["gsettings", "get", "org.gnome.shell"]:
             if get_rc != 0:
                 return types.SimpleNamespace(returncode=get_rc, stdout="", stderr="fail")
@@ -118,3 +125,28 @@ def test_is_enabled_uses_cli_result_without_dbus_on_host(monkeypatch):
                         lambda uuid: (_ for _ in ()).throw(AssertionError("D-Bus must not be used when the CLI answers")),
                         raising=False)
     assert dd.is_extension_enabled(UUID) is True
+
+
+def test_enable_takes_it_off_the_disabled_list(monkeypatch):
+    """An uninstall's `gnome-extensions disable` put it there, and GNOME
+    wouldn't start a reinstall listed on it."""
+    run, state = _fake_run(enable_rc=1, get_out="@as []\n")
+    state["disabled"] = f"['other@x', '{UUID}']"
+    monkeypatch.setattr(dd.subprocess, "run", run)
+    assert dd.enable_extension(UUID) is True
+    assert state["disabled"] == "['other@x']"
+
+
+def test_forget_leaves_other_extensions_and_an_unreadable_list_alone(monkeypatch):
+    run, state = _fake_run(enable_rc=0, get_out="@as []\n")
+    state["disabled"] = "['a@x', 'b@y']"
+    monkeypatch.setattr(dd.subprocess, "run", run)
+    dd.forget_extension(UUID)
+    assert state["disabled"] == "['a@x', 'b@y']"        # nothing of ours: untouched
+
+    def failing(argv, **k):
+        if argv[:2] == ["gsettings", "set"]:
+            raise AssertionError("must not write a list it couldn't read")
+        return types.SimpleNamespace(returncode=1, stdout="", stderr="")
+    monkeypatch.setattr(dd.subprocess, "run", failing)
+    dd.forget_extension(UUID)
