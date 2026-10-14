@@ -5895,6 +5895,16 @@ class PreferencesWindow:
 def main():
     from . import desktop_identity
     desktop_identity.apply()        # TuxTalk's icon on its windows, not KDE's generic one
+    # Before anything opens the shared D-Bus connection, as in the tray: one
+    # opened without the GLib main loop can't receive signals, and Test
+    # Hotkeys (which listens for HotkeyPressed) crashed on opening in 0.15.0
+    # testing. Its own DBusGMainLoop call comes too late for a shared
+    # connection that already exists.
+    try:
+        import dbus.mainloop.glib
+        dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+    except ImportError:
+        pass
     import argparse
     parser = argparse.ArgumentParser(description="TuxTalk Preferences")
     parser.add_argument("--tab", choices=["general", "audio", "advanced", "snippets", "commands", "stats", "updates", "backup"],

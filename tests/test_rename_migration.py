@@ -204,3 +204,15 @@ def test_the_plasma_script_uses_its_own_bus_connection(monkeypatch):
     monkeypatch.setenv("XDG_CURRENT_DESKTOP", "KDE")
     assert rm._default_plasma_runner()("print(1)") == "1"
     assert calls == [("open", {"private": True}), ("close", {})]
+
+
+def test_preferences_sets_the_dbus_main_loop_before_anything_else():
+    """0.15.0 testing: Test Hotkeys crashed on opening ("D-Bus connections must
+    be attached to a main loop"). Something in Preferences opened the shared
+    connection first, and the dialog's own DBusGMainLoop call can't reach a
+    connection that already exists. main() must set it before the window."""
+    import inspect
+    from tuxtalk import prefs
+    body = inspect.getsource(prefs.main)
+    assert "DBusGMainLoop(set_as_default=True)" in body
+    assert body.index("DBusGMainLoop(set_as_default=True)") < body.index("PreferencesWindow()")
