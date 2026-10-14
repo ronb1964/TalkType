@@ -20,6 +20,9 @@ before 0.15.0, so older entries use that name.
 - Voice editing (TuxTalk Labs) can do two or three changes at once. Say "make
   this formal and remove the commas" and it does both, one after the other.
   Before, only one of them happened.
+- The hands-free option in Preferences now names your actual key ("Double-tap
+  F9 for hands-free") and sits right under the toggle key it belongs to, so
+  it's easier to notice that double-tapping is a thing.
 - The language lists show each language in its own words too, like "Spanish
   (Español)" and "Japanese (日本語)", so you can find yours even if you don't
   read English. Preferences had little flags in its list, and those are gone,

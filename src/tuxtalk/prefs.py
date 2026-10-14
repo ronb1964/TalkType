@@ -352,6 +352,14 @@ HOTKEY_CLASHES = {
 }
 
 
+def hands_free_label(toggle_key):
+    """The hands-free tickbox's words, naming the toggle key: "Double-tap F9
+    for hands-free: stop after" (its seconds box and "seconds of silence"
+    follow it)."""
+    key = toggle_key or "the toggle key"
+    return f"Double-tap {key} for hands-free: stop after"
+
+
 def hotkey_label(key):
     """'F5 (reloads the page in browsers)', or just the key."""
     clash = HOTKEY_CLASHES.get(key)
@@ -1136,7 +1144,10 @@ class PreferencesWindow:
         
         # Tap-to-toggle hotkey (active alongside the hold key)
         self.toggle_label = Gtk.Label(label="Toggle Hotkey 💡:", xalign=0)
-        self.toggle_label.set_tooltip_text("Press once to start recording, press again to stop.\nBoth hotkeys are always active simultaneously.\nRecommended: F9 (default).")
+        self.toggle_label.set_tooltip_text("Press once to start recording, press again to stop.\n"
+                                           "Double-tap it for hands-free (the option under this row):\n"
+                                           "the recording stops by itself when you stop talking.\n"
+                                           "Both hotkeys are always active simultaneously.\nRecommended: F9 (default).")
         self.toggle_combo = Gtk.ComboBoxText()
         self.toggle_combo.set_can_focus(True)
         self.toggle_combo.connect("button-press-event", self._on_combo_button_press)
@@ -1161,7 +1172,10 @@ class PreferencesWindow:
         # when you go quiet (silence.py). A single tap stays a plain toggle.
         # Shown on the Flatpak too: its toggle shortcut double-taps the same way.
         auto_stop_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        auto_stop_check = Gtk.CheckButton(label="Double-tap the toggle key for hands-free: stop after")
+        auto_stop_check = Gtk.CheckButton(label=hands_free_label(self.config.get("toggle_hotkey")))
+        # Says the key itself, and follows the dropdown above.
+        self.toggle_combo.connect("changed", lambda c: auto_stop_check.set_label(
+            hands_free_label(c.get_active_id())))
         auto_stop_check.set_active(bool(self.config.get("auto_stop_silence", False)))
         auto_stop_adj = Gtk.Adjustment(value=float(self.config.get("auto_stop_seconds", 2.0)),
                                        lower=0.5, upper=10.0, step_increment=0.5)
@@ -1184,6 +1198,8 @@ class PreferencesWindow:
             "again, however long you pause. Hands-free waits until you have actually\n"
             "started talking, and a pause shorter than this setting does not stop it.\n"
             "Hold-to-talk is not affected.")
+        # Indented under the toggle key's row, which it belongs to.
+        auto_stop_box.set_margin_start(28)
         grid.attach(auto_stop_box, 0, row, 2, 1)
         row += 1
 

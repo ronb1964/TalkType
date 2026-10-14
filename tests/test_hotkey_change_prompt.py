@@ -77,3 +77,10 @@ def test_several_clashes_get_one_title():
 def test_no_clash_asks_to_try_the_key():
     title, _, _ = hotkey_change_message(CFG, {"hotkey"}, [])
     assert title == "Try your new hotkey?"
+
+
+def test_the_hands_free_option_names_the_toggle_key():
+    from tuxtalk.prefs import hands_free_label
+    assert hands_free_label("F9") == "Double-tap F9 for hands-free: stop after"
+    assert hands_free_label("F10").startswith("Double-tap F10 ")
+    assert hands_free_label("") == "Double-tap the toggle key for hands-free: stop after"
