@@ -358,6 +358,10 @@ def hotkey_label(key):
     return f"{key} ({clash})" if clash else key
 
 
+# The amber of TuxTalk's warnings (an unsafe setting, a backup never saved).
+WARNING_AMBER = "#e6aa3c"
+
+
 def hotkey_change_message(cfg, changed, refused, apps=None):
     """(title, text, offer the test) for the question after OK or Apply, or None.
 
@@ -2406,7 +2410,7 @@ class PreferencesWindow:
             self.last_backup_label.set_markup(
                 f'<span color="#6db896">Last saved: {settings_backup.when_label(when)}</span>')
         else:
-            self.last_backup_label.set_markup('<span color="#e6aa3c">Last saved: never</span>')
+            self.last_backup_label.set_markup(f'<span color="{WARNING_AMBER}">Last saved: never</span>')
 
     # --- Backup (settings_backup.py) ------------------------------------------
 
@@ -3813,7 +3817,7 @@ class PreferencesWindow:
             name.split(" ", 1)[-1])     # "🇯🇵 Japanese" -> "Japanese"
         if message:
             # Amber and bold, so it can't be missed.
-            label.set_markup(f'<span color="#e6aa3c" weight="bold">⚠️ '
+            label.set_markup(f'<span color="{WARNING_AMBER}" weight="bold">⚠️ '
                              f'{GLib.markup_escape_text(message)}</span>')
             label.show()
         else:
@@ -3904,7 +3908,7 @@ class PreferencesWindow:
         for row, (name, _models, *cells) in enumerate(recommend.COMPATIBILITY, start=1):
             grid.attach(Gtk.Label(label=name, xalign=0), 0, row, 1, 1)
             for col, (works, note) in enumerate(cells, start=1):
-                mark, colour = ("✓", "#6db896") if works else ("✗", "#e6aa3c")
+                mark, colour = ("✓", "#6db896") if works else ("✗", WARNING_AMBER)
                 text = f"{mark} {note}".strip()
                 cell = Gtk.Label(xalign=0)
                 cell.set_markup(f'<span color="{colour}">{GLib.markup_escape_text(text)}</span>')
@@ -5793,7 +5797,19 @@ class PreferencesWindow:
                                 message_type=Gtk.MessageType.QUESTION
                                 if offer_test and not clash else Gtk.MessageType.WARNING,
                                 buttons=Gtk.ButtonsType.NONE, text=title)
-        dialog.format_secondary_text(text)
+        if clash:
+            # A key that does two things must not read like an ordinary
+            # heading: the title and the clash paragraph are amber, the
+            # colour of TuxTalk's other warnings.
+            esc = GLib.markup_escape_text
+            dialog.set_markup(f'<span color="{WARNING_AMBER}" weight="bold" size="large">'
+                              f'⚠️ {esc(title)}</span>')
+            first, _, rest = text.partition("\n\n")
+            dialog.format_secondary_markup(
+                f'<span color="{WARNING_AMBER}" weight="bold">{esc(first)}</span>'
+                + (f"\n\n{esc(rest)}" if rest else ""))
+        else:
+            dialog.format_secondary_text(text)
         if offer_test:
             dialog.add_button("Not Now", Gtk.ResponseType.CANCEL)
             dialog.add_button("Test Now", Gtk.ResponseType.OK)
