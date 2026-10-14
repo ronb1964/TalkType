@@ -87,9 +87,28 @@
       <caption>Voice commands for punctuation, formatting and corrections</caption>
       <image>https://raw.githubusercontent.com/ronb1964/TuxTalk/main/screenshots/voice-commands.png</image>
     </screenshot>
+    <screenshot>
+      <caption>Voice editing: select text and say how to change it</caption>
+      <image>https://raw.githubusercontent.com/ronb1964/TuxTalk/main/screenshots/voice-edit.png</image>
+    </screenshot>
   </screenshots>
 
   <releases>
+    <release version="0.15.0" date="2026-10-13">
+      <description>
+        <p>TalkType is now TuxTalk, with voice editing and Your Words</p>
+        <ul>
+          <li>New name, same app. Settings, models, voice commands, stats and backups move over on their own</li>
+          <li>Voice editing (TuxTalk Labs): select text, hold Shift+F8 and say how to change it</li>
+          <li>Your Words: the names and terms you use come out spelled your way</li>
+          <li>Ctrl+Alt+P types your last dictation again, wherever your cursor is</li>
+          <li>Music and videos pause while you dictate</li>
+          <li>The recording indicator can follow the window you're dictating into (TuxTalk Labs)</li>
+          <li>Swiss German spelling: ss instead of ß</li>
+          <li>Preferences asks before closing with changes you didn't apply</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.14.6" date="2026-10-11">
       <description>
         <p>Settings backup, and CUDA where you'd look for it</p>

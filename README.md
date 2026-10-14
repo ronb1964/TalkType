@@ -20,6 +20,7 @@
 
 <p align="center">
   <a href="#installation">Install</a> &nbsp;&bull;&nbsp;
+  <a href="#new-in-0150">New in 0.15.0</a> &nbsp;&bull;&nbsp;
   <a href="#what-it-does">What it does</a> &nbsp;&bull;&nbsp;
   <a href="#all-the-features">All the features</a> &nbsp;&bull;&nbsp;
   <a href="CHANGELOG.md">What's new</a>
@@ -36,6 +37,24 @@ https://github.com/user-attachments/assets/e2aa55f4-a4ff-482e-8884-cc92ac5809a9
 That works on GNOME, KDE, Sway, Hyprland and X11 with no setup, because TuxTalk reads the key straight from the keyboard instead of asking the desktop for it. Most Linux dictation tools can't do hold-to-talk on Wayland at all.
 
 It's free, it runs completely offline, and nothing you say ever leaves your computer.
+
+---
+
+## New in 0.15.0
+
+<p align="center">
+  <img src="screenshots/voice-edit.png" alt="Voice editing. Select 'hey can u send me the report by friday thx' and say 'make this more formal': it becomes 'Could you please send me the report by Friday, thank you.' Select milk, eggs, bread on three lines and say 'make this a bulleted list': each line gets a dash. Select 'the deadline is tomorrow' and say 'make this all caps': THE DEADLINE IS TOMORROW." width="700">
+</p>
+
+**Voice editing.** Select some text, hold Shift+F8 and tell it what to change. Say it however you want, there's no fixed wording. Ctrl+Z puts your text back if you don't like what you got. Things like all caps, bullet lists or taking out the commas are done exactly in code, and the AI only gets the jobs that need it, like changing the tone. It's in TuxTalk Labs for now, which means it works but I'm still working on it, so it stays off until you turn it on.
+
+**Your Words.** Put in the names and terms you use, one per line, and they come out spelled your way. Parakeet kept writing my app's name as "Tuck's talk". Now it's TuxTalk.
+
+**Ctrl+Alt+P types your last dictation again**, wherever your cursor is. For when something steals the focus and your words land in the wrong window.
+
+**Music and videos pause while you dictate**, and start back up when you're done. I had a YouTube video going once and it turned "isn't it" into "Venezuela".
+
+And the indicator can follow the window you're dictating into, Swiss German gets ss instead of ß, and Preferences asks before you close it with changes you didn't apply. The [changelog](CHANGELOG.md) has the rest.
 
 ---
 
@@ -67,12 +86,12 @@ Want something else? One button shows every choice, with what it costs you in do
 
 ### Teach it your words
 
-Names, brands, the part numbers you use every day. If TuxTalk keeps getting one wrong, pick it out of a recent dictation with **Fix a Word**, type it the right way, and it's fixed from then on.
+Names, brands, the part numbers you use every day. Put them in **Your Words** and they come out spelled your way, even when the model hears them split up, like "tux talk". If one still comes out wrong, pick it out of a recent dictation with **Fix a Word**, type it the right way, and it's fixed from then on.
 
-You can also make your own shortcuts, like "my email" for your address.
+Snippets are your own shortcuts, like "my email" for your address.
 
 </td>
-<td width="50%"><img src="screenshots/prefs-commands.png" alt="Preferences, Snippets tab: your own phrases and Fix a Word"></td>
+<td width="50%"><img src="screenshots/your-words.png" alt="Your Words: names and terms TuxTalk should spell your way, one per line"></td>
 </tr>
 <tr>
 <td width="50%"><img src="screenshots/tray-performance.png" alt="Tray menu with the Performance presets"></td>
@@ -103,6 +122,16 @@ Your Stats shows the words you've dictated today, this week and all time, and ho
 Save your settings, voice commands, Fix a Word words and stats to one file, and load it on a new computer or after a reinstall. TuxTalk also keeps your last 10 settings on its own, so if a change or an update goes wrong you can just go back.
 
 </td>
+</tr>
+<tr>
+<td>
+
+### Try what's coming next
+
+TuxTalk Labs is at the bottom of Preferences, Advanced. It's for features that work but aren't finished, like voice editing and an indicator that follows the window you're dictating into. They're off until you turn them on, and there's a link right there to tell me how they're working for you.
+
+</td>
+<td width="50%"><img src="screenshots/prefs-labs.png" alt="Preferences, Advanced: the TuxTalk Labs section with voice editing and the indicator that follows your window"></td>
 </tr>
 </table>
 
@@ -193,6 +222,8 @@ enough interest and I'll make it happen.
 |--------|--------------|
 | **F8** | Hold to record, release to transcribe (hold-to-talk) |
 | **F9** | Press once to start, press again to stop (tap-to-toggle) |
+| **Ctrl+Alt+P** | Types your last dictation again, wherever your cursor is |
+| **Shift+F8** | Voice editing: hold it and say how to change the selected text (turn it on in TuxTalk Labs first) |
 
 ---
 
@@ -205,12 +236,17 @@ enough interest and I'll make it happen.
 - **Corrections.** Say "no wait", "scratch that", "I mean" or "actually" and the optional AI fixes it. It also drops "um", "uh" and stutters.
 - **Voice commands.** "comma", "period", "new paragraph", "undo last word", "delete last three sentences" and more. See the full list below.
 - **Email and web addresses.** "john at gmail dot com" types john@gmail.com, and "github dot com" types github.com.
-- **Your own commands.** Make a phrase type anything you want, like "my email" for your address.
+- **Voice editing (Labs).** Select text, hold Shift+F8 and say how to change it. Tone and rewrites go to the AI, while caps, lists, commas and removing a word are done exactly in code. Bold, italics and underline work in LibreOffice and other word processors.
+- **Snippets.** Make a phrase type anything you want, like "my email" for your address.
+- **Your Words.** The names and terms you use, spelled your way.
 - **Fix a Word.** Teach it a name or term it keeps getting wrong.
+- **Paste Last Dictation.** Ctrl+Alt+P types your last dictation again, for when it landed in the wrong window.
+- **Pauses your music and videos** while you talk, and starts back up only what it paused.
 - **Recent Dictations.** Your last 20, one click to copy. Kept in memory only.
 - **Your Stats.** Words dictated and typing time saved, at your own typing speed.
 - **Settings backup.** Save everything to one file and load it on another computer. TuxTalk also keeps your last 10 settings on its own, so you can roll back a change.
-- **A recording indicator you can style.** Orb, waveform, frequency bars or radial, any color, anywhere on screen. It reacts to your voice so you know it's listening.
+- **A recording indicator you can style.** Orb, waveform, frequency bars or radial, any color, anywhere on screen. It reacts to your voice so you know it's listening. In Labs it can follow the window you're dictating into.
+- **Swiss German spelling.** Types ss instead of ß, on by itself when your system is set to Swiss German.
 - **Tells you why when it can't type.** If a dictation can't be typed into the window, TuxTalk says why and what fixes it.
 - **Private.** Everything runs on your computer, and what you dictate is never written to a log unless you turn that on for troubleshooting.
 - **GNOME extension.** A native panel menu on GNOME, and a tray icon everywhere else.
@@ -247,10 +283,19 @@ enough interest and I'll make it happen.
 <p align="center"><em>Microphone test and recording indicator &bull; The Voice Commands quick reference</em></p>
 
 <p align="center">
-  <img src="screenshots/help-getting-started.png" alt="Help, Getting Started" width="45%">
-  <img src="screenshots/help-voice-commands.png" alt="Help, Voice Commands" width="45%">
+  <img src="screenshots/prefs-snippets.png" alt="Preferences, Snippets: your own phrases, Fix a Word and Your Words" width="45%">
+  <img src="screenshots/prefs-stats.png" alt="Preferences, Stats" width="45%">
 </p>
-<p align="center"><em>Built-in help</em></p>
+<p align="center"><em>Snippets, Fix a Word and Your Words &bull; Your Stats</em></p>
+
+<p align="center">
+  <img src="screenshots/help-getting-started.png" alt="Help, Getting Started" width="70%">
+</p>
+<p align="center">
+  <img src="screenshots/help-voice-commands.png" alt="Help, Voice Commands" width="45%">
+  <img src="screenshots/help-labs.png" alt="Help, TuxTalk Labs: how voice editing works" width="45%">
+</p>
+<p align="center"><em>Built-in help, including a page on TuxTalk Labs and voice editing</em></p>
 
 </details>
 

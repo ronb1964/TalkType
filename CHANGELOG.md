@@ -3,7 +3,7 @@
 All notable changes to TuxTalk are documented here. It was called TalkType
 before 0.15.0, so older entries use that name.
 
-## [0.15.0] - unreleased
+## [0.15.0] - 2026-10-13
 
 TalkType is now TuxTalk.
 
@@ -72,6 +72,37 @@ Also new in this one:
 - Times like "6:41 p.m." sometimes came out as "641 p.m.", with no colon. Turns
   out Parakeet writes the same time two different ways, and only one of them
   was getting fixed. Both come out as 6:41 PM now.
+- Preferences has a gear next to it in the tray menu now, so it's easier to
+  spot. On KDE the Dictation Service checkmark moved into the same column so
+  everything still lines up.
+- Close Preferences with the X after changing something and it asks if you
+  want to apply it first. Before, it just threw your changes away without a
+  word. I found that one the hard way.
+
+Fixed, mostly found by testing on five different distros:
+
+- Tap F9 and say nothing and Parakeet could type "Mm-hmm." It hears that in
+  silence, apparently. It doesn't get typed anymore, and a dictation that
+  comes up empty gives you the cancel beep so you know it heard you stop.
+- Test Hotkeys could close the second it opened.
+- Preferences fits on a 1366x768 or 1280x800 laptop screen with its buttons
+  showing.
+- If an old TalkType was still running, TuxTalk quietly didn't start. Now the
+  old one steps aside. An old TalkType Flatpak gets stopped too, otherwise both
+  of them typed every dictation twice.
+- The hotkey test only says Working when TuxTalk can actually read your
+  keyboard. Before, it could say Working and then the dictation key did
+  nothing.
+- A line break going into a terminal becomes a space, so a dictation can't run
+  a command by itself.
+- Model downloads try again on a bad connection, and ask before falling back
+  to a smaller model.
+- Cancel the password prompt for the typing fix or an update and it says
+  cancelled instead of failed.
+- On GNOME without the extension, dictating into a terminal pastes again.
+- On KDE the setup windows show TuxTalk's icon instead of a generic W.
+- The "You're All Set" window fits without scrolling.
+- Restoring the clipboard puts the middle-click selection back too.
 
 ## [0.14.6] - 2026-10-11
 
