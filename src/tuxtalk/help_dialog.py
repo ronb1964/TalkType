@@ -440,6 +440,11 @@ These are done exactly, without the AI, so they always come out right:
   • <b>make this a bulleted list</b> or <b>a numbered list</b> (several lines: one point per line)
   • <b>indent this</b>  •  <b>remove the indent</b>  •  <b>delete this</b>
 
+<b>One change at a time</b>
+Each voice edit does one thing. Say "make this bold and all caps" and only one of them
+happens. For two changes, do two edits: say the first, then select the text again
+(a change to the words clears the selection) and say the second.
+
 <b>Bold, italics and underline</b>
 Say <b>make this bold</b>, <b>italicize this</b> or <b>underline this</b> in LibreOffice and
 other word processors, and TuxTalk presses the app's own Ctrl+B, Ctrl+I or Ctrl+U for you.
