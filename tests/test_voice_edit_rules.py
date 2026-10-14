@@ -257,3 +257,33 @@ def test_a_colour_or_point_size_is_an_honest_cant(said):
 ])
 def test_colour_and_point_words_about_the_wording_still_go_to_the_ai(said):
     assert r.formatting(said) is None
+
+
+# --- two changes at once (0.15.1) --------------------------------------------------------
+
+@pytest.mark.parametrize("said, steps", [
+    ("make it formal and remove the commas", ["make it formal", "remove the commas"]),
+    ("Remove the commas, then make it all caps.", ["Remove the commas", "make it all caps"]),
+    ("translate it to Spanish and then make it shorter",
+     ["translate it to Spanish", "make it shorter"]),
+    ("make it formal, remove the commas and add a title",
+     ["make it formal", "remove the commas", "add a title"]),
+    # One instruction, even with "and" in it: the second part isn't a command.
+    ("make it shorter and simpler", ["make it shorter and simpler"]),
+    ("remove the commas and periods", ["remove the commas and periods"]),
+    ("make it sound friendly and professional", ["make it sound friendly and professional"]),
+    ("replace cats and dogs with pets", ["replace cats and dogs with pets"]),
+    ("make it formal", ["make it formal"]),
+    # Keys pressed in the app (bold, Delete) can't follow a rewrite: one step.
+    ("make it bold and remove the commas", ["make it bold and remove the commas"]),
+    ("remove the commas and delete it", ["remove the commas and delete it"]),
+])
+def test_split_steps(said, steps):
+    from tuxtalk.voice_edit_rules import split_steps
+    assert split_steps(said) == steps
+
+
+def test_at_most_three_steps():
+    from tuxtalk.voice_edit_rules import split_steps
+    said = "make it formal and remove the commas and add a title and make it all caps"
+    assert split_steps(said) == [said]

@@ -274,6 +274,44 @@ def has_formatting_shortcuts(window_class) -> bool:
     return bool(window_class) and window_class.lower() in _WORD_PROCESSORS
 
 
+# --- two changes at once --------------------------------------------------------------
+
+# Words a change starts with. A piece of an instruction is a change of its own
+# only if it starts with one, so "make it shorter and simpler" stays one
+# instruction ("simpler" is no command) while "make it formal and remove the
+# commas" is two.
+_COMMANDS = frozenset("""
+    make change turn convert put set switch write rewrite reword rephrase remove
+    delete take get drop strip lose cut add use insert capitalize capitalise
+    uppercase lowercase fix correct translate shorten expand lengthen simplify
+    replace swap sort number indent unindent outdent dedent join combine merge
+    split separate summarize summarise spell keep start end begin""".split())
+# ", then" / "and then" / "and also" / ", and" / "and" / a bare comma, longest first.
+_STEP_BREAK = re.compile(r"\s*(?:,\s*(?:and\s+)?then|\s+and\s+(?:then|also)|,?\s+and|,)\s+",
+                         re.IGNORECASE)
+MAX_STEPS = 3
+
+
+def split_steps(instruction: str) -> list:
+    """*instruction* as the changes it asks for, in order: "make it formal and
+    remove the commas" -> ["make it formal", "remove the commas"].
+
+    Split only where every piece starts with a command word; otherwise, and
+    for more than MAX_STEPS pieces, the whole instruction is one step, as
+    before. Bold, italics and Delete press keys in the app, which can't follow
+    a rewrite that's typed in afterwards, so an instruction holding one of
+    those stays whole too."""
+    text = instruction.strip().rstrip(".!?")
+    pieces = [p.strip() for p in _STEP_BREAK.split(text) if p.strip()]
+    if not 1 < len(pieces) <= MAX_STEPS:
+        return [instruction.strip()]
+    for piece in pieces:
+        first = _norm(piece).split()[0] if _norm(piece) else ""
+        if first not in _COMMANDS or is_delete(piece) or formatting(piece):
+            return [instruction.strip()]
+    return pieces
+
+
 # --- which edits may change the lines -----------------------------------------------------
 
 _RELAYOUT = re.compile(

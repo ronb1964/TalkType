@@ -17,6 +17,9 @@ before 0.15.0, so older entries use that name.
   pressing it opened the Emoji Selector and started dictating with no warning
   at all. Now the question after changing the key says which app KDE opens with
   it.
+- Voice editing (TuxTalk Labs) can do two or three changes at once. Say "make
+  this formal and remove the commas" and it does both, one after the other.
+  Before, only one of them happened.
 - The language lists show each language in its own words too, like "Spanish
   (Español)" and "Japanese (日本語)", so you can find yours even if you don't
   read English. Preferences had little flags in its list, and those are gone,

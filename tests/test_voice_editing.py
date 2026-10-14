@@ -1008,3 +1008,31 @@ def test_a_rewrite_uses_ss_with_swiss_spelling_on(edit_env, monkeypatch):
     edit_env["engine"].answer = "Die Straße ist gross."
     run_edit()
     assert edit_env["typed"] == ["Die Strasse ist gross."]
+
+
+def test_two_changes_are_done_one_after_the_other(edit_env, monkeypatch):
+    """"make it formal and remove the commas": the AI rewords, then the
+    commas go in code, exactly."""
+    monkeypatch.setattr(app, "_transcribe_audio",
+                        lambda audio, lang: "make it formal and remove the commas")
+    edit_env["engine"].answer = "We completed the electrical work, as planned, today."
+    run_edit()
+    assert [i for _t, i in edit_env["engine"].asked] == ["make it formal"]
+    assert edit_env["typed"] == ["We completed the electrical work as planned today."]
+
+
+def test_a_step_with_no_change_does_not_stop_the_others(edit_env, monkeypatch):
+    monkeypatch.setattr(app, "_transcribe_audio",
+                        lambda audio, lang: "make it formal and make it all caps")
+    edit_env["engine"].answer = None              # the AI has nothing for step one
+    run_edit()
+    assert edit_env["typed"] == ["WE FINISHED THE ELECTRICAL TODAY."]
+
+
+def test_a_rewording_step_needs_the_ai(edit_env, monkeypatch):
+    monkeypatch.setattr(app, "_ai_engine", None)
+    monkeypatch.setattr(app, "_transcribe_audio",
+                        lambda audio, lang: "remove the commas and make it formal")
+    run_edit()
+    assert edit_env["typed"] == []
+    assert edit_env["notices"]

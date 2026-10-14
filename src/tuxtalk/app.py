@@ -3109,22 +3109,36 @@ def _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
         if len(selected) > ai_cleanup.MAX_EDIT_CHARS:
             _edit_problem("too_long", beeps_on)
             return
-        result = voice_edit_rules.mechanical_edit(selected, instruction)
+        # "make it formal and remove the commas" is two changes, made one
+        # after the other, each in code or by the AI (split_steps).
+        steps = voice_edit_rules.split_steps(instruction)
+        if len(steps) > 1:
+            logger.info(f"Voice edit: {len(steps)} changes, one at a time")
         engine = _ai_engine
-        if result is not None:
-            logger.info("Voice edit done in code, without the AI")
-        elif engine is None:
-            _edit_problem("not_installed", beeps_on)
-            return
-        elif not engine.is_ready():
-            _edit_problem("not_ready", beeps_on)
-            return
-        else:
-            result = engine.edit(selected, instruction)
-            if result and result.split() == selected.split():
-                # Only spacing changed ("select all" got the line ends
-                # trimmed): not an edit anyone asked for.
-                result = None
+        text = selected
+        for step in steps:
+            done = voice_edit_rules.mechanical_edit(text, step)
+            if done is not None:
+                logger.info("Voice edit done in code, without the AI"
+                            + (f" ({_loggable(step)})" if len(steps) > 1 else ""))
+            elif engine is None:
+                _edit_problem("not_installed", beeps_on)
+                return
+            elif not engine.is_ready():
+                _edit_problem("not_ready", beeps_on)
+                return
+            else:
+                done = engine.edit(text, step)
+                if done and done.split() == text.split():
+                    # Only spacing changed ("select all" got the line ends
+                    # trimmed): not an edit anyone asked for.
+                    done = None
+                if done is None and len(steps) > 1:
+                    # One change the AI had nothing for needn't cost the others.
+                    logger.info(f"Voice edit: no change for {_loggable(step)}")
+            if done is not None:
+                text = done
+        result = text if text != selected else None
         if result and _swiss_spelling:
             result = swiss_spelling(result)
         if result:

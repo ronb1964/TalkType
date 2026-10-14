@@ -441,10 +441,13 @@ These are done exactly, without the AI, so they always come out right:
   • <b>make this a bulleted list</b> or <b>a numbered list</b> (several lines: one point per line)
   • <b>indent this</b>  •  <b>remove the indent</b>  •  <b>delete this</b>
 
-<b>One change at a time</b>
-Each voice edit does one thing. Say "make this bold and all caps" and only one of them
-happens. For two changes, do two edits: say the first, then select the text again
-(a change to the words clears the selection) and say the second.
+<b>Two or three changes at once</b>
+Join changes with "and" or "then": <b>make this formal and remove the commas</b>, or
+<b>translate this to Spanish, then make it shorter</b>. They're done one after the other,
+up to three. Each one has to start like a command (make, remove, add, change...), so
+"make it shorter and simpler" is still one change.
+Bold, italics, underline and delete press keys in the app, so they can't be combined with
+other changes: do those as an edit of their own.
 
 <b>Bold, italics and underline</b>
 Say <b>make this bold</b>, <b>italicize this</b> or <b>underline this</b> in LibreOffice and
