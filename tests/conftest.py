@@ -96,3 +96,21 @@ def _no_real_hotkey_test_flag(monkeypatch):
         os.remove(_HOTKEY_TEST_FLAG)
     except OSError:
         pass
+
+
+@pytest.fixture(autouse=True)
+def _no_real_custom_files(monkeypatch, tmp_path):
+    """Keep tests off the user's own Your Words and custom commands.
+
+    custom_words.txt sits beside custom_commands.toml, so one path covers
+    both. In 0.15.0 testing, "TuxTalk" saved in the real Your Words reached a
+    Whisper test as a prompt it didn't expect. Tests that need these files
+    point the path at their own folder, as before.
+    """
+    import sys
+    from tuxtalk import config
+
+    monkeypatch.setattr(config, "CUSTOM_COMMANDS_PATH", str(tmp_path / "custom_commands.toml"))
+    app = sys.modules.get("tuxtalk.app")
+    if app is not None:
+        monkeypatch.setattr(app, "_custom_words", [])
