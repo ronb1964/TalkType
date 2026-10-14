@@ -50,6 +50,7 @@ def test_the_title_bar_close_waits_too(monkeypatch):
     monkeypatch.setattr(service_launcher, "find_service_pids", lambda: [123])
     monkeypatch.setattr(P.Gtk, "main_quit", lambda: closed.append("quit"))
     d = SimpleNamespace(window=SimpleNamespace(set_sensitive=lambda v: None),
+                        _has_unapplied_changes=lambda: False,
                         _stop_mic_test=lambda: closed.append("mic"),
                         _release_pidfile=lambda: closed.append("pidfile"))
 

@@ -5230,6 +5230,16 @@ class PreferencesWindow:
         """Handle window close event: stop the mic test, clean up PID file."""
         if getattr(self, "_waiting_for_kde", False):
             return True     # Apply/OK is still using the window
+        # Closing with the X used to drop unapplied changes without a word.
+        # Ask first, the way KDE's System Settings does. (Cancel still closes
+        # without asking: clicking it already says "throw them away".)
+        if self._has_unapplied_changes():
+            answer = self._ask_apply_before_closing()
+            if answer == "apply":
+                self.on_ok(None)    # saves and closes; stays open if saving fails
+                return True
+            if answer != "discard":
+                return True         # Keep Editing, or the question was closed
         self._stop_mic_test()
         self._release_pidfile()
         Gtk.main_quit()
@@ -5350,6 +5360,41 @@ class PreferencesWindow:
                           f"The {model_display_name(model_name)} model has been "
                           "downloaded and is ready to use.")
         return (_ok, _ok, cancelled)  # (success, was_downloaded, cancelled)
+
+    def _has_unapplied_changes(self):
+        """True when closing now would lose something: a setting changed since
+        the last Apply, an edited Voice Commands list, or a new language pick
+        (written to the config only at save time, see save_config)."""
+        if self._changed_since_open():
+            return True
+        try:
+            if (hasattr(self, "commands_store")
+                    and self._commands_from_store() != self._commands_loaded):
+                return True
+        except Exception:
+            pass
+        if (hasattr(self, "lang_combo") and self.config.get("language_mode", "auto") != "auto"
+                and self.lang_combo.get_active_id() not in (None, self._config_at_open.get("language"))):
+            return True
+        return False
+
+    def _ask_apply_before_closing(self):
+        """"apply", "discard", or "keep" (also when the question is closed)."""
+        dialog = message_dialog(transient_for=self.window, modal=True,
+                                message_type=Gtk.MessageType.QUESTION,
+                                buttons=Gtk.ButtonsType.NONE,
+                                text="Apply your changes before closing?")
+        dialog.format_secondary_text(
+            "You changed some settings but haven't applied them. "
+            "If you close without applying, they're lost.")
+        dialog.add_button("Keep Editing", Gtk.ResponseType.CANCEL)
+        dialog.add_button("Discard", Gtk.ResponseType.REJECT)
+        dialog.add_button("Apply", Gtk.ResponseType.OK)
+        dialog.set_default_response(Gtk.ResponseType.OK)
+        response = dialog.run()
+        dialog.destroy()
+        return {Gtk.ResponseType.OK: "apply",
+                Gtk.ResponseType.REJECT: "discard"}.get(response, "keep")
 
     def _changed_since_open(self):
         """Keys the user changed in this window since it opened.
