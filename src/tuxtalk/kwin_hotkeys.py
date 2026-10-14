@@ -89,6 +89,25 @@ def qt_key_sequence(name):
     return "+".join(mods + [key])
 
 
+# Qt's codes for a modifier and a key, as kglobalaccel reports shortcuts.
+_QT_MODIFIER_CODES = {"Shift": 0x02000000, "Ctrl": 0x04000000, "Alt": 0x08000000,
+                      "Meta": 0x10000000}
+_QT_F1 = 0x01000030
+
+
+def qt_key_code(sequence):
+    """A Qt key sequence from qt_key_sequence ("Shift+F8") as the number
+    kglobalaccel reports it in, or None."""
+    sequence = qt_key_sequence(sequence)
+    if sequence is None:
+        return None
+    *mods, key = sequence.split("+")
+    code = _QT_F1 + int(key[1:]) - 1 if key in _FKEYS else ord(key)
+    for mod in mods:
+        code |= _QT_MODIFIER_CODES[mod]
+    return code
+
+
 def wanted_shortcuts(cfg):
     """[(shortcut name, description, Qt key)] for the hotkeys in *cfg*."""
     roles = (
@@ -161,6 +180,13 @@ def session_bus():
             if method == "unregister":
                 obj = bus.get_object(KGLOBALACCEL_SERVICE, KGLOBALACCEL_PATH)
                 return obj.unregister(*args, dbus_interface=KGLOBALACCEL_INTERFACE, **t)
+            if method == "allComponents":
+                obj = bus.get_object(KGLOBALACCEL_SERVICE, KGLOBALACCEL_PATH)
+                return obj.allComponents(dbus_interface=KGLOBALACCEL_INTERFACE, **t)
+            if method in ("componentShortcuts", "componentIsActive"):
+                obj = bus.get_object(KGLOBALACCEL_SERVICE, args[0])
+                name = "allShortcutInfos" if method == "componentShortcuts" else "isActive"
+                return getattr(obj, name)(dbus_interface=KGLOBALACCEL_COMPONENT_INTERFACE, **t)
             if method in ("shortcutNames", "allShortcutInfos"):
                 obj = bus.get_object(KGLOBALACCEL_SERVICE, KWIN_COMPONENT_PATH)
                 return getattr(obj, method)(dbus_interface=KGLOBALACCEL_COMPONENT_INTERFACE, **t)
@@ -199,13 +225,13 @@ def result_path() -> str:
     return os.path.join(os.path.dirname(CONFIG_PATH), "kde-hotkeys.json")
 
 
-def _save_result(refused) -> None:
+def _save_result(refused, apps=None) -> None:
     """Record which keys KDE refused, and when, for Preferences to report
-    after a hotkey change."""
+    after a hotkey change. *apps*: {key: app} for the keys that open an app."""
     import json
     try:
         with open(result_path(), "w") as f:
-            json.dump({"checked": time.time(), "refused": refused}, f)
+            json.dump({"checked": time.time(), "refused": refused, "apps": apps or {}}, f)
     except OSError as e:
         logger.debug(f"Could not save the KDE hotkey result: {e}")
 
@@ -222,6 +248,77 @@ def refused_since(since):
         return [str(k) for k in data["refused"]]
     except (OSError, ValueError, KeyError, TypeError):
         return None
+
+
+def app_shortcuts_since(since):
+    """{key: app} for the keys that open an app in KDE, from the last claim
+    if that was after *since*; {} when unknown."""
+    import json
+    try:
+        with open(result_path()) as f:
+            data = json.load(f)
+        if float(data["checked"]) < since:
+            return {}
+        return {str(k): str(v) for k, v in data.get("apps", {}).items()}
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return {}
+
+
+# kglobalaccel components that are TuxTalk's own: TalkType's portal
+# component (io.github.ronb1964.TalkType) can linger with F3/F4 in it.
+_OUR_COMPONENTS = ("tuxtalk", "talktype", "io.github.ronb1964.")
+
+
+def _desktop_file_exists(name) -> bool:
+    """Whether an app's .desktop file (*name*, "org.kde.foo.desktop") is
+    installed, so its launch shortcut still works."""
+    dirs = [os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")]
+    dirs += (os.environ.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share").split(":")
+    return any(os.path.isfile(os.path.join(d, "applications", name)) for d in dirs if d)
+
+
+def _app_shortcut_clashes(bus, shortcuts) -> dict:
+    """{key: app} for our keys another kglobalaccel component holds.
+
+    kglobalaccel turns a KWin-script shortcut away only when another one is
+    on the same key in the same way; an app's launch shortcut (KDE's Emoji
+    Selector on F6) lives in its own component and isn't weighed against
+    ours, so both fire. A launch shortcut counts while its app is installed
+    (leftovers of removed apps stay listed), any other component while it
+    runs.
+    """
+    wanted = {qt_key_code(key): key for _name, _text, key in shortcuts}
+    wanted.pop(None, None)
+    clashes = {}
+    try:
+        paths = [str(p) for p in bus.call("allComponents") or []]
+    except Exception as e:
+        logger.debug(f"Could not list KDE's shortcut components: {e}")
+        return clashes
+    for path in paths:
+        if path == KWIN_COMPONENT_PATH:
+            continue
+        try:
+            infos = bus.call("componentShortcuts", path) or []
+        except Exception as e:
+            logger.debug(f"Could not read KDE shortcuts of {path}: {e}")
+            continue
+        for info in infos:
+            unique, friendly = str(info[2]), str(info[3]) or str(info[1])
+            if unique.lower().startswith(_OUR_COMPONENTS):
+                break
+            hits = [wanted[int(c)] for c in info[6] if int(c) in wanted]
+            if not hits:
+                continue
+            try:
+                live = (_desktop_file_exists(unique) if unique.endswith(".desktop")
+                        else bool(bus.call("componentIsActive", path)))
+            except Exception:
+                live = False
+            if live:
+                for key in hits:
+                    clashes.setdefault(key, friendly)
+    return clashes
 
 
 def _log_refused(bus, shortcuts) -> list:
@@ -274,7 +371,12 @@ def claim(cfg, bus=None) -> bool:
     except Exception as e:
         logger.warning(f"Could not register the hotkeys with KWin: {e}")
         return False
-    _save_result(_log_refused(bus, shortcuts))
+    refused = _log_refused(bus, shortcuts)
+    apps = _app_shortcut_clashes(bus, shortcuts)
+    for key, app in apps.items():
+        logger.warning(f"KDE opens {app} with {key}, so pressing {key} will do that "
+                       f"as well as dictating")
+    _save_result(refused + [k for k in apps if k not in refused], apps)
     logger.info("KWin now holds the hotkeys back from the focused app: "
                 + ", ".join(k for _n, _t, k in shortcuts))
     return True

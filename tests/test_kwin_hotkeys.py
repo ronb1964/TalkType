@@ -250,3 +250,87 @@ class TestRenameToTuxTalk:
         kh.release(bus)
         unloaded = [c[1] for c in bus.calls if c[0] == "unloadScript"]
         assert "talktype-hotkeys" in unloaded and "tuxtalk-hotkeys" in unloaded
+
+
+class TestAppLaunchShortcuts:
+    """2026-10-13: F6 opened KDE's Emoji Selector AND started dictation, with
+    no warning. App-launch shortcuts live in their own kglobalaccel component
+    (org.kde.plasma.emojier.desktop), which kglobalaccel doesn't weigh against
+    a KWin script's shortcut, so our F6 was accepted and the read-back looked
+    fine. claim() now looks through the other components for our keys."""
+
+    F6 = 0x01000035                       # Qt::Key_F6
+    META_DOT = 0x10000000 | 0x2E          # Meta+.
+
+    class AppsBus(FakeBus):
+        def __init__(self, components, desktop_files=(), **kw):
+            super().__init__(**kw)
+            # path -> (unique name, friendly name, [Qt key codes], active)
+            self.components = components
+            self.desktop_files = set(desktop_files)
+
+        def call(self, method, *args):
+            if method == "allComponents":
+                return ["/component/kwin", *self.components]
+            if method == "componentShortcuts":
+                unique, friendly, keys, _active = self.components[args[0]]
+                return [("_launch", friendly, unique, friendly, "default", "", keys, keys)]
+            if method == "componentIsActive":
+                return self.components[args[0]][3]
+            return super().call(method, *args)
+
+    @pytest.fixture
+    def apps(self, on_kde, monkeypatch):
+        def make(components, desktop_files=()):
+            bus = self.AppsBus(components)
+            monkeypatch.setattr(kh, "_desktop_file_exists",
+                                lambda name: name in set(desktop_files))
+            return bus
+        return make
+
+    EMOJI = {"/component/org_kde_plasma_emojier_desktop":
+             ("org.kde.plasma.emojier.desktop", "Emoji Selector", [F6, META_DOT], False)}
+
+    @pytest.mark.parametrize("name,code", [
+        ("F6", 0x01000035), ("F1", 0x01000030), ("F12", 0x0100003B),
+        ("Shift+F8", 0x02000000 | 0x01000037), ("Ctrl+Alt+V", 0x04000000 | 0x08000000 | 0x56),
+        ("Super+F9", 0x10000000 | 0x01000038), ("", None), ("Space", None),
+    ])
+    def test_qt_key_codes(self, name, code):
+        assert kh.qt_key_code(name) == code
+
+    def test_an_app_launched_by_our_key_is_reported(self, apps, caplog):
+        before = kh.time.time() - 1
+        kh.claim(_cfg("F6", "", ""), apps(self.EMOJI, {"org.kde.plasma.emojier.desktop"}))
+        assert "Emoji Selector" in caplog.text and "F6" in caplog.text
+        assert kh.refused_since(before) == ["F6"]
+        assert kh.app_shortcuts_since(before) == {"F6": "Emoji Selector"}
+
+    def test_another_key_of_that_app_is_no_clash(self, apps, caplog):
+        kh.claim(_cfg("F8", "F9", ""), apps(self.EMOJI, {"org.kde.plasma.emojier.desktop"}))
+        assert "Emoji Selector" not in caplog.text
+
+    def test_a_leftover_from_an_uninstalled_app_is_ignored(self, apps, caplog):
+        before = kh.time.time() - 1
+        kh.claim(_cfg("F6", "", ""), apps(self.EMOJI, desktop_files=()))
+        assert kh.refused_since(before) == []
+
+    def test_a_running_app_with_its_own_shortcut_counts(self, apps):
+        before = kh.time.time() - 1
+        comps = {"/component/kmix": ("kmix", "Audio Volume", [self.F6], True)}
+        kh.claim(_cfg("F6", "", ""), apps(comps))
+        assert kh.app_shortcuts_since(before) == {"F6": "Audio Volume"}
+
+    def test_an_old_talktype_component_is_ours_not_a_clash(self, apps):
+        """TalkType's portal component still lists F3/F4 on Ron's machine."""
+        before = kh.time.time() - 1
+        comps = {"/component/io_github_ronb1964_TalkType":
+                 ("io.github.ronb1964.TalkType", "TalkType", [0x01000032], True)}
+        kh.claim(_cfg("F3", "", ""), apps(comps))
+        assert kh.refused_since(before) == []
+
+    def test_a_kde_that_cannot_list_components_is_fine(self, on_kde, caplog):
+        before = kh.time.time() - 1
+        kh.claim(_cfg("F6", "", ""), FakeBus(fail={"allComponents"}))
+        assert kh.refused_since(before) == []
+        assert kh.app_shortcuts_since(before) == {}

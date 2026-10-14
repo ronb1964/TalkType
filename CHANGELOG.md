@@ -12,6 +12,11 @@ before 0.15.0, so older entries use that name.
   it spell out one to nine the way a lot of style guides do. Works in English,
   German, Spanish, French, Italian, Portuguese, Dutch and Danish. Thanks to
   thecommedore64 for asking (Discussion #11).
+- On KDE, picking a hotkey that already opens an app now warns you. I gave
+  the Emoji Selector F6 in System Settings, then made F6 my dictation key, and
+  pressing it opened the Emoji Selector and started dictating with no warning
+  at all. Now the question after changing the key says which app KDE opens with
+  it.
 
 ## [0.15.0] - 2026-10-13
 

@@ -358,12 +358,13 @@ def hotkey_label(key):
     return f"{key} ({clash})" if clash else key
 
 
-def hotkey_change_message(cfg, changed, refused):
+def hotkey_change_message(cfg, changed, refused, apps=None):
     """(text, offer the test) for the question after OK or Apply, or None.
 
     *changed*: the settings keys changed; *refused*: keys KDE already uses
-    (kwin_hotkeys.refused_since), None when unknown. A changed key is offered
-    the same test first run gives it.
+    (kwin_hotkeys.refused_since), None when unknown; *apps*: {key: app} for
+    those that open an app (kwin_hotkeys.app_shortcuts_since). A changed key
+    is offered the same test first run gives it.
     """
     roles = (("hotkey", "hold-to-talk key"), ("toggle_hotkey", "tap-to-start key"))
     lines = [f"Your {what} is now {cfg.get(key)}." for key, what in roles
@@ -380,7 +381,14 @@ def hotkey_change_message(cfg, changed, refused):
     all_keys = ("hotkey", "toggle_hotkey", "voice_commands_hotkey", "paste_last_hotkey")
     ours = {qt_key_sequence(cfg.get(k)): cfg.get(k) for k in all_keys if cfg.get(k)}
     for key in refused or []:
-        if key in ours and changed & set(all_keys):
+        if key not in ours or not changed & set(all_keys):
+            continue
+        app = (apps or {}).get(key)
+        if app:
+            lines.append(f"KDE opens {app} with {ours[key]}, so pressing it does that too. "
+                         f"Pick another key, or change that shortcut in System Settings, "
+                         f"Keyboard, Shortcuts.")
+        else:
             lines.append(f"KDE already uses {ours[key]} for one of its own shortcuts, so "
                          f"pressing it does that too. Pick another key if that gets in the way.")
     return ("\n\n".join(lines), offer_test) if lines else None
@@ -5756,7 +5764,10 @@ class PreferencesWindow:
         from .config import HOTKEY_KEYS
         if not set(changed) & {*HOTKEY_KEYS, "voice_commands_hotkey", "paste_last_hotkey"}:
             return False
-        message = hotkey_change_message(self.config, set(changed), self._kde_refused(since))
+        from .kwin_hotkeys import app_shortcuts_since
+        refused = self._kde_refused(since)
+        message = hotkey_change_message(self.config, set(changed), refused,
+                                        app_shortcuts_since(since) if refused else None)
         if message is None:
             return False
         text, offer_test = message

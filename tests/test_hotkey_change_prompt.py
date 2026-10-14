@@ -48,3 +48,12 @@ def test_kdes_meta_spelling_maps_back_to_super():
 def test_the_question_says_where_to_test_later():
     text, _ = hotkey_change_message(CFG, {"hotkey"}, [])
     assert "Test Hotkeys, under the hotkeys on the General tab" in text
+
+
+def test_an_app_kde_opens_with_the_key_is_named():
+    """F6 opened the Emoji Selector as well as dictating (2026-10-13)."""
+    cfg = dict(CFG, hotkey="F6")
+    text, offer_test = hotkey_change_message(cfg, {"hotkey"}, ["F6"], {"F6": "Emoji Selector"})
+    assert offer_test and "KDE opens Emoji Selector with F6" in text
+    assert "System Settings" in text
+    assert "one of its own shortcuts" not in text
