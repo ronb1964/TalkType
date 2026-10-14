@@ -125,6 +125,9 @@ fresh-test-env.sh
 # --recurse-submodules` fail and showed as a dead link on GitHub. The packaging
 # sources that belong to this project live in aur/ and are tracked there.
 aur-repo/
+# The same for the package after the 0.15.0 rename
+# (ssh://aur@aur.archlinux.org/tuxtalk-appimage.git).
+aur-repo-tuxtalk/
 
 # ============================================
 # Build artifacts & generated files
