@@ -90,7 +90,8 @@ def test_in_another_window_it_only_saves_the_fix(opened, typed, monkeypatch):
     assert calls == [()]
 
 
-def test_fix_in_text_selects_types_and_puts_the_cursor_back(monkeypatch):
+def test_fix_in_text_swaps_only_the_word(monkeypatch):
+    """It retyped the whole dictation; only the word should change (Ron)."""
     from tuxtalk import fix_word_dialog as fw
     pressed, typed_text = [], []
 
@@ -105,12 +106,22 @@ def test_fix_in_text_selects_types_and_puts_the_cursor_back(monkeypatch):
     monkeypatch.setattr(fw, "_REFOCUS_S", 0)
     monkeypatch.setattr(app, "_output_backend", lambda: Backend())
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "org.kde.kwrite")
-    old = " Whose fleece was white. "
-    assert fw.fix_in_text(old, "Whose fleece is white.", "org.kde.kwrite") is True
+    old = " Whose fleas was white. "                  # as typed, outer spaces and all
+    core = old.strip()
+    start = core.index("fleas")
+    assert fw.fix_in_text(old, (start, start + 5, "fleece"), "org.kde.kwrite") is True
+    after = len(" was white.") + 1                     # the rest, plus the trailing space
     S = ("SHIFT",)
-    assert pressed[0] == [((), "LEFT")] + [(S, "LEFT")] * len("Whose fleece was white.")
-    assert typed_text == ["Whose fleece is white."]
-    assert pressed[1] == [((), "RIGHT")]                          # back past the space
+    assert pressed[0] == [((), "LEFT")] * after + [(S, "LEFT")] * 5
+    assert typed_text == ["fleece"]                    # just the word
+    assert pressed[1] == [((), "RIGHT")] * after       # back to the end
+
+
+def test_the_word_span_leaves_its_punctuation_out():
+    from tuxtalk import vocabulary
+    text = "I use Bamboo Studio, daily."
+    start, end = vocabulary.core_span(text, 2, 3)
+    assert text[start:end] == "Bamboo Studio"
 
 
 def test_fix_in_text_leaves_another_window_alone(monkeypatch):
@@ -120,7 +131,7 @@ def test_fix_in_text_leaves_another_window_alone(monkeypatch):
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "firefox")
     monkeypatch.setattr(app, "_notify", lambda t, m: notices.append(m))
     monkeypatch.setattr(app, "_output_backend", lambda: pytest.fail("typed into the wrong window"))
-    assert fw.fix_in_text(" Hello. ", "Hi.", "org.kde.kwrite") is False
+    assert fw.fix_in_text(" Hello. ", (0, 5, "Hi"), "org.kde.kwrite") is False
     assert notices and "wasn't changed" in notices[0]
 
 

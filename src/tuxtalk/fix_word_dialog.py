@@ -284,11 +284,14 @@ class _FixWordDialog:
             return
         logger.info("Saved a word fix to custom voice commands")
         if self.copy_check.get_active():
-            fixed = vocabulary.fixed_text(self.text, self.first, self.last, replacement)
             if self.in_place:
-                self.fixed_for_text = fixed
+                # Only the picked words change in the app: where they are in
+                # the text, and what goes there.
+                start, end = vocabulary.core_span(self.text, self.first, self.last)
+                self.fixed_for_text = (start, end, replacement)
             else:
-                self.copy_text(fixed)
+                self.copy_text(vocabulary.fixed_text(self.text, self.first, self.last,
+                                                     replacement))
         self.window.destroy()
 
     def _confirm_risky(self, phrase, replacement):
@@ -323,14 +326,17 @@ class _FixWordDialog:
 _REFOCUS_S = 0.5
 
 
-def fix_in_text(typed, fixed, window):
-    """Replace what TuxTalk *typed* with *fixed* in the focused app: select
-    it as "select that" does, type the fixed text over it, and put the
-    cursor back after the spaces that followed. Not when another window has
-    the focus than *window* (None: unknown, go ahead). True if done."""
+def fix_in_text(typed, fix, window):
+    """Swap just the picked words in what TuxTalk *typed*, in the focused
+    app. *fix* is (start, end, replacement), offsets in the typed text
+    without its outer spaces, as the window showed it. The cursor, still at
+    the end of the dictation, steps back to the words, selects them, types
+    the replacement and steps forward again; nothing else is retyped. Not
+    when another window than *window* has the focus (None: unknown, go
+    ahead). True if done."""
     import time
-    from . import app, voice_navigation as nav
-    from .history import _LINE_BREAK_MARKER
+    from . import app
+    start, end, replacement = fix
     time.sleep(_REFOCUS_S)
     focused = app._query_focused_window_class()
     if window and focused and focused != window:
@@ -338,12 +344,14 @@ def fix_in_text(typed, fixed, window):
         app._notify("TuxTalk", "The fix is saved, but your text wasn't changed: another "
                                "window had the focus.")
         return False
-    chords = nav.chords(nav.parse("select that"), typed)
-    trailing = len(typed) - len(typed.rstrip())
+    core = typed.strip()
+    # From the cursor back to the end of the picked words: the spaces after
+    # the dictation, then whatever followed the words in it.
+    back = (len(typed) - len(typed.rstrip())) + (len(core) - end)
     backend = app._output_backend()
-    done = (bool(chords) and backend.press_keys(chords)
-            and backend.type_text(fixed.replace("\n", _LINE_BREAK_MARKER))
-            and backend.press_keys([((), "RIGHT")] * trailing))
+    done = (backend.press_keys([((), "LEFT")] * back + [(("SHIFT",), "LEFT")] * (end - start))
+            and backend.type_text(replacement)
+            and backend.press_keys([((), "RIGHT")] * back))
     logger.info("Fix a Word: fixed it in the text" if done else "Fix a Word: couldn't fix the text")
     return bool(done)
 

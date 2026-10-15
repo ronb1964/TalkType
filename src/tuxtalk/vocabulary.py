@@ -76,6 +76,14 @@ def phrase_for(text, first, last):
     return " ".join(core.split()).lower()
 
 
+def core_span(text, first, last):
+    """(start, end) of the picked words without the punctuation around them:
+    the part fixed_text replaces ("Bamboo Studio," -> just "Bamboo Studio")."""
+    start, end = word_span(text, first, last)
+    lead, core, _trail = _EDGE_RE.match(text[start:end]).groups()
+    return start + len(lead), start + len(lead) + len(core)
+
+
 def fixed_text(text, first, last, replacement):
     """*text* with the selected words replaced, keeping the punctuation around
     them ("Bamboo Studio," -> "BambuStudio,") and everything else as it was."""
