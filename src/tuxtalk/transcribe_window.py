@@ -69,6 +69,9 @@ class TranscribeWindow:
         # nothing. A copy doesn't count: the next copy replaces it.
         self.kept = False
         self.copied = False
+        # The transcript is on disk for next time (file_transcribe.remember),
+        # so closing loses nothing; only another file replaces it.
+        self.remembered = False
         self._cancel = threading.Event()
 
         self.window = Gtk.Window(title=TITLE)
@@ -259,6 +262,7 @@ class TranscribeWindow:
     def _on_done(self, pieces, total, seconds, stopped):
         self.pieces = pieces
         self.kept = self.copied = False
+        self.remembered = bool(pieces) and ft.remember(self.path, pieces, total)
         self._set_busy(False)
         self._show_text()
         logger.info(f"Transcribed a file: {total:.0f} s of sound in {seconds:.1f} s"
@@ -271,8 +275,27 @@ class TranscribeWindow:
         elif not pieces:
             self.status.set_text("Nobody seems to talk in this file.")
         else:
-            self.status.set_text(f"Done: {_duration(total)} of sound in {_duration(seconds)}.")
+            self.status.set_text(f"Done: {_duration(total)} of sound in {_duration(seconds)}."
+                                 + (" It stays here until you transcribe another file."
+                                    if self.remembered else ""))
         return False
+
+    def recall(self):
+        """Show the last transcript kept, with every button, as it was."""
+        last = ft.recall()
+        if last is None:
+            return
+        path, pieces, _total, when = last
+        self.path, self.pieces = path, pieces
+        self.kept = self.copied = False
+        self.remembered = True
+        name = os.path.basename(path or "") or "Your last file"
+        self.file_label.set_markup(f"<b>{GLib.markup_escape_text(name)}</b>")
+        stamp = time.strftime("%b %-d at %-I:%M %p", time.localtime(when)) if when else ""
+        self.status.set_text(f"Your last transcript{', from ' + stamp if stamp else ''}. "
+                             "It stays here until you transcribe another file.")
+        self._set_busy(False)
+        self._show_text()
 
     def _on_failed(self, message):
         self._set_busy(False)
@@ -338,7 +361,7 @@ class TranscribeWindow:
                 "The file isn't finished yet. Closing now loses what's been done so far.",
                 [("Keep Going", Gtk.ResponseType.CANCEL),
                  ("Stop and Close", Gtk.ResponseType.ACCEPT)]) == Gtk.ResponseType.ACCEPT
-        if not self.pieces or self.kept:
+        if not self.pieces or self.kept or (why == "close" and self.remembered):
             return True
         loses = ("Closing the window loses it." if why == "close"
                  else "Opening another file replaces it.")
@@ -397,6 +420,8 @@ def main(argv=None):
         logger.debug(f"Transcribe a File: no pidfile ({e})")
     if argv and os.path.isfile(argv[0]):
         window.start(os.path.abspath(argv[0]))
+    else:
+        window.recall()
     try:
         Gtk.main()
     finally:
