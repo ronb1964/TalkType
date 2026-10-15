@@ -6,6 +6,9 @@ import pytest
 
 from tuxtalk import app, explain
 
+# The real open_window, before the suite's stand-in replaces it (conftest).
+REAL_OPEN_WINDOW = explain.open_window
+
 
 @pytest.fixture
 def problems(monkeypatch):
@@ -98,10 +101,10 @@ def test_the_window_is_centred_over_the_app_and_kept_on_its_monitor():
 
 def test_it_opens_on_xwayland_where_it_may_be_placed(monkeypatch):
     started = []
-    monkeypatch.undo()     # the real open_window, not the test suite's stand-in
+    monkeypatch.setattr(explain, "_window", None)     # put back after the test
     monkeypatch.setattr(explain.subprocess, "Popen",
-                        lambda cmd, env, **k: started.append((cmd, env)) or type("P", (), {})())
-    assert explain.open_window("terminal") is True
+                        lambda cmd, env, **k: started.append((cmd, env)) or object())
+    assert REAL_OPEN_WINDOW("terminal") is True
     cmd, env = started[0]
     assert cmd[-2:] == ["tuxtalk.explain", "terminal"]
     assert env["GDK_BACKEND"] == "x11,wayland"
