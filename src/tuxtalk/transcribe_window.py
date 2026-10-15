@@ -361,10 +361,17 @@ class TranscribeWindow:
                 "The file isn't finished yet. Closing now loses what's been done so far.",
                 [("Keep Going", Gtk.ResponseType.CANCEL),
                  ("Stop and Close", Gtk.ResponseType.ACCEPT)]) == Gtk.ResponseType.ACCEPT
-        if not self.pieces or self.kept or (why == "close" and self.remembered):
+        # Closing asks even when the text is kept for next time (Ron: "a
+        # little bit of insurance"), and says it's kept, so it isn't a scare.
+        if not self.pieces or self.kept:
             return True
-        loses = ("Closing the window loses it." if why == "close"
-                 else "Opening another file replaces it.")
+        if why != "close":
+            loses = "Opening another file replaces it."
+        elif self.remembered:
+            loses = ("TuxTalk shows it again when you reopen this window, until you "
+                     "transcribe another file.")
+        else:
+            loses = "Closing the window loses it."
         where = ("You copied it, but it isn't saved to a file." if self.copied
                  else "It isn't saved or copied anywhere yet.")
         answer = self._ask(
