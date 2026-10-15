@@ -4654,7 +4654,7 @@ class PreferencesWindow:
         intro.set_line_wrap(True)
         intro.set_max_width_chars(60)
         intro.set_markup("Tick the languages you dictate in. Auto-detect then picks "
-                         "only from these.\n<b>Tick none</b> to let it pick any language.")
+                         "only from these.\nTo let it pick any language, leave them all unticked (<b>Untick all</b>).")
         box.pack_start(intro, False, False, 0)
 
         # Three columns, in the pickers' order, each with its own name for itself.
