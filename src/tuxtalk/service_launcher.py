@@ -31,6 +31,35 @@ HOTKEY_TEST_LEASE_S = 6.0
 HOTKEY_TEST_REFRESH_S = 2
 
 
+def ready_file_path() -> str:
+    """Where the service writes its PID once its model is loaded, so a tray
+    started after it (one that missed NotifyServiceReady) knows it's ready."""
+    base = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
+    return os.path.join(base, "tuxtalk-service-ready")
+
+
+def read_ready_pid():
+    """The PID in the ready file, or None."""
+    try:
+        with open(ready_file_path()) as f:
+            return int(f.read().strip())
+    except (OSError, ValueError):
+        return None
+
+
+def write_ready_pid(pid) -> None:
+    """Record *pid* as the ready service. Never raises: the D-Bus report is
+    the main route, this only covers a tray that starts later."""
+    try:
+        path = ready_file_path()
+        tmp = f"{path}.{pid}"
+        with open(tmp, "w") as f:
+            f.write(str(pid))
+        os.replace(tmp, path)
+    except OSError as e:
+        logger.debug(f"Could not write the service's ready file: {e}")
+
+
 def hotkey_test_flag_path() -> str:
     """Where Preferences keeps the hotkey test flag for the service to see."""
     from .config import get_data_dir

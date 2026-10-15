@@ -5,6 +5,12 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- New: `tuxtalk --toggle`, plus `--start` and `--stop`, for your own desktop
+  shortcut or a script. AppImage users run the AppImage file with it. If
+  TuxTalk isn't running it starts it, and if the speech model is still loading
+  the recording starts the moment it's ready, so a press right after login
+  isn't lost. Before this you had to call TuxTalk over D-Bus yourself and
+  guess when it was ready. Thanks to guelz for asking (Discussion #12).
 - New: Transcribe a File, in the tray menu. Give it a recording or a video
   (MP3, M4A, WAV, MP4, MKV and the rest) and you get the text back, to copy,
   save as a text file, or save as subtitles for the video. It uses the same
