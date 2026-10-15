@@ -110,6 +110,9 @@ _auto_stop_seconds = 0.0
 # settings object middle chunks read beeps, quotes and language from.
 _chunk_pause_seconds = 0.0
 _chunk_cfg = None
+# Type at pause fine-tuning (Preferences → Advanced → TuxTalk Labs).
+_chunk_speech_db = 6.0
+_chunk_context_marks = True
 
 
 def _apply_cleanup_settings(cfg):
@@ -117,10 +120,12 @@ def _apply_cleanup_settings(cfg):
     stop the AI engine."""
     global _remove_fillers, _ai_engine, _auto_stop_seconds, _ai_corrections, _voice_editing, _swiss_spelling
     global _numbers_mode, _numbers_language, _voice_navigation, _adapt_to_app
-    global _chunk_pause_seconds, _chunk_cfg
+    global _chunk_pause_seconds, _chunk_cfg, _chunk_speech_db, _chunk_context_marks
     _auto_stop_seconds = (float(getattr(cfg, "auto_stop_seconds", 2.0))
                           if getattr(cfg, "auto_stop_silence", False) else 0.0)
     _chunk_cfg = cfg
+    _chunk_speech_db = float(getattr(cfg, "chunk_speech_db", 6.0))
+    _chunk_context_marks = bool(getattr(cfg, "chunk_context_marks", True))
     pause = (float(getattr(cfg, "chunk_pause_seconds", 0.8))
              if getattr(cfg, "chunked_dictation", False) else 0.0)
     if pause > 0 and _auto_stop_seconds > 0 and pause >= _auto_stop_seconds:
@@ -912,7 +917,7 @@ def _arm_chunker(rec_sr, edit_mode=False):
     chunker = None
     if _chunk_pause_seconds > 0 and not edit_mode:
         from .chunking import PauseDetector
-        chunker = PauseDetector(_chunk_pause_seconds, rec_sr)
+        chunker = PauseDetector(_chunk_pause_seconds, rec_sr, speech_db=_chunk_speech_db)
         # Started here, so the audio callback never has to build it.
         _chunk_worker()
     with _chunk_lock:
@@ -3215,7 +3220,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         chunk_period = auto_period and chunk_role != "middle"
         text = _prepare_text(raw, smart_quotes, chunk_period, auto_space, app_kind=kind)
         held_mark = None
-        if chunk_role == "middle":
+        if chunk_role == "middle" and _chunk_context_marks:
             text, held_mark = _hold_back_boundary(text, raw)
 
         # Beep to confirm transcription is done

@@ -704,3 +704,60 @@ def test_a_recording_without_a_pause_says_why(recording, caplog):
     app._finish_capture(beeps_on=False, notify_on=False)
     assert any("no pause found" in r.getMessage() and "room" in r.getMessage()
                for r in caplog.records)
+
+
+# --- sensitivity and context settings ----------------------------------------
+
+def test_new_chunk_settings_defaults():
+    from tuxtalk.config import Settings
+    s = Settings()
+    assert s.chunk_speech_db == 6.0
+    assert s.chunk_context_marks is True
+
+
+@pytest.mark.parametrize("value,ok", [(6.0, True), (3.0, True), (12.0, True),
+                                      (2.0, False), (13.0, False)])
+def test_chunk_speech_db_range(value, ok):
+    from tuxtalk import config
+    problems = config._validation_problems(config.Settings(chunk_speech_db=value))
+    assert any(k == "chunk_speech_db" for k, _ in problems) is (not ok)
+
+
+def test_new_chunk_settings_apply_without_a_restart():
+    from tuxtalk.config import LIVE_APPLIED_KEYS
+    assert {"chunk_speech_db", "chunk_context_marks"} <= LIVE_APPLIED_KEYS
+
+
+def test_service_reads_the_new_chunk_settings(monkeypatch):
+    from types import SimpleNamespace
+    from tuxtalk import app
+    monkeypatch.setattr(app, "_ai_engine", None)
+    app._apply_cleanup_settings(SimpleNamespace(
+        chunked_dictation=True, chunk_speech_db=9.0, chunk_context_marks=False))
+    assert app._chunk_speech_db == 9.0
+    assert app._chunk_context_marks is False
+    app._apply_cleanup_settings(SimpleNamespace(chunked_dictation=False))
+    assert app._chunk_speech_db == 6.0
+    assert app._chunk_context_marks is True
+
+
+def test_speech_db_reaches_the_detector(monkeypatch):
+    from tuxtalk import app
+    monkeypatch.setattr(app, "_chunk_pause_seconds", 0.8)
+    monkeypatch.setattr(app, "_chunk_speech_db", 9.0)
+    monkeypatch.setattr(app, "_chunk_worker_instance", None)
+    app._arm_chunker(SR)
+    assert app.state.chunker.speech_over_room == pytest.approx(10 ** (9 / 20))
+    app.state.chunker = None
+
+
+def test_context_marks_off_types_the_engines_mark(pipeline, monkeypatch):
+    """Off: the chunk is typed as Parakeet wrote it, mark and space included,
+    and nothing waits for the next chunk."""
+    from tuxtalk import app
+    monkeypatch.setattr(app, "_chunk_context_marks", False)
+    texts, typed, _ = pipeline
+    texts.append("we meet.")
+    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    assert typed == ["We meet. "]
+    assert app.state.pending_boundary is None
