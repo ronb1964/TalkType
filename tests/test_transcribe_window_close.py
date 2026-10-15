@@ -4,7 +4,7 @@ import pytest
 
 gi = pytest.importorskip("gi")
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk  # noqa: E402
+from gi.repository import Gdk, Gtk  # noqa: E402
 
 from tuxtalk import file_transcribe as ft  # noqa: E402
 
@@ -246,3 +246,33 @@ def test_the_tick_box_cleans_what_is_shown_and_saved(win, monkeypatch, tmp_path)
     assert "uh" not in (tmp_path / "clip.srt").read_text()
     win.clean_check.set_active(False)
     assert "uh" in text()                       # as heard again
+
+
+# --- dropping a file anywhere, with a hint where ---------------------------------
+
+def test_the_text_area_takes_dropped_files(win):
+    targets = win.view.drag_dest_get_target_list()
+    assert targets is not None and targets.find(Gdk.Atom.intern("text/uri-list", False))[0]
+
+
+def test_a_drop_on_the_text_starts_the_file(win, monkeypatch, tmp_path):
+    started = []
+    monkeypatch.setattr(win, "start", started.append)
+    monkeypatch.setattr(win.view, "stop_emission_by_name", lambda name: None)
+    clip = tmp_path / "talk.mp3"
+    clip.write_bytes(b"")
+
+    class Data:
+        def get_uris(self):
+            return [clip.as_uri()]
+
+    win._on_view_drop(win.view, None, 0, 0, Data(), 0, 0)
+    assert started == [str(clip)]
+
+
+def test_the_drop_hint_shows_only_while_empty(win):
+    assert win.drop_hint.get_visible()
+    done(win)
+    assert not win.drop_hint.get_visible()
+    win._set_busy(True)
+    assert not win.drop_hint.get_visible()

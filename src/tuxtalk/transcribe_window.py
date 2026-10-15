@@ -135,7 +135,27 @@ class TranscribeWindow:
         scrolled = Gtk.ScrolledWindow()
         scrolled.set_shadow_type(Gtk.ShadowType.IN)
         scrolled.add(self.view)
-        box.pack_start(scrolled, True, True, 0)
+        # A read-only text view turns down every drop, and it's most of the
+        # window, so it takes files itself (_on_view_drag_motion).
+        self.view.drag_dest_set(Gtk.DestDefaults.ALL, [], Gdk.DragAction.COPY)
+        self.view.drag_dest_add_uri_targets()
+        self.view.connect("drag-motion", self._on_view_drag_motion)
+        self.view.connect("drag-leave", lambda w, *_a: w.drag_unhighlight())
+        self.view.connect("drag-drop", self._on_view_drag_drop)
+        self.view.connect("drag-data-received", self._on_view_drop)
+        # Where to drop, while there's nothing to show yet.
+        self.drop_hint = Gtk.Label(justify=Gtk.Justification.CENTER)
+        self.drop_hint.set_markup(
+            "<span size='large'>Drop an audio or video file here</span>\n"
+            "<small>or use Choose a File…</small>")
+        self.drop_hint.set_opacity(0.6)
+        self.drop_hint.set_halign(Gtk.Align.CENTER)
+        self.drop_hint.set_valign(Gtk.Align.CENTER)
+        overlay = Gtk.Overlay()
+        overlay.add(scrolled)
+        overlay.add_overlay(self.drop_hint)
+        overlay.set_overlay_pass_through(self.drop_hint, True)
+        box.pack_start(overlay, True, True, 0)
 
         bottom = Gtk.Box(spacing=8)
         self.times_check = Gtk.CheckButton(label="Show times")
@@ -185,6 +205,7 @@ class TranscribeWindow:
             widget.set_sensitive(have)
         self.cancel_btn.set_visible(busy)
         self.progress.set_visible(busy)
+        self.drop_hint.set_visible(not self.pieces and not busy)
 
     def _shown(self):
         """The pieces as they're shown: cleaned up when that's ticked."""
@@ -220,6 +241,28 @@ class TranscribeWindow:
         chooser.destroy()
         if path:
             self.start(path)
+
+    def _on_view_drag_motion(self, view, context, _x, _y, time_):
+        """Take a file anywhere over the text, as over the rest of the
+        window; not while a file is running."""
+        if self.busy:
+            Gdk.drag_status(context, 0, time_)
+            view.drag_unhighlight()
+        else:
+            Gdk.drag_status(context, Gdk.DragAction.COPY, time_)
+            view.drag_highlight()
+        return True
+
+    def _on_view_drag_drop(self, _view, _context, _x, _y, _time):
+        """GTK already asks for the file's address (Gtk.DestDefaults.DROP);
+        handled here so the text view doesn't ask a second time."""
+        return True
+
+    def _on_view_drop(self, view, context, x, y, data, info, time_):
+        view.drag_unhighlight()
+        # The text view's own handler would only turn the file down.
+        view.stop_emission_by_name("drag-data-received")
+        self._on_drop(view, context, x, y, data, info, time_)
 
     def _on_drop(self, _widget, _context, _x, _y, data, _info, _time):
         uris = data.get_uris() or []
