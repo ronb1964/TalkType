@@ -2943,18 +2943,35 @@ def _report_undelivered(outcome: str, beeps_on: bool):
 
 def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                            language=None, auto_space=True, auto_period=True,
-                           injection_mode="type"):
+                           injection_mode="type", chunk_role=None):
     """The slow half of stopping: transcribe the captured audio and inject the
     text. It touches no GTK (the indicator was already hidden in _finish_capture)
     and uses only CPU + audio + D-Bus + the output backend, so it is safe on a
-    worker thread, which Backend B uses so the hotkey loop stays live."""
+    worker thread, which Backend B uses so the hotkey loop stays live.
+
+    *chunk_role* is set for chunked dictation (chunking.py): "middle" for a
+    chunk cut at a pause while recording goes on (no beep, no notice, silence
+    dropped quietly), "last" for the rest after the stop (the usual READY beep,
+    even when it holds no speech, since earlier chunks were typed)."""
     print("Recording stopped. Transcribing…")
     t0 = time.time()
     logger.info("Recording stopped, starting transcription")
+
+    def _nothing_in_chunk(what: str) -> bool:
+        """For a chunk, handle an empty or silent one; False for a whole dictation."""
+        if chunk_role is None:
+            return False
+        logger.info(f"Chunk ({chunk_role}) {what}; nothing typed for it")
+        if chunk_role == "last":
+            _beep(beeps_on, *READY_BEEP)
+        return True
+
     try:
         # Convert captured bytes → float32 mono PCM in [-1, 1]
         pcm_int16 = np.frombuffer(b''.join(frames), dtype=np.int16)
         if pcm_int16.size == 0:
+            if _nothing_in_chunk("had no audio"):
+                return
             print("(No audio captured)")
             return
         audio_f32 = pcm_int16.astype(np.float32) / 32768.0
@@ -2967,6 +2984,8 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         # Both stop with the cancel beep, as a too-short F8 tap and the
         # hands-free "nothing said" stop do: silence there read as broken.
         if is_speechless_tap(audio_f32, SAMPLE_RATE):
+            if _nothing_in_chunk("had no speech"):
+                return
             print("(Short tap with no speech; nothing typed)")
             logger.info(f"Skipped a {len(audio_f32) / SAMPLE_RATE:.2f}s recording with no speech in it")
             _beep(beeps_on, *CANCEL_BEEP)
@@ -2975,7 +2994,12 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         # Stage 1: Transcribe audio → raw text
         raw = _transcribe_audio(audio_f32, language)
         logger.info(f"TIMING: Transcription pipeline took {time.time() - t0:.2f}s")
+        if chunk_role is not None:
+            logger.info(f"Chunk ({chunk_role}): {len(audio_f32) / SAMPLE_RATE:.1f}s of audio, "
+                        f"raw: {_loggable(raw)}")
         if not raw:
+            if _nothing_in_chunk("was not recognised"):
+                return
             print("(No speech recognized)")
             logger.info("Nothing recognized, so nothing was typed")
             _beep(beeps_on, *CANCEL_BEEP)
@@ -3001,9 +3025,10 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         text = _prepare_text(raw, smart_quotes, auto_period, auto_space, app_kind=kind)
 
         # Beep to confirm transcription is done
-        _beep(beeps_on, *READY_BEEP)
-        _ellipsis = "…"
-        if notify_on: _notify("TuxTalk", f"Transcribed: {text[:80]}{_ellipsis if len(text)>80 else ''}")
+        if chunk_role != "middle":
+            _beep(beeps_on, *READY_BEEP)
+            _ellipsis = "…"
+            if notify_on: _notify("TuxTalk", f"Transcribed: {text[:80]}{_ellipsis if len(text)>80 else ''}")
 
         # Stage 4: Inject text into the active application. It goes into the
         # Recent Dictations list first, so it can be recovered even if the
@@ -3021,6 +3046,13 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                 outcome = "failed"
             if outcome in _UNDELIVERED_NOTICES:
                 _report_undelivered(outcome, beeps_on)
+            if chunk_role == "middle" and outcome == "ok":
+                # A pause is not a sentence end: when the engine didn't
+                # close the phrase, the next chunk carries on lowercase,
+                # the way a dictation after "undo" does.
+                tail = text.rstrip()
+                if tail and not tail.endswith(('.', '?', '!', '…')):
+                    state.continue_mid_sentence = True
             if _usage_stats:
                 # After typing, so saving the counts never delays the text.
                 # Counts only (words, seconds dictating); see stats.py.

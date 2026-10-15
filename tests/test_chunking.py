@@ -211,3 +211,82 @@ def test_chunk_pause_stays_below_auto_stop(monkeypatch):
         auto_stop_silence=True, auto_stop_seconds=1.0))
     assert app._chunk_pause_seconds == pytest.approx(0.8)
     app._apply_cleanup_settings(SimpleNamespace(chunked_dictation=False))
+
+
+# --- chunk roles in the pipeline ---------------------------------------------
+
+@pytest.fixture
+def pipeline(monkeypatch):
+    """A fake engine and fake typing around the real _transcribe_and_inject.
+    texts: what the engine 'hears', one per call. Returns (texts, typed, beeps)."""
+    from tuxtalk import app, history
+    texts, typed, beeps = [], [], []
+    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: texts.pop(0))
+    monkeypatch.setattr(app, "_inject_text",
+                        lambda text, mode, t0, one_block=False: (typed.append(text), "ok")[1])
+    monkeypatch.setattr(app, "_beep", lambda enabled, *tone: beeps.append(tone))
+    monkeypatch.setattr(app, "_notify", lambda *a, **k: None)
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: None)
+    monkeypatch.setattr(app, "_adapt_to_app", False)
+    monkeypatch.setattr(app, "_usage_stats", False)
+    monkeypatch.setattr(history, "add_entry", lambda text: None)
+    monkeypatch.setattr(app.state, "continue_mid_sentence", False)
+    return texts, typed, beeps
+
+
+def frames_of(audio):
+    return [audio.tobytes()]
+
+
+def call(frames, role, auto_period=False):
+    from tuxtalk import app
+    app._transcribe_and_inject(frames, SR, True, True, False, None, True, auto_period,
+                               "type", chunk_role=role)
+
+
+def test_middle_chunk_types_without_the_ready_beep(pipeline):
+    from tuxtalk import app
+    texts, typed, beeps = pipeline
+    texts.append("we meet")
+    call(frames_of(speech(1.0)), "middle")
+    assert [t.strip() for t in typed] == ["We meet"]
+    assert app.READY_BEEP not in beeps
+
+
+def test_middle_chunk_without_final_punctuation_continues_the_sentence(pipeline):
+    from tuxtalk import app
+    texts, typed, _ = pipeline
+    texts.extend(["we meet", "at three"])
+    call(frames_of(speech(1.0)), "middle")
+    assert app.state.continue_mid_sentence is True
+    call(frames_of(speech(1.0)), "last")
+    assert typed[1].strip().startswith("at three")
+
+
+def test_silent_middle_chunk_is_dropped_without_a_sound(pipeline):
+    texts, typed, beeps = pipeline
+    call(frames_of(noise(0.4)), "middle")
+    assert typed == [] and beeps == []
+
+
+def test_last_chunk_with_no_speech_still_beeps_ready(pipeline):
+    from tuxtalk import app
+    _, typed, beeps = pipeline
+    call(frames_of(noise(0.4)), "last")
+    assert typed == []
+    assert beeps == [app.READY_BEEP]
+
+
+def test_last_chunk_with_no_audio_beeps_ready(pipeline):
+    from tuxtalk import app
+    _, typed, beeps = pipeline
+    call([], "last")
+    assert typed == [] and beeps == [app.READY_BEEP]
+
+
+def test_whole_dictation_is_unchanged(pipeline):
+    """chunk_role=None: today's behaviour, a silent tap gets the cancel beep."""
+    from tuxtalk import app
+    _, typed, beeps = pipeline
+    call(frames_of(noise(0.4)), None)
+    assert typed == [] and beeps == [app.CANCEL_BEEP]
