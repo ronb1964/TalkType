@@ -2396,6 +2396,8 @@ class PreferencesWindow:
             # The recording indicator follows the window being dictated into
             # (recording_indicator._follow_target), placed by the same
             # active-window position as the floating messages.
+            row = self._build_type_at_pause(grid, row, LABS_INDENT, labs_heading)
+
             grid.attach(labs_heading("Recording indicator"), 0, row, 2, 1)
             row += 1
             follow_check = Gtk.CheckButton(
@@ -5382,6 +5384,191 @@ class PreferencesWindow:
                     self.record_stream.close()
                 except Exception:
                     pass
+        self._stop_pause_test()
+
+    # --- TuxTalk Labs: Type at pause (chunking.py) -----------------------------
+
+    def _build_type_at_pause(self, grid, row, indent, heading):
+        """The Labs entry: the switch, and under it the fine-tuning with a live
+        test of what the pause detector hears. Returns the next grid row."""
+        grid.attach(heading("Type at pause"), 0, row, 2, 1)
+        row += 1
+
+        self.tap_check = Gtk.CheckButton(label="Type each phrase when you pause")
+        self.tap_check.set_active(bool(self.config.get("chunked_dictation", False)))
+        self.tap_check.set_tooltip_text(
+            "While you dictate, each phrase is typed as soon as you pause, instead of\n"
+            "all of it when you stop. Nothing typed is changed afterwards. Whether a\n"
+            "pause ends a sentence is decided once the next words are heard.")
+        self.tap_check.set_margin_start(indent)
+        grid.attach(self.tap_check, 0, row, 2, 1)
+        row += 1
+
+        self.tap_expander = Gtk.Expander(label="Fine-tuning")
+        self.tap_expander.set_margin_start(indent)
+        fine = Gtk.Grid(column_spacing=8, row_spacing=6)
+        fine.set_margin_start(16)
+        fine.set_margin_top(6)
+        self.tap_fine = fine
+        r = 0
+
+        fine.attach(Gtk.Label(label="Pause length:", xalign=0), 0, r, 1, 1)
+        self.tap_pause_spin = Gtk.SpinButton(
+            adjustment=Gtk.Adjustment(value=float(self.config.get("chunk_pause_seconds", 0.8)),
+                                      lower=0.3, upper=3.0, step_increment=0.1,
+                                      page_increment=0.5),
+            digits=1)
+        self.tap_pause_spin.connect("scroll-event", lambda *a: True)
+        self.tap_pause_spin.set_tooltip_text(
+            "How long a silence ends a phrase. Kept below the hands-free stop time.")
+        pause_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        pause_box.pack_start(self.tap_pause_spin, False, False, 0)
+        pause_box.pack_start(Gtk.Label(label="s"), False, False, 0)
+        fine.attach(pause_box, 1, r, 1, 1)
+        r += 1
+
+        fine.attach(Gtk.Label(label="Sensitivity:", xalign=0), 0, r, 1, 1)
+        self.tap_db_spin = Gtk.SpinButton(
+            adjustment=Gtk.Adjustment(value=float(self.config.get("chunk_speech_db", 6.0)),
+                                      lower=3, upper=12, step_increment=1, page_increment=3),
+            digits=0)
+        self.tap_db_spin.connect("scroll-event", lambda *a: True)
+        self.tap_db_spin.set_tooltip_text(
+            "Lower hears a soft voice as speech; higher keeps a noisy room from\n"
+            "counting as speech. Use Test below to see where it lands.")
+        db_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        db_box.pack_start(Gtk.Label(label="speech is"), False, False, 0)
+        db_box.pack_start(self.tap_db_spin, False, False, 0)
+        db_box.pack_start(Gtk.Label(label="dB louder than the room"), False, False, 0)
+        fine.attach(db_box, 1, r, 1, 1)
+        r += 1
+
+        self.tap_context_check = Gtk.CheckButton(
+            label="Punctuation from context: decide the mark at a pause by hearing "
+                  "both sides (slower on a weak graphics chip)")
+        self.tap_context_check.get_child().set_line_wrap(True)
+        self.tap_context_check.set_active(bool(self.config.get("chunk_context_marks", True)))
+        fine.attach(self.tap_context_check, 0, r, 2, 1)
+        r += 1
+
+        self.tap_test_btn = Gtk.Button(label="Test")
+        self.tap_test_btn.set_tooltip_text(
+            "Listen with the microphone chosen on the Audio tab and show where a\n"
+            "phrase would end. Nothing is typed.")
+        self.tap_meter = PauseMeter(num_segments=20)
+        test_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        test_box.pack_start(self.tap_test_btn, False, False, 0)
+        test_box.pack_start(self.tap_meter, True, True, 0)
+        fine.attach(test_box, 0, r, 2, 1)
+        r += 1
+
+        self.tap_status = Gtk.Label(label="Press Test and speak, with a pause or two.",
+                                    xalign=0)
+        self.tap_status.set_opacity(0.7)
+        fine.attach(self.tap_status, 0, r, 2, 1)
+
+        self.tap_expander.add(fine)
+        grid.attach(self.tap_expander, 0, row, 2, 1)
+        row += 1
+
+        self.tap_check.connect("toggled", lambda c: (
+            self.update_config("chunked_dictation", c.get_active()),
+            self._tap_sync_sensitivity()))
+        self.tap_pause_spin.connect("value-changed", lambda sp: (
+            self.update_config("chunk_pause_seconds", round(sp.get_value(), 1)),
+            self._tap_reconfigure()))
+        self.tap_db_spin.connect("value-changed", lambda sp: (
+            self.update_config("chunk_speech_db", float(round(sp.get_value()))),
+            self._tap_reconfigure()))
+        self.tap_context_check.connect("toggled", lambda c: self.update_config(
+            "chunk_context_marks", c.get_active()))
+        self.tap_test_btn.connect("clicked", self._tap_toggle_test)
+        self.tap_expander.connect("notify::expanded", lambda e, _p: (
+            None if e.get_expanded() else self._stop_pause_test()))
+        self._tap_sync_sensitivity()
+        return row
+
+    def _tap_sync_sensitivity(self):
+        on = self.tap_check.get_active()
+        self.tap_fine.set_sensitive(on)
+        if not on:
+            self._stop_pause_test()
+
+    def _pause_stream_factory(self, **kwargs):
+        import sounddevice as sd
+        return sd.InputStream(**kwargs)
+
+    def _tap_toggle_test(self, _button):
+        if getattr(self, "_pause_test_stream", None) is not None:
+            self._stop_pause_test()
+        else:
+            self._start_pause_test()
+
+    def _start_pause_test(self):
+        """Stream the chosen mic into a PauseTest; the callback only feeds it
+        and asks for one redraw at a time."""
+        from .chunk_meter import PauseTest
+        try:
+            device_idx = self.get_selected_device_idx()
+            sample_rate = self._get_device_samplerate(device_idx)
+            self._pause_test = PauseTest(sample_rate, self.tap_pause_spin.get_value(),
+                                         self.tap_db_spin.get_value())
+            self._tap_redraw_pending = False
+
+            def callback(indata, frames, time_info, status):
+                test = getattr(self, "_pause_test", None)
+                if test is None:
+                    return
+                test.feed(indata)
+                if not self._tap_redraw_pending:
+                    self._tap_redraw_pending = True
+                    GLib.idle_add(self._tap_show)
+
+            stream = self._pause_stream_factory(device=device_idx, channels=1,
+                                                samplerate=sample_rate, dtype="int16",
+                                                callback=callback)
+            stream.start()
+        except Exception as e:
+            self._pause_test = None
+            self.tap_status.set_text(f"Couldn't open the microphone: {e}")
+            return
+        self._pause_test_stream = stream
+        self.tap_test_btn.set_label("Stop")
+        self.tap_status.set_text("Listening\u2026 speak, then pause.")
+
+    def _tap_show(self):
+        """Draw the latest snapshot (GTK thread, via GLib.idle_add)."""
+        self._tap_redraw_pending = False
+        test = getattr(self, "_pause_test", None)
+        if test is None:
+            return False
+        from .chunk_meter import level_to_fraction
+        snap = test.snapshot()
+        self.tap_meter.show_snapshot(level_to_fraction(snap.level),
+                                     level_to_fraction(snap.room),
+                                     level_to_fraction(snap.threshold),
+                                     cut=test.take_cut())
+        self.tap_status.set_text(test.status_text())
+        return False
+
+    def _tap_reconfigure(self):
+        test = getattr(self, "_pause_test", None)
+        if test is not None:
+            test.configure(self.tap_pause_spin.get_value(), self.tap_db_spin.get_value())
+
+    def _stop_pause_test(self):
+        """Stop Type at pause's live test, if it is running, and free the mic."""
+        stream = getattr(self, "_pause_test_stream", None)
+        self._pause_test_stream = None
+        self._pause_test = None
+        if stream is not None:
+            try:
+                stream.stop()
+                stream.close()
+            except Exception:
+                pass
+        if hasattr(self, "tap_test_btn"):
+            self.tap_test_btn.set_label("Test")
 
     def _release_pidfile(self):
         """Remove the prefs singleton pidfile if it belongs to this process."""
@@ -5647,6 +5834,8 @@ class PreferencesWindow:
         # The dictation service adds to the stats while this window is open.
         if notebook.get_tab_label_text(page) == "Stats":
             self._refresh_stats()
+        if notebook.get_tab_label_text(page) != "Advanced":
+            self._stop_pause_test()   # Type at pause's live test holds the mic
 
     def _download_selected_model(self):
         """Download the model selected in the dropdown, if it needs it.
