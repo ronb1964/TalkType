@@ -129,37 +129,6 @@ def test_preferences_offers_the_helper_to_input_group_users(monkeypatch):
     assert prefs.fix_typing_button.label == "✓ Ready" and not prefs.fix_typing_button.sensitive
 
 
-def test_the_remove_button_shows_only_while_the_helper_is_installed(monkeypatch):
-    from tuxtalk import prefs as P, uinput_helper
-
-    class Widget:
-        markup = label = ""
-        sensitive = visible = None
-
-        def set_markup(self, m):
-            self.markup = m
-
-        def set_label(self, v):
-            self.label = v
-
-        def set_sensitive(self, v):
-            self.sensitive = v
-
-        def set_visible(self, v):
-            self.visible = v
-
-    monkeypatch.setattr(uinput_helper, "check_all_device_permissions", lambda: (True, ""))
-    prefs = P.PreferencesWindow.__new__(P.PreferencesWindow)
-    prefs.typing_status_label, prefs.fix_typing_button = Widget(), Widget()
-    prefs.remove_helper_button = Widget()
-    monkeypatch.setattr(si, "is_installed", lambda: True)
-    prefs._check_typing_status()
-    assert prefs.remove_helper_button.visible is True
-    monkeypatch.setattr(si, "is_installed", lambda: False)
-    prefs._check_typing_status()
-    assert prefs.remove_helper_button.visible is False
-
-
 def _typing_prefs(monkeypatch, *, running, installed=True, in_group=False):
     from tuxtalk import prefs as P, uinput_helper
 
@@ -185,7 +154,6 @@ def _typing_prefs(monkeypatch, *, running, installed=True, in_group=False):
     monkeypatch.setattr(si, "is_installed", lambda: installed)
     prefs = P.PreferencesWindow.__new__(P.PreferencesWindow)
     prefs.typing_status_label, prefs.fix_typing_button = Widget(), Widget()
-    prefs.remove_helper_button = Widget()
     prefs._check_typing_status()
     return P, prefs
 
@@ -212,3 +180,47 @@ def test_leaving_the_group_uses_pkexecs_own_uid_and_drops_the_old_rule():
 
 def test_the_service_keeps_select_safe():
     assert "LimitNOFILE=512" in si.UNIT.splitlines()
+
+
+def test_switching_leaves_the_input_group_in_the_same_password_prompt():
+    script = si.install_script(leave_group=True)
+    assert subprocess.run(["bash", "-n"], input=script, text=True).returncode == 0
+    assert 'id -nu "${PKEXEC_UID:?}"' in script and 'gpasswd -d "$user" input' in script
+    assert script.index("gpasswd") < script.index("systemctl restart")
+    assert "gpasswd" not in si.install_script()      # a new user is never in it
+
+
+@pytest.mark.parametrize("shortcut, refused", [
+    ("Ctrl+Alt+P", False), ("Ctrl+Super+V", False), ("Ctrl+Shift+H", True),
+    ("Alt+P", True), ("Super+V", True), ("Shift+F8", False), ("", False),
+])
+def test_which_shortcuts_the_helper_refuses(shortcut, refused):
+    from tuxtalk.hotkey_helper_client import refused_shortcut
+    assert refused_shortcut(shortcut) is refused
+
+
+def test_a_hand_edited_shortcut_that_cant_work_is_warned_about(monkeypatch):
+    from tuxtalk import prefs as P, uinput_helper
+
+    class Widget:
+        markup = label = ""
+        sensitive = None
+
+        def set_markup(self, m):
+            self.markup = m
+
+        def set_label(self, v):
+            self.label = v
+
+        def set_sensitive(self, v):
+            self.sensitive = v
+
+    monkeypatch.setattr(uinput_helper, "check_all_device_permissions", lambda: (True, ""))
+    monkeypatch.setattr(uinput_helper, "check_user_in_input_group", lambda: False)
+    monkeypatch.setattr(si, "running_version", lambda: hotkey_helper.VERSION)
+    prefs = P.PreferencesWindow.__new__(P.PreferencesWindow)
+    prefs.typing_status_label, prefs.fix_typing_button = Widget(), Widget()
+    prefs.config = {"voice_commands_hotkey": "Ctrl+Shift+H", "paste_last_hotkey": "Ctrl+Alt+P"}
+    prefs._check_typing_status()
+    assert "Ctrl+Shift+H won't work" in prefs.typing_status_label.markup
+    assert "Ctrl+Alt+P" not in prefs.typing_status_label.markup

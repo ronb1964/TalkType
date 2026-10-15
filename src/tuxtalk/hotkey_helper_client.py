@@ -275,6 +275,19 @@ def connect_helper(path=None):
     return keyboard
 
 
+def refused_shortcut(text):
+    """True when a shortcut written like "Ctrl+Shift+H" won't be reported by
+    the helper: a key that isn't an F-key needs two of Ctrl, Alt and Super.
+    (Text only, so Preferences needn't load the dictation service's code.)"""
+    parts = [p.strip().upper() for p in (text or "").split("+") if p.strip()]
+    if len(parts) < 2:
+        return False
+    key, mods = parts[-1], set(parts[:-1])
+    if key.startswith("F") and key[1:].isdigit():
+        return False
+    return len(mods & {"CTRL", "ALT", "SUPER"}) < 2
+
+
 def refused_combo(mods, key):
     """Why the helper won't report this (modifier names, key) combo, or None.
     It reports a key only with two of Ctrl, Alt and Super held."""

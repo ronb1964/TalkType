@@ -437,8 +437,16 @@ every program you run read every key you press, passwords too. The helper
 fixes that. It runs as a throwaway system user with no network and no access
 to your files, it never reports a letter or a number, only F-keys, Esc and
 shortcuts with Ctrl, Alt or Super, and only to whoever's at the screen.
-`systemd-analyze security tuxtalk-hotkeys` rates it 0.6, "SAFE". Remove it
-any time with Preferences → Advanced → Typing Setup → Remove Hotkey Helper.
+`systemd-analyze security tuxtalk-hotkeys` rates it 0.6, "SAFE". To take it
+off again:
+
+```bash
+sudo systemctl disable --now tuxtalk-hotkeys
+```
+
+```bash
+sudo rm -r /etc/systemd/system/tuxtalk-hotkeys.service /etc/udev/rules.d/70-tuxtalk-uinput.rules /usr/local/libexec/tuxtalk
+```
 
 ### Transcription slow?
 - Use your graphics card if you have one (see [Graphics cards](#graphics-cards) above)

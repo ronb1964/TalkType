@@ -2205,16 +2205,6 @@ class PreferencesWindow:
             self.fix_typing_button.set_sensitive(False)
             typing_button_box.pack_start(self.fix_typing_button, False, False, 0)
 
-            # Only while the hotkey helper is installed (see _check_typing_status).
-            self.remove_helper_button = Gtk.Button(label="Remove Hotkey Helper")
-            self.remove_helper_button.connect("clicked", self._on_remove_helper_clicked)
-            self.remove_helper_button.set_tooltip_text(
-                "Takes TuxTalk's hotkey helper and its typing rule off this computer.\n"
-                "The hotkeys then need the 'input' group again.\n"
-                "Will prompt for admin password."
-            )
-            self.remove_helper_button.set_no_show_all(True)
-            typing_button_box.pack_start(self.remove_helper_button, False, False, 0)
 
             grid.attach(typing_button_box, 0, row, 2, 1)
             row += 1
@@ -5026,9 +5016,6 @@ class PreferencesWindow:
             # /dev/uinput while /dev/input, which the hotkeys need, stays unreadable.
             has_access, reason = uinput_helper.check_all_device_permissions()
             from . import secure_input
-            remove = getattr(self, "remove_helper_button", None)
-            if remove is not None:
-                remove.set_visible(secure_input.is_installed())
 
             running = secure_input.running_version() if has_access else None
             from .hotkey_helper import VERSION as HELPER_VERSION
@@ -5050,6 +5037,15 @@ class PreferencesWindow:
                 )
                 self.fix_typing_button.set_label(LEAVE_GROUP_LABEL)
                 self.fix_typing_button.set_sensitive(True)
+            elif running is not None and self._shortcuts_the_helper_refuses():
+                bad = ", ".join(self._shortcuts_the_helper_refuses())
+                self.typing_status_label.set_markup(
+                    f'<span color="{WARNING_AMBER}">⚠ {GLib.markup_escape_text(bad)} won\'t work: '
+                    'with the hotkey helper a shortcut needs two of Ctrl, Alt and Super. '
+                    'Pick one from the list on the General tab</span>'
+                )
+                self.fix_typing_button.set_label("✓ Ready")
+                self.fix_typing_button.set_sensitive(False)
             elif running is not None:
                 self.typing_status_label.set_markup(
                     '<span color="#4CAF50">✓ Ready. Only TuxTalk\'s hotkey helper reads the '
@@ -5119,7 +5115,8 @@ class PreferencesWindow:
             from . import uinput_helper, secure_input
 
             lines, restarts = secure_input.fix_description()
-            switching = button.get_label() in (SWITCH_TO_HELPER_LABEL, UPDATE_HELPER_LABEL)
+            switching = button.get_label() == SWITCH_TO_HELPER_LABEL
+            updating = button.get_label() == UPDATE_HELPER_LABEL
             dialog = message_dialog(
                 transient_for=self.window,
                 flags=0,
@@ -5130,7 +5127,11 @@ class PreferencesWindow:
             )
             dialog.format_secondary_text(
                 ("This sets TuxTalk up so the hotkeys and typing work without the "
-                 "'input' group.\n\n" if switching else
+                 "'input' group, and takes you out of that group, so other programs "
+                 "can't read your keyboard. (If another program you use needs the "
+                 "group, a key remapper for instance, add yourself back.)\n\n"
+                 if switching else
+                 "This updates TuxTalk's hotkey helper.\n\n" if updating else
                  "This will configure system permissions to allow TuxTalk to type "
                  "directly into applications.\n\n")
                 + "What this does:\n"
@@ -5163,7 +5164,11 @@ class PreferencesWindow:
         def work():
             needs_restart = True
             try:
-                success, message, needs_restart = secure_input.fix_permissions()
+                if switching or updating:
+                    success, message = secure_input.install_with_pkexec(leave_group=switching)
+                    needs_restart = False
+                else:
+                    success, message, needs_restart = secure_input.fix_permissions()
                 if success:
                     uinput_helper.ensure_ydotoold_running()   # one started without permission has exited
             except Exception as e:
@@ -5172,6 +5177,15 @@ class PreferencesWindow:
 
         import threading
         threading.Thread(target=work, daemon=True).start()
+
+    def _shortcuts_the_helper_refuses(self):
+        """The Voice Commands / Paste Last shortcuts (only a hand-edited
+        setting can be one) that the hotkey helper won't report."""
+        from .hotkey_helper_client import refused_shortcut
+        config = getattr(self, "config", None) or {}
+        return [value for value in (config.get(key, "") or ""
+                                    for key in ("voice_commands_hotkey", "paste_last_hotkey"))
+                if refused_shortcut(value)]
 
     def _leave_input_group(self, button):
         """Take the user out of the input group once the helper is doing its job."""
@@ -5210,37 +5224,6 @@ class PreferencesWindow:
         self._check_typing_status()
         return False
 
-    def _on_remove_helper_clicked(self, button):
-        """Take the hotkey helper and its uinput rule away again."""
-        from . import secure_input
-        dialog = message_dialog(
-            transient_for=self.window, flags=0,
-            message_type=Gtk.MessageType.QUESTION, buttons=Gtk.ButtonsType.YES_NO,
-            text="Remove the hotkey helper?")
-        dialog.format_secondary_text(
-            "TuxTalk's hotkeys and typing then stop working until you set them "
-            "up again with Fix Typing Permissions, which on a system like this "
-            "puts the helper back.\n\nYou will be prompted for your admin password.")
-        answer = dialog.run()
-        dialog.destroy()
-        if answer != Gtk.ResponseType.YES:
-            return
-        button.set_sensitive(False)
-
-        def work():
-            ok, message = secure_input.uninstall_with_pkexec()
-            GLib.idle_add(self._finish_remove_helper, button, ok, message)
-
-        import threading
-        threading.Thread(target=work, daemon=True).start()
-
-    def _finish_remove_helper(self, button, ok, message):
-        button.set_sensitive(True)
-        if not ok and message != "cancelled":
-            self._message(Gtk.MessageType.ERROR, "The hotkey helper wasn't removed", message)
-        self._check_typing_status()
-        return False
-
     def _finish_fix_typing(self, button, success, message, needs_restart=True, switching=False):
         """Back on the GTK thread: report how Fix Typing Permissions went."""
         if success and not needs_restart:
@@ -5254,9 +5237,9 @@ class PreferencesWindow:
             msg.format_secondary_text(
                 "TuxTalk's hotkey helper is installed, and TuxTalk can type into "
                 "your applications. No restart is needed.\n\n"
-                + ("You're still in the 'input' group, which lets every program read "
-                   "the keyboard. TuxTalk doesn't need it any more: the Typing Setup "
-                   "button now offers to take you out of it." if switching else
+                + ("You've also left the 'input' group. Restart your computer when "
+                   "it suits you: until then, programs that were already running "
+                   "keep the old access." if switching else
                    "Dictation restarts now to use it.")
             )
             msg.run()

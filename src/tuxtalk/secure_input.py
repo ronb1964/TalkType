@@ -127,8 +127,11 @@ def _install_file(path, content, delimiter, mode):
             + f'chown root:root "$tmp"\nchmod {mode} "$tmp"\nmv -fT "$tmp" {path}\n')
 
 
-def install_script():
-    """The script pkexec runs as root to set it all up."""
+def install_script(leave_group=False):
+    """The script pkexec runs as root to set it all up. With *leave_group*
+    (switching from the input group) the user also leaves that group, in
+    the same password prompt."""
+    leave = _leave_group_lines() if leave_group else ""
     return f"""set -euo pipefail
 umask 022
 # The folder the service runs from must be root's own, never a link.
@@ -137,7 +140,7 @@ if [ -L {HELPER_DIR} ] || [ -L {os.path.dirname(HELPER_DIR)} ]; then
     exit 1
 fi
 install -d -m 0755 -o root -g root {HELPER_DIR}
-{_install_file(HELPER_PATH, helper_source(), "TUXTALK_HELPER_EOF", "0755")}{_install_file(UNIT_PATH, UNIT, "TUXTALK_UNIT_EOF", "0644")}{_install_file(UINPUT_RULE_PATH, UINPUT_RULE, "TUXTALK_RULE_EOF", "0644")}systemctl daemon-reload
+{_install_file(HELPER_PATH, helper_source(), "TUXTALK_HELPER_EOF", "0755")}{_install_file(UNIT_PATH, UNIT, "TUXTALK_UNIT_EOF", "0644")}{_install_file(UINPUT_RULE_PATH, UINPUT_RULE, "TUXTALK_RULE_EOF", "0644")}{leave}systemctl daemon-reload
 systemctl enable {SERVICE}
 # restart, not start: a TuxTalk update brings a new helper with it
 systemctl restart {SERVICE}
@@ -163,6 +166,16 @@ udevadm control --reload-rules
 udevadm trigger --action=change --sysname-match=uinput
 exit 0
 """
+
+
+def _leave_group_lines():
+    """Shell lines taking the user who asked (pkexec's PKEXEC_UID, which they
+    can't fake) out of the input group, with the old rule that gave that
+    group /dev/uinput."""
+    from .uinput_helper import UDEV_RULE_PATH
+    return (f'user=$(id -nu "${{PKEXEC_UID:?}}")\n'
+            f'gpasswd -d "$user" input || true\n'
+            f'rm -f {UDEV_RULE_PATH}\n')
 
 
 def leave_input_group_script():
@@ -287,9 +300,10 @@ def fix_description():
     ], True)
 
 
-def install_with_pkexec():
-    """Install (or update) the helper and the typing rule. (ok, message)."""
-    return _run_as_root(install_script(), "installed")
+def install_with_pkexec(leave_group=False):
+    """Install (or update) the helper and the typing rule, and with
+    *leave_group* leave the input group too. (ok, message)."""
+    return _run_as_root(install_script(leave_group), "installed")
 
 
 def uninstall_with_pkexec():
