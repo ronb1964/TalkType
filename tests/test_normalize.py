@@ -765,3 +765,23 @@ def test_a_tab_before_a_spoken_dash_is_kept():
 ])
 def test_a_spoken_dash_still_joins_the_words(said, expected):
     assert normalize_text(said) == expected
+
+
+# The engine often ends the sentence itself before a spoken mark: the spoken
+# mark replaces its period instead of landing after it as ". ?".
+@pytest.mark.parametrize("said,typed", [
+    ("If I like 'em, I'll send 'em. Question mark.", "If I like 'em, I'll send 'em?"),
+    ("Off of GitHub for TuxTalk. Question mark.", "Off of GitHub for TuxTalk?"),
+    ("Is it done. Exclamation point.", "Is it done!"),
+    ("Is it done. Exclamation mark. Then more.", "Is it done! Then more."),
+    ("Is it done? Question mark.", "Is it done?"),
+    ("is it done question mark", "Is it done?"),
+])
+def test_a_spoken_mark_replaces_the_engines_period(said, typed):
+    from tuxtalk.normalize import normalize_text
+    assert normalize_text(said) == typed
+
+
+def test_an_abbreviation_keeps_its_period_before_a_spoken_mark():
+    from tuxtalk.normalize import normalize_text
+    assert normalize_text("Is it the U.S. question mark").startswith("Is it the U.S.")
