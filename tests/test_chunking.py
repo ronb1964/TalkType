@@ -785,3 +785,156 @@ def test_context_marks_off_does_not_carry_past_the_recording(pipeline, monkeypat
     call(frames_of(speech(1.0)), "middle")
     call([], "last")
     assert app.state.continue_mid_sentence is False
+
+
+# --- a correction said after a pause (AI self-corrections on) -----------------
+
+class FakeAI:
+    """Stands in for the local AI: drops "three" and the cue, as the model does."""
+    def __init__(self):
+        self.asked = []
+
+    def correct(self, text):
+        self.asked.append(text)
+        return "Meet at four." if "three" in text.lower() else text
+
+
+@pytest.fixture
+def ai_on(pipeline, monkeypatch):
+    """`pipeline` with AI self-corrections on and backspaces recorded."""
+    from types import SimpleNamespace
+    from tuxtalk import app
+    ai = FakeAI()
+    erased = []
+    monkeypatch.setattr(app, "_ai_corrections", True)
+    monkeypatch.setattr(app, "_ai_engine", ai)
+    monkeypatch.setattr(app, "_output_backend",
+                        lambda: SimpleNamespace(backspaces=lambda n: (erased.append(n), True)[1]))
+    monkeypatch.setattr(app.state, "chunk_typed", False)
+    monkeypatch.setattr(app.state, "held_cue", "")
+    monkeypatch.setattr(app.state, "last_inserted_window", None)
+    texts, typed, beeps = pipeline
+    return texts, typed, erased, ai
+
+
+def test_correction_after_a_pause_fixes_the_phrase_before(ai_on):
+    """"meet at three" ... "no wait, four": the AI hears both, the first
+    phrase is backspaced and the fixed sentence typed in its place."""
+    from tuxtalk import app
+    texts, typed, erased, _ = ai_on
+    texts.extend(["meet at three.", "no wait, four.", "meet at three. No wait, four."])
+    call(frames_of(speech(1.0)), "middle")
+    call(frames_of(speech(1.0)), "middle")
+    assert erased == [len("Meet at three. ")]
+    assert typed[-1] == "Meet at four"
+    assert app.state.pending_boundary["mark"] == "."
+
+
+def test_correction_on_the_last_phrase(ai_on):
+    texts, typed, erased, _ = ai_on
+    texts.extend(["meet at three.", "no wait, four.", "meet at three. No wait, four."])
+    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    call(frames_of(speech(1.0)), "last", auto_period=True)
+    assert erased == [len("Meet at three. ")]
+    assert typed[-1] == "Meet at four. "
+
+
+def test_a_bare_cue_waits_for_the_value(ai_on):
+    """"meet at three" ... "no wait" ... "four": nothing is typed for the cue
+    alone; the value after it makes the correction."""
+    texts, typed, erased, ai = ai_on
+    texts.extend(["meet at three.", "no wait.", "meet at three. No wait.", "four."])
+    call(frames_of(speech(1.0)), "middle")
+    call(frames_of(speech(1.0)), "middle")
+    assert typed == ["Meet at three", ". "]          # the cue is held
+    call(frames_of(speech(1.0)), "last", auto_period=True)
+    assert erased == [len("Meet at three. ")]
+    assert typed[-1] == "Meet at four. "
+
+
+def test_a_bare_cue_said_last_is_typed(ai_on):
+    from tuxtalk import app
+    texts, typed, erased, _ = ai_on
+    texts.extend(["meet at three.", "no wait.", "meet at three. No wait."])
+    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    call([], "last", auto_period=True)
+    assert typed == ["Meet at three", ". ", "No wait. "]
+    assert erased == [] and app.state.held_cue == ""
+
+
+def test_no_correction_types_the_phrase_as_said(ai_on):
+    texts, typed, erased, ai = ai_on
+    texts.extend(["meet at three.", "in the garden.", "meet at three in the garden."])
+    call(frames_of(speech(1.0)), "middle")
+    call(frames_of(speech(1.0)), "middle")
+    assert erased == [] and ai.asked == []
+    assert typed == ["Meet at three", " ", "in the garden"]
+
+
+def test_ai_unchanged_types_the_phrase_as_said(ai_on):
+    """The AI found nothing to fix: nothing is erased."""
+    texts, typed, erased, _ = ai_on
+    texts.extend(["we meet.", "no wait, four.", "we meet. No wait, four."])
+    call(frames_of(speech(1.0)), "middle")
+    call(frames_of(speech(1.0)), "middle")
+    assert erased == []
+    assert typed[-1] == "No wait, four"
+
+
+def test_correction_never_reaches_into_another_window(ai_on, monkeypatch):
+    from tuxtalk import app
+    texts, typed, erased, _ = ai_on
+    texts.extend(["meet at three.", "no wait, four.", "meet at three. No wait, four."])
+    call(frames_of(speech(1.0)), "middle")
+    app.state.last_inserted_window = "kwrite"
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "konsole")
+    call(frames_of(speech(1.0)), "middle")
+    assert erased == []
+    assert typed[-1] == "No wait, four"
+
+
+def test_correction_never_reaches_into_the_dictation_before(ai_on):
+    """A new recording's first phrase never changes the last recording's text."""
+    from tuxtalk import app
+    texts, typed, erased, _ = ai_on
+    app.state.last_inserted_text = "Meet at three. "
+    texts.append("no wait, four.")
+    call(frames_of(speech(1.0)), "middle")
+    assert erased == []
+
+
+def test_ai_off_leaves_a_correction_after_a_pause_alone(ai_on, monkeypatch):
+    from tuxtalk import app
+    monkeypatch.setattr(app, "_ai_corrections", False)
+    texts, typed, erased, _ = ai_on
+    texts.extend(["meet at three.", "no wait, four.", "meet at three. No wait, four."])
+    call(frames_of(speech(1.0)), "middle")
+    call(frames_of(speech(1.0)), "middle")
+    assert erased == []
+    assert typed[-1] == "No wait, four"
+
+
+def test_the_context_pass_hears_only_the_seconds_around_the_pause(pipeline, monkeypatch):
+    """A long phrase isn't transcribed a second time whole."""
+    from tuxtalk import app
+    texts, typed, _ = pipeline
+    heard = []
+    real = app._transcribe_audio
+    monkeypatch.setattr(app, "_transcribe_audio",
+                        lambda audio, lang: (heard.append(len(audio) / SR), real(audio, lang))[1])
+    texts.extend(["we meet.", "at three.", "we meet at three."])
+    call(frames_of(speech(20.0)), "middle")
+    call(frames_of(speech(20.0)), "middle")
+    assert heard[:2] == [20.0, 20.0]
+    assert heard[2] == pytest.approx(2 * app.CONTEXT_S + app.JOINT_GAP_S)
+    assert typed == ["We meet", " ", "at three"]
+
+
+def test_describe_says_how_close_a_pause_came():
+    from tuxtalk.chunking import PauseDetector
+    det = PauseDetector(0.8, SR)
+    for b in blocks(np.concatenate([speech(1.0), noise(0.5), speech(1.0)])):
+        assert not det.feed(b)
+    assert 0.4 < det.longest_quiet < 0.6
+    assert "longest quiet 0.5" in det.describe()

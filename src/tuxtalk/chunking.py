@@ -98,12 +98,16 @@ class PauseDetector:
         self._burst = 0.0
         self.loudest = 0.0
         self.blocks = 0
+        # The longest quiet stretch after speech, for the log: how close a
+        # recording with no cut came to a pause.
+        self.longest_quiet = 0.0
 
     def describe(self) -> str:
         """The levels it is working with, for the log."""
         return (f"room {self._room:.0f}, speech from {self.threshold():.0f}, "
                 f"loudest {self.loudest:.0f} (int16 RMS after the high-pass), "
-                f"{self.blocks} blocks at {self.sample_rate} Hz")
+                f"{self.blocks} blocks at {self.sample_rate} Hz, longest quiet "
+                f"{self.longest_quiet:.2f}s of the {self.pause_seconds:.2f}s a pause needs")
 
     def snapshot(self) -> PauseSnapshot:
         """The levels it is working with now, for the live test in Preferences."""
@@ -164,6 +168,8 @@ class PauseDetector:
         else:
             self._burst = 0.0
         self.silence_time += duration
+        if self.speech_time >= MIN_SPEECH_S:
+            self.longest_quiet = max(self.longest_quiet, self.silence_time)
         if self.silence_time < self.pause_seconds:
             return False
         if self.speech_time < MIN_SPEECH_S:

@@ -285,6 +285,12 @@ class RecordingState:
     # {"mark", "audio", "raw", "typed"} until the next chunk decides it, else
     # None. Belongs to its recording only (cleared by _arm_chunker).
     pending_boundary: object = None
+    # A phrase of this recording has been typed, so a correction said after the
+    # next pause ("no wait, four") may change it (app._correct_across_pause).
+    chunk_typed: bool = False
+    # A phrase that was only a correction cue ("No wait."), not typed yet: the
+    # corrected value comes in the next phrase.
+    held_cue: str = ""
     # Speech the pause detector heard after its last cut, taken at the stop:
     # 0.0 means the rest of the recording is room noise only.
     last_chunk_speech: float = None
@@ -927,6 +933,8 @@ def _arm_chunker(rec_sr, edit_mode=False):
     with _chunk_lock:
         state.chunks_submitted = 0
         state.pending_boundary = None
+        state.chunk_typed = False
+        state.held_cue = ""
         state.chunker = chunker
 
 
@@ -2635,11 +2643,13 @@ def _numbers_to_digits(text: str) -> str:
 
 
 def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: bool,
-                  app_kind: str = "") -> str:
+                  app_kind: str = "", ai: bool = True) -> str:
     """Apply voice commands, normalize, handle mid-sentence, add auto-period/space.
 
     *app_kind* ("terminal", "code" or ""): the focused app wants plain text
     (no closing period; in a terminal, no starting capital either).
+    *ai* False skips the AI self-corrections: Type at pause asks the AI about
+    a phrase together with the one before it instead (_correct_across_pause).
 
     Returns the final text string ready for injection.
     """
@@ -2672,7 +2682,7 @@ def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: b
     if _remove_fillers:
         from .cleanup import clean_fillers_and_repeats
         text = clean_fillers_and_repeats(text)
-    if _ai_corrections and _ai_engine is not None:
+    if ai and _ai_corrections and _ai_engine is not None:
         from . import ai_cleanup
         text = ai_cleanup.fix_self_corrections(text, _ai_engine)
 
@@ -3077,7 +3087,74 @@ def _report_undelivered(outcome: str, beeps_on: bool):
 # Silence put between two chunks when the engine hears them together, so the
 # pause is still there to hear (the cut kept only 0.3 s of it).
 JOINT_GAP_S = 0.5
+# Seconds heard on each side of the pause for that: enough words for the
+# engine to judge the seam, so a long phrase isn't transcribed a second time
+# whole (a 45 s phrase took a second 45 s pass).
+CONTEXT_S = 6.0
 _SENTENCE_ENDS = (".", "?", "!", "…")
+
+
+def _context_samples() -> int:
+    return int(CONTEXT_S * SAMPLE_RATE)
+
+
+def _corrects_across_pause(raw: str, chunk_role) -> bool:
+    """True when this phrase corrects the one typed before the pause ("no
+    wait, four" after "meet at three"), so the AI should hear both together.
+    Needs AI self-corrections on and a phrase of this recording typed."""
+    if chunk_role is None or not state.chunk_typed:
+        return False
+    if not (_ai_corrections and _ai_engine is not None and state.last_inserted_text.strip()):
+        return False
+    if state.held_cue:
+        return True
+    from . import ai_cleanup
+    return ai_cleanup.opens_with_correction(state.last_inserted_text, raw)
+
+
+def _erase_typed(text: str) -> bool:
+    """Backspace over *text*, just typed by the phrase before the pause. False
+    when it can't be done safely; then nothing more is erased."""
+    focused = _query_focused_window_class()
+    if (focused is not None and state.last_inserted_window is not None
+            and focused != state.last_inserted_window):
+        logger.info("Correction across a pause skipped: the phrase is in another window")
+        return False
+    try:
+        deleted = _output_backend().backspaces(len(text))
+    except KeystrokesStoppedPartway:
+        logger.error("Correction across a pause stopped partway; typing the phrase as said")
+        state.last_inserted_text = ""
+        _notify("TuxTalk", "A correction stopped partway, so check the text before it")
+        return False
+    if deleted:
+        state.last_inserted_text = ""
+    return bool(deleted)
+
+
+def _correct_across_pause(text: str) -> str:
+    """The text to type for a phrase that corrects the one before the pause.
+
+    The AI hears both phrases as one ("Meet at three. No wait, four."). When
+    it fixes the correction, the earlier phrase is backspaced and the fixed
+    whole is typed in its place ("Meet at four."); otherwise the phrase is
+    typed as said, a cue held back from the phrase before included."""
+    from . import ai_cleanup
+    prev = state.last_inserted_text
+    cue, state.held_cue = state.held_cue, ""
+    if cue and cue[-1] not in ".?!,;:":
+        cue += ","
+    if cue.endswith(",") and text[:1].isupper() and _safe_to_lowercase_first_word(text):
+        text = text[0].lower() + text[1:]      # "No wait, four", not "Four"
+    said = f"{cue} {text}" if cue else text
+    joined = prev + ("" if prev[-1:].isspace() else " ") + said
+    fixed = ai_cleanup.fix_self_corrections(joined, _ai_engine)
+    if fixed == joined or not fixed.strip():
+        return said
+    if not _erase_typed(prev):
+        return said
+    logger.info("AI cleanup fixed a self-correction across a pause")
+    return fixed
 
 
 def _last_word(text: str) -> str:
@@ -3123,7 +3200,8 @@ def _resolve_boundary(audio_f32, language, injection_mode) -> None:
     try:
         from .chunking import boundary_mark
         gap = np.zeros(int(JOINT_GAP_S * SAMPLE_RATE), dtype=np.float32)
-        joint = _transcribe_audio(np.concatenate([pending["audio"], gap, audio_f32]), language)
+        joint = _transcribe_audio(np.concatenate(
+            [pending["audio"], gap, audio_f32[:_context_samples()]]), language)
         found = boundary_mark(pending["raw"], joint or "")
         logger.info(f"Chunk boundary: {pending['mark']!r} alone, {found!r} in context")
         if found is not None:
@@ -3172,6 +3250,12 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
             return False
         logger.info(f"Chunk ({chunk_role}) {what}; nothing typed for it")
         if chunk_role == "last":
+            if state.held_cue:
+                # "No wait." was the last thing said: type it as it was said.
+                cue, state.held_cue = state.held_cue, ""
+                if auto_period and cue[-1] not in ".?!":
+                    cue += "."
+                _inject_text(cue + (" " if auto_space else ""), injection_mode, time.time())
             _flush_boundary(auto_period, auto_space, injection_mode)
             if not _chunk_context_marks:
                 state.continue_mid_sentence = False   # it belongs to this recording
@@ -3242,7 +3326,19 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         # A pause is not a sentence end, so a middle chunk gets no auto-period
         # of its own; the last chunk (or _flush_boundary) ends the sentence.
         chunk_period = auto_period and chunk_role != "middle"
-        text = _prepare_text(raw, smart_quotes, chunk_period, auto_space, app_kind=kind)
+        # A correction said after a pause ("meet at three" ... "no wait,
+        # four") goes to the AI together with the phrase it corrects.
+        across = _corrects_across_pause(raw, chunk_role)
+        text = _prepare_text(raw, smart_quotes, chunk_period, auto_space, app_kind=kind,
+                             ai=not across)
+        if across:
+            from . import ai_cleanup
+            if chunk_role == "middle" and ai_cleanup.is_bare_cue(text):
+                # Only "No wait.": the corrected value is in the next phrase.
+                state.held_cue = text.strip()
+                logger.info("Chunk is only a correction cue; waiting for the next phrase")
+                return
+            text = _correct_across_pause(text)
         held_mark = None
         if chunk_role == "middle" and _chunk_context_marks:
             text, held_mark = _hold_back_boundary(text, raw)
@@ -3273,8 +3369,13 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                 # Without the context pass the engine's own mark decides: after
                 # a comma or none, the next chunk carries on lowercase.
                 state.continue_mid_sentence = not text.rstrip().endswith(_SENTENCE_ENDS)
+            if chunk_role is not None and outcome == "ok":
+                state.chunk_typed = True
             if held_mark is not None and outcome == "ok":
-                state.pending_boundary = {"mark": held_mark, "audio": audio_f32,
+                # Only the end of the phrase is kept: the engine hears it with
+                # the start of the next one to decide the mark between them.
+                state.pending_boundary = {"mark": held_mark,
+                                          "audio": audio_f32[-_context_samples():],
                                           "raw": raw, "typed": state.last_inserted_text}
             if _usage_stats:
                 # After typing, so saving the counts never delays the text.
