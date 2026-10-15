@@ -65,15 +65,23 @@ def test_a_cancelled_save_keeps_the_window(win, monkeypatch):
     assert win._on_close() is True
 
 
-def test_copied_text_closes_without_asking(win, monkeypatch):
+def test_copied_text_still_asks(win):
+    """The next copy replaces the clipboard, so a copy isn't kept."""
     done(win)
     win._on_copy(None)
+    assert win._on_close() is True
+    assert "You copied it, but it isn't saved to a file." in win.asked[0][1]
+
+
+def test_saved_text_closes_without_asking(win):
+    done(win)
+    win.kept = True                    # what a successful _save sets
     assert win._on_close() is False and win.asked == []
 
 
 def test_a_new_transcript_is_unsaved_again(win):
     done(win)
-    win._on_copy(None)
+    win.kept = True
     done(win, "Another one.")
     win._on_close()
     assert win.asked

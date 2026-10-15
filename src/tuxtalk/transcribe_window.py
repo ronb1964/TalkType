@@ -65,8 +65,10 @@ class TranscribeWindow:
         self.pieces = []
         self.path = None
         self.busy = False
-        # The text was saved or copied, so closing or a new file loses nothing.
+        # The text was saved to a file, so closing or a new file loses
+        # nothing. A copy doesn't count: the next copy replaces it.
         self.kept = False
+        self.copied = False
         self._cancel = threading.Event()
 
         self.window = Gtk.Window(title=TITLE)
@@ -256,7 +258,7 @@ class TranscribeWindow:
 
     def _on_done(self, pieces, total, seconds, stopped):
         self.pieces = pieces
-        self.kept = False
+        self.kept = self.copied = False
         self._set_busy(False)
         self._show_text()
         logger.info(f"Transcribed a file: {total:.0f} s of sound in {seconds:.1f} s"
@@ -283,7 +285,7 @@ class TranscribeWindow:
         buf = self.view.get_buffer()
         text = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
         Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD).set_text(text, -1)
-        self.kept = True
+        self.copied = True
         self.status.set_text("Copied. Paste it wherever you like.")
 
     def _save(self, kind):
@@ -340,9 +342,11 @@ class TranscribeWindow:
             return True
         loses = ("Closing the window loses it." if why == "close"
                  else "Opening another file replaces it.")
+        where = ("You copied it, but it isn't saved to a file." if self.copied
+                 else "It isn't saved or copied anywhere yet.")
         answer = self._ask(
             "Save the text first?",
-            f"It isn't saved or copied anywhere yet. {loses}",
+            f"{where} {loses}",
             [("Cancel", Gtk.ResponseType.CANCEL),
              ("Don't Save", Gtk.ResponseType.REJECT),
              ("Save as Text…", Gtk.ResponseType.ACCEPT)])
