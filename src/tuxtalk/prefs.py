@@ -8,6 +8,7 @@ import datetime
 import os
 import subprocess
 import sys
+import time
 import atexit
 import dbus.mainloop.glib
 from dataclasses import asdict
@@ -302,6 +303,49 @@ class SegmentedVUMeter(Gtk.DrawingArea):
             cr.stroke()
 
         return False
+
+
+class PauseMeter(SegmentedVUMeter):
+    """The mic test's meter for Type at pause (TuxTalk Labs): the level, with
+    the room's level (grey) and the speech threshold (green) marked on it, and
+    a short flash where the pause detector would cut. All three are 0-1
+    positions (chunk_meter.level_to_fraction)."""
+
+    FLASH_S = 0.3
+
+    def __init__(self, num_segments=20):
+        super().__init__(num_segments=num_segments)
+        self.room = 0.0
+        self.threshold = 0.0
+        self._flash_until = 0.0
+        self.set_size_request(300, 20)
+
+    def show_snapshot(self, level, room, threshold, cut=False):
+        self.room = max(0.0, min(1.0, room))
+        self.threshold = max(0.0, min(1.0, threshold))
+        if cut:
+            self._flash_until = time.monotonic() + self.FLASH_S
+        self.set_value(level)
+
+    def flashing(self):
+        return time.monotonic() < self._flash_until
+
+    def _on_draw(self, widget, cr):
+        super()._on_draw(widget, cr)
+        self._draw_marks(cr, widget.get_allocated_width(), widget.get_allocated_height())
+        return False
+
+    def _draw_marks(self, cr, width, height):
+        for fraction, rgb in ((self.room, (0.62, 0.62, 0.62)),
+                              (self.threshold, (0x04 / 255, 0xB5 / 255, 0x03 / 255))):
+            x = round(fraction * width)
+            cr.set_source_rgb(*rgb)
+            cr.rectangle(max(0, x - 1), 0, 3, height)
+            cr.fill()
+        if self.flashing():
+            cr.set_source_rgba(1.0, 1.0, 1.0, 0.35)
+            cr.rectangle(0, 0, width, height)
+            cr.fill()
 
 
 def _on_gnome():
