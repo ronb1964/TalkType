@@ -145,6 +145,18 @@ def test_the_checkbox_says_what_it_does(monkeypatch):
     try:
         assert voice.copy_check.get_label() == "Also fix it in my text"
         assert "whole corrected dictation" in tray.copy_check.get_label()
+
+        def labels(dialog):
+            out, todo = [], [dialog.window]
+            while todo:
+                w = todo.pop()
+                if isinstance(w, fw.Gtk.Label):
+                    out.append(w.get_text())
+                if isinstance(w, fw.Gtk.Container):
+                    todo.extend(w.get_children())
+            return " ".join(out)
+        assert "fix that word" in labels(tray)          # the tray points to the voice command
+        assert "fix that word" not in labels(voice)
     finally:
         voice.window.destroy()
         tray.window.destroy()

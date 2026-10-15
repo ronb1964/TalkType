@@ -102,6 +102,15 @@ class _FixWordDialog:
                       "more than one word.")
         box.pack_start(hint, False, False, 0)
 
+        # Opened from the tray: point to the quicker way (app._handle_fix_word).
+        if not in_place:
+            tip = Gtk.Label(xalign=0)
+            tip.set_line_wrap(True)
+            tip.set_markup('<span alpha="70%">Tip: right after dictating, you can also just '
+                           'say \u201cfix that word\u201d. It fixes the word in your text '
+                           'for you.</span>')
+            box.pack_start(tip, False, False, 0)
+
         # A read-only text box rather than a button per word: it reads like
         # the sentence it is, and click-or-drag is how people select text
         # everywhere else. The selection is snapped to whole words.
