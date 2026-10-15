@@ -196,7 +196,7 @@ def test_the_service_passes_the_list_to_the_graphics_engine(words_off, monkeypat
 def test_parakeet_says_it_does_not_use_the_list():
     from tuxtalk.prefs import model_setting_warning
     note = model_setting_warning("parakeet-v3", "vulkan", "auto", "", auto_languages=("en", "es"))
-    assert "only with the Whisper models" in note
+    assert "does nothing with Parakeet" in note
     assert model_setting_warning("parakeet-v3", "vulkan", "auto", "") == ""
     assert model_setting_warning("small", "vulkan", "auto", "", auto_languages=("en", "es")) == ""
     # Manual mode names one language, so the list doesn't apply at all.

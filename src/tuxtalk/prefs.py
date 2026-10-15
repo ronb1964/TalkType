@@ -341,8 +341,8 @@ def model_setting_warning(model, device, language_mode, language, language_name=
         notes.append(f"Parakeet doesn't understand {lang}. It knows English and 24 European "
                      f"languages. For {lang}, choose one of the Whisper models.")
     if language_mode == "auto" and auto_languages:
-        notes.append("Parakeet picks the language by itself, so \u201cOnly these languages\u201d "
-                     "is used only with the Whisper models.")
+        notes.append("\u201cOnly these languages\u201d does nothing with Parakeet, which always "
+                     "picks the language by itself. It only works with the Whisper models.")
     return "\n".join(notes)
 
 
@@ -4582,6 +4582,20 @@ class PreferencesWindow:
             getattr(box, f"set_margin_{side}")(16)
         box.set_spacing(10)
 
+        # First thing in the window, in the warning amber: with Parakeet the
+        # ticks change nothing, and a note at the bottom was easy to miss.
+        it = self.model_combo.get_active_iter()
+        model = self.model_store.get_value(it, 0) if it is not None else ""
+        if model == "parakeet-v3":
+            parakeet_note = Gtk.Label(xalign=0)
+            parakeet_note.set_line_wrap(True)
+            parakeet_note.set_max_width_chars(60)
+            parakeet_note.set_markup(
+                f'<span color="{WARNING_AMBER}" weight="bold">⚠️ You\u2019re using Parakeet, '
+                "which always picks the language by itself. These ticks do nothing with "
+                "Parakeet. They only work with the Whisper models.</span>")
+            box.pack_start(parakeet_note, False, False, 0)
+
         intro = Gtk.Label(xalign=0)
         intro.set_line_wrap(True)
         intro.set_max_width_chars(60)
@@ -4612,8 +4626,7 @@ class PreferencesWindow:
             "<small>This is for the Whisper models. When Whisper thinks it hears a "
             "language that isn\u2019t ticked, it listens again in the likeliest one "
             "that is. Tick just one and it\u2019s the same as choosing that language "
-            "by hand. Parakeet has no language setting: it picks among its 25 "
-            "languages by itself.</small>")
+            "by hand.</small>")
         box.pack_start(how, False, False, 0)
 
         dialog.show_all()
