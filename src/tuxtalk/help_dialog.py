@@ -269,6 +269,14 @@ After choosing one, the tray's Device line shows where it really runs.
 • Your fixes live in Preferences → Snippets, where you can edit or remove them
 • Handy for names, brands and technical terms, like "bamboo studio" → BambuStudio
 
+<b>Transcribe a File</b> (tray menu → Transcribe a File...)
+• Turns a recording or a video into text: MP3, M4A, OGG, WAV, FLAC, MP4, MKV, WebM and more
+• Choose a file or drop one on the window. It uses the model and device you dictate with
+• Copy the text, save it as a text file, or save subtitles (.srt) for a video
+• "Show times" starts each paragraph with where it is in the file
+• It runs on its own, so you can keep dictating while it works. Stop keeps what's done
+• Nothing leaves your computer
+
 <b>Your Stats</b> (tray menu → Your Stats..., or Preferences → Stats)
 • How many words you've dictated today, this week and all time
 • How long you spent dictating, and roughly how much typing time that saved

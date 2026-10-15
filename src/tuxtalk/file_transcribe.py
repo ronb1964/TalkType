@@ -1,0 +1,302 @@
+"""Turning an audio or video file into text (Tray → Transcribe a File...).
+
+This is the part with no window in it: reading the file, cutting it into
+pieces, running the speech model over each piece, and writing the result as
+text or as subtitles. transcribe_window.py is the window around it.
+
+It runs in its own process with its own copy of the model, never inside the
+dictation service: a long file takes minutes, and dictation has to keep
+working the whole time. The model is the one the user dictates with, on the
+same device, so nothing new is downloaded.
+
+Every engine gets the same treatment, so progress, Cancel and the subtitle
+timing work alike for all of them:
+
+- The file is decoded with PyAV, which faster-whisper already brings along
+  (with FFmpeg's libraries inside it), so MP3, M4A, OGG, FLAC, WAV and the
+  sound of MP4, MKV and WebM videos all read without anything installed.
+- It is cut into pieces of 16 to 30 seconds, each cut at the quietest moment
+  in that stretch, which is nearly always a pause between words. 30 seconds
+  is what Whisper reads at once, and it keeps Parakeet's memory use small.
+- A piece in which nobody talks is skipped. It saves time, and it's where
+  Whisper invents "Thanks for watching!". Nothing else is filtered: unlike a
+  dictation, a video's real "like and subscribe" should stay.
+"""
+import os
+import re
+from dataclasses import dataclass
+
+import numpy as np
+
+from .logger import setup_logger
+
+logger = setup_logger(__name__)
+
+SAMPLE_RATE = 16000
+MIN_PIECE_S = 16
+MAX_PIECE_S = 30
+
+# What the file picker offers. PyAV reads far more than this, so the picker
+# also has an "All files" choice.
+AUDIO_EXTENSIONS = ("mp3", "m4a", "aac", "ogg", "oga", "opus", "flac", "wav", "wma", "amr", "aiff")
+VIDEO_EXTENSIONS = ("mp4", "mkv", "webm", "mov", "avi", "m4v", "wmv", "flv", "3gp", "mpeg", "mpg", "ts")
+
+
+class NotDownloaded(Exception):
+    """The model the user dictates with isn't downloaded."""
+
+
+class NoSound(Exception):
+    """The file has no sound TuxTalk can read."""
+
+
+@dataclass
+class Piece:
+    """One piece of the file: where it is (seconds) and what was said in it."""
+    start: float
+    end: float
+    text: str
+
+
+# --- reading and cutting ---------------------------------------------------------------
+
+def decode(path):
+    """The file's sound as 16 kHz mono float32. Raises NoSound for a file
+    PyAV can't open or one with no sound in it."""
+    from faster_whisper.audio import decode_audio
+    try:
+        audio = decode_audio(path, sampling_rate=SAMPLE_RATE)
+    except Exception as e:
+        raise NoSound(f"TuxTalk couldn't read the sound in this file ({e})") from e
+    if audio is None or len(audio) == 0:
+        raise NoSound("This file has no sound in it.")
+    return np.asarray(audio, dtype=np.float32)
+
+
+def cut_points(audio, sample_rate=SAMPLE_RATE, min_s=MIN_PIECE_S, max_s=MAX_PIECE_S):
+    """(start, end) sample indexes of the pieces, end exclusive. Each piece
+    is at most *max_s* long and ends in the quietest half second between
+    *min_s* and *max_s*; the last one takes whatever is left.
+
+    Half a second, not the single quietest moment: a comma's short pause can
+    be as quiet as the gap between two sentences, and cutting there splits a
+    sentence. Averaged over half a second, the longer gap wins."""
+    frame = sample_rate // 20
+    smooth = np.ones(9) / 9           # nine 50 ms frames
+    pieces, start, n = [], 0, len(audio)
+    while n - start > max_s * sample_rate:
+        lo, hi = start + min_s * sample_rate, start + max_s * sample_rate
+        frames = (hi - lo) // frame
+        energy = np.square(audio[lo:lo + frames * frame].reshape(frames, frame)).mean(axis=1)
+        energy = np.convolve(energy, smooth, mode="same")
+        cut = lo + int(np.argmin(energy)) * frame + frame // 2
+        pieces.append((start, cut))
+        start = cut
+    if n > start:
+        pieces.append((start, n))
+    return pieces
+
+
+# --- the engine ---------------------------------------------------------------------------
+
+class FileEngine:
+    """The user's model, loaded for a file: .text(audio) -> what was said.
+
+    *describe* is what the window shows, like "Parakeet on the graphics card"."""
+
+    def __init__(self, model, kind, describe, language=None, limit_to=(), words=()):
+        self.model, self.kind, self.describe = model, kind, describe
+        self.language, self.limit_to, self.words = language, tuple(limit_to), list(words)
+
+    def text(self, audio):
+        from . import custom_words, language_limit
+        if self.kind == "parakeet":
+            text = self.model.recognize(audio)
+        elif self.kind == "vulkan":
+            extra = {"limit_to": self.limit_to} if self.limit_to else {}
+            prompt = custom_words.prompt(self.words)
+            if prompt:
+                extra["prompt"] = prompt
+            text, _ = self.model.transcribe(audio, self.language, timeout=600, **extra)
+        else:
+            options = dict(beam_size=5, vad_filter=False, hotwords=custom_words.prompt(self.words))
+            segments, info = self.model.transcribe(audio, language=self.language, **options)
+            better = (language_limit.redirect(info.language, dict(info.all_language_probs or ()),
+                                              self.limit_to) if self.limit_to else None)
+            if better:
+                logger.info(f"File: Whisper heard {info.language}, not on the list; using {better}")
+                segments, info = self.model.transcribe(audio, language=better, **options)
+            text = " ".join(s.text.strip() for s in segments)
+        text = " ".join((text or "").split())
+        if self.words:
+            text = custom_words.fix_spelling(text, self.words)
+        return text
+
+    def close(self):
+        close = getattr(self.model, "close", None)
+        if close:
+            try:
+                close()
+            except Exception as e:
+                logger.debug(f"Closing the file engine: {e}")
+
+
+def load_engine(cfg):
+    """The model *cfg* dictates with, loaded for files. Graphics first when
+    that's the device, the processor when the graphics chip can't be used.
+    Raises NotDownloaded when the model isn't on this computer."""
+    from . import custom_words, language_limit, whisper_vulkan
+    from .model_helper import is_model_cached_fast, model_display_name
+    from .parakeet_engine import is_parakeet, load_parakeet_model
+
+    name, device = cfg.model, (cfg.device or "cpu").lower()
+    parakeet = is_parakeet(name)
+    title = "Parakeet" if parakeet else f"Whisper {model_display_name(name)}"
+    language = cfg.language or None
+    limit_to = () if language else language_limit.parse(getattr(cfg, "auto_languages", ""))
+    if not language:
+        language = language_limit.forced_language(limit_to)
+        limit_to = () if language else limit_to
+    try:
+        words = custom_words.load()
+    except Exception:
+        words = []
+    common = dict(language=language, limit_to=limit_to, words=words)
+
+    gpu_failed = False
+    if device == "vulkan" and whisper_vulkan.is_installed(name):
+        gpu_failed = True       # until it starts
+        try:
+            index = whisper_vulkan.find_device()
+            if index is not None:
+                if parakeet:
+                    from .parakeet_gpu import ParakeetGpuModel
+                    model = ParakeetGpuModel(index)
+                    return FileEngine(model, "parakeet", f"{title} on the graphics card", **common)
+                model = whisper_vulkan.VulkanWhisperModel(name, index)
+                return FileEngine(model, "vulkan", f"{title} on the graphics card", **common)
+        except Exception as e:
+            logger.warning(f"File transcription: graphics card not used ({e}); using the processor")
+    # The graphics copy is there but wouldn't start: say that, not "not downloaded".
+    missing = (f"{title} couldn't start on the graphics card, and its processor copy isn't "
+               f"downloaded." if gpu_failed else f"{title} isn't downloaded yet.")
+
+    if parakeet:
+        try:
+            return FileEngine(load_parakeet_model(), "parakeet", f"{title} on the processor", **common)
+        except FileNotFoundError as e:
+            raise NotDownloaded(missing) from e
+
+    if not is_model_cached_fast(name):
+        raise NotDownloaded(missing)
+    from faster_whisper import WhisperModel
+    if device == "cuda":
+        try:
+            from .cuda_helper import has_cuda_libraries
+            if has_cuda_libraries():
+                model = WhisperModel(name, device="cuda", compute_type="float16", local_files_only=True)
+                return FileEngine(model, "whisper", f"{title} on the graphics card (CUDA)", **common)
+        except Exception as e:
+            logger.warning(f"File transcription: CUDA not used ({e}); using the processor")
+    model = WhisperModel(name, device="cpu", compute_type="int8",
+                         cpu_threads=os.cpu_count() or 4, local_files_only=True)
+    return FileEngine(model, "whisper", f"{title} on the processor", **common)
+
+
+# --- transcribing ---------------------------------------------------------------------------
+
+def transcribe(audio, engine, progress=None, cancelled=None):
+    """The pieces of *audio* with what was said in each; pieces nobody
+    talked in are left out. *progress(done_seconds, total_seconds)* is called
+    after each piece; *cancelled()* returning True stops early, with the
+    pieces done so far."""
+    from .silence import has_no_speech
+    total = len(audio) / SAMPLE_RATE
+    pieces = []
+    for start, end in cut_points(audio):
+        if cancelled and cancelled():
+            break
+        chunk = audio[start:end]
+        if not has_no_speech(chunk, SAMPLE_RATE):
+            text = engine.text(chunk)
+            if text:
+                pieces.append(Piece(start / SAMPLE_RATE, end / SAMPLE_RATE, text))
+        if progress:
+            progress(end / SAMPLE_RATE, total)
+    return pieces
+
+
+# --- writing it out -------------------------------------------------------------------------
+
+def clock(seconds, srt=False):
+    """1:05, 1:02:05, or SRT's 00:01:05,000."""
+    ms = int(round(seconds * 1000))
+    h, rest = divmod(ms, 3_600_000)
+    m, rest = divmod(rest, 60_000)
+    s, ms = divmod(rest, 1000)
+    if srt:
+        return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+    return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
+
+
+_SENTENCE_END = re.compile(r"[.!?…。！？]['\")\]]*$")
+
+
+def to_text(pieces, times=False):
+    """The pieces as paragraphs. A piece that ends a sentence ends its
+    paragraph; one cut mid-sentence carries on into the next. *times* starts
+    each paragraph with where it is in the file, "[1:05]"."""
+    paragraphs, current, began = [], [], 0.0
+    for piece in pieces:
+        if not current:
+            began = piece.start
+        current.append(piece.text)
+        if _SENTENCE_END.search(piece.text):
+            paragraphs.append((began, " ".join(current)))
+            current = []
+    if current:
+        paragraphs.append((began, " ".join(current)))
+    return "\n\n".join(f"[{clock(t)}] {p}" if times else p for t, p in paragraphs)
+
+
+MAX_CUE_CHARS = 84      # two subtitle lines of 42, the usual limit
+
+
+def _cue_texts(text):
+    """*text* in subtitle-sized parts: by sentence, and a long sentence in
+    even parts, each cut at the comma or space nearest its share, so no
+    single word is left on its own."""
+    parts = []
+    for sentence in re.split(r"(?<=[.!?…。！？])\s+", text):
+        sentence = sentence.strip()
+        count = -(-len(sentence) // MAX_CUE_CHARS)
+        while count > 1:
+            target = len(sentence) // count
+            spaces = [i for i, ch in enumerate(sentence) if ch == " "]
+            if not spaces:
+                break
+            # A comma close to the share is the better place to cut.
+            cut = min(spaces, key=lambda i: abs(i - target) - (8 if sentence[i - 1] in ",;" else 0))
+            parts.append(sentence[:cut].strip())
+            sentence = sentence[cut:].strip()
+            count -= 1
+        if sentence:
+            parts.append(sentence)
+    return parts
+
+
+def to_srt(pieces):
+    """The pieces as SRT subtitles. Each piece's time is shared among its
+    sentences by their length: the engines don't time single words, so a
+    cue can be off by a second or two, but never strays outside its piece."""
+    cues = []
+    for piece in pieces:
+        parts = _cue_texts(piece.text)
+        weights = [len(p) + 10 for p in parts]
+        at, span = piece.start, piece.end - piece.start
+        for part, weight in zip(parts, weights):
+            length = span * weight / sum(weights)
+            cues.append((at, at + length, part))
+            at += length
+    return "".join(f"{i}\n{clock(a, srt=True)} --> {clock(b, srt=True)}\n{t}\n\n"
+                   for i, (a, b, t) in enumerate(cues, 1))

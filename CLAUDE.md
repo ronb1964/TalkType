@@ -110,6 +110,7 @@ Preferences and the rest:
 - [ ] Plain text in terminals and code editors: Preferences → Advanced → Text Formatting has it, ticked. In Konsole dictate "git status": types git status (no capital, no period). In KWrite the same words type "Git status." Untick it: Konsole gets "Git status." again
 - [ ] Your Words: Preferences → Snippets → Your Words..., add "TuxTalk", Save. On Parakeet, saying "tux talk" types TuxTalk. On a Whisper model (e.g. small) the name comes out right more often (log: "Loaded your words" / "Reloaded your words"). Saying nothing with a Whisper model types nothing
 - [ ] Only these languages: Preferences → General with Language Mode Auto-detect shows "Only these languages: Any language" (hidden with Manual). Choose… lists the 35 languages; tick English and Spanish, OK: the button reads "English, Spanish". On Parakeet an amber line says it's used only with Whisper. On a Whisper model (e.g. small, CPU and Vulkan) English and Spanish dictations come out in their own language; dictating German comes out in English (log: "Language: Whisper heard de, which isn't on your list; using en"). Untick all: any language again
+- [ ] Transcribe a File: Tray → Transcribe a File... (and the GNOME menu, right under Fix a Word) opens the window. Choose a File… shows the desktop's file dialog with "Audio and video"; pick an MP3 or a video: a progress bar, then the text in paragraphs and "Done: … of sound in …" (log: "Transcribed a file"). Dropping a file on the window works too. Show times adds [m:ss]. Copy All, Save as Text… and Save as Subtitles… (.srt next to the file) work, and the .srt plays in a video player. Dictating while a long file runs still works. Stop keeps what's done. Opening it again brings the open window to the front
 - [ ] Tray → Performance shows Recommended / Lightest / Battery saver, with the dot on the active one
 - [ ] Preferences → General: off the recommended setup, the row says "Recommended for this computer: …" with Use Recommended, which sets Model and Device (Vulkan: download and speed check first) and turns into "✓ You're on the recommended setup". "What works with what?" shows the models-by-device grid and a line about this computer
 - [ ] Backup: Preferences → Updates & Backup fits without scrolling. Save Backup opens the desktop's file dialog, writes the .zip, and "Last saved" turns from amber "never" to the date. Change the hotkey, then Load Backup puts it back, restarts dictation (log) and closes Preferences. Earlier settings lists both "— your backup" files from the backup folder and "— automatic" copies, newest first, and Restore undoes the load. A second backup the same day gets its own name (the time is in it). A non-backup file is turned away with a message. Backup folder → Change… opens a folder browser; after picking one, Save Backup and Load Backup open in it. Tray → Check for Updates still opens this tab
@@ -301,6 +302,7 @@ Dictation Service (toggle)
 Restart Service
 Recent Dictations ▸
 Fix a Word...
+Transcribe a File...
 ─────────────────────
 Active Model: [model]
 Device: [device]

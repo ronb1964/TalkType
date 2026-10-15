@@ -269,6 +269,17 @@ def launch_dictation_service():
     return proc
 
 
+def launch_transcribe_window():
+    """Start the Transcribe a File window as its own process, like
+    Preferences (and keeping the caller's GDK_BACKEND for the same reason).
+    A second one brings the open window to the front and quits."""
+    env = os.environ.copy()
+    pythonpath = dev_pythonpath()
+    if pythonpath:
+        env["PYTHONPATH"] = pythonpath
+    return subprocess.Popen([sys.executable, "-m", "tuxtalk.transcribe_window"], env=env)
+
+
 def launch_preferences(tab=None):
     """Start the Preferences window as its own process; returns the Popen.
 

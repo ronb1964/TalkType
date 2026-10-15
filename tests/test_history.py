@@ -97,17 +97,20 @@ def test_dictation_is_recorded_before_it_is_typed(monkeypatch):
 
 
 def test_tray_and_gnome_extension_place_recent_dictations_after_restart():
-    """CLAUDE.md menu order: Restart Service, Recent Dictations, Fix a Word, in both."""
+    """CLAUDE.md menu order: Restart Service, Recent Dictations, Fix a Word,
+    Transcribe a File, in both."""
     tray = (ROOT / "src/tuxtalk/tray.py").read_text()
     assert re.search(
-        r"restart_item,\s*history_menu_item,\s*fix_word_item,\s*Gtk\.SeparatorMenuItem\(\)", tray)
+        r"restart_item,\s*history_menu_item,\s*fix_word_item,\s*transcribe_item,\s*"
+        r"Gtk\.SeparatorMenuItem\(\)", tray)
 
     js = (ROOT / "gnome-extension/talktype@ronb1964.github.io/extension.js").read_text()
     restart = js.index("new PopupMenu.PopupMenuItem('Restart Service')")
     recent = js.index("new PopupMenu.PopupSubMenuMenuItem('Recent Dictations')")
     fix_word = js.index("new PopupMenu.PopupMenuItem('Fix a Word...')")
+    transcribe = js.index("new PopupMenu.PopupMenuItem('Transcribe a File...')")
     separator = js.index("new PopupMenu.PopupSeparatorMenuItem()", recent)
-    assert restart < recent < fix_word < separator
+    assert restart < recent < fix_word < transcribe < separator
 
 
 def test_full_text_lines_wraps_keeps_breaks_and_caps():

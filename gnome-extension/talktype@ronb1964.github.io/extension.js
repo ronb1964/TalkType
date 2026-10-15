@@ -74,6 +74,7 @@ const TuxTalkIface = `
     </method>
     <method name="ClearRecentDictations"/>
     <method name="FixWordInDictation"/>
+    <method name="TranscribeFile"/>
     <method name="OpenPreferences"/>
     <method name="OpenPreferencesUpdates"/>
     <method name="OpenPreferencesStats"/>
@@ -393,6 +394,11 @@ class TuxTalkIndicator extends PanelMenu.Button {
         const fixWordItem = new PopupMenu.PopupMenuItem('Fix a Word...');
         fixWordItem.connect('activate', () => this._proxy?.FixWordInDictationRemote());
         this.menu.addMenuItem(fixWordItem);
+
+        // Transcribe a File, right under Fix a Word as in the tray.
+        const transcribeItem = new PopupMenu.PopupMenuItem('Transcribe a File...');
+        transcribeItem.connect('activate', () => this._proxy?.TranscribeFileRemote());
+        this.menu.addMenuItem(transcribeItem);
 
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 

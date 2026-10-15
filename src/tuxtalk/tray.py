@@ -546,6 +546,10 @@ class DictationTray:
                     """Open Fix a Word on the newest dictation (GNOME extension D-Bus)."""
                     GLib.idle_add(self.tray.show_fix_word_dialog, 0)
 
+                def show_transcribe_file(self):
+                    """Open Transcribe a File (GNOME extension D-Bus)."""
+                    GLib.idle_add(self.tray.open_transcribe_window, None)
+
                 def show_about(self):
                     """Show about dialog via tray."""
                     GLib.idle_add(self.tray.show_about_dialog, None)
@@ -1204,6 +1208,15 @@ class DictationTray:
             self._launch_preferences(tab="updates")
         except Exception as e:
             logger.error(f"Failed to open preferences updates tab: {e}")
+
+    def open_transcribe_window(self, _=None):
+        """Open Transcribe a File (transcribe_window.py), its own process."""
+        try:
+            from .service_launcher import launch_transcribe_window
+            launch_transcribe_window()
+        except Exception as e:
+            logger.error(f"Failed to open Transcribe a File: {e}")
+        return False
 
     def show_help(self, _):
         """Show help dialog with TuxTalk features and instructions."""
@@ -2055,6 +2068,8 @@ class DictationTray:
         # Top level, right under Recent Dictations, so it is easy to find.
         fix_word_item = Gtk.MenuItem(label="Fix a Word...")
         fix_word_item.connect("activate", lambda _w: self.show_fix_word_dialog(0))
+        transcribe_item = Gtk.MenuItem(label="Transcribe a File...")
+        transcribe_item.connect("activate", self.open_transcribe_window)
 
         # Service management items
         restart_item = Gtk.MenuItem(label="Restart Service")
@@ -2082,6 +2097,7 @@ class DictationTray:
             restart_item,
             history_menu_item,
             fix_word_item,
+            transcribe_item,
             Gtk.SeparatorMenuItem(),
             self.model_display_item,
             self.device_display_item,

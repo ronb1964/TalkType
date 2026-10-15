@@ -5,6 +5,15 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- New: Transcribe a File, in the tray menu. Give it a recording or a video
+  (MP3, M4A, WAV, MP4, MKV and the rest) and you get the text back, to copy,
+  save as a text file, or save as subtitles for the video. It uses the same
+  model you dictate with, so there's nothing new to download, and it runs on
+  its own so dictation keeps working while it goes. On my NVIDIA card with
+  Parakeet, three and a half minutes of talking took about nine seconds,
+  loading included. Subtitle timing is shared out by sentence length inside
+  each half minute, so a line can land a second or two off. Good enough for
+  most things, not for a film.
 - Auto-detect can be held to the languages you actually speak. Whisper picks
   from 99 languages, and on a short dictation it sometimes picks wrong, so you
   say something in Spanish and get French back. Preferences, General, Only

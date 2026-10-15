@@ -303,6 +303,11 @@ class TuxTalkDBusService(dbus.service.Object):
         self._dispatch('show_fix_word')
 
     @dbus.service.method(DBUS_INTERFACE)
+    def TranscribeFile(self):
+        """Open the Transcribe a File window."""
+        self._dispatch('show_transcribe_file')
+
+    @dbus.service.method(DBUS_INTERFACE)
     def OpenPreferences(self):
         """Open the preferences window"""
         self._dispatch('show_preferences')
