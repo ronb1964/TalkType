@@ -213,7 +213,9 @@ def test_only_the_user_at_the_screen_hears(setup):
     assert heard(sock) == []
 
 
-def test_a_key_held_on_two_keyboards_comes_up_once_both_let_go(setup):
+def test_a_press_comes_up_when_its_own_keyboard_lets_go(setup):
+    """Holding the same key on another keyboard (a program's virtual one,
+    say) can't keep a recording going."""
     helper, kb, connect, say, heard, _seat = setup
     other = FakeKeyboard("/dev/input/event-other")
     helper.keyboards[other.path] = other
@@ -223,9 +225,9 @@ def test_a_key_held_on_two_keyboards_comes_up_once_both_let_go(setup):
     other.press(F8)
     assert heard(sock) == []           # already down: no second DOWN
     kb.press(F8, 0)
-    assert heard(sock) == []           # still held on the other one
+    assert heard(sock) == ["UP 66"]    # the press's own keyboard let go
     other.press(F8, 0)
-    assert heard(sock) == ["UP 66"]
+    assert heard(sock) == []
 
 
 def test_an_unplugged_keyboard_lets_its_keys_go(setup):
@@ -325,11 +327,11 @@ def test_a_line_too_long_ends_the_connection(setup):
     assert helper.clients == {}
 
 
-def test_too_many_connections_are_turned_away(setup):
+def test_connections_never_pile_up_past_the_limit(setup):
     helper, _kb, connect, _say, _heard, _seat = setup
-    for _ in range(hh.MAX_CLIENTS_PER_UID + 2):
+    for _ in range(hh.MAX_CLIENTS + 3):
         connect()
-    assert len(helper.clients) == hh.MAX_CLIENTS_PER_UID
+    assert len(helper.clients) == hh.MAX_CLIENTS
 
 
 def test_the_active_user_is_read_from_logind(tmp_path):
@@ -535,3 +537,77 @@ def test_other_seats_keyboards_are_not_read(tmp_path):
     (data / "c13:70").write_text("E:ID_INPUT=1\nE:ID_SEAT=seat1\n")
     assert hh.udev_seat(rdev, str(data)) == "seat1"
     assert hh.udev_seat(os.makedev(13, 71), str(data)) == "seat0"
+
+
+# --- from the second security review, 2026-10-15 -------------------------------------------
+
+def test_a_real_keyboard_split_over_two_devices_still_makes_combos(setup):
+    """Some keyboards send Ctrl and Alt from one device and letters from
+    another. Real keyboards pool their modifiers, as the desktop does."""
+    helper, kb, connect, say, heard, _seat = setup
+    kb.group = "real"
+    letters = FakeKeyboard("/dev/input/event-letters")
+    letters.group = "real"
+    helper.keyboards[letters.path] = letters
+    sock = _ready(connect, say, heard, "CA:25")
+    kb.press(LCTRL)
+    kb.press(LALT)
+    letters.press(P)
+    assert heard(sock) == ["DOWN 25 29,56"]
+
+
+def test_a_virtual_keyboard_still_cant_lend_to_real_ones(setup):
+    helper, kb, connect, say, heard, _seat = setup
+    kb.group = "real"
+    virtual = FakeKeyboard("/dev/input/event-virtual")      # a group of its own
+    helper.keyboards[virtual.path] = virtual
+    sock = _ready(connect, say, heard, "CA:25")
+    virtual.press(LCTRL)
+    virtual.press(LALT)
+    kb.press(P)
+    assert heard(sock) == []
+
+
+def test_holding_the_hotkey_on_a_virtual_keyboard_cant_pin_the_grab(setup, monkeypatch):
+    """A program holds F8 on its own virtual keyboard while the user holds
+    the real one, then asks for the grab: the real keyboard comes back a
+    second after the user lets go, and TuxTalk hears the release."""
+    helper, kb, connect, say, heard, _seat = setup
+    monkeypatch.setattr(hh, "HIDE_RELEASE_GRACE_S", 0.05)
+    virtual = FakeKeyboard("/dev/input/event-virtual")
+    helper.keyboards[virtual.path] = virtual
+    tuxtalk = _ready(connect, say, heard)
+    hostile = _ready(connect, say, heard)
+    kb.press(F8)                                # the user, on the real keyboard
+    heard(tuxtalk)
+    heard(hostile)
+    virtual.press(F8)
+    say(hostile, "HIDE 66")
+    assert heard(hostile) == ["OK HIDE"]
+    assert virtual.calls == []                  # only the press's own keyboard
+    kb.press(F8, 0)
+    assert heard(tuxtalk) == ["UP 66"]
+    time.sleep(0.1)
+    heard(tuxtalk)
+    assert helper.hide is None and kb.calls[-1] == ("grab", False)
+
+
+def test_a_program_holding_every_place_cant_keep_tuxtalk_out(setup):
+    helper, _kb, connect, say, heard, _seat = setup
+    for _ in range(hh.MAX_CLIENTS):
+        _ready(connect, say, heard)             # all of them said hello
+    tuxtalk = connect()
+    say(tuxtalk, "HELLO 1")
+    assert heard(tuxtalk) == [f"HELLO 1 {hh.VERSION}"]
+    assert len(helper.clients) == hh.MAX_CLIENTS
+
+
+def test_only_real_devices_share_modifiers(tmp_path):
+    chars = tmp_path / "char"
+    chars.mkdir()
+    (chars / "13:70").symlink_to("/sys/devices/pci0000:00/0000:11:00.0/usb1/1-3/1-3:1.2/input/input14/event3")
+    (chars / "13:71").symlink_to("/sys/devices/virtual/input/input36/event26")
+    assert hh.device_group(os.makedev(13, 70), str(chars)) == "real"
+    assert hh.device_group(os.makedev(13, 71), str(chars)).startswith("virtual:")
+    # Can't tell (no /sys): the safe side.
+    assert hh.device_group(os.makedev(13, 72), str(chars)).startswith("virtual:")

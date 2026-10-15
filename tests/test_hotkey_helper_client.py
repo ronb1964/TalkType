@@ -130,7 +130,7 @@ def test_shift_with_the_dictation_key_starts_an_edit_and_hides_shift_too(rig, mo
     kb.press(F8)
     loop()
     assert calls == [("start", True)]
-    assert helper.hide["hotkeys"] == {F8}
+    assert {code for _, code in helper.hide["presses"]} == {F8}
     assert ("inject", LSHIFT, 0) in kb.calls     # Shift hidden from the desktop too
     kb.press(LSHIFT, 0)
     kb.press(F8, 0)

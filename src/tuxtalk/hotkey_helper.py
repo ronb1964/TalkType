@@ -19,15 +19,19 @@ A key is reported only when the desktop itself sees it as a shortcut, never
 as typing:
 
 * F1-F24, Esc, Pause and Scroll Lock, which never type anything;
-* any other key only while two of Ctrl, Alt and Super are held with it, on
-  the same keyboard, having gone down while the desktop could see them.
+* any other key only while two of Ctrl, Alt and Super are held with it,
+  having gone down while the desktop could see them, on a real keyboard
+  (any of them, as the desktop counts them) or on the same virtual one.
 
 "Two of" because any one modifier can be made to type characters: Right Alt
 is AltGr on most layouts (it never counts here at all), and XKB options turn
-Left Alt, Super or Right Ctrl into a third-level key too. "On the same
-keyboard" and "seen by the desktop" because a program can make a virtual
+Left Alt, Super or Right Ctrl into a third-level key too. "Seen by the
+desktop" and "the same virtual one" because a program can make a virtual
 keyboard: a Ctrl held there, or one the desktop didn't see go down, would
 otherwise make every key typed on the real keyboard look like a shortcut.
+Real keyboards (USB, built in) can't be made by a program, and the desktop
+pools their modifiers, so their Ctrl and their letters may come from
+different devices, as they do on some keyboards.
 
 Everything goes only to the user at the screen (logind's active user on
 seat0), and only keyboards of seat0 are read. Letters, numbers, Enter or
@@ -39,9 +43,12 @@ Hiding a held hotkey
 While TuxTalk records it hides the held hotkey from the desktop and keeps that
 keyboard to itself, so a held F8 doesn't auto-repeat into the window being
 dictated into. That's allowed once per press of a hotkey that is physically
-held, grabs only the keyboard it's held on, and ends by itself within a
-second of letting go, when someone else's session comes to the front, when
-the program that asked goes away, or after 15 minutes at most.
+held, grabs only the keyboard the press came from, and ends by itself within
+a second of that key coming up there, when someone else's session comes to
+the front, when the program that asked goes away, or after 15 minutes at
+most. A press's release is reported from the keyboard it was pressed on, so
+holding the same key on another keyboard can't keep a recording or a grab
+going.
 
 This file must stay self-contained: it is copied to a root-owned place
 (/usr/local/libexec/tuxtalk/) and run with the system's own python3 in
@@ -76,13 +83,14 @@ import sys
 import time
 
 PROTOCOL = 1
-VERSION = "1.1"
+VERSION = "1.2"
 
 DEFAULT_SOCKET_DIR = "/run/tuxtalk-hotkeys"
 SOCKET_NAME = "hotkeys.sock"
 DEFAULT_SEAT_FILE = "/run/systemd/seats/seat0"
 INPUT_DIR = "/dev/input"
 UDEV_DATA_DIR = "/run/udev/data"
+SYS_CHAR_DIR = "/sys/dev/char"
 
 # --- evdev numbers (linux/input.h, linux/input-event-codes.h) -------------------
 
@@ -142,7 +150,6 @@ def EVIOCGNAME(length):
 # --- limits: nobody gets to make this helper do much work ----------------------------
 
 MAX_CLIENTS = 8
-MAX_CLIENTS_PER_UID = 4
 MAX_LINE = 512
 MAX_SPECS = 32
 MAX_OUTBUF = 64 * 1024
@@ -219,13 +226,25 @@ def udev_seat(rdev, data_dir=UDEV_DATA_DIR):
     return "seat0"
 
 
+def device_group(rdev, sys_dir=SYS_CHAR_DIR):
+    """Which keyboards' modifiers count together. Every real keyboard is in
+    one group, as the desktop pools them; each virtual one (made through
+    uinput, which a program can do) is in a group of its own. When it can't
+    be told, a device counts as virtual: the safe side."""
+    path = os.path.realpath(os.path.join(sys_dir, f"{os.major(rdev)}:{os.minor(rdev)}"))
+    if path.startswith("/sys/devices/") and not path.startswith("/sys/devices/virtual/"):
+        return "real"
+    return f"virtual:{os.major(rdev)}:{os.minor(rdev)}"
+
+
 # --- keyboards --------------------------------------------------------------------------
 
 class Keyboard:
     """One open /dev/input/event* keyboard and the keys down on it."""
 
-    def __init__(self, path, fd, name, down, virtual=False):
+    def __init__(self, path, fd, name, down, virtual=False, group=None):
         self.path, self.fd, self.name, self.virtual = path, fd, name, virtual
+        self.group = group or f"own:{path}"
         self.down = set(down)
         # The modifiers the desktop saw go down on this keyboard: only these
         # unlock a key. One already down when it was opened, pressed while we
@@ -254,13 +273,14 @@ class Keyboard:
                 return None
             ident = bytearray(8)
             fcntl.ioctl(fd, EVIOCGID, ident, True)
-            virtual = struct.unpack("HHHH", ident)[0] == BUS_VIRTUAL
+            group = device_group(os.fstat(fd).st_rdev)
+            virtual = struct.unpack("HHHH", ident)[0] == BUS_VIRTUAL or group != "real"
             name = bytearray(256)
             fcntl.ioctl(fd, EVIOCGNAME(len(name)), name, True)
             state = bytearray(KEY_BYTES)
             fcntl.ioctl(fd, EVIOCGKEY(len(state)), state, True)
             return cls(path, fd, name.split(b"\0", 1)[0].decode("utf-8", "replace"),
-                       bits(state), virtual)
+                       bits(state), virtual, group)
         except OSError:
             os.close(fd)
             return None
@@ -312,8 +332,8 @@ class Client:
         self.hello = False
         self.bare = set()          # codes reported on their own
         self.combos = {}           # code -> list of modifier-letter sets
-        self.reported = set()      # keys reported DOWN, not yet UP
-        self.mods_owed = set()     # modifiers held at a reported DOWN, not yet UP
+        self.origin = {}           # key reported DOWN, not yet UP -> the keyboard it came from
+        self.mods_owed = {}        # modifier held at a reported DOWN, not yet UP -> its group
         self.hideable = set()      # reported keys whose press hasn't been hidden yet
 
     def send(self, line):
@@ -404,8 +424,7 @@ class Helper:
         keyboard.close()
         # Its keys can't come up any more: tell whoever was told they went down.
         for code in sorted(keyboard.down):
-            if not self.held(code):
-                self.deliver_up(code)
+            self.deliver_up(keyboard, code)
         if self.hide is not None and not any(
                 k.path in self.keyboards for k in self.hide["keyboards"]):
             self.end_hide()
@@ -417,14 +436,21 @@ class Helper:
         for code in sorted(keyboard.down - real):
             keyboard.down.discard(code)
             keyboard.trusted.discard(code)
-            if not self.held(code):
-                self.deliver_up(code)
+            self.deliver_up(keyboard, code)
         keyboard.down |= real
 
     # -- state ------------------------------------------------------------------------
 
     def held(self, code):
         return any(code in k.down for k in self.keyboards.values())
+
+    def group_mods(self, group):
+        """The trusted modifiers held on the keyboards of *group*."""
+        mods = set()
+        for k in self.keyboards.values():
+            if k.group == group:
+                mods |= k.down & k.trusted
+        return mods
 
     def was_injected(self, path, code, value):
         now = time.monotonic()
@@ -456,18 +482,23 @@ class Helper:
         elif value == 0:
             keyboard.down.discard(code)
             keyboard.trusted.discard(code)
-            if not self.held(code):
-                self.deliver_up(code)
+            self.deliver_up(keyboard, code)
         # value 2 is auto-repeat: never reported
 
-    def deliver_up(self, code):
-        # A release goes to whoever was told about the press, at the screen or
-        # not: it says nothing new.
+    def deliver_up(self, keyboard, code):
+        """*code* came up on *keyboard*. A release goes to whoever was told
+        about the press from this keyboard, at the screen or not: it says
+        nothing new. A modifier is let go once no keyboard of its group holds it."""
         for client in list(self.clients.values()):
-            if code in client.reported or code in client.mods_owed:
-                client.reported.discard(code)
-                client.mods_owed.discard(code)
+            if client.origin.get(code) == keyboard.path:
+                del client.origin[code]
                 client.hideable.discard(code)
+                self.send(client, f"UP {code}")
+            elif client.mods_owed.get(code) == keyboard.group and \
+                    code not in self.group_mods(keyboard.group) and \
+                    not any(code in k.down for k in self.keyboards.values()
+                            if k.group == keyboard.group):
+                del client.mods_owed[code]
                 self.send(client, f"UP {code}")
 
     def deliver_down(self, keyboard, code):
@@ -481,9 +512,10 @@ class Helper:
         active = read_active_uid(self.seat_file)
         if active is None:
             return
-        # Modifiers count only from this keyboard, and only those the desktop
-        # saw go down (see Keyboard.trusted).
-        mods = keyboard.down & keyboard.trusted
+        # Modifiers count only from this keyboard's group (all real keyboards,
+        # or this one virtual keyboard), and only those the desktop saw go
+        # down (see Keyboard.trusted).
+        mods = self.group_mods(keyboard.group)
         for client in interested:
             if client.uid != active:
                 continue
@@ -494,9 +526,10 @@ class Helper:
                 wanted = self.hide is None and any(
                     mods_satisfy(letters, mods) for letters in client.combos.get(code, ()))
             if wanted:
-                client.reported.add(code)
+                client.origin[code] = keyboard.path
                 client.hideable.add(code)
-                client.mods_owed |= mods
+                for mod in mods:
+                    client.mods_owed[mod] = keyboard.group
                 self.send(client, f"DOWN {code} {','.join(map(str, sorted(mods))) or '-'}")
 
     # -- hiding a held hotkey ---------------------------------------------------------
@@ -512,33 +545,40 @@ class Helper:
         # counts as let go (its UP goes out before this answer).
         for keyboard in list(self.keyboards.values()):
             self.read_keyboard(keyboard)
-        # Once per press: a hotkey whose press was hidden before needs a new press.
-        hotkeys = [c for c in codes if c in client.hideable and self.held(c)]
-        if not hotkeys:
+        # Once per press, and only on the keyboard the press came from: a
+        # hotkey whose press was hidden before needs a new press.
+        presses = {(client.origin[c], c) for c in codes
+                   if c in client.hideable and c in client.origin
+                   and client.origin[c] in self.keyboards
+                   and c in self.keyboards[client.origin[c]].down}
+        if not presses:
             return "ERR the hotkey isn't held"
         mods = [c for c in codes if c in client.mods_owed and c in MODIFIERS]
-        # Only the keyboard the hotkey is held on. The desktop has seen these
-        # keys go down there: tell it they went up, so it doesn't auto-repeat
-        # them, then keep the keyboard, then mark them down again, which only
-        # we see, so the real release still reaches us. Going by the kernel's
-        # state, not what's been read, in case a release is on its way.
+        # The desktop has seen these keys go down: tell it they went up, so it
+        # doesn't auto-repeat them, then keep the keyboard, then mark them down
+        # again, which only we see, so the real release still reaches us. By
+        # the kernel's state, not what's been read, in case a release is on
+        # its way. The press's own keyboard is kept; another keyboard of its
+        # group only has its modifiers hidden the same way.
         held_on = []
+        origins = {path for path, _ in presses}
+        group = {self.keyboards[path].group for path in origins}
         for keyboard in list(self.keyboards.values()):
-            really_down = keyboard.kernel_down()
-            if not any(c in really_down for c in hotkeys):
+            if keyboard.path not in origins and keyboard.group not in group:
                 continue
-            released = [c for c in hotkeys + mods
+            really_down = keyboard.kernel_down()
+            mine = [c for path, c in presses if path == keyboard.path]
+            released = [c for c in mine + mods
                         if c in really_down and self.inject(keyboard, c, 0)]
-            keyboard.grab(True)
+            if keyboard.path in origins or released:
+                keyboard.grab(True)
+                held_on.append(keyboard)
             for code in released:
                 self.inject(keyboard, code, 1)
             # The desktop now believes these are up.
             keyboard.trusted.difference_update(released)
-            held_on.append(keyboard)
-        if not held_on:
-            return "ERR the hotkey isn't held"
-        client.hideable.difference_update(hotkeys)
-        self.hide = {"client": client, "uid": client.uid, "hotkeys": set(hotkeys),
+        client.hideable.difference_update(c for _, c in presses)
+        self.hide = {"client": client, "uid": client.uid, "presses": presses,
                      "keyboards": held_on, "since": time.monotonic(), "all_up_at": None}
         return "OK HIDE"
 
@@ -562,7 +602,8 @@ class Helper:
             self.end_hide("held too long")
         elif read_active_uid(self.seat_file) != hide["uid"]:
             self.end_hide("someone else is at the screen")
-        elif any(self.held(c) for c in hide["hotkeys"]):
+        elif any(path in self.keyboards and code in self.keyboards[path].down
+                 for path, code in hide["presses"]):
             hide["all_up_at"] = None
         elif hide["all_up_at"] is None:
             hide["all_up_at"] = now
@@ -583,17 +624,17 @@ class Helper:
             sock.close()                    # only the user at the screen
             return
         if len(self.clients) >= MAX_CLIENTS:
-            # Make room: someone who's no longer at the screen, or who never
-            # said hello, goes first.
-            spare = [c for c in self.clients.values() if c.uid != active] \
-                or [c for c in self.clients.values() if not c.hello]
-            if not spare:
+            # Make room rather than turn the user at the screen away, so
+            # nothing can hold every place and keep TuxTalk out: someone no
+            # longer at the screen goes first, then a connection that never
+            # said hello, then the oldest. Not the one holding a keyboard.
+            keeper = self.hide["client"] if self.hide else None
+            others = sorted((c for c in self.clients.values() if c is not keeper),
+                            key=lambda c: (c.uid == active, c.hello, c.connected_at))
+            if not others:
                 sock.close()
                 return
-            self.drop_client(spare[0])
-        if sum(1 for c in self.clients.values() if c.uid == uid) >= MAX_CLIENTS_PER_UID:
-            sock.close()
-            return
+            self.drop_client(others[0])
         sock.setblocking(False)
         self.clients[sock.fileno()] = Client(sock, uid, pid)
 
