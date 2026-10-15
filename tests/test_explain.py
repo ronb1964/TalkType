@@ -12,7 +12,6 @@ def problems(monkeypatch):
     seen = {"windows": [], "labels": [], "notices": []}
 
     def open_window(kind):
-        explain._mark_shown(kind)
         seen["windows"].append(kind)
         return True
     monkeypatch.setattr(explain, "open_window", open_window)
@@ -23,13 +22,19 @@ def problems(monkeypatch):
     return seen
 
 
-def test_the_first_time_a_window_explains_then_the_label_is_enough(problems):
+def test_the_window_explains_every_time(problems):
+    """Someone who makes the same mistake twice is told twice (Ron)."""
     app._edit_problem("nothing_said", False)
-    assert problems["windows"] == ["nothing_said"] and problems["notices"] == []
     app._edit_problem("nothing_said", False)
-    assert problems["windows"] == ["nothing_said"]                 # not again this run
-    assert problems["labels"] == ["Works only right after dictating"]
-    assert problems["notices"] == []
+    assert problems["windows"] == ["nothing_said", "nothing_said"]
+    assert problems["labels"] == [] and problems["notices"] == []
+
+
+def test_a_window_already_open_is_not_stacked_on(problems, monkeypatch):
+    monkeypatch.setattr(explain, "window_open", lambda: True)
+    app._edit_problem("nothing_said", False)
+    assert problems["windows"] == []
+    assert problems["labels"] == ["Works only right after dictating"] and problems["notices"] == []
 
 
 def test_dont_explain_again_is_kept(problems):
@@ -73,18 +78,10 @@ def test_a_broken_file_means_explain_again(tmp_path, monkeypatch):
     assert explain.should_explain("nothing_said")
 
 
-def test_each_run_explains_again_but_never_again_holds(problems):
-    app._edit_problem("terminal", False)
-    explain.never_again("cant_format")
-    explain.start_run()                        # TuxTalk restarted
-    assert explain.should_explain("terminal")
-    assert not explain.should_explain("cant_format")
-
-
 def test_show_tips_again_brings_everything_back(problems):
-    app._edit_problem("terminal", False)       # shown in this run
     explain.never_again("cant_format")
-    assert explain.anything_to_reset()
-    explain.reset()                            # Preferences' button, service still running
+    explain.never_again("terminal")
+    assert explain.anything_to_reset() and not explain.should_explain("terminal")
+    explain.reset()                            # Preferences' button
     assert explain.should_explain("terminal") and explain.should_explain("cant_format")
     assert not explain.anything_to_reset()

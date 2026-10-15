@@ -3,11 +3,12 @@ are really "here's the rule" rather than errors: "select that" said in the
 wrong place, voice editing in a terminal, bold in a plain-text app.
 
 The floating label is glanced at, and the notification is gone in seconds,
-too quickly to read a whole explanation. So the first time one of these
-comes up in a TuxTalk run, this window opens over the app and stays until
-"Got it". After that the short floating label is enough, and ticking "Don't
-explain this again" leaves it at the label for good (explained.json, next
-to the settings).
+too quickly to read a whole explanation. So each time one of these comes
+up, this window opens over the app and stays until "Got it" (Ron: someone
+who makes the same mistake twice should be told twice). Ticking "Don't
+explain this again" leaves that one at the short floating label for good
+(explained.json, next to the settings), until Preferences' "Show tips
+again" brings them all back.
 
 It runs as its own process, like Preferences: the dictation service draws
 on XWayland (for the recording indicator), and a real window with a
@@ -68,12 +69,10 @@ EXPLANATIONS = {
         "itself works the same on X11."),
 }
 
-# explained.json, next to the settings:
-#   "never": kinds the user ticked "Don't explain this again" for;
-#   "shown": kinds explained since the service started (start_run() clears
-#            it), so each is explained once per run.
-# One file, so Preferences' "Show tips again" (reset()) brings every
-# explanation back at once, even with the service running.
+# explained.json, next to the settings: {"never": [the kinds the user ticked
+# "Don't explain this again" for]}.
+
+_window = None      # the explanation window's process, while one is open
 
 
 def _never_path():
@@ -81,67 +80,53 @@ def _never_path():
     return os.path.join(os.path.dirname(CONFIG_PATH), "explained.json")
 
 
-def _load():
+def _never_again():
     try:
         with open(_never_path()) as f:
-            data = json.load(f)
-        return {k: set(data.get(k, [])) for k in ("never", "shown")}
+            return set(json.load(f).get("never", []))
     except (OSError, ValueError, AttributeError, TypeError):
-        return {"never": set(), "shown": set()}
-
-
-def _save(data):
-    try:
-        with open(_never_path(), "w") as f:
-            json.dump({k: sorted(v) for k, v in data.items()}, f)
-    except OSError as e:
-        logger.debug(f"Could not save the explained kinds: {e}")
+        return set()
 
 
 def never_again(kind):
     """Remember that *kind* needs no more explaining (the tickbox)."""
-    data = _load()
-    data["never"].add(kind)
-    _save(data)
-
-
-def _mark_shown(kind):
-    data = _load()
-    data["shown"].add(kind)
-    _save(data)
-
-
-def start_run():
-    """The service started: explain each kind once more in this run."""
-    data = _load()
-    if data["shown"]:
-        data["shown"] = set()
-        _save(data)
+    kinds = _never_again() | {kind}
+    try:
+        with open(_never_path(), "w") as f:
+            json.dump({"never": sorted(kinds)}, f)
+    except OSError as e:
+        logger.debug(f"Could not save the explained kinds: {e}")
 
 
 def reset():
     """Preferences' "Show tips again": every explanation comes back."""
-    _save({"never": set(), "shown": set()})
+    try:
+        os.remove(_never_path())
+    except FileNotFoundError:
+        pass
+    except OSError as e:
+        logger.debug(f"Could not reset the explained kinds: {e}")
 
 
 def anything_to_reset() -> bool:
-    data = _load()
-    return bool(data["never"] or data["shown"])
+    return bool(_never_again())
 
 
 def should_explain(kind) -> bool:
-    """Whether *kind* gets the window now: it has one, it hasn't been shown
-    in this run, and the user didn't tick "Don't explain this again"."""
-    if kind not in EXPLANATIONS:
-        return False
-    data = _load()
-    return kind not in data["never"] and kind not in data["shown"]
+    """Whether *kind* gets the window: it has one, and the user didn't tick
+    "Don't explain this again" for it."""
+    return kind in EXPLANATIONS and kind not in _never_again()
+
+
+def window_open() -> bool:
+    """Whether an explanation window is on screen already (no stacking)."""
+    return _window is not None and _window.poll() is None
 
 
 def open_window(kind) -> bool:
     """Open the explanation for *kind* in its own process. True if it was
     started; never raises."""
-    _mark_shown(kind)
+    global _window
     env = os.environ.copy()
     # The service runs on XWayland; this window belongs on the native desktop.
     env.pop("GDK_BACKEND", None)
@@ -153,9 +138,9 @@ def open_window(kind) -> bool:
     except Exception:
         pass
     try:
-        subprocess.Popen([sys.executable, "-m", "tuxtalk.explain", kind], env=env,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                         start_new_session=True)
+        _window = subprocess.Popen([sys.executable, "-m", "tuxtalk.explain", kind], env=env,
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                   start_new_session=True)
         logger.info(f"Explained: {kind}")
         return True
     except Exception as e:

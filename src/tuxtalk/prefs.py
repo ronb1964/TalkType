@@ -2334,8 +2334,8 @@ class PreferencesWindow:
             from . import explain
             tips_again = Gtk.Button(label="Show tips again")
             tips_again.set_tooltip_text(
-                "Show the small windows that explain how voice editing and select and\n"
-                "move work again, including any you ticked \u201cDon't explain this again\u201d.")
+                "Bring back the small windows that explain how voice editing and select\n"
+                "and move work, for any you ticked \u201cDon't explain this again\u201d.")
 
             def _tips_again(button):
                 explain.reset()

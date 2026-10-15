@@ -26,11 +26,11 @@ before 0.15.0, so older entries use that name.
   feedback too. I'd really like to hear how these work for you.
 - When voice editing or select and move can't do something because of how it
   works (like "select that" when you haven't just dictated, or voice editing
-  in a terminal), a small window now explains it once, and stays until you
-  click Got it. The notification was gone before you could read it. After
-  that you just get a short reminder over your window, and you can tick
-  "Don't explain this again". Show tips again, under TuxTalk Labs in
-  Preferences, brings them all back.
+  in a terminal), a small window now explains it and stays until you click
+  Got it. The notification was gone before you could read it. Tick "Don't
+  explain this again" and you just get a short reminder over your window
+  instead. Show tips again, under TuxTalk Labs in Preferences, brings them all
+  back.
 - Voice editing (TuxTalk Labs) can do two or three changes at once. Say "make
   this formal and remove the commas" and it does both, one after the other.
   Before, only one of them happened.

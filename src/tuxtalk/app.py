@@ -3070,19 +3070,20 @@ def _edit_problem(kind: str, beeps_on: bool) -> None:
     _report_undelivered: otherwise nothing at all would seem to happen.
 
     A problem that is really a rule ("select works right after you dictate")
-    opens a small window explaining it, the first time in a run (explain.py);
-    later, and for good once "Don't explain this again" is ticked, the short
-    floating label alone. The notification is for real errors only: a whole
+    opens a small window explaining it, every time, until "Don't explain
+    this again" is ticked for it (explain.py); then the short floating label
+    alone. The notification is for real errors only: a whole
     explanation in it is gone before it can be read."""
     message = _EDIT_NOTICES[kind]
     logger.info(f"Voice edit not done: {kind}")
     print(message)
     _beep(beeps_on, *CANCEL_BEEP)
     from . import explain
-    # Explained before (this run, or "don't explain again"): the label is
-    # enough. Not opened (no window could start): the notification as before.
+    # "Don't explain this again" ticked, or a window already open: the
+    # label is enough. Not opened (no window could start): the notification
+    # as before.
     explained = False
-    if explain.should_explain(kind):
+    if explain.should_explain(kind) and not explain.window_open():
         if explain.open_window(kind):
             return
     else:
@@ -4202,9 +4203,6 @@ def main():
     # Dictation cleanup; the AI engine (if on) loads in the background.
     _apply_cleanup_settings(cfg)
 
-    # Each "how it works" explanation is shown once per run (explain.py).
-    from . import explain
-    explain.start_run()
 
     # Load custom voice commands
     global _custom_commands
