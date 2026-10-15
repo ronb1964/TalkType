@@ -232,6 +232,8 @@ class RecordingState:
     # inside the last dictation after a word or letter move, so the next move
     # is counted exactly too; None when the cursor is somewhere unknown.
     nav_context: tuple = None
+    # The window the last dictation was typed into (its class), or None.
+    last_inserted_window: str = None
     # Mid-sentence continuation - if True, lowercase the first letter of next dictation
     continue_mid_sentence: bool = False
     # Hands-free auto-stop for this recording (a silence.SilenceDetector), or
@@ -2196,20 +2198,32 @@ def _nav_keycode(name: str) -> int:
         return 30    # KEY_A on a US layout
 
 
+# Navigation keys go faster than typing: a selection is drawn as it grows, and
+# at typing speed it crawled visibly across the line.
+NAV_KEY_DELAY_MS = 4
+
+
 def _send_chords(chords) -> bool:
-    """Press [(modifiers, key)] in order with ydotool, each modifier held
-    around its key. True only if they were delivered."""
+    """Press [(modifiers, key)] in order with ydotool. Consecutive keys with
+    the same modifiers share one press of them (Shift held once across forty
+    Lefts, not pressed forty times), which halves the events and never leaves
+    a modifier flapping. True only if they were delivered."""
     if not chords:
         return True
-    sequence = ["-d", str(BACKSPACE_DELAY_MS)]
+    sequence = ["-d", str(NAV_KEY_DELAY_MS)]
     events = 0
-    for mods, key in chords:
-        mod_codes = [_nav_keycode(m) for m in mods]
-        code = _nav_keycode(key)
-        sequence += [f"{c}:1" for c in mod_codes] + [f"{code}:1", f"{code}:0"]
-        sequence += [f"{c}:0" for c in reversed(mod_codes)]
-        events += 2 + 2 * len(mod_codes)
-    timeout = YDOTOOL_TIMEOUT_S + events * BACKSPACE_DELAY_MS / 1000 * 1.5
+    held = ()
+    for mods, key in list(chords) + [((), None)]:
+        if tuple(mods) != held:
+            sequence += [f"{_nav_keycode(m)}:0" for m in reversed(held)]
+            sequence += [f"{_nav_keycode(m)}:1" for m in mods]
+            events += len(held) + len(mods)
+            held = tuple(mods)
+        if key is not None:
+            code = _nav_keycode(key)
+            sequence += [f"{code}:1", f"{code}:0"]
+            events += 2
+    timeout = YDOTOOL_TIMEOUT_S + events * NAV_KEY_DELAY_MS / 1000 * 1.5
     return _ydotool_key(sequence, timeout=timeout, what=f"{len(chords)} navigation keys")
 
 
@@ -2538,6 +2552,12 @@ def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = Fa
     as Shift+Enter, since a plain Enter would send a chat message; that holds
     for every typed line break, not only voice editing's.
     """
+    # Which window this text goes into, so select and move by voice only
+    # trusts "what I just said" in that same window.
+    try:
+        state.last_inserted_window = _query_focused_window_class()
+    except Exception:
+        state.last_inserted_window = None
     # Determine injection method (auto mode does smart detection)
     detection_start = time.time()
     actual_mode, reason = _determine_injection_method(injection_mode)
@@ -3003,6 +3023,8 @@ _EDIT_NOTICES = {
                     "\u201cselect that\u201d or \u201cselect the last sentence\u201d.",
     "nav_terminal": "Select and move by voice doesn't work in a terminal, where those "
                     "keys mean other things.",
+    "other_window": "TuxTalk typed the last dictation in another window, so it can't "
+                    "select it here. Dictate here first, or select it yourself.",
 }
 
 
@@ -3027,6 +3049,7 @@ _EDIT_LABELS = {
     "shortcut_failed": "Couldn't press the keys",
     "nothing_said": "Nothing to select yet",
     "nav_terminal": "Doesn't work in a terminal",
+    "other_window": "Last dictation was in another window",
 }
 
 
@@ -3096,14 +3119,20 @@ def _handle_navigation(raw: str, beeps_on: bool, focused_class=_UNKNOWN_WINDOW) 
         _edit_problem("nav_terminal", beeps_on)
         return True
     # Right after a dictation the cursor is at its end; after an exact move,
-    # nav_context says where in it.
-    if state.last_inserted_text:
+    # nav_context says where in it. Only in the window it was typed into:
+    # dictating into a chat, then saying "select the last sentence" in Writer
+    # would otherwise select the chat message's length of Writer's text.
+    elsewhere = (focused_class is not None and state.last_inserted_window is not None
+                 and focused_class != state.last_inserted_window)
+    if elsewhere:
+        left, right = None, ""
+    elif state.last_inserted_text:
         left, right = state.last_inserted_text, ""
     else:
         left, right = state.nav_context or (None, "")
     plan = nav.plan(command, left, right)
     if plan is None:
-        _edit_problem("nothing_said", beeps_on)
+        _edit_problem("other_window" if elsewhere else "nothing_said", beeps_on)
         return True
     try:
         pressed = _output_backend().press_keys(plan.chords)

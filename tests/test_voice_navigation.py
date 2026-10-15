@@ -199,6 +199,38 @@ def test_ydotool_holds_each_modifier_around_its_key(monkeypatch):
     assert seq[2:] == ["29:1", "42:1", "105:1", "105:0", "42:0", "29:0", "107:1", "107:0"]
 
 
+def test_shift_is_held_once_across_a_run_of_keys(monkeypatch):
+    """Selecting a sentence crawled across the line: forty Shift presses at
+    typing speed (Ron, 2026-10-14)."""
+    from tuxtalk import app
+    sent = []
+    monkeypatch.setattr(app, "_ydotool_key", lambda seq, **k: sent.append(seq) or True)
+    app._send_chords([((), "LEFT")] + [((S,), "LEFT")] * 3)
+    assert sent[0][2:] == ["105:1", "105:0", "42:1", "105:1", "105:0", "105:1", "105:0",
+                           "105:1", "105:0", "42:0"]
+    assert int(sent[0][1]) < app.BACKSPACE_DELAY_MS
+
+
+def test_what_i_said_is_only_trusted_in_the_window_it_went_to(dictation, monkeypatch):
+    """Ron dictated a chat message, then said "select the last sentence" in
+    Writer: it selected the chat sentence's length of Writer's text."""
+    app = dictation["app"]
+    monkeypatch.setattr(app.state, "last_inserted_window", "claude")
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "libreoffice-writer")
+    assert app._handle_navigation("select the last sentence", False) is True
+    assert dictation["pressed"] == [] and dictation["problems"] == ["other_window"]
+    # A word move there uses the app's own keys instead of counting.
+    app._handle_navigation("go back three words", False)
+    assert dictation["pressed"] == [[((C,), "LEFT")] * 3]
+
+
+def test_the_same_window_is_trusted(dictation, monkeypatch):
+    app = dictation["app"]
+    monkeypatch.setattr(app.state, "last_inserted_window", "org.kde.kwrite")
+    app._handle_navigation("select the last word", False)
+    assert dictation["pressed"] == [[((S,), "LEFT")] * 6]
+
+
 def test_the_setting_is_off_by_default_and_live():
     from tuxtalk import config
     assert config.Settings().voice_navigation is False
