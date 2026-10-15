@@ -77,6 +77,7 @@ class HelperKeyboard:
         self.specs = []
         self.to_hide = []
         self.reconnect_at = 0.0
+        self.helper_version = None
         # Stands in for the socket in select() while disconnected: never readable.
         self._idle_r, self._idle_w = os.pipe()
 
@@ -99,9 +100,11 @@ class HelperKeyboard:
             sock.close()
             return False
         line, _, rest = reply.partition(b"\n")
-        if not line.decode("ascii", "replace").startswith(f"HELLO {PROTOCOL}"):
+        words = line.decode("ascii", "replace").split()
+        if words[:2] != ["HELLO", str(PROTOCOL)]:
             sock.close()
             return False
+        self.helper_version = words[2] if len(words) > 2 else None
         sock.setblocking(False)
         self.sock, self.inbuf = sock, rest
         if self.specs:
