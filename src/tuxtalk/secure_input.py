@@ -56,6 +56,8 @@ Type=simple
 ExecStart={PYTHON} -I -S {HELPER_PATH}
 Restart=on-failure
 RestartSec=2
+# select() can't watch descriptors from 1024 up; the helper never needs many.
+LimitNOFILE=512
 
 # A throwaway user whose only extra right is reading the keyboards.
 DynamicUser=yes
@@ -114,17 +116,28 @@ def _heredoc(path, content, delimiter):
     return f"cat > {path} <<'{delimiter}'\n{content}{'' if content.endswith(chr(10)) else chr(10)}{delimiter}\n"
 
 
+def _install_file(path, content, delimiter, mode):
+    """Shell lines writing *content* to *path* the safe way: into a new file
+    beside it, then moved over it, so it's never there half-written or
+    with the wrong permissions."""
+    folder = os.path.dirname(path)
+    name = os.path.basename(path)
+    return (f'tmp=$(mktemp {folder}/.{name}.XXXXXX)\n'
+            + _heredoc('"$tmp"', content, delimiter)
+            + f'chown root:root "$tmp"\nchmod {mode} "$tmp"\nmv -fT "$tmp" {path}\n')
+
+
 def install_script():
     """The script pkexec runs as root to set it all up."""
     return f"""set -euo pipefail
+umask 022
+# The folder the service runs from must be root's own, never a link.
+if [ -L {HELPER_DIR} ] || [ -L {os.path.dirname(HELPER_DIR)} ]; then
+    echo "{HELPER_DIR} is a symbolic link; not installing there" >&2
+    exit 1
+fi
 install -d -m 0755 -o root -g root {HELPER_DIR}
-tmp=$(mktemp {HELPER_DIR}/.tuxtalk-hotkeys.XXXXXX)
-{_heredoc('"$tmp"', helper_source(), "TUXTALK_HELPER_EOF")}chown root:root "$tmp"
-chmod 0755 "$tmp"
-mv -f "$tmp" {HELPER_PATH}
-{_heredoc(UNIT_PATH, UNIT, "TUXTALK_UNIT_EOF")}chmod 0644 {UNIT_PATH}
-{_heredoc(UINPUT_RULE_PATH, UINPUT_RULE, "TUXTALK_RULE_EOF")}chmod 0644 {UINPUT_RULE_PATH}
-systemctl daemon-reload
+{_install_file(HELPER_PATH, helper_source(), "TUXTALK_HELPER_EOF", "0755")}{_install_file(UNIT_PATH, UNIT, "TUXTALK_UNIT_EOF", "0644")}{_install_file(UINPUT_RULE_PATH, UINPUT_RULE, "TUXTALK_RULE_EOF", "0644")}systemctl daemon-reload
 systemctl enable {SERVICE}
 # restart, not start: a TuxTalk update brings a new helper with it
 systemctl restart {SERVICE}
@@ -150,6 +163,26 @@ udevadm control --reload-rules
 udevadm trigger --action=change --sysname-match=uinput
 exit 0
 """
+
+
+def leave_input_group_script():
+    """The script pkexec runs as root to take the user who asked (pkexec's
+    PKEXEC_UID, which they can't fake) out of the input group, with the old
+    rule that gave that group /dev/uinput."""
+    from .uinput_helper import UDEV_RULE_PATH
+    return f"""set -uo pipefail
+user=$(id -nu "${{PKEXEC_UID:?}}")
+gpasswd -d "$user" input
+rm -f {UDEV_RULE_PATH}
+udevadm control --reload-rules
+udevadm trigger --action=change --sysname-match=uinput
+exit 0
+"""
+
+
+def leave_input_group_with_pkexec():
+    """(ok, message): out of the input group; takes effect after a restart."""
+    return _run_as_root(leave_input_group_script(), "left the input group")
 
 
 def can_install():

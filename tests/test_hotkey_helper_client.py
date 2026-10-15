@@ -18,11 +18,17 @@ LSHIFT = 42
 
 
 def test_watch_specs():
-    combos = (({"CTRL", "ALT"}, 47), ({"CTRL", "SHIFT"}, 35), None)
-    assert watch_specs(F8, F9, ESC, combos) == ["66", "67", "1", "AC:47", "CS:35"]
+    combos = (({"CTRL", "ALT"}, 47), ({"CTRL", "ALT"}, 25), None)
+    assert watch_specs(F8, F9, ESC, combos) == ["66", "67", "1", "AC:47", "AC:25"]
     assert watch_specs(F8, None, ESC, ()) == ["66", "1"]
     for spec in watch_specs(F8, F9, ESC, combos):
-        hh.parse_spec(spec)                 # every spec TuxTalk sends is allowed
+        hh.parse_spec(spec)                 # TuxTalk's defaults are all allowed
+
+
+def test_a_combo_the_helper_wont_report_is_named():
+    from tuxtalk.hotkey_helper_client import refused_combo
+    assert refused_combo({"CTRL", "ALT"}, 25) is None
+    assert "two of Ctrl, Alt and Super" in refused_combo({"CTRL", "SHIFT"}, 35)
 
 
 @pytest.fixture
@@ -124,7 +130,8 @@ def test_shift_with_the_dictation_key_starts_an_edit_and_hides_shift_too(rig, mo
     kb.press(F8)
     loop()
     assert calls == [("start", True)]
-    assert helper.hide["codes"] == {F8, LSHIFT}
+    assert helper.hide["hotkeys"] == {F8}
+    assert ("inject", LSHIFT, 0) in kb.calls     # Shift hidden from the desktop too
     kb.press(LSHIFT, 0)
     kb.press(F8, 0)
     loop()
@@ -187,11 +194,18 @@ def test_events_taken_in_early_are_read_without_waiting(rig):
 
 def test_no_helper_means_none(tmp_path):
     assert connect_helper(str(tmp_path / "nothing.sock")) is None
+
+
+def test_a_helper_that_doesnt_answer_yet_is_tried_again(tmp_path):
+    """Restarting, or this session not in front yet: keep trying rather than
+    fall back for good, which would leave the hotkeys dead."""
     stale = tmp_path / "stale.sock"
     s = socket.socket(socket.AF_UNIX)
     s.bind(str(stale))
     s.close()                            # a socket file nobody listens on
-    assert connect_helper(str(stale)) is None
+    keyboard = connect_helper(str(stale))
+    assert keyboard is not None and keyboard.sock is None
+    keyboard.close()
 
 
 def test_the_service_uses_the_helper_when_it_is_there(monkeypatch):

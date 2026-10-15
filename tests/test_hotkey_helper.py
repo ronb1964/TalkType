@@ -108,13 +108,14 @@ def _ready(connect, say, heard, specs="66 67 1 CA:25"):
     sock = connect()
     say(sock, "HELLO 1")
     say(sock, f"WATCH {specs}")
-    assert heard(sock) == ["HELLO 1 1.0", "OK WATCH"]
+    assert heard(sock) == [f"HELLO 1 {hh.VERSION}", "OK WATCH"]
     return sock
 
 
 # --- what may be watched --------------------------------------------------------------
 
-@pytest.mark.parametrize("spec", ["66", "88", "183", "194", "1", "119", "70", "CA:25", "C:30", "A:30", "M:20", "CS:30", "S:66"])
+@pytest.mark.parametrize("spec", ["66", "88", "183", "194", "1", "119", "70", "CA:25", "CA:30",
+                                  "CM:30", "AM:30", "CAS:30", "S:66", "C:66"])
 def test_hotkeys_and_modifier_combos_can_be_watched(spec):
     hh.parse_spec(spec)
 
@@ -126,6 +127,11 @@ def test_hotkeys_and_modifier_combos_can_be_watched(spec):
     "14",       # Backspace
     "57",       # Space
     "S:30",     # Shift+letter is a capital letter
+    "C:30",     # one modifier can be made to type (XKB level-3 options)
+    "A:30",
+    "M:20",
+    "CS:30",    # Shift doesn't count as the second one
+    "AS:30",
     "42",       # a modifier on its own
     "C:29",     # a modifier as the key
     "X:30",     # not a modifier letter
@@ -145,8 +151,8 @@ def test_say_hello_first_and_refusals_are_named(setup):
     say(sock, "HELLO 1")
     say(sock, "WATCH 66 30")
     assert heard(sock) == ["ERR say HELLO first", "ERR this helper speaks protocol 1",
-                           "HELLO 1 1.0",
-                           "ERR key 30 is only reported together with Ctrl, Alt or Super"]
+                           f"HELLO 1 {hh.VERSION}",
+                           "ERR key 30 is only reported with two of Ctrl, Alt and Super"]
 
 
 # --- what is reported ---------------------------------------------------------------------
@@ -342,3 +348,190 @@ def test_the_helper_needs_nothing_but_the_standard_library():
     imported |= {node.module.split(".")[0] for node in ast.walk(tree)
                  if isinstance(node, ast.ImportFrom) and node.module}
     assert imported <= {"errno", "fcntl", "os", "select", "signal", "socket", "struct", "sys", "time"}
+
+
+# --- from the security review, 2026-10-15 -------------------------------------------------
+
+RALT, LMETA = 100, 125
+
+
+def test_a_virtual_keyboard_cant_lend_its_modifiers_to_the_real_one(setup):
+    """A program makes a virtual keyboard and holds Ctrl+Alt there: keys typed
+    on the real keyboard must not turn into reportable combos."""
+    helper, kb, connect, say, heard, _seat = setup
+    virtual = FakeKeyboard("/dev/input/event-virtual")
+    helper.keyboards[virtual.path] = virtual
+    sock = _ready(connect, say, heard, "CA:25 CA:30 CA:31")
+    virtual.press(LCTRL)
+    virtual.press(LALT)
+    heard(sock)
+    for code in (A, 31, P):
+        kb.press(code)
+        kb.press(code, 0)
+    assert heard(sock) == []
+
+
+def test_modifiers_down_before_the_keyboard_was_opened_dont_count(setup):
+    helper, _kb, connect, say, heard, _seat = setup
+    late = FakeKeyboard("/dev/input/event-late")
+    late.down = {LCTRL, LALT}             # already held when it appeared
+    helper.keyboards[late.path] = late
+    sock = _ready(connect, say, heard, "CA:25")
+    late.press(P)
+    late.press(P, 0)
+    assert heard(sock) == []
+    late.press(LCTRL, 0)
+    late.press(LALT, 0)
+    late.press(LCTRL)
+    late.press(LALT)
+    late.press(P)
+    assert heard(sock) == ["DOWN 25 29,56"]
+
+
+def test_altgr_never_unlocks_a_key(setup):
+    """Right Alt is AltGr on most layouts: Ctrl+AltGr+key can type @ or €."""
+    _helper, kb, connect, say, heard, _seat = setup
+    sock = _ready(connect, say, heard, "CA:25 CA:16")
+    kb.press(LCTRL)
+    kb.press(RALT)
+    kb.press(16)                         # Q: AltGr+Q is @ on a German layout
+    kb.press(16, 0)
+    assert heard(sock) == []
+
+
+def test_no_combos_while_a_keyboard_is_held_and_hidden_modifiers_stop_counting(setup):
+    helper, kb, connect, say, heard, _seat = setup
+    sock = _ready(connect, say, heard, "66 CA:25")
+    kb.press(LCTRL)
+    kb.press(LALT)
+    kb.press(F8)                          # Ctrl+Alt+F8 held, then hidden
+    heard(sock)
+    say(sock, "HIDE 66 29 56")
+    assert heard(sock) == ["OK HIDE"]
+    kb.press(P)                           # the desktop doesn't see this
+    kb.press(P, 0)
+    kb.press(F8, 0)
+    say(sock, "UNHIDE")
+    heard(sock)
+    kb.press(P)                           # Ctrl+Alt still physically held, but the
+    kb.press(P, 0)                        # desktop was told they went up
+    assert "DOWN 25" not in " ".join(heard(sock))
+
+
+def test_modifiers_pressed_while_held_dont_count(setup):
+    helper, kb, connect, say, heard, _seat = setup
+    sock = _ready(connect, say, heard, "66 CA:25")
+    kb.press(F8)
+    heard(sock)
+    say(sock, "HIDE 66")
+    kb.press(LCTRL)                       # pressed while we hold the keyboard
+    kb.press(LALT)
+    kb.press(F8, 0)
+    say(sock, "UNHIDE")
+    heard(sock)
+    kb.press(P)
+    assert heard(sock) == []
+
+
+def test_one_hide_per_press(setup):
+    helper, kb, connect, say, heard, _seat = setup
+    sock = _ready(connect, say, heard)
+    kb.press(F8)
+    heard(sock)
+    say(sock, "HIDE 66")
+    say(sock, "UNHIDE")
+    say(sock, "HIDE 66")                  # same press, still held
+    assert heard(sock) == ["OK HIDE", "OK UNHIDE", "ERR the hotkey isn't held"]
+    kb.press(F8, 0)
+    kb.press(F8)                          # a new press may
+    heard(sock)
+    say(sock, "HIDE 66")
+    assert heard(sock) == ["OK HIDE"]
+
+
+def test_the_keyboard_comes_back_when_someone_else_is_at_the_screen(setup):
+    helper, kb, connect, say, heard, seat = setup
+    sock = _ready(connect, say, heard)
+    kb.press(F8)
+    heard(sock)
+    say(sock, "HIDE 66")
+    seat.write_text(f"ACTIVE_UID={os.getuid() + 1}\n")
+    heard(sock)
+    assert helper.hide is None and kb.calls[-1] == ("grab", False)
+
+
+def test_only_the_keyboard_the_hotkey_is_held_on_is_grabbed(setup):
+    helper, kb, connect, say, heard, _seat = setup
+    other = FakeKeyboard("/dev/input/event-other")
+    helper.keyboards[other.path] = other
+    sock = _ready(connect, say, heard)
+    kb.press(F8)
+    heard(sock)
+    say(sock, "HIDE 66")
+    assert ("grab", True) in kb.calls and other.calls == []
+
+
+def test_someone_not_at_the_screen_cant_connect(setup):
+    helper, _kb, connect, _say, _heard, seat = setup
+    seat.write_text(f"ACTIVE_UID={os.getuid() + 1}\n")
+    sock = connect()
+    assert helper.clients == {}
+    assert sock.recv(10) == b""           # closed
+
+
+def test_a_connection_that_never_says_hello_is_dropped(setup, monkeypatch):
+    helper, _kb, connect, _say, _heard, _seat = setup
+    monkeypatch.setattr(hh, "HELLO_DEADLINE_S", 0.05)
+    connect()
+    assert len(helper.clients) == 1
+    time.sleep(0.1)
+    helper.run_once(timeout=0.01)
+    assert helper.clients == {}
+
+
+def test_a_full_house_makes_room_for_the_user_at_the_screen(setup, monkeypatch):
+    helper, _kb, connect, say, heard, _seat = setup
+    monkeypatch.setattr(hh, "MAX_CLIENTS", 2)
+    first = _ready(connect, say, heard)
+    _ready(connect, say, heard)
+    next(c for c in helper.clients.values() if c.sock.fileno() >= 0).uid = os.getuid() + 1
+    third = connect()
+    say(third, "HELLO 1")
+    assert heard(third) == [f"HELLO 1 {hh.VERSION}"]
+    assert sorted(c.uid for c in helper.clients.values()) == [os.getuid()] * 2
+
+
+def test_lost_events_are_made_up_from_the_kernel(setup):
+    helper, kb, connect, say, heard, _seat = setup
+    sock = _ready(connect, say, heard)
+    kb.press(F8)
+    assert heard(sock) == ["DOWN 66 -"]
+    kb.kernel.discard(F8)                 # released while events were being lost
+    os.write(kb.w, hh.EVENT.pack(0, 0, hh.EV_SYN, hh.SYN_DROPPED, 0)
+             + hh.EVENT.pack(0, 0, hh.EV_KEY, F8, 1)        # stale, skipped
+             + hh.EVENT.pack(0, 0, hh.EV_SYN, hh.SYN_REPORT, 0))
+    assert heard(sock) == ["UP 66"]
+
+
+def test_virtual_keyboards_cant_crowd_out_real_ones(setup, monkeypatch, tmp_path):
+    helper, _kb, _connect, _say, _heard, _seat = setup
+    folder = tmp_path / "input"
+    for i in range(hh.MAX_VIRTUAL_KEYBOARDS + 4):
+        (folder / f"event{i}").write_text("")
+
+    def fake_open(path):
+        keyboard = FakeKeyboard(path)
+        keyboard.virtual = True
+        return keyboard
+    monkeypatch.setattr(hh.Keyboard, "open", staticmethod(fake_open))
+    helper.scan()
+    assert sum(1 for k in helper.keyboards.values() if k.virtual) == hh.MAX_VIRTUAL_KEYBOARDS
+
+
+def test_other_seats_keyboards_are_not_read(tmp_path):
+    data = tmp_path / "data"
+    data.mkdir()
+    rdev = os.makedev(13, 70)
+    (data / "c13:70").write_text("E:ID_INPUT=1\nE:ID_SEAT=seat1\n")
+    assert hh.udev_seat(rdev, str(data)) == "seat1"
+    assert hh.udev_seat(os.makedev(13, 71), str(data)) == "seat0"

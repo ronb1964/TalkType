@@ -258,13 +258,32 @@ class HelperKeyboard:
 
 
 def connect_helper(path=None):
-    """A connected HelperKeyboard, or None when the helper isn't installed or
-    isn't running (TuxTalk then reads the keyboards itself, as before)."""
+    """A HelperKeyboard when the helper is running, or None when it isn't
+    (TuxTalk then reads the keyboards itself, as before).
+
+    A running helper that doesn't answer at once (restarting, or this
+    session isn't the one at the screen yet) is still used: the
+    HelperKeyboard keeps trying every second. Falling back for good would
+    leave the hotkeys dead until TuxTalk restarts."""
     path = path or socket_path()
     if not os.path.exists(path):
         return None
     keyboard = HelperKeyboard(path)
-    if keyboard.connect():
-        return keyboard
-    keyboard.close()
-    return None
+    if not keyboard.connect():
+        logger.info("The hotkey helper didn't answer yet; trying again every second")
+        keyboard.reconnect_at = time.monotonic() + RECONNECT_S
+    return keyboard
+
+
+def refused_combo(mods, key):
+    """Why the helper won't report this (modifier names, key) combo, or None.
+    It reports a key only with two of Ctrl, Alt and Super held."""
+    from .hotkey_helper import parse_spec
+    spec = watch_specs(None, None, None, [(mods, key)])
+    if not spec:
+        return None
+    try:
+        parse_spec(spec[0])
+        return None
+    except ValueError as e:
+        return str(e)

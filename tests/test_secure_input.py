@@ -10,7 +10,8 @@ from tuxtalk import hotkey_helper
 def test_the_install_script_is_valid_bash_and_installs_root_owned():
     script = si.install_script()
     assert subprocess.run(["bash", "-n"], input=script, text=True).returncode == 0
-    assert f"mv -f \"$tmp\" {si.HELPER_PATH}" in script
+    assert f"mv -fT \"$tmp\" {si.HELPER_PATH}" in script
+    assert script.startswith("set -euo pipefail\numask 022\n")
     assert 'chown root:root "$tmp"' in script
     assert "systemctl restart tuxtalk-hotkeys.service" in script
     # The helper is copied exactly, so the service runs this TuxTalk's helper.
@@ -114,6 +115,7 @@ def test_preferences_offers_the_helper_to_input_group_users(monkeypatch):
             self.sensitive = v
 
     monkeypatch.setattr(uinput_helper, "check_all_device_permissions", lambda: (True, ""))
+    monkeypatch.setattr(uinput_helper, "check_user_in_input_group", lambda: False)
     monkeypatch.setattr(si, "can_install", lambda: (True, ""))
     prefs = P.PreferencesWindow.__new__(P.PreferencesWindow)
     prefs.typing_status_label, prefs.fix_typing_button = Label(), Button()
@@ -156,3 +158,57 @@ def test_the_remove_button_shows_only_while_the_helper_is_installed(monkeypatch)
     monkeypatch.setattr(si, "is_installed", lambda: False)
     prefs._check_typing_status()
     assert prefs.remove_helper_button.visible is False
+
+
+def _typing_prefs(monkeypatch, *, running, installed=True, in_group=False):
+    from tuxtalk import prefs as P, uinput_helper
+
+    class Widget:
+        markup = label = ""
+        sensitive = visible = None
+
+        def set_markup(self, m):
+            self.markup = m
+
+        def set_label(self, v):
+            self.label = v
+
+        def set_sensitive(self, v):
+            self.sensitive = v
+
+        def set_visible(self, v):
+            self.visible = v
+
+    monkeypatch.setattr(uinput_helper, "check_all_device_permissions", lambda: (True, ""))
+    monkeypatch.setattr(uinput_helper, "check_user_in_input_group", lambda: in_group)
+    monkeypatch.setattr(si, "running_version", lambda: running)
+    monkeypatch.setattr(si, "is_installed", lambda: installed)
+    prefs = P.PreferencesWindow.__new__(P.PreferencesWindow)
+    prefs.typing_status_label, prefs.fix_typing_button = Widget(), Widget()
+    prefs.remove_helper_button = Widget()
+    prefs._check_typing_status()
+    return P, prefs
+
+
+def test_an_older_helper_is_offered_an_update(monkeypatch):
+    P, prefs = _typing_prefs(monkeypatch, running="1.0")
+    assert prefs.fix_typing_button.label == P.UPDATE_HELPER_LABEL and prefs.fix_typing_button.sensitive
+    assert "newer hotkey helper" in prefs.typing_status_label.markup
+
+
+def test_still_in_the_input_group_is_said_plainly(monkeypatch):
+    P, prefs = _typing_prefs(monkeypatch, running=hotkey_helper.VERSION, in_group=True)
+    assert prefs.fix_typing_button.label == P.LEAVE_GROUP_LABEL and prefs.fix_typing_button.sensitive
+    assert "other programs can still read" in prefs.typing_status_label.markup
+
+
+def test_leaving_the_group_uses_pkexecs_own_uid_and_drops_the_old_rule():
+    script = si.leave_input_group_script()
+    assert subprocess.run(["bash", "-n"], input=script, text=True).returncode == 0
+    assert 'id -nu "${PKEXEC_UID:?}"' in script and 'gpasswd -d "$user" input' in script
+    from tuxtalk.uinput_helper import UDEV_RULE_PATH
+    assert f"rm -f {UDEV_RULE_PATH}" in script
+
+
+def test_the_service_keeps_select_safe():
+    assert "LimitNOFILE=512" in si.UNIT.splitlines()

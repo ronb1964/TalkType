@@ -3791,7 +3791,13 @@ def _helper_watch(devices, hold_key, toggle_key, voice_cmds_combo, paste_last_co
     to report: the dictation keys, Esc, and the two combos."""
     for dev in devices:
         if hasattr(dev, "watch"):
-            from .hotkey_helper_client import watch_specs
+            from .hotkey_helper_client import refused_combo, watch_specs
+            for what, combo in (("Voice Commands", voice_cmds_combo),
+                                ("Paste Last Dictation", paste_last_combo)):
+                why = combo and refused_combo(*combo)
+                if why:
+                    logger.warning(f"The {what} shortcut won't work with the hotkey helper "
+                                   f"({why}). Pick one with Ctrl+Alt, Ctrl+Super or Alt+Super.")
             dev.watch(watch_specs(hold_key, toggle_key, ecodes.KEY_ESC,
                                   (voice_cmds_combo, paste_last_combo)))
 
