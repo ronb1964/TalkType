@@ -14,6 +14,7 @@ import queue
 import re
 import threading
 import time
+from typing import NamedTuple
 
 import numpy as np
 
@@ -29,10 +30,11 @@ TAIL_KEEP_S = 0.3
 # Measured on a Beyerdynamic M 70 PRO X into a MiniFuse 2 in a quiet room: the
 # room at 1-6, speech at 50-600. Auto-stop's 300 never heard that as speech.
 MIN_SPEECH_RMS = 40.0
-# Speech must be this much louder than the room (+6 dB). Measured on cbox
+# Speech must be at least this much louder than the room, in dB (Preferences →
+# Advanced → TuxTalk Labs → Type at pause → Sensitivity). Measured on cbox
 # (onboard ALC887 at +50 dB gain): the room's hiss at 370-410, speech at
 # 600-4000, so auto-stop's +8 dB would take the quieter words for pauses.
-SPEECH_OVER_ROOM = 2.0
+DEFAULT_SPEECH_DB = 6.0
 # Rumble below this is filtered out before measuring: it is loud on an onboard
 # mic input and carries no speech.
 HIGH_PASS_HZ = 150
@@ -51,6 +53,15 @@ WINDOW_S = 0.02
 MIN_BURST_S = 0.04
 
 
+class PauseSnapshot(NamedTuple):
+    """What a PauseDetector hears right now (int16 RMS after the high-pass)."""
+    level: float
+    room: float
+    threshold: float
+    silence_s: float
+    cuts: int
+
+
 class PauseDetector:
     """Feed it the recording's audio blocks; it says when a chunk ends.
 
@@ -65,9 +76,13 @@ class PauseDetector:
     those levels over the last ROOM_WINDOW_S, digital silence left out.
     """
 
-    def __init__(self, pause_seconds: float, sample_rate: int):
+    def __init__(self, pause_seconds: float, sample_rate: int,
+                 speech_db: float = DEFAULT_SPEECH_DB):
         self.pause_seconds = float(pause_seconds)
         self.sample_rate = int(sample_rate)
+        self.speech_over_room = 10 ** (float(speech_db) / 20)
+        self.cuts = 0
+        self.level = 0.0
         self.speech_time = 0.0
         self.silence_time = 0.0
         self.last_pause = 0.0
@@ -90,6 +105,11 @@ class PauseDetector:
                 f"loudest {self.loudest:.0f} (int16 RMS after the high-pass), "
                 f"{self.blocks} blocks at {self.sample_rate} Hz")
 
+    def snapshot(self) -> PauseSnapshot:
+        """The levels it is working with now, for the live test in Preferences."""
+        return PauseSnapshot(self.level, self._room, self.threshold(), self.silence_time,
+                             self.cuts)
+
     def _high_pass(self, block):
         samples = np.frombuffer(block, dtype=np.int16).astype(np.float64)
         if samples.size == 0:
@@ -102,7 +122,7 @@ class PauseDetector:
 
     def threshold(self) -> float:
         """The level (int16 RMS) that counts as speech in this room right now."""
-        return max(MIN_SPEECH_RMS, self._room * SPEECH_OVER_ROOM)
+        return max(MIN_SPEECH_RMS, self._room * self.speech_over_room)
 
     def _learn_room(self, level: float, duration: float) -> None:
         self._clock += duration
@@ -132,6 +152,7 @@ class PauseDetector:
         return fired
 
     def _window(self, level: float, duration: float) -> bool:
+        self.level = level
         self._learn_room(level, duration)
         self.loudest = max(self.loudest, level)
         if level >= self.threshold():
@@ -153,6 +174,7 @@ class PauseDetector:
         self.last_pause = self._tail_s = self.silence_time
         self.speech_time = 0.0
         self.silence_time = 0.0
+        self.cuts += 1
         return True
 
     def tail_samples(self) -> int:

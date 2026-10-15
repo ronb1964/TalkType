@@ -135,10 +135,10 @@ def loud_room(seconds, sr=SR):
                    -32768, 32767).astype(np.int16)
 
 
-def loud_speech(seconds, sr=SR):
+def loud_speech(seconds, sr=SR, level=2000.0):
     t = np.arange(int(seconds * sr)) / sr
     voiced = (t % 0.25) < 0.18
-    tone = np.sin(2 * np.pi * 220 * t) * 2000 * voiced
+    tone = np.sin(2 * np.pi * 220 * t) * level * voiced
     return np.clip(tone + loud_room(seconds, sr), -32768, 32767).astype(np.int16)
 
 
@@ -196,6 +196,38 @@ def test_lone_noise_spikes_do_not_hide_a_pause():
                             loud_room(1.5)])
     fired, _ = run_pauses(audio)
     assert len(fired) == 2
+
+
+
+def test_higher_sensitivity_db_hears_less_as_speech():
+    """Quiet speech over cbox's hiss: +3 dB hears it, +12 dB takes it for room."""
+    from tuxtalk.chunking import PauseDetector
+    audio = np.concatenate([loud_room(1.0), loud_speech(2.0, level=1000.0), loud_room(1.5),
+                            loud_speech(2.0, level=1000.0), loud_room(1.5)])
+    def cuts(db):
+        det = PauseDetector(0.8, SR, speech_db=db)
+        return sum(det.feed(b.tobytes()) for b in blocks(audio))
+    assert cuts(3.0) == 2
+    assert cuts(12.0) == 0
+
+
+def test_snapshot_reports_what_the_detector_hears():
+    from tuxtalk.chunking import PauseDetector
+    det = PauseDetector(0.8, SR)
+    for b in blocks(np.concatenate([loud_room(2.0), loud_speech(2.0), loud_room(1.2)])):
+        det.feed(b.tobytes())
+    snap = det.snapshot()
+    assert 250 < snap.room < 450
+    assert snap.threshold == pytest.approx(snap.room * 10 ** (6 / 20))
+    assert snap.cuts == 1
+    assert snap.silence_s > 0.2
+    assert snap.level > 0
+
+
+def test_default_sensitivity_is_six_db():
+    from tuxtalk.chunking import DEFAULT_SPEECH_DB, PauseDetector
+    assert DEFAULT_SPEECH_DB == 6.0
+    assert PauseDetector(0.8, SR).speech_over_room == pytest.approx(1.995, abs=0.01)
 
 
 # --- the chunk worker --------------------------------------------------------
