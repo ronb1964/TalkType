@@ -7,8 +7,7 @@ Things I'd like to add or fix, roughly grouped. Nothing here has a date on it. W
 ## Dictation
 
 - [ ] Importable packs of snippets, like a "Linux developer" pack that turns "why do tool" into ydotool and "dee bus" into D-Bus, so people don't have to build their list from scratch. Could grow into a library people send in by pull request.
-- [ ] Per-app profiles, picked by the window you're typing into (cleanup on or off, paste mode, maybe a different model). Window class only. TuxTalk won't read the screen or take screenshots.
-- [ ] Live text while you talk, using a streaming model. I'm not sold on it yet, so it's parked.
+- [~] Per-app profiles, picked by the window you're typing into (cleanup on or off, paste mode, maybe a different model). Window class only. TuxTalk won't read the screen or take screenshots. Started: terminals get no capital or closing period, and code editors no closing period. Full profiles aren't done.
 - [ ] Language quick switch in the tray menu. The setting exists, but only in Preferences.
 - [ ] Ignore background noise that gets transcribed as a word or two (a confidence threshold).
 - [ ] Some kind of signal when a dictation heard nothing at all. Hands-free mode already beeps and stops when you say nothing, but a normal hold-to-talk just types nothing.
@@ -47,9 +46,13 @@ Things I'd like to add or fix, roughly grouped. Nothing here has a date on it. W
 
 ## Packaging
 
-- [~] Flatpak. The manifests are in `packaging/flatpak/` and were updated for the rename, but they haven't been built since, and nothing is published. The Flathub submission was closed, so it would be a `.flatpak` file on the Releases page or a self-hosted Flatpak repo.
+- [~] Flatpak, next up. The manifests are in `packaging/flatpak/` and were updated for the rename, but they haven't been built since, and nothing is published. Typing inside the Flatpak still only handles plain English letters, so that gets fixed first. It'll go out as a test build on the Releases page before a real release. The Flathub submission was closed, so it would be a `.flatpak` file or a self-hosted Flatpak repo.
 - [ ] Snap.
 - [ ] macOS or Windows. Big jobs, since the hotkeys, typing and tray are all Linux-specific today.
+
+## Decided against
+
+- Live text while you talk, words showing up as you speak. I tried it, and seeing the words appear while I was still talking pulled me out of what I was saying. Not planned unless a lot of people ask for it.
 
 ## Known limitations
 
