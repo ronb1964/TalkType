@@ -83,7 +83,7 @@ import sys
 import time
 
 PROTOCOL = 1
-VERSION = "1.2"
+VERSION = "1.3"
 
 DEFAULT_SOCKET_DIR = "/run/tuxtalk-hotkeys"
 SOCKET_NAME = "hotkeys.sock"
@@ -441,8 +441,10 @@ class Helper:
 
     # -- state ------------------------------------------------------------------------
 
-    def held(self, code):
-        return any(code in k.down for k in self.keyboards.values())
+    def held(self, code, group):
+        """Whether a keyboard of *group* already holds *code*. Per group, so a
+        program's virtual keyboard holding F8 never swallows the real F8."""
+        return any(code in k.down for k in self.keyboards.values() if k.group == group)
 
     def group_mods(self, group):
         """The trusted modifiers held on the keyboards of *group*."""
@@ -473,7 +475,7 @@ class Helper:
         if self.was_injected(keyboard.path, code, value):
             return
         if value == 1:
-            elsewhere = self.held(code)
+            elsewhere = self.held(code, keyboard.group)
             keyboard.down.add(code)
             if code in MODIFIERS and not keyboard.grabbed:
                 keyboard.trusted.add(code)
@@ -518,6 +520,16 @@ class Helper:
         mods = self.group_mods(keyboard.group)
         for client in interested:
             if client.uid != active:
+                continue
+            prior = self.keyboards.get(client.origin.get(code))
+            if prior is not None and prior is not keyboard and code in prior.down:
+                # Already held on another keyboard: no second DOWN. The press
+                # stays with that keyboard, so a program's keyboard can't take
+                # over the real press (or the grab). Only a real keyboard takes
+                # a press over from a virtual one, quietly: its release is the
+                # UP, so a program holding F8 can't swallow the real F8.
+                if prior.virtual and not keyboard.virtual:
+                    client.origin[code] = keyboard.path
                 continue
             if code in client.bare:
                 wanted = True
@@ -570,13 +582,20 @@ class Helper:
             mine = [c for path, c in presses if path == keyboard.path]
             released = [c for c in mine + mods
                         if c in really_down and self.inject(keyboard, c, 0)]
-            if keyboard.path in origins or released:
-                keyboard.grab(True)
+            if (keyboard.path in origins or released) and keyboard.grab(True):
                 held_on.append(keyboard)
+            elif keyboard.path in origins or released:
+                # Not held, so the desktop would see the keys go down again
+                # and repeat them: leave them up for it.
+                log(f"couldn't hold keyboard {keyboard.name!r}")
+                keyboard.trusted.difference_update(released)
+                continue
             for code in released:
                 self.inject(keyboard, code, 1)
             # The desktop now believes these are up.
             keyboard.trusted.difference_update(released)
+        if not held_on:
+            return "ERR couldn't hold the keyboard"
         client.hideable.difference_update(c for _, c in presses)
         self.hide = {"client": client, "uid": client.uid, "presses": presses,
                      "keyboards": held_on, "since": time.monotonic(), "all_up_at": None}
@@ -585,12 +604,16 @@ class Helper:
     def end_hide(self, why=None):
         if self.hide is None:
             return
-        for keyboard in self.hide["keyboards"]:
-            if keyboard.path in self.keyboards and keyboard.grabbed:
-                keyboard.grab(False)
+        keyboards, self.hide = self.hide["keyboards"], None
+        stuck = [k for k in keyboards
+                 if k.path in self.keyboards and k.grabbed and not k.grab(False)]
         if why:
             log(f"gave the keyboard back: {why}")
-        self.hide = None
+        for keyboard in stuck:
+            # Closing the device always ends the kernel's grab; the keyboard
+            # is opened afresh on the next scan.
+            log(f"couldn't let go of {keyboard.name!r}; closing it")
+            self.drop_keyboard(keyboard)
 
     def check_hide(self):
         """The safety net: a keyboard is never kept once the hotkey is let go."""

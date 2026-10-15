@@ -224,3 +224,21 @@ def test_a_hand_edited_shortcut_that_cant_work_is_warned_about(monkeypatch):
     prefs._check_typing_status()
     assert "Ctrl+Shift+H won't work" in prefs.typing_status_label.markup
     assert "Ctrl+Alt+P" not in prefs.typing_status_label.markup
+
+
+def test_still_being_in_the_group_is_reported_not_hidden(monkeypatch):
+    """gpasswd can fail (the group in /usr/lib/group on an immutable system):
+    the script says so, and Preferences then doesn't claim the user left."""
+    for script in (si.install_script(leave_group=True), si.leave_input_group_script()):
+        assert f"echo {si.STILL_IN_GROUP}" in script
+        assert subprocess.run(["bash", "-n"], input=script, text=True).returncode == 0
+    ran = subprocess.run(["bash", "-s"], text=True, capture_output=True,
+                         input='user=$(id -nu)\n' + si._still_in_group_check())
+    groups = subprocess.run(["id", "-nG"], text=True, capture_output=True).stdout.split()
+    assert (si.STILL_IN_GROUP in ran.stdout) == ("input" in groups)
+
+    class Done:
+        returncode, stdout, stderr = 0, si.STILL_IN_GROUP + "\n", ""
+
+    monkeypatch.setattr(si.subprocess, "run", lambda *a, **k: Done())
+    assert si._pkexec("true", "tested") == (True, si.STILL_IN_GROUP)

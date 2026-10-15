@@ -175,7 +175,19 @@ def _leave_group_lines():
     from .uinput_helper import UDEV_RULE_PATH
     return (f'user=$(id -nu "${{PKEXEC_UID:?}}")\n'
             f'gpasswd -d "$user" input || true\n'
-            f'rm -f {UDEV_RULE_PATH}\n')
+            + _still_in_group_check()
+            + f'rm -f {UDEV_RULE_PATH}\n')
+
+
+# Printed by the root script when the user is still in the input group after
+# gpasswd (the group lives in /usr/lib/group on an immutable system, or
+# gpasswd failed), so Preferences doesn't claim they left it.
+STILL_IN_GROUP = "TUXTALK_STILL_IN_INPUT_GROUP"
+
+
+def _still_in_group_check():
+    # No pipe: under pipefail, grep -q quitting early could fail the test.
+    return (f'case " $(id -nG "$user") " in *" input "*) echo {STILL_IN_GROUP} ;; esac\n')
 
 
 def leave_input_group_script():
@@ -186,7 +198,7 @@ def leave_input_group_script():
     return f"""set -uo pipefail
 user=$(id -nu "${{PKEXEC_UID:?}}")
 gpasswd -d "$user" input
-rm -f {UDEV_RULE_PATH}
+{_still_in_group_check()}rm -f {UDEV_RULE_PATH}
 udevadm control --reload-rules
 udevadm trigger --action=change --sysname-match=uinput
 exit 0
@@ -262,6 +274,9 @@ def _pkexec(script, what):
         return False, "pkexec isn't installed, so TuxTalk can't ask for your password."
     if result.returncode == 0:
         logger.info(f"Hotkey helper {what}")
+        if STILL_IN_GROUP in (result.stdout or ""):
+            logger.warning("Still in the input group after gpasswd")
+            return True, STILL_IN_GROUP
         return True, ""
     if pkexec_was_declined(result):
         logger.info(f"Hotkey helper {what}: cancelled at the password prompt")

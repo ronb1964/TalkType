@@ -5215,7 +5215,12 @@ class PreferencesWindow:
         threading.Thread(target=work, daemon=True).start()
 
     def _finish_leave_group(self, button, ok, message):
-        if ok:
+        from .secure_input import STILL_IN_GROUP
+        if ok and message == STILL_IN_GROUP:
+            self._message(Gtk.MessageType.WARNING, "You're still in the 'input' group",
+                          "TuxTalk couldn't take you out of it. Your system may keep "
+                          "that group somewhere TuxTalk can't change.")
+        elif ok:
             self._message(Gtk.MessageType.INFO, "You've left the 'input' group",
                           "Restart your computer to finish. Until then, programs that "
                           "started before keep the old access.")
@@ -5226,6 +5231,12 @@ class PreferencesWindow:
 
     def _finish_fix_typing(self, button, success, message, needs_restart=True, switching=False):
         """Back on the GTK thread: report how Fix Typing Permissions went."""
+        from .secure_input import STILL_IN_GROUP
+        still_in_group = success and message == STILL_IN_GROUP
+        still_in_group_text = (
+            "TuxTalk couldn't take you out of the 'input' group, so other programs "
+            "can still read your keyboard. Your system may keep that group "
+            "somewhere TuxTalk can't change. Your hotkeys work either way.")
         if success and not needs_restart:
             msg = message_dialog(
                 transient_for=self.window,
@@ -5237,7 +5248,8 @@ class PreferencesWindow:
             msg.format_secondary_text(
                 "TuxTalk's hotkey helper is installed, and TuxTalk can type into "
                 "your applications. No restart is needed.\n\n"
-                + ("You've also left the 'input' group. Restart your computer when "
+                + (still_in_group_text if still_in_group else
+                   "You've also left the 'input' group. Restart your computer when "
                    "it suits you: until then, programs that were already running "
                    "keep the old access." if switching else
                    "Dictation restarts now to use it.")

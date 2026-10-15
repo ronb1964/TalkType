@@ -611,3 +611,92 @@ def test_only_real_devices_share_modifiers(tmp_path):
     assert hh.device_group(os.makedev(13, 71), str(chars)).startswith("virtual:")
     # Can't tell (no /sys): the safe side.
     assert hh.device_group(os.makedev(13, 72), str(chars)).startswith("virtual:")
+
+
+# --- fixes from the Codex review (helper 1.3) ----------------------------------------
+
+def test_a_virtual_keyboard_holding_the_hotkey_cant_swallow_the_real_one(setup):
+    """A program holds F8 on its own virtual keyboard first: the real F8 is
+    still reported, so it can't switch dictation (or Esc) off."""
+    helper, kb, connect, say, heard, _seat = setup
+    virtual = FakeKeyboard("/dev/input/event-virtual")
+    virtual.virtual = True
+    helper.keyboards[virtual.path] = virtual
+    tuxtalk = _ready(connect, say, heard)
+    virtual.press(F8)
+    assert heard(tuxtalk) == ["DOWN 66 -"]
+    kb.press(F8)
+    assert heard(tuxtalk) == []                 # taken over, no second DOWN
+    kb.press(F8, 0)
+    assert heard(tuxtalk) == ["UP 66"]          # the real release ends it
+    kb.press(F8)
+    assert heard(tuxtalk) == ["DOWN 66 -"]      # and the next real press counts
+    kb.press(F8, 0)
+    assert heard(tuxtalk) == ["UP 66"]
+    virtual.press(F8, 0)
+    assert heard(tuxtalk) == []
+
+
+def test_a_virtual_keyboard_cant_take_over_a_real_press(setup):
+    helper, kb, connect, say, heard, _seat = setup
+    virtual = FakeKeyboard("/dev/input/event-virtual")
+    virtual.virtual = True
+    helper.keyboards[virtual.path] = virtual
+    tuxtalk = _ready(connect, say, heard)
+    kb.press(F8)
+    assert heard(tuxtalk) == ["DOWN 66 -"]
+    virtual.press(F8)
+    assert heard(tuxtalk) == []
+    virtual.press(F8, 0)
+    assert heard(tuxtalk) == []
+    kb.press(F8, 0)
+    assert heard(tuxtalk) == ["UP 66"]
+
+
+def test_two_presses_in_one_group_are_reported_once(setup):
+    helper, kb, connect, say, heard, _seat = setup
+    kb.group = "real"
+    second = FakeKeyboard("/dev/input/event-second")
+    second.group = "real"
+    helper.keyboards[second.path] = second
+    tuxtalk = _ready(connect, say, heard)
+    kb.press(F8)
+    second.press(F8)
+    assert heard(tuxtalk) == ["DOWN 66 -"]
+
+
+def test_a_keyboard_that_cant_be_held_is_refused_and_left_alone(setup, monkeypatch):
+    """The grab failed: the keys aren't marked down again (the desktop would
+    repeat them) and the helper doesn't claim it holds the keyboard."""
+    helper, kb, connect, say, heard, _seat = setup
+    tuxtalk = _ready(connect, say, heard)
+    kb.press(F8)
+    heard(tuxtalk)
+
+    def grab_fails(on):
+        kb.calls.append(("grab", on))
+        return False
+
+    monkeypatch.setattr(kb, "grab", grab_fails)
+    say(tuxtalk, "HIDE 66")
+    assert heard(tuxtalk) == ["ERR couldn't hold the keyboard"]
+    assert ("inject", F8, 1) not in kb.calls
+    assert helper.hide is None
+
+
+def test_a_keyboard_that_cant_be_let_go_is_closed(setup, monkeypatch):
+    """Letting go failed: closing the device is the kernel's own way to end a
+    grab, so the keyboard can never stay locked."""
+    helper, kb, connect, say, heard, _seat = setup
+    tuxtalk = _ready(connect, say, heard)
+    kb.press(F8)
+    heard(tuxtalk)
+    say(tuxtalk, "HIDE 66")
+    assert heard(tuxtalk) == ["OK HIDE"]
+    closed = []
+    monkeypatch.setattr(kb, "grab", lambda on: False)
+    monkeypatch.setattr(kb, "close", lambda: closed.append(True))
+    helper.end_hide("test")
+    assert closed == [True]
+    assert kb.path not in helper.keyboards and helper.hide is None
+    assert heard(tuxtalk) == ["UP 66"]          # its key can't come up any more

@@ -437,8 +437,11 @@ every program you run read every key you press, passwords too. The helper
 fixes that. It runs as a throwaway system user with no network and no access
 to your files, it never reports a letter or a number, only F-keys, Esc and
 shortcuts with Ctrl, Alt or Super, and only to whoever's at the screen.
-`systemd-analyze security tuxtalk-hotkeys` rates it 0.6, "SAFE". To take it
-off again:
+`systemd-analyze security tuxtalk-hotkeys` rates it 0.6, "SAFE".
+
+To type, TuxTalk still needs `/dev/uinput`, so whoever's at the screen gets
+it, the same rule Steam uses for game controllers. A program can use it to
+press keys but not to read them. To take the helper off again:
 
 ```bash
 sudo systemctl disable --now tuxtalk-hotkeys
