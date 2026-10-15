@@ -117,6 +117,15 @@ def test_works_at_48k():
     assert 1.6 <= fired[0] <= 1.9
 
 
+def test_a_quiet_dynamic_mic_still_gets_boundaries():
+    """Measured on a Beyerdynamic M 70 PRO X into a MiniFuse 2 in a quiet room:
+    the room at int16 RMS 1-6, speech at 50-600. Auto-stop's 300 minimum
+    would never hear that as speech, so no pause would ever end a chunk."""
+    audio = np.concatenate([speech(1.0, level=150.0, noise_level=2.0), noise(1.5, level=2.0),
+                            speech(1.0, level=150.0, noise_level=2.0), noise(1.5, level=2.0)])
+    fired, _ = run_pauses(audio)
+    assert len(fired) == 2
+
 # --- the chunk worker --------------------------------------------------------
 
 def test_worker_runs_jobs_in_order():

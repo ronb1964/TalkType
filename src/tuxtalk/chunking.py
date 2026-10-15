@@ -21,6 +21,12 @@ logger = setup_logger(__name__)
 MIN_SPEECH_S = 0.3
 # Silence kept at the end of a chunk, so the last word's decay is never cut.
 TAIL_KEEP_S = 0.3
+# The quietest level (int16 RMS, about -58 dBFS) that can count as speech.
+# Auto-stop's 300 is far too high for a dynamic mic in a quiet room: measured
+# on a Beyerdynamic M 70 PRO X into a MiniFuse 2, the room sat at 1-6 and
+# speech at 50-600, so no pause was ever found. Erring low is safe here: noise
+# taken for speech only costs a cut, it never cuts mid-word.
+MIN_SPEECH_RMS = 40.0
 
 
 class PauseDetector:
@@ -33,7 +39,7 @@ class PauseDetector:
     def __init__(self, pause_seconds: float, sample_rate: int):
         self.pause_seconds = float(pause_seconds)
         self.sample_rate = int(sample_rate)
-        self._floor = NoiseFloor()
+        self._floor = NoiseFloor(MIN_SPEECH_RMS)
         self.speech_time = 0.0
         self.silence_time = 0.0
         self.last_pause = 0.0
