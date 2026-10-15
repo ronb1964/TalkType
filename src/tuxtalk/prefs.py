@@ -2262,6 +2262,17 @@ class PreferencesWindow:
             grid.attach(labs_note, 0, row, 2, 1)
             row += 1
 
+            # Each Labs feature: a small heading, its options indented under it.
+            def labs_heading(text):
+                label = Gtk.Label(xalign=0)
+                label.set_markup(f'<span weight="600">{text}</span>')
+                label.set_margin_top(6)
+                return label
+
+            LABS_INDENT = 20
+            grid.attach(labs_heading("Editing by voice"), 0, row, 2, 1)
+            row += 1
+
             # Voice editing (app._transcribe_and_edit): the AI that fixes
             # self-corrections rewrites the selected text the way the user says.
             self.voice_editing_check = Gtk.CheckButton(
@@ -2277,6 +2288,7 @@ class PreferencesWindow:
                 "Uses the same small AI as self-corrections (one shared 1.1 GB download),\n"
                 "on this computer. Simple, clear changes work best.")
             self.voice_editing_check.connect("toggled", self._on_voice_editing_toggled)
+            self.voice_editing_check.set_margin_start(LABS_INDENT)
             grid.attach(self.voice_editing_check, 0, row, 2, 1)
             row += 1
 
@@ -2284,7 +2296,7 @@ class PreferencesWindow:
             # is only "select the last sentence" or "go to the end" is done as
             # a command. Works with or without voice editing.
             nav_check = Gtk.CheckButton(
-                label="Select and move by voice: say \u201cselect the last sentence\u201d, "
+                label="Select and move: say \u201cselect the last sentence\u201d, "
                       "\u201cgo to the end\u201d")
             nav_check.set_active(bool(self.config.get("voice_navigation", False)))
             nav_check.set_tooltip_text(
@@ -2302,35 +2314,12 @@ class PreferencesWindow:
                 "Not in terminals. The full list is in Help, on the TuxTalk Labs page.")
             nav_check.connect("toggled", lambda c: self.update_config(
                 "voice_navigation", c.get_active()))
+            nav_check.set_margin_start(LABS_INDENT)
             grid.attach(nav_check, 0, row, 2, 1)
             row += 1
 
-            # The recording indicator follows the window being dictated into
-            # (recording_indicator._follow_target), placed by the same
-            # active-window position as the floating messages.
-            follow_check = Gtk.CheckButton(
-                label="Recording indicator follows the window you\u2019re dictating into")
-            follow_check.set_active(bool(self.config.get("indicator_follow_window", False)))
-            follow_check.set_tooltip_text(
-                "Shows the recording indicator in the window you're dictating into, wherever it\n"
-                "is on the screen. The position set on the Audio tab (bottom center, top right...)\n"
-                "applies inside that window; the offset doesn't. When TuxTalk can't tell where\n"
-                "the window is, the usual position and offset are used.")
-            follow_check.connect("toggled", lambda c: self.update_config(
-                "indicator_follow_window", c.get_active()))
-            grid.attach(follow_check, 0, row, 2, 1)
-            row += 1
-
-            # How these work (Help, on its Labs tab) and Send feedback.
-            from .help_dialog import FEEDBACK_URL, show_help_dialog
-            labs_links = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-            labs_links.set_margin_top(6)
-            labs_help = Gtk.Button(label="How these work")
-            labs_help.set_tooltip_text("Open Help on the TuxTalk Labs page")
-            labs_help.connect("clicked", lambda _b: show_help_dialog(tab="labs"))
-            labs_links.pack_start(labs_help, False, False, 0)
-            # Brings back every "how it works" window, dismissed or ticked
-            # "Don't explain this again" (explain.py).
+            # Brings back the "how it works" windows of these two features that
+            # were ticked "Don't explain this again" (explain.py).
             from . import explain
             tips_again = Gtk.Button(label="Show tips again")
             tips_again.set_tooltip_text(
@@ -2342,7 +2331,38 @@ class PreferencesWindow:
                 button.set_label("\u2713 Tips will show again")
                 button.set_sensitive(False)
             tips_again.connect("clicked", _tips_again)
-            labs_links.pack_start(tips_again, False, False, 0)
+            tips_again.set_halign(Gtk.Align.START)
+            tips_again.set_margin_start(LABS_INDENT + 4)
+            grid.attach(tips_again, 0, row, 2, 1)
+            row += 1
+
+            # The recording indicator follows the window being dictated into
+            # (recording_indicator._follow_target), placed by the same
+            # active-window position as the floating messages.
+            grid.attach(labs_heading("Recording indicator"), 0, row, 2, 1)
+            row += 1
+            follow_check = Gtk.CheckButton(
+                label="Follows the window you\u2019re dictating into")
+            follow_check.set_active(bool(self.config.get("indicator_follow_window", False)))
+            follow_check.set_tooltip_text(
+                "Shows the recording indicator in the window you're dictating into, wherever it\n"
+                "is on the screen. The position set on the Audio tab (bottom center, top right...)\n"
+                "applies inside that window; the offset doesn't. When TuxTalk can't tell where\n"
+                "the window is, the usual position and offset are used.")
+            follow_check.connect("toggled", lambda c: self.update_config(
+                "indicator_follow_window", c.get_active()))
+            follow_check.set_margin_start(LABS_INDENT)
+            grid.attach(follow_check, 0, row, 2, 1)
+            row += 1
+
+            # How these work (Help, on its Labs tab) and Send feedback.
+            from .help_dialog import FEEDBACK_URL, show_help_dialog
+            labs_links = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+            labs_links.set_margin_top(12)
+            labs_help = Gtk.Button(label="How these work")
+            labs_help.set_tooltip_text("Open Help on the TuxTalk Labs page")
+            labs_help.connect("clicked", lambda _b: show_help_dialog(tab="labs"))
+            labs_links.pack_start(labs_help, False, False, 0)
             labs_feedback = Gtk.LinkButton.new_with_label(FEEDBACK_URL, "Send feedback")
             labs_feedback.set_tooltip_text("Tell us how the Labs features work for you "
                                            "(TuxTalk Discussions on GitHub)")
