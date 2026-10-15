@@ -311,3 +311,21 @@ def test_delete_last_word_in_its_own_window_still_works(dictation, monkeypatch):
     monkeypatch.setattr(app.state, "last_inserted_window", "org.kde.kwrite")
     assert app._handle_undo("delete last word", False, False) is True
     assert deleted == [6] and dictation["problems"] == []
+
+
+def test_delete_everything_in_a_terminal_clears_the_line_the_shells_way(dictation, monkeypatch):
+    """Ctrl+A in Konsole jumped to the start of the line and Backspace
+    deleted nothing (Ron, 2026-10-14)."""
+    app = dictation["app"]
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "org.kde.konsole")
+    dictation["backend"].select_all_delete = lambda: pytest.fail("Ctrl+A in a terminal")
+    assert app._handle_undo("delete everything", False, False) is True
+    assert dictation["pressed"] == [[((C,), "E"), ((C,), "U")]]
+
+
+def test_delete_everything_elsewhere_still_selects_all_and_deletes(dictation):
+    app = dictation["app"]
+    cleared = []
+    dictation["backend"].select_all_delete = lambda: cleared.append(1) or True
+    assert app._handle_undo("delete everything", False, False) is True
+    assert cleared == [1] and dictation["pressed"] == []

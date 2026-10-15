@@ -139,7 +139,8 @@ The commands are English words, whatever language you dictate in.
   <b>delete last paragraph</b> → delete back to last line break
   <b>delete last 3 words</b> / <b>undo last two sentences</b> → counted undo (1–10 or digits)
   <b>delete everything</b> / <b>delete all</b> / <b>clear everything</b> / <b>clear all</b> /
-  <b>undo everything</b> / <b>undo all</b> → wipe the entire input field (Ctrl+A, Backspace)
+  <b>undo everything</b> / <b>undo all</b> → wipe the entire input field (Ctrl+A, Backspace);
+  in a terminal, the line you're typing (Ctrl+E, Ctrl+U)
 
 <b>Select and Move</b> (TuxTalk Labs: turn on in Preferences → Advanced)
   <b>select that</b> / <b>select the last sentence</b> / <b>select the last 3 words</b> → select what you just said

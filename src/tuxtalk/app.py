@@ -2371,7 +2371,15 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
     # No tracked dictation required: it wipes whatever is in the textarea,
     # including text that wasn't typed by TuxTalk.
     if undo_type == 'everything':
-        if _output_backend().select_all_delete():
+        # In a terminal Ctrl+A jumps to the start of the line and Backspace
+        # there deletes nothing, so the line is cleared the shell's way:
+        # Ctrl+E to its end, Ctrl+U to delete back to the prompt (bash, zsh,
+        # fish). Ctrl+A would also be screen's prefix key.
+        if is_terminal_class(_query_focused_window_class()):
+            cleared = _output_backend().press_keys([(("CTRL",), "E"), (("CTRL",), "U")])
+        else:
+            cleared = _output_backend().select_all_delete()
+        if cleared:
             state.last_inserted_text = ""
             state.continue_mid_sentence = False
             _beep(beeps_on, *READY_BEEP)

@@ -22,6 +22,9 @@ before 0.15.0, so older entries use that name.
   code editors like VS Code get no period at the end. Everywhere else
   punctuation stays as it was, chat apps included. It's on by default and
   there's a tickbox in Preferences, Advanced if you'd rather not.
+- "Delete everything" works in a terminal now. It pressed Ctrl+A, which in a
+  terminal jumps to the start of the line, so nothing got deleted. In a
+  terminal it now clears the line you're typing.
 - New in TuxTalk Labs: select and move by voice. Say "select the last
   sentence", "select all", "go to the end" or "go back three words" on its own
   and TuxTalk does it instead of typing it. Said in the middle of a sentence,
