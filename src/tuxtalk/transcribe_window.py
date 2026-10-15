@@ -124,7 +124,9 @@ class TranscribeWindow:
         self.times_check.connect("toggled", lambda _c: self._show_text())
         bottom.pack_start(self.times_check, False, False, 0)
         self.srt_btn = Gtk.Button(label="Save as Subtitles…")
-        self.srt_btn.set_tooltip_text("An .srt file that video players and editors read")
+        self.srt_btn.set_tooltip_text(
+            "Captions for a video: the words show up on screen while it plays.\n"
+            "Saved as an .srt file next to the video; players like VLC pick it up.")
         self.srt_btn.connect("clicked", lambda _b: self._save("srt"))
         bottom.pack_end(self.srt_btn, False, False, 0)
         self.txt_btn = Gtk.Button(label="Save as Text…")
