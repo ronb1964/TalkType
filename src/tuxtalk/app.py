@@ -2973,6 +2973,10 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         if _handle_navigation(raw, beeps_on):
             return
 
+        # "fix that word": Fix a Word on the dictation before this one.
+        if _handle_fix_word(raw, beeps_on):
+            return
+
         # Stage 3: Normalize text (voice commands, punctuation, spacing),
         # plainer for a terminal or code editor ("Plain text in terminals and
         # code editors").
@@ -3171,6 +3175,32 @@ def _focus_moved(focused_class) -> bool:
     if now is None and focused_class is not None:
         logger.info("Voice edit: the focused window can't be found now, so it can't be checked")
     return now != focused_class
+
+
+# "fix that word": the whole dictation is one of these (normalized: lower case,
+# no punctuation). Fix a Word opens on the dictation before it.
+_FIX_WORD_PHRASES = frozenset({
+    "fix that", "fix that word", "fix a word", "fix the word", "fix this word",
+    "fix the last word", "fix that please", "fix that word please",
+})
+
+
+def _handle_fix_word(raw: str, beeps_on: bool) -> bool:
+    """"fix that word": open Fix a Word over the app, on the newest dictation.
+    True when the dictation was that command."""
+    said = " ".join(re.sub(r"[^\w\s]", " ", raw.lower()).split())
+    if said not in _FIX_WORD_PHRASES:
+        return False
+    logger.info("Voice command: fix that word")
+    try:
+        from .explain import start_helper_window
+        start_helper_window("tuxtalk.fix_word_dialog")
+        _beep(beeps_on, *READY_BEEP)
+    except Exception as e:
+        logger.warning(f"Could not open Fix a Word: {e}")
+        _beep(beeps_on, *CANCEL_BEEP)
+        _notify("TuxTalk", "Fix a Word didn't open. Choose it in the TuxTalk menu instead.")
+    return True
 
 
 _UNKNOWN_WINDOW = object()

@@ -17,6 +17,10 @@ before 0.15.0, so older entries use that name.
   pressing it opened the Emoji Selector and started dictating with no warning
   at all. Now the question after changing the key says which app KDE opens with
   it.
+- Say "fix that word" right after a dictation and Fix a Word opens over your
+  window with what you just said, so you can click the word it got wrong and
+  teach it the right spelling. Before, it was only in the tray menu, and I
+  don't think many people found it there.
 - Dictating into a terminal no longer types "Git status." with a capital and a
   period. Terminals get no capital at the start and no period at the end, and
   code editors like VS Code get no period at the end. Everywhere else

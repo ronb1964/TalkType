@@ -127,13 +127,12 @@ def window_open() -> bool:
     return _window is not None and _window.poll() is None
 
 
-def open_window(kind) -> bool:
-    """Open the explanation for *kind* in its own process. True if it was
-    started; never raises."""
-    global _window
+def start_helper_window(module, *args):
+    """Start TuxTalk's *module* as its own process for a small window that
+    opens over the app being dictated into: on XWayland first, where it may
+    be placed (plain Wayland if there's none, centred on the screen). Shared
+    by these explanations and "fix that word". Returns the Popen."""
     env = os.environ.copy()
-    # XWayland first, where the window may be placed over the app; plain
-    # Wayland if there's no XWayland (then it's centred on the screen).
     env["GDK_BACKEND"] = "x11,wayland"
     try:
         from .service_launcher import dev_pythonpath
@@ -142,10 +141,17 @@ def open_window(kind) -> bool:
             env["PYTHONPATH"] = pythonpath
     except Exception:
         pass
+    return subprocess.Popen([sys.executable, "-m", module, *args], env=env,
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                            start_new_session=True)
+
+
+def open_window(kind) -> bool:
+    """Open the explanation for *kind* in its own process. True if it was
+    started; never raises."""
+    global _window
     try:
-        _window = subprocess.Popen([sys.executable, "-m", "tuxtalk.explain", kind], env=env,
-                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                   start_new_session=True)
+        _window = start_helper_window("tuxtalk.explain", kind)
         logger.info(f"Explained: {kind}")
         return True
     except Exception as e:
@@ -181,9 +187,10 @@ def position_over(size, center, monitor):
     return place(size[0], size[1], center, monitor)
 
 
-def _place_over_active_window(dialog):
-    """Centre *dialog* over the window being dictated into, before it shows.
-    Leaves it centred on the screen when that window can't be found."""
+def place_over_active_window(dialog):
+    """Centre *dialog* (any Gtk.Window) over the window being dictated into,
+    before it shows. Leaves it centred on the screen when that window can't
+    be found."""
     try:
         from gi.repository import Gdk, Gtk
         from . import window_geometry
@@ -212,7 +219,7 @@ def main(argv=None):
         pass
     dialog, check = build_dialog(kind)
     # Asked before the window shows, while the app still has the focus.
-    _place_over_active_window(dialog)
+    place_over_active_window(dialog)
     dialog.show_all()
     dialog.present()
     dialog.run()

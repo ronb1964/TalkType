@@ -104,6 +104,7 @@ def test_it_opens_on_xwayland_where_it_may_be_placed(monkeypatch):
     monkeypatch.setattr(explain, "_window", None)     # put back after the test
     monkeypatch.setattr(explain.subprocess, "Popen",
                         lambda cmd, env, **k: started.append((cmd, env)) or object())
+    monkeypatch.setattr(explain, "_window", None)
     assert REAL_OPEN_WINDOW("terminal") is True
     cmd, env = started[0]
     assert cmd[-2:] == ["tuxtalk.explain", "terminal"]

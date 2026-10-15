@@ -5,6 +5,10 @@ Opened from Recent Dictations in the tray menu (or the GNOME panel menu via
 D-Bus). The user clicks the misheard word(s), types the right spelling, and
 the fix is saved as a custom voice command (see vocabulary.py), so every
 later dictation gets it right.
+
+Saying "fix that word" opens it too (app._handle_fix_word), as its own
+process (main() below) placed over the app being dictated into, on the
+newest dictation only: no dropdown, which XWayland would break.
 """
 import gi
 gi.require_version('Gtk', '3.0')
@@ -59,7 +63,7 @@ def show_fix_word_dialog(index=0, copy_text=None):
 
 
 class _FixWordDialog:
-    def __init__(self, entries, index, copy_text):
+    def __init__(self, entries, index, copy_text, before_show=None):
         self.entries = entries
         self.copy_text = copy_text
         self.text = ""
@@ -150,6 +154,8 @@ class _FixWordDialog:
         box.pack_start(buttons, False, False, 0)
 
         self.select_entry(index)
+        if before_show:
+            before_show(win)
         win.show_all()
         self.combo_row.set_visible(len(entries) > 1)
 
@@ -299,3 +305,29 @@ class _FixWordDialog:
     def _on_destroy(self, _widget):
         global _active_dialog
         _active_dialog = None
+
+
+def main():
+    """"fix that word": Fix a Word on the newest dictation, over the app
+    being dictated into, as its own process (see the module docstring)."""
+    try:
+        from . import desktop_identity
+        desktop_identity.apply()        # TuxTalk's icon on the window
+    except Exception:
+        pass
+    from .clipboard import copy_text
+    from .explain import place_over_active_window
+    entries = get_entries()[:1]
+    if not entries:
+        show_fix_word_dialog(0, copy_text=copy_text)    # says there's nothing yet
+        return 0
+    dialog = _FixWordDialog(entries, 0, copy_text, before_show=place_over_active_window)
+    dialog.window.connect("destroy", lambda _w: Gtk.main_quit())
+    dialog.window.present()
+    Gtk.main()
+    return 0
+
+
+if __name__ == "__main__":
+    import sys
+    sys.exit(main())

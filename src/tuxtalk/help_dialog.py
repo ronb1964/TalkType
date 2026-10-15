@@ -260,7 +260,9 @@ After choosing one, the tray's Device line shows where it really runs.
 • With any other device, Parakeet runs on the processor (CUDA can't run it)
 
 <b>Fix a Word</b> (teach TuxTalk a word it keeps getting wrong)
-• Tray menu → Fix a Word..., or Preferences → Snippets → Fix a Word...
+• Say <b>fix that word</b> right after a dictation: Fix a Word opens over your window
+  on what you just said
+• Or tray menu → Fix a Word..., or Preferences → Snippets → Fix a Word...
 • Pick a recent dictation, click the wrong word (or drag across a few),
   type the right spelling, then click Always fix this
 • From then on it's fixed in every dictation, with any speech model

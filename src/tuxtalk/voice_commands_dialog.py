@@ -142,6 +142,10 @@ The commands are English words, whatever language you dictate in.
   <b>undo everything</b> / <b>undo all</b> → wipe the entire input field (Ctrl+A, Backspace);
   in a terminal, the line you're typing (Ctrl+E, Ctrl+U)
 
+<b>Fixing a Word</b>
+  <b>fix that word</b> / <b>fix that</b> → open Fix a Word on what you just said, to teach TuxTalk
+  the right spelling for next time
+
 <b>Select and Move</b> (TuxTalk Labs: turn on in Preferences → Advanced)
   <b>select that</b> / <b>select the last sentence</b> / <b>select the last 3 words</b> → select what you just said
   <b>select all</b> / <b>select the line</b> / <b>select the next word</b> / <b>select to the end of the line</b>
