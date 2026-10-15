@@ -2179,6 +2179,9 @@ class PreferencesWindow:
         else:
             # Typing Status Label
             self.typing_status_label = Gtk.Label(label="Checking...", xalign=0)
+            # Wrapped: "Working, through the 'input' group…" would widen the window.
+            self.typing_status_label.set_line_wrap(True)
+            self.typing_status_label.set_max_width_chars(70)
             self.typing_status_label.set_margin_start(10)
             self.typing_status_label.set_margin_bottom(10)
             grid.attach(self.typing_status_label, 0, row, 2, 1)
@@ -2199,6 +2202,17 @@ class PreferencesWindow:
             )
             self.fix_typing_button.set_sensitive(False)
             typing_button_box.pack_start(self.fix_typing_button, False, False, 0)
+
+            # Only while the hotkey helper is installed (see _check_typing_status).
+            self.remove_helper_button = Gtk.Button(label="Remove Hotkey Helper")
+            self.remove_helper_button.connect("clicked", self._on_remove_helper_clicked)
+            self.remove_helper_button.set_tooltip_text(
+                "Takes TuxTalk's hotkey helper and its typing rule off this computer.\n"
+                "The hotkeys then need the 'input' group again.\n"
+                "Will prompt for admin password."
+            )
+            self.remove_helper_button.set_no_show_all(True)
+            typing_button_box.pack_start(self.remove_helper_button, False, False, 0)
 
             grid.attach(typing_button_box, 0, row, 2, 1)
             row += 1
@@ -5010,6 +5024,9 @@ class PreferencesWindow:
             # /dev/uinput while /dev/input, which the hotkeys need, stays unreadable.
             has_access, reason = uinput_helper.check_all_device_permissions()
             from . import secure_input
+            remove = getattr(self, "remove_helper_button", None)
+            if remove is not None:
+                remove.set_visible(secure_input.is_installed())
 
             if has_access and secure_input.running_version() is not None:
                 self.typing_status_label.set_markup(
@@ -5130,6 +5147,37 @@ class PreferencesWindow:
 
         import threading
         threading.Thread(target=work, daemon=True).start()
+
+    def _on_remove_helper_clicked(self, button):
+        """Take the hotkey helper and its uinput rule away again."""
+        from . import secure_input
+        dialog = message_dialog(
+            transient_for=self.window, flags=0,
+            message_type=Gtk.MessageType.QUESTION, buttons=Gtk.ButtonsType.YES_NO,
+            text="Remove the hotkey helper?")
+        dialog.format_secondary_text(
+            "TuxTalk's hotkeys and typing then stop working until you set them "
+            "up again with Fix Typing Permissions, which on a system like this "
+            "puts the helper back.\n\nYou will be prompted for your admin password.")
+        answer = dialog.run()
+        dialog.destroy()
+        if answer != Gtk.ResponseType.YES:
+            return
+        button.set_sensitive(False)
+
+        def work():
+            ok, message = secure_input.uninstall_with_pkexec()
+            GLib.idle_add(self._finish_remove_helper, button, ok, message)
+
+        import threading
+        threading.Thread(target=work, daemon=True).start()
+
+    def _finish_remove_helper(self, button, ok, message):
+        button.set_sensitive(True)
+        if not ok and message != "cancelled":
+            self._message(Gtk.MessageType.ERROR, "The hotkey helper wasn't removed", message)
+        self._check_typing_status()
+        return False
 
     def _finish_fix_typing(self, button, success, message, needs_restart=True, switching=False):
         """Back on the GTK thread: report how Fix Typing Permissions went."""

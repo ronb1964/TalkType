@@ -418,17 +418,27 @@ auto_period = true        # Add period at end of sentences
 - Ensure TuxTalk service is running (check tray icon)
 
 ### No hotkey works at all?
-TuxTalk reads your keyboard directly, which requires your account to be in the
-system's `input` group. Without it no key can be detected, even though the app
-looks like it started fine.
+On Wayland a normal program isn't allowed to see keys pressed in other
+windows, so TuxTalk needs a little help to notice F8.
 
 - Preferences → Advanced → Typing Setup → **Fix Typing Permissions**
-- **Then restart your computer.** Logging out and back in is often not enough —
-  a lingering user session keeps the old group list alive
-- Check it worked with `groups`; the list should include `input`
+- On most systems that installs TuxTalk's hotkey helper. It's a small
+  background service, and it's the only thing that reads the keyboard. It
+  tells TuxTalk about its hotkeys and nothing else, so no other program you
+  run gets to read what you type. No restart needed. Check it with
+  `systemctl status tuxtalk-hotkeys`
+- On a system without systemd it puts you in the `input` group instead. Then
+  restart the computer (logging out often isn't enough) and check with
+  `groups`
 
-Most common on Fedora, where permission to *type* is granted separately from
-permission to *read keys*, so typing can work while hotkeys do not.
+### Why is there a hotkey helper service?
+Older versions put you in the `input` group. That works, but the group lets
+every program you run read every key you press, passwords too. The helper
+fixes that. It runs as a throwaway system user with no network and no access
+to your files, it never reports a letter or a number, only F-keys, Esc and
+shortcuts with Ctrl, Alt or Super, and only to whoever's at the screen.
+`systemd-analyze security tuxtalk-hotkeys` rates it 0.6, "SAFE". Remove it
+any time with Preferences → Advanced → Typing Setup → Remove Hotkey Helper.
 
 ### Transcription slow?
 - Use your graphics card if you have one (see [Graphics cards](#graphics-cards) above)

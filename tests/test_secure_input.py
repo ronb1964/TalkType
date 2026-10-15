@@ -125,3 +125,34 @@ def test_preferences_offers_the_helper_to_input_group_users(monkeypatch):
     monkeypatch.setattr(si, "running_version", lambda: hotkey_helper.VERSION)
     prefs._check_typing_status()
     assert prefs.fix_typing_button.label == "✓ Ready" and not prefs.fix_typing_button.sensitive
+
+
+def test_the_remove_button_shows_only_while_the_helper_is_installed(monkeypatch):
+    from tuxtalk import prefs as P, uinput_helper
+
+    class Widget:
+        markup = label = ""
+        sensitive = visible = None
+
+        def set_markup(self, m):
+            self.markup = m
+
+        def set_label(self, v):
+            self.label = v
+
+        def set_sensitive(self, v):
+            self.sensitive = v
+
+        def set_visible(self, v):
+            self.visible = v
+
+    monkeypatch.setattr(uinput_helper, "check_all_device_permissions", lambda: (True, ""))
+    prefs = P.PreferencesWindow.__new__(P.PreferencesWindow)
+    prefs.typing_status_label, prefs.fix_typing_button = Widget(), Widget()
+    prefs.remove_helper_button = Widget()
+    monkeypatch.setattr(si, "is_installed", lambda: True)
+    prefs._check_typing_status()
+    assert prefs.remove_helper_button.visible is True
+    monkeypatch.setattr(si, "is_installed", lambda: False)
+    prefs._check_typing_status()
+    assert prefs.remove_helper_button.visible is False
