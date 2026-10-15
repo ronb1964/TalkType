@@ -5512,33 +5512,38 @@ class PreferencesWindow:
             digits=1)
         self.tap_pause_spin.connect("scroll-event", lambda *a: True)
         self.tap_pause_spin.set_tooltip_text(
-            "How long a silence ends a phrase. Kept below the hands-free stop time.")
+            "How long you stay quiet before the phrase so far is typed.\n"
+            "It's always kept shorter than the hands-free stop.")
         pause_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         pause_box.pack_start(self.tap_pause_spin, False, False, 0)
         pause_box.pack_start(Gtk.Label(label="s"), False, False, 0)
         fine.attach(pause_box, 1, r, 1, 1)
         r += 1
 
-        fine.attach(Gtk.Label(label="Sensitivity:", xalign=0), 0, r, 1, 1)
+        fine.attach(Gtk.Label(label="Noise filter:", xalign=0), 0, r, 1, 1)
         self.tap_db_spin = Gtk.SpinButton(
             adjustment=Gtk.Adjustment(value=float(self.config.get("chunk_speech_db", 6.0)),
                                       lower=3, upper=12, step_increment=1, page_increment=3),
             digits=0)
         self.tap_db_spin.connect("scroll-event", lambda *a: True)
+        # The value is how many dB louder than the room speech must be
+        # (chunk_speech_db): higher ignores more room noise.
         self.tap_db_spin.set_tooltip_text(
-            "Lower hears a soft voice as speech; higher keeps a noisy room from\n"
-            "counting as speech. Use Test below to see where it lands.")
+            "Raise it if the bar never flashes green when you pause: your room's\n"
+            "noise is being taken for talking. Lower it if it flashes while you're\n"
+            "still talking: your softer words are being taken for quiet.")
         db_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        db_box.pack_start(Gtk.Label(label="speech is"), False, False, 0)
         db_box.pack_start(self.tap_db_spin, False, False, 0)
-        db_box.pack_start(Gtk.Label(label="dB louder than the room"), False, False, 0)
+        db_box.pack_start(Gtk.Label(label="higher ignores more background noise"),
+                          False, False, 0)
         fine.attach(db_box, 1, r, 1, 1)
         r += 1
 
         self.tap_test_btn = Gtk.Button(label="Test")
         self.tap_test_btn.set_tooltip_text(
-            "Listen with the microphone chosen on the Audio tab and show where a\n"
-            "phrase would end. Nothing is typed.")
+            "Try your settings without typing anything. Talk, and stop now and then:\n"
+            "the bar moves with your voice and flashes green wherever a phrase\n"
+            "would be typed. It uses the microphone from the Audio tab.")
         self.tap_meter = PauseMeter(num_segments=20)
         test_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         test_box.pack_start(self.tap_test_btn, False, False, 0)
@@ -5546,8 +5551,11 @@ class PreferencesWindow:
         fine.attach(test_box, 0, r, 2, 1)
         r += 1
 
-        self.tap_status = Gtk.Label(label="Press Test and speak, with a pause or two.",
-                                    xalign=0)
+        self.tap_status = Gtk.Label(
+            label="Press Test, then talk and stop now and then. Your voice should go "
+                  "past the green line, and a green flash means a phrase would be typed.",
+            xalign=0)
+        self.tap_status.set_line_wrap(True)
         self.tap_status.set_opacity(0.7)
         fine.attach(self.tap_status, 0, r, 2, 1)
 
@@ -5634,7 +5642,7 @@ class PreferencesWindow:
             return
         self._pause_test_stream = stream
         self.tap_test_btn.set_label("Stop")
-        self.tap_status.set_text("Listening\u2026 speak, then pause.")
+        self.tap_status.set_text("Listening\u2026 talk, then pause.")
 
     def _tap_show(self):
         """Draw the latest snapshot (GTK thread, via GLib.idle_add)."""
@@ -5644,7 +5652,7 @@ class PreferencesWindow:
             return False
         from .chunk_meter import level_to_fraction
         snap = test.snapshot()
-        self._tap_last_room = snap.room   # the mark keeps following Sensitivity after Stop
+        self._tap_last_room = snap.room   # the mark keeps following the noise filter after Stop
         self.tap_meter.show_snapshot(level_to_fraction(snap.level),
                                      level_to_fraction(snap.threshold),
                                      cut=test.take_cut())

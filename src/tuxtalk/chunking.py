@@ -31,7 +31,7 @@ TAIL_KEEP_S = 0.3
 # room at 1-6, speech at 50-600. Auto-stop's 300 never heard that as speech.
 MIN_SPEECH_RMS = 40.0
 # Speech must be at least this much louder than the room, in dB (Preferences →
-# Advanced → TuxTalk Labs → Type at pause → Sensitivity). Measured on cbox
+# Advanced → TuxTalk Labs → Type at pause → Noise filter). Measured on cbox
 # (onboard ALC887 at +50 dB gain): the room's hiss at 370-410, speech at
 # 600-4000, so auto-stop's +8 dB would take the quieter words for pauses.
 DEFAULT_SPEECH_DB = 6.0

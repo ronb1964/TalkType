@@ -80,9 +80,22 @@ def test_status_text():
     test = PauseTest(SR, 0.8, 6.0)
     feed_all(test, two_pauses())
     text = test.status_text()
-    assert text.startswith("Room ")
-    assert "speech from" in text and "pause" in text
-    assert text.endswith("2 cuts")
+    assert text.endswith(" · 2 pauses heard")
+    assert "Room" not in text and "dB" not in text      # no raw levels
+
+
+def test_status_text_in_plain_words():
+    from tuxtalk.chunk_meter import PauseTest
+    test = PauseTest(SR, 0.8, 6.0)
+    feed_all(test, room(1.5))
+    assert test.status_text() == "Quiet. Say something, then pause"
+    feed_all(test, speech(0.9))                 # ends mid-syllable
+    assert test.status_text() == "Hearing your voice"
+    feed_all(test, room(0.4))
+    assert test.status_text().startswith("Quiet for 0.")
+    assert "of the 0.8 seconds a pause needs" in test.status_text()
+    feed_all(test, room(0.6))
+    assert test.status_text().endswith(" · 1 pause heard")
 
 
 def test_threshold_fraction_follows_the_sensitivity():

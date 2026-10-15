@@ -6,7 +6,7 @@ with synthetic audio, without a display or a microphone.
 """
 import math
 
-from .chunking import MIN_SPEECH_RMS, PauseDetector, PauseSnapshot
+from .chunking import MIN_SPEECH_RMS, MIN_SPEECH_S, PauseDetector, PauseSnapshot
 
 # The meter's scale, in dBFS: a quiet dynamic mic (room near -80, speech from
 # -55) and a hissing onboard input (room near -38) both read clearly.
@@ -62,7 +62,18 @@ class PauseTest:
         return snap._replace(cuts=self._earlier_cuts + snap.cuts)
 
     def status_text(self) -> str:
+        """What the test hears, in plain words. The raw levels stay in the log
+        line PauseDetector.describe() writes; they mean nothing to most people."""
         snap = self.snapshot()
-        cuts = "1 cut" if snap.cuts == 1 else f"{snap.cuts} cuts"
-        return (f"Room {snap.room:.0f} · speech from {snap.threshold:.0f} · "
-                f"pause {snap.silence_s:.1f} s · {cuts}")
+        detector = self._detector
+        if snap.level >= snap.threshold:
+            now = "Hearing your voice"
+        elif detector.speech_time >= MIN_SPEECH_S:
+            now = (f"Quiet for {snap.silence_s:.1f} of the "
+                   f"{detector.pause_seconds:.1f} seconds a pause needs")
+        else:
+            now = "Quiet. Say something, then pause"
+        if not snap.cuts:
+            return now
+        pauses = "1 pause" if snap.cuts == 1 else f"{snap.cuts} pauses"
+        return f"{now} · {pauses} heard"

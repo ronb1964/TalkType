@@ -453,12 +453,14 @@ all of it when you stop. Nothing that was typed changes afterwards.
 
 <b>Fine-tuning</b>
   • <b>Pause length</b>: how long a silence ends a phrase.
-  • <b>Sensitivity</b>: how much louder than the room your voice must be. Lower it for
-    a soft voice or a quiet microphone, raise it in a noisy room.
+  • <b>Noise filter</b>: raise it in a noisy room, lower it for a soft voice or a quiet
+    microphone.
   • <b>Punctuation from context</b>: off types each phrase as it was heard, which is
     quicker on a slow graphics chip but puts a period at more pauses.
-  • <b>Test</b>: speak and pause, and the meter shows your voice, the room (grey) and
-    where speech starts (green); it flashes where a phrase would end.
+  • <b>Test</b>: talk and stop now and then, and nothing is typed. The bar moves with
+    your voice, which should go past the green line, and it flashes green wherever a
+    phrase would be typed. If it never flashes when you pause, raise the noise filter.
+    If it flashes while you're still talking, lower it.
 
 <span size="large"><b>Voice Editing</b></span>
 Change text by saying how you want it changed.
