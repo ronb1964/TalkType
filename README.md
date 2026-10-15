@@ -225,6 +225,8 @@ enough interest and I'll make it happen.
 | **Ctrl+Alt+P** | Types your last dictation again, wherever your cursor is |
 | **Shift+F8** | Voice editing: hold it and say how to change the selected text (turn it on in TuxTalk Labs first) |
 
+Want your own shortcut, or a script? Run `tuxtalk --toggle` (or `--start`, `--stop`). For the AppImage, use the AppImage file, e.g. `~/AppImages/TuxTalk.AppImage --toggle`. It starts TuxTalk if it isn't running and waits for the speech model to load, so the toggle is never lost.
+
 ---
 
 ## All the features

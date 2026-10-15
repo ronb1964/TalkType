@@ -149,6 +149,41 @@ _tray_lockfile_handle = None
 _OLD_TRAY_EXIT_WAIT_S = 3.0
 
 
+def _tray_lock_held():
+    """Whether another tray holds the single-instance lock, e.g. one still
+    starting up that hasn't taken its D-Bus name yet."""
+    path = os.path.join(_runtime_dir(), "talktype-tray.lock")
+    try:
+        fd = os.open(path, os.O_RDONLY)
+    except OSError:
+        return False        # no lock file: no tray has ever started here
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return False        # closing the file below lets go of it again
+    except BlockingIOError:
+        return True
+    except OSError:
+        return False
+    finally:
+        os.close(fd)
+
+
+def _run_command_line(action):
+    """tuxtalk --toggle/--start/--stop with TuxTalk running: exits. Returns
+    only when nothing runs and this process should start TuxTalk itself."""
+    from . import control
+    try:
+        status = control.ask_running(action, tray_starting=_tray_lock_held)
+    except Exception as e:
+        print(f"Couldn't reach TuxTalk: {e}", file=sys.stderr)
+        sys.exit(1)
+    if status is not None:
+        sys.exit(control.report(status))
+    if action == "stop":
+        sys.exit(control.report("idle"))
+    print("Starting TuxTalk.")
+
+
 def _wait_for_lock(lockfile, timeout_s):
     """Take the lock on *lockfile* once its holder lets go; False after *timeout_s*."""
     deadline = time.monotonic() + timeout_s
@@ -421,6 +456,12 @@ class DictationTray:
         # Track onboarding state - service should not start during onboarding
         self.onboarding_in_progress = False
 
+        # tuxtalk --toggle/--start/--stop (control.py): the PID of the service
+        # that said it's ready, and a recording asked for before then.
+        from .control import WaitingStart
+        self._ready_pid = None
+        self._waiting_start = WaitingStart()
+
         # Initialize D-Bus service (optional - for GNOME extension integration)
         self.dbus_service = None
         self._init_dbus_service()
@@ -513,6 +554,14 @@ class DictationTray:
                             os.kill(pid, signal.SIGUSR1)
                         except (ProcessLookupError, PermissionError):
                             pass
+
+                def control(self, action):
+                    """tuxtalk --toggle/--start/--stop; answered at once with a status."""
+                    return self.tray.control(action)
+
+                def service_ready(self, pid):
+                    """The service loaded its model (NotifyServiceReady)."""
+                    self.tray.service_ready(pid)
 
                 def start_recording(self):
                     """Start recording if not already recording."""
@@ -852,6 +901,7 @@ class DictationTray:
         if old_state is not None and old_state != new_state:
             logger.info(f"Service state changed: {old_state} -> {new_state}")
             if not new_state:
+                self._ready_pid = None
                 # Normal stops release the hotkeys themselves; a crash or a
                 # SIGKILL doesn't, and F8 would stay swallowed with dictation off.
                 self._release_desktop_hotkeys()
@@ -868,6 +918,57 @@ class DictationTray:
 
         self._last_service_state = new_state
         return repeat
+
+    # ----- tuxtalk --toggle / --start / --stop (control.py) -----
+
+    def _ready_service_pid(self):
+        """The service's PID once it has said it's ready, else None. Checked
+        against /proc: a report from a service since stopped counts for nothing.
+        A tray started after the service missed the report; the service's
+        ready file covers that."""
+        from .service_launcher import read_ready_pid
+        for pid in (getattr(self, "_ready_pid", None), read_ready_pid()):
+            if pid and self._check_pid_is_service(pid):
+                return pid
+        return None
+
+    def control(self, action):
+        """Toggle, start or stop recording for the command line; a status
+        (control.MESSAGES) for it to print. Before the service is ready the
+        request waits for it, and the service is started if it isn't running."""
+        from . import control
+        if self.onboarding_in_progress:
+            return "setup"
+        pid = self._ready_service_pid()
+        if pid is None:
+            status = self._waiting_start.apply(action)
+            logger.info(f"Command line --{action} while the service isn't ready: {status}")
+            if status == "waiting" and not self.is_service_running():
+                self.start_service(None)
+            return status
+        self._waiting_start.take()      # nothing waits once the service is ready
+        app = getattr(self.dbus_service, "app", None)
+        send, status = control.act_now(action, bool(getattr(app, "is_recording", False)))
+        logger.info(f"Command line --{action}: {status}")
+        if send:
+            self._signal_toggle(pid)
+        return status
+
+    def service_ready(self, pid):
+        """The service loaded its model and acts on toggles from now on."""
+        self._ready_pid = pid
+        logger.info(f"Dictation service is ready (PID {pid})")
+        if self._waiting_start.take():
+            logger.info("Starting the recording the command line asked for")
+            self._signal_toggle(pid)
+
+    @staticmethod
+    def _signal_toggle(pid):
+        """One toggle for the service: SIGUSR1 (app._handle_sigusr1)."""
+        try:
+            os.kill(pid, signal.SIGUSR1)
+        except (ProcessLookupError, PermissionError) as e:
+            logger.warning(f"Could not reach the dictation service: {e}")
 
     def _release_desktop_hotkeys(self):
         """Give the hotkeys back to the desktop if no service is holding them.
@@ -2181,6 +2282,14 @@ def _show_rename_notice_once():
 def main():
     from . import desktop_identity
     desktop_identity.apply()        # TuxTalk's icon on its windows, not KDE's generic one
+    # tuxtalk --toggle/--start/--stop (control.py). With TuxTalk running this
+    # asks it and exits; otherwise this process starts TuxTalk and the request
+    # waits for the speech model below.
+    from . import control
+    command = control.parse_action(sys.argv[1:])
+    if command:
+        _run_command_line(command)
+
     # Before anything opens the shared D-Bus connection: one opened without
     # the GLib main loop can't export the tray's D-Bus service later.
     try:
@@ -2276,6 +2385,8 @@ def main():
         # Only show welcome dialog on first tray launch (not for prefs)
         if cuda_helper.is_first_run():
             logger.info("First run detected - starting onboarding")
+            if command:
+                control.report("setup")     # the welcome screens come first
             # Set flag BEFORE scheduling to prevent any auto-start during onboarding
             tray.onboarding_in_progress = True
 
@@ -2345,6 +2456,12 @@ def main():
                 refresh_autostart_comment()
             except Exception as e:
                 logger.debug(f"Could not check the login entry: {e}")
+            if command:
+                # The auto-start below starts the service; the recording
+                # waits until its model is loaded.
+                status = tray._waiting_start.apply(command)
+                logger.info(f"Started with --{command}: {status}")
+                control.report(status)
             GLib.timeout_add(1000, tray._auto_start_service)
             # Check for updates after a delay (don't interfere with startup)
             GLib.timeout_add(5000, tray.auto_check_for_updates)

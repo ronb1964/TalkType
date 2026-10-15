@@ -4151,6 +4151,52 @@ def _notify_tray_running_engine():
         logger.debug(f"Could not tell the tray which engine is running: {e}")
 
 
+# tuxtalk --toggle/--start/--stop (control.py). The tray normally answers
+# them; these serve a service running without a tray, which then owns the
+# D-Bus name itself.
+_service_ready = False
+_ready_lock = threading.Lock()
+_waiting_start = None       # control.WaitingStart, made on first use
+
+
+def _control_in_service(action):
+    """A command-line action for a service with no tray; returns its status."""
+    from . import control
+    global _waiting_start
+    with _ready_lock:
+        if not _service_ready:
+            if _waiting_start is None:
+                _waiting_start = control.WaitingStart()
+            return _waiting_start.apply(action)
+    send, status = control.act_now(action, state.is_recording)
+    if send:
+        _handle_sigusr1(None, None)
+    return status
+
+
+def _mark_service_ready():
+    """From here a toggle is acted on: start a recording the command line
+    asked for meanwhile, and tell the tray (NotifyServiceReady)."""
+    global _service_ready
+    with _ready_lock:
+        _service_ready = True
+        start = _waiting_start is not None and _waiting_start.take()
+    if start:
+        logger.info("Starting the recording the command line asked for")
+        _cmd_start_recording.set()
+    from .service_launcher import write_ready_pid
+    write_ready_pid(os.getpid())
+    try:
+        import dbus
+        _get_tray_dbus_proxy().NotifyServiceReady(
+            dbus.UInt32(os.getpid()),
+            dbus_interface='io.github.ronb1964.TalkType',
+            timeout=_TRAY_DBUS_TIMEOUT,
+        )
+    except Exception as e:
+        logger.debug(f"Could not tell the tray the service is ready: {e}")
+
+
 def build_model(settings: Settings):
     """Load the speech model on the configured device, falling back to the
     processor when the graphics card can't be used."""
@@ -4395,6 +4441,10 @@ def main():
                         else:
                             _cmd_start_recording.set()
 
+                    def control(self, action):
+                        """tuxtalk --toggle/--start/--stop with no tray running."""
+                        return _control_in_service(action)
+
                     def start_service(self):
                         """Start the dictation service"""
                         import subprocess
@@ -4549,9 +4599,11 @@ def main():
     _notify_tray_running_engine()
     # A toggle sent while the model was loading would otherwise start a
     # recording seconds later, out of the blue, when the input loop starts.
+    # One asked for on the command line waits in the tray instead (control.py).
     _cmd_start_recording.clear()
     _cmd_stop_recording.clear()
     _cmd_start_from_toggle_key.clear()
+    _mark_service_ready()
 
     # Run the input backend chosen by FLATPAK_ID: evdev+ydotool everywhere
     # (EvdevInputBackend -> _loop_evdev), portals inside a Flatpak.

@@ -62,6 +62,16 @@ def show_help_dialog(tab=None):
         hotkey_hold = "<b>F8</b>"
         hotkey_toggle = "<b>F9</b>"
 
+    # A desktop shortcut or script can run the toggle itself (control.py).
+    shortcut_line = ""
+    if not is_flatpak:
+        from .control import shortcut_command
+        from gi.repository import GLib
+        shortcut_line = (
+            "\n• <b>Your own shortcut:</b> a desktop shortcut or script can run "
+            f"<tt>{GLib.markup_escape_text(shortcut_command())}</tt>\n  (or --start, --stop). "
+            "It starts TuxTalk if needed and waits until the speech model is loaded")
+
     if is_flatpak:
         typing_para = (
             "TuxTalk types straight into the focused app through your desktop's "
@@ -644,7 +654,7 @@ See the <b>TuxTalk Labs</b> tab.
 • {hotkey_toggle}: toggle recording (press once to start, again to stop)
 • <b>Voice Commands shortcut:</b> set in Preferences → General to pop up the cheat sheet
 • <b>Paste Last Dictation</b> (Ctrl+Alt+P): types your last dictation again where the cursor
-  is, for when it went to the wrong window. Change or turn it off in Preferences → General
+  is, for when it went to the wrong window. Change or turn it off in Preferences → General{shortcut_line}
 • Keys work globally in any application
 • Change your dictation keys in {keys_where}
 

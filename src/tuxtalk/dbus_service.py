@@ -182,6 +182,25 @@ class TuxTalkDBusService(dbus.service.Object):
         """Toggle recording on/off"""
         self._dispatch('toggle_recording')
 
+    @dbus.service.method(DBUS_INTERFACE, in_signature='s', out_signature='s')
+    def ControlDictation(self, action: str):
+        """tuxtalk --toggle, --start or --stop (control.py): starts the service
+        if needed and keeps the request until its model is loaded. Answered
+        here rather than dispatched, as the command prints the status."""
+        from .control import ACTIONS
+        control = getattr(self.app, "control", None)
+        if str(action) not in ACTIONS or control is None:
+            return "unknown"
+        logger.info(f"D-Bus: command line --{action}")
+        return str(control(str(action)))
+
+    @dbus.service.method(DBUS_INTERFACE, in_signature='u')
+    def NotifyServiceReady(self, pid):
+        """Called by the dictation service once its model is loaded and a
+        toggle is acted on (sent after NotifyRunningEngine). *pid* is the
+        service's, so a report from a service since replaced counts for nothing."""
+        self._dispatch('service_ready', int(pid))
+
     @dbus.service.method(DBUS_INTERFACE)
     def StartService(self):
         """Start the dictation service"""
