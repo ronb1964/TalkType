@@ -142,6 +142,12 @@ class TranscribeWindow:
         self.times_check.set_tooltip_text("Start each paragraph with where it is in the file, like [1:05]")
         self.times_check.connect("toggled", lambda _c: self._show_text())
         bottom.pack_start(self.times_check, False, False, 0)
+        self.clean_check = Gtk.CheckButton(label="Remove ums and repeats")
+        self.clean_check.set_tooltip_text(
+            "Takes out um, uh and words said twice, like \u201cthe the\u201d.\n"
+            "Untick it to see it exactly as it was heard. Copy and the saves use what's shown.")
+        self.clean_check.connect("toggled", lambda _c: self._show_text())
+        bottom.pack_start(self.clean_check, False, False, 0)
         self.srt_btn = Gtk.Button(label="Save as Subtitles…")
         self.srt_btn.set_tooltip_text(
             "Captions for a video: the words show up on screen while it plays.\n"
@@ -174,13 +180,18 @@ class TranscribeWindow:
         self.choose_btn.set_sensitive(not busy)
         self.earlier_btn.set_sensitive(not busy and bool(self.earlier_menu.get_children()))
         have = bool(self.pieces) and not busy
-        for widget in (self.copy_btn, self.txt_btn, self.srt_btn, self.times_check):
+        for widget in (self.copy_btn, self.txt_btn, self.srt_btn, self.times_check,
+                       self.clean_check):
             widget.set_sensitive(have)
         self.cancel_btn.set_visible(busy)
         self.progress.set_visible(busy)
 
+    def _shown(self):
+        """The pieces as they're shown: cleaned up when that's ticked."""
+        return ft.cleaned(self.pieces) if self.clean_check.get_active() else self.pieces
+
     def _show_text(self):
-        self.view.get_buffer().set_text(ft.to_text(self.pieces, times=self.times_check.get_active()))
+        self.view.get_buffer().set_text(ft.to_text(self._shown(), times=self.times_check.get_active()))
 
     def present(self):
         self.window.present()
@@ -361,8 +372,9 @@ class TranscribeWindow:
         self.status.set_text("Copied. Paste it wherever you like.")
 
     def _save(self, kind):
-        content = (ft.to_srt(self.pieces) if kind == "srt"
-                   else ft.to_text(self.pieces, times=self.times_check.get_active()) + "\n")
+        shown = self._shown()
+        content = (ft.to_srt(shown) if kind == "srt"
+                   else ft.to_text(shown, times=self.times_check.get_active()) + "\n")
         chooser = Gtk.FileChooserNative.new("Save as subtitles" if kind == "srt" else "Save as text",
                                             self.window, Gtk.FileChooserAction.SAVE, None, None)
         stem = os.path.splitext(os.path.basename(self.path or "transcript"))[0]
