@@ -149,7 +149,7 @@ def test_format_duration(seconds, text):
 def _dictate(monkeypatch, app, seconds=2.0):
     import numpy as np
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, language: "hello there friend")
-    monkeypatch.setattr(app, "_prepare_text", lambda raw, *a: "Hello there, friend. ")
+    monkeypatch.setattr(app, "_prepare_text", lambda raw, *a, **k: "Hello there, friend. ")
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
     monkeypatch.setattr(app, "_inject_text", lambda text, mode, t0: None)
     monkeypatch.setattr("tuxtalk.history.add_entry", lambda text: None)
@@ -231,7 +231,7 @@ def test_stats_are_saved_after_the_text_is_typed(stats_file, monkeypatch):
     order = []
     monkeypatch.setattr(app, "_usage_stats", True)
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, language: "hello there")
-    monkeypatch.setattr(app, "_prepare_text", lambda raw, *a: "Hello there. ")
+    monkeypatch.setattr(app, "_prepare_text", lambda raw, *a, **k: "Hello there. ")
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
     monkeypatch.setattr("tuxtalk.history.add_entry", lambda text: None)
     monkeypatch.setattr(app, "_inject_text", lambda text, mode, t0: order.append("typed"))

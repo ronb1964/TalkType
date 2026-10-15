@@ -82,7 +82,7 @@ def test_dictation_is_recorded_before_it_is_typed(monkeypatch):
 
     order = []
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, language: "hello there")
-    monkeypatch.setattr(app, "_prepare_text", lambda raw, *a: "Hello there. ")
+    monkeypatch.setattr(app, "_prepare_text", lambda raw, *a, **k: "Hello there. ")
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
     monkeypatch.setattr(app, "_inject_text",
                         lambda text, mode, t0: order.append(("typed", history.get_entries())))

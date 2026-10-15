@@ -1900,6 +1900,19 @@ class PreferencesWindow:
         period_check.set_tooltip_text("Ensure every sentence ends with punctuation.\n\nThe speech model usually adds periods by itself, but sometimes misses one.\nThis option adds the period when it does, so punctuation stays consistent.\n\nUnchecked: you get exactly what the speech model wrote\nChecked: every sentence ends with punctuation")
         grid.attach(period_check, 0, row, 2, 1)
         row += 1
+
+        # No closing period in terminals and code editors, no starting capital
+        # in terminals (app.app_kind, normalize.plain_for_app).
+        plain_check = Gtk.CheckButton(label="Plain text in terminals and code editors")
+        plain_check.set_active(bool(self.config.get("adapt_to_app", True)))
+        plain_check.connect("toggled", lambda x: self.update_config("adapt_to_app", x.get_active()))
+        plain_check.set_tooltip_text(
+            "In a terminal, a dictation starts without a capital and ends without a period,\n"
+            "so \u201cgit status\u201d is typed as git status, not Git status.\n"
+            "In code editors (VS Code, Zed, JetBrains IDEs...) no period is added at the end.\n\n"
+            "Everywhere else, including chat apps, punctuation is as usual.")
+        grid.attach(plain_check, 0, row, 2, 1)
+        row += 1
         
         # Injection mode
         inject_label = Gtk.Label(label="Text Injection 💡:", xalign=0)

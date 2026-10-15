@@ -233,6 +233,8 @@ After choosing one, the tray's Device line shows where it really runs.
 • Smart quotes (\u201c \u201d instead of " ")
 • Swiss German spelling: ss instead of ß (on by itself on Swiss German systems)
 • Numbers as digits: "twenty-five" becomes 25 (Preferences → Advanced)
+• Plain text in terminals and code editors: no capital or closing period in a terminal,
+  no closing period in a code editor (on by default)
 • Auto-spacing before new text
 • Optional auto-period at end of sentences
 • Voice-activated undo (word, sentence, paragraph, or everything)

@@ -17,6 +17,11 @@ before 0.15.0, so older entries use that name.
   pressing it opened the Emoji Selector and started dictating with no warning
   at all. Now the question after changing the key says which app KDE opens with
   it.
+- Dictating into a terminal no longer types "Git status." with a capital and a
+  period. Terminals get no capital at the start and no period at the end, and
+  code editors like VS Code get no period at the end. Everywhere else
+  punctuation stays as it was, chat apps included. It's on by default and
+  there's a tickbox in Preferences, Advanced if you'd rather not.
 - New in TuxTalk Labs: select and move by voice. Say "select the last
   sentence", "select all", "go to the end" or "go back three words" on its own
   and TuxTalk does it instead of typing it. Said in the middle of a sentence,

@@ -24,7 +24,7 @@ from evdev import InputDevice, ecodes, list_devices
 
 from typing import NamedTuple
 
-from .normalize import normalize_text, append_auto_punct, swiss_spelling
+from .normalize import normalize_text, append_auto_punct, plain_for_app, swiss_spelling
 from .config import load_config, Settings, load_custom_commands
 # Imported as a module too, so the live-settings reload can read CONFIG_PATH and
 # LIVE_APPLIED_KEYS without pulling each name in separately.
@@ -95,6 +95,8 @@ _numbers_mode = None
 _numbers_language = "en"
 # Select and move by voice (TuxTalk Labs, voice_navigation.py).
 _voice_navigation = False
+# Plain text in terminals and code editors (app_kind, plain_for_app).
+_adapt_to_app = True
 _ai_engine = None
 # Which of the two features using the AI engine are on. The engine runs while
 # either is; each checks its own flag before using it.
@@ -109,12 +111,13 @@ def _apply_cleanup_settings(cfg):
     """Bring the cleanup and auto-stop options in line with *cfg*; start or
     stop the AI engine."""
     global _remove_fillers, _ai_engine, _auto_stop_seconds, _ai_corrections, _voice_editing, _swiss_spelling
-    global _numbers_mode, _numbers_language, _voice_navigation
+    global _numbers_mode, _numbers_language, _voice_navigation, _adapt_to_app
     _auto_stop_seconds = (float(getattr(cfg, "auto_stop_seconds", 2.0))
                           if getattr(cfg, "auto_stop_silence", False) else 0.0)
     _remove_fillers = bool(getattr(cfg, "remove_fillers", False))
     _swiss_spelling = bool(getattr(cfg, "swiss_spelling", False))
     _voice_navigation = bool(getattr(cfg, "voice_navigation", False))
+    _adapt_to_app = bool(getattr(cfg, "adapt_to_app", True))
     if getattr(cfg, "numbers_as_digits", False):
         _numbers_mode = "small_as_words" if getattr(cfg, "numbers_small_as_words", False) else "all"
     else:
@@ -1837,6 +1840,29 @@ _TERMINAL_WM_CLASSES = frozenset({
 _TERMINAL_WM_CLASSES_LOWER = frozenset(c.lower() for c in _TERMINAL_WM_CLASSES)
 
 
+# Code editors, for "Plain text in terminals and code editors": no period
+# typed at the end. Matched case-insensitively, plus any JetBrains IDE
+# (jetbrains-idea, jetbrains-pycharm...). Kate is left out: it's used for
+# prose as much as code.
+_CODE_EDITOR_CLASSES_LOWER = frozenset({
+    "code", "code-oss", "code-url-handler", "codium", "vscodium",
+    "dev.zed.zed", "zed", "sublime_text", "geany", "org.gnome.builder",
+    "org.kde.kdevelop", "neovide",
+})
+
+
+def app_kind(wm_class: str | None) -> str:
+    """"terminal", "code" or "" for the focused window, for plain_for_app."""
+    if not wm_class:
+        return ""
+    if is_terminal_class(wm_class):
+        return "terminal"
+    lower = wm_class.lower()
+    if lower in _CODE_EDITOR_CLASSES_LOWER or lower.startswith("jetbrains-"):
+        return "code"
+    return ""
+
+
 def is_terminal_class(wm_class: str | None) -> bool:
     """Whether the focused window is a terminal, so paste uses Ctrl+Shift+V.
 
@@ -2471,11 +2497,17 @@ def _numbers_to_digits(text: str) -> str:
     return to_digits(text, _numbers_language, small_as_words=_numbers_mode == "small_as_words")
 
 
-def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: bool) -> str:
+def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: bool,
+                  app_kind: str = "") -> str:
     """Apply voice commands, normalize, handle mid-sentence, add auto-period/space.
+
+    *app_kind* ("terminal", "code" or ""): the focused app wants plain text
+    (no closing period; in a terminal, no starting capital either).
 
     Returns the final text string ready for injection.
     """
+    if app_kind:
+        auto_period = False
     # Apply custom voice commands (phrase → replacement)
     # Quoted replacements come back as placeholder tokens in `protected`
     processed, protected = _apply_custom_commands(raw)
@@ -2541,6 +2573,8 @@ def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: b
     # command, the period lands BEFORE the break and no trailing space is
     # added, so "hello new line" leaves no orphan ". " on the next line.
     text = append_auto_punct(text, auto_period, auto_space)
+    if app_kind:
+        text = plain_for_app(text, app_kind)
     logger.info(f"Normalized text: {_loggable(text)}")
     return text
 
@@ -2931,8 +2965,11 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         if _handle_navigation(raw, beeps_on):
             return
 
-        # Stage 3: Normalize text (voice commands, punctuation, spacing)
-        text = _prepare_text(raw, smart_quotes, auto_period, auto_space)
+        # Stage 3: Normalize text (voice commands, punctuation, spacing),
+        # plainer for a terminal or code editor ("Plain text in terminals and
+        # code editors").
+        kind = app_kind(_query_focused_window_class()) if _adapt_to_app else ""
+        text = _prepare_text(raw, smart_quotes, auto_period, auto_space, app_kind=kind)
 
         # Beep to confirm transcription is done
         _beep(beeps_on, *READY_BEEP)
