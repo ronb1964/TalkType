@@ -307,21 +307,19 @@ class SegmentedVUMeter(Gtk.DrawingArea):
 
 class PauseMeter(SegmentedVUMeter):
     """The mic test's meter for Type at pause (TuxTalk Labs): the level, with
-    the room's level (grey) and the speech threshold (green) marked on it, and
-    a short flash where the pause detector would cut. All three are 0-1
-    positions (chunk_meter.level_to_fraction)."""
+    the speech threshold marked on it in green, and a green frame flashing
+    where the pause detector would cut. The room needs no mark: in silence the
+    meter itself shows it. Both are 0-1 positions (chunk_meter)."""
 
     FLASH_S = 0.3
 
     def __init__(self, num_segments=20):
         super().__init__(num_segments=num_segments)
-        self.room = 0.0
         self.threshold = 0.0
         self._flash_until = 0.0
         self.set_size_request(300, 20)
 
-    def show_snapshot(self, level, room, threshold, cut=False):
-        self.room = max(0.0, min(1.0, room))
+    def show_snapshot(self, level, threshold, cut=False):
         self.threshold = max(0.0, min(1.0, threshold))
         if cut:
             self._flash_until = time.monotonic() + self.FLASH_S
@@ -336,10 +334,9 @@ class PauseMeter(SegmentedVUMeter):
         return False
 
     def _draw_marks(self, cr, width, height):
-        for fraction, rgb in ((self.room, (0.62, 0.62, 0.62)),
-                              (self.threshold, (0x04 / 255, 0xB5 / 255, 0x03 / 255))):
-            x = round(fraction * width)
-            cr.set_source_rgb(*rgb)
+        if self.threshold > 0:
+            x = round(self.threshold * width)
+            cr.set_source_rgb(0x04 / 255, 0xB5 / 255, 0x03 / 255)
             cr.rectangle(max(0, x - 1), 0, 3, height)
             cr.fill()
         if self.flashing():
@@ -5563,8 +5560,8 @@ class PreferencesWindow:
             return False
         from .chunk_meter import level_to_fraction
         snap = test.snapshot()
+        self._tap_last_room = snap.room   # the mark keeps following Sensitivity after Stop
         self.tap_meter.show_snapshot(level_to_fraction(snap.level),
-                                     level_to_fraction(snap.room),
                                      level_to_fraction(snap.threshold),
                                      cut=test.take_cut())
         self.tap_status.set_text(test.status_text())
@@ -5574,6 +5571,12 @@ class PreferencesWindow:
         test = getattr(self, "_pause_test", None)
         if test is not None:
             test.configure(self.tap_pause_spin.get_value(), self.tap_db_spin.get_value())
+            return
+        room = getattr(self, "_tap_last_room", None)
+        if room is not None:
+            # Not testing: place the mark from the room the last test measured.
+            from .chunk_meter import threshold_fraction
+            self.tap_meter.show_snapshot(0.0, threshold_fraction(room, self.tap_db_spin.get_value()))
 
     def _stop_pause_test(self):
         """Stop Type at pause's live test, if it is running, and free the mic."""
@@ -5588,6 +5591,8 @@ class PreferencesWindow:
                 pass
         if hasattr(self, "tap_test_btn"):
             self.tap_test_btn.set_label("Test")
+        if hasattr(self, "tap_meter"):
+            self.tap_meter.show_snapshot(0.0, self.tap_meter.threshold)
 
     def _release_pidfile(self):
         """Remove the prefs singleton pidfile if it belongs to this process."""

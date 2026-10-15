@@ -6,7 +6,7 @@ with synthetic audio, without a display or a microphone.
 """
 import math
 
-from .chunking import PauseDetector, PauseSnapshot
+from .chunking import MIN_SPEECH_RMS, PauseDetector, PauseSnapshot
 
 # The meter's scale, in dBFS: a quiet dynamic mic (room near -80, speech from
 # -55) and a hissing onboard input (room near -38) both read clearly.
@@ -19,6 +19,12 @@ def level_to_fraction(rms: float) -> float:
         return 0.0
     db = 20 * math.log10(rms / 32768.0)
     return max(0.0, min(1.0, (db - METER_FLOOR_DB) / -METER_FLOOR_DB))
+
+
+def threshold_fraction(room: float, speech_db: float) -> float:
+    """Where speech starts on the meter for this room level and sensitivity,
+    the same rule PauseDetector.threshold() applies."""
+    return level_to_fraction(max(MIN_SPEECH_RMS, room * 10 ** (speech_db / 20)))
 
 
 class PauseTest:

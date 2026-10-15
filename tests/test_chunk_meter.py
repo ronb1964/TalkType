@@ -83,3 +83,10 @@ def test_status_text():
     assert text.startswith("Room ")
     assert "speech from" in text and "pause" in text
     assert text.endswith("2 cuts")
+
+
+def test_threshold_fraction_follows_the_sensitivity():
+    from tuxtalk.chunk_meter import level_to_fraction, threshold_fraction
+    assert threshold_fraction(400.0, 6.0) == pytest.approx(level_to_fraction(400 * 10 ** (6 / 20)))
+    assert threshold_fraction(400.0, 12.0) > threshold_fraction(400.0, 6.0)
+    assert threshold_fraction(1.0, 6.0) == pytest.approx(level_to_fraction(40.0))   # the floor
