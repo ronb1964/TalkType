@@ -69,6 +69,14 @@ class PauseDetector:
         self._recent = collections.deque(maxlen=3)
         self._lows = collections.deque()   # (clock, median of the last 3 blocks)
         self._clock = 0.0
+        self.loudest = 0.0
+        self.blocks = 0
+
+    def describe(self) -> str:
+        """The levels it is working with, for the log."""
+        room = min(v for _, v in self._lows) if self._lows else 0.0
+        return (f"room {room:.0f}, speech from {self.threshold():.0f}, loudest {self.loudest:.0f} "
+                f"(int16 RMS after the high-pass), {self.blocks} blocks at {self.sample_rate} Hz")
 
     def _level(self, block):
         """(high-passed int16 RMS, duration in seconds) of one block."""
@@ -102,6 +110,8 @@ class PauseDetector:
         if duration == 0:
             return False
         self._learn_room(rms, duration)
+        self.loudest = max(self.loudest, rms)
+        self.blocks += 1
         if rms >= self.threshold():
             self.speech_time += duration
             self.silence_time = 0.0

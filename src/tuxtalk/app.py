@@ -2990,6 +2990,8 @@ def _finish_capture(beeps_on: bool, notify_on: bool):
         # No more cuts: from here on the audio is the last chunk.
         chunker, state.chunker = state.chunker, None
         state.last_chunk_speech = chunker.speech_time if chunker is not None else None
+    if chunker is not None and not state.chunks_submitted:
+        logger.info(f"Chunked dictation: no pause found ({chunker.describe()})")
         frames = state.frames  # snapshot the reference before it can be reassigned
     rec_sr = getattr(state, 'recording_samplerate', SAMPLE_RATE)
     state.is_recording = False

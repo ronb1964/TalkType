@@ -636,3 +636,15 @@ def test_a_cut_queues_its_chunk_before_releasing_the_lock(recording, monkeypatch
                         SimpleNamespace(submit=lambda job: held.append(app._chunk_lock.locked())))
     feed(np.concatenate([speech(1.0), noise(1.0)]))
     assert held == [True]
+
+
+def test_a_recording_without_a_pause_says_why(recording, caplog):
+    """When no pause was found, the log names the room level, the threshold and
+    the loudest block, so a mic the detector can't read is easy to spot."""
+    import logging
+    from tuxtalk import app
+    caplog.set_level(logging.INFO)
+    feed(speech(2.0))
+    app._finish_capture(beeps_on=False, notify_on=False)
+    assert any("no pause found" in r.getMessage() and "room" in r.getMessage()
+               for r in caplog.records)
