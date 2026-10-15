@@ -17,6 +17,13 @@ before 0.15.0, so older entries use that name.
   pressing it opened the Emoji Selector and started dictating with no warning
   at all. Now the question after changing the key says which app KDE opens with
   it.
+- New in TuxTalk Labs: select and move by voice. Say "select the last
+  sentence", "select all", "go to the end" or "go back three words" on its own
+  and TuxTalk does it instead of typing it. Said in the middle of a sentence,
+  the words are just typed. Together with voice editing it's hands-free:
+  select the last sentence, then "make it more formal". Turn it on in
+  Preferences, Advanced, TuxTalk Labs. The Labs section now asks for your
+  feedback too. I'd really like to hear how these work for you.
 - Voice editing (TuxTalk Labs) can do two or three changes at once. Say "make
   this formal and remove the commas" and it does both, one after the other.
   Before, only one of them happened.

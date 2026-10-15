@@ -137,6 +137,8 @@ class Settings:
     numbers_as_digits: bool = False
     # ...but a lone one to nine stays a word ("three cats", "25 chickens")
     numbers_small_as_words: bool = False
+    # TuxTalk Labs: "select the last sentence", "go to the end" (voice_navigation.py)
+    voice_navigation: bool = False
     mode: str = "hold"          # "hold" or "toggle"
     toggle_hotkey: str = ""     # used only when mode="toggle" (empty until user picks during onboarding)
     mic: str = ""               # substring to match input device (empty = default)
@@ -738,6 +740,7 @@ LIVE_APPLIED_KEYS = {
     "swiss_spelling",
     "numbers_as_digits",
     "numbers_small_as_words",
+    "voice_navigation",
     "ai_corrections",
     "voice_editing",
     # Hands-free auto-stop; read when each toggle recording starts.

@@ -141,6 +141,12 @@ The commands are English words, whatever language you dictate in.
   <b>delete everything</b> / <b>delete all</b> / <b>clear everything</b> / <b>clear all</b> /
   <b>undo everything</b> / <b>undo all</b> → wipe the entire input field (Ctrl+A, Backspace)
 
+<b>Select and Move</b> (TuxTalk Labs: turn on in Preferences → Advanced)
+  <b>select that</b> / <b>select the last sentence</b> / <b>select the last 3 words</b> → select what you just said
+  <b>select all</b> / <b>select the line</b> / <b>select the next word</b> / <b>select to the end of the line</b>
+  <b>go to the end</b> / <b>go to the start of the line</b> / <b>go back 3 words</b> / <b>go up 2 lines</b>
+  <b>unselect</b> → drop the selection
+
 <b>Changing Your Mind</b>
 Correct yourself mid-sentence with <b>no wait</b>, <b>I mean</b>, <b>make that</b>,
 <b>scratch that</b> or <b>or rather</b>:

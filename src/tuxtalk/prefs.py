@@ -2252,8 +2252,10 @@ class PreferencesWindow:
 
             labs_note = Gtk.Label(xalign=0)
             labs_note.set_markup(
-                '<span>Experimental features. They work, but they’re still being '
-                'refined, so they may change and won’t always get it right.</span>')
+                '<span>Experimental features we’re still shaping, so they may change '
+                'and won’t always get it right. If you try one, we’d love to hear how it '
+                'went or what you’d change: use Send feedback below. Your ideas help make '
+                'TuxTalk better.</span>')
             labs_note.set_line_wrap(True)
             labs_note.set_opacity(0.7)
             labs_note.set_margin_bottom(8)
@@ -2276,6 +2278,31 @@ class PreferencesWindow:
                 "on this computer. Simple, clear changes work best.")
             self.voice_editing_check.connect("toggled", self._on_voice_editing_toggled)
             grid.attach(self.voice_editing_check, 0, row, 2, 1)
+            row += 1
+
+            # Select and move by voice (voice_navigation.py): a dictation that
+            # is only "select the last sentence" or "go to the end" is done as
+            # a command. Works with or without voice editing.
+            nav_check = Gtk.CheckButton(
+                label="Select and move by voice: say \u201cselect the last sentence\u201d, "
+                      "\u201cgo to the end\u201d")
+            nav_check.set_active(bool(self.config.get("voice_navigation", False)))
+            nav_check.set_tooltip_text(
+                "When a dictation is only one of these commands, TuxTalk does it instead of\n"
+                "typing it. Inside a longer sentence the words are typed as usual.\n\n"
+                "• What you just said: “select that”, “select the last sentence”,\n"
+                "  “select the last 3 words”\n"
+                "• Around the cursor: “select all”, “select the line”,\n"
+                "  “select the next word”, “select to the end of the line”\n"
+                "• Moving: “go to the end”, “go to the start of the line”,\n"
+                "  “go back 3 words”, “go up 2 lines”\n"
+                "• “unselect”\n\n"
+                "With voice editing on, the Shift key understands them too: Shift+F8\n"
+                "“select the last sentence”, then Shift+F8 “make it more formal”.\n"
+                "Not in terminals. The full list is in Help, on the TuxTalk Labs page.")
+            nav_check.connect("toggled", lambda c: self.update_config(
+                "voice_navigation", c.get_active()))
+            grid.attach(nav_check, 0, row, 2, 1)
             row += 1
 
             # The recording indicator follows the window being dictated into

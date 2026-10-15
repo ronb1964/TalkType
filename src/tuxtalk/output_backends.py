@@ -36,6 +36,11 @@ class OutputBackend:
         """Send `count` Backspace presses (character-level undo)."""
         raise NotImplementedError
 
+    def press_keys(self, chords) -> bool:
+        """Press [(modifiers, key)] in order, by name ("CTRL", "LEFT"), for
+        select and move by voice (voice_navigation.py)."""
+        raise NotImplementedError
+
 
 class YdotoolOutputBackend(OutputBackend):
     """Backend A: app.py's ydotool path."""
@@ -51,6 +56,10 @@ class YdotoolOutputBackend(OutputBackend):
     def backspaces(self, count: int) -> bool:
         from . import app
         return app._send_backspaces(count)
+
+    def press_keys(self, chords) -> bool:
+        from . import app
+        return app._send_chords(chords)
 
 
 class LibeiOutputBackend(OutputBackend):
@@ -263,6 +272,9 @@ class LibeiOutputBackend(OutputBackend):
 
     def backspaces(self, count: int) -> bool:
         return self._with_session(lambda s: s.backspaces(count))
+
+    def press_keys(self, chords) -> bool:
+        return self._with_session(lambda s: s.press_chords(chords))
 
 
 def get_output_backend(flatpak_id=None) -> OutputBackend:

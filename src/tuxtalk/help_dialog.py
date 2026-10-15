@@ -479,6 +479,35 @@ can't be changed by voice.
   • <i>The AI is still starting</i>: right after turning it on or starting TuxTalk, wait a few seconds.
   • <i>The AI didn't come up with a change</i>: try saying it another way.
   • <i>You switched windows</i>: the rewrite wasn't typed; it's in Recent Dictations.
+
+<span size="large"><b>Select and Move by Voice</b></span>
+Select text or move the cursor by saying so. When a dictation is <b>only</b> one of these
+commands, TuxTalk does it instead of typing it. Said inside a longer sentence, the words
+are typed as usual. Counts go up to 10 ("three" or "3").
+
+<b>What you just said</b> (exact in any app, because TuxTalk knows what it typed)
+  • <b>select that</b>  •  <b>select what I said</b>
+  • <b>select the last sentence</b>  •  <b>select the last word</b>  •  <b>select the last 3 words</b>
+<b>Around the cursor</b>
+  • <b>select all</b>  •  <b>select the line</b>
+  • <b>select the next word</b>  •  <b>select the previous 2 words</b>  •  <b>select the next line</b>
+  • <b>select to the end of the line</b>  •  <b>select to the start of the line</b>
+  • <b>select to the end</b>  •  <b>select to the top</b>
+<b>Moving</b>
+  • <b>go to the end</b>  •  <b>go to the top</b>  •  <b>go to the end of the line</b>  •  <b>go to the start of the line</b>
+  • <b>go back 3 words</b>  •  <b>go forward a word</b>  •  <b>next word</b>  •  <b>previous word</b>
+  • <b>go back 5 letters</b>  •  <b>go up 2 lines</b>  •  <b>go down a line</b>
+  • <b>unselect</b>
+
+<b>Good to know</b>
+  • With voice editing on, Shift+F8 understands these too, so you can do it all on one
+    key: Shift+F8 <i>"select the last sentence"</i>, then Shift+F8 <i>"make it more formal"</i>.
+  • The commands around the cursor press the usual keys (Home, End, Ctrl+arrows), so
+    they do what those keys do in each app.
+  • It doesn't work in a terminal, where those keys mean other things.
+  • After a select or move, <b>delete last word</b> won't run, since the cursor is
+    somewhere else now. Use Ctrl+Z in the app instead.
+
 <span size="large"><b>Indicator Follows Your Window</b></span>
 The recording indicator shows up in the window you're dictating into, wherever
 that window is on the screen, instead of always in the same spot.

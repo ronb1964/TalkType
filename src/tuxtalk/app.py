@@ -93,6 +93,8 @@ _swiss_spelling = False     # ß -> ss in the finished text (Swiss Standard Germ
 # stay words), and the language to read them in. See spoken_numbers.py.
 _numbers_mode = None
 _numbers_language = "en"
+# Select and move by voice (TuxTalk Labs, voice_navigation.py).
+_voice_navigation = False
 _ai_engine = None
 # Which of the two features using the AI engine are on. The engine runs while
 # either is; each checks its own flag before using it.
@@ -107,11 +109,12 @@ def _apply_cleanup_settings(cfg):
     """Bring the cleanup and auto-stop options in line with *cfg*; start or
     stop the AI engine."""
     global _remove_fillers, _ai_engine, _auto_stop_seconds, _ai_corrections, _voice_editing, _swiss_spelling
-    global _numbers_mode, _numbers_language
+    global _numbers_mode, _numbers_language, _voice_navigation
     _auto_stop_seconds = (float(getattr(cfg, "auto_stop_seconds", 2.0))
                           if getattr(cfg, "auto_stop_silence", False) else 0.0)
     _remove_fillers = bool(getattr(cfg, "remove_fillers", False))
     _swiss_spelling = bool(getattr(cfg, "swiss_spelling", False))
+    _voice_navigation = bool(getattr(cfg, "voice_navigation", False))
     if getattr(cfg, "numbers_as_digits", False):
         _numbers_mode = "small_as_words" if getattr(cfg, "numbers_small_as_words", False) else "all"
     else:
@@ -2173,6 +2176,39 @@ def _send_backspaces(count: int) -> bool:
     return _ydotool_key(key_sequence, timeout=timeout, what=f"{count} backspaces",
                         raise_on_timeout=True)
 
+# Key names voice_navigation uses -> Linux key codes (the letter A is looked up
+# on the active layout, as Ctrl shortcuts are matched by letter).
+_NAV_KEYCODES = {"CTRL": 29, "SHIFT": 42, "LEFT": 105, "RIGHT": 106, "UP": 103,
+                 "DOWN": 108, "HOME": 102, "END": 107}
+
+
+def _nav_keycode(name: str) -> int:
+    if name in _NAV_KEYCODES:
+        return _NAV_KEYCODES[name]
+    from .keyboard_layout import shortcut_keycode
+    try:
+        return shortcut_keycode(name.lower()) or 30
+    except Exception:
+        return 30    # KEY_A on a US layout
+
+
+def _send_chords(chords) -> bool:
+    """Press [(modifiers, key)] in order with ydotool, each modifier held
+    around its key. True only if they were delivered."""
+    if not chords:
+        return True
+    sequence = ["-d", str(BACKSPACE_DELAY_MS)]
+    events = 0
+    for mods, key in chords:
+        mod_codes = [_nav_keycode(m) for m in mods]
+        code = _nav_keycode(key)
+        sequence += [f"{c}:1" for c in mod_codes] + [f"{code}:1", f"{code}:0"]
+        sequence += [f"{c}:0" for c in reversed(mod_codes)]
+        events += 2 + 2 * len(mod_codes)
+    timeout = YDOTOOL_TIMEOUT_S + events * BACKSPACE_DELAY_MS / 1000 * 1.5
+    return _ydotool_key(sequence, timeout=timeout, what=f"{len(chords)} navigation keys")
+
+
 def _transcribe_audio(audio_f32, language: str | None) -> str | None:
     """Transcribe audio with the loaded engine (Whisper or Parakeet) and filter hallucinations.
 
@@ -2853,6 +2889,11 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         if _handle_undo(raw, beeps_on, notify_on):
             return
 
+        # Select and move by voice ("select the last sentence"), when the
+        # whole dictation is one of its commands (TuxTalk Labs).
+        if _handle_navigation(raw, beeps_on):
+            return
+
         # Stage 3: Normalize text (voice commands, punctuation, spacing)
         text = _prepare_text(raw, smart_quotes, auto_period, auto_space)
 
@@ -2952,6 +2993,10 @@ _EDIT_NOTICES = {
     "cant_format": "Voice editing changes the words. It can't change the font, size or color.",
     "shortcut_failed": "TuxTalk couldn't press the keys for that. Try doing it from the "
                        "keyboard yourself.",
+    "nothing_said": "Nothing to select yet. Dictate something first, then say "
+                    "\u201cselect that\u201d or \u201cselect the last sentence\u201d.",
+    "nav_terminal": "Select and move by voice doesn't work in a terminal, where those "
+                    "keys mean other things.",
 }
 
 
@@ -2974,6 +3019,8 @@ _EDIT_LABELS = {
     "no_shortcuts": "No bold or italics in this app",
     "cant_format": "Can't change font, size or color",
     "shortcut_failed": "Couldn't press the keys",
+    "nothing_said": "Nothing to select yet",
+    "nav_terminal": "Doesn't work in a terminal",
 }
 
 
@@ -3023,6 +3070,44 @@ def _focus_moved(focused_class) -> bool:
     return now != focused_class
 
 
+_UNKNOWN_WINDOW = object()
+
+
+def _handle_navigation(raw: str, beeps_on: bool, focused_class=_UNKNOWN_WINDOW) -> bool:
+    """Select and move by voice (TuxTalk Labs). True when the whole dictation
+    was one of voice_navigation's commands, done or refused with a notice;
+    False to type it as text."""
+    if not _voice_navigation:
+        return False
+    from . import voice_navigation as nav
+    command = nav.parse(raw)
+    if command is None:
+        return False
+    logger.info(f"Voice command: {command.name}")
+    if focused_class is _UNKNOWN_WINDOW:
+        focused_class = _query_focused_window_class()
+    if is_terminal_class(focused_class):
+        _edit_problem("nav_terminal", beeps_on)
+        return True
+    chords = nav.chords(command, state.last_inserted_text)
+    if chords is None:
+        _edit_problem("nothing_said", beeps_on)
+        return True
+    try:
+        pressed = _output_backend().press_keys(chords)
+    except Exception as e:
+        logger.error(f"Voice command: pressing the keys failed: {e}")
+        pressed = False
+    # The cursor has moved (or may have): undo's character count no longer
+    # matches the document, and "delete last word" would eat the wrong text.
+    state.last_inserted_text = ""
+    if pressed:
+        _beep(beeps_on, *READY_BEEP)
+    else:
+        _edit_problem("shortcut_failed", beeps_on)
+    return True
+
+
 def _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
     """Voice editing: the recording is an instruction ("make this more formal")
     for the text selected in the focused app, which the AI rewrites and the
@@ -3057,6 +3142,13 @@ def _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
         _edit_problem("no_clipboard", beeps_on)
         return
     if not selected:
+        # "select the last sentence" needs nothing selected: it makes the
+        # selection the next edit works on (select and move by voice). The
+        # clipboard is already back (copy_selection does that when empty).
+        if _voice_navigation:
+            instruction = _transcribe_audio(audio_f32, language)
+            if instruction and _handle_navigation(instruction, beeps_on, focused_class):
+                return
         _edit_problem("no_selection", beeps_on)
         return
     result = None
@@ -3064,6 +3156,8 @@ def _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
         instruction = _transcribe_audio(audio_f32, language)
         if not instruction:
             _edit_problem("no_instruction", beeps_on)
+            return
+        if _handle_navigation(instruction, beeps_on, focused_class):
             return
         logger.info(f"Voice edit: {_loggable(instruction)} ({len(selected)} characters)")
         # Deleting, formatting and exact jobs need no AI (voice_edit_rules.py).

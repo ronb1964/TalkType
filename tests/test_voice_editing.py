@@ -1036,3 +1036,24 @@ def test_a_rewording_step_needs_the_ai(edit_env, monkeypatch):
     run_edit()
     assert edit_env["typed"] == []
     assert edit_env["notices"]
+
+
+def test_the_edit_key_understands_select_commands_with_nothing_selected(edit_env, monkeypatch):
+    """Shift+F8 "select the last sentence", then Shift+F8 "make it formal"."""
+    pressed = []
+    monkeypatch.setattr(app, "_voice_navigation", True)
+    monkeypatch.setattr(app, "_output_backend",
+                        lambda: type("B", (), {"press_keys": lambda self, c: pressed.append(c) or True})())
+    monkeypatch.setattr(app.state, "last_inserted_text", "One. Two.")
+    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "select the last sentence")
+    edit_env["selection"]["text"] = ""
+    run_edit()
+    assert len(pressed) == 1 and edit_env["notices"] == [] and edit_env["typed"] == []
+
+
+def test_with_the_labs_switch_off_nothing_selected_still_says_select_first(edit_env, monkeypatch):
+    monkeypatch.setattr(app, "_voice_navigation", False)
+    monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "select the last sentence")
+    edit_env["selection"]["text"] = ""
+    run_edit()
+    assert edit_env["notices"] and "Select the text" in edit_env["notices"][0]
