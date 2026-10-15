@@ -216,3 +216,33 @@ def test_the_one_kept_before_the_list_comes_along(win, tmp_path):
     kept = ft.recent()
     assert [e.path for e in kept] == ["/videos/old.mov"]
     assert not old.exists() and (tmp_path / "recent-transcripts.json").exists()
+
+
+# --- Remove ums and repeats ---------------------------------------------------
+
+def test_the_tick_box_cleans_what_is_shown_and_saved(win, monkeypatch, tmp_path):
+    win.path = str(tmp_path / "clip.mov")
+    done(win, "This is this is uh a blade.")
+    buf = win.view.get_buffer()
+    text = lambda: buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
+    assert "uh" in text()
+    assert win.clean_check.get_sensitive()
+    win.clean_check.set_active(True)
+    assert text() == "This is a blade."
+    saved = {}
+
+    class Chooser:
+        def __init__(self, *a): pass
+        def set_current_name(self, n): saved["name"] = n
+        def set_current_folder(self, f): pass
+        def set_do_overwrite_confirmation(self, v): pass
+        def run(self): return Gtk.ResponseType.ACCEPT
+        def get_filename(self): return str(tmp_path / saved["name"])
+        def destroy(self): pass
+
+    monkeypatch.setattr(Gtk.FileChooserNative, "new", lambda *a: Chooser())
+    win._save("srt")
+    assert "This is a blade." in (tmp_path / "clip.srt").read_text()
+    assert "uh" not in (tmp_path / "clip.srt").read_text()
+    win.clean_check.set_active(False)
+    assert "uh" in text()                       # as heard again

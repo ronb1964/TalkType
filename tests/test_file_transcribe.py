@@ -243,3 +243,36 @@ def test_changing_the_model_or_languages_reloads_the_engine():
     assert ft.engine_settings(config.Settings(model="small", device="cpu")) == base
     assert ft.engine_settings(config.Settings(model="base", device="cpu")) != base
     assert ft.engine_settings(config.Settings(model="small", device="cpu", auto_languages="en,es")) != base
+
+
+# --- Remove ums and repeats ------------------------------------------------------
+
+def test_cleaned_takes_out_ums_and_repeats_and_keeps_the_rest():
+    from tuxtalk.file_transcribe import Piece, cleaned
+    pieces = [Piece(0, 18, "Okay, this is the cleaver which needs its own maintenance a lot "
+                           "more often than your uh single fiber cleaver."),
+              Piece(18, 40, "12 times faster than uh than a single. This is this is a blade.")]
+    out = cleaned(pieces)
+    assert out[0].text == ("Okay, this is the cleaver which needs its own maintenance a lot "
+                           "more often than your single fiber cleaver.")
+    assert out[1].text == "12 times faster than a single. This is a blade."
+    assert [(p.start, p.end) for p in out] == [(0, 18), (18, 40)]      # times kept
+    assert pieces[1].text.startswith("12 times faster than uh")          # originals untouched
+
+
+def test_a_piece_that_was_only_an_um_is_dropped():
+    from tuxtalk.file_transcribe import Piece, cleaned
+    assert [p.text for p in cleaned([Piece(0, 2, "Um."), Piece(2, 9, "The blade.")])] == ["The blade."]
+
+
+def test_a_piece_carrying_on_a_sentence_keeps_its_lowercase():
+    """Cut mid-sentence: "uh, the blade" carries on, so no capital T."""
+    from tuxtalk.file_transcribe import Piece, cleaned
+    out = cleaned([Piece(0, 30, "So when you rotate"), Piece(30, 50, "uh, the blade it moves.")])
+    assert out[1].text.startswith("the blade")
+
+
+def test_a_piece_starting_a_sentence_keeps_its_capital():
+    from tuxtalk.file_transcribe import Piece, cleaned
+    out = cleaned([Piece(0, 30, "That's the pin."), Piece(30, 50, "Uh, the blade moves.")])
+    assert out[1].text.startswith("The blade")
