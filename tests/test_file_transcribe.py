@@ -201,3 +201,45 @@ def test_an_open_window_is_found_by_its_pidfile(tmp_path, monkeypatch):
     assert tw._running_pid() is None
     (tmp_path / "tuxtalk-transcribe.pid").write_text("1")     # pid 1 is not the window
     assert tw._running_pid() is None
+
+
+# --- from the code review, 2026-10-15 ---------------------------------------------------------
+
+def test_a_soft_pause_in_steady_noise_still_wins_over_the_window_edges():
+    # A music bed or room noise: no true silence, the pause only 0.8x as loud.
+    rng = np.random.default_rng(5)
+    audio = rng.uniform(-0.3, 0.3, 45 * SR).astype(np.float32)
+    audio[int(22.6 * SR):int(23.4 * SR)] *= 0.8
+    first_cut = ft.cut_points(audio)[0][1] / SR
+    assert 22.5 < first_cut < 23.5
+
+
+def test_japanese_subtitles_split_by_sentence_and_length():
+    text = ("今日は天気がいいので、公園に行きました。そこで友達に会って、一緒にお昼ご飯を食べました。"
+            "午後は図書館で本を読んで、夕方に家に帰りました。")
+    parts = ft._cue_texts(text)
+    assert "".join(parts) == text
+    assert len(parts) >= 3 and all(len(p) <= ft.MAX_CUE_CHARS_UNSPACED for p in parts)
+
+
+def test_a_long_unpunctuated_unspaced_line_is_still_cut():
+    parts = ft._cue_texts("あ" * 100)
+    assert "".join(parts) == "あ" * 100
+    assert all(len(p) <= ft.MAX_CUE_CHARS_UNSPACED for p in parts)
+
+
+def test_a_quiet_talk_over_room_hum_is_not_skipped():
+    rng = np.random.default_rng(6)
+    hum = rng.normal(0, 0.01, 30 * SR).astype(np.float32)           # about -40 dBFS
+    talk = hum.copy()
+    talk[5 * SR:25 * SR] += rng.normal(0, 0.02, 20 * SR).astype(np.float32)  # ~6 dB over it
+    assert not ft.is_silent(talk)
+    assert ft.is_silent(np.zeros(30 * SR, dtype=np.float32))
+    assert ft.is_silent(rng.normal(0, 0.0005, 30 * SR).astype(np.float32))   # recorder hiss
+
+
+def test_changing_the_model_or_languages_reloads_the_engine():
+    base = ft.engine_settings(config.Settings(model="small", device="cpu"))
+    assert ft.engine_settings(config.Settings(model="small", device="cpu")) == base
+    assert ft.engine_settings(config.Settings(model="base", device="cpu")) != base
+    assert ft.engine_settings(config.Settings(model="small", device="cpu", auto_languages="en,es")) != base

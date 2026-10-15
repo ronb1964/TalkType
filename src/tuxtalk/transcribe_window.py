@@ -61,6 +61,7 @@ def _duration(seconds):
 class TranscribeWindow:
     def __init__(self):
         self.engine = None            # loaded on the first file, kept for the next
+        self.engine_key = None        # the settings it was loaded with (engine_settings)
         self.pieces = []
         self.path = None
         self.busy = False
@@ -208,10 +209,24 @@ class TranscribeWindow:
         try:
             audio = ft.decode(path)
             total = len(audio) / ft.SAMPLE_RATE
-            if self.engine is None:
-                from .config import load_config
+            if self._cancel.is_set():
+                GLib.idle_add(self._on_done, [], total, time.time() - started, True)
+                return
+            # Settings are read for every file: a model or language changed in
+            # Preferences since the last one loads afresh.
+            from .config import load_config
+            cfg = load_config()
+            if self.engine is None or self.engine_key != ft.engine_settings(cfg):
+                if self.engine is not None:
+                    self.engine.close()
+                    self.engine = None
                 GLib.idle_add(self.status.set_text, "Loading the speech model…")
-                self.engine = ft.load_engine(load_config())
+                self.engine = ft.load_engine(cfg)
+                self.engine_key = ft.engine_settings(cfg)
+            self.engine.reload_words()
+            if self._cancel.is_set():
+                GLib.idle_add(self._on_done, [], total, time.time() - started, True)
+                return
             describe = self.engine.describe
             GLib.idle_add(self.status.set_text, f"Transcribing {_duration(total)} with {describe}…")
 
@@ -239,9 +254,11 @@ class TranscribeWindow:
         self._show_text()
         logger.info(f"Transcribed a file: {total:.0f} s of sound in {seconds:.1f} s"
                     f"{' (stopped)' if stopped else ''}, {len(pieces)} pieces with speech")
-        if stopped:
-            done = pieces[-1].end if pieces else 0
-            self.status.set_text(f"Stopped at about {_duration(done)}. What was done so far is below.")
+        if stopped and not pieces:
+            self.status.set_text("Stopped.")
+        elif stopped:
+            self.status.set_text(f"Stopped at about {_duration(pieces[-1].end)}. "
+                                 "What was done so far is below.")
         elif not pieces:
             self.status.set_text("Nobody seems to talk in this file.")
         else:
@@ -285,11 +302,17 @@ class TranscribeWindow:
     # --- closing -------------------------------------------------------------------------------
 
     def _on_close(self, *_args):
+        """Stop and quit at once. The engine is closed in main() after the
+        window is gone: closing it here could wait for the piece being
+        transcribed, with the window frozen meanwhile."""
         self._cancel.set()
-        if self.engine is not None:
-            self.engine.close()
+        self.window.hide()
         Gtk.main_quit()
         return False
+
+    def close_engine(self):
+        if self.engine is not None:
+            self.engine.close()
 
 
 def main(argv=None):
@@ -325,6 +348,7 @@ def main(argv=None):
                 os.remove(pidfile_path())
         except OSError:
             pass
+        window.close_engine()
     return 0
 
 

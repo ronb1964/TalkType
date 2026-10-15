@@ -18,9 +18,12 @@ timing work alike for all of them:
 - It is cut into pieces of 16 to 30 seconds, each cut at the quietest moment
   in that stretch, which is nearly always a pause between words. 30 seconds
   is what Whisper reads at once, and it keeps Parakeet's memory use small.
-- A piece in which nobody talks is skipped. It saves time, and it's where
-  Whisper invents "Thanks for watching!". Nothing else is filtered: unlike a
-  dictation, a video's real "like and subscribe" should stay.
+- A piece that is silent, or as good as, is skipped. It saves time, and
+  it's where Whisper invents "Thanks for watching!". Only near silence: a
+  quiet talk taped from the back of a room still goes to the model, since
+  losing real words without a word said is worse than an odd phrase. And
+  nothing else is filtered: unlike a dictation, a video's real "like and
+  subscribe" should stay.
 """
 import os
 import re
@@ -88,7 +91,10 @@ def cut_points(audio, sample_rate=SAMPLE_RATE, min_s=MIN_PIECE_S, max_s=MAX_PIEC
         lo, hi = start + min_s * sample_rate, start + max_s * sample_rate
         frames = (hi - lo) // frame
         energy = np.square(audio[lo:lo + frames * frame].reshape(frames, frame)).mean(axis=1)
-        energy = np.convolve(energy, smooth, mode="same")
+        # Divided by the same average of ones: "same" pads the ends with
+        # zeros, which would make the window's edges look quieter than they are.
+        energy = (np.convolve(energy, smooth, mode="same")
+                  / np.convolve(np.ones_like(energy), smooth, mode="same"))
         cut = lo + int(np.argmin(energy)) * frame + frame // 2
         pieces.append((start, cut))
         start = cut
@@ -132,6 +138,14 @@ class FileEngine:
             text = custom_words.fix_spelling(text, self.words)
         return text
 
+    def reload_words(self):
+        """Your Words as they are now: they can change between two files."""
+        from . import custom_words
+        try:
+            self.words = custom_words.load()
+        except Exception:
+            pass
+
     def close(self):
         close = getattr(self.model, "close", None)
         if close:
@@ -139,6 +153,13 @@ class FileEngine:
                 close()
             except Exception as e:
                 logger.debug(f"Closing the file engine: {e}")
+
+
+def engine_settings(cfg):
+    """The settings load_engine depends on; when any of them changes, the
+    engine has to be loaded again."""
+    return (cfg.model, (cfg.device or "cpu").lower(), cfg.language or "",
+            getattr(cfg, "auto_languages", ""))
 
 
 def load_engine(cfg):
@@ -205,19 +226,37 @@ def load_engine(cfg):
 
 # --- transcribing ---------------------------------------------------------------------------
 
+# Near silence: no 50 ms of the piece louder than about -50 dBFS. A faint
+# voice is well above it; a recorder's hiss in a pause is below it.
+SILENT_RMS = 0.003
+
+
+def is_silent(chunk, sample_rate=SAMPLE_RATE):
+    """Whether nothing in *chunk* is louder than near silence.
+
+    Not silence.has_no_speech, which is built for dictation: it judges talk
+    against the recording's own background, and a quiet lecture 6 dB over
+    the room's hum would count as nobody talking."""
+    frame = sample_rate // 20
+    frames = len(chunk) // frame
+    if frames == 0:
+        return float(np.sqrt(np.mean(np.square(chunk)))) < SILENT_RMS if len(chunk) else True
+    rms = np.sqrt(np.square(chunk[:frames * frame].reshape(frames, frame)).mean(axis=1))
+    return float(rms.max()) < SILENT_RMS
+
+
 def transcribe(audio, engine, progress=None, cancelled=None):
     """The pieces of *audio* with what was said in each; pieces nobody
     talked in are left out. *progress(done_seconds, total_seconds)* is called
     after each piece; *cancelled()* returning True stops early, with the
     pieces done so far."""
-    from .silence import has_no_speech
     total = len(audio) / SAMPLE_RATE
     pieces = []
     for start, end in cut_points(audio):
         if cancelled and cancelled():
             break
         chunk = audio[start:end]
-        if not has_no_speech(chunk, SAMPLE_RATE):
+        if not is_silent(chunk):
             text = engine.text(chunk)
             if text:
                 pieces.append(Piece(start / SAMPLE_RATE, end / SAMPLE_RATE, text))
@@ -260,23 +299,31 @@ def to_text(pieces, times=False):
 
 
 MAX_CUE_CHARS = 84      # two subtitle lines of 42, the usual limit
+# Chinese and Japanese have no spaces and carry more in each character: two
+# lines of 16 is the common limit there.
+MAX_CUE_CHARS_UNSPACED = 32
 
 
 def _cue_texts(text):
     """*text* in subtitle-sized parts: by sentence, and a long sentence in
     even parts, each cut at the comma or space nearest its share, so no
-    single word is left on its own."""
+    single word is left on its own. Text written without spaces (Chinese,
+    Japanese) is cut after its own commas, or anywhere near the share."""
     parts = []
-    for sentence in re.split(r"(?<=[.!?…。！？])\s+", text):
+    for sentence in re.split(r"(?<=[.!?…])\s+|(?<=[。！？])\s*", text):
         sentence = sentence.strip()
-        count = -(-len(sentence) // MAX_CUE_CHARS)
+        spaced = " " in sentence
+        limit = MAX_CUE_CHARS if spaced else MAX_CUE_CHARS_UNSPACED
+        count = -(-len(sentence) // limit)
         while count > 1:
             target = len(sentence) // count
-            spaces = [i for i, ch in enumerate(sentence) if ch == " "]
-            if not spaces:
-                break
+            if spaced:
+                places = [i for i, ch in enumerate(sentence) if ch == " "]
+            else:
+                places = list(range(1, len(sentence)))
             # A comma close to the share is the better place to cut.
-            cut = min(spaces, key=lambda i: abs(i - target) - (8 if sentence[i - 1] in ",;" else 0))
+            cut = min(places, key=lambda i: abs(i - target)
+                      - (8 if sentence[i - 1] in ",;、，；" else 0))
             parts.append(sentence[:cut].strip())
             sentence = sentence[cut:].strip()
             count -= 1
