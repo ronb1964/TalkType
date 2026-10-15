@@ -114,12 +114,16 @@ def test_closing_while_transcribing_asks_to_stop(win):
 
 # --- the last transcript, kept for next time ----------------------------------
 
-def test_a_kept_transcript_closes_without_asking(win):
-    """It's on disk: closing loses nothing, so there's nothing to ask."""
+def test_a_kept_transcript_still_asks_on_close(win):
+    """Ron wants the question on every close as insurance; it says the text
+    is kept, so it isn't a scare. Don't Save then closes."""
     done(win, kept_for_next_time=True)
     assert win.remembered
-    assert win._on_close() is False and win.asked == []
     assert "until you transcribe another file" in win.status.get_text()
+    assert win._on_close() is True
+    assert "TuxTalk shows it again when you reopen this window" in win.asked[0][1]
+    win.answer = Gtk.ResponseType.REJECT
+    assert win._on_close() is False
 
 
 def test_another_file_still_asks_about_a_kept_transcript(win):
