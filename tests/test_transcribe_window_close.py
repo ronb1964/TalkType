@@ -12,8 +12,8 @@ from tuxtalk import file_transcribe as ft  # noqa: E402
 @pytest.fixture
 def win(monkeypatch, tmp_path):
     from tuxtalk import transcribe_window as tw
-    # The last transcript is kept here, never in the real data folder.
-    monkeypatch.setattr(ft, "last_path", lambda: str(tmp_path / "last-transcript.json"))
+    # Transcripts are kept here, never in the real data folder.
+    monkeypatch.setattr(ft, "recent_path", lambda: str(tmp_path / "recent-transcripts.json"))
     monkeypatch.setattr(Gtk, "main_quit", lambda: None)
     # Never on the desktop: the windows are built but not shown.
     monkeypatch.setattr(Gtk.Window, "show_all", lambda self: None)
@@ -34,7 +34,7 @@ def done(w, text="Hello there.", kept_for_next_time=False):
     """A file finished. Keeping it for next time is off unless asked for, so
     the close question can be tested; it's on in real use."""
     if not kept_for_next_time:
-        ft_remember, ft.remember = ft.remember, lambda *a: False
+        ft_remember, ft.remember = ft.remember, lambda *a: None
     try:
         w._on_done([ft.Piece(0.0, 5.0, text)], 5.0, 1.0, False)
     finally:
@@ -112,28 +112,26 @@ def test_closing_while_transcribing_asks_to_stop(win):
     assert win._cancel.is_set()
 
 
-# --- the last transcript, kept for next time ----------------------------------
+# --- earlier transcripts, kept for next time ---------------------------------
 
 def test_a_kept_transcript_still_asks_on_close(win):
     """Ron wants the question on every close as insurance; it says the text
     is kept, so it isn't a scare. Don't Save then closes."""
     done(win, kept_for_next_time=True)
     assert win.remembered
-    assert "until you transcribe another file" in win.status.get_text()
+    assert "Earlier Transcripts" in win.status.get_text()
     assert win._on_close() is True
-    assert "TuxTalk shows it again when you reopen this window" in win.asked[0][1]
+    assert "It's kept under Earlier Transcripts" in win.asked[0][1]
     win.answer = Gtk.ResponseType.REJECT
     assert win._on_close() is False
 
 
-def test_another_file_still_asks_about_a_kept_transcript(win):
-    """Another file replaces the kept one, so that still asks."""
+def test_another_file_loses_nothing_when_kept(win):
     done(win, kept_for_next_time=True)
-    assert win._may_discard("new") is False
-    assert "Opening another file replaces it." in win.asked[0][1]
+    assert win._may_discard("new") is True and win.asked == []
 
 
-def test_reopening_shows_the_last_transcript(win, monkeypatch, tmp_path):
+def test_reopening_shows_the_newest_transcript(win):
     from tuxtalk import transcribe_window as tw
     win.path = "/videos/Cleaver Maintenance.mov"
     done(win, "The blade gets dull.", kept_for_next_time=True)
@@ -144,24 +142,77 @@ def test_reopening_shows_the_last_transcript(win, monkeypatch, tmp_path):
         assert again.path == "/videos/Cleaver Maintenance.mov"
         assert "Cleaver Maintenance.mov" in again.file_label.get_text()
         assert again.srt_btn.get_sensitive() and again.txt_btn.get_sensitive()
-        assert again.status.get_text().startswith("Your last transcript")
+        assert again.status.get_text().startswith("Transcribed ")
     finally:
         again.window.destroy()
+
+
+def test_earlier_transcripts_lists_them_newest_first(win):
+    for n in range(3):
+        win.path = f"/videos/part{n}.mov"
+        done(win, f"Part {n}.", kept_for_next_time=True)
+    labels = [i.get_label() for i in win.earlier_menu.get_children()
+              if isinstance(i, Gtk.MenuItem) and not isinstance(i, Gtk.SeparatorMenuItem)]
+    assert labels[0].startswith("part2.mov") and labels[2].startswith("part0.mov")
+    assert labels[-1] == "Clear This List…"
+    assert win.earlier_btn.get_sensitive()
+
+
+def test_choosing_an_earlier_one_shows_it(win):
+    win.path = "/videos/first.mov"
+    done(win, "First.", kept_for_next_time=True)
+    win.path = "/videos/second.mov"
+    done(win, "Second.", kept_for_next_time=True)
+    first = [e for e in ft.recent() if e.path == "/videos/first.mov"][0]
+    win.show_kept(first)
+    assert [p.text for p in win.pieces] == ["First."] and win.path == "/videos/first.mov"
+
+
+def test_only_ten_are_kept_and_a_file_done_again_replaces_its_copy(win):
+    for n in range(12):
+        ft.remember(f"/videos/{n}.mov", [ft.Piece(0, 1, str(n))], 1.0)
+    ft.remember("/videos/5.mov", [ft.Piece(0, 1, "again")], 1.0)
+    kept = ft.recent()
+    assert len(kept) == ft.MAX_RECENT
+    assert kept[0].path == "/videos/5.mov" and kept[0].pieces[0].text == "again"
+    assert sum(e.path == "/videos/5.mov" for e in kept) == 1
+
+
+def test_clearing_the_list(win):
+    done(win, kept_for_next_time=True)
+    win.answer = Gtk.ResponseType.ACCEPT
+    win._on_clear_earlier()
+    assert ft.recent() == [] and not win.remembered
+    assert not win.earlier_btn.get_sensitive()
+    win.answer = Gtk.ResponseType.CANCEL
+    assert win._on_close() is True              # now closing would lose it
+    assert "Closing the window loses it." in win.asked[-1][1]
 
 
 def test_nothing_kept_opens_empty(win):
     win.recall()
     assert win.pieces == [] and not win.srt_btn.get_sensitive()
+    assert not win.earlier_btn.get_sensitive()
 
 
-def test_the_kept_transcript_is_private(win, tmp_path):
+def test_the_kept_transcripts_are_private(win, tmp_path):
     import stat
     done(win, kept_for_next_time=True)
-    mode = (tmp_path / "last-transcript.json").stat().st_mode
+    mode = (tmp_path / "recent-transcripts.json").stat().st_mode
     assert stat.S_IMODE(mode) == 0o600
 
 
-def test_a_broken_kept_file_is_ignored(win, tmp_path):
-    (tmp_path / "last-transcript.json").write_text("{not json")
+def test_a_broken_list_is_ignored(win, tmp_path):
+    (tmp_path / "recent-transcripts.json").write_text("{not json")
     win.recall()
     assert win.pieces == []
+
+
+def test_the_one_kept_before_the_list_comes_along(win, tmp_path):
+    import json
+    old = tmp_path / "last-transcript.json"
+    old.write_text(json.dumps({"path": "/videos/old.mov", "total": 5, "when": 1.0,
+                               "pieces": [[0, 5, "Old one."]]}))
+    kept = ft.recent()
+    assert [e.path for e in kept] == ["/videos/old.mov"]
+    assert not old.exists() and (tmp_path / "recent-transcripts.json").exists()

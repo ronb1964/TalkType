@@ -53,6 +53,13 @@ def _running_pid():
     return None
 
 
+def _when(stamp):
+    """"Oct 15 at 7:40 PM" for a time.time() stamp; "earlier" without one."""
+    if not stamp:
+        return "earlier"
+    return time.strftime("%b %-d at %-I:%M %p", time.localtime(stamp))
+
+
 def _duration(seconds):
     """3:20, or 1:02:05."""
     return ft.clock(seconds)
@@ -69,8 +76,8 @@ class TranscribeWindow:
         # nothing. A copy doesn't count: the next copy replaces it.
         self.kept = False
         self.copied = False
-        # The transcript is on disk for next time (file_transcribe.remember),
-        # so closing loses nothing; only another file replaces it.
+        # The transcript is kept under Earlier transcripts (file_transcribe.
+        # remember), so another file or closing the window loses nothing.
         self.remembered = False
         self._cancel = threading.Event()
 
@@ -92,6 +99,13 @@ class TranscribeWindow:
         self.choose_btn = Gtk.Button(label="Choose a File…")
         self.choose_btn.connect("clicked", self._on_choose)
         top.pack_end(self.choose_btn, False, False, 0)
+        self.earlier_btn = Gtk.MenuButton()
+        self.earlier_btn.set_label("Earlier Transcripts")
+        self.earlier_btn.set_tooltip_text(
+            f"Your last {ft.MAX_RECENT} transcripts, to open again and save another way")
+        self.earlier_menu = Gtk.Menu()
+        self.earlier_btn.set_popup(self.earlier_menu)
+        top.pack_end(self.earlier_btn, False, False, 0)
         box.pack_start(top, False, False, 0)
 
         self.file_label = Gtk.Label(xalign=0)
@@ -149,6 +163,7 @@ class TranscribeWindow:
 
         self.window.show_all()
         self._set_busy(False)
+        self._refresh_earlier()
         self.progress.hide()
         self.cancel_btn.hide()
 
@@ -157,6 +172,7 @@ class TranscribeWindow:
     def _set_busy(self, busy):
         self.busy = busy
         self.choose_btn.set_sensitive(not busy)
+        self.earlier_btn.set_sensitive(not busy and bool(self.earlier_menu.get_children()))
         have = bool(self.pieces) and not busy
         for widget in (self.copy_btn, self.txt_btn, self.srt_btn, self.times_check):
             widget.set_sensitive(have)
@@ -262,7 +278,8 @@ class TranscribeWindow:
     def _on_done(self, pieces, total, seconds, stopped):
         self.pieces = pieces
         self.kept = self.copied = False
-        self.remembered = bool(pieces) and ft.remember(self.path, pieces, total)
+        self.remembered = bool(pieces) and ft.remember(self.path, pieces, total) is not None
+        self._refresh_earlier()
         self._set_busy(False)
         self._show_text()
         logger.info(f"Transcribed a file: {total:.0f} s of sound in {seconds:.1f} s"
@@ -276,26 +293,58 @@ class TranscribeWindow:
             self.status.set_text("Nobody seems to talk in this file.")
         else:
             self.status.set_text(f"Done: {_duration(total)} of sound in {_duration(seconds)}."
-                                 + (" It stays here until you transcribe another file."
-                                    if self.remembered else ""))
+                                 + (" It's kept under Earlier Transcripts." if self.remembered
+                                    else ""))
         return False
 
     def recall(self):
-        """Show the last transcript kept, with every button, as it was."""
-        last = ft.recall()
-        if last is None:
+        """On opening: show the newest transcript kept, with every button."""
+        self._refresh_earlier()
+        entries = ft.recent()
+        if entries:
+            self.show_kept(entries[0])
+
+    def show_kept(self, entry):
+        """Show a kept transcript as it was, ready to save another way."""
+        if self.busy:
             return
-        path, pieces, _total, when = last
-        self.path, self.pieces = path, pieces
+        self.path, self.pieces = entry.path, entry.pieces
         self.kept = self.copied = False
         self.remembered = True
-        name = os.path.basename(path or "") or "Your last file"
-        self.file_label.set_markup(f"<b>{GLib.markup_escape_text(name)}</b>")
-        stamp = time.strftime("%b %-d at %-I:%M %p", time.localtime(when)) if when else ""
-        self.status.set_text(f"Your last transcript{', from ' + stamp if stamp else ''}. "
-                             "It stays here until you transcribe another file.")
+        self.file_label.set_markup(f"<b>{GLib.markup_escape_text(entry.name)}</b>")
+        self.status.set_text(f"Transcribed {_when(entry.when)}. It's kept under Earlier Transcripts.")
         self._set_busy(False)
         self._show_text()
+
+    def _refresh_earlier(self):
+        """The Earlier Transcripts menu, as the list is now."""
+        menu = self.earlier_menu
+        for child in menu.get_children():
+            menu.remove(child)
+        entries = ft.recent()
+        for entry in entries:
+            item = Gtk.MenuItem(label=f"{entry.name}  ·  {_when(entry.when)}")
+            item.connect("activate", lambda _i, e=entry: self.show_kept(e))
+            menu.append(item)
+        if entries:
+            menu.append(Gtk.SeparatorMenuItem())
+            clear = Gtk.MenuItem(label="Clear This List…")
+            clear.connect("activate", lambda _i: self._on_clear_earlier())
+            menu.append(clear)
+        menu.show_all()
+        self.earlier_btn.set_sensitive(not self.busy and bool(entries))
+
+    def _on_clear_earlier(self):
+        if self._ask("Clear earlier transcripts?",
+                     f"The last {ft.MAX_RECENT} transcripts kept here are deleted. "
+                     "Files you saved aren't touched.",
+                     [("Cancel", Gtk.ResponseType.CANCEL),
+                      ("Clear", Gtk.ResponseType.ACCEPT)]) != Gtk.ResponseType.ACCEPT:
+            return
+        if ft.forget_all():
+            self.remembered = False     # what's shown is now only here
+            self.status.set_text("Earlier transcripts cleared.")
+        self._refresh_earlier()
 
     def _on_failed(self, message):
         self._set_busy(False)
@@ -361,17 +410,17 @@ class TranscribeWindow:
                 "The file isn't finished yet. Closing now loses what's been done so far.",
                 [("Keep Going", Gtk.ResponseType.CANCEL),
                  ("Stop and Close", Gtk.ResponseType.ACCEPT)]) == Gtk.ResponseType.ACCEPT
-        # Closing asks even when the text is kept for next time (Ron: "a
-        # little bit of insurance"), and says it's kept, so it isn't a scare.
-        if not self.pieces or self.kept:
+        # Closing asks even when the text is kept (Ron: "a little bit of
+        # insurance"), and says it's kept, so it isn't a scare. Another file
+        # loses nothing then: the text stays under Earlier Transcripts.
+        if not self.pieces or self.kept or (why == "new" and self.remembered):
             return True
-        if why != "close":
-            loses = "Opening another file replaces it."
-        elif self.remembered:
-            loses = ("TuxTalk shows it again when you reopen this window, until you "
-                     "transcribe another file.")
-        else:
+        if self.remembered:
+            loses = "It's kept under Earlier Transcripts, so you can open it again."
+        elif why == "close":
             loses = "Closing the window loses it."
+        else:
+            loses = "Opening another file replaces it."
         where = ("You copied it, but it isn't saved to a file." if self.copied
                  else "It isn't saved or copied anywhere yet.")
         answer = self._ask(
