@@ -165,3 +165,49 @@ def test_jobs_run_holding_the_lock():
     w.submit(lambda: seen.append(lock.locked()))
     assert w.drain(5)
     assert seen == [True]
+
+
+# --- settings ----------------------------------------------------------------
+
+def test_chunk_settings_default_off():
+    from tuxtalk.config import Settings
+    s = Settings()
+    assert s.chunked_dictation is False
+    assert s.chunk_pause_seconds == 0.8
+
+
+@pytest.mark.parametrize("value,ok", [(0.8, True), (0.3, True), (3.0, True),
+                                      (0.2, False), (3.5, False)])
+def test_chunk_pause_range(value, ok):
+    from tuxtalk import config
+    problems = config._validation_problems(config.Settings(chunk_pause_seconds=value))
+    flagged = any(key == "chunk_pause_seconds" for key, _msg in problems)
+    assert flagged is (not ok)
+
+
+def test_chunk_settings_apply_without_a_restart():
+    from tuxtalk.config import LIVE_APPLIED_KEYS
+    assert {"chunked_dictation", "chunk_pause_seconds"} <= LIVE_APPLIED_KEYS
+
+
+def test_chunk_setting_follows_config(monkeypatch):
+    from types import SimpleNamespace
+    from tuxtalk import app
+    monkeypatch.setattr(app, "_ai_engine", None)
+    on = SimpleNamespace(chunked_dictation=True, chunk_pause_seconds=1.0)
+    app._apply_cleanup_settings(on)
+    assert app._chunk_pause_seconds == 1.0
+    assert app._chunk_cfg is on
+    app._apply_cleanup_settings(SimpleNamespace(chunked_dictation=False, chunk_pause_seconds=1.0))
+    assert app._chunk_pause_seconds == 0.0
+
+
+def test_chunk_pause_stays_below_auto_stop(monkeypatch):
+    from types import SimpleNamespace
+    from tuxtalk import app
+    monkeypatch.setattr(app, "_ai_engine", None)
+    app._apply_cleanup_settings(SimpleNamespace(
+        chunked_dictation=True, chunk_pause_seconds=1.5,
+        auto_stop_silence=True, auto_stop_seconds=1.0))
+    assert app._chunk_pause_seconds == pytest.approx(0.8)
+    app._apply_cleanup_settings(SimpleNamespace(chunked_dictation=False))

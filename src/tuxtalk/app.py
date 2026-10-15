@@ -106,14 +106,31 @@ _voice_editing = False
 # Seconds of silence that end a toggle recording (0 = auto-stop off).
 _auto_stop_seconds = 0.0
 
+# Seconds of silence that end a chunk (0 = chunked dictation off), and the live
+# settings object middle chunks read beeps, quotes and language from.
+_chunk_pause_seconds = 0.0
+_chunk_cfg = None
+
 
 def _apply_cleanup_settings(cfg):
     """Bring the cleanup and auto-stop options in line with *cfg*; start or
     stop the AI engine."""
     global _remove_fillers, _ai_engine, _auto_stop_seconds, _ai_corrections, _voice_editing, _swiss_spelling
     global _numbers_mode, _numbers_language, _voice_navigation, _adapt_to_app
+    global _chunk_pause_seconds, _chunk_cfg
     _auto_stop_seconds = (float(getattr(cfg, "auto_stop_seconds", 2.0))
                           if getattr(cfg, "auto_stop_silence", False) else 0.0)
+    _chunk_cfg = cfg
+    pause = (float(getattr(cfg, "chunk_pause_seconds", 0.8))
+             if getattr(cfg, "chunked_dictation", False) else 0.0)
+    if pause > 0 and _auto_stop_seconds > 0 and pause >= _auto_stop_seconds:
+        # A pause as long as auto-stop's would end the recording instead of
+        # the chunk, so the chunk pause gives way.
+        clamped = max(0.3, _auto_stop_seconds - 0.2)
+        logger.warning(f"chunk_pause_seconds {pause} is not below auto_stop_seconds "
+                       f"{_auto_stop_seconds}; using {clamped}")
+        pause = clamped
+    _chunk_pause_seconds = pause
     _remove_fillers = bool(getattr(cfg, "remove_fillers", False))
     _swiss_spelling = bool(getattr(cfg, "swiss_spelling", False))
     _voice_navigation = bool(getattr(cfg, "voice_navigation", False))

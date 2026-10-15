@@ -175,6 +175,8 @@ class Settings:
     voice_editing: bool = False          # Shift + dictation key rewrites the selected text with the same AI model
     auto_stop_silence: bool = False      # toggle recordings stop by themselves when you stop talking (silence.py)
     auto_stop_seconds: float = 2.0       # seconds of silence before an auto-stop (0.5-10)
+    chunked_dictation: bool = False      # type each phrase at the pause after it, while still recording (chunking.py; config.toml only)
+    chunk_pause_seconds: float = 0.8     # seconds of silence that end a chunk (0.3-3.0; kept below auto_stop_seconds)
     usage_stats: bool = True             # count words/dictations/speaking time per day (stats.py; numbers only, never text)
     restore_clipboard: bool = False      # put back what the user had copied after pasting a dictation (clipboard.ClipboardKeeper, issue #7)
     typing_wpm: int = 40                 # the user's typing speed, for "time saved" on the Stats tab (10-200)
@@ -252,6 +254,8 @@ def _validation_problems(s: Settings) -> list[tuple[str, str]]:
 
     if not (0.5 <= s.auto_stop_seconds <= 10.0):
         problems.append(("auto_stop_seconds", f"Invalid auto_stop_seconds '{s.auto_stop_seconds}'. Must be between 0.5 and 10"))
+    if not (0.3 <= s.chunk_pause_seconds <= 3.0):
+        problems.append(("chunk_pause_seconds", f"Invalid chunk_pause_seconds '{s.chunk_pause_seconds}'. Must be between 0.3 and 3.0"))
     if not (0.5 <= s.indicator_sensitivity <= 2.0):
         problems.append(("indicator_sensitivity", f"Invalid indicator_sensitivity '{s.indicator_sensitivity}'. Must be between 0.5 and 2.0"))
 
@@ -749,6 +753,9 @@ LIVE_APPLIED_KEYS = {
     # Hands-free auto-stop; read when each toggle recording starts.
     "auto_stop_silence",
     "auto_stop_seconds",
+    # Chunked dictation; read when each recording starts.
+    "chunked_dictation",
+    "chunk_pause_seconds",
     # Usage stats; read into a module global on each reload, checked per dictation.
     "usage_stats",
     # Read into a module global on each reload, checked on each paste.
