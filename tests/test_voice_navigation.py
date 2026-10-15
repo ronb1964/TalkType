@@ -218,7 +218,7 @@ def test_what_i_said_is_only_trusted_in_the_window_it_went_to(dictation, monkeyp
     monkeypatch.setattr(app.state, "last_inserted_window", "claude")
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "libreoffice-writer")
     assert app._handle_navigation("select the last sentence", False) is True
-    assert dictation["pressed"] == [] and dictation["problems"] == ["other_window"]
+    assert dictation["pressed"] == [] and dictation["problems"] == ["nothing_said"]
     # A word move there uses the app's own keys instead of counting.
     app._handle_navigation("go back three words", False)
     assert dictation["pressed"] == [[((C,), "LEFT")] * 3]

@@ -2290,8 +2290,8 @@ class PreferencesWindow:
             nav_check.set_tooltip_text(
                 "When a dictation is only one of these commands, TuxTalk does it instead of\n"
                 "typing it. Inside a longer sentence the words are typed as usual.\n\n"
-                "• What you just said: “select that”, “select the last sentence”,\n"
-                "  “select the last 3 words”\n"
+                "• Right after you dictate, on what you just said: “select that”,\n"
+                "  “select the last sentence”, “select the last 3 words”\n"
                 "• Around the cursor: “select all”, “select the line”,\n"
                 "  “select the next word”, “select to the end of the line”\n"
                 "• Moving: “go to the end”, “go to the start of the line”,\n"

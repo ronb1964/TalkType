@@ -3030,14 +3030,13 @@ _EDIT_NOTICES = {
     "cant_format": "Voice editing changes the words. It can't change the font, size or color.",
     "shortcut_failed": "TuxTalk couldn't press the keys for that. Try doing it from the "
                        "keyboard yourself.",
-    "nothing_said": "Nothing to select yet. Dictate something first, then say "
-                    "\u201cselect that\u201d or \u201cselect the last sentence\u201d.",
+    "nothing_said": "TuxTalk can only select what you just dictated, right after you "
+                    "dictate it. For other text, say \u201cselect the previous 3 words\u201d "
+                    "or \u201cselect the line\u201d, or use the mouse.",
     "nav_terminal": "Select and move by voice doesn't work in a terminal, where those "
                     "keys mean other things.",
-    "other_window": "TuxTalk typed the last dictation in another window, so it can't "
-                    "select it here. Dictate here first, or select it yourself.",
-    "undo_other_window": "TuxTalk typed the last dictation in another window, so it "
-                         "didn't delete anything here. Use Ctrl+Z in this app instead.",
+    "undo_other_window": "TuxTalk can only delete what you just dictated, right after "
+                         "you dictate it. Use Ctrl+Z in this app instead.",
 }
 
 
@@ -3060,10 +3059,9 @@ _EDIT_LABELS = {
     "no_shortcuts": "No bold or italics in this app",
     "cant_format": "Can't change font, size or color",
     "shortcut_failed": "Couldn't press the keys",
-    "nothing_said": "Nothing to select yet",
+    "nothing_said": "Only right after you dictate",
     "nav_terminal": "Doesn't work in a terminal",
-    "other_window": "Last dictation was in another window",
-    "undo_other_window": "Last dictation was in another window",
+    "undo_other_window": "Only right after you dictate",
 }
 
 
@@ -3146,7 +3144,9 @@ def _handle_navigation(raw: str, beeps_on: bool, focused_class=_UNKNOWN_WINDOW) 
         left, right = state.nav_context or (None, "")
     plan = nav.plan(command, left, right)
     if plan is None:
-        _edit_problem("other_window" if elsewhere else "nothing_said", beeps_on)
+        # One message for "just restarted" and "dictated somewhere else since":
+        # both come down to the one rule (it teaches the rule, too).
+        _edit_problem("nothing_said", beeps_on)
         return True
     try:
         pressed = _output_backend().press_keys(plan.chords)

@@ -485,9 +485,11 @@ Select text or move the cursor by saying so. When a dictation is <b>only</b> one
 commands, TuxTalk does it instead of typing it. Said inside a longer sentence, the words
 are typed as usual. Counts go up to 10 ("three" or "3").
 
-<b>What you just said</b> (exact in any app, because TuxTalk knows what it typed)
+<b>What you just said</b>: these work <b>right after you dictate</b>, on what you just said.
   • <b>select that</b>  •  <b>select what I said</b>
   • <b>select the last sentence</b>  •  <b>select the last word</b>  •  <b>select the last 3 words</b>
+  For any other text, use the commands below (<b>select the previous 3 words</b>,
+  <b>select the line</b>) or the mouse.
 <b>Around the cursor</b>
   • <b>select all</b>  •  <b>select the line</b>
   • <b>select the next word</b>  •  <b>select the previous 2 words</b>  •  <b>select the next line</b>
