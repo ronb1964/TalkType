@@ -42,3 +42,17 @@ def test_a_cut_flashes_briefly():
     assert m.flashing()
     m._flash_until = 0.0
     assert not m.flashing()
+
+
+def test_a_cut_draws_a_green_frame():
+    """The flash must be easy to see: a #04B503 frame round the meter, not a
+    faint veil over it."""
+    m = PauseMeter()
+    m.show_snapshot(0.0, 0.0, 0.0, cut=True)
+    surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, 200, 20)
+    cr = cairo.Context(surface)
+    m._draw_marks(cr, 200, 20)
+    r, g, b = pixel(surface, 100, 0)        # top edge
+    assert g > 150 and r < 60 and b < 60
+    r, g, b = pixel(surface, 100, 10)       # inside: left alone
+    assert (r, g, b) != (255, 255, 255) and g < 150

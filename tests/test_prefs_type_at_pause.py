@@ -202,3 +202,7 @@ def test_a_stream_that_wont_start_is_closed(win):
     win.tap_test_btn.clicked()
     assert opened[-1].closed
     assert "Couldn't open the microphone" in win.tap_status.get_text()
+
+
+def test_punctuation_from_context_comes_first(win):
+    assert win.tap_fine.get_child_at(0, 0) is win.tap_context_check

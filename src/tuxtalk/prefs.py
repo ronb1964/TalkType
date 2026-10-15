@@ -343,9 +343,12 @@ class PauseMeter(SegmentedVUMeter):
             cr.rectangle(max(0, x - 1), 0, 3, height)
             cr.fill()
         if self.flashing():
-            cr.set_source_rgba(1.0, 1.0, 1.0, 0.35)
-            cr.rectangle(0, 0, width, height)
-            cr.fill()
+            # A cut: a green frame round the whole meter, easy to catch from
+            # the corner of the eye while speaking.
+            cr.set_source_rgb(0x04 / 255, 0xB5 / 255, 0x03 / 255)
+            cr.set_line_width(3)
+            cr.rectangle(1.5, 1.5, width - 3, height - 3)
+            cr.stroke()
 
 
 def _on_gnome():
@@ -5412,6 +5415,14 @@ class PreferencesWindow:
         self.tap_fine = fine
         r = 0
 
+        self.tap_context_check = Gtk.CheckButton(
+            label="Punctuation from context: decide the mark at a pause by hearing "
+                  "both sides (slower on a weak graphics chip)")
+        self.tap_context_check.get_child().set_line_wrap(True)
+        self.tap_context_check.set_active(bool(self.config.get("chunk_context_marks", True)))
+        fine.attach(self.tap_context_check, 0, r, 2, 1)
+        r += 1
+
         fine.attach(Gtk.Label(label="Pause length:", xalign=0), 0, r, 1, 1)
         self.tap_pause_spin = Gtk.SpinButton(
             adjustment=Gtk.Adjustment(value=float(self.config.get("chunk_pause_seconds", 0.8)),
@@ -5441,14 +5452,6 @@ class PreferencesWindow:
         db_box.pack_start(self.tap_db_spin, False, False, 0)
         db_box.pack_start(Gtk.Label(label="dB louder than the room"), False, False, 0)
         fine.attach(db_box, 1, r, 1, 1)
-        r += 1
-
-        self.tap_context_check = Gtk.CheckButton(
-            label="Punctuation from context: decide the mark at a pause by hearing "
-                  "both sides (slower on a weak graphics chip)")
-        self.tap_context_check.get_child().set_line_wrap(True)
-        self.tap_context_check.set_active(bool(self.config.get("chunk_context_marks", True)))
-        fine.attach(self.tap_context_check, 0, r, 2, 1)
         r += 1
 
         self.tap_test_btn = Gtk.Button(label="Test")
