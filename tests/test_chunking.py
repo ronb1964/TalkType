@@ -231,6 +231,7 @@ def pipeline(monkeypatch):
     monkeypatch.setattr(app, "_usage_stats", False)
     monkeypatch.setattr(history, "add_entry", lambda text: None)
     monkeypatch.setattr(app.state, "continue_mid_sentence", False)
+    monkeypatch.setattr(app.state, "chunk_continuation", False)
     return texts, typed, beeps
 
 
@@ -258,7 +259,7 @@ def test_middle_chunk_without_final_punctuation_continues_the_sentence(pipeline)
     texts, typed, _ = pipeline
     texts.extend(["we meet", "at three"])
     call(frames_of(speech(1.0)), "middle")
-    assert app.state.continue_mid_sentence is True
+    assert app.state.chunk_continuation is True
     call(frames_of(speech(1.0)), "last")
     assert typed[1].strip().startswith("at three")
 
@@ -329,10 +330,10 @@ def feed(audio):
         app._sd_callback(b.reshape(-1, 1), len(b), None, None)
 
 
-def stop():
+def stop(auto_period=False):
     from tuxtalk import app
     app.stop_recording(beeps_on=True, smart_quotes=True, notify_on=False,
-                       language=None, auto_space=True, auto_period=False,
+                       language=None, auto_space=True, auto_period=auto_period,
                        injection_mode="type")
 
 
@@ -411,3 +412,85 @@ def test_flatpak_stop_queues_the_last_chunk_on_the_worker(recording, monkeypatch
     app._service_tick(app._chunk_cfg, svc)
     assert app._chunk_worker().drain(5)
     assert [t.strip() for t in typed] == ["We meet", "at three"]
+
+
+# --- final review fixes ------------------------------------------------------
+
+def test_middle_chunk_gets_no_auto_period(pipeline):
+    """A pause is not a sentence end: with auto-period on (the default) a
+    middle chunk must not get TuxTalk's own period, or every pause would type
+    one and the next chunk could never carry on the sentence."""
+    from tuxtalk import app
+    texts, typed, _ = pipeline
+    texts.append("we meet")
+    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    assert [t.strip() for t in typed] == ["We meet"]
+    assert app.state.chunk_continuation is True
+
+
+def test_last_chunk_gets_the_auto_period(pipeline):
+    texts, typed, _ = pipeline
+    texts.extend(["we meet", "at three"])
+    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    call(frames_of(speech(1.0)), "last", auto_period=True)
+    assert [t.strip() for t in typed] == ["We meet", "at three."]
+
+
+def test_pause_before_stop_closes_the_sentence(recording, monkeypatch):
+    """The usual way to finish: the last words, a pause (which cuts them off as
+    a middle chunk), then the stop with nothing left. The sentence still gets
+    its auto-period, in place of the space after it."""
+    from types import SimpleNamespace
+    from tuxtalk import app
+    texts, typed, beeps = recording
+    erased = []
+    monkeypatch.setattr(app, "_output_backend",
+                        lambda: SimpleNamespace(backspaces=lambda n: (erased.append(n), True)[1]))
+    monkeypatch.setattr(app, "_inject_text",
+                        lambda text, mode, t0, one_block=False: (
+                            typed.append(text),
+                            setattr(app.state, "last_inserted_text", text), "ok")[2])
+    monkeypatch.setattr(app._chunk_cfg, "auto_period", True)
+    texts.append("we meet")
+    feed(np.concatenate([speech(1.0), noise(1.2)]))
+    stop(auto_period=True)
+    assert typed == ["We meet ", ". "]
+    assert erased == [1]
+    assert app.state.last_inserted_text == "We meet. "
+    assert beeps == [app.READY_BEEP]
+
+
+def test_chunk_continuation_never_reaches_the_next_dictation(pipeline):
+    """A chunk's 'carry on lowercase' belongs to its own recording only."""
+    from tuxtalk import app
+    texts, typed, _ = pipeline
+    texts.extend(["we meet", "hello there"])
+    call(frames_of(speech(1.0)), "middle")
+    assert app.state.chunk_continuation is True
+    app._arm_chunker(SR)            # the next recording starts
+    assert app.state.chunk_continuation is False
+    call(frames_of(speech(1.0)), None)
+    assert typed[1].strip().startswith("Hello")
+
+
+def test_arming_starts_the_worker(monkeypatch):
+    """The worker must exist before the first cut, so the audio callback never
+    has to build it (a thread start and an import on the audio thread)."""
+    from tuxtalk import app
+    monkeypatch.setattr(app, "_chunk_worker_instance", None)
+    monkeypatch.setattr(app, "_chunk_pause_seconds", 0.8)
+    app._arm_chunker(SR)
+    assert app._chunk_worker_instance is not None
+    app.state.chunker = None
+
+
+def test_a_cut_queues_its_chunk_before_releasing_the_lock(recording, monkeypatch):
+    """Otherwise the stop could slip in between counting the chunk and queuing
+    it, and queue the last chunk ahead of this one."""
+    from types import SimpleNamespace
+    from tuxtalk import app
+    held = []
+    monkeypatch.setattr(app, "_chunk_worker_instance",
+                        SimpleNamespace(submit=lambda job: held.append(app._chunk_lock.locked())))
+    feed(np.concatenate([speech(1.0), noise(1.0)]))
+    assert held == [True]

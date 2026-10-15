@@ -272,6 +272,11 @@ class RecordingState:
     # or None, and how many chunks it has cut so far.
     chunker: object = None
     chunks_submitted: int = 0
+    # The last chunk typed ended mid-sentence, so the next chunk of the SAME
+    # recording carries on lowercase. Kept apart from continue_mid_sentence
+    # (which "undo" sets for the next dictation) so it never leaks past the
+    # recording.
+    chunk_continuation: bool = False
 
     def __post_init__(self):
         if self.frames is None:
@@ -876,16 +881,23 @@ def _cut_chunk(chunker):
         _drop_tail_samples(frames, chunker.tail_samples())
         state.chunks_submitted += 1
         number = state.chunks_submitted
-    rec_sr = getattr(state, "recording_samplerate", SAMPLE_RATE)
-    seconds = sum(len(f) for f in frames) / 2 / rec_sr
-    logger.info(f"Chunk {number}: {seconds:.1f}s of audio, cut after a "
-                f"{chunker.last_pause:.2f}s pause")
-    _chunk_worker().submit(lambda: _transcribe_chunk(frames, rec_sr, "middle"))
+        rec_sr = getattr(state, "recording_samplerate", SAMPLE_RATE)
+        pause = chunker.last_pause
+        # Queued before the lock is let go: otherwise the stop could slip in
+        # between counting this chunk and queuing it, and queue the last chunk
+        # ahead of it. put() on the unbounded queue never blocks.
+        _chunk_worker().submit(
+            lambda: _transcribe_chunk(frames, rec_sr, "middle", number, pause))
 
 
-def _transcribe_chunk(frames, rec_sr, role):
+def _transcribe_chunk(frames, rec_sr, role, number=None, pause=None):
     """Transcribe and type one chunk cut during the recording, with the
     settings as they are now."""
+    if number is not None:
+        # Logged here, on the worker, to keep file writes off the audio thread.
+        seconds = sum(len(f) for f in frames) / 2 / rec_sr
+        logger.info(f"Chunk {number}: {seconds:.1f}s of audio, cut after a "
+                    f"{pause:.2f}s pause")
     cfg = _chunk_cfg
     _transcribe_and_inject(frames, rec_sr, cfg.beeps, cfg.smart_quotes, cfg.notify,
                            cfg.language, cfg.auto_space, cfg.auto_period,
@@ -899,8 +911,11 @@ def _arm_chunker(rec_sr, edit_mode=False):
     if _chunk_pause_seconds > 0 and not edit_mode:
         from .chunking import PauseDetector
         chunker = PauseDetector(_chunk_pause_seconds, rec_sr)
+        # Started here, so the audio callback never has to build it.
+        _chunk_worker()
     with _chunk_lock:
         state.chunks_submitted = 0
+        state.chunk_continuation = False
         state.chunker = chunker
 
 
@@ -3017,6 +3032,33 @@ def _report_undelivered(outcome: str, beeps_on: bool):
     _notify("TuxTalk", message)
 
 
+def _close_chunked_sentence(auto_period: bool, auto_space: bool, injection_mode: str) -> None:
+    """The dictation ended in a pause, so its last chunk held nothing, and the
+    sentence the chunks typed has no auto-period yet (middle chunks get none).
+    Put it in place of the space after the last chunk."""
+    pending, state.chunk_continuation = state.chunk_continuation, False
+    if not (pending and auto_period):
+        return
+    focused = _query_focused_window_class()
+    if (focused is not None and state.last_inserted_window is not None
+            and focused != state.last_inserted_window):
+        return  # backspacing in another window would delete the user's text
+    if _adapt_to_app and app_kind(focused):
+        return  # terminals and code editors get no closing period
+    typed = state.last_inserted_text
+    closing = "." + (" " if auto_space else "")
+    try:
+        if typed.endswith(" "):
+            if not _output_backend().backspaces(1):
+                return
+            typed = typed[:-1]
+        if _inject_text(closing, injection_mode, time.time()) == "ok":
+            # Undo then removes the whole last chunk with its period.
+            state.last_inserted_text = typed + closing
+    except Exception as e:
+        logger.warning(f"Couldn't close the chunked sentence: {e}")
+
+
 def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                            language=None, auto_space=True, auto_period=True,
                            injection_mode="type", chunk_role=None):
@@ -3039,6 +3081,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
             return False
         logger.info(f"Chunk ({chunk_role}) {what}; nothing typed for it")
         if chunk_role == "last":
+            _close_chunked_sentence(auto_period, auto_space, injection_mode)
             _beep(beeps_on, *READY_BEEP)
         return True
 
@@ -3098,7 +3141,14 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         # plainer for a terminal or code editor ("Plain text in terminals and
         # code editors").
         kind = app_kind(_query_focused_window_class()) if _adapt_to_app else ""
-        text = _prepare_text(raw, smart_quotes, auto_period, auto_space, app_kind=kind)
+        if chunk_role is not None and state.chunk_continuation:
+            # The chunk before this one stopped mid-sentence.
+            state.chunk_continuation = False
+            state.continue_mid_sentence = True
+        # A pause is not a sentence end, so a middle chunk gets no auto-period
+        # of its own; the last chunk (or _close_chunked_sentence) ends it.
+        chunk_period = auto_period and chunk_role != "middle"
+        text = _prepare_text(raw, smart_quotes, chunk_period, auto_space, app_kind=kind)
 
         # Beep to confirm transcription is done
         if chunk_role != "middle":
@@ -3128,7 +3178,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                 # the way a dictation after "undo" does.
                 tail = text.rstrip()
                 if tail and not tail.endswith(('.', '?', '!', '…')):
-                    state.continue_mid_sentence = True
+                    state.chunk_continuation = True
             if _usage_stats:
                 # After typing, so saving the counts never delays the text.
                 # Counts only (words, seconds dictating); see stats.py.
