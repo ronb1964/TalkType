@@ -94,6 +94,21 @@
   </screenshots>
 
   <releases>
+    <release version="0.15.1" date="2026-10-15">
+      <description>
+        <p>Transcribe a File, and tuxtalk --toggle for your own shortcuts</p>
+        <ul>
+          <li>Transcribe a File: turn a recording or a video into text or subtitles, on this computer</li>
+          <li>tuxtalk --toggle, --start and --stop for a desktop shortcut or a script</li>
+          <li>Auto-detect can be held to the languages you speak (Whisper models)</li>
+          <li>Numbers can be typed as digits: 25, 15th, 7:30</li>
+          <li>Say "fix that word" right after a dictation to fix a word it got wrong</li>
+          <li>Plain text in terminals and code editors: no capital or period they don't want</li>
+          <li>Select and move by voice (TuxTalk Labs)</li>
+          <li>Language lists show each language in its own words</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.15.0" date="2026-10-13">
       <description>
         <p>TalkType is now TuxTalk, with voice editing and Your Words</p>

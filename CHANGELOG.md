@@ -3,7 +3,7 @@
 All notable changes to TuxTalk are documented here. It was called TalkType
 before 0.15.0, so older entries use that name.
 
-## [Unreleased]
+## [0.15.1] - 2026-10-15
 
 - New: `tuxtalk --toggle`, plus `--start` and `--stop`, for your own desktop
   shortcut or a script. AppImage users run the AppImage file with it. If
