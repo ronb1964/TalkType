@@ -66,14 +66,44 @@ class Piece:
 def decode(path):
     """The file's sound as 16 kHz mono float32. Raises NoSound for a file
     PyAV can't open or one with no sound in it."""
-    from faster_whisper.audio import decode_audio
     try:
-        audio = decode_audio(path, sampling_rate=SAMPLE_RATE)
+        audio = _decode_with_av(path)
     except Exception as e:
         raise NoSound(f"TuxTalk couldn't read the sound in this file ({e})") from e
     if audio is None or len(audio) == 0:
         raise NoSound("This file has no sound in it.")
     return np.asarray(audio, dtype=np.float32)
+
+
+def _decode_with_av(path):
+    """The first sound track of *path* as 16 kHz mono float32, read with
+    PyAV. Not faster-whisper's decode_audio: it passes av.open() an option
+    PyAV 19 removed (metadata_errors), so with a current PyAV it can't read
+    any file. A frame that won't decode is skipped, as there."""
+    import av
+    resampler = av.audio.resampler.AudioResampler(format="s16", layout="mono", rate=SAMPLE_RATE)
+    chunks = []
+
+    def add(frames):
+        for frame in frames:
+            chunks.append(frame.to_ndarray().reshape(-1))
+
+    with av.open(path, mode="r") as container:
+        if not container.streams.audio:
+            return np.zeros(0, dtype=np.float32)
+        frames = container.decode(audio=0)
+        while True:
+            try:
+                frame = next(frames)
+            except StopIteration:
+                break
+            except av.error.InvalidDataError:
+                continue
+            add(resampler.resample(frame))
+        add(resampler.resample(None))       # what the resampler still holds
+    if not chunks:
+        return np.zeros(0, dtype=np.float32)
+    return np.concatenate(chunks).astype(np.float32) / 32768.0
 
 
 def cut_points(audio, sample_rate=SAMPLE_RATE, min_s=MIN_PIECE_S, max_s=MAX_PIECE_S):
