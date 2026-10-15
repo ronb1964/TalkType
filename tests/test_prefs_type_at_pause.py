@@ -162,3 +162,43 @@ def test_help_explains_type_at_pause():
     source = inspect.getsource(help_dialog)
     assert "<b>Type at Pause</b>" in source
     assert "Fine-tuning" in source
+
+
+# --- final review fixes ------------------------------------------------------
+
+def test_leaving_the_window_stops_the_test(win):
+    """Clicking into the app to dictate takes the focus from Preferences. A test
+    still holding a direct hw: mic would make the dictation fail with only a
+    beep, so the test stops then."""
+    win.tap_check.set_active(True)
+    win.tap_test_btn.clicked()
+    win._tap_on_window_active(SimpleNamespace(is_active=lambda: False), None)
+    assert win.streams[-1].stopped
+
+
+def test_the_window_focus_is_watched():
+    connected = []
+    w = PreferencesWindow.__new__(PreferencesWindow)
+    w.config = {}
+    w.update_config = lambda k, v: None
+    w.window = SimpleNamespace(connect=lambda sig, cb: connected.append(sig))
+    w._build_type_at_pause(Gtk.Grid(), 0, 20, lambda text: Gtk.Label(label=text))
+    assert "notify::is-active" in connected
+
+
+def test_a_stream_that_wont_start_is_closed(win):
+    class NoStart(FakeStream):
+        def start(self):
+            raise OSError("Device unavailable")
+    opened = []
+
+    def factory(**kwargs):
+        s = NoStart(**kwargs)
+        opened.append(s)
+        return s
+
+    win._pause_stream_factory = factory
+    win.tap_check.set_active(True)
+    win.tap_test_btn.clicked()
+    assert opened[-1].closed
+    assert "Couldn't open the microphone" in win.tap_status.get_text()

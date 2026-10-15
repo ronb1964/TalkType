@@ -761,3 +761,27 @@ def test_context_marks_off_types_the_engines_mark(pipeline, monkeypatch):
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     assert typed == ["We meet. "]
     assert app.state.pending_boundary is None
+
+
+# --- final review fixes ------------------------------------------------------
+
+def test_context_marks_off_carries_on_after_a_comma(pipeline, monkeypatch):
+    """Off, a chunk ending in a comma (or no mark) is mid-sentence: the next one
+    must not start with a capital."""
+    from tuxtalk import app
+    monkeypatch.setattr(app, "_chunk_context_marks", False)
+    texts, typed, _ = pipeline
+    texts.extend(["we meet,", "at the station"])
+    call(frames_of(speech(1.0)), "middle")
+    call(frames_of(speech(1.0)), "last")
+    assert typed[1].strip().startswith("at the station")
+
+
+def test_context_marks_off_does_not_carry_past_the_recording(pipeline, monkeypatch):
+    from tuxtalk import app
+    monkeypatch.setattr(app, "_chunk_context_marks", False)
+    texts, typed, _ = pipeline
+    texts.append("we meet,")
+    call(frames_of(speech(1.0)), "middle")
+    call([], "last")
+    assert app.state.continue_mid_sentence is False

@@ -5485,8 +5485,18 @@ class PreferencesWindow:
         self.tap_test_btn.connect("clicked", self._tap_toggle_test)
         self.tap_expander.connect("notify::expanded", lambda e, _p: (
             None if e.get_expanded() else self._stop_pause_test()))
+        window = getattr(self, "window", None)
+        if window is not None:
+            window.connect("notify::is-active", self._tap_on_window_active)
         self._tap_sync_sensitivity()
         return row
+
+    def _tap_on_window_active(self, window, _param):
+        """Going off to another window is going off to dictate: a test still
+        holding a direct hw: mic would make that dictation fail with only a
+        beep, so the test stops."""
+        if not window.is_active():
+            self._stop_pause_test()
 
     def _tap_sync_sensitivity(self):
         on = self.tap_check.get_active()
@@ -5524,12 +5534,18 @@ class PreferencesWindow:
                     self._tap_redraw_pending = True
                     GLib.idle_add(self._tap_show)
 
+            stream = None
             stream = self._pause_stream_factory(device=device_idx, channels=1,
                                                 samplerate=sample_rate, dtype="int16",
                                                 callback=callback)
             stream.start()
         except Exception as e:
             self._pause_test = None
+            if stream is not None:
+                try:
+                    stream.close()   # opened but not started: free the mic
+                except Exception:
+                    pass
             self.tap_status.set_text(f"Couldn't open the microphone: {e}")
             return
         self._pause_test_stream = stream

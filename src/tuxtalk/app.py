@@ -3151,6 +3151,8 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         logger.info(f"Chunk ({chunk_role}) {what}; nothing typed for it")
         if chunk_role == "last":
             _flush_boundary(auto_period, auto_space, injection_mode)
+            if not _chunk_context_marks:
+                state.continue_mid_sentence = False   # it belongs to this recording
             _beep(beeps_on, *READY_BEEP)
         return True
 
@@ -3245,6 +3247,10 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                 outcome = "failed"
             if outcome in _UNDELIVERED_NOTICES:
                 _report_undelivered(outcome, beeps_on)
+            if chunk_role == "middle" and not _chunk_context_marks and outcome == "ok":
+                # Without the context pass the engine's own mark decides: after
+                # a comma or none, the next chunk carries on lowercase.
+                state.continue_mid_sentence = not text.rstrip().endswith(_SENTENCE_ENDS)
             if held_mark is not None and outcome == "ok":
                 state.pending_boundary = {"mark": held_mark, "audio": audio_f32,
                                           "raw": raw, "typed": state.last_inserted_text}
