@@ -4,6 +4,22 @@ Things I'd like to add or fix, roughly grouped. Nothing here has a date on it. W
 
 `[ ]` not started, `[~]` partly done (the note says what's left).
 
+## Road to 1.0
+
+1.0 means TuxTalk does its main job reliably and won't change under you in
+big ways. Roughly in order:
+
+- [ ] 0.15.1 ships, with everything built since 0.15.0.
+- [ ] A polish release (0.16) that fixes what early users report, and decides
+  which TuxTalk Labs features graduate and which stay experimental.
+- [ ] Dictation works reliably on the desktops it claims: KDE, GNOME,
+  Cinnamon, XFCE, Sway and Hyprland, on Wayland and X11.
+- [ ] No big changes left that would disrupt people, like settings that need
+  moving or features that work a different way.
+- [ ] A release or two in a row with no serious bug reports.
+- [ ] Help, the README and the common questions all match what the app does.
+- [ ] A new demo video and walkthrough to go out with the 1.0 release.
+
 ## Dictation
 
 - [ ] Importable packs of snippets, like a "Linux developer" pack that turns "why do tool" into ydotool and "dee bus" into D-Bus, so people don't have to build their list from scratch. Could grow into a library people send in by pull request.
