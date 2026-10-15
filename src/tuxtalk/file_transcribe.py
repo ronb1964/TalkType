@@ -265,6 +265,57 @@ def transcribe(audio, engine, progress=None, cancelled=None):
     return pieces
 
 
+# --- the last transcript, kept for next time ------------------------------------------------
+# So closing the window loses nothing: opening it again shows the last file's
+# text with every save button, until another file replaces it.
+
+LAST_FILE = "last-transcript.json"
+
+
+def last_path():
+    from . import config
+    return os.path.join(config.get_data_dir(), LAST_FILE)
+
+
+def remember(path, pieces, total):
+    """Keep *pieces* of the file at *path* for next time: True when it's on
+    disk. Readable only by this user, and written whole or not at all."""
+    import json
+    import time
+    target = last_path()
+    data = {"path": path, "total": total, "when": time.time(),
+            "pieces": [[p.start, p.end, p.text] for p in pieces]}
+    tmp = f"{target}.tmp"
+    try:
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+        os.replace(tmp, target)
+        return True
+    except OSError as e:
+        logger.warning(f"Couldn't keep the transcript for next time: {e}")
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        return False
+
+
+def recall():
+    """(path, pieces, total, when) of the last transcript kept, or None."""
+    import json
+    try:
+        with open(last_path(), encoding="utf-8") as f:
+            data = json.load(f)
+        pieces = [Piece(float(a), float(b), str(t)) for a, b, t in data["pieces"]]
+        if not pieces:
+            return None
+        return data.get("path"), pieces, float(data.get("total", 0)), float(data.get("when", 0))
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
 # --- writing it out -------------------------------------------------------------------------
 
 def clock(seconds, srt=False):
