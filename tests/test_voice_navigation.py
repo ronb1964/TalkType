@@ -289,3 +289,25 @@ def test_dictation_remembers_the_place_between_moves(dictation):
     app._handle_navigation("go back one word", False)
     assert dictation["pressed"][1] == [((), "LEFT")] * len("We ")
     assert app.state.nav_context == (" ", "We finished early.")
+
+
+# --- the same check for "delete last word" ------------------------------------------------
+
+def test_delete_last_word_in_another_window_deletes_nothing(dictation, monkeypatch):
+    app = dictation["app"]
+    deleted = []
+    dictation["backend"].backspaces = lambda n: deleted.append(n) or True
+    monkeypatch.setattr(app.state, "last_inserted_window", "claude")
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "libreoffice-writer")
+    assert app._handle_undo("delete last word", False, False) is True
+    assert deleted == [] and dictation["problems"] == ["undo_other_window"]
+    assert app.state.last_inserted_text == " We finished early."   # still there for its window
+
+
+def test_delete_last_word_in_its_own_window_still_works(dictation, monkeypatch):
+    app = dictation["app"]
+    deleted = []
+    dictation["backend"].backspaces = lambda n: deleted.append(n) or True
+    monkeypatch.setattr(app.state, "last_inserted_window", "org.kde.kwrite")
+    assert app._handle_undo("delete last word", False, False) is True
+    assert deleted == [6] and dictation["problems"] == []

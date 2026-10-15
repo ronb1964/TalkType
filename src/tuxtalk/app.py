@@ -2363,6 +2363,17 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
         if notify_on: _notify("TuxTalk", "Nothing to undo")
         return True
 
+    # Backspacing the last dictation's length in a different window would
+    # delete text there that TuxTalk never typed. Unknown windows go ahead,
+    # as before.
+    focused = _query_focused_window_class()
+    if (focused is not None and state.last_inserted_window is not None
+            and focused != state.last_inserted_window):
+        logger.info(f"Undo refused: the last dictation went to {state.last_inserted_window!r}, "
+                    f"not {focused!r}")
+        _edit_problem("undo_other_window", beeps_on)
+        return True
+
     # Calculate how many characters to delete (iterates `count` times)
     delete_count = calculate_undo_length(state.last_inserted_text, undo_type, count)
     logger.info(f"Undo: deleting {delete_count} characters (last text was {len(state.last_inserted_text)} chars, count={count})")
@@ -3025,6 +3036,8 @@ _EDIT_NOTICES = {
                     "keys mean other things.",
     "other_window": "TuxTalk typed the last dictation in another window, so it can't "
                     "select it here. Dictate here first, or select it yourself.",
+    "undo_other_window": "TuxTalk typed the last dictation in another window, so it "
+                         "didn't delete anything here. Use Ctrl+Z in this app instead.",
 }
 
 
@@ -3050,6 +3063,7 @@ _EDIT_LABELS = {
     "nothing_said": "Nothing to select yet",
     "nav_terminal": "Doesn't work in a terminal",
     "other_window": "Last dictation was in another window",
+    "undo_other_window": "Last dictation was in another window",
 }
 
 

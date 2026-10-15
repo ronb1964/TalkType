@@ -44,6 +44,18 @@ _hold_back_notifications()
 
 
 @pytest.fixture(autouse=True)
+def _no_remembered_dictation_window(monkeypatch):
+    """Start each test with no remembered dictation window. Typing records the
+    focused window (state.last_inserted_window), and undo and voice navigation
+    refuse when another window has the focus. A window left by an earlier test
+    compared against the user's real desktop, so tests passed or failed with
+    whatever the user was doing."""
+    from tuxtalk import app
+    monkeypatch.setattr(app.state, "last_inserted_window", None)
+    monkeypatch.setattr(app.state, "nav_context", None)
+
+
+@pytest.fixture(autouse=True)
 def _no_real_kwin(monkeypatch):
     """Never let a test register or release hotkeys in the user's live KWin.
 
