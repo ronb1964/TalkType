@@ -3059,19 +3059,34 @@ _EDIT_LABELS = {
     "no_shortcuts": "No bold or italics in this app",
     "cant_format": "Can't change font, size or color",
     "shortcut_failed": "Couldn't press the keys",
-    "nothing_said": "Only right after you dictate",
-    "nav_terminal": "Doesn't work in a terminal",
-    "undo_other_window": "Only right after you dictate",
+    "nothing_said": "Works only right after dictating",
+    "nav_terminal": "Can't select or move in a terminal",
+    "undo_other_window": "Works only right after dictating",
 }
 
 
 def _edit_problem(kind: str, beeps_on: bool) -> None:
     """Tell the user a voice edit didn't happen, and why. Always shown, like
-    _report_undelivered: otherwise nothing at all would seem to happen."""
+    _report_undelivered: otherwise nothing at all would seem to happen.
+
+    A problem that is really a rule ("select works right after you dictate")
+    opens a small window explaining it, the first time in a run (explain.py);
+    later, and for good once "Don't explain this again" is ticked, the short
+    floating label alone. The notification is for real errors only: a whole
+    explanation in it is gone before it can be read."""
     message = _EDIT_NOTICES[kind]
     logger.info(f"Voice edit not done: {kind}")
     print(message)
     _beep(beeps_on, *CANCEL_BEEP)
+    from . import explain
+    # Explained before (this run, or "don't explain again"): the label is
+    # enough. Not opened (no window could start): the notification as before.
+    explained = False
+    if explain.should_explain(kind):
+        if explain.open_window(kind):
+            return
+    else:
+        explained = kind in explain.EXPLANATIONS
     # Where the user is looking: over the active window (screen_message.py).
     # The notification stays as a backup, in the notification history.
     try:
@@ -3079,7 +3094,8 @@ def _edit_problem(kind: str, beeps_on: bool) -> None:
         screen_message.show_over_active_window(_EDIT_LABELS[kind])
     except Exception as e:
         logger.debug(f"Could not float the message over the window: {e}")
-    _notify("TuxTalk", message)
+    if not explained:
+        _notify("TuxTalk", message)
 
 
 def _send_copy_keystroke() -> bool:

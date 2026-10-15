@@ -56,6 +56,17 @@ def _no_remembered_dictation_window(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_real_explanation_windows(monkeypatch, tmp_path):
+    """Never open an explanation window on the user's desktop, and never read
+    or write their "don't explain again" choices. Tests that want the window
+    record it through explain.open_window themselves."""
+    from tuxtalk import explain
+    monkeypatch.setattr(explain, "open_window", lambda kind: False)
+    monkeypatch.setattr(explain, "_never_path", lambda: str(tmp_path / "explained.json"))
+    monkeypatch.setattr(explain, "_shown_this_run", set())
+
+
+@pytest.fixture(autouse=True)
 def _no_real_kwin(monkeypatch):
     """Never let a test register or release hotkeys in the user's live KWin.
 
