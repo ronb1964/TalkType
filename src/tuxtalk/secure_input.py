@@ -182,7 +182,7 @@ def is_installed():
 def running_version():
     """The running helper's version, from its hello, or None."""
     from .hotkey_helper_client import HelperKeyboard
-    keyboard = HelperKeyboard()
+    keyboard = HelperKeyboard(connect_timeout=0.5)
     try:
         if not os.path.exists(keyboard.socket_path) or not keyboard.connect():
             return None
@@ -199,6 +199,12 @@ def needs_update():
 
 
 def _run_as_root(script, what):
+    """(ok, message) after running *script* through pkexec. (Tests replace
+    this, so a test can never open a password prompt; _pkexec is the work.)"""
+    return _pkexec(script, what)
+
+
+def _pkexec(script, what):
     """(ok, message) after running *script* through pkexec."""
     from .uinput_helper import pkexec_was_declined
     try:
@@ -217,6 +223,35 @@ def _run_as_root(script, what):
     detail = (result.stderr or result.stdout or "").strip()
     logger.error(f"Hotkey helper {what} failed: {detail}")
     return False, detail or "it failed for an unknown reason"
+
+
+def fix_permissions():
+    """The permission fix behind first-run's Fix Typing and Preferences' Fix
+    Typing Permissions: the hotkey helper where this system can run it, the
+    "input" group where it can't. Returns (ok, message, needs_restart)."""
+    usable, why = can_install()
+    if usable:
+        ok, message = install_with_pkexec()
+        return ok, message, False
+    logger.info(f"Hotkey helper not used ({why}); using the input group instead")
+    from .uinput_helper import install_udev_rule_with_pkexec
+    ok, message = install_udev_rule_with_pkexec()
+    return ok, message, ok
+
+
+def fix_description():
+    """What the fix will do, one line each, for the screens that offer it.
+    The second item is whether a restart follows."""
+    if can_install()[0]:
+        return ([
+            "Installs TuxTalk's hotkey helper, the only program that reads the keyboard. "
+            "It tells TuxTalk about its hotkeys and nothing else",
+            "Lets TuxTalk type with a virtual keyboard, as Steam does for game controllers",
+        ], False)
+    return ([
+        "Adds a system rule to allow input device access",
+        "Adds your user to the 'input' group",
+    ], True)
 
 
 def install_with_pkexec():

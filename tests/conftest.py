@@ -136,3 +136,33 @@ def _no_real_custom_files(monkeypatch, tmp_path):
     app = sys.modules.get("tuxtalk.app")
     if app is not None:
         monkeypatch.setattr(app, "_custom_words", [])
+
+
+@pytest.fixture(autouse=True)
+def _no_real_hotkey_helper_or_pkexec(monkeypatch, tmp_path):
+    """No test may open a password prompt or reach a real hotkey helper.
+
+    A test that patched only the "input" group installer once ran the real
+    pkexec through the hotkey helper's installer instead, and a password
+    dialog sat on the desktop until it timed out. So: the helper's socket is
+    a path nobody listens on, this machine counts as unable to run the
+    helper unless a test says otherwise, and running anything as root fails
+    the test outright."""
+    monkeypatch.setenv("TUXTALK_HOTKEYS_SOCKET", str(tmp_path / "no-helper.sock"))
+    from tuxtalk import secure_input
+    monkeypatch.setattr(secure_input, "can_install", lambda: (False, "tests"))
+
+    def refuse(*_a, **_k):
+        pytest.fail("a test tried to run something as root through pkexec")
+    monkeypatch.setattr(secure_input, "_run_as_root", refuse)
+
+    # And pkexec itself, however it's reached. A test that mocks
+    # subprocess.run on purpose replaces this guard with its own mock.
+    import subprocess
+    real_run = subprocess.run
+
+    def guarded_run(cmd, *args, **kwargs):
+        if isinstance(cmd, (list, tuple)) and cmd and os.path.basename(str(cmd[0])) == "pkexec":
+            pytest.fail(f"a test tried to run pkexec: {cmd[:3]}")
+        return real_run(cmd, *args, **kwargs)
+    monkeypatch.setattr(subprocess, "run", guarded_run)
