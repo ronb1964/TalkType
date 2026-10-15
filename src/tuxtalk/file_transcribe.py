@@ -265,27 +265,77 @@ def transcribe(audio, engine, progress=None, cancelled=None):
     return pieces
 
 
-# --- the last transcript, kept for next time ------------------------------------------------
-# So closing the window loses nothing: opening it again shows the last file's
-# text with every save button, until another file replaces it.
+# --- earlier transcripts, kept for next time ------------------------------------------------
+# So closing the window or opening another file loses nothing: the window
+# shows the newest one on opening, and Earlier transcripts lists them all.
 
-LAST_FILE = "last-transcript.json"
+RECENT_FILE = "recent-transcripts.json"
+MAX_RECENT = 10
+_OLD_LAST_FILE = "last-transcript.json"     # one kept transcript, before the list
 
 
-def last_path():
+class Kept:
+    """One transcript kept for next time."""
+    def __init__(self, path, pieces, total, when):
+        self.path, self.pieces, self.total, self.when = path, pieces, total, when
+
+    @property
+    def name(self):
+        return os.path.basename(self.path or "") or "A file"
+
+
+def recent_path():
     from . import config
-    return os.path.join(config.get_data_dir(), LAST_FILE)
+    return os.path.join(config.get_data_dir(), RECENT_FILE)
 
 
-def remember(path, pieces, total):
-    """Keep *pieces* of the file at *path* for next time: True when it's on
-    disk. Readable only by this user, and written whole or not at all."""
+def _read_list(target):
     import json
-    import time
-    target = last_path()
-    data = {"path": path, "total": total, "when": time.time(),
-            "pieces": [[p.start, p.end, p.text] for p in pieces]}
+    with open(target, encoding="utf-8") as f:
+        data = json.load(f)
+    return data if isinstance(data, list) else [data]
+
+
+def _entry(data):
+    try:
+        pieces = [Piece(float(a), float(b), str(t)) for a, b, t in data["pieces"]]
+        if not pieces:
+            return None
+        return Kept(data.get("path"), pieces, float(data.get("total", 0)),
+                    float(data.get("when", 0)))
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def recent():
+    """The transcripts kept, newest first. Never raises."""
+    target = recent_path()
+    entries = []
+    try:
+        entries = _read_list(target)
+    except FileNotFoundError:
+        # The one transcript kept before there was a list comes along once.
+        old = os.path.join(os.path.dirname(target), _OLD_LAST_FILE)
+        try:
+            entries = _read_list(old)
+            kept = [e for e in (_entry(d) for d in entries) if e]
+            if _write(kept):
+                os.remove(old)
+            return kept
+        except (OSError, ValueError):
+            return []
+    except (OSError, ValueError):
+        return []
+    return [e for e in (_entry(d) for d in entries) if e][:MAX_RECENT]
+
+
+def _write(entries):
+    """Write the list whole or not at all, readable only by this user."""
+    import json
+    target = recent_path()
     tmp = f"{target}.tmp"
+    data = [{"path": e.path, "total": e.total, "when": e.when,
+             "pieces": [[p.start, p.end, p.text] for p in e.pieces]} for e in entries]
     try:
         os.makedirs(os.path.dirname(target), exist_ok=True)
         fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
@@ -294,7 +344,7 @@ def remember(path, pieces, total):
         os.replace(tmp, target)
         return True
     except OSError as e:
-        logger.warning(f"Couldn't keep the transcript for next time: {e}")
+        logger.warning(f"Couldn't keep the transcripts for next time: {e}")
         try:
             os.remove(tmp)
         except OSError:
@@ -302,18 +352,27 @@ def remember(path, pieces, total):
         return False
 
 
-def recall():
-    """(path, pieces, total, when) of the last transcript kept, or None."""
-    import json
+def remember(path, pieces, total):
+    """Put this transcript first in the list (a file done again replaces its
+    older copy) and keep MAX_RECENT. Returns the Kept, or None when it
+    couldn't be written."""
+    import time
+    entry = Kept(path, list(pieces), total, time.time())
+    others = [e for e in recent() if not (path and e.path == path)]
+    entries = [entry] + others[:MAX_RECENT - 1]
+    return entry if _write(entries) else None
+
+
+def forget_all():
+    """Clear the list. True when nothing is kept any more."""
     try:
-        with open(last_path(), encoding="utf-8") as f:
-            data = json.load(f)
-        pieces = [Piece(float(a), float(b), str(t)) for a, b, t in data["pieces"]]
-        if not pieces:
-            return None
-        return data.get("path"), pieces, float(data.get("total", 0)), float(data.get("when", 0))
-    except (OSError, ValueError, KeyError, TypeError):
-        return None
+        os.remove(recent_path())
+    except FileNotFoundError:
+        pass
+    except OSError as e:
+        logger.warning(f"Couldn't clear the earlier transcripts: {e}")
+        return False
+    return True
 
 
 # --- writing it out -------------------------------------------------------------------------
