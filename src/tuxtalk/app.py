@@ -3192,9 +3192,31 @@ def _handle_fix_word(raw: str, beeps_on: bool) -> bool:
     if said not in _FIX_WORD_PHRASES:
         return False
     logger.info("Voice command: fix that word")
+    # Right after a dictation, in its window, Fix a Word can also fix it in
+    # the text: it gets exactly what was typed, through a file only this
+    # user can read (the runtime folder), which it deletes once read.
+    args = []
+    focused = _query_focused_window_class()
+    if state.last_inserted_text.strip() and not (
+            focused is not None and state.last_inserted_window is not None
+            and focused != state.last_inserted_window):
+        try:
+            import json
+            path = os.path.join(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"),
+                                "tuxtalk-fix-word.json")
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w") as f:
+                json.dump({"text": state.last_inserted_text, "window": focused}, f)
+            args = ["--in-place", path]
+            # The text is about to change: undo and voice moves can't trust
+            # their counts any more.
+            state.last_inserted_text = ""
+            state.nav_context = None
+        except OSError as e:
+            logger.debug(f"Fix a Word can't fix it in the text: {e}")
     try:
         from .explain import start_helper_window
-        start_helper_window("tuxtalk.fix_word_dialog")
+        start_helper_window("tuxtalk.fix_word_dialog", *args)
         _beep(beeps_on, *READY_BEEP)
     except Exception as e:
         logger.warning(f"Could not open Fix a Word: {e}")

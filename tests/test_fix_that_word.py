@@ -45,12 +45,95 @@ def test_the_voice_window_shows_only_the_newest_dictation(monkeypatch):
     built = {}
 
     class Dialog:
-        def __init__(self, entries, index, copy_text, before_show=None):
-            built.update(entries=entries, before_show=before_show)
+        def __init__(self, entries, index, copy_text, before_show=None, in_place=False):
+            built.update(entries=entries, before_show=before_show, in_place=in_place)
+            self.fixed_for_text = None
             self.window = type("W", (), {"connect": lambda *a: None, "present": lambda *a: None})()
     monkeypatch.setattr(fw, "_FixWordDialog", Dialog)
     monkeypatch.setattr(fw, "get_entries", lambda: ["newest one", "older", "oldest"])
     monkeypatch.setattr(fw.Gtk, "main", lambda: None)
-    assert fw.main() == 0
-    assert built["entries"] == ["newest one"]
+    assert fw.main([]) == 0
+    assert built["entries"] == ["newest one"] and built["in_place"] is False
     assert built["before_show"] is explain.place_over_active_window
+
+
+
+# --- fixing it in the text (Ron, 2026-10-14) ----------------------------------------------
+
+@pytest.fixture
+def typed(monkeypatch, tmp_path):
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    monkeypatch.setattr(app.state, "last_inserted_text", " Mary had a lamb whose fleece was white. ")
+    monkeypatch.setattr(app.state, "last_inserted_window", "org.kde.kwrite")
+    return tmp_path
+
+
+def test_right_after_a_dictation_it_can_fix_the_text(opened, typed, monkeypatch):
+    calls = []
+    monkeypatch.setattr(explain, "start_helper_window", lambda module, *a: calls.append(a))
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "org.kde.kwrite")
+    app._handle_fix_word("fix that word", False)
+    flag, path = calls[0]
+    import json, os, stat
+    assert flag == "--in-place"
+    assert json.load(open(path)) == {"text": " Mary had a lamb whose fleece was white. ",
+                                     "window": "org.kde.kwrite"}
+    assert stat.S_IMODE(os.stat(path).st_mode) == 0o600          # only this user
+    assert app.state.last_inserted_text == ""                     # undo can't trust it now
+
+
+def test_in_another_window_it_only_saves_the_fix(opened, typed, monkeypatch):
+    calls = []
+    monkeypatch.setattr(explain, "start_helper_window", lambda module, *a: calls.append(a))
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "libreoffice-writer")
+    app._handle_fix_word("fix that word", False)
+    assert calls == [()]
+
+
+def test_fix_in_text_selects_types_and_puts_the_cursor_back(monkeypatch):
+    from tuxtalk import fix_word_dialog as fw
+    pressed, typed_text = [], []
+
+    class Backend:
+        def press_keys(self, chords):
+            pressed.append(chords)
+            return True
+
+        def type_text(self, text):
+            typed_text.append(text)
+            return True
+    monkeypatch.setattr(fw, "_REFOCUS_S", 0)
+    monkeypatch.setattr(app, "_output_backend", lambda: Backend())
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "org.kde.kwrite")
+    old = " Whose fleece was white. "
+    assert fw.fix_in_text(old, "Whose fleece is white.", "org.kde.kwrite") is True
+    S = ("SHIFT",)
+    assert pressed[0] == [((), "LEFT")] + [(S, "LEFT")] * len("Whose fleece was white.")
+    assert typed_text == ["Whose fleece is white."]
+    assert pressed[1] == [((), "RIGHT")]                          # back past the space
+
+
+def test_fix_in_text_leaves_another_window_alone(monkeypatch):
+    from tuxtalk import fix_word_dialog as fw
+    notices = []
+    monkeypatch.setattr(fw, "_REFOCUS_S", 0)
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "firefox")
+    monkeypatch.setattr(app, "_notify", lambda t, m: notices.append(m))
+    monkeypatch.setattr(app, "_output_backend", lambda: pytest.fail("typed into the wrong window"))
+    assert fw.fix_in_text(" Hello. ", "Hi.", "org.kde.kwrite") is False
+    assert notices and "wasn't changed" in notices[0]
+
+
+def test_the_checkbox_says_what_it_does(monkeypatch):
+    pytest.importorskip("gi")
+    from tuxtalk import fix_word_dialog as fw
+    # Built, never shown: a test must not flash windows on the user's screen.
+    monkeypatch.setattr(fw.Gtk.Window, "show_all", lambda self: None)
+    voice = fw._FixWordDialog(["whose fleece"], 0, lambda t: None, in_place=True)
+    tray = fw._FixWordDialog(["whose fleece"], 0, lambda t: None)
+    try:
+        assert voice.copy_check.get_label() == "Also fix it in my text"
+        assert "whole corrected dictation" in tray.copy_check.get_label()
+    finally:
+        voice.window.destroy()
+        tray.window.destroy()

@@ -63,9 +63,13 @@ def show_fix_word_dialog(index=0, copy_text=None):
 
 
 class _FixWordDialog:
-    def __init__(self, entries, index, copy_text, before_show=None):
+    def __init__(self, entries, index, copy_text, before_show=None, in_place=False):
         self.entries = entries
         self.copy_text = copy_text
+        # "fix that word" right after the dictation: fix it in the app's text
+        # too (main() does it once the window is gone), not just copy it.
+        self.in_place = in_place
+        self.fixed_for_text = None
         self.text = ""
         self.first = self.last = None
 
@@ -139,7 +143,11 @@ class _FixWordDialog:
         self.warning_label.set_no_show_all(True)
         box.pack_start(self.warning_label, False, False, 0)
 
-        self.copy_check = Gtk.CheckButton(label="Also copy the fixed text so I can paste it")
+        # Ron read "copy the fixed text" as the fixed word, and pasted the
+        # whole dictation over one word. Say what it is.
+        self.copy_check = Gtk.CheckButton(
+            label="Also fix it in my text" if in_place
+            else "Also copy the whole corrected dictation, to paste over the old one")
         self.copy_check.set_active(True)
         box.pack_start(self.copy_check, False, False, 0)
 
@@ -276,7 +284,11 @@ class _FixWordDialog:
             return
         logger.info("Saved a word fix to custom voice commands")
         if self.copy_check.get_active():
-            self.copy_text(vocabulary.fixed_text(self.text, self.first, self.last, replacement))
+            fixed = vocabulary.fixed_text(self.text, self.first, self.last, replacement)
+            if self.in_place:
+                self.fixed_for_text = fixed
+            else:
+                self.copy_text(fixed)
         self.window.destroy()
 
     def _confirm_risky(self, phrase, replacement):
@@ -307,9 +319,44 @@ class _FixWordDialog:
         _active_dialog = None
 
 
-def main():
+# How long the app gets to take the focus back after the window closes.
+_REFOCUS_S = 0.5
+
+
+def fix_in_text(typed, fixed, window):
+    """Replace what TuxTalk *typed* with *fixed* in the focused app: select
+    it as "select that" does, type the fixed text over it, and put the
+    cursor back after the spaces that followed. Not when another window has
+    the focus than *window* (None: unknown, go ahead). True if done."""
+    import time
+    from . import app, voice_navigation as nav
+    from .history import _LINE_BREAK_MARKER
+    time.sleep(_REFOCUS_S)
+    focused = app._query_focused_window_class()
+    if window and focused and focused != window:
+        logger.info(f"Fix a Word: {focused!r} has the focus, not {window!r}; text left as it was")
+        app._notify("TuxTalk", "The fix is saved, but your text wasn't changed: another "
+                               "window had the focus.")
+        return False
+    chords = nav.chords(nav.parse("select that"), typed)
+    trailing = len(typed) - len(typed.rstrip())
+    backend = app._output_backend()
+    done = (bool(chords) and backend.press_keys(chords)
+            and backend.type_text(fixed.replace("\n", _LINE_BREAK_MARKER))
+            and backend.press_keys([((), "RIGHT")] * trailing))
+    logger.info("Fix a Word: fixed it in the text" if done else "Fix a Word: couldn't fix the text")
+    return bool(done)
+
+
+def main(argv=None):
     """"fix that word": Fix a Word on the newest dictation, over the app
-    being dictated into, as its own process (see the module docstring)."""
+    being dictated into, as its own process (see the module docstring).
+    With --in-place FILE (right after the dictation, in its window), FILE
+    holds what was typed, and the fix goes into the app's text too."""
+    import json
+    import os
+    import sys
+    argv = sys.argv[1:] if argv is None else argv
     try:
         from . import desktop_identity
         desktop_identity.apply()        # TuxTalk's icon on the window
@@ -317,14 +364,30 @@ def main():
         pass
     from .clipboard import copy_text
     from .explain import place_over_active_window
-    entries = get_entries()[:1]
+    typed = window = None
+    if len(argv) == 2 and argv[0] == "--in-place":
+        try:
+            with open(argv[1]) as f:
+                data = json.load(f)
+            typed, window = data["text"], data.get("window")
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            logger.debug(f"Fix a Word: no text to fix in place: {e}")
+        finally:
+            try:
+                os.remove(argv[1])
+            except OSError:
+                pass
+    entries = [typed.strip()] if typed and typed.strip() else get_entries()[:1]
     if not entries:
         show_fix_word_dialog(0, copy_text=copy_text)    # says there's nothing yet
         return 0
-    dialog = _FixWordDialog(entries, 0, copy_text, before_show=place_over_active_window)
+    dialog = _FixWordDialog(entries, 0, copy_text, before_show=place_over_active_window,
+                            in_place=bool(typed and typed.strip()))
     dialog.window.connect("destroy", lambda _w: Gtk.main_quit())
     dialog.window.present()
     Gtk.main()
+    if dialog.fixed_for_text is not None:
+        fix_in_text(typed, dialog.fixed_for_text, window)
     return 0
 
 
