@@ -33,6 +33,10 @@ class Command:
     count: int = 1
     keys: tuple = ()        # pressed count times
     first: tuple = ()       # pressed once before (Home, for "select the line")
+    # Word and letter moves: ("word" or "char", -1 back or +1 forward, select?).
+    # In text TuxTalk typed, these are counted exactly (plan()); elsewhere the
+    # keys above are the app's own Ctrl+arrows.
+    step: tuple = ()
 
 
 def _norm(text: str) -> str:
@@ -46,30 +50,32 @@ def _norm(text: str) -> str:
 # (pattern, builder). Each pattern matches the whole normalized dictation; the
 # builder gets the count and returns (said_unit, keys, first).
 _DOC = r"(?:\s+of\s+(?:the\s+)?(?:document|page|text))?"
+# "the line", "this line", "that line", "the current line": people say all of them.
+_LINE = r"(?:(?:the|this|that) )?(?:current )?line"
 _RULES = [
     # What I just said: exact, from the text TuxTalk typed last.
     (r"select (?:that|it|what i (?:just )?said|the last dictation)", lambda n: ("all", (), ())),
     (rf"select (?:the )?last {_N}(?P<u>word|sentence|paragraph)s?", lambda n, u: (u, (), ())),
     # Around the cursor.
     (r"select (?:all|everything)", lambda n: ("", (((C,), "A"),), ())),
-    (r"select (?:the|this) line", lambda n: ("", (((S,), "END"),), (((), "HOME"),))),
-    (rf"select (?:the )?next {_N}words?", lambda n: ("", (((C, S), "RIGHT"),), ())),
-    (rf"select (?:the )?previous {_N}words?", lambda n: ("", (((C, S), "LEFT"),), ())),
+    (rf"select {_LINE}", lambda n: ("", (((S,), "END"),), (((), "HOME"),))),
+    (rf"select (?:the )?next {_N}words?", lambda n: ("", (((C, S), "RIGHT"),), (), ("word", 1, True))),
+    (rf"select (?:the )?previous {_N}words?", lambda n: ("", (((C, S), "LEFT"),), (), ("word", -1, True))),
     (rf"select (?:the )?next {_N}lines?", lambda n: ("", (((S,), "DOWN"),), ())),
     (rf"select (?:the )?previous {_N}lines?", lambda n: ("", (((S,), "UP"),), ())),
-    (r"select to (?:the )?end of (?:the )?line", lambda n: ("", (((S,), "END"),), ())),
-    (r"select to (?:the )?(?:start|beginning) of (?:the )?line", lambda n: ("", (((S,), "HOME"),), ())),
+    (rf"select to (?:the )?end of {_LINE}", lambda n: ("", (((S,), "END"),), ())),
+    (rf"select to (?:the )?(?:start|beginning) of {_LINE}", lambda n: ("", (((S,), "HOME"),), ())),
     (rf"select to (?:the )?(?:end|bottom){_DOC}", lambda n: ("", (((C, S), "END"),), ())),
     (rf"select to (?:the )?(?:start|beginning|top){_DOC}", lambda n: ("", (((C, S), "HOME"),), ())),
     # Moving.
-    (r"go to (?:the )?end of (?:the )?line", lambda n: ("", (((), "END"),), ())),
-    (r"go to (?:the )?(?:start|beginning) of (?:the )?line", lambda n: ("", (((), "HOME"),), ())),
+    (rf"go to (?:the )?end of {_LINE}", lambda n: ("", (((), "END"),), ())),
+    (rf"go to (?:the )?(?:start|beginning) of {_LINE}", lambda n: ("", (((), "HOME"),), ())),
     (rf"go to (?:the )?(?:end|bottom){_DOC}", lambda n: ("", (((C,), "END"),), ())),
     (rf"go to (?:the )?(?:start|beginning|top){_DOC}", lambda n: ("", (((C,), "HOME"),), ())),
-    (rf"go (?:back|left) {_N}words?|previous word", lambda n: ("", (((C,), "LEFT"),), ())),
-    (rf"go (?:forward|right) {_N}words?|next word", lambda n: ("", (((C,), "RIGHT"),), ())),
-    (rf"go (?:back|left) {_N}(?:characters?|letters?)", lambda n: ("", (((), "LEFT"),), ())),
-    (rf"go (?:forward|right) {_N}(?:characters?|letters?)", lambda n: ("", (((), "RIGHT"),), ())),
+    (rf"go (?:back|left) {_N}words?|previous word", lambda n: ("", (((C,), "LEFT"),), (), ("word", -1, False))),
+    (rf"go (?:forward|right) {_N}words?|next word", lambda n: ("", (((C,), "RIGHT"),), (), ("word", 1, False))),
+    (rf"go (?:back|left) {_N}(?:characters?|letters?)", lambda n: ("", (((), "LEFT"),), (), ("char", -1, False))),
+    (rf"go (?:forward|right) {_N}(?:characters?|letters?)", lambda n: ("", (((), "RIGHT"),), (), ("char", 1, False))),
     (rf"go up {_N}lines?", lambda n: ("", (((), "UP"),), ())),
     (rf"go down {_N}lines?", lambda n: ("", (((), "DOWN"),), ())),
     # Unselect: Right collapses a selection to its end.
@@ -94,15 +100,82 @@ def parse(text: str):
         if not 1 <= count <= MAX_COUNT:
             return None
         args = (count, groups["u"]) if "u" in groups and groups["u"] else (count,)
-        unit, keys, first = build(*args)
+        unit, keys, first, *step = build(*args)
         name = said if raw is None else said[:m.start("n")] + str(count) + said[m.end("n"):]
-        return Command(name=name, said_unit=unit, count=count, keys=keys, first=first)
+        return Command(name=name, said_unit=unit, count=count, keys=keys, first=first,
+                       step=step[0] if step else ())
     return None
 
 
 def needs_last_text(command: Command) -> bool:
     """Whether *command* works on what TuxTalk typed last."""
     return bool(command.said_unit)
+
+
+@dataclass(frozen=True)
+class Plan:
+    chords: list
+    # The known text left and right of the cursor afterwards, inside what
+    # TuxTalk typed, or None when the cursor is somewhere unknown (or text is
+    # selected) and the next word move must use the app's own keys.
+    left: str = None
+    right: str = ""
+
+
+def _words_back(left: str, n: int) -> int:
+    """Letters from the cursor back to the start of the n-th word before it.
+    A word is everything between spaces, so "end." is one word: apps that
+    stop at the period (KWrite's Ctrl+Left) would go one word short."""
+    i = len(left)
+    for _ in range(n):
+        while i > 0 and left[i - 1].isspace():
+            i -= 1
+        if i == 0:
+            break
+        while i > 0 and not left[i - 1].isspace():
+            i -= 1
+    return len(left) - i
+
+
+def _words_forward(right: str, n: int) -> int:
+    """Letters from the cursor to the start of the n-th word after it (or the
+    end of the known text)."""
+    i = 0
+    for _ in range(n):
+        while i < len(right) and not right[i].isspace():
+            i += 1
+        while i < len(right) and right[i].isspace():
+            i += 1
+        if i >= len(right):
+            break
+    return i
+
+
+def plan(command: Command, left=None, right: str = ""):
+    """The keys for *command*, given the known text *left* and *right* of the
+    cursor (None when unknown), and that text afterwards. None when the
+    command needs the last dictation and there is none."""
+    if command.said_unit:
+        if left is None:
+            return None
+        # From wherever an earlier move left the cursor, back to the end first.
+        to_end = [((), "RIGHT")] * len(right)
+        selected = chords(command, left + right)
+        return None if selected is None else Plan(to_end + selected)
+    if command.step and left is not None:
+        unit, direction, select = command.step
+        if direction < 0:
+            n = _words_back(left, command.count) if unit == "word" else min(command.count, len(left))
+        else:
+            n = _words_forward(right, command.count) if unit == "word" else min(command.count, len(right))
+        mods = (S,) if select else ()
+        keys = [(mods, "LEFT" if direction < 0 else "RIGHT")] * n
+        if select:
+            return Plan(keys)
+        if direction < 0:
+            return Plan(keys, left[:len(left) - n], left[len(left) - n:] + right)
+        return Plan(keys, left + right[:n], right[n:])
+    return Plan(list(command.first) + list(command.keys) * command.count)
 
 
 def chords(command: Command, last_text: str):

@@ -203,3 +203,57 @@ def test_the_setting_is_off_by_default_and_live():
     from tuxtalk import config
     assert config.Settings().voice_navigation is False
     assert "voice_navigation" in config.LIVE_APPLIED_KEYS
+
+
+# --- exact word moves in what TuxTalk typed (Ron, 2026-10-14) -----------------------------
+
+def test_go_back_three_words_counts_the_period_with_its_word():
+    """KWrite's Ctrl+Left stops at the period, so three presses went two words."""
+    p = nav.plan(nav.parse("go back three words"), "We finished the job early.", "")
+    assert p.chords == [((), "LEFT")] * len("the job early.")
+    assert (p.left, p.right) == ("We finished ", "the job early.")
+
+
+def test_moves_keep_counting_from_where_the_last_one_left_off():
+    p = nav.plan(nav.parse("go back two words"), "We finished the job early.", "")
+    p = nav.plan(nav.parse("go forward one word"), p.left, p.right)
+    assert p.chords == [((), "RIGHT")] * len("job ")
+    assert (p.left, p.right) == ("We finished the job ", "early.")
+
+
+def test_letters_and_the_start_of_the_text():
+    p = nav.plan(nav.parse("go back 3 letters"), "Hi.", "")
+    assert p.chords == [((), "LEFT")] * 3
+    p = nav.plan(nav.parse("go back 5 words"), "Hi there.", "")
+    assert p.chords == [((), "LEFT")] * len("Hi there.")      # stops at the start
+
+
+def test_select_previous_words_is_exact_too_and_ends_the_tracking():
+    p = nav.plan(nav.parse("select the previous 2 words"), "We finished early.", "")
+    assert p.chords == [((S,), "LEFT")] * len("finished early.") and p.left is None
+
+
+def test_select_that_after_moving_goes_back_to_the_end_first():
+    p = nav.plan(nav.parse("select that"), "Hello ", "world.")
+    assert p.chords == [((), "RIGHT")] * 6 + [((S,), "LEFT")] * 12
+
+
+def test_unknown_text_falls_back_to_the_apps_own_keys():
+    p = nav.plan(nav.parse("go back three words"), None, "")
+    assert p.chords == [((C,), "LEFT")] * 3 and p.left is None
+    assert nav.plan(nav.parse("go to the end"), "Hello.", "").left is None
+
+
+@pytest.mark.parametrize("said", ["select that line", "select this line", "select the current line",
+                                  "select line", "go to the end of this line",
+                                  "go to the start of that line", "select to the end of this line"])
+def test_this_that_and_current_line(said):
+    assert nav.parse(said) is not None
+
+
+def test_dictation_remembers_the_place_between_moves(dictation):
+    app = dictation["app"]
+    app._handle_navigation("go back two words", False)       # " We finished early."
+    app._handle_navigation("go back one word", False)
+    assert dictation["pressed"][1] == [((), "LEFT")] * len("We ")
+    assert app.state.nav_context == (" ", "We finished early.")

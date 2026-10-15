@@ -228,6 +228,10 @@ class RecordingState:
     press_t0: float = None
     # Undo history - tracks last inserted text for voice-activated undo
     last_inserted_text: str = ""
+    # Select and move by voice: the known text (left, right) of the cursor
+    # inside the last dictation after a word or letter move, so the next move
+    # is counted exactly too; None when the cursor is somewhere unknown.
+    nav_context: tuple = None
     # Mid-sentence continuation - if True, lowercase the first letter of next dictation
     continue_mid_sentence: bool = False
     # Hands-free auto-stop for this recording (a silence.SilenceDetector), or
@@ -2317,6 +2321,8 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
         return False
 
     undo_type, count = detected
+    # Deleting changes the text a voice move remembered (nav_context).
+    state.nav_context = None
     label = undo_type if count == 1 else f"{count} {undo_type}s"
     logger.info(f"Undo command detected: {label}")
     print(f"Undo command: {label}")
@@ -3089,18 +3095,25 @@ def _handle_navigation(raw: str, beeps_on: bool, focused_class=_UNKNOWN_WINDOW) 
     if is_terminal_class(focused_class):
         _edit_problem("nav_terminal", beeps_on)
         return True
-    chords = nav.chords(command, state.last_inserted_text)
-    if chords is None:
+    # Right after a dictation the cursor is at its end; after an exact move,
+    # nav_context says where in it.
+    if state.last_inserted_text:
+        left, right = state.last_inserted_text, ""
+    else:
+        left, right = state.nav_context or (None, "")
+    plan = nav.plan(command, left, right)
+    if plan is None:
         _edit_problem("nothing_said", beeps_on)
         return True
     try:
-        pressed = _output_backend().press_keys(chords)
+        pressed = _output_backend().press_keys(plan.chords)
     except Exception as e:
         logger.error(f"Voice command: pressing the keys failed: {e}")
         pressed = False
     # The cursor has moved (or may have): undo's character count no longer
     # matches the document, and "delete last word" would eat the wrong text.
     state.last_inserted_text = ""
+    state.nav_context = (plan.left, plan.right) if pressed and plan.left is not None else None
     if pressed:
         _beep(beeps_on, *READY_BEEP)
     else:
