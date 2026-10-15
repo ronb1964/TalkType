@@ -4202,6 +4202,10 @@ def main():
     # Dictation cleanup; the AI engine (if on) loads in the background.
     _apply_cleanup_settings(cfg)
 
+    # Each "how it works" explanation is shown once per run (explain.py).
+    from . import explain
+    explain.start_run()
+
     # Load custom voice commands
     global _custom_commands
     _custom_commands = load_custom_commands()

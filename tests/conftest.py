@@ -63,7 +63,6 @@ def _no_real_explanation_windows(monkeypatch, tmp_path):
     from tuxtalk import explain
     monkeypatch.setattr(explain, "open_window", lambda kind: False)
     monkeypatch.setattr(explain, "_never_path", lambda: str(tmp_path / "explained.json"))
-    monkeypatch.setattr(explain, "_shown_this_run", set())
 
 
 @pytest.fixture(autouse=True)

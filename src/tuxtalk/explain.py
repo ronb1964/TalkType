@@ -68,8 +68,12 @@ EXPLANATIONS = {
         "itself works the same on X11."),
 }
 
-# Kinds explained in this run of the service: once each, then the label.
-_shown_this_run = set()
+# explained.json, next to the settings:
+#   "never": kinds the user ticked "Don't explain this again" for;
+#   "shown": kinds explained since the service started (start_run() clears
+#            it), so each is explained once per run.
+# One file, so Preferences' "Show tips again" (reset()) brings every
+# explanation back at once, even with the service running.
 
 
 def _never_path():
@@ -77,34 +81,67 @@ def _never_path():
     return os.path.join(os.path.dirname(CONFIG_PATH), "explained.json")
 
 
-def _never_again():
+def _load():
     try:
         with open(_never_path()) as f:
-            return set(json.load(f).get("never", []))
+            data = json.load(f)
+        return {k: set(data.get(k, [])) for k in ("never", "shown")}
     except (OSError, ValueError, AttributeError, TypeError):
-        return set()
+        return {"never": set(), "shown": set()}
+
+
+def _save(data):
+    try:
+        with open(_never_path(), "w") as f:
+            json.dump({k: sorted(v) for k, v in data.items()}, f)
+    except OSError as e:
+        logger.debug(f"Could not save the explained kinds: {e}")
 
 
 def never_again(kind):
     """Remember that *kind* needs no more explaining (the tickbox)."""
-    kinds = _never_again() | {kind}
-    try:
-        with open(_never_path(), "w") as f:
-            json.dump({"never": sorted(kinds)}, f)
-    except OSError as e:
-        logger.debug(f"Could not save the explained kinds: {e}")
+    data = _load()
+    data["never"].add(kind)
+    _save(data)
+
+
+def _mark_shown(kind):
+    data = _load()
+    data["shown"].add(kind)
+    _save(data)
+
+
+def start_run():
+    """The service started: explain each kind once more in this run."""
+    data = _load()
+    if data["shown"]:
+        data["shown"] = set()
+        _save(data)
+
+
+def reset():
+    """Preferences' "Show tips again": every explanation comes back."""
+    _save({"never": set(), "shown": set()})
+
+
+def anything_to_reset() -> bool:
+    data = _load()
+    return bool(data["never"] or data["shown"])
 
 
 def should_explain(kind) -> bool:
     """Whether *kind* gets the window now: it has one, it hasn't been shown
     in this run, and the user didn't tick "Don't explain this again"."""
-    return kind in EXPLANATIONS and kind not in _shown_this_run and kind not in _never_again()
+    if kind not in EXPLANATIONS:
+        return False
+    data = _load()
+    return kind not in data["never"] and kind not in data["shown"]
 
 
 def open_window(kind) -> bool:
     """Open the explanation for *kind* in its own process. True if it was
     started; never raises."""
-    _shown_this_run.add(kind)
+    _mark_shown(kind)
     env = os.environ.copy()
     # The service runs on XWayland; this window belongs on the native desktop.
     env.pop("GDK_BACKEND", None)

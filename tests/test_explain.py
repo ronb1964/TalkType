@@ -12,7 +12,7 @@ def problems(monkeypatch):
     seen = {"windows": [], "labels": [], "notices": []}
 
     def open_window(kind):
-        explain._shown_this_run.add(kind)
+        explain._mark_shown(kind)
         seen["windows"].append(kind)
         return True
     monkeypatch.setattr(explain, "open_window", open_window)
@@ -71,3 +71,20 @@ def test_a_broken_file_means_explain_again(tmp_path, monkeypatch):
     p.write_text("{not json")
     monkeypatch.setattr(explain, "_never_path", lambda: str(p))
     assert explain.should_explain("nothing_said")
+
+
+def test_each_run_explains_again_but_never_again_holds(problems):
+    app._edit_problem("terminal", False)
+    explain.never_again("cant_format")
+    explain.start_run()                        # TuxTalk restarted
+    assert explain.should_explain("terminal")
+    assert not explain.should_explain("cant_format")
+
+
+def test_show_tips_again_brings_everything_back(problems):
+    app._edit_problem("terminal", False)       # shown in this run
+    explain.never_again("cant_format")
+    assert explain.anything_to_reset()
+    explain.reset()                            # Preferences' button, service still running
+    assert explain.should_explain("terminal") and explain.should_explain("cant_format")
+    assert not explain.anything_to_reset()

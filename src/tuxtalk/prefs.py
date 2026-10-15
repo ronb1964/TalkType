@@ -2329,6 +2329,20 @@ class PreferencesWindow:
             labs_help.set_tooltip_text("Open Help on the TuxTalk Labs page")
             labs_help.connect("clicked", lambda _b: show_help_dialog(tab="labs"))
             labs_links.pack_start(labs_help, False, False, 0)
+            # Brings back every "how it works" window, dismissed or ticked
+            # "Don't explain this again" (explain.py).
+            from . import explain
+            tips_again = Gtk.Button(label="Show tips again")
+            tips_again.set_tooltip_text(
+                "Show the small windows that explain how voice editing and select and\n"
+                "move work again, including any you ticked \u201cDon't explain this again\u201d.")
+
+            def _tips_again(button):
+                explain.reset()
+                button.set_label("\u2713 Tips will show again")
+                button.set_sensitive(False)
+            tips_again.connect("clicked", _tips_again)
+            labs_links.pack_start(tips_again, False, False, 0)
             labs_feedback = Gtk.LinkButton.new_with_label(FEEDBACK_URL, "Send feedback")
             labs_feedback.set_tooltip_text("Tell us how the Labs features work for you "
                                            "(TuxTalk Discussions on GitHub)")
