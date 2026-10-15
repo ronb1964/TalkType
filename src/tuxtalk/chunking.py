@@ -8,7 +8,14 @@ natural pauses, never words appearing and changing mid-sentence (upstream's
 
 Off unless chunked_dictation is set in config.toml; see app._arm_chunker.
 """
+import queue
+import threading
+import time
+
+from .logger import setup_logger
 from .silence import NoiseFloor, block_rms
+
+logger = setup_logger(__name__)
 
 # Talking needed before a pause can end a chunk: a cough or a click is shorter.
 MIN_SPEECH_S = 0.3
@@ -58,3 +65,43 @@ class PauseDetector:
     def tail_samples(self) -> int:
         """Samples of measured silence to drop from the chunk just cut."""
         return max(0, int((self._tail_s - TAIL_KEEP_S) * self.sample_rate))
+
+
+class ChunkWorker:
+    """Transcribes and types chunks one at a time, in the order they were cut.
+
+    One per service process (app._chunk_worker), so a new recording's chunks
+    can never overtake the last one's. Each job runs holding *lock*
+    (app._inject_lock), the lock that already keeps two dictations from
+    typing at once.
+    """
+
+    def __init__(self, lock=None):
+        self._lock = lock if lock is not None else threading.Lock()
+        self._queue = queue.Queue()
+        threading.Thread(target=self._run, daemon=True, name="tt-chunks").start()
+
+    def submit(self, job) -> None:
+        self._queue.put(job)
+
+    def drain(self, timeout=None) -> bool:
+        """Wait until every submitted job has finished. False on timeout."""
+        deadline = None if timeout is None else time.monotonic() + timeout
+        with self._queue.all_tasks_done:
+            while self._queue.unfinished_tasks:
+                remaining = None if deadline is None else deadline - time.monotonic()
+                if remaining is not None and remaining <= 0:
+                    return False
+                self._queue.all_tasks_done.wait(remaining)
+        return True
+
+    def _run(self):
+        while True:
+            job = self._queue.get()
+            try:
+                with self._lock:
+                    job()
+            except Exception:
+                logger.exception("A dictation chunk failed; carrying on with the next")
+            finally:
+                self._queue.task_done()

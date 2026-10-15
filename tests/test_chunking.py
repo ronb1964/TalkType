@@ -115,3 +115,53 @@ def test_works_at_48k():
     fired, _ = run_pauses(audio, sr=sr, block=block)
     assert len(fired) == 1
     assert 1.6 <= fired[0] <= 1.9
+
+
+# --- the chunk worker --------------------------------------------------------
+
+def test_worker_runs_jobs_in_order():
+    from tuxtalk.chunking import ChunkWorker
+    w = ChunkWorker()
+    done = []
+    for i in range(5):
+        w.submit(lambda i=i: (time.sleep(0.01 * (5 - i)), done.append(i)))
+    assert w.drain(5)
+    assert done == [0, 1, 2, 3, 4]
+
+
+def test_a_failing_chunk_does_not_stop_the_next():
+    from tuxtalk.chunking import ChunkWorker
+    w = ChunkWorker()
+    done = []
+
+    def boom():
+        raise RuntimeError("engine fell over")
+
+    w.submit(lambda: done.append(1))
+    w.submit(boom)
+    w.submit(lambda: done.append(3))
+    assert w.drain(5)
+    assert done == [1, 3]
+
+
+def test_drain_waits_for_the_job_in_progress():
+    from tuxtalk.chunking import ChunkWorker
+    w = ChunkWorker()
+    w.submit(lambda: time.sleep(0.5))
+    assert w.drain(0.1) is False
+    assert w.drain(5) is True
+
+
+def test_drain_with_nothing_queued_returns_at_once():
+    from tuxtalk.chunking import ChunkWorker
+    assert ChunkWorker().drain(0.01) is True
+
+
+def test_jobs_run_holding_the_lock():
+    from tuxtalk.chunking import ChunkWorker
+    lock = threading.Lock()
+    w = ChunkWorker(lock)
+    seen = []
+    w.submit(lambda: seen.append(lock.locked()))
+    assert w.drain(5)
+    assert seen == [True]
