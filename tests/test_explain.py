@@ -85,3 +85,23 @@ def test_show_tips_again_brings_everything_back(problems):
     explain.reset()                            # Preferences' button
     assert explain.should_explain("terminal") and explain.should_explain("cant_format")
     assert not explain.anything_to_reset()
+
+
+def test_the_window_is_centred_over_the_app_and_kept_on_its_monitor():
+    from tuxtalk.window_geometry import Rect
+    right_monitor = Rect(2560, 0, 2560, 1440)
+    # A window over an app on the right-hand monitor.
+    assert explain.position_over((500, 240), (3400, 700), right_monitor) == (3150, 580)
+    # An app near the monitor's edge: the window stays on that monitor.
+    assert explain.position_over((500, 240), (5100, 100), right_monitor) == (4620, 0)
+
+
+def test_it_opens_on_xwayland_where_it_may_be_placed(monkeypatch):
+    started = []
+    monkeypatch.undo()     # the real open_window, not the test suite's stand-in
+    monkeypatch.setattr(explain.subprocess, "Popen",
+                        lambda cmd, env, **k: started.append((cmd, env)) or type("P", (), {})())
+    assert explain.open_window("terminal") is True
+    cmd, env = started[0]
+    assert cmd[-2:] == ["tuxtalk.explain", "terminal"]
+    assert env["GDK_BACKEND"] == "x11,wayland"

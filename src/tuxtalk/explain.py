@@ -10,9 +10,13 @@ explain this again" leaves that one at the short floating label for good
 (explained.json, next to the settings), until Preferences' "Show tips
 again" brings them all back.
 
-It runs as its own process, like Preferences: the dictation service draws
-on XWayland (for the recording indicator), and a real window with a
-button belongs on the desktop's own Wayland.
+It runs as its own process, like Preferences, and opens centred over the
+window being dictated into (window_geometry, as the floating label does),
+so on a big screen or a second monitor it's where the user is looking.
+Wayland lets no app place its own windows, so it runs on XWayland like the
+recording indicator; it has no dropdowns, the one thing XWayland breaks
+(see CLAUDE.md, GDK_BACKEND). With no XWayland it falls back to Wayland,
+centred on the screen.
 """
 import json
 import os
@@ -128,8 +132,9 @@ def open_window(kind) -> bool:
     started; never raises."""
     global _window
     env = os.environ.copy()
-    # The service runs on XWayland; this window belongs on the native desktop.
-    env.pop("GDK_BACKEND", None)
+    # XWayland first, where the window may be placed over the app; plain
+    # Wayland if there's no XWayland (then it's centred on the screen).
+    env["GDK_BACKEND"] = "x11,wayland"
     try:
         from .service_launcher import dev_pythonpath
         pythonpath = dev_pythonpath()
@@ -169,6 +174,32 @@ def build_dialog(kind):
     return dialog, check
 
 
+def position_over(size, center, monitor):
+    """Top-left corner that centres a window of *size* (w, h) on *center*,
+    kept on *monitor* (a window_geometry.Rect)."""
+    from .screen_message import place
+    return place(size[0], size[1], center, monitor)
+
+
+def _place_over_active_window(dialog):
+    """Centre *dialog* over the window being dictated into, before it shows.
+    Leaves it centred on the screen when that window can't be found."""
+    try:
+        from gi.repository import Gdk, Gtk
+        from . import window_geometry
+        center = window_geometry.active_window_center()
+        if center is None:
+            return
+        display = Gdk.Display.get_default()
+        g = (display.get_monitor_at_point(*center) or display.get_monitor(0)).get_geometry()
+        _min, natural = dialog.get_preferred_size()
+        dialog.set_position(Gtk.WindowPosition.NONE)
+        dialog.move(*position_over((natural.width, natural.height), center,
+                                   window_geometry.Rect(g.x, g.y, g.width, g.height)))
+    except Exception as e:
+        logger.debug(f"Could not place the explanation over the window: {e}")
+
+
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     kind = argv[0] if argv else ""
@@ -180,6 +211,8 @@ def main(argv=None):
     except Exception:
         pass
     dialog, check = build_dialog(kind)
+    # Asked before the window shows, while the app still has the focus.
+    _place_over_active_window(dialog)
     dialog.show_all()
     dialog.present()
     dialog.run()
