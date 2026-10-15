@@ -63,3 +63,9 @@ def test_rows_for_settings_that_are_on_are_shown():
     assert stub.timeout_label.visible and stub.timeout_spin.visible
     assert stub.lang_label.visible and stub.lang_combo.visible
     assert not stub.auto_langs_label.visible and not stub.auto_langs_button.visible
+
+
+def test_the_language_button_says_it_changes_the_list():
+    from tuxtalk.prefs import _auto_langs_label
+    assert _auto_langs_label("") == "Any language · Change…"
+    assert _auto_langs_label("en,es").startswith("English, Spanish")

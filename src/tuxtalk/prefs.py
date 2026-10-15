@@ -307,6 +307,12 @@ class SegmentedVUMeter(Gtk.DrawingArea):
         return False
 
 
+def _auto_langs_label(setting):
+    """The Only these languages button: "English, Spanish · Change…"."""
+    from . import language_limit
+    return f"{language_limit.describe(language_limit.parse(setting))} \u00b7 Change\u2026"
+
+
 def _on_gnome():
     """Whether the GNOME Shell extension can apply on this desktop at all."""
     try:
@@ -1057,8 +1063,10 @@ class PreferencesWindow:
             "Handy when it sometimes takes your language for another one.\n"
             "Used with the Whisper models; Parakeet picks by itself.")
         grid.attach(self.auto_langs_label, 0, row, 1, 1)
+        # The button shows the choice and says it opens the list ("Any
+        # language" alone didn't look like something to click).
         self.auto_langs_button = Gtk.Button(
-            label=language_limit.describe(language_limit.parse(self.config.get("auto_languages", ""))))
+            label=_auto_langs_label(self.config.get("auto_languages", "")))
         self.auto_langs_button.set_halign(Gtk.Align.START)
         self.auto_langs_button.connect("clicked", self._on_auto_languages_clicked)
         grid.attach(self.auto_langs_button, 1, row, 1, 1)
@@ -4641,7 +4649,7 @@ class PreferencesWindow:
             if dialog.run() == Gtk.ResponseType.OK:
                 setting = language_limit.to_setting(c for c, chk in checks.items() if chk.get_active())
                 self.update_config("auto_languages", setting)
-                self.auto_langs_button.set_label(language_limit.describe(language_limit.parse(setting)))
+                self.auto_langs_button.set_label(_auto_langs_label(setting))
                 self._update_model_combo_hint()
         finally:
             dialog.destroy()
