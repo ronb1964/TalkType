@@ -46,7 +46,7 @@ Things I'd like to add or fix, roughly grouped. Nothing here has a date on it. W
 
 ## Packaging
 
-- [~] Flatpak, next up. The manifests are in `packaging/flatpak/` and were updated for the rename, but they haven't been built since, and nothing is published. Typing inside the Flatpak still only handles plain English letters, so that gets fixed first. It'll go out as a test build on the Releases page before a real release. The Flathub submission was closed, so it would be a `.flatpak` file or a self-hosted Flatpak repo.
+- [~] Flatpak, on hold until more people ask for it (vote in [Discussion #6](https://github.com/ronb1964/TuxTalk/discussions/6)). The AppImage already runs on the immutable distros a Flatpak would mostly be for. The manifests are in `packaging/flatpak/` and were updated for the rename, but they haven't been built since, and nothing is published. Typing inside the Flatpak still only handles plain English letters, so that gets fixed first. The Flathub submission was closed, so it would be a `.flatpak` file or a self-hosted Flatpak repo.
 - [ ] Snap.
 - [ ] macOS or Windows. Big jobs, since the hotkeys, typing and tray are all Linux-specific today.
 
