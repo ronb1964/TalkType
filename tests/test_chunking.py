@@ -290,3 +290,124 @@ def test_whole_dictation_is_unchanged(pipeline):
     _, typed, beeps = pipeline
     call(frames_of(noise(0.4)), None)
     assert typed == [] and beeps == [app.CANCEL_BEEP]
+
+
+# --- chunks cut during a recording -------------------------------------------
+
+@pytest.fixture
+def recording(monkeypatch, pipeline):
+    """A recording in progress at 16 kHz with chunking on, no real stream, a
+    fresh chunk worker and the fake engine/typing from `pipeline`."""
+    from types import SimpleNamespace
+    from tuxtalk import app
+    monkeypatch.setattr(app, "_chunk_worker_instance", None)
+    monkeypatch.setattr(app, "_chunk_pause_seconds", 0.8)
+    monkeypatch.setattr(app, "_chunk_cfg", SimpleNamespace(
+        beeps=True, smart_quotes=True, notify=False, language=None,
+        auto_space=True, auto_period=False, injection_mode="type"))
+    monkeypatch.setattr(app, "recording_indicator", None)
+    monkeypatch.setattr(app, "_stop_stream_safely", lambda: None)
+    monkeypatch.setattr(app, "_resume_media_players", lambda: None)
+    monkeypatch.setattr(app, "_notify_tray_recording_state", lambda *a: None)
+    monkeypatch.setattr(app.state, "silence", None)
+    monkeypatch.setattr(app.state, "recording_samplerate", SR, raising=False)
+    app.state.frames = []
+    app.state.was_cancelled = False
+    app.state.edit_mode = False
+    app.state.press_t0 = time.time() - 10
+    app.state.is_recording = True
+    app._arm_chunker(SR)
+    yield pipeline
+    app.state.is_recording = False
+    app.state.chunker = None
+    app.state.chunks_submitted = 0
+
+
+def feed(audio):
+    from tuxtalk import app
+    for b in blocks(audio):
+        app._sd_callback(b.reshape(-1, 1), len(b), None, None)
+
+
+def stop():
+    from tuxtalk import app
+    app.stop_recording(beeps_on=True, smart_quotes=True, notify_on=False,
+                       language=None, auto_space=True, auto_period=False,
+                       injection_mode="type")
+
+
+def test_two_pauses_give_three_chunks_in_order(recording):
+    from tuxtalk import app
+    texts, typed, beeps = recording
+    texts.extend(["we meet", "at three", "in the garden"])
+    feed(np.concatenate([speech(1.0), noise(1.0), speech(1.0), noise(1.0), speech(0.8)]))
+    stop()
+    assert [t.strip() for t in typed] == ["We meet", "at three", "in the garden"]
+    assert beeps.count(app.READY_BEEP) == 1
+    assert app.state.chunks_submitted == 2
+
+
+def test_chunking_off_types_one_dictation(recording, monkeypatch):
+    from tuxtalk import app
+    texts, typed, beeps = recording
+    monkeypatch.setattr(app, "_chunk_pause_seconds", 0.0)
+    app._arm_chunker(SR)
+    assert app.state.chunker is None
+    texts.append("we meet at three in the garden")
+    feed(np.concatenate([speech(1.0), noise(1.0), speech(1.0), noise(1.0), speech(0.8)]))
+    stop()
+    assert len(typed) == 1
+    assert beeps.count(app.READY_BEEP) == 1
+
+
+def test_a_voice_edit_is_never_chunked(recording):
+    from tuxtalk import app
+    app._arm_chunker(SR, edit_mode=True)
+    assert app.state.chunker is None
+
+
+def test_auto_stop_after_a_cut_beeps_ready_once(recording):
+    """Review focus 1: the rest after the cut is only room noise."""
+    from tuxtalk import app
+    texts, typed, beeps = recording
+    texts.append("we meet")
+    feed(np.concatenate([speech(1.0), noise(1.2)]))
+    stop()
+    assert [t.strip() for t in typed] == ["We meet"]
+    assert beeps == [app.READY_BEEP]
+
+
+def test_cut_after_stop_snapshot_hands_nothing_on(recording):
+    """Review focus 2: a block arriving after the stop took its snapshot must
+    not cut a chunk from frames the stop already owns."""
+    from tuxtalk import app
+    feed(speech(1.0))
+    chunker = app.state.chunker
+    cap = app._finish_capture(beeps_on=False, notify_on=False)
+    assert cap is not None
+    app._cut_chunk(chunker)
+    assert app.state.chunks_submitted == 0
+    assert app._chunk_worker().drain(1)
+
+
+def test_drop_tail_samples_keeps_partial_blocks():
+    from tuxtalk import app
+    frames = [b"\0\0" * 320, b"\0\0" * 320, b"\0\0" * 320]
+    app._drop_tail_samples(frames, 700)   # two whole blocks fit, the third doesn't
+    assert len(frames) == 1
+
+
+def test_flatpak_stop_queues_the_last_chunk_on_the_worker(recording, monkeypatch):
+    from types import SimpleNamespace
+    from tuxtalk import app
+    texts, typed, _ = recording
+    texts.extend(["we meet", "at three"])
+    monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TuxTalk")
+    monkeypatch.setattr(app, "_release_all_grabs", lambda: None)
+    feed(np.concatenate([speech(1.0), noise(1.0), speech(0.8)]))
+    svc = SimpleNamespace(input_device_idx=None, last_activity=0.0,
+                          timeout_enabled=False, last_config_check=time.time())
+    app._cmd_stop_recording.set()
+    app._service_tick(app._chunk_cfg, svc)
+    assert app._chunk_worker().drain(5)
+    assert [t.strip() for t in typed] == ["We meet", "at three"]

@@ -268,6 +268,10 @@ class RecordingState:
     # Voice editing: this recording is an instruction for the selected text
     # (Shift + the dictation key), not dictation.
     edit_mode: bool = False
+    # Chunked dictation: this recording's pause detector (chunking.PauseDetector)
+    # or None, and how many chunks it has cut so far.
+    chunker: object = None
+    chunks_submitted: int = 0
 
     def __post_init__(self):
         if self.frames is None:
@@ -312,6 +316,22 @@ _cmd_stop_recording = threading.Event()
 # menu) started it, so a quick second press can switch it to hands-free.
 _cmd_start_from_toggle_key = threading.Event()
 _inject_lock = threading.Lock()  # serialise Backend B transcribe/inject workers
+
+# Chunked dictation (chunking.py). The audio callback cuts chunks and the stop
+# path takes the rest; this lock keeps the two from both taking the same frames.
+_chunk_lock = threading.Lock()
+_chunk_worker_instance = None
+# How long stopping waits for the queued chunks to be typed (evdev path).
+CHUNK_DRAIN_TIMEOUT_S = 60.0
+
+
+def _chunk_worker():
+    """The one chunk worker of this service, started on first use."""
+    global _chunk_worker_instance
+    if _chunk_worker_instance is None:
+        from .chunking import ChunkWorker
+        _chunk_worker_instance = ChunkWorker(_inject_lock)
+    return _chunk_worker_instance
 
 # Hotkey test mode: while Preferences' Test Hotkeys dialog keeps its flag file
 # fresh (service_launcher.hotkey_test_flag_path), hotkey presses are reported via
@@ -824,6 +844,11 @@ def _sd_callback(indata, frames_count, time_info, status):
     if state.is_recording:
         state.frames.append(indata.tobytes())
 
+        # Chunked dictation: at a pause, the phrase so far goes off to be typed.
+        chunker = state.chunker
+        if chunker is not None and chunker.feed(indata):
+            _cut_chunk(chunker)
+
         # Hands-free auto-stop: when the speaker has finished, ask the service
         # loop to stop, exactly as a second press of the toggle key would.
         detector = state.silence
@@ -837,6 +862,47 @@ def _sd_callback(indata, frames_count, time_info, status):
         # Feed the recording indicator whatever its active style needs.
         if recording_indicator:
             _feed_indicator(recording_indicator, indata, _spectrum_processor)
+
+
+def _cut_chunk(chunker):
+    """The speaker paused: hand the audio so far to the chunk worker.
+
+    Runs on the audio thread, so it only swaps a list and queues a job; the
+    transcription happens on the worker."""
+    with _chunk_lock:
+        if state.chunker is not chunker:
+            return  # the recording ended while this block was arriving
+        frames, state.frames = state.frames, []
+        _drop_tail_samples(frames, chunker.tail_samples())
+        state.chunks_submitted += 1
+        number = state.chunks_submitted
+    rec_sr = getattr(state, "recording_samplerate", SAMPLE_RATE)
+    seconds = sum(len(f) for f in frames) / 2 / rec_sr
+    logger.info(f"Chunk {number}: {seconds:.1f}s of audio, cut after a "
+                f"{chunker.last_pause:.2f}s pause")
+    _chunk_worker().submit(lambda: _transcribe_chunk(frames, rec_sr, "middle"))
+
+
+def _transcribe_chunk(frames, rec_sr, role):
+    """Transcribe and type one chunk cut during the recording, with the
+    settings as they are now."""
+    cfg = _chunk_cfg
+    _transcribe_and_inject(frames, rec_sr, cfg.beeps, cfg.smart_quotes, cfg.notify,
+                           cfg.language, cfg.auto_space, cfg.auto_period,
+                           cfg.injection_mode, chunk_role=role)
+
+
+def _arm_chunker(rec_sr, edit_mode=False):
+    """Give this recording a pause detector when chunked dictation is on.
+    Never for a voice edit: its instruction needs the whole recording."""
+    chunker = None
+    if _chunk_pause_seconds > 0 and not edit_mode:
+        from .chunking import PauseDetector
+        chunker = PauseDetector(_chunk_pause_seconds, rec_sr)
+    with _chunk_lock:
+        state.chunks_submitted = 0
+        state.chunker = chunker
+
 
 def _feed_indicator(indicator, indata, spectrum_processor):
     """Feed the recording indicator the data its active style needs.
@@ -1475,6 +1541,7 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
     state.frames = []
     state.was_cancelled = False
     state.silence = None
+    state.chunker = None
     state.press_t0 = time.time()
     state.toggle_started_at = state.press_t0 if from_toggle else None
     state.edit_mode = edit_mode
@@ -1506,6 +1573,7 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
                 _notify("TuxTalk", "Microphone unavailable — check that no other app is using it")
             return False
 
+    _arm_chunker(getattr(state, "recording_samplerate", SAMPLE_RATE), edit_mode)
     _pause_media_players()
     print("Recording…")
     logger.debug("Recording started")
@@ -2858,7 +2926,12 @@ def _trim_auto_stop_tail(frames):
     touched. Runs after the stream stops, so no block is still being added.
     """
     detector, state.silence = state.silence, None
-    to_trim = detector.tail_to_trim() if detector is not None else 0
+    _drop_tail_samples(frames, detector.tail_to_trim() if detector is not None else 0)
+
+
+def _drop_tail_samples(frames, to_trim):
+    """Remove whole trailing blocks (int16 mono) holding at most *to_trim*
+    samples. A block is never split, so speech is never touched."""
     while frames and to_trim > 0:
         block_samples = len(frames[-1]) // 2          # int16 mono
         if block_samples > to_trim:
@@ -2886,7 +2959,10 @@ def _finish_capture(beeps_on: bool, notify_on: bool):
     if held_ms < MIN_HOLD_MS:
         cancel_recording(beeps_on, notify_on, f"Cancelled (held {held_ms} ms)")
         return None
-    frames = state.frames  # snapshot the reference before it can be reassigned
+    with _chunk_lock:
+        # No more cuts: from here on the audio is the last chunk.
+        state.chunker = None
+        frames = state.frames  # snapshot the reference before it can be reassigned
     rec_sr = getattr(state, 'recording_samplerate', SAMPLE_RATE)
     state.is_recording = False
     _stop_stream_safely()
@@ -3091,6 +3167,19 @@ def stop_recording(
     frames, rec_sr = cap
     if edit_mode:
         _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode)
+        return
+    if state.chunks_submitted:
+        # Chunked dictation: the rest goes in after the chunks already queued,
+        # and stopping waits for all of them, as it waits for one
+        # transcription when nothing was chunked.
+        params = (beeps_on, smart_quotes, notify_on, language, auto_space,
+                  auto_period, injection_mode)
+        worker = _chunk_worker()
+        worker.submit(lambda: _transcribe_and_inject(frames, rec_sr, *params,
+                                                     chunk_role="last"))
+        if not worker.drain(CHUNK_DRAIN_TIMEOUT_S):
+            logger.warning("Chunked dictation: chunks still typing after "
+                           f"{CHUNK_DRAIN_TIMEOUT_S:.0f}s; not waiting longer")
         return
     _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                            language, auto_space, auto_period, injection_mode)
@@ -3758,14 +3847,26 @@ def _service_tick(cfg, svc: "_ServiceState") -> "LiveSettings | None":
                 cap = _finish_capture(cfg.beeps, cfg.notify)
                 if cap is not None:
                     frames, rec_sr = cap
-                    def _worker(frames=frames, rec_sr=rec_sr, cfg=cfg):
-                        with _inject_lock:
+                    if _chunk_pause_seconds > 0:
+                        # Chunked dictation: through the chunk worker, so the
+                        # rest is typed after this recording's chunks and
+                        # before the next recording's. No wait, as below.
+                        role = "last" if state.chunks_submitted else None
+                        _chunk_worker().submit(
+                            lambda frames=frames, rec_sr=rec_sr, cfg=cfg, role=role:
                             _transcribe_and_inject(
                                 frames, rec_sr, cfg.beeps, cfg.smart_quotes,
                                 cfg.notify, cfg.language, cfg.auto_space,
-                                cfg.auto_period, cfg.injection_mode)
-                    threading.Thread(target=_worker, daemon=True,
-                                     name="tt-inject").start()
+                                cfg.auto_period, cfg.injection_mode, chunk_role=role))
+                    else:
+                        def _worker(frames=frames, rec_sr=rec_sr, cfg=cfg):
+                            with _inject_lock:
+                                _transcribe_and_inject(
+                                    frames, rec_sr, cfg.beeps, cfg.smart_quotes,
+                                    cfg.notify, cfg.language, cfg.auto_space,
+                                    cfg.auto_period, cfg.injection_mode)
+                        threading.Thread(target=_worker, daemon=True,
+                                         name="tt-inject").start()
             else:
                 stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
                                cfg.auto_space, cfg.auto_period, cfg.injection_mode)
