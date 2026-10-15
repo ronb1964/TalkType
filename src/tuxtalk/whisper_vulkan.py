@@ -367,14 +367,27 @@ def parse_result(reply):
     return text, no_speech
 
 
-def request_fields(language=None, prompt=None):
+def request_fields(language=None, prompt=None, scores=False):
     """The form fields of one /inference request. whisper-server reads
-    "prompt" as Whisper's initial prompt for that request alone."""
+    "prompt" as Whisper's initial prompt for that request alone.
+
+    *scores* asks for every language's probability (language_scores). The
+    server works them out with one more pass of the model, about a fifth of
+    the time of a short dictation on built-in graphics, so they're only
+    asked for when auto-detect is held to the user's languages."""
     fields = {"response_format": "verbose_json", "temperature": "0.0",
-              "beam_size": "5", "language": language or "auto"}
+              "beam_size": "5", "language": language or "auto",
+              "no_language_probabilities": "false" if scores else "true"}
     if prompt:
         fields["prompt"] = prompt
     return fields
+
+
+def language_scores(reply):
+    """{language code: probability} from a reply asked for with scores=True,
+    or {} when it has none."""
+    scores = reply.get("language_probabilities") or {}
+    return {code: float(p) for code, p in scores.items()}
 
 
 class VulkanWhisperModel:
@@ -440,10 +453,29 @@ class VulkanWhisperModel:
             raise
         logger.info(f"Graphics engine ready (warm-up took {time.time() - started:.1f}s)")
 
-    def transcribe(self, audio_f32, language=None, timeout=120, prompt=None):
+    def transcribe(self, audio_f32, language=None, timeout=120, prompt=None, limit_to=()):
         """(text, highest no-speech probability) for *audio_f32*. *prompt*
-        is Your Words (custom_words.prompt), to steer Whisper's spelling."""
-        body, content_type = multipart(request_fields(language, prompt), wav_bytes(audio_f32))
+        is Your Words (custom_words.prompt), to steer Whisper's spelling.
+
+        *limit_to* holds auto-detect to those languages (language_limit.py):
+        a dictation Whisper hears in another language is run again in the
+        likeliest one on the list."""
+        wav = wav_bytes(audio_f32)
+        limited = bool(limit_to) and not language
+        reply = self._inference(request_fields(language, prompt, scores=limited), wav, timeout)
+        if limited:
+            from . import language_limit
+            scores = language_scores(reply)
+            heard = max(scores, key=scores.get) if scores else None
+            better = language_limit.redirect(heard, scores, limit_to) if scores else None
+            if better:
+                logger.info(f"Language: Whisper heard {heard}, which isn't on your list; using {better}")
+                reply = self._inference(request_fields(better, prompt), wav, timeout)
+        return parse_result(reply)
+
+    def _inference(self, fields, wav, timeout):
+        """One /inference request; the server's JSON reply."""
+        body, content_type = multipart(fields, wav)
         with self._lock:
             if self._proc is None or self._proc.poll() is not None:
                 logger.warning("Graphics engine had stopped; starting it again")
@@ -452,7 +484,7 @@ class VulkanWhisperModel:
                 f"http://127.0.0.1:{self._port}/inference", data=body,
                 headers={"Content-Type": content_type})
             with urllib.request.urlopen(request, timeout=timeout) as response:
-                return parse_result(json.load(response))
+                return json.load(response)
 
     def _stop(self):
         proc, self._proc = self._proc, None

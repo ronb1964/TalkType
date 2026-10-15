@@ -279,7 +279,10 @@ After choosing one, the tray's Device line shows where it really runs.
 
 <b>Language Support</b>
 • Auto-detect language from speech
-• Or choose one of 33 common languages by hand. Whisper models know 99 languages;
+• Auto-detect sometimes takes your language for another? Preferences → General →
+  "Only these languages": tick the ones you speak and it picks only from those
+  (Whisper models; Parakeet always picks by itself)
+• Or choose one of 35 common languages by hand. Whisper models know 99 languages;
   Parakeet knows English and 24 European languages and always detects which by itself
 • Great for multilingual users
 

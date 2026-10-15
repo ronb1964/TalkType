@@ -5,6 +5,19 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- Auto-detect can be held to the languages you actually speak. Whisper picks
+  from 99 languages, and on a short dictation it sometimes picks wrong, so you
+  say something in Spanish and get French back. Preferences, General, Only
+  these languages: tick English and Spanish, say, and it only ever picks one of
+  those. If Whisper thinks it heard something else it listens again in the
+  likeliest language you ticked. It costs nothing when it guesses right. This
+  is for the Whisper models. Parakeet has no language setting at all, it picks
+  by itself, and Preferences says so.
+- Whisper on built-in graphics is faster. The graphics engine was working out
+  how likely every language was on every dictation, and TuxTalk never used
+  those numbers. On my Ryzen's built-in graphics that extra work was about a
+  fifth of a short dictation (0.63 seconds down to 0.49 with the tiny model).
+  On a big NVIDIA card you won't notice.
 - Numbers can be typed as digits. Parakeet likes to write "twenty-five" and
   "october fifteenth" out in words, so there's a new option in Preferences,
   Advanced, Write numbers as digits. You get 25, 15th, 7:30 and 1984, and zip

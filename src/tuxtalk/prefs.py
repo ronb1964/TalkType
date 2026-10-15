@@ -320,7 +320,8 @@ def _hide_widgets(*widgets):
         w.hide()
 
 
-def model_setting_warning(model, device, language_mode, language, language_name=""):
+def model_setting_warning(model, device, language_mode, language, language_name="",
+                          auto_languages=()):
     """What's wrong with this model/device/language combination, or "".
 
     Parakeet can't run on CUDA: with that device it quietly uses the processor
@@ -339,6 +340,9 @@ def model_setting_warning(model, device, language_mode, language, language_name=
         lang = language_name or language
         notes.append(f"Parakeet doesn't understand {lang}. It knows English and 24 European "
                      f"languages. For {lang}, choose one of the Whisper models.")
+    if language_mode == "auto" and auto_languages:
+        notes.append("Parakeet picks the language by itself, so \u201cOnly these languages\u201d "
+                     "is used only with the Whisper models.")
     return "\n".join(notes)
 
 
@@ -1040,7 +1044,23 @@ class PreferencesWindow:
         self.lang_mode_combo.connect("changed", self._on_language_mode_changed)
         grid.attach(self.lang_mode_combo, 1, row, 1, 1)
         row += 1
-        
+
+        # Auto-detect held to the user's languages (language_limit.py). Shown
+        # with Auto-detect only; Manual already names the one language.
+        from . import language_limit
+        self.auto_langs_label = Gtk.Label(label="Only these languages 💡:", xalign=0)
+        self.auto_langs_label.set_tooltip_text(
+            "Auto-detect picks only from the languages you tick.\n"
+            "Handy when it sometimes takes your language for another one.\n"
+            "Used with the Whisper models; Parakeet picks by itself.")
+        grid.attach(self.auto_langs_label, 0, row, 1, 1)
+        self.auto_langs_button = Gtk.Button(
+            label=language_limit.describe(language_limit.parse(self.config.get("auto_languages", ""))))
+        self.auto_langs_button.set_halign(Gtk.Align.START)
+        self.auto_langs_button.connect("clicked", self._on_auto_languages_clicked)
+        grid.attach(self.auto_langs_button, 1, row, 1, 1)
+        row += 1
+
         # Language Selection (second)
         self.lang_label = Gtk.Label(label="Language 💡:", xalign=0)
         self.lang_label.set_tooltip_text("Select the language for speech recognition.\nOnly used when Language Mode is set to 'Manual'.")
@@ -3866,11 +3886,13 @@ class PreferencesWindow:
         self._relabel_cuda_option(model)
         self._update_recommended_row(model)
         from .recommend import language_name
+        from . import language_limit
         code = self.lang_combo.get_active_id() or ""
         message = model_setting_warning(
             model, self.device_combo.get_active_id() or "",
             self.lang_mode_combo.get_active_id() or "auto",
-            code, language_name(code))
+            code, language_name(code),
+            language_limit.parse(self.config.get("auto_languages", "")))
         if message:
             # Amber and bold, so it can't be missed.
             label.set_markup(f'<span color="{WARNING_AMBER}" weight="bold">⚠️ '
@@ -4537,28 +4559,77 @@ class PreferencesWindow:
     
     def _on_language_mode_changed(self, widget):
         """Handle language mode change to show/hide language selection."""
-        mode = widget.get_active_id()
-        if mode == "auto":
-            # Hide language selection
-            self.lang_label.set_visible(False)
-            self.lang_combo.set_visible(False)
-        else:  # manual mode
-            # Show language selection
-            self.lang_label.set_visible(True)
-            self.lang_combo.set_visible(True)
+        self._show_language_rows(widget.get_active_id() or "auto")
+
+    def _show_language_rows(self, mode):
+        """Auto-detect shows its language list; Manual shows the one language."""
+        auto = mode == "auto"
+        self.lang_label.set_visible(not auto)
+        self.lang_combo.set_visible(not auto)
+        self.auto_langs_label.set_visible(auto)
+        self.auto_langs_button.set_visible(auto)
+
+    def _on_auto_languages_clicked(self, _button):
+        """Pick the languages auto-detect may choose from."""
+        from . import language_limit, recommend
+        chosen = set(language_limit.parse(self.config.get("auto_languages", "")))
+        dialog = Gtk.Dialog(title="Only these languages", transient_for=self.window, modal=True)
+        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        dialog.add_button("OK", Gtk.ResponseType.OK)
+        dialog.set_default_response(Gtk.ResponseType.OK)
+        box = dialog.get_content_area()
+        for side in ("start", "end", "top", "bottom"):
+            getattr(box, f"set_margin_{side}")(16)
+        box.set_spacing(10)
+
+        intro = Gtk.Label(xalign=0)
+        intro.set_line_wrap(True)
+        intro.set_max_width_chars(60)
+        intro.set_markup("Tick the languages you dictate in. Auto-detect then picks "
+                         "only from these.\n<b>Tick none</b> to let it pick any language.")
+        box.pack_start(intro, False, False, 0)
+
+        # Three columns, in the pickers' order, each with its own name for itself.
+        checks = {}
+        table = Gtk.Grid(column_spacing=18, row_spacing=2)
+        per_column = -(-len(recommend.LANGUAGES) // 3)
+        for i, (code, _name) in enumerate(recommend.LANGUAGES):
+            check = Gtk.CheckButton(label=recommend.language_label(code))
+            check.set_active(code in chosen)
+            checks[code] = check
+            table.attach(check, i // per_column, i % per_column, 1, 1)
+        box.pack_start(table, False, False, 0)
+
+        clear = Gtk.Button(label="Untick all")
+        clear.set_halign(Gtk.Align.START)
+        clear.connect("clicked", lambda _b: [c.set_active(False) for c in checks.values()])
+        box.pack_start(clear, False, False, 0)
+
+        how = Gtk.Label(xalign=0)
+        how.set_line_wrap(True)
+        how.set_max_width_chars(60)
+        how.set_markup(
+            "<small>This is for the Whisper models. When Whisper thinks it hears a "
+            "language that isn\u2019t ticked, it listens again in the likeliest one "
+            "that is. Tick just one and it\u2019s the same as choosing that language "
+            "by hand. Parakeet has no language setting: it picks among its 25 "
+            "languages by itself.</small>")
+        box.pack_start(how, False, False, 0)
+
+        dialog.show_all()
+        try:
+            if dialog.run() == Gtk.ResponseType.OK:
+                setting = language_limit.to_setting(c for c, chk in checks.items() if chk.get_active())
+                self.update_config("auto_languages", setting)
+                self.auto_langs_button.set_label(language_limit.describe(language_limit.parse(setting)))
+                self._update_model_combo_hint()
+        finally:
+            dialog.destroy()
     
     
     def _update_language_ui_state(self):
         """Update language UI state based on current config."""
-        language_mode = self.config.get("language_mode", "auto")
-        if language_mode == "auto":
-            # Hide language selection when auto-detect is selected
-            self.lang_label.set_visible(False)
-            self.lang_combo.set_visible(False)
-        else:  # manual mode
-            # Show language selection when manual is selected
-            self.lang_label.set_visible(True)
-            self.lang_combo.set_visible(True)
+        self._show_language_rows(self.config.get("language_mode", "auto"))
 
     def _on_auto_timeout_toggled(self, checkbox):
         """Handle auto-timeout checkbox toggle."""

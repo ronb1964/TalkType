@@ -34,10 +34,11 @@ class FakeWindow:
 
 def _stub(config):
     rows = {name: FakeWidget() for name in
-            ("timeout_label", "timeout_spin", "lang_label", "lang_combo")}
+            ("timeout_label", "timeout_spin", "lang_label", "lang_combo",
+             "auto_langs_label", "auto_langs_button")}
     stub = SimpleNamespace(config=config, window=FakeWindow(list(rows.values())),
                            ok_btn=SimpleNamespace(grab_default=lambda: None), **rows)
-    for name in ("_update_timeout_ui_state", "_update_language_ui_state"):
+    for name in ("_update_timeout_ui_state", "_update_language_ui_state", "_show_language_rows"):
         setattr(stub, name, getattr(PreferencesWindow, name).__get__(stub))
     return stub
 
@@ -50,6 +51,8 @@ def test_rows_for_settings_that_are_off_stay_hidden_after_show_all():
     assert stub.window.presented
     assert not stub.timeout_label.visible and not stub.timeout_spin.visible
     assert not stub.lang_label.visible and not stub.lang_combo.visible
+    # Auto-detect shows its language list instead.
+    assert stub.auto_langs_label.visible and stub.auto_langs_button.visible
 
 
 def test_rows_for_settings_that_are_on_are_shown():
@@ -59,3 +62,4 @@ def test_rows_for_settings_that_are_on_are_shown():
 
     assert stub.timeout_label.visible and stub.timeout_spin.visible
     assert stub.lang_label.visible and stub.lang_combo.visible
+    assert not stub.auto_langs_label.visible and not stub.auto_langs_button.visible

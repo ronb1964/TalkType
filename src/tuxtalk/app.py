@@ -97,6 +97,8 @@ _numbers_language = "en"
 _voice_navigation = False
 # Plain text in terminals and code editors (app_kind, plain_for_app).
 _adapt_to_app = True
+# The languages auto-detect may pick from, () for any (language_limit.py).
+_auto_languages = ()
 _ai_engine = None
 # Which of the two features using the AI engine are on. The engine runs while
 # either is; each checks its own flag before using it.
@@ -111,13 +113,15 @@ def _apply_cleanup_settings(cfg):
     """Bring the cleanup and auto-stop options in line with *cfg*; start or
     stop the AI engine."""
     global _remove_fillers, _ai_engine, _auto_stop_seconds, _ai_corrections, _voice_editing, _swiss_spelling
-    global _numbers_mode, _numbers_language, _voice_navigation, _adapt_to_app
+    global _numbers_mode, _numbers_language, _voice_navigation, _adapt_to_app, _auto_languages
     _auto_stop_seconds = (float(getattr(cfg, "auto_stop_seconds", 2.0))
                           if getattr(cfg, "auto_stop_silence", False) else 0.0)
     _remove_fillers = bool(getattr(cfg, "remove_fillers", False))
     _swiss_spelling = bool(getattr(cfg, "swiss_spelling", False))
     _voice_navigation = bool(getattr(cfg, "voice_navigation", False))
     _adapt_to_app = bool(getattr(cfg, "adapt_to_app", True))
+    from . import language_limit
+    _auto_languages = language_limit.parse(getattr(cfg, "auto_languages", ""))
     if getattr(cfg, "numbers_as_digits", False):
         _numbers_mode = "small_as_words" if getattr(cfg, "numbers_small_as_words", False) else "all"
     else:
@@ -2261,12 +2265,23 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
     transcribe_start = time.time()
 
     from .whisper_vulkan import VulkanWhisperModel
-    from . import custom_words
+    from . import custom_words, language_limit
     words_prompt = custom_words.prompt(_custom_words)
+    # Auto-detect held to the user's languages: one language is simply used,
+    # two or more are checked against Whisper's own pick (language_limit.py).
+    # Parakeet below has no language setting, so this changes nothing there.
+    if not language:
+        language = language_limit.forced_language(_auto_languages)
+    limit_to = () if language else _auto_languages
     if isinstance(model, VulkanWhisperModel):
-        # Only pass a prompt when there is one, so nothing changes without words.
-        raw, _no_speech = model.transcribe(
-            audio_f32, language, **({"prompt": words_prompt} if words_prompt else {}))
+        # Only pass a prompt or a language list when there is one, so nothing
+        # changes without them.
+        extra = {}
+        if words_prompt:
+            extra["prompt"] = words_prompt
+        if limit_to:
+            extra["limit_to"] = limit_to
+        raw, _no_speech = model.transcribe(audio_f32, language, **extra)
         logger.info(f"TIMING: Transcription completed in {time.time() - transcribe_start:.2f}s (Vulkan GPU)")
         print(f"Raw (graphics): {_loggable(raw)}")
         logger.info(f"Raw transcription (Vulkan GPU): {_loggable(raw)}")
@@ -2298,8 +2313,7 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
         no_speech = 1.0 if raw and has_no_speech(audio_f32, SAMPLE_RATE) else 0.0
         return _strip_hallucinations(raw, no_speech_prob=no_speech) or None
 
-    segments, _ = model.transcribe(
-        audio_f32,
+    whisper_options = dict(
         vad_filter=False,
         beam_size=5,
         condition_on_previous_text=True,
@@ -2312,7 +2326,6 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
         # the loop without changing normal decoding.
         repetition_penalty=1.1,
         no_repeat_ngram_size=5,
-        language=(language or None),
         # Your Words, so Whisper spells them the user's way. faster-whisper
         # puts them in the prompt of every 30-second window.
         hotwords=words_prompt,
@@ -2326,6 +2339,15 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
         # it drops real speech after natural 2+ second pauses. Trailing
         # hallucination phrases are handled by _strip_hallucinations().
     )
+    segments, info = model.transcribe(audio_f32, language=(language or None), **whisper_options)
+    # faster-whisper detects the language before it decodes a word (segments
+    # is a generator), so starting again in another language costs only that
+    # detection, and only when its pick is off the user's list.
+    better = (language_limit.redirect(info.language, dict(info.all_language_probs or ()), limit_to)
+              if limit_to else None)
+    if better:
+        logger.info(f"Language: Whisper heard {info.language}, which isn't on your list; using {better}")
+        segments, info = model.transcribe(audio_f32, language=better, **whisper_options)
     transcribe_time = time.time() - transcribe_start
     logger.info(f"TIMING: Transcription completed in {transcribe_time:.2f}s")
     if transcribe_time > 2.0:

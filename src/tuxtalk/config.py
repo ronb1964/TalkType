@@ -168,6 +168,7 @@ class Settings:
     auto_check_updates: bool = True      # automatically check for updates on startup (once per day)
     last_update_check: str = ""          # ISO timestamp of last update check
     language_mode: str = "auto"          # "auto" (detect language) or "manual" (use `language`); UI state for prefs
+    auto_languages: str = ""             # auto-detect only picks from these, "en,es" (language_limit.py); "" = any
     launch_at_login: bool = False        # start TuxTalk automatically at login (prefs manages the autostart file)
     log_transcripts: bool = False        # write full transcribed text to the log (off = redacted); opt-in for troubleshooting only
     remove_fillers: bool = False         # drop "um"/"uh" and accidental repeated words (cleanup.py; rules, no download)
@@ -733,6 +734,8 @@ LIVE_APPLIED_KEYS = {
     "auto_check_updates",
     "last_update_check",
     "language_mode",
+    # Read into a module global on each reload, used on each dictation.
+    "auto_languages",
     # Read into a module global by the service so toggling transcript logging in
     # Preferences takes effect on the next utterance, no restart.
     "log_transcripts",
