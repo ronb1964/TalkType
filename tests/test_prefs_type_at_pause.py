@@ -155,3 +155,10 @@ def test_a_slider_change_applies_to_a_running_test(win):
 
 def test_the_advanced_tab_builds_it():
     assert "_build_type_at_pause" in inspect.getsource(PreferencesWindow.create_advanced_tab)
+
+
+def test_help_explains_type_at_pause():
+    from tuxtalk import help_dialog
+    source = inspect.getsource(help_dialog)
+    assert "<b>Type at Pause</b>" in source
+    assert "Fine-tuning" in source
