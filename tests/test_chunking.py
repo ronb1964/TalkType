@@ -126,6 +126,54 @@ def test_a_quiet_dynamic_mic_still_gets_boundaries():
     fired, _ = run_pauses(audio)
     assert len(fired) == 2
 
+
+def loud_room(seconds, sr=SR):
+    """cbox's onboard mic at full gain: steady hiss (int16 RMS ~380) plus a
+    strong rumble below 20 Hz."""
+    t = np.arange(int(seconds * sr)) / sr
+    return np.clip(rng.normal(0, 380, t.size) + 600 * np.sin(2 * np.pi * 15 * t),
+                   -32768, 32767).astype(np.int16)
+
+
+def loud_speech(seconds, sr=SR):
+    t = np.arange(int(seconds * sr)) / sr
+    voiced = (t % 0.25) < 0.18
+    tone = np.sin(2 * np.pi * 220 * t) * 2000 * voiced
+    return np.clip(tone + loud_room(seconds, sr), -32768, 32767).astype(np.int16)
+
+
+def test_a_loud_noisy_room_still_gets_boundaries():
+    """Measured on cbox (ALC887, +50 dB): hiss at RMS 370-410 once the rumble
+    is filtered out, speech at 600-4000. Taking the quietest block ever heard
+    as the room, plus a fixed minimum, counted the hiss as speech forever."""
+    audio = np.concatenate([loud_room(1.0), loud_speech(2.0), loud_room(1.5),
+                            loud_speech(2.0), loud_room(1.5)])
+    fired, _ = run_pauses(audio)
+    assert len(fired) == 2
+
+
+def test_a_dropout_does_not_poison_the_room_level():
+    """A few blocks of digital silence (stream start, an xrun) must not make the
+    detector take the room's hiss for speech for the rest of the recording."""
+    audio = np.concatenate([np.zeros(BLOCK * 3, dtype=np.int16), loud_room(1.0),
+                            loud_speech(2.0), loud_room(1.5),
+                            np.zeros(BLOCK * 2, dtype=np.int16),
+                            loud_speech(2.0), loud_room(1.5)])
+    fired, _ = run_pauses(audio)
+    assert len(fired) == 2
+
+
+def test_the_room_level_follows_a_room_that_gets_noisier():
+    """A fan starts: the hiss jumps. It may cost one stray cut while it still
+    sounds like speech, but within ROOM_WINDOW_S it is the room, and the pause
+    after the next words is found again."""
+    audio = np.concatenate([speech(1.0), noise(1.0), noise(6.0, level=400.0),
+                            loud_speech(2.0), loud_room(1.5)])
+    fired, _ = run_pauses(audio)
+    assert any(10.5 <= t <= 11.5 for t in fired)   # the words end at 10.0 s
+    assert len(fired) <= 3
+
+
 # --- the chunk worker --------------------------------------------------------
 
 def test_worker_runs_jobs_in_order():

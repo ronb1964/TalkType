@@ -47,13 +47,12 @@ class NoiseFloor:
     that counts as speech over it. Shared by auto-stop (SilenceDetector) and
     chunked dictation (chunking.PauseDetector), so both hear the room alike."""
 
-    def __init__(self, min_speech_rms: float = _MIN_SPEECH_RMS):
+    def __init__(self):
         self.level = None
-        self.min_speech_rms = float(min_speech_rms)
 
     def threshold(self) -> float:
         """The loudness (int16 RMS) that counts as speech in this room."""
-        return max(self.min_speech_rms, (self.level or 0.0) * _SPEECH_OVER_NOISE)
+        return max(_MIN_SPEECH_RMS, (self.level or 0.0) * _SPEECH_OVER_NOISE)
 
     def update(self, rms: float, duration: float) -> bool:
         """Learn from one block; True if the block is speech.
