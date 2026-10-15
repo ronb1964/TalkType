@@ -8,7 +8,9 @@ natural pauses, never words appearing and changing mid-sentence (upstream's
 
 Off unless chunked_dictation is set in config.toml; see app._arm_chunker.
 """
+import difflib
 import queue
+import re
 import threading
 import time
 
@@ -111,3 +113,40 @@ class ChunkWorker:
                 logger.exception("A dictation chunk failed; carrying on with the next")
             finally:
                 self._queue.task_done()
+
+
+# --- where a sentence ends at a pause ------------------------------------------
+# The engine punctuates each chunk as if it were a whole sentence, so nearly
+# every pause would end in a period. The chunk's final mark is held back
+# instead, and once the next chunk arrives the engine hears both together:
+# with the words (and the voice) on both sides of the pause, the mark it puts
+# at the seam is a real verdict. Only that mark is taken from the joint text;
+# the words typed always come from each chunk's own transcription.
+
+_WORD = re.compile(r"\w+(?:['’-]\w+)*")
+_MARKS = ".?!…,;:"
+
+
+def boundary_mark(prev_raw: str, joint_raw: str):
+    """The punctuation the engine put after the last word of *prev_raw* when it
+    transcribed that chunk together with the next one (*joint_raw*): ".", "?",
+    ",", ... or "" for none. None when the words can't be lined up, or when
+    nothing follows them (so there is no context to judge by)."""
+    prev = [w.casefold() for w in _WORD.findall(prev_raw)]
+    joint = list(_WORD.finditer(joint_raw))
+    if not prev or not joint:
+        return None
+    words = [m.group().casefold() for m in joint]
+    last = len(prev) - 1
+    matcher = difflib.SequenceMatcher(None, prev, words, autojunk=False)
+    for a, b, size in matcher.get_matching_blocks():
+        if size and a <= last < a + size:
+            j = b + (last - a)
+            break
+    else:
+        return None
+    if j == len(joint) - 1:
+        return None
+    gap = joint_raw[joint[j].end():joint[j + 1].start()]
+    marks = [c for c in gap if c in _MARKS]
+    return marks[0] if marks else ""

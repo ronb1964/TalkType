@@ -272,11 +272,13 @@ class RecordingState:
     # or None, and how many chunks it has cut so far.
     chunker: object = None
     chunks_submitted: int = 0
-    # The last chunk typed ended mid-sentence, so the next chunk of the SAME
-    # recording carries on lowercase. Kept apart from continue_mid_sentence
-    # (which "undo" sets for the next dictation) so it never leaks past the
-    # recording.
-    chunk_continuation: bool = False
+    # The last chunk typed held back its final mark (app._hold_back_boundary):
+    # {"mark", "audio", "raw", "typed"} until the next chunk decides it, else
+    # None. Belongs to its recording only (cleared by _arm_chunker).
+    pending_boundary: object = None
+    # Speech the pause detector heard after its last cut, taken at the stop:
+    # 0.0 means the rest of the recording is room noise only.
+    last_chunk_speech: float = None
 
     def __post_init__(self):
         if self.frames is None:
@@ -915,7 +917,7 @@ def _arm_chunker(rec_sr, edit_mode=False):
         _chunk_worker()
     with _chunk_lock:
         state.chunks_submitted = 0
-        state.chunk_continuation = False
+        state.pending_boundary = None
         state.chunker = chunker
 
 
@@ -2944,6 +2946,16 @@ def _trim_auto_stop_tail(frames):
     _drop_tail_samples(frames, detector.tail_to_trim() if detector is not None else 0)
 
 
+def _drop_speechless_rest(frames):
+    """The audio after the last cut, or none when the pause detector heard no
+    speech in it: room noise longer than the tap check would otherwise reach
+    the engine, which invents a word for it ("Yeah.")."""
+    if state.last_chunk_speech == 0.0:
+        logger.info("No speech after the last chunk; the rest isn't transcribed")
+        return []
+    return frames
+
+
 def _drop_tail_samples(frames, to_trim):
     """Remove whole trailing blocks (int16 mono) holding at most *to_trim*
     samples. A block is never split, so speech is never touched."""
@@ -2976,7 +2988,8 @@ def _finish_capture(beeps_on: bool, notify_on: bool):
         return None
     with _chunk_lock:
         # No more cuts: from here on the audio is the last chunk.
-        state.chunker = None
+        chunker, state.chunker = state.chunker, None
+        state.last_chunk_speech = chunker.speech_time if chunker is not None else None
         frames = state.frames  # snapshot the reference before it can be reassigned
     rec_sr = getattr(state, 'recording_samplerate', SAMPLE_RATE)
     state.is_recording = False
@@ -3032,31 +3045,80 @@ def _report_undelivered(outcome: str, beeps_on: bool):
     _notify("TuxTalk", message)
 
 
-def _close_chunked_sentence(auto_period: bool, auto_space: bool, injection_mode: str) -> None:
-    """The dictation ended in a pause, so its last chunk held nothing, and the
-    sentence the chunks typed has no auto-period yet (middle chunks get none).
-    Put it in place of the space after the last chunk."""
-    pending, state.chunk_continuation = state.chunk_continuation, False
-    if not (pending and auto_period):
+# Silence put between two chunks when the engine hears them together, so the
+# pause is still there to hear (the cut kept only 0.3 s of it).
+JOINT_GAP_S = 0.5
+_SENTENCE_ENDS = (".", "?", "!", "…")
+
+
+def _last_word(text: str) -> str:
+    words = re.findall(r"\w+", text.casefold())
+    return words[-1] if words else ""
+
+
+def _hold_back_boundary(text: str, raw: str):
+    """Split a middle chunk's text into what to type now and the final mark to
+    hold back: (text, mark), or (text, None) when nothing is held back.
+
+    The engine heard the chunk alone, so its final period or question mark is
+    a guess; the next chunk decides it (_resolve_boundary). The trailing space
+    waits too, so whatever comes next lands right after the last word."""
+    core = text.rstrip(" ")
+    if not core:
+        return text, None
+    m = re.search(r"[.?!…]+$", core)
+    mark = m.group() if m else ""
+    if mark:
+        core = core[:m.start()].rstrip()
+        # A mark the speaker dictated ("Punkt") is theirs, not the engine's
+        # guess: the word before it then isn't the raw text's last word.
+        if not core or _last_word(core) != _last_word(raw):
+            return text, None
+    elif not core[-1].isalnum():
+        return text, None   # ends in a line break, a quote, a bracket...
+    return core, mark
+
+
+def _type_boundary(pending: dict, tail: str, injection_mode: str) -> None:
+    """Type what goes between a held-back chunk and what follows it."""
+    if tail and _inject_text(tail, injection_mode, time.time()) == "ok":
+        # Undo and "delete last sentence" then see the whole chunk.
+        state.last_inserted_text = pending["typed"] + tail
+
+
+def _resolve_boundary(audio_f32, language, injection_mode) -> None:
+    """The next chunk has arrived: decide the mark held back after the last
+    one, from the engine hearing both chunks together, and type it."""
+    pending, state.pending_boundary = state.pending_boundary, None
+    mark = pending["mark"]
+    try:
+        from .chunking import boundary_mark
+        gap = np.zeros(int(JOINT_GAP_S * SAMPLE_RATE), dtype=np.float32)
+        joint = _transcribe_audio(np.concatenate([pending["audio"], gap, audio_f32]), language)
+        found = boundary_mark(pending["raw"], joint or "")
+        logger.info(f"Chunk boundary: {pending['mark']!r} alone, {found!r} in context")
+        if found is not None:
+            mark = found
+    except Exception as e:
+        logger.warning(f"Couldn't hear the chunk boundary in context: {e}")
+    _type_boundary(pending, (mark + " ") if mark else " ", injection_mode)
+    # Lowercase on after a comma or no mark; a sentence end starts afresh.
+    state.continue_mid_sentence = mark not in _SENTENCE_ENDS
+
+
+def _flush_boundary(auto_period: bool, auto_space: bool, injection_mode: str) -> None:
+    """The dictation ended in a pause: type the mark held back after its last
+    chunk, or the auto-period when the engine wrote none."""
+    pending, state.pending_boundary = state.pending_boundary, None
+    if pending is None:
         return
     focused = _query_focused_window_class()
     if (focused is not None and state.last_inserted_window is not None
             and focused != state.last_inserted_window):
-        return  # backspacing in another window would delete the user's text
-    if _adapt_to_app and app_kind(focused):
-        return  # terminals and code editors get no closing period
-    typed = state.last_inserted_text
-    closing = "." + (" " if auto_space else "")
-    try:
-        if typed.endswith(" "):
-            if not _output_backend().backspaces(1):
-                return
-            typed = typed[:-1]
-        if _inject_text(closing, injection_mode, time.time()) == "ok":
-            # Undo then removes the whole last chunk with its period.
-            state.last_inserted_text = typed + closing
-    except Exception as e:
-        logger.warning(f"Couldn't close the chunked sentence: {e}")
+        return  # the end of this sentence isn't in the window that has focus
+    kind = app_kind(focused) if _adapt_to_app else ""
+    mark = pending["mark"] or ("." if auto_period and not kind else "")
+    _type_boundary(pending, mark + (" " if auto_space and not kind else ""), injection_mode)
 
 
 def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
@@ -3081,7 +3143,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
             return False
         logger.info(f"Chunk ({chunk_role}) {what}; nothing typed for it")
         if chunk_role == "last":
-            _close_chunked_sentence(auto_period, auto_space, injection_mode)
+            _flush_boundary(auto_period, auto_space, injection_mode)
             _beep(beeps_on, *READY_BEEP)
         return True
 
@@ -3124,6 +3186,11 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
             _beep(beeps_on, *CANCEL_BEEP)
             return
 
+        # Chunked dictation: the chunk before this one held back its final
+        # mark; decide it now, before a command acts on what was typed.
+        if chunk_role is not None and state.pending_boundary is not None:
+            _resolve_boundary(audio_f32, language, injection_mode)
+
         # Stage 2: Check for undo commands ("undo that", "undo word", etc.)
         if _handle_undo(raw, beeps_on, notify_on):
             return
@@ -3141,14 +3208,13 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         # plainer for a terminal or code editor ("Plain text in terminals and
         # code editors").
         kind = app_kind(_query_focused_window_class()) if _adapt_to_app else ""
-        if chunk_role is not None and state.chunk_continuation:
-            # The chunk before this one stopped mid-sentence.
-            state.chunk_continuation = False
-            state.continue_mid_sentence = True
         # A pause is not a sentence end, so a middle chunk gets no auto-period
-        # of its own; the last chunk (or _close_chunked_sentence) ends it.
+        # of its own; the last chunk (or _flush_boundary) ends the sentence.
         chunk_period = auto_period and chunk_role != "middle"
         text = _prepare_text(raw, smart_quotes, chunk_period, auto_space, app_kind=kind)
+        held_mark = None
+        if chunk_role == "middle":
+            text, held_mark = _hold_back_boundary(text, raw)
 
         # Beep to confirm transcription is done
         if chunk_role != "middle":
@@ -3172,13 +3238,9 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                 outcome = "failed"
             if outcome in _UNDELIVERED_NOTICES:
                 _report_undelivered(outcome, beeps_on)
-            if chunk_role == "middle" and outcome == "ok":
-                # A pause is not a sentence end: when the engine didn't
-                # close the phrase, the next chunk carries on lowercase,
-                # the way a dictation after "undo" does.
-                tail = text.rstrip()
-                if tail and not tail.endswith(('.', '?', '!', '…')):
-                    state.chunk_continuation = True
+            if held_mark is not None and outcome == "ok":
+                state.pending_boundary = {"mark": held_mark, "audio": audio_f32,
+                                          "raw": raw, "typed": state.last_inserted_text}
             if _usage_stats:
                 # After typing, so saving the counts never delays the text.
                 # Counts only (words, seconds dictating); see stats.py.
@@ -3224,6 +3286,7 @@ def stop_recording(
         # transcription when nothing was chunked.
         params = (beeps_on, smart_quotes, notify_on, language, auto_space,
                   auto_period, injection_mode)
+        frames = _drop_speechless_rest(frames)
         worker = _chunk_worker()
         worker.submit(lambda: _transcribe_and_inject(frames, rec_sr, *params,
                                                      chunk_role="last"))
@@ -3902,6 +3965,8 @@ def _service_tick(cfg, svc: "_ServiceState") -> "LiveSettings | None":
                         # rest is typed after this recording's chunks and
                         # before the next recording's. No wait, as below.
                         role = "last" if state.chunks_submitted else None
+                        if role:
+                            frames = _drop_speechless_rest(frames)
                         _chunk_worker().submit(
                             lambda frames=frames, rec_sr=rec_sr, cfg=cfg, role=role:
                             _transcribe_and_inject(

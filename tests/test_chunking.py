@@ -222,17 +222,40 @@ def test_chunk_pause_stays_below_auto_stop(monkeypatch):
     app._apply_cleanup_settings(SimpleNamespace(chunked_dictation=False))
 
 
+# --- where a sentence ends at a pause (the engine's word, in context) ---------
+
+@pytest.mark.parametrize("prev,joint,mark", [
+    ("Wir treffen uns morgen.", "Wir treffen uns morgen um drei Uhr.", ""),
+    ("Das ist gut.", "Das ist gut. Wir gehen.", "."),
+    ("Kommst du?", "Kommst du? Ich warte.", "?"),
+    ("Wir treffen uns morgen", "Wir treffen uns morgen, um drei.", ","),
+    ("Die Straße.", "die strasse ist nass", ""),          # ß, casefolded
+    ("Hallo Welt.", "Etwas ganz anderes.", None),       # no match: no verdict
+    ("Wir gehen.", "Wir gehen.", None),                  # nothing after it
+])
+def test_boundary_mark(prev, joint, mark):
+    from tuxtalk.chunking import boundary_mark
+    assert boundary_mark(prev, joint) == mark
+
+
 # --- chunk roles in the pipeline ---------------------------------------------
 
 @pytest.fixture
 def pipeline(monkeypatch):
     """A fake engine and fake typing around the real _transcribe_and_inject.
-    texts: what the engine 'hears', one per call. Returns (texts, typed, beeps)."""
+    texts: what the engine 'hears', one per call, in call order (a chunk after
+    a held-back one is transcribed alone, then together with it).
+    Returns (texts, typed, beeps)."""
     from tuxtalk import app, history
     texts, typed, beeps = [], [], []
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: texts.pop(0))
-    monkeypatch.setattr(app, "_inject_text",
-                        lambda text, mode, t0, one_block=False: (typed.append(text), "ok")[1])
+
+    def fake_inject(text, mode, t0, one_block=False):
+        typed.append(text)
+        app.state.last_inserted_text = text
+        return "ok"
+
+    monkeypatch.setattr(app, "_inject_text", fake_inject)
     monkeypatch.setattr(app, "_beep", lambda enabled, *tone: beeps.append(tone))
     monkeypatch.setattr(app, "_notify", lambda *a, **k: None)
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: None)
@@ -240,7 +263,8 @@ def pipeline(monkeypatch):
     monkeypatch.setattr(app, "_usage_stats", False)
     monkeypatch.setattr(history, "add_entry", lambda text: None)
     monkeypatch.setattr(app.state, "continue_mid_sentence", False)
-    monkeypatch.setattr(app.state, "chunk_continuation", False)
+    monkeypatch.setattr(app.state, "pending_boundary", None)
+    monkeypatch.setattr(app.state, "last_inserted_text", "")
     return texts, typed, beeps
 
 
@@ -259,18 +283,113 @@ def test_middle_chunk_types_without_the_ready_beep(pipeline):
     texts, typed, beeps = pipeline
     texts.append("we meet")
     call(frames_of(speech(1.0)), "middle")
-    assert [t.strip() for t in typed] == ["We meet"]
+    assert typed == ["We meet"]
     assert app.READY_BEEP not in beeps
 
 
-def test_middle_chunk_without_final_punctuation_continues_the_sentence(pipeline):
+def test_middle_chunk_holds_back_its_final_mark(pipeline):
+    """The engine heard the chunk alone and ended it with a period; that is a
+    guess, so it is not typed yet (nor the space after it)."""
     from tuxtalk import app
     texts, typed, _ = pipeline
-    texts.extend(["we meet", "at three"])
+    texts.append("we meet.")
+    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    assert typed == ["We meet"]
+    assert app.state.pending_boundary["mark"] == "."
+
+
+def test_context_without_a_period_carries_the_sentence_on(pipeline):
+    texts, typed, _ = pipeline
+    texts.extend(["we meet.", "at three.", "we meet at three."])
     call(frames_of(speech(1.0)), "middle")
-    assert app.state.chunk_continuation is True
-    call(frames_of(speech(1.0)), "last")
-    assert typed[1].strip().startswith("at three")
+    call(frames_of(speech(1.0)), "middle")
+    assert typed == ["We meet", " ", "at three"]
+
+
+def test_context_with_a_period_ends_the_sentence(pipeline):
+    texts, typed, _ = pipeline
+    texts.extend(["we meet.", "the end.", "we meet. The end."])
+    call(frames_of(speech(1.0)), "middle")
+    call(frames_of(speech(1.0)), "middle")
+    assert typed == ["We meet", ". ", "The end"]
+
+
+def test_context_with_a_comma_types_the_comma(pipeline):
+    texts, typed, _ = pipeline
+    texts.extend(["we meet.", "at three.", "we meet, at three."])
+    call(frames_of(speech(1.0)), "middle")
+    call(frames_of(speech(1.0)), "middle")
+    assert typed == ["We meet", ", ", "at three"]
+
+
+def test_no_verdict_keeps_the_engines_mark(pipeline):
+    texts, typed, _ = pipeline
+    texts.extend(["we meet.", "the end.", "something else entirely"])
+    call(frames_of(speech(1.0)), "middle")
+    call(frames_of(speech(1.0)), "middle")
+    assert typed == ["We meet", ". ", "The end"]
+
+
+def test_last_chunk_gets_the_auto_period(pipeline):
+    texts, typed, _ = pipeline
+    texts.extend(["we meet", "at three", "we meet at three"])
+    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    call(frames_of(speech(1.0)), "last", auto_period=True)
+    assert typed == ["We meet", " ", "at three. "]
+
+
+def test_stop_after_a_pause_types_the_held_mark(pipeline):
+    from tuxtalk import app
+    texts, typed, beeps = pipeline
+    texts.append("are you there?")
+    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    call([], "last", auto_period=True)
+    assert typed == ["Are you there", "? "]
+    assert app.state.last_inserted_text == "Are you there? "
+    assert beeps == [app.READY_BEEP]
+
+
+def test_stop_after_a_pause_adds_the_auto_period(pipeline):
+    texts, typed, _ = pipeline
+    texts.append("we meet")
+    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    call([], "last", auto_period=True)
+    assert typed == ["We meet", ". "]
+
+
+def test_a_dictated_period_is_not_held_back():
+    """A voice command ("Punkt" -> ".") made the period: it is the speaker's own,
+    not the engine's guess, so it is typed as it is."""
+    from tuxtalk import app
+    text = "Bei jedem Unterbruch ein. "
+    assert app._hold_back_boundary(text, "bei jedem Unterbruch ein Punkt.") == (text, None)
+
+
+def test_the_engines_period_is_held_back():
+    from tuxtalk import app
+    assert app._hold_back_boundary("Die Strasse ist nass. ", "die Straße ist nass.") == \
+        ("Die Strasse ist nass", ".")
+
+
+def test_a_line_break_is_not_held_back():
+    from tuxtalk import app
+    text = "Dear John,\n"
+    assert app._hold_back_boundary(text, "dear john new line") == (text, None)
+
+
+def test_a_command_after_a_pause_sees_the_finished_chunk(pipeline, monkeypatch):
+    """'delete last sentence' must delete the chunk before it, mark and all."""
+    from types import SimpleNamespace
+    from tuxtalk import app
+    texts, typed, _ = pipeline
+    erased = []
+    monkeypatch.setattr(app, "_output_backend",
+                        lambda: SimpleNamespace(backspaces=lambda n: (erased.append(n), True)[1]))
+    texts.extend(["we meet.", "delete last sentence", "we meet. Delete last sentence."])
+    call(frames_of(speech(1.0)), "middle")
+    call(frames_of(speech(1.0)), "middle")
+    assert typed == ["We meet", ". "]
+    assert erased == [len("We meet. ")]
 
 
 def test_silent_middle_chunk_is_dropped_without_a_sound(pipeline):
@@ -300,6 +419,17 @@ def test_whole_dictation_is_unchanged(pipeline):
     _, typed, beeps = pipeline
     call(frames_of(noise(0.4)), None)
     assert typed == [] and beeps == [app.CANCEL_BEEP]
+
+
+def test_held_mark_never_reaches_the_next_recording(pipeline):
+    from tuxtalk import app
+    texts, typed, _ = pipeline
+    texts.extend(["we meet.", "hello there"])
+    call(frames_of(speech(1.0)), "middle")
+    app._arm_chunker(SR)            # the next recording starts
+    assert app.state.pending_boundary is None
+    call(frames_of(speech(1.0)), None)
+    assert typed[1].strip() == "Hello there"
 
 
 # --- chunks cut during a recording -------------------------------------------
@@ -349,10 +479,11 @@ def stop(auto_period=False):
 def test_two_pauses_give_three_chunks_in_order(recording):
     from tuxtalk import app
     texts, typed, beeps = recording
-    texts.extend(["we meet", "at three", "in the garden"])
+    texts.extend(["we meet.", "at three.", "we meet at three.",
+                  "in the garden", "at three in the garden"])
     feed(np.concatenate([speech(1.0), noise(1.0), speech(1.0), noise(1.0), speech(0.8)]))
     stop()
-    assert [t.strip() for t in typed] == ["We meet", "at three", "in the garden"]
+    assert "".join(typed) == "We meet at three in the garden "
     assert beeps.count(app.READY_BEEP) == 1
     assert app.state.chunks_submitted == 2
 
@@ -383,7 +514,20 @@ def test_auto_stop_after_a_cut_beeps_ready_once(recording):
     texts.append("we meet")
     feed(np.concatenate([speech(1.0), noise(1.2)]))
     stop()
-    assert [t.strip() for t in typed] == ["We meet"]
+    assert "".join(typed) == "We meet "
+    assert beeps == [app.READY_BEEP]
+
+
+def test_a_silent_rest_never_reaches_the_engine(recording):
+    """After the last cut only the room was heard (1.2 s, too long for the tap
+    check): the engine must not get it, or it invents a "Yeah."."""
+    from tuxtalk import app
+    texts, typed, beeps = recording
+    texts.extend(["we meet", "yeah"])
+    feed(np.concatenate([speech(1.0), noise(2.0)]))
+    stop(auto_period=True)
+    assert "".join(typed) == "We meet. "
+    assert texts == ["yeah"]
     assert beeps == [app.READY_BEEP]
 
 
@@ -411,7 +555,7 @@ def test_flatpak_stop_queues_the_last_chunk_on_the_worker(recording, monkeypatch
     from types import SimpleNamespace
     from tuxtalk import app
     texts, typed, _ = recording
-    texts.extend(["we meet", "at three"])
+    texts.extend(["we meet", "at three", "we meet at three"])
     monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TuxTalk")
     monkeypatch.setattr(app, "_release_all_grabs", lambda: None)
     feed(np.concatenate([speech(1.0), noise(1.0), speech(0.8)]))
@@ -420,66 +564,7 @@ def test_flatpak_stop_queues_the_last_chunk_on_the_worker(recording, monkeypatch
     app._cmd_stop_recording.set()
     app._service_tick(app._chunk_cfg, svc)
     assert app._chunk_worker().drain(5)
-    assert [t.strip() for t in typed] == ["We meet", "at three"]
-
-
-# --- final review fixes ------------------------------------------------------
-
-def test_middle_chunk_gets_no_auto_period(pipeline):
-    """A pause is not a sentence end: with auto-period on (the default) a
-    middle chunk must not get TuxTalk's own period, or every pause would type
-    one and the next chunk could never carry on the sentence."""
-    from tuxtalk import app
-    texts, typed, _ = pipeline
-    texts.append("we meet")
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
-    assert [t.strip() for t in typed] == ["We meet"]
-    assert app.state.chunk_continuation is True
-
-
-def test_last_chunk_gets_the_auto_period(pipeline):
-    texts, typed, _ = pipeline
-    texts.extend(["we meet", "at three"])
-    call(frames_of(speech(1.0)), "middle", auto_period=True)
-    call(frames_of(speech(1.0)), "last", auto_period=True)
-    assert [t.strip() for t in typed] == ["We meet", "at three."]
-
-
-def test_pause_before_stop_closes_the_sentence(recording, monkeypatch):
-    """The usual way to finish: the last words, a pause (which cuts them off as
-    a middle chunk), then the stop with nothing left. The sentence still gets
-    its auto-period, in place of the space after it."""
-    from types import SimpleNamespace
-    from tuxtalk import app
-    texts, typed, beeps = recording
-    erased = []
-    monkeypatch.setattr(app, "_output_backend",
-                        lambda: SimpleNamespace(backspaces=lambda n: (erased.append(n), True)[1]))
-    monkeypatch.setattr(app, "_inject_text",
-                        lambda text, mode, t0, one_block=False: (
-                            typed.append(text),
-                            setattr(app.state, "last_inserted_text", text), "ok")[2])
-    monkeypatch.setattr(app._chunk_cfg, "auto_period", True)
-    texts.append("we meet")
-    feed(np.concatenate([speech(1.0), noise(1.2)]))
-    stop(auto_period=True)
-    assert typed == ["We meet ", ". "]
-    assert erased == [1]
-    assert app.state.last_inserted_text == "We meet. "
-    assert beeps == [app.READY_BEEP]
-
-
-def test_chunk_continuation_never_reaches_the_next_dictation(pipeline):
-    """A chunk's 'carry on lowercase' belongs to its own recording only."""
-    from tuxtalk import app
-    texts, typed, _ = pipeline
-    texts.extend(["we meet", "hello there"])
-    call(frames_of(speech(1.0)), "middle")
-    assert app.state.chunk_continuation is True
-    app._arm_chunker(SR)            # the next recording starts
-    assert app.state.chunk_continuation is False
-    call(frames_of(speech(1.0)), None)
-    assert typed[1].strip().startswith("Hello")
+    assert "".join(typed) == "We meet at three "
 
 
 def test_arming_starts_the_worker(monkeypatch):
