@@ -174,6 +174,30 @@ def test_the_room_level_follows_a_room_that_gets_noisier():
     assert len(fired) <= 3
 
 
+
+def test_tiny_audio_blocks_still_get_boundaries():
+    """The service's callback on cbox delivered ~6 ms blocks; a block that
+    small is too noisy a measurement, so the level is taken over fixed 20 ms
+    windows whatever the block size."""
+    audio = np.concatenate([loud_room(1.0), loud_speech(2.0), loud_room(1.5),
+                            loud_speech(2.0), loud_room(1.5)])
+    fired, _ = run_pauses(audio, block=64)
+    assert len(fired) == 2
+
+
+def test_lone_noise_spikes_do_not_hide_a_pause():
+    """A click or a burst of hiss during a pause (shorter than a consonant)
+    must not start the pause over."""
+    room = loud_room(1.5)
+    for start in (0.3, 0.7, 1.1):          # three 10 ms clicks in the pause
+        i = int(start * SR)
+        room[i:i + 160] = np.clip(room[i:i + 160].astype(np.int32) * 4, -32768, 32767)
+    audio = np.concatenate([loud_room(1.0), loud_speech(2.0), room, loud_speech(2.0),
+                            loud_room(1.5)])
+    fired, _ = run_pauses(audio)
+    assert len(fired) == 2
+
+
 # --- the chunk worker --------------------------------------------------------
 
 def test_worker_runs_jobs_in_order():

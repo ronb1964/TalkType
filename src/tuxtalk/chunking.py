@@ -36,9 +36,19 @@ SPEECH_OVER_ROOM = 2.0
 # Rumble below this is filtered out before measuring: it is loud on an onboard
 # mic input and carries no speech.
 HIGH_PASS_HZ = 150
-# The room level is the quietest the recording has been over this long, so a
-# room that gets noisier is followed within seconds.
+# The room level is a low percentile of the levels over this long, so a room
+# that gets noisier is followed within seconds. For the first ROOM_START_S it
+# is the quietest level yet: a recording often starts mid-word, and then every
+# level heard so far is speech.
 ROOM_WINDOW_S = 5.0
+ROOM_PERCENTILE = 10
+ROOM_START_S = 1.0
+# Levels are measured over windows this long, whatever size of block the audio
+# callback delivers: on cbox it delivered ~6 ms blocks, too short to measure.
+WINDOW_S = 0.02
+# Loud for less than this is a click or a burst of hiss, not speech; it does not
+# start a pause over. A consonant lasts longer.
+MIN_BURST_S = 0.04
 
 
 class PauseDetector:
@@ -50,10 +60,9 @@ class PauseDetector:
     The room level is measured differently too. SilenceDetector keeps the
     quietest block ever heard, so a few blocks of digital silence (the stream
     starting, an xrun) set it near zero for good, and then a noisy room's hiss
-    counts as speech and no pause is ever found. Here each block is measured
-    after a high-pass, the level is the median of the last three blocks (a
-    lone dropout doesn't count) and the room is the quietest of those over the
-    last ROOM_WINDOW_S.
+    counts as speech and no pause is ever found. Here the audio is high-passed,
+    measured over fixed WINDOW_S windows, and the room is a low percentile of
+    those levels over the last ROOM_WINDOW_S, digital silence left out.
     """
 
     def __init__(self, pause_seconds: float, sample_rate: int):
@@ -66,56 +75,73 @@ class PauseDetector:
         # High-pass: the signal minus its moving average over 1/HIGH_PASS_HZ.
         self._hp_len = max(2, int(self.sample_rate / HIGH_PASS_HZ))
         self._hp_tail = np.zeros(self._hp_len - 1)
-        self._recent = collections.deque(maxlen=3)
-        self._lows = collections.deque()   # (clock, median of the last 3 blocks)
+        self._win_len = max(1, int(WINDOW_S * self.sample_rate))
+        self._pending = np.zeros(0)
+        self._levels = collections.deque()   # (clock, level) over ROOM_WINDOW_S
+        self._room = 0.0
         self._clock = 0.0
+        self._burst = 0.0
         self.loudest = 0.0
         self.blocks = 0
 
     def describe(self) -> str:
         """The levels it is working with, for the log."""
-        room = min(v for _, v in self._lows) if self._lows else 0.0
-        return (f"room {room:.0f}, speech from {self.threshold():.0f}, loudest {self.loudest:.0f} "
-                f"(int16 RMS after the high-pass), {self.blocks} blocks at {self.sample_rate} Hz")
+        return (f"room {self._room:.0f}, speech from {self.threshold():.0f}, "
+                f"loudest {self.loudest:.0f} (int16 RMS after the high-pass), "
+                f"{self.blocks} blocks at {self.sample_rate} Hz")
 
-    def _level(self, block):
-        """(high-passed int16 RMS, duration in seconds) of one block."""
+    def _high_pass(self, block):
         samples = np.frombuffer(block, dtype=np.int16).astype(np.float64)
         if samples.size == 0:
-            return 0.0, 0.0
+            return samples
         buf = np.concatenate([self._hp_tail, samples])
         sums = np.cumsum(np.concatenate([[0.0], buf]))
         average = (sums[self._hp_len:] - sums[:-self._hp_len]) / self._hp_len
         self._hp_tail = buf[-(self._hp_len - 1):]
-        return float(np.sqrt(np.mean((samples - average) ** 2))), samples.size / self.sample_rate
+        return samples - average
 
     def threshold(self) -> float:
         """The level (int16 RMS) that counts as speech in this room right now."""
-        room = min(v for _, v in self._lows) if self._lows else 0.0
-        return max(MIN_SPEECH_RMS, room * SPEECH_OVER_ROOM)
+        return max(MIN_SPEECH_RMS, self._room * SPEECH_OVER_ROOM)
 
-    def _learn_room(self, rms: float, duration: float) -> None:
+    def _learn_room(self, level: float, duration: float) -> None:
         self._clock += duration
-        if rms >= 1.0:   # digital silence is a dropout, not the room
-            self._recent.append(rms)
-        if self._recent:
-            self._lows.append((self._clock, float(np.median(self._recent))))
-        while self._lows and self._lows[0][0] < self._clock - ROOM_WINDOW_S:
-            self._lows.popleft()
+        if level >= 1.0:   # digital silence is a dropout, not the room
+            self._levels.append((self._clock, level))
+        while self._levels and self._levels[0][0] < self._clock - ROOM_WINDOW_S:
+            self._levels.popleft()
+        if self._levels:
+            levels = [v for _, v in self._levels]
+            self._room = (min(levels) if self._clock < ROOM_START_S
+                          else float(np.percentile(levels, ROOM_PERCENTILE)))
 
     def feed(self, block) -> bool:
         """Add one block of int16 samples. True when the speaker has paused for
         pause_seconds after talking for at least MIN_SPEECH_S."""
-        rms, duration = self._level(block)
-        if duration == 0:
+        hp = self._high_pass(block)
+        if hp.size == 0:
             return False
-        self._learn_room(rms, duration)
-        self.loudest = max(self.loudest, rms)
         self.blocks += 1
-        if rms >= self.threshold():
-            self.speech_time += duration
-            self.silence_time = 0.0
-            return False
+        self._pending = np.concatenate([self._pending, hp])
+        fired = False
+        n = self._win_len
+        while self._pending.size >= n:
+            window, self._pending = self._pending[:n], self._pending[n:]
+            level = float(np.sqrt(np.mean(window ** 2)))
+            fired = self._window(level, n / self.sample_rate) or fired
+        return fired
+
+    def _window(self, level: float, duration: float) -> bool:
+        self._learn_room(level, duration)
+        self.loudest = max(self.loudest, level)
+        if level >= self.threshold():
+            self._burst += duration
+            if self._burst >= MIN_BURST_S:
+                self.speech_time += duration
+                self.silence_time = 0.0
+                return False
+        else:
+            self._burst = 0.0
         self.silence_time += duration
         if self.silence_time < self.pause_seconds:
             return False
