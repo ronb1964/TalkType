@@ -391,6 +391,29 @@ def clock(seconds, srt=False):
 _SENTENCE_END = re.compile(r"[.!?…。！？]['\")\]]*$")
 
 
+def cleaned(pieces):
+    """The pieces with um, uh and repeated words taken out (cleanup.py's
+    rules, no AI), for "Remove ums and repeats". The pieces themselves stay
+    as heard. A piece that's left empty is dropped.
+
+    The cleanup capitalizes what it leaves at the start ("uh, the" ->
+    "The"); in a piece that carries on a sentence from the one before, the
+    word keeps the case it was heard with."""
+    from .cleanup import clean_fillers_and_repeats
+    out, carries = [], False
+    for piece in pieces:
+        text = clean_fillers_and_repeats(piece.text)
+        if text and carries:
+            first = re.match(r"\w+", text)
+            heard = first and re.search(rf"\b{re.escape(first.group())}\b", piece.text, re.I)
+            if heard:
+                text = heard.group() + text[first.end():]
+        carries = not _SENTENCE_END.search(piece.text)
+        if text:
+            out.append(Piece(piece.start, piece.end, text))
+    return out
+
+
 def to_text(pieces, times=False):
     """The pieces as paragraphs. A piece that ends a sentence ends its
     paragraph; one cut mid-sentence carries on into the next. *times* starts
