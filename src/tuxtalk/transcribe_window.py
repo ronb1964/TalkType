@@ -65,6 +65,8 @@ class TranscribeWindow:
         self.pieces = []
         self.path = None
         self.busy = False
+        # The text was saved or copied, so closing or a new file loses nothing.
+        self.kept = False
         self._cancel = threading.Event()
 
         self.window = Gtk.Window(title=TITLE)
@@ -164,6 +166,8 @@ class TranscribeWindow:
     # --- choosing a file -----------------------------------------------------------------
 
     def _on_choose(self, _button):
+        if not self._may_discard("new"):
+            return
         chooser = Gtk.FileChooserNative.new("Choose a recording or video", self.window,
                                             Gtk.FileChooserAction.OPEN, None, None)
         media = Gtk.FileFilter()
@@ -185,7 +189,7 @@ class TranscribeWindow:
 
     def _on_drop(self, _widget, _context, _x, _y, data, _info, _time):
         uris = data.get_uris() or []
-        if uris and not self.busy:
+        if uris and not self.busy and self._may_discard("new"):
             path, _host = GLib.filename_from_uri(uris[0])
             self.start(path)
 
@@ -250,6 +254,7 @@ class TranscribeWindow:
 
     def _on_done(self, pieces, total, seconds, stopped):
         self.pieces = pieces
+        self.kept = False
         self._set_busy(False)
         self._show_text()
         logger.info(f"Transcribed a file: {total:.0f} s of sound in {seconds:.1f} s"
@@ -276,6 +281,7 @@ class TranscribeWindow:
         buf = self.view.get_buffer()
         text = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
         Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD).set_text(text, -1)
+        self.kept = True
         self.status.set_text("Copied. Paste it wherever you like.")
 
     def _save(self, kind):
@@ -295,16 +301,61 @@ class TranscribeWindow:
         try:
             with open(target, "w", encoding="utf-8") as f:
                 f.write(content)
+            self.kept = True
             self.status.set_text(f"Saved {os.path.basename(target)}.")
         except OSError as e:
             self.status.set_text(f"Couldn't save it: {e}")
 
     # --- closing -------------------------------------------------------------------------------
 
+    def _ask(self, title, text, buttons):
+        """A question over the window; the response of the button clicked.
+        *buttons*: (label, response) pairs, the last one the default."""
+        from .ui_style import message_dialog
+        dialog = message_dialog(transient_for=self.window, modal=True,
+                                message_type=Gtk.MessageType.QUESTION,
+                                buttons=Gtk.ButtonsType.NONE, text=title)
+        dialog.format_secondary_text(text)
+        for label, response in buttons:
+            dialog.add_button(label, response)
+        dialog.set_default_response(buttons[-1][1])
+        answer = dialog.run()
+        dialog.destroy()
+        return answer
+
+    def _may_discard(self, why):
+        """Whether the text shown may go, asking first when it would be lost:
+        *why* is "close" (the window is closing) or "new" (another file)."""
+        if self.busy:
+            if why != "close":
+                return False
+            return self._ask(
+                "Stop transcribing?",
+                "The file isn't finished yet. Closing now loses what's been done so far.",
+                [("Keep Going", Gtk.ResponseType.CANCEL),
+                 ("Stop and Close", Gtk.ResponseType.ACCEPT)]) == Gtk.ResponseType.ACCEPT
+        if not self.pieces or self.kept:
+            return True
+        loses = ("Closing the window loses it." if why == "close"
+                 else "Opening another file replaces it.")
+        answer = self._ask(
+            "Save the text first?",
+            f"It isn't saved or copied anywhere yet. {loses}",
+            [("Cancel", Gtk.ResponseType.CANCEL),
+             ("Don't Save", Gtk.ResponseType.REJECT),
+             ("Save as Text…", Gtk.ResponseType.ACCEPT)])
+        if answer == Gtk.ResponseType.ACCEPT:
+            self._save("txt")
+            return self.kept            # not if the save was cancelled or failed
+        return answer == Gtk.ResponseType.REJECT
+
     def _on_close(self, *_args):
-        """Stop and quit at once. The engine is closed in main() after the
-        window is gone: closing it here could wait for the piece being
-        transcribed, with the window frozen meanwhile."""
+        """Stop and quit at once, once nothing unsaved would be lost. The
+        engine is closed in main() after the window is gone: closing it here
+        could wait for the piece being transcribed, with the window frozen
+        meanwhile."""
+        if not self._may_discard("close"):
+            return True                 # the window stays open
         self._cancel.set()
         self.window.hide()
         Gtk.main_quit()
