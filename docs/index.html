@@ -1,0 +1,517 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TuxTalk</title>
+<meta name="description" content="TuxTalk is free voice dictation for Linux. Hold F8, talk, and your words are typed into any app. It runs offline, on your own computer.">
+<meta property="og:title" content="TuxTalk">
+<meta property="og:description" content="Free voice dictation for Linux. Hold a key, talk, and your words are typed wherever your cursor is. Nothing leaves your computer.">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#3aa8ff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f2c49" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="img/icon-64.png" type="image/png" sizes="64x64">
+<link rel="preload" href="fonts/archivo.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/atkinson-next.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="style.css">
+<script>
+  /* Apply a saved light/dark choice before the page paints, so it doesn't flash. */
+  try { var t = localStorage.getItem("tuxtalk-theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}
+</script>
+</head>
+<body>
+<div id="top"></div>
+<a class="skip" href="#main">Skip to the content</a>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#top" aria-label="TuxTalk, back to the top">
+      <img src="img/icon-64.png" alt="" width="32" height="32">
+      TuxTalk
+    </a>
+    <nav aria-label="Main">
+      <a class="nav-hide" href="#features">Features</a>
+      <a class="nav-hide" href="#videos">Videos</a>
+      <a class="nav-hide" href="privacy.html">Privacy</a>
+      <a class="nav-hide" href="https://github.com/ronb1964/TuxTalk">GitHub</a>
+      <a class="nav-dl" href="#download">Download</a>
+      <button class="theme-btn" type="button" id="theme-btn" aria-label="Switch between light and dark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/></svg>
+      </button>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+<!-- ============ HERO: the desk ============ -->
+<div class="hero">
+  <div class="wrap">
+    <div>
+      <h1>Hold F8 and talk.<span class="quiet">Your words show up wherever you're typing.</span></h1>
+      <p class="lede">TuxTalk is free voice dictation for Linux. It runs on your own computer, offline, so nothing you say ever leaves it.</p>
+      <div class="cta">
+        <a class="btn btn-main" href="#download">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 20h14"/></svg>
+          Download
+        </a>
+        <a class="btn btn-ghost" href="#videos">Watch it work</a>
+      </div>
+      <ul class="facts">
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Free, MIT license</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>No account, no cloud</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Wayland and X11</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>AppImage, .deb, .rpm and AUR</li>
+      </ul>
+    </div>
+
+    <div class="desk" id="desk">
+      <div class="window">
+        <div class="window-bar" aria-hidden="true">
+          <span class="dots"><i></i><i></i><i></i></span>
+          <span class="title">letter.txt</span>
+          <span class="dots" style="visibility:hidden"><i></i><i></i><i></i></span>
+        </div>
+        <div class="doc" id="doc" role="region" aria-label="Example text window">
+          <p>Hi Sarah,</p>
+          <p>Thanks for sending the drawings over. I went through them this morning and the layout looks good to me.<span class="caret" aria-hidden="true"></span></p>
+        </div>
+        <div class="indicator" id="indicator" aria-hidden="true">
+          <span class="orb" id="orb"></span><span id="timer">0:00</span>
+        </div>
+      </div>
+
+      <p class="said" id="said" aria-hidden="true"><span class="label">Try it</span>Hold the key below and watch what gets typed.</p>
+
+      <div class="keyrow">
+        <button class="key" id="key" type="button" aria-describedby="keyhint">
+          <span class="cap"><span class="legend">F8</span><span class="sub">hold</span></span>
+          <span class="visually-hidden">Hold to dictate the next example sentence</span>
+        </button>
+        <p class="keyhint" id="keyhint">Press and hold it, or hold <kbd>F8</kbd> on your keyboard.</p>
+      </div>
+      <p class="visually-hidden" aria-live="polite" id="announce"></p>
+    </div>
+  </div>
+</div>
+
+<!-- ============ THE STORY: what happens when you hold the key ============
+     The stage on one side sticks while the four steps scroll past; site.js
+     sets data-step on it. With no JS the stage shows the last step. -->
+<section class="story" id="story" aria-labelledby="story-h">
+  <div class="wrap">
+    <div class="intro">
+      <h2 id="story-h">What happens when you hold the key</h2>
+    </div>
+    <div class="story-grid">
+      <div class="stage-wrap">
+        <div class="stage" id="stage" data-step="4" aria-hidden="true">
+          <!-- step 1 and 2: the key and TuxTalk's indicator -->
+          <div class="st-key"><span class="cap"><span class="legend">F8</span></span></div>
+          <div class="st-ind"><span class="orb"></span><span class="st-time">0:02</span></div>
+          <!-- step 2: your voice -->
+          <div class="st-wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <p class="st-heard"><span>“could</span> <span>we</span> <span>meet</span> <span>on</span> <span>thursday</span> <span>question</span> <span>mark”</span></p>
+          <!-- step 3: turned into text on your computer -->
+          <div class="st-convert">
+            <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>On your computer</span>
+            <p class="raw">Could we meet on Thursday <s>question mark</s></p>
+            <p class="clean">Could we meet on Thursday<b>?</b></p>
+          </div>
+          <!-- step 4: typed into your window -->
+          <div class="st-window">
+            <div class="window-bar"><span class="dots"><i></i><i></i><i></i></span><span class="title">Message</span><span class="dots" style="visibility:hidden"><i></i><i></i><i></i></span></div>
+            <p class="st-typed">Could we meet on Thursday?<span class="caret"></span></p>
+          </div>
+        </div>
+      </div>
+      <ol class="steps">
+        <li data-step="1">
+          <span class="num">1</span>
+          <h3>Hold F8</h3>
+          <p>Or whatever key you picked. A little indicator pops up so you know it's listening, and if music or a video is playing it pauses.</p>
+        </li>
+        <li data-step="2">
+          <span class="num">2</span>
+          <h3>Talk</h3>
+          <p>Just talk normally, at your own pace. Stopping to think is fine, it keeps listening as long as you hold the key.</p>
+        </li>
+        <li data-step="3">
+          <span class="num">3</span>
+          <h3>Let go</h3>
+          <p>The speech model turns what you said into text right there on your computer. Then TuxTalk tidies it up, so "question mark" turns into an actual question mark.</p>
+        </li>
+        <li data-step="4">
+          <span class="num">4</span>
+          <h3>It types it for you</h3>
+          <p>Your words get typed wherever your cursor is, a browser or a terminal or whatever has the focus. On a graphics card a sentence takes about a fifth of a second.</p>
+        </li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- ============ THE KEYS ============ -->
+<section id="how" aria-labelledby="how-h">
+  <div class="wrap">
+    <div class="intro">
+      <h2 id="how-h">It all runs off a few keys</h2>
+      <p>F8 and F9 are both on all the time, so you just use whichever one fits what you're doing. Don't like those keys? Change them to anything you want.</p>
+    </div>
+    <ul class="keys">
+      <li>
+        <span class="chord"><kbd class="k">F8</kbd></span>
+        <h3>Hold to talk</h3>
+        <p>Hold it while you talk. When you let go, TuxTalk types what you said wherever your cursor is.</p>
+      </li>
+      <li>
+        <span class="chord"><kbd class="k">F9</kbd></span>
+        <h3>Tap to start, tap to stop</h3>
+        <p>For the longer stuff. Double-tap it and it goes hands-free, then stops by itself when you go quiet. If you don't say anything for 10 seconds it stops and types nothing.</p>
+      </li>
+      <li>
+        <span class="chord"><kbd class="k">Ctrl</kbd><span class="plus">+</span><kbd class="k">Alt</kbd><span class="plus">+</span><kbd class="k">P</kbd></span>
+        <h3>Type it again</h3>
+        <p>Something grabbed the focus and your words went into the wrong window? Click where they belong and press this.</p>
+      </li>
+      <li>
+        <span class="chord"><kbd class="k">Shift</kbd><span class="plus">+</span><kbd class="k">F8</kbd></span>
+        <h3>Voice editing <span class="tag">Labs</span></h3>
+        <p>Select some text, hold it and say what to change, like "make this more formal". It's off until you turn it on.</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ YOU SAY / IT TYPES ============ -->
+<section id="features" aria-labelledby="say-h">
+  <div class="wrap">
+    <div class="intro">
+      <h2 id="say-h">Say it the way you'd say it out loud</h2>
+      <p>Punctuation goes in on its own. Say "comma" or "new paragraph" when you want one in a certain spot, and email addresses come out written the way they should be.</p>
+    </div>
+    <div class="says" role="table" aria-label="What you say and what TuxTalk types">
+      <div class="say-head" role="row" data-hide-narrow><span role="columnheader">You say</span><span role="columnheader">turns into</span><span role="columnheader">TuxTalk types</span></div>
+      <div class="say-row" role="row">
+        <p class="heard" role="cell">"send the plans to john at gmail dot com"</p>
+        <svg role="presentation" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h15M13 6l6 6-6 6"/></svg>
+        <p class="typed" role="cell">Send the plans to john@gmail.com.</p>
+      </div>
+      <div class="say-row" role="row">
+        <p class="heard" role="cell">"new paragraph could we meet on Thursday question mark"</p>
+        <svg role="presentation" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h15M13 6l6 6-6 6"/></svg>
+        <p class="typed" role="cell">Could we meet on Thursday?<small>on a new paragraph</small></p>
+      </div>
+      <div class="say-row" role="row">
+        <p class="heard" role="cell">"I have three cats and twenty five chickens"</p>
+        <svg role="presentation" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h15M13 6l6 6-6 6"/></svg>
+        <p class="typed" role="cell">I have 3 cats and 25 chickens.<small>with Write numbers as digits turned on</small></p>
+      </div>
+      <div class="say-row" role="row">
+        <p class="heard" role="cell">"git status", in a terminal</p>
+        <svg role="presentation" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h15M13 6l6 6-6 6"/></svg>
+        <p class="typed" role="cell"><code>git status</code><small>no capital and no period, since it's a terminal</small></p>
+      </div>
+      <div class="say-row" role="row">
+        <p class="heard" role="cell">"let's say three o'clock, no wait, make that four o'clock"</p>
+        <svg role="presentation" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h15M13 6l6 6-6 6"/></svg>
+        <p class="typed" role="cell">Let's say four o'clock.<small>with the AI corrections, which are optional and off until you turn them on</small></p>
+      </div>
+    </div>
+    <p class="note" style="margin-top:18px">The AI that catches "no wait" and "scratch that" is a small model that runs on your computer. If it changes anything besides the correction, your words get typed exactly the way you said them. There are voice commands for fixing things too, like "undo last word" or "delete last three sentences".</p>
+  </div>
+</section>
+
+<!-- ============ SETUP AND SPEED ============ -->
+<section aria-labelledby="setup-h">
+  <div class="wrap">
+    <div class="feature">
+      <div class="prose">
+        <h2 id="setup-h">It picks a setup for your computer</h2>
+        <p>The first time you start it, TuxTalk looks at your graphics card and the language you speak and picks a setup for you. One button shows every other choice, with how big each download is.</p>
+        <p>The default speech model is NVIDIA's Parakeet. It's fast even on an ordinary processor and handles English plus 24 European languages. For anything else there's OpenAI's Whisper, which knows 99 languages, from Tiny all the way up to Large-v3.</p>
+        <p><strong>Got a graphics card?</strong> NVIDIA, AMD or Intel, TuxTalk can use it. That's a 24 MB engine plus a 669 MB copy of Parakeet made for the graphics card. It times your card against your processor first and only switches if the card is really faster. On an NVIDIA graphics card there's also a bigger 1.4 GB option, but that one only runs the Whisper models.</p>
+        <div class="bars" role="img" aria-label="One minute of speech with Parakeet on an RTX 4070 Super: 2 seconds on the processor, 0.2 seconds on the graphics card.">
+          <div class="bar cpu" style="--w:100%"><span>On the processor</span><span class="track"><span class="fill" style="display:block"></span><span class="val">2 seconds</span></span></div>
+          <div class="bar gpu" style="--w:10%"><span>On the graphics card</span><span class="track"><span class="fill" style="display:block"></span><span class="val">0.2 seconds</span></span></div>
+        </div>
+        <p class="bars-cap">A minute of speech with Parakeet, same accuracy both ways. Timed on my RTX 4070 Super.</p>
+      </div>
+      <figure class="shot-frame">
+        <img class="shot" src="img/welcome-recommended.webp" width="710" height="1083" loading="lazy" style="max-width:min(100%, 400px)" alt="The first-run screen: a recommended setup naming the graphics card and the language, with a Download and Set Up button.">
+        <figcaption>The first-run screen recommends a setup. Use Recommended in Preferences gets you back to it later.</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<!-- ============ YOUR WORDS ============ -->
+<section aria-labelledby="words-h">
+  <div class="wrap">
+    <div class="feature flip">
+      <div class="prose">
+        <h2 id="words-h">Teach it the words you use</h2>
+        <p>Names and part numbers, the stuff a speech model has never heard of. Put them in <strong>Your Words</strong> and they come out spelled your way. Parakeet kept writing my app's name as "Tuck's talk". Now it's TuxTalk.</p>
+        <p>If a word still comes out wrong, say <strong>"fix that word"</strong> right after. A window opens on what you just said, you click the word and type it the right way, and from then on it's fixed. It fixes it in your text too.</p>
+        <p><strong>Snippets</strong> are your own shortcuts. Say "my email" and get your whole address typed out.</p>
+      </div>
+      <figure class="shot-frame">
+        <img class="shot" src="img/your-words.webp" width="695" height="534" loading="lazy" alt="The Your Words window: a list of names and terms, one per line, that TuxTalk should spell your way.">
+      </figure>
+    </div>
+  </div>
+</section>
+
+<!-- ============ TRANSCRIBE A FILE ============ -->
+<section aria-labelledby="tf-h">
+  <div class="wrap">
+    <div class="feature">
+      <div class="prose">
+        <h2 id="tf-h">Transcribe a File <span class="tag">New in 0.15.1</span></h2>
+        <p>Got a recording or a video? Hand it to TuxTalk from the tray menu and you get the text back. MP3, M4A, WAV, MP4, MKV and a bunch more all work.</p>
+        <p>It uses the same model you dictate with, so there's nothing new to download, and you can keep dictating while it works. On my NVIDIA card with Parakeet, three and a half minutes of talking took about nine seconds.</p>
+        <p>You can copy the text or save it as subtitles for the video. The subtitle timing can be a second or two off, which is fine for most things but I wouldn't use it for a film. It also keeps your last 10, so closing the window doesn't lose anything.</p>
+      </div>
+      <div class="tf" role="img" aria-label="Illustration: shop-meeting.mp3 becomes text with times, saved as a .txt file and .srt subtitles">
+        <div class="tf-file">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 17v-4M12 17v-6M15 17v-3"/></svg>
+          <div>shop-meeting.mp3<span>3 min 31 s of talking</span></div>
+        </div>
+        <div class="tf-arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v15M6 13l6 6 6-6"/></svg></div>
+        <div class="tf-out">
+          <p><span class="t">0:00</span>Okay, first thing on the list is the cabinet by the back door.</p>
+          <p><span class="t">0:31</span>The wiring can go behind the panel, so we'll run it before the walls go in.</p>
+          <p><span class="t">1:12</span>Let's get the parts ordered this week.</p>
+          <div class="files"><span>shop-meeting.txt</span><span>shop-meeting.srt</span></div>
+        </div>
+        <p class="illus-note">An example, not a screenshot</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ LABS ============ -->
+<section aria-labelledby="labs-h">
+  <div class="wrap">
+    <div class="intro">
+      <h2 id="labs-h">TuxTalk Labs</h2>
+      <p>Labs is where new stuff goes while I'm still working on it. It works, it's just not finished, so it stays off until you turn it on. You'll find it at the bottom of Preferences, Advanced, with a link right there to tell me how it's going.</p>
+    </div>
+
+    <div class="feature" style="margin-top:44px">
+      <div class="prose">
+        <h3>Voice editing</h3>
+        <p>Select some text, hold Shift+F8 and say what you want changed. There's no fixed wording, and Ctrl+Z puts it back if you don't like it. Jobs like all caps or taking out commas are done exactly in code. Rewording goes to a small AI model that runs on your computer, and that one's a download you only get if you turn it on.</p>
+        <h3 style="margin-top:14px">Select and move by voice</h3>
+        <p>Say "select the last sentence" or "go to the end" on its own and TuxTalk does it instead of typing it. Put that together with voice editing and you can select your last sentence and say "make it more formal" without reaching for the mouse.</p>
+        <h3 style="margin-top:14px">An indicator that follows your window</h3>
+        <p>The recording indicator can sit near the bottom of whatever window you're talking into, instead of one spot on the screen.</p>
+      </div>
+      <div class="edits" role="table" aria-label="Voice editing examples">
+        <div class="edit edit-head" role="row" data-hide-narrow><span role="columnheader">You select</span><span role="columnheader">and say</span><span role="columnheader">It changes to</span></div>
+        <div class="edit" role="row">
+          <p role="cell"><mark>hey can u send me the report by friday thx</mark></p>
+          <p role="cell"><q>make this more formal</q></p>
+          <p class="out" role="cell">Could you please send me the report by Friday, thank you.<small>the AI reworded it</small></p>
+        </div>
+        <div class="edit" role="row">
+          <p role="cell"><mark>milk</mark><br><mark>eggs</mark><br><mark>bread</mark></p>
+          <p role="cell"><q>make this a bulleted list</q></p>
+          <p class="out" role="cell">- milk<br>- eggs<br>- bread<small>done exactly, no AI</small></p>
+        </div>
+        <div class="edit" role="row">
+          <p role="cell"><mark>the deadline is tomorrow</mark></p>
+          <p role="cell"><q>make this all caps</q></p>
+          <p class="out" role="cell">THE DEADLINE IS TOMORROW<small>done exactly, no AI</small></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ THE SMALLER STUFF ============ -->
+<section aria-labelledby="extras-h">
+  <div class="wrap">
+    <div class="intro">
+      <h2 id="extras-h">And a bunch of smaller stuff</h2>
+    </div>
+    <div class="extras">
+      <div><h3>Pauses your music</h3><p>Music and videos pause while you dictate and pick back up when you're done. I had a YouTube video going once and it turned "isn't it" into "Venezuela".</p></div>
+      <div><h3>Recent Dictations</h3><p>Your last 20 are in the tray menu, one click to copy. They're only kept in memory and they're gone when you log out.</p></div>
+      <div><h3>Your Stats</h3><p>How many words you've dictated and about how much typing that saved you. Only the numbers get kept, never what you said.</p></div>
+      <div><h3>Settings backup</h3><p>Save all your settings and words to one file and load it on another computer. It keeps your last 10 settings on its own too, in case a change goes wrong.</p></div>
+      <div><h3>An indicator you can style</h3><p>Orb, waveform, frequency bars or radial, any color, anywhere on the screen. It moves with your voice so you know it's hearing you.</p></div>
+      <div><h3>Only the languages you speak</h3><p>Whisper picks from 99 languages and on a short dictation it sometimes guesses wrong. Tick the ones you actually speak and it sticks to those.</p></div>
+      <div><h3>It tells you why</h3><p>If a dictation can't be typed into a window, TuxTalk says why and what fixes it instead of just doing nothing.</p></div>
+      <div><h3>A command for your own shortcut</h3><p><code>tuxtalk --toggle</code>, plus <code>--start</code> and <code>--stop</code>, if you'd rather use your desktop's shortcuts or a script.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SCREENSHOTS ============ -->
+<section id="screenshots" aria-labelledby="shots-h">
+  <div class="wrap">
+    <div class="intro">
+      <h2 id="shots-h">A look around</h2>
+      <p>Swipe or scroll sideways for more, and click one to see it full size.</p>
+    </div>
+  </div>
+  <div class="strip-wrap">
+    <div class="strip-nav wrap">
+      <button type="button" class="strip-btn" data-dir="-1" aria-label="Previous screenshots"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <button type="button" class="strip-btn" data-dir="1" aria-label="Next screenshots"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+    </div>
+    <div class="strip" tabindex="0" aria-label="Screenshots, scroll sideways">
+      <figure><a href="img/dictating.webp" class="zoom"><img class="opaque" src="img/dictating.webp" width="1500" height="940" alt="Dictating a letter in LibreOffice Writer with the recording indicator showing 0:04."></a><figcaption>Dictating a letter, with the indicator showing it's listening</figcaption></figure>
+      <figure><a href="img/tray-performance.webp" class="zoom"><img src="img/tray-performance.webp" width="790" height="459" alt="The tray menu with Performance open: Recommended, Lightest and Battery saver."></a><figcaption>The tray menu, with Recommended, Lightest and Battery saver</figcaption></figure>
+      <figure><a href="img/prefs-general.webp" class="zoom"><img src="img/prefs-general.webp" width="1054" height="1051" loading="lazy" alt="Preferences, General tab: model, device, language and hotkeys."></a><figcaption>Preferences: model, graphics card and hotkeys</figcaption></figure>
+      <figure><a href="img/prefs-advanced.webp" class="zoom"><img src="img/prefs-advanced.webp" width="1054" height="1051" loading="lazy" alt="Preferences, Advanced tab: dictation cleanup and text formatting options."></a><figcaption>Dictation cleanup and text formatting</figcaption></figure>
+      <figure><a href="img/prefs-snippets.webp" class="zoom"><img src="img/prefs-snippets.webp" width="1054" height="1051" loading="lazy" alt="Preferences, Snippets tab: your own phrases, Fix a Word and Your Words."></a><figcaption>Snippets, Fix a Word and Your Words</figcaption></figure>
+      <figure><a href="img/prefs-stats.webp" class="zoom"><img src="img/prefs-stats.webp" width="1054" height="1051" loading="lazy" alt="Preferences, Stats tab: words dictated today, this week and all time, and typing time saved."></a><figcaption>Your Stats</figcaption></figure>
+      <figure><a href="img/prefs-audio.webp" class="zoom"><img src="img/prefs-audio.webp" width="1054" height="1051" loading="lazy" alt="Preferences, Audio tab: microphone test and recording indicator style."></a><figcaption>Microphone test and indicator style</figcaption></figure>
+      <figure><a href="img/prefs-backup.webp" class="zoom"><img src="img/prefs-backup.webp" width="1054" height="1051" loading="lazy" alt="Preferences, Updates and Backup tab: save or load a backup and go back to earlier settings."></a><figcaption>Updates and backup</figcaption></figure>
+      <figure><a href="img/voice-commands.webp" class="zoom"><img src="img/voice-commands.webp" width="650" height="738" loading="lazy" alt="The Voice Commands quick reference window."></a><figcaption>The voice commands, all in one place</figcaption></figure>
+      <figure><a href="img/welcome-other-options.webp" class="zoom"><img src="img/welcome-other-options.webp" width="710" height="1083" loading="lazy" alt="First run, other options: language, model and graphics card choices with their download sizes."></a><figcaption>Every other choice, with its download size</figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<!-- ============ VIDEOS ============
+     To add a YouTube video, paste this inside <div class="videos"> and put
+     the video's ID (the part after watch?v=) in place of VIDEO_ID.
+     youtube-nocookie.com doesn't set tracking cookies until someone presses play.
+
+     <figure class="video-main shot-frame">
+       <div class="yt"><iframe src="https://www.youtube-nocookie.com/embed/VIDEO_ID"
+         title="TuxTalk video" loading="lazy" allowfullscreen
+         allow="encrypted-media; picture-in-picture"></iframe></div>
+       <figcaption>What the video shows.</figcaption>
+     </figure>
+
+     Keep big videos on YouTube, not in this folder (GitHub caps a file at
+     100 MB, and every visitor would download it). -->
+<section id="videos" aria-labelledby="videos-h">
+  <div class="wrap">
+    <div class="intro">
+      <h2 id="videos-h">Watch it work</h2>
+    </div>
+    <div class="videos">
+      <figure class="video-main shot-frame">
+        <video controls preload="metadata" playsinline poster="img/tuxtalk-demo-poster.webp" width="1136" height="1270">
+          <source src="img/tuxtalk-demo.mp4" type="video/mp4">
+          Your browser can't play this video. <a href="img/tuxtalk-demo.mp4">Download it</a> instead.
+        </video>
+        <figcaption>Just under a minute, with sound. It dictates a letter in LibreOffice Writer, then shows the tray menu and the first-run setup. The "no wait" fix in there is the AI corrections, which are off until you turn them on and run on your computer.</figcaption>
+      </figure>
+      <div class="video-side">
+        <figure class="shot-frame">
+          <video controls preload="metadata" playsinline muted poster="img/demo-poster.webp" width="640" height="716">
+            <source src="img/demo.mp4" type="video/mp4">
+            Your browser can't play this video. <a href="img/demo.mp4">Download it</a> instead.
+          </video>
+          <figcaption>No sound handy? This 30-second version has captions instead.</figcaption>
+        </figure>
+        <p class="note">I'll put more videos here as I make them.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PRIVACY ============ -->
+<section class="privacy-band" id="privacy" aria-labelledby="privacy-h">
+  <div class="wrap">
+    <h2 class="promise" id="privacy-h"><span style="--i:0">Nothing</span> <span style="--i:1">you</span> <span style="--i:2">say</span> <span style="--i:3">ever</span> <span style="--i:4">leaves</span> <span style="--i:5">your</span> <span style="--i:6">computer.</span></h2>
+    <div class="prose">
+      <p>TuxTalk turns your speech into text right there on your computer. There's no account and no cloud, and once the speech model is downloaded it works with the internet unplugged.</p>
+      <p><a href="privacy.html">The privacy page</a> has the details, including the few times TuxTalk does go online and why.</p>
+    </div>
+    <ul class="privacy-list">
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></svg><p>What you dictate doesn't go in the log file. There's a setting to log it for troubleshooting, and it's off.</p></li>
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7.5 3v5.5c0 4.5-3.2 8.2-7.5 9.5-4.3-1.3-7.5-5-7.5-9.5V6z"/></svg><p>The AI corrections are optional and off until you turn them on. If you do, the AI runs on your computer too.</p></li>
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V5M4 19h16M8 15v-4M12 15V8M16 15v-6"/></svg><p>Your Stats keeps numbers only. Recent Dictations are held in memory and gone when you log out.</p></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ DOWNLOAD ============ -->
+<section id="download" aria-labelledby="dl-h">
+  <div class="wrap">
+    <div class="intro">
+      <h2 id="dl-h">Get TuxTalk</h2>
+      <p>Pick whichever one matches your Linux. It's the same app in all of them, for 64-bit PCs (x86_64).</p>
+    </div>
+    <div class="dl">
+      <div class="dl-row">
+        <div><h3>AppImage</h3><p class="for">Any distro. Download it and run it.</p></div>
+        <div class="cmd"><code>chmod +x TuxTalk-v*.AppImage && ./TuxTalk-v*.AppImage</code><button class="copy" type="button">Copy</button></div>
+        <a class="btn btn-main" href="https://github.com/ronb1964/TuxTalk/releases/latest">Download</a>
+      </div>
+      <div class="dl-row">
+        <div><h3>.deb</h3><p class="for">Debian, Ubuntu, Linux Mint</p></div>
+        <div class="cmd"><code>sudo apt install ./tuxtalk_*_amd64.deb</code><button class="copy" type="button">Copy</button></div>
+        <a class="btn btn-main" href="https://github.com/ronb1964/TuxTalk/releases/latest">Download</a>
+      </div>
+      <div class="dl-row">
+        <div><h3>.rpm</h3><p class="for">Fedora, RHEL, openSUSE</p></div>
+        <div class="cmd"><code>sudo dnf install ./tuxtalk-*.x86_64.rpm</code><button class="copy" type="button">Copy</button></div>
+        <a class="btn btn-main" href="https://github.com/ronb1964/TuxTalk/releases/latest">Download</a>
+      </div>
+      <div class="dl-row">
+        <div><h3>AUR</h3><p class="for">Arch and the distros built on it</p></div>
+        <div class="cmd"><code>yay -S tuxtalk-appimage</code><button class="copy" type="button">Copy</button></div>
+        <a class="btn btn-main" href="https://aur.archlinux.org/packages/tuxtalk-appimage">AUR page</a>
+      </div>
+    </div>
+    <div class="dl-after">
+      <p>The Download buttons take you to the newest release on GitHub. Grab the file that ends in .AppImage, .deb or .rpm.</p>
+      <p><strong>Heads up:</strong> the first time it runs, TuxTalk asks for your admin password once so it can read your keyboard and type into other apps. Restart your computer after that, or the hotkeys won't work yet.</p>
+      <p>The AppImage needs fusermount, which almost every desktop already has. If it won't start, install the fuse3 package. No Flatpak yet. If you'd like one, <a href="https://github.com/ronb1964/TuxTalk/discussions/6">vote in the poll</a>.</p>
+    </div>
+
+    <div class="prose" style="margin-top:64px">
+      <h3>Works on your desktop</h3>
+      <p>TuxTalk reads the key straight from your keyboard instead of asking the desktop for it, so hold-to-talk works on Wayland and X11 with no setup. On GNOME you get a proper panel menu, and everywhere else a tray icon.</p>
+    </div>
+    <ul class="desktops">
+      <li>GNOME</li><li>KDE Plasma</li><li>Sway</li><li>Hyprland</li><li>Cinnamon</li><li>Other X11 desktops</li>
+    </ul>
+  </div>
+</section>
+
+<!-- Screenshot viewer, opened from "A look around" (site.js) -->
+<dialog class="lightbox" id="lightbox" aria-labelledby="lb-cap">
+  <figure class="lb-figure">
+    <img id="lb-img" src="data:," alt="">
+    <figcaption id="lb-cap"></figcaption>
+  </figure>
+  <p class="lb-count" id="lb-count" aria-live="polite"></p>
+  <button type="button" class="lb-btn lb-close" id="lb-close" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  <button type="button" class="lb-btn lb-prev" id="lb-prev" aria-label="Previous screenshot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+  <button type="button" class="lb-btn lb-next" id="lb-next" aria-label="Next screenshot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+</dialog>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="made">
+      <a class="brand" href="#top"><img src="img/icon-64.png" alt="" width="32" height="32">TuxTalk</a>
+      <p>I'm Ron Brand. I build custom camper vans in New Jersey, and before that I spent 30 years splicing fiber optic cable. TuxTalk is free and open source under the MIT license, and I use it every day.</p>
+      <p>Found a bug or got an idea? Tell me in Discussions or open an issue on GitHub. And if you're on Arch, a vote on the AUR page helps other people find it.</p>
+      <p class="note">This site has no tracking and no cookies, and its fonts are hosted right here.</p>
+    </div>
+    <ul class="links">
+      <li><a href="https://github.com/ronb1964/TuxTalk">GitHub</a></li>
+      <li><a href="https://github.com/ronb1964/TuxTalk/discussions">Discussions</a></li>
+      <li><a href="https://github.com/ronb1964/TuxTalk/issues">Report a bug</a></li>
+      <li><a href="https://github.com/ronb1964/TuxTalk/blob/main/CHANGELOG.md">Changelog</a></li>
+      <li><a href="https://aur.archlinux.org/packages/tuxtalk-appimage">AUR</a></li>
+      <li><a href="privacy.html">Privacy</a></li>
+    </ul>
+  </div>
+</footer>
+
+<script src="site.js"></script>
+</body>
+</html>
