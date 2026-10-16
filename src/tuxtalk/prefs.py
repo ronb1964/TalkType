@@ -5167,6 +5167,7 @@ class PreferencesWindow:
             from . import uinput_helper, secure_input
 
             lines, restarts = secure_input.fix_description()
+            note = secure_input.fallback_note()     # on the "input" group path
             switching = button.get_label() == SWITCH_TO_HELPER_LABEL
             updating = button.get_label() == UPDATE_HELPER_LABEL
             dialog = message_dialog(
@@ -5188,6 +5189,7 @@ class PreferencesWindow:
                  "directly into applications.\n\n")
                 + "What this does:\n"
                 + "".join(f"• {line}\n" for line in lines)
+                + (f"\n{note}\n" if note else "")
                 + "\nYou will be prompted for your admin password.\n\n"
                 + ("After setup, restart your computer for the changes to take "
                    "effect. Logging out and back in is often not enough — a "

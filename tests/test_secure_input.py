@@ -74,6 +74,25 @@ def test_fix_falls_back_to_the_input_group(monkeypatch):
     assert restarts and "'input' group" in lines[1]
 
 
+def test_the_input_group_path_says_why_and_what_it_means(monkeypatch):
+    """Without the helper, setup says why, and that programs can then read
+    the keyboard: calmly, in one line."""
+    monkeypatch.setattr(si, "can_install", lambda: (False, "this system doesn't run systemd"))
+    note = si.fallback_note()
+    assert "(this system doesn't run systemd)" in note
+    assert "'input' group" in note and "read the keyboard" in note
+
+
+def test_the_helper_path_needs_no_note(monkeypatch):
+    monkeypatch.setattr(si, "can_install", lambda: (True, ""))
+    assert si.fallback_note() is None
+
+
+def test_the_flatpak_needs_no_note(monkeypatch):
+    monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TuxTalk")
+    assert si.fallback_note() is None
+
+
 def test_a_running_helper_counts_as_hotkeys_working(monkeypatch):
     from tuxtalk import uinput_helper, hotkey_helper_client
 

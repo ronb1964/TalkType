@@ -315,6 +315,21 @@ def fix_description():
     ], True)
 
 
+def fallback_note():
+    """One line for the screens offering the fix, when it will be the
+    "input" group: why the helper can't be used here, and what the group
+    means. None where the helper is used (or in the Flatpak, which uses
+    neither)."""
+    if os.environ.get("FLATPAK_ID"):
+        return None
+    usable, why = can_install()
+    if usable:
+        return None
+    return (f"TuxTalk's hotkey helper can't run here ({why}), so TuxTalk uses the "
+            "'input' group instead. That lets programs you run read the keyboard, "
+            "which is how most Linux key tools work.")
+
+
 def install_with_pkexec(leave_group=False):
     """Install (or update) the helper and the typing rule, and with
     *leave_group* leave the input group too. (ok, message)."""

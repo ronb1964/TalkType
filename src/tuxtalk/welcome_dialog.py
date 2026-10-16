@@ -1329,6 +1329,18 @@ class WelcomeDialog:
             label.set_opacity(0.9)
             details_box.pack_start(label, False, False, 0)
 
+        # On the "input" group path, why and what it means (secure_input).
+        if self.needs_uinput_fix:
+            from tuxtalk.secure_input import fallback_note
+            note = fallback_note()
+            if note:
+                label = Gtk.Label(label=f"🔒 {note}", xalign=0)
+                label.set_line_wrap(True)
+                label.set_max_width_chars(70)
+                label.set_opacity(0.9)
+                label.set_margin_top(4)
+                details_box.pack_start(label, False, False, 0)
+
         typing_box.pack_start(details_box, False, False, 0)
 
         # Buttons
