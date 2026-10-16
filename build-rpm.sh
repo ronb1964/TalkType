@@ -118,7 +118,7 @@ fpm -s dir -t rpm \
     -v "$VERSION" \
     --architecture x86_64 \
     --maintainer "Ron Brand <ronb1964@gmail.com>" \
-    --url "https://github.com/ronb1964/TuxTalk" \
+    --url "https://tuxtalk.app/" \
     --description "TuxTalk (formerly TalkType) — voice dictation for Linux.
 Hold a hotkey, speak, and your words are typed into any application. Runs fully
 offline, on the processor or an NVIDIA, AMD or Intel graphics card." \

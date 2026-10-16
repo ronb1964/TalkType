@@ -1423,7 +1423,10 @@ class DictationTray:
         links_box.set_halign(Gtk.Align.CENTER)
         links_box.set_margin_top(10)
 
-        # GitHub link
+        # The website, then the code on GitHub
+        website_btn = Gtk.LinkButton.new_with_label("https://tuxtalk.app/", "Website")
+        links_box.pack_start(website_btn, False, False, 0)
+
         github_btn = Gtk.LinkButton.new_with_label(
             "https://github.com/ronb1964/TuxTalk",
             "GitHub Repository"

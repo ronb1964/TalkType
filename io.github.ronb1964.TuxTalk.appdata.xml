@@ -32,9 +32,10 @@
 
   <launchable type="desktop-id">io.github.ronb1964.TuxTalk.desktop</launchable>
 
-  <url type="homepage">https://github.com/ronb1964/TuxTalk</url>
+  <url type="homepage">https://tuxtalk.app/</url>
   <url type="bugtracker">https://github.com/ronb1964/TuxTalk/issues</url>
   <url type="help">https://github.com/ronb1964/TuxTalk#readme</url>
+  <url type="vcs-browser">https://github.com/ronb1964/TuxTalk</url>
 
   <developer id="io.github.ronb1964">
     <name>Ron</name>
