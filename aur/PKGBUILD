@@ -4,7 +4,7 @@ pkgver=0.15.1
 pkgrel=1
 pkgdesc="Voice dictation for Linux: hold a key, talk, and your words are typed for you"
 arch=('x86_64')
-url="https://github.com/ronb1964/TuxTalk"
+url="https://tuxtalk.app/"
 license=('MIT')
 # The AppImage itself bundles libayatana-appindicator3 with its dbusmenu
 # libraries, and ydotool, ydotoold and wl-clipboard, so those depends are
