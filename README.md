@@ -21,7 +21,7 @@
 <p align="center">
   <a href="https://ronb1964.github.io/TuxTalk/"><b>Website</b></a> &nbsp;&bull;&nbsp;
   <a href="#installation">Install</a> &nbsp;&bull;&nbsp;
-  <a href="#new-in-0150">New in 0.15.0</a> &nbsp;&bull;&nbsp;
+  <a href="#new-in-0151">New in 0.15.1</a> &nbsp;&bull;&nbsp;
   <a href="#what-it-does">What it does</a> &nbsp;&bull;&nbsp;
   <a href="#all-the-features">All the features</a> &nbsp;&bull;&nbsp;
   <a href="CHANGELOG.md">What's new</a>
@@ -41,21 +41,21 @@ It's free, it runs completely offline, and nothing you say ever leaves your comp
 
 ---
 
-## New in 0.15.0
+## New in 0.15.1
 
 <p align="center">
-  <img src="screenshots/voice-edit.png" alt="Voice editing. Select 'hey can u send me the report by friday thx' and say 'make this more formal': it becomes 'Could you please send me the report by Friday, thank you.' Select milk, eggs, bread on three lines and say 'make this a bulleted list': each line gets a dash. Select 'the deadline is tomorrow' and say 'make this all caps': THE DEADLINE IS TOMORROW." width="700">
+  <img src="screenshots/transcribe-file.png" alt="Transcribe a File: a one-minute recording called shop-meeting.mp3 turned into three paragraphs of text, each starting with its time, with buttons to copy it or save it as text or as subtitles" width="600">
 </p>
 
-**Voice editing.** Select some text, hold Shift+F8 and tell it what to change. Say it however you want, there's no fixed wording. Ctrl+Z puts your text back if you don't like what you got. Things like all caps, bullet lists or taking out the commas are done exactly in code, and the AI only gets the jobs that need it, like changing the tone. It's in TuxTalk Labs for now, which means it works but I'm still working on it, so it stays off until you turn it on.
+**Transcribe a File.** Give it a recording or a video and you get the text back, or subtitles for the video. It's in the tray menu right under Fix a Word. It uses the same model you dictate with, so there's nothing new to download, and dictation keeps working while it runs. On my NVIDIA card with Parakeet, three and a half minutes of talking took about nine seconds.
 
-**Your Words.** Put in the names and terms you use, one per line, and they come out spelled your way. Parakeet kept writing my app's name as "Tuck's talk". Now it's TuxTalk.
+**Say "fix that word"** right after a dictation and Fix a Word opens on what you just said. Click the word it got wrong, type it the right way, and it's fixed in your text and in every dictation after.
 
-**Ctrl+Alt+P types your last dictation again**, wherever your cursor is. For when something steals the focus and your words land in the wrong window.
+**Numbers as digits**, if you want them. Parakeet likes to write "twenty-five" out in words. Tick Write numbers as digits in Preferences, Advanced and you get 25.
 
-**Music and videos pause while you dictate**, and start back up when you're done. I had a YouTube video going once and it turned "isn't it" into "Venezuela".
+**Terminals get plain text.** Say "git status" into a terminal and you get git status, with no capital and no period.
 
-And the indicator can follow the window you're dictating into, Swiss German gets ss instead of ß, and Preferences asks before you close it with changes you didn't apply. The [changelog](CHANGELOG.md) has the rest.
+And there's `tuxtalk --toggle` for your own shortcut, a way to keep auto-detect to the languages you actually speak, and select and move by voice in TuxTalk Labs. The [changelog](CHANGELOG.md) has the rest.
 
 ---
 
@@ -235,15 +235,20 @@ Want your own shortcut, or a script? Run `tuxtalk --toggle` (or `--start`, `--st
 - **Two hotkeys, both always on.** Hold F8 to talk, or tap F9 to start and tap again to stop. Pick any keys you like.
 - **Hands-free if you want it.** Double-tap F9, talk, and it stops by itself when you go quiet. A single tap still works as a plain on/off switch, so a long dictation with thinking pauses never gets cut off. Say nothing for 10 seconds and it stops without typing anything.
 - **Your choice of speech model.** NVIDIA's Parakeet is the default: fast on any processor, for English and 24 European languages. OpenAI's Whisper covers 99 languages, from Tiny up to Large-v3. Not sure which? **What works with what?** in Preferences lays it out.
+- **Only these languages.** Tick the languages you actually speak and Whisper's auto-detect sticks to those.
 - **Any graphics card.** NVIDIA, AMD or Intel through Vulkan, a 24 MB download. On NVIDIA you can use CUDA instead. TuxTalk times your graphics chip against your processor first and only uses it if it's really faster.
 - **Corrections.** Say "no wait", "scratch that", "I mean" or "actually" and the optional AI fixes it. It also drops "um", "uh" and stutters.
 - **Voice commands.** "comma", "period", "new paragraph", "undo last word", "delete last three sentences" and more. See the full list below.
 - **Email and web addresses.** "john at gmail dot com" types john@gmail.com, and "github dot com" types github.com.
+- **Numbers as digits, if you want them.** 25 instead of twenty-five, and 7:30 and 15th too. Works in English and seven other languages.
+- **Plain text in terminals.** No capital at the start and no period at the end when you dictate a command.
 - **Voice editing (Labs).** Select text, hold Shift+F8 and say how to change it. Tone and rewrites go to the AI, while caps, lists, commas and removing a word are done exactly in code. Bold, italics and underline work in LibreOffice and other word processors.
+- **Select and move by voice (Labs).** Say "select the last sentence" or "go to the end" on its own and TuxTalk does it instead of typing it.
 - **Snippets.** Make a phrase type anything you want, like "my email" for your address.
 - **Your Words.** The names and terms you use, spelled your way.
-- **Fix a Word.** Teach it a name or term it keeps getting wrong.
+- **Fix a Word.** Teach it a name or term it keeps getting wrong. Or just say "fix that word" right after a dictation.
 - **Paste Last Dictation.** Ctrl+Alt+P types your last dictation again, for when it landed in the wrong window.
+- **Transcribe a File.** Turns a recording or a video into text or subtitles with the same model you dictate with, and keeps your last 10.
 - **Pauses your music and videos** while you talk, and starts back up only what it paused.
 - **Recent Dictations.** Your last 20, one click to copy. Kept in memory only.
 - **Your Stats.** Words dictated and typing time saved, at your own typing speed.
