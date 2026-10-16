@@ -1056,7 +1056,6 @@ class PreferencesWindow:
 
         # Auto-detect held to the user's languages (language_limit.py). Shown
         # with Auto-detect only; Manual already names the one language.
-        from . import language_limit
         self.auto_langs_label = Gtk.Label(label="Only these languages 💡:", xalign=0)
         self.auto_langs_label.set_tooltip_text(
             "Auto-detect picks only from the languages you tick.\n"
