@@ -86,6 +86,7 @@ First run (since 0.14.2 it recommends one setup; CUDA is not offered here):
 - [ ] The speed check runs, and the log shows its result (`Speed check (parakeet-v3): graphics …s, processor …s`)
 - [ ] Default settings are correct (model=parakeet-v3, device=vulkan when the card won, auto_period=True, auto_timeout 5 min, language_mode=auto)
 - [ ] Dictation works on the graphics card (log: `Parakeet on GPU`)
+- [ ] Hotkey helper (default since 0.16): first-run's Fix Typing asks for the password once, says no restart is needed, and F8 works straight away without the user joining the input group (`systemctl is-active tuxtalk-hotkeys`, `getent group input`; log: "Hotkeys come from the TuxTalk hotkey helper"). After a reboot it starts by itself. In a VM, also once on an immutable distro (Bazzite or Silverblue) and once without systemd, where it falls back to the input group (log: "Hotkey helper not used")
 
 Preferences and the rest:
 - [ ] Dictation works in CPU mode (Device → CPU downloads the processor copy of Parakeet with a progress bar)
