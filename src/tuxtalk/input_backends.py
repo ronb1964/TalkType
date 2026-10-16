@@ -6,6 +6,10 @@ so it registers a shortcut with the GlobalShortcuts portal and reacts to the
 desktop's press/release signals (Backend B). Both backends drive the SAME
 thread-safe events in app.py (_cmd_start_recording / _cmd_stop_recording), so the
 recording core is identical either way. Chosen once at startup by FLATPAK_ID.
+
+Outside a Flatpak, when TuxTalk's hotkey helper is installed (hotkey_helper.py,
+set up by secure_input.py), Backend A reads the keys from it instead of
+opening the keyboards, so the user needn't be in the "input" group.
 """
 import os
 
@@ -24,13 +28,17 @@ class InputBackend:
 class EvdevInputBackend(InputBackend):
     """Backend A: app.py's evdev loop, reading the keyboard directly."""
 
-    def __init__(self, cfg, input_device_idx):
+    def __init__(self, cfg, input_device_idx, helper=None):
         self.cfg = cfg
         self.input_device_idx = input_device_idx
+        self.helper = helper        # hotkey_helper_client.HelperKeyboard, or None
 
     def start(self):
         from . import app
-        app._loop_evdev(self.cfg, self.input_device_idx)
+        if self.helper is not None:
+            app._loop_evdev(self.cfg, self.input_device_idx, keyboards=[self.helper])
+        else:
+            app._loop_evdev(self.cfg, self.input_device_idx)
 
 
 class PortalInputBackend(InputBackend):
@@ -152,4 +160,6 @@ def get_input_backend(flatpak_id=None, cfg=None, input_device_idx=None) -> Input
         flatpak_id = os.environ.get("FLATPAK_ID", "")
     if flatpak_id:
         return PortalInputBackend(cfg, input_device_idx)
-    return EvdevInputBackend(cfg, input_device_idx)
+    from .hotkey_helper_client import connect_helper
+    helper = connect_helper()
+    return EvdevInputBackend(cfg, input_device_idx, helper=helper)

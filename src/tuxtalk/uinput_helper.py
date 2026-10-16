@@ -221,6 +221,14 @@ def check_input_read_permission():
     Returns:
         tuple: (has_access: bool, reason: str)
     """
+    try:
+        from .hotkey_helper_client import connect_helper
+        helper = connect_helper()
+    except Exception:
+        helper = None
+    if helper is not None:
+        helper.close()
+        return (True, "TuxTalk's hotkey helper reads the hotkeys. Hotkeys should work.")
     if _readable_keyboards():
         return (True, "You can read input devices. Hotkeys should work.")
     return (False, "Cannot read any keyboard under /dev/input, so hotkeys "

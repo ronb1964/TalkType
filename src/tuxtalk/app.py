@@ -992,6 +992,11 @@ INPUT_MIN_PASS_S = 0.005
 
 def _devices_with_input(devices, timeout):
     """The devices with events waiting, after sleeping up to *timeout* for one."""
+    # The hotkey helper may already hold events it took in while answering
+    # another call (active_keys), or have a reconnect due: ready now.
+    due = [d for d in devices if getattr(d, "needs_service", None) and d.needs_service()]
+    if due:
+        return due
     try:
         ready, _, _ = select.select(devices, [], [], timeout)
     except (OSError, ValueError):
@@ -3810,8 +3815,27 @@ def _service_tick(cfg, svc: "_ServiceState") -> "LiveSettings | None":
     return None
 
 
-def _loop_evdev(cfg: Settings, input_device_idx):
-    """Main event loop: monitor keyboard for hotkey presses and dispatch to recording."""
+def _helper_watch(devices, hold_key, toggle_key, voice_cmds_combo, paste_last_combo):
+    """Tell the hotkey helper, when it stands in for the keyboards, which keys
+    to report: the dictation keys, Esc, and the two combos."""
+    for dev in devices:
+        if hasattr(dev, "watch"):
+            from .hotkey_helper_client import refused_combo, watch_specs
+            for what, combo in (("Voice Commands", voice_cmds_combo),
+                                ("Paste Last Dictation", paste_last_combo)):
+                why = combo and refused_combo(*combo)
+                if why:
+                    logger.warning(f"The {what} shortcut won't work with the hotkey helper "
+                                   f"({why}). Pick one with Ctrl+Alt, Ctrl+Super or Alt+Super.")
+            dev.watch(watch_specs(hold_key, toggle_key, ecodes.KEY_ESC,
+                                  (voice_cmds_combo, paste_last_combo)))
+
+
+def _loop_evdev(cfg: Settings, input_device_idx, keyboards=None):
+    """Main event loop: monitor keyboard for hotkey presses and dispatch to recording.
+
+    *keyboards* is the hotkey helper (hotkey_helper_client.HelperKeyboard) when
+    it is installed: then no keyboard is opened here at all."""
     session = os.environ.get("XDG_SESSION_TYPE", "").lower()
     print(f"Session: {session} | Wayland={session=='wayland'}")
     logger.info(f"Session type: {session}, Wayland: {session=='wayland'}")
@@ -3826,7 +3850,10 @@ def _loop_evdev(cfg: Settings, input_device_idx):
     logger.info(f"Auto-timeout: enabled={svc.timeout_enabled}, minutes={svc.timeout_minutes}")
 
     # evdev opens these non-blocking, which the read loop below relies on.
-    devices = [InputDevice(p) for p in list_devices()]
+    use_helper = keyboards is not None
+    devices = list(keyboards) if use_helper else [InputDevice(p) for p in list_devices()]
+    if use_helper:
+        logger.info("Hotkeys come from the TuxTalk hotkey helper; no keyboard is opened here")
     last_device_scan = time.time()
     # Establish both files' current mtimes so the first poll does not report a
     # spurious change and re-apply what the service just started with.
@@ -3873,6 +3900,7 @@ def _loop_evdev(cfg: Settings, input_device_idx):
     if voice_cmds_combo:
         print(f"Voice Commands hotkey: {vc_hotkey_str}")
         logger.info(f"Voice Commands hotkey: {vc_hotkey_str}")
+    _helper_watch(devices, hold_key, toggle_key, voice_cmds_combo, paste_last_combo)
 
     # Have the desktop hold the hotkeys back from the focused app (see
     # _claim_desktop_hotkeys). On KDE they are released by
@@ -3912,6 +3940,7 @@ def _loop_evdev(cfg: Settings, input_device_idx):
             # Re-claim even if the hotkeys look unchanged: claim() is cheap,
             # and comparing would mean a second copy of the hotkey fields.
             _claim_desktop_hotkeys(cfg)
+            _helper_watch(devices, hold_key, toggle_key, voice_cmds_combo, paste_last_combo)
             logger.info("Applied settings change without restarting")
 
         # Read the devices that have key events waiting.
@@ -3959,7 +3988,8 @@ def _loop_evdev(cfg: Settings, input_device_idx):
         # mid-recording would add an ungrabbed device to a grabbed set, letting
         # the hotkey leak into the focused app. Throttled because it opens
         # every node under /dev/input.
-        if not state.is_recording and current_time - last_device_scan >= DEVICE_RESCAN_SECONDS:
+        if (not use_helper and not state.is_recording
+                and current_time - last_device_scan >= DEVICE_RESCAN_SECONDS):
             last_device_scan = current_time
             _rediscover_devices(devices)
 

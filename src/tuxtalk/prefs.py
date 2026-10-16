@@ -157,6 +157,9 @@ def _pulse_source_for_mic(mic, sources):
 
 
 FIX_TYPING_LABEL = "Fix Typing Permissions"
+SWITCH_TO_HELPER_LABEL = "Switch to Hotkey Helper"
+UPDATE_HELPER_LABEL = "Update Hotkey Helper"
+LEAVE_GROUP_LABEL = "Leave the 'input' Group"
 
 # What the GNOME extension adds, shared by the install and success dialogs so
 # the two can't promise different things.
@@ -2185,6 +2188,9 @@ class PreferencesWindow:
         else:
             # Typing Status Label
             self.typing_status_label = Gtk.Label(label="Checking...", xalign=0)
+            # Wrapped: "Working, through the 'input' group…" would widen the window.
+            self.typing_status_label.set_line_wrap(True)
+            self.typing_status_label.set_max_width_chars(70)
             self.typing_status_label.set_margin_start(10)
             self.typing_status_label.set_margin_bottom(10)
             grid.attach(self.typing_status_label, 0, row, 2, 1)
@@ -2205,6 +2211,7 @@ class PreferencesWindow:
             )
             self.fix_typing_button.set_sensitive(False)
             typing_button_box.pack_start(self.fix_typing_button, False, False, 0)
+
 
             grid.attach(typing_button_box, 0, row, 2, 1)
             row += 1
@@ -5015,8 +5022,55 @@ class PreferencesWindow:
             # Both halves, not just uinput: on Fedora a logind ACL can grant
             # /dev/uinput while /dev/input, which the hotkeys need, stays unreadable.
             has_access, reason = uinput_helper.check_all_device_permissions()
-            
-            if has_access:
+            from . import secure_input
+
+            running = secure_input.running_version() if has_access else None
+            from .hotkey_helper import VERSION as HELPER_VERSION
+            if running is not None and running != HELPER_VERSION and secure_input.is_installed():
+                # A TuxTalk update brought a newer helper: the old one keeps
+                # running until it's installed again.
+                self.typing_status_label.set_markup(
+                    f'<span color="{WARNING_AMBER}">⚠ This TuxTalk brings a newer hotkey helper '
+                    f'({GLib.markup_escape_text(running)} → {HELPER_VERSION}). '
+                    'Update it to get its fixes</span>'
+                )
+                self.fix_typing_button.set_label(UPDATE_HELPER_LABEL)
+                self.fix_typing_button.set_sensitive(True)
+            elif running is not None and uinput_helper.check_user_in_input_group():
+                self.typing_status_label.set_markup(
+                    f'<span color="{WARNING_AMBER}">⚠ TuxTalk uses its hotkey helper, but you\'re '
+                    'still in the \'input\' group, so other programs can still read your '
+                    'keyboard</span>'
+                )
+                self.fix_typing_button.set_label(LEAVE_GROUP_LABEL)
+                self.fix_typing_button.set_sensitive(True)
+            elif running is not None and self._shortcuts_the_helper_refuses():
+                bad = ", ".join(self._shortcuts_the_helper_refuses())
+                self.typing_status_label.set_markup(
+                    f'<span color="{WARNING_AMBER}">⚠ {GLib.markup_escape_text(bad)} won\'t work: '
+                    'with the hotkey helper a shortcut needs two of Ctrl, Alt and Super. '
+                    'Pick one from the list on the General tab</span>'
+                )
+                self.fix_typing_button.set_label("✓ Ready")
+                self.fix_typing_button.set_sensitive(False)
+            elif running is not None:
+                self.typing_status_label.set_markup(
+                    '<span color="#4CAF50">✓ Ready. Only TuxTalk\'s hotkey helper reads the '
+                    'keyboard, and it tells TuxTalk about its hotkeys and nothing else</span>'
+                )
+                self.fix_typing_button.set_label("✓ Ready")
+                self.fix_typing_button.set_sensitive(False)
+            elif has_access and secure_input.can_install()[0]:
+                # Working through the "input" group, which lets every program
+                # read the keyboard. Offer the helper; nothing changes until asked.
+                self.typing_status_label.set_markup(
+                    '<span color="#4CAF50">✓ Working</span>, through the \'input\' group. '
+                    'TuxTalk\'s hotkey helper is safer: with it, other programs '
+                    'can\'t read what you type'
+                )
+                self.fix_typing_button.set_label(SWITCH_TO_HELPER_LABEL)
+                self.fix_typing_button.set_sensitive(True)
+            elif has_access:
                 self.typing_status_label.set_markup(
                     '<span color="#4CAF50">✓ Typing permissions configured correctly</span>'
                 )
@@ -5061,28 +5115,40 @@ class PreferencesWindow:
 
     def _on_fix_typing_clicked(self, button):
         """Handle Fix Typing button click."""
+        if button.get_label() == LEAVE_GROUP_LABEL:
+            self._leave_input_group(button)
+            return
         try:
-            from . import uinput_helper
-            
-            # Show confirmation dialog
+            from . import uinput_helper, secure_input
+
+            lines, restarts = secure_input.fix_description()
+            switching = button.get_label() == SWITCH_TO_HELPER_LABEL
+            updating = button.get_label() == UPDATE_HELPER_LABEL
             dialog = message_dialog(
                 transient_for=self.window,
                 flags=0,
                 message_type=Gtk.MessageType.QUESTION,
                 buttons=Gtk.ButtonsType.YES_NO,
-                text="Configure Typing Permissions?"
+                text=("Switch to the hotkey helper?" if switching
+                      else "Configure Typing Permissions?")
             )
             dialog.format_secondary_text(
-                "This will configure system permissions to allow TuxTalk to type "
-                "directly into applications.\n\n"
-                "What this does:\n"
-                "• Adds a udev rule for /dev/uinput access\n"
-                "• Adds your user to the 'input' group\n\n"
-                "You will be prompted for your admin password.\n\n"
-                "After setup, restart your computer for the changes to take "
-                "effect. Logging out and back in is often not enough — a "
-                "background session can keep the old permissions alive.\n\n"
-                "Continue?"
+                ("This sets TuxTalk up so the hotkeys and typing work without the "
+                 "'input' group, and takes you out of that group, so other programs "
+                 "can't read your keyboard. (If another program you use needs the "
+                 "group, a key remapper for instance, add yourself back.)\n\n"
+                 if switching else
+                 "This updates TuxTalk's hotkey helper.\n\n" if updating else
+                 "This will configure system permissions to allow TuxTalk to type "
+                 "directly into applications.\n\n")
+                + "What this does:\n"
+                + "".join(f"• {line}\n" for line in lines)
+                + "\nYou will be prompted for your admin password.\n\n"
+                + ("After setup, restart your computer for the changes to take "
+                   "effect. Logging out and back in is often not enough — a "
+                   "background session can keep the old permissions alive.\n\n"
+                   if restarts else "No restart is needed.\n\n")
+                + "Continue?"
             )
             
             response = dialog.run()
@@ -5103,20 +5169,104 @@ class PreferencesWindow:
         # pkexec waits for the password prompt, up to a minute: off the GTK
         # thread, or the window freezes and "Setting up..." is never drawn.
         def work():
+            needs_restart = True
             try:
-                success, message = uinput_helper.install_udev_rule_with_pkexec()
+                if switching or updating:
+                    success, message = secure_input.install_with_pkexec(leave_group=switching)
+                    needs_restart = False
+                else:
+                    success, message, needs_restart = secure_input.fix_permissions()
                 if success:
                     uinput_helper.ensure_ydotoold_running()   # one started without permission has exited
             except Exception as e:
                 success, message = False, str(e)
-            GLib.idle_add(self._finish_fix_typing, button, success, message)
+            GLib.idle_add(self._finish_fix_typing, button, success, message, needs_restart, switching)
 
         import threading
         threading.Thread(target=work, daemon=True).start()
 
-    def _finish_fix_typing(self, button, success, message):
+    def _shortcuts_the_helper_refuses(self):
+        """The Voice Commands / Paste Last shortcuts (only a hand-edited
+        setting can be one) that the hotkey helper won't report."""
+        from .hotkey_helper_client import refused_shortcut
+        config = getattr(self, "config", None) or {}
+        return [value for value in (config.get(key, "") or ""
+                                    for key in ("voice_commands_hotkey", "paste_last_hotkey"))
+                if refused_shortcut(value)]
+
+    def _leave_input_group(self, button):
+        """Take the user out of the input group once the helper is doing its job."""
+        from . import secure_input
+        dialog = message_dialog(
+            transient_for=self.window, flags=0,
+            message_type=Gtk.MessageType.QUESTION, buttons=Gtk.ButtonsType.YES_NO,
+            text="Leave the 'input' group?")
+        dialog.format_secondary_text(
+            "TuxTalk doesn't need it any more: its hotkey helper reads the hotkeys. "
+            "Leaving it means other programs can't read your keyboard.\n\n"
+            "If some other program you use needs the group (a key remapper, for "
+            "instance), it will stop working until you add yourself back.\n\n"
+            "It takes effect after you restart your computer. "
+            "You will be prompted for your admin password.")
+        answer = dialog.run()
+        dialog.destroy()
+        if answer != Gtk.ResponseType.YES:
+            return
+        button.set_sensitive(False)
+
+        def work():
+            ok, message = secure_input.leave_input_group_with_pkexec()
+            GLib.idle_add(self._finish_leave_group, button, ok, message)
+
+        import threading
+        threading.Thread(target=work, daemon=True).start()
+
+    def _finish_leave_group(self, button, ok, message):
+        from .secure_input import STILL_IN_GROUP
+        if ok and message == STILL_IN_GROUP:
+            self._message(Gtk.MessageType.WARNING, "You're still in the 'input' group",
+                          "TuxTalk couldn't take you out of it. Your system may keep "
+                          "that group somewhere TuxTalk can't change.")
+        elif ok:
+            self._message(Gtk.MessageType.INFO, "You've left the 'input' group",
+                          "Restart your computer to finish. Until then, programs that "
+                          "started before keep the old access.")
+        elif message != "cancelled":
+            self._message(Gtk.MessageType.ERROR, "That didn't work", message)
+        self._check_typing_status()
+        return False
+
+    def _finish_fix_typing(self, button, success, message, needs_restart=True, switching=False):
         """Back on the GTK thread: report how Fix Typing Permissions went."""
-        if success:
+        from .secure_input import STILL_IN_GROUP
+        still_in_group = success and message == STILL_IN_GROUP
+        still_in_group_text = (
+            "TuxTalk couldn't take you out of the 'input' group, so other programs "
+            "can still read your keyboard. Your system may keep that group "
+            "somewhere TuxTalk can't change. Your hotkeys work either way.")
+        if success and not needs_restart:
+            msg = message_dialog(
+                transient_for=self.window,
+                modal=True,
+                message_type=Gtk.MessageType.INFO,
+                buttons=Gtk.ButtonsType.OK,
+                text="Hotkeys and Typing Set Up!"
+            )
+            msg.format_secondary_text(
+                "TuxTalk's hotkey helper is installed, and TuxTalk can type into "
+                "your applications. No restart is needed.\n\n"
+                + (still_in_group_text if still_in_group else
+                   "You've also left the 'input' group. Restart your computer when "
+                   "it suits you: until then, programs that were already running "
+                   "keep the old access." if switching else
+                   "Dictation restarts now to use it.")
+            )
+            msg.run()
+            msg.destroy()
+            # The service picks its hotkey source when it starts.
+            self.restart_service()
+            self._check_typing_status()
+        elif success:
             msg = message_dialog(
                 transient_for=self.window,
                 modal=True,

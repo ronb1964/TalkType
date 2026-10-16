@@ -64,11 +64,11 @@ def _fix_typing_steps(do_ydotoold, do_uinput):
     from tuxtalk.uinput_helper import (
         check_ydotoold_running,
         ensure_ydotoold_running,
-        install_udev_rule_with_pkexec,
         setup_ydotoold_service,
     )
+    from tuxtalk.secure_input import fix_permissions
     results = []
-    ydotoold_fixed = uinput_fixed = False
+    ydotoold_fixed = uinput_fixed = needs_restart = False
 
     # Step 1: Set up ydotoold daemon if needed
     if do_ydotoold:
@@ -85,7 +85,7 @@ def _fix_typing_steps(do_ydotoold, do_uinput):
     # Step 2: Set up uinput permissions if needed
     if do_uinput:
         logger.info("Setting up uinput permissions...")
-        uinput_success, uinput_msg = install_udev_rule_with_pkexec()
+        uinput_success, uinput_msg, needs_restart = fix_permissions()
         if uinput_success:
             results.append("✅ Device permissions configured")
             uinput_fixed = True
@@ -109,7 +109,8 @@ def _fix_typing_steps(do_ydotoold, do_uinput):
                 running = True
                 break
     return {"results": results, "ydotoold_fixed": ydotoold_fixed,
-            "uinput_fixed": uinput_fixed, "ydotoold_running": running}
+            "uinput_fixed": uinput_fixed, "ydotoold_running": running,
+            "needs_restart": needs_restart}
 
 
 class SplashScreen:
@@ -427,6 +428,8 @@ class WelcomeDialog:
         self.install_ydotool_button = None
         self.typing_status_label = None
         self.uinput_fixed = False  # Track if user fixed uinput during this dialog
+        # Only the "input" group needs a restart; the hotkey helper doesn't.
+        self.restart_needed = False
         self.ydotoold_fixed = False  # Track if user fixed ydotoold during this dialog
         self.install_portaudio_button = None
         self.portaudio_status_label = None
@@ -1306,11 +1309,15 @@ class WelcomeDialog:
         details = []
         if self.needs_ydotoold_setup and self.ydotoold_status.get('ydotool_installed'):
             details.append("🔧 Sets up ydotoold daemon as a user service")
+        fix_restarts = False
         if self.needs_uinput_fix:
-            details.append("🔧 Adds a system rule to allow input device access")
-            details.append("👤 Adds your user to the 'input' group")
-        if self.needs_uinput_fix or self.needs_ydotoold_setup:
+            from tuxtalk.secure_input import fix_description
+            lines, fix_restarts = fix_description()
+            details.extend(f"🔧 {GLib.markup_escape_text(line)}" for line in lines)
+        if fix_restarts or (self.needs_ydotoold_setup and not self.needs_uinput_fix):
             details.append("🔄 Restart your computer to apply (logging out is often not enough)")
+        elif self.needs_uinput_fix:
+            details.append("✓ No restart needed")
 
         details_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         details_box.set_margin_start(25)
@@ -1465,10 +1472,11 @@ class WelcomeDialog:
             self.ydotoold_fixed = True
         if outcome["uinput_fixed"]:
             self.uinput_fixed = True
+            self.restart_needed = self.restart_needed or outcome.get("needs_restart", True)
         ydotoold_running = outcome["ydotoold_running"]
         permissions_set = self.uinput_fixed or not self.needs_uinput_fix
         ydotoold_failed = self.needs_ydotoold_setup and not self.ydotoold_fixed
-        needs_restart = self.uinput_fixed
+        needs_restart = self.restart_needed
 
         if ydotoold_running and permissions_set:
             # Full success - everything is working
@@ -1498,7 +1506,7 @@ class WelcomeDialog:
             msg.run()
             msg.destroy()
 
-        elif permissions_set and not ydotoold_failed and self.uinput_fixed:
+        elif permissions_set and not ydotoold_failed and self.uinput_fixed and needs_restart:
             # Permissions set and nothing failed, but ydotoold isn't running
             # yet: it starts after the restart on some systems.
             button.set_label("✅ Permissions Set")
@@ -1962,6 +1970,7 @@ class WelcomeDialog:
 
         # Include typing setup status
         result['uinput_fixed'] = self.uinput_fixed
+        result['needs_restart'] = self.restart_needed
         result['needs_uinput_fix'] = self.needs_uinput_fix and not self.uinput_fixed
         result['ydotoold_setup'] = not self.needs_ydotoold_setup or self.ydotoold_fixed
         result['needs_typing_setup'] = (self.needs_uinput_fix and not self.uinput_fixed) or \
@@ -3316,7 +3325,8 @@ def show_welcome_and_install():
     # device permissions during setup (uinput_fixed), typing/hotkeys won't work
     # until a reboot, so the final screen offers "Restart Now" instead of an
     # interrupting popup earlier in the flow.
-    needs_restart = bool(result.get('uinput_fixed')) if isinstance(result, dict) else False
+    needs_restart = (bool(result.get('needs_restart', result.get('uinput_fixed')))
+                     if isinstance(result, dict) else False)
 
     # Turn on launch-at-login by default for new users. A dictation tool is only
     # useful when it's already running, and a fresh install almost always reboots

@@ -1,0 +1,244 @@
+"""Setting up the hotkey helper (secure_input.py) instead of the input group."""
+import subprocess
+
+import pytest
+
+from tuxtalk import secure_input as si
+from tuxtalk import hotkey_helper
+
+
+def test_the_install_script_is_valid_bash_and_installs_root_owned():
+    script = si.install_script()
+    assert subprocess.run(["bash", "-n"], input=script, text=True).returncode == 0
+    assert f"mv -fT \"$tmp\" {si.HELPER_PATH}" in script
+    assert script.startswith("set -euo pipefail\numask 022\n")
+    assert 'chown root:root "$tmp"' in script
+    assert "systemctl restart tuxtalk-hotkeys.service" in script
+    # The helper is copied exactly, so the service runs this TuxTalk's helper.
+    assert si.helper_source() in script
+
+
+def test_the_uninstall_script_is_valid_bash_and_takes_everything_away():
+    script = si.uninstall_script()
+    assert subprocess.run(["bash", "-n"], input=script, text=True).returncode == 0
+    for path in (si.UNIT_PATH, si.HELPER_PATH, si.UINPUT_RULE_PATH):
+        assert path in script
+
+
+@pytest.mark.parametrize("line", [
+    "DynamicUser=yes", "SupplementaryGroups=input", "DevicePolicy=closed",
+    "DeviceAllow=char-input rw", "PrivateNetwork=yes", "ProtectHome=yes",
+    "ProtectSystem=strict", "NoNewPrivileges=yes", "CapabilityBoundingSet=",
+    "RestrictAddressFamilies=AF_UNIX", "SystemCallFilter=@system-service",
+])
+def test_the_service_is_locked_down(line):
+    assert line in si.UNIT.splitlines()
+
+
+def test_the_service_runs_the_root_owned_copy_in_isolated_mode():
+    assert f"ExecStart={si.PYTHON} -I -S {si.HELPER_PATH}" in si.UNIT
+    assert si.HELPER_PATH.startswith("/usr/local/libexec/")
+
+
+def test_the_uinput_rule_uses_uaccess_before_logind_applies_it():
+    assert 'TAG+="uaccess"' in si.UINPUT_RULE and 'KERNEL=="uinput"' in si.UINPUT_RULE
+    number = int(si.UINPUT_RULE_PATH.rsplit("/", 1)[1].split("-")[0])
+    assert number < 73            # 73-seat-late.rules turns the tag into access
+
+
+def test_the_script_goes_to_pkexec_on_stdin_not_through_a_file(monkeypatch):
+    seen = {}
+
+    def fake_run(cmd, **kwargs):
+        seen.update(cmd=cmd, **kwargs)
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+    monkeypatch.setattr(si.subprocess, "run", fake_run)
+    assert si._pkexec("echo hi", "tested") == (True, "")
+    assert seen["cmd"] == ["pkexec", "/bin/bash", "-s"]
+    assert seen["input"] == "echo hi"
+
+
+def test_fix_uses_the_helper_where_it_can_and_needs_no_restart(monkeypatch):
+    monkeypatch.setattr(si, "can_install", lambda: (True, ""))
+    monkeypatch.setattr(si, "install_with_pkexec", lambda: (True, ""))
+    assert si.fix_permissions() == (True, "", False)
+    lines, restarts = si.fix_description()
+    assert not restarts and "hotkey helper" in lines[0]
+
+
+def test_fix_falls_back_to_the_input_group(monkeypatch):
+    from tuxtalk import uinput_helper
+    monkeypatch.setattr(uinput_helper, "install_udev_rule_with_pkexec", lambda: (True, "ok"))
+    assert si.fix_permissions() == (True, "ok", True)
+    lines, restarts = si.fix_description()
+    assert restarts and "'input' group" in lines[1]
+
+
+def test_a_running_helper_counts_as_hotkeys_working(monkeypatch):
+    from tuxtalk import uinput_helper, hotkey_helper_client
+
+    class Connected:
+        def close(self):
+            pass
+    monkeypatch.setattr(hotkey_helper_client, "connect_helper", lambda: Connected())
+    monkeypatch.setattr(uinput_helper, "_readable_keyboards", lambda: [])
+    ok, reason = uinput_helper.check_input_read_permission()
+    assert ok and "hotkey helper" in reason
+
+
+def test_first_run_fix_with_the_helper_asks_for_no_restart(monkeypatch):
+    from tuxtalk import uinput_helper, welcome_dialog as wd
+    monkeypatch.setattr(si, "can_install", lambda: (True, ""))
+    monkeypatch.setattr(si, "install_with_pkexec", lambda: (True, ""))
+    monkeypatch.setattr(uinput_helper, "ensure_ydotoold_running", lambda: None)
+    monkeypatch.setattr(uinput_helper, "check_ydotoold_running", lambda: True)
+    result = wd._fix_typing_steps(do_ydotoold=False, do_uinput=True)
+    assert result["uinput_fixed"] and result["needs_restart"] is False
+
+
+def test_preferences_offers_the_helper_to_input_group_users(monkeypatch):
+    from tuxtalk import prefs as P, uinput_helper
+
+    class Label:
+        markup = ""
+
+        def set_markup(self, m):
+            self.markup = m
+
+    class Button:
+        label, sensitive = "", None
+
+        def set_label(self, v):
+            self.label = v
+
+        def set_sensitive(self, v):
+            self.sensitive = v
+
+    monkeypatch.setattr(uinput_helper, "check_all_device_permissions", lambda: (True, ""))
+    monkeypatch.setattr(uinput_helper, "check_user_in_input_group", lambda: False)
+    monkeypatch.setattr(si, "can_install", lambda: (True, ""))
+    prefs = P.PreferencesWindow.__new__(P.PreferencesWindow)
+    prefs.typing_status_label, prefs.fix_typing_button = Label(), Button()
+    prefs._check_typing_status()
+    assert prefs.fix_typing_button.label == P.SWITCH_TO_HELPER_LABEL
+    assert prefs.fix_typing_button.sensitive
+    assert "'input' group" in prefs.typing_status_label.markup
+
+    monkeypatch.setattr(si, "running_version", lambda: hotkey_helper.VERSION)
+    prefs._check_typing_status()
+    assert prefs.fix_typing_button.label == "✓ Ready" and not prefs.fix_typing_button.sensitive
+
+
+def _typing_prefs(monkeypatch, *, running, installed=True, in_group=False):
+    from tuxtalk import prefs as P, uinput_helper
+
+    class Widget:
+        markup = label = ""
+        sensitive = visible = None
+
+        def set_markup(self, m):
+            self.markup = m
+
+        def set_label(self, v):
+            self.label = v
+
+        def set_sensitive(self, v):
+            self.sensitive = v
+
+        def set_visible(self, v):
+            self.visible = v
+
+    monkeypatch.setattr(uinput_helper, "check_all_device_permissions", lambda: (True, ""))
+    monkeypatch.setattr(uinput_helper, "check_user_in_input_group", lambda: in_group)
+    monkeypatch.setattr(si, "running_version", lambda: running)
+    monkeypatch.setattr(si, "is_installed", lambda: installed)
+    prefs = P.PreferencesWindow.__new__(P.PreferencesWindow)
+    prefs.typing_status_label, prefs.fix_typing_button = Widget(), Widget()
+    prefs._check_typing_status()
+    return P, prefs
+
+
+def test_an_older_helper_is_offered_an_update(monkeypatch):
+    P, prefs = _typing_prefs(monkeypatch, running="1.0")
+    assert prefs.fix_typing_button.label == P.UPDATE_HELPER_LABEL and prefs.fix_typing_button.sensitive
+    assert "newer hotkey helper" in prefs.typing_status_label.markup
+
+
+def test_still_in_the_input_group_is_said_plainly(monkeypatch):
+    P, prefs = _typing_prefs(monkeypatch, running=hotkey_helper.VERSION, in_group=True)
+    assert prefs.fix_typing_button.label == P.LEAVE_GROUP_LABEL and prefs.fix_typing_button.sensitive
+    assert "other programs can still read" in prefs.typing_status_label.markup
+
+
+def test_leaving_the_group_uses_pkexecs_own_uid_and_drops_the_old_rule():
+    script = si.leave_input_group_script()
+    assert subprocess.run(["bash", "-n"], input=script, text=True).returncode == 0
+    assert 'id -nu "${PKEXEC_UID:?}"' in script and 'gpasswd -d "$user" input' in script
+    from tuxtalk.uinput_helper import UDEV_RULE_PATH
+    assert f"rm -f {UDEV_RULE_PATH}" in script
+
+
+def test_the_service_keeps_select_safe():
+    assert "LimitNOFILE=512" in si.UNIT.splitlines()
+
+
+def test_switching_leaves_the_input_group_in_the_same_password_prompt():
+    script = si.install_script(leave_group=True)
+    assert subprocess.run(["bash", "-n"], input=script, text=True).returncode == 0
+    assert 'id -nu "${PKEXEC_UID:?}"' in script and 'gpasswd -d "$user" input' in script
+    assert script.index("gpasswd") < script.index("systemctl restart")
+    assert "gpasswd" not in si.install_script()      # a new user is never in it
+
+
+@pytest.mark.parametrize("shortcut, refused", [
+    ("Ctrl+Alt+P", False), ("Ctrl+Super+V", False), ("Ctrl+Shift+H", True),
+    ("Alt+P", True), ("Super+V", True), ("Shift+F8", False), ("", False),
+])
+def test_which_shortcuts_the_helper_refuses(shortcut, refused):
+    from tuxtalk.hotkey_helper_client import refused_shortcut
+    assert refused_shortcut(shortcut) is refused
+
+
+def test_a_hand_edited_shortcut_that_cant_work_is_warned_about(monkeypatch):
+    from tuxtalk import prefs as P, uinput_helper
+
+    class Widget:
+        markup = label = ""
+        sensitive = None
+
+        def set_markup(self, m):
+            self.markup = m
+
+        def set_label(self, v):
+            self.label = v
+
+        def set_sensitive(self, v):
+            self.sensitive = v
+
+    monkeypatch.setattr(uinput_helper, "check_all_device_permissions", lambda: (True, ""))
+    monkeypatch.setattr(uinput_helper, "check_user_in_input_group", lambda: False)
+    monkeypatch.setattr(si, "running_version", lambda: hotkey_helper.VERSION)
+    prefs = P.PreferencesWindow.__new__(P.PreferencesWindow)
+    prefs.typing_status_label, prefs.fix_typing_button = Widget(), Widget()
+    prefs.config = {"voice_commands_hotkey": "Ctrl+Shift+H", "paste_last_hotkey": "Ctrl+Alt+P"}
+    prefs._check_typing_status()
+    assert "Ctrl+Shift+H won't work" in prefs.typing_status_label.markup
+    assert "Ctrl+Alt+P" not in prefs.typing_status_label.markup
+
+
+def test_still_being_in_the_group_is_reported_not_hidden(monkeypatch):
+    """gpasswd can fail (the group in /usr/lib/group on an immutable system):
+    the script says so, and Preferences then doesn't claim the user left."""
+    for script in (si.install_script(leave_group=True), si.leave_input_group_script()):
+        assert f"echo {si.STILL_IN_GROUP}" in script
+        assert subprocess.run(["bash", "-n"], input=script, text=True).returncode == 0
+    ran = subprocess.run(["bash", "-s"], text=True, capture_output=True,
+                         input='user=$(id -nu)\n' + si._still_in_group_check())
+    groups = subprocess.run(["id", "-nG"], text=True, capture_output=True).stdout.split()
+    assert (si.STILL_IN_GROUP in ran.stdout) == ("input" in groups)
+
+    class Done:
+        returncode, stdout, stderr = 0, si.STILL_IN_GROUP + "\n", ""
+
+    monkeypatch.setattr(si.subprocess, "run", lambda *a, **k: Done())
+    assert si._pkexec("true", "tested") == (True, si.STILL_IN_GROUP)

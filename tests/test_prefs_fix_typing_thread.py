@@ -25,6 +25,9 @@ class FakeButton:
     def set_label(self, text):
         self.label = text
 
+    def get_label(self):
+        return self.label
+
     def set_sensitive(self, value):
         self.sensitive = value
 
@@ -51,6 +54,9 @@ def test_pkexec_runs_off_the_gtk_thread_and_a_failure_resets_the_button(monkeypa
     monkeypatch.setattr(P.GLib, "idle_add", lambda fn, *a: idle.append((fn, a)))
     monkeypatch.setattr(P, "message_dialog", lambda **k: FakeDialog(P.Gtk.ResponseType.YES))
     ran_in = []
+    from tuxtalk import secure_input
+    # The "input" group route; the hotkey helper's goes the same way.
+    monkeypatch.setattr(secure_input, "can_install", lambda: (False, "test"))
     monkeypatch.setattr(uinput_helper, "install_udev_rule_with_pkexec",
                         lambda *a: ran_in.append(threading.current_thread()) or
                         (False, "Authentication was cancelled"))
