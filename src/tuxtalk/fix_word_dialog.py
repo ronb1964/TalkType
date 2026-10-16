@@ -285,7 +285,7 @@ class _FixWordDialog:
         except ConfigNotLoadedError:
             self._show_warning(
                 "Your snippets file couldn't be read, so nothing was saved. "
-                "Open Preferences, Snippets, to check it.")
+                "Open Preferences, Words, to check it.")
             return
         except Exception as e:
             logger.error(f"Could not save word fix: {e}")

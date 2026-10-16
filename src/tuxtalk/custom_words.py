@@ -1,7 +1,7 @@
 """Your Words: names and terms TuxTalk should spell the user's way.
 
-Set in Preferences > Snippets > Your Words and kept in custom_words.txt, one
-per line, next to the snippets file. They are used twice:
+Set in Preferences > Words and kept in custom_words.txt, one per line, next
+to the snippets file. They are used twice:
 
 - Whisper models are told about them before they listen: faster-whisper's
   `hotwords` and whisper.cpp's `prompt`. That steers Whisper towards the
@@ -76,10 +76,23 @@ def load(strict=False):
         return []
 
 
+# The header save() writes. A file without it predates the Words tab, whose
+# first opening moves the user's word fixes in (vocabulary.adopt_fixes).
+HEADER = "# TuxTalk: your words, one per line (Preferences > Words)"
+
+
 def save(words):
     """Write *words* to custom_words.txt, under a header comment."""
-    lines = ["# TuxTalk: your words, one per line (Preferences > Snippets > Your Words)"]
-    config.write_text_atomic(path(), "\n".join(lines + list(words)) + "\n")
+    config.write_text_atomic(path(), "\n".join([HEADER] + list(words)) + "\n")
+
+
+def has_header():
+    """Whether custom_words.txt starts with today's HEADER."""
+    try:
+        with open(path(), encoding="utf-8") as f:
+            return f.readline().rstrip("\n") == HEADER
+    except (OSError, UnicodeDecodeError):
+        return False
 
 
 # What Fix a Word may add: a word or a short name, not an email address, a

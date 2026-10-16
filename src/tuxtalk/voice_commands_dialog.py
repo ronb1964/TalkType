@@ -166,6 +166,6 @@ Say <b>literal</b> or <b>the word</b> before a basic punctuation or line-break w
   <b>literal new line</b> → "new line"
 
 <b>Snippets</b>
-Say a short phrase, get the full text. Add your own in Preferences → Snippets.
+Say a short phrase, get the full text. Add your own in Preferences → Words.
   Wrap the text in <b>"quotes"</b> to type it exactly as written
   (bypasses auto-capitalization and punctuation).'''

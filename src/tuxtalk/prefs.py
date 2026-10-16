@@ -13,7 +13,7 @@ import dbus.mainloop.glib
 from dataclasses import asdict
 from .config import (CONFIG_PATH, ConfigNotLoadedError, Settings, changed_keys, merge_changed_keys,
                      load_custom_commands, save_custom_commands, write_text_atomic,
-                     merge_custom_command_edits, CUSTOM_COMMANDS_PATH,
+                     merge_custom_command_edits,
                      _toml_value, CLASSIC_CYAN_HEX)
 
 # Set on the Preferences window so prefs_style.css — which must be installed
@@ -770,14 +770,14 @@ class PreferencesWindow:
         advanced_tab = self.create_advanced_tab()
         notebook.append_page(self._scrollable_tab(advanced_tab), Gtk.Label(label="Advanced"))
 
-        # Snippets tab (custom voice commands). Its snippet list has a scroll of
-        # its own, which the wheel must still reach, so the page scroll leaves
+        # Words tab (Your Words and the snippets). Its lists have scrolls of
+        # their own, which the wheel must still reach, so the page scroll leaves
         # the wheel alone; the tab has no dropdowns or sliders to protect.
         # Its whole content sets the window's opening height (see below).
         commands_tab = self.create_commands_tab()
         commands_page = self._scrollable_tab(commands_tab, capture_wheel=False)
         commands_page.set_propagate_natural_height(True)
-        notebook.append_page(commands_page, Gtk.Label(label="Snippets"))
+        notebook.append_page(commands_page, Gtk.Label(label="Words"))
 
         # Stats tab (usage stats: words dictated, time saved)
         stats_tab = self.create_stats_tab()
@@ -2650,99 +2650,84 @@ class PreferencesWindow:
         self.on_cancel(None)
     
     def create_commands_tab(self):
-        """Create the Snippets tab (custom voice commands, saved in custom_commands.toml)."""
+        """Create the Words tab: Your Words, each with the mishearings fixed to
+        it, then the Snippets. Underneath, every mishearing and snippet is a
+        custom voice command (custom_commands.toml); the ones that type one of
+        Your Words (custom_words.txt) are that word's (vocabulary.py)."""
+        from . import vocabulary
         vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         vbox.set_margin_start(20)
         vbox.set_margin_end(20)
         vbox.set_margin_top(15)
         vbox.set_margin_bottom(15)
-        
-        # Header
-        header = Gtk.Label()
-        header.set_markup('<span size="large"><b>Snippets</b></span>')
-        header.set_xalign(0)
-        vbox.pack_start(header, False, False, 0)
-        
-        # Description
-        desc = Gtk.Label()
-        desc.set_markup(
-            '<span>Say a short phrase and TuxTalk types the full text. For example, '
-            'say "my email" and it types user@example.com.</span>'
-        )
-        desc.set_xalign(0)
-        desc.set_line_wrap(True)
-        vbox.pack_start(desc, False, False, 5)
 
-        # Fix a Word saves into this same list, so it gets a home here as well
-        # as in the tray menu.
-        fix_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        fix_label = Gtk.Label()
-        fix_label.set_markup(
-            '<span>Does TuxTalk keep getting a word wrong? Pick it out of a '
-            'recent dictation and type the right spelling. The fix shows up in this list, '
-            'where you can edit or remove it.</span>')
-        fix_label.set_xalign(0)
-        fix_label.set_line_wrap(True)
-        fix_row.pack_start(fix_label, True, True, 0)
-        fix_btn = Gtk.Button(label="Fix a Word...")
-        fix_btn.set_valign(Gtk.Align.CENTER)
-        fix_btn.set_tooltip_text("Teach TuxTalk a word from one of your recent dictations")
-        fix_btn.connect("clicked", self._on_fix_word)
-        fix_row.pack_start(fix_btn, False, False, 0)
-        vbox.pack_start(fix_row, False, False, 5)
+        # Once: word fixes saved before this tab existed are listed with
+        # their word, not among the snippets.
+        try:
+            if vocabulary.adopt_fixes():
+                print("Word fixes moved under Your Words")
+        except Exception as e:
+            print(f"Word fixes not moved under Your Words: {e}")
 
-        # Your Words (custom_words.py): spelled the user's way, in every engine.
-        words_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        words_label = Gtk.Label()
-        words_label.set_markup(
-            '<span>Names and terms TuxTalk should always spell your way, '
-            'like TuxTalk or Kubernetes.</span>')
-        words_label.set_xalign(0)
-        words_label.set_line_wrap(True)
-        words_row.pack_start(words_label, True, True, 0)
-        words_btn = Gtk.Button(label="Your Words...")
-        words_btn.set_valign(Gtk.Align.CENTER)
-        words_btn.set_tooltip_text("Names and terms to spell your way, one per line")
-        words_btn.connect("clicked", self._on_your_words)
-        words_row.pack_start(words_btn, False, False, 0)
-        vbox.pack_start(words_row, False, False, 5)
+        def section(title, text):
+            header = Gtk.Label(xalign=0)
+            header.set_markup(f'<span size="large"><b>{title}</b></span>')
+            vbox.pack_start(header, False, False, 0)
+            desc = Gtk.Label(label=text, xalign=0)
+            desc.set_line_wrap(True)
+            vbox.pack_start(desc, False, False, 0)
 
-        # Buttons for add/remove (at the top for easy access)
-        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        button_box.set_margin_top(5)
-        button_box.set_margin_bottom(5)
+        def table(store, titles, min_height, max_height):
+            tree = Gtk.TreeView(model=store)
+            scrolled = Gtk.ScrolledWindow()
+            scrolled.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+            scrolled.set_min_content_height(min_height)
+            scrolled.set_max_content_height(max_height)
+            scrolled.set_shadow_type(Gtk.ShadowType.IN)
+            scrolled.add(tree)
+            vbox.pack_start(scrolled, False, False, 0)
+            return tree
 
-        add_btn = Gtk.Button(label="Add Snippet")
-        add_btn.connect("clicked", self._on_add_command)
-        add_btn.get_child().set_xalign(0.5)
-        add_btn.set_tooltip_text("Add a new snippet")
-        button_box.pack_start(add_btn, False, False, 0)
+        def buttons(*specs):
+            box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+            for label, tip, handler, at_end in specs:
+                button = Gtk.Button(label=label)
+                button.set_tooltip_text(tip)
+                button.connect("clicked", handler)
+                (box.pack_end if at_end else box.pack_start)(button, False, False, 0)
+            vbox.pack_start(box, False, False, 0)
 
-        remove_btn = Gtk.Button(label="Remove Selected")
-        remove_btn.connect("clicked", self._on_remove_command)
-        remove_btn.get_child().set_xalign(0.5)
-        remove_btn.set_tooltip_text("Remove the selected snippet")
-        button_box.pack_start(remove_btn, False, False, 0)
+        # --- Your Words: saved as soon as a word is saved or removed, like
+        # Fix a Word, which adds to this list from the tray too.
+        section("Your Words",
+                "Names and terms TuxTalk spells your way. Add what it hears them as, "
+                "and it fixes those too.")
+        self.words_store = Gtk.ListStore(str, str)      # word, its mishearings
+        self.words_tree = table(self.words_store, None, 150, 230)
+        for i, (title, expand) in enumerate((("Spelled", False),
+                                             ("Also fixes when it hears", True))):
+            column = Gtk.TreeViewColumn(title, Gtk.CellRendererText(), text=i)
+            column.set_expand(expand)
+            column.set_min_width(150)
+            self.words_tree.append_column(column)
+        self.words_tree.connect("row-activated", lambda *_: self._on_edit_word(None))
+        buttons(("Add Word", "Add a name or term to spell your way", self._on_add_word, False),
+                ("Edit...", "Change the selected word or what TuxTalk hears it as",
+                 self._on_edit_word, False),
+                ("Remove", "Remove the selected word", self._on_remove_word, False),
+                ("Fix a Word...", "Teach TuxTalk a word from one of your recent dictations",
+                 self._on_fix_word, True))
 
-        vbox.pack_start(button_box, False, False, 0)
+        spacer = Gtk.Box()
+        spacer.set_size_request(-1, 6)
+        vbox.pack_start(spacer, False, False, 0)
 
-        # Create list store for commands: phrase, replacement
-        self.commands_store = Gtk.ListStore(str, str)
-
-        # Load existing commands, and follow the file while this window is
-        # open: Fix a Word (tray or the button above) writes to it directly.
-        self._fill_commands_store(load_custom_commands())
-        self._watch_custom_commands_file()
-
-        # Create tree view
-        scrolled = Gtk.ScrolledWindow()
-        scrolled.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        # Set reasonable height limits - grows with content but doesn't fill empty space
-        scrolled.set_min_content_height(160)  # Show ~5 rows minimum for easier browsing
-        scrolled.set_max_content_height(280)  # Cap at ~10 rows so tips stay visible
-
-        self.commands_tree = Gtk.TreeView(model=self.commands_store)
-        self.commands_tree.set_headers_visible(True)
+        # --- Snippets: edited in place, saved with Apply or OK.
+        section("Snippets",
+                'Say a short phrase and TuxTalk types the full text. For example, '
+                'say "my email" and it types user@example.com.')
+        self.commands_store = Gtk.ListStore(str, str)   # phrase, replacement
+        self.commands_tree = table(self.commands_store, None, 110, 200)
 
         # Phrase column (editable)
         phrase_renderer = Gtk.CellRendererText()
@@ -2768,31 +2753,30 @@ class PreferencesWindow:
         replacement_column.set_min_width(200)
         self.commands_tree.append_column(replacement_column)
 
-        scrolled.add(self.commands_tree)
-        vbox.pack_start(scrolled, False, False, 0)  # Don't expand - stay compact
-        
-        # Tips section
-        tips = Gtk.Label()
-        tips.set_markup(
-            '<span><b>Tips:</b>\n'
-            '• Click on a cell to edit it directly\n'
-            '• Phrases are matched case-insensitively\n'
-            '• Use \\n in the text for line breaks\n'
-            '• Wrap the text in "quotes" to type it exactly as written (no auto-capitalization or punctuation changes)\n'
-            '• Changes are saved when you click Apply or OK\n'
-            '• Changes take effect on your next dictation — no restart needed</span>'
-        )
-        tips.set_xalign(0)
+        buttons(("Add Snippet", "Add a new snippet", self._on_add_command, False),
+                ("Remove Selected", "Remove the selected snippet", self._on_remove_command, False))
+
+        # Load both lists, and follow the files while this window is open:
+        # Fix a Word (tray or the button above) writes to them directly.
+        self._fill_commands_store(load_custom_commands())
+        self._watch_custom_commands_file()
+
+        tips = Gtk.Label(xalign=0)
         tips.set_line_wrap(True)
-        vbox.pack_start(tips, False, False, 10)
-        
+        tips.set_markup(
+            '<small>Click a snippet to edit it. Use \\n in the text for a line break, and '
+            'wrap it in "quotes" to type it exactly as written. Snippets are saved '
+            'when you click Apply or OK; words are saved right away. Both work from '
+            'your next dictation.</small>')
+        vbox.pack_start(tips, False, False, 4)
+
         return vbox
 
     def select_tab(self, name):
         """Show the tab whose label is *name* (case-insensitive). Looked up by
         label so adding a tab can't make --tab or bring_to_front open the wrong one."""
-        # Older callers still ask for the Snippets tab by its former name.
-        name = {"commands": "snippets"}.get(name.lower(), name)
+        # Older callers still ask for the Words tab by its former names.
+        name = {"commands": "words", "snippets": "words"}.get(name.lower(), name)
         for i in range(self.notebook.get_n_pages()):
             label = self.notebook.get_tab_label_text(self.notebook.get_nth_page(i)) or ""
             # Any word of the label: "updates" (the tray's --tab) and
@@ -3569,6 +3553,12 @@ class PreferencesWindow:
         phrase = new_text.strip().lower()
         if not phrase:
             return
+        for word, phrases in getattr(self, "_word_rows", ()):
+            if phrase in phrases:
+                self._message(Gtk.MessageType.WARNING, "That phrase already fixes a word",
+                              f"\u201c{phrase}\u201d is how TuxTalk hears {word}, under "
+                              "Your Words. Change it there, or pick a different phrase.")
+                return
         row_index = int(str(path))
         for i, row in enumerate(self.commands_store):
             if i != row_index and row[0].strip().lower() == phrase:
@@ -3622,38 +3612,166 @@ class PreferencesWindow:
                 commands[phrase] = row[1]
         return commands
 
+    def _split_commands(self, commands):
+        """*commands* as (Your Words rows, snippets): see vocabulary.split_commands."""
+        from . import custom_words, vocabulary
+        return vocabulary.split_commands(custom_words.load(), commands)
+
+    def _fill_words_store(self, rows):
+        self._word_rows = rows
+        if getattr(self, "words_store", None) is None:
+            return
+        self.words_store.clear()
+        for word, phrases in rows:
+            self.words_store.append([word, ", ".join(phrases)])
+
     def _fill_commands_store(self, commands):
-        """Show *commands* in the list and remember them as the saved state,
-        so that later only the user's own edits count as changes."""
+        """Show *commands* in the two lists (the ones typing one of Your Words
+        under it, the rest as snippets) and remember the snippets as the saved
+        state, so that later only the user's own edits count as changes."""
+        rows, snippets = self._split_commands(commands)
+        self._fill_words_store(rows)
         self.commands_store.clear()
-        for phrase, replacement in commands.items():
+        for phrase, replacement in snippets.items():
             self.commands_store.append([phrase, replacement])
         self._commands_loaded = self._commands_from_store()
 
     def _watch_custom_commands_file(self):
-        """Follow custom_commands.toml, which Fix a Word writes from outside this window."""
+        """Follow custom_commands.toml and custom_words.txt, which Fix a Word
+        writes from outside this window."""
         from gi.repository import Gio
-        try:
-            self._commands_monitor = Gio.File.new_for_path(
-                CUSTOM_COMMANDS_PATH).monitor_file(Gio.FileMonitorFlags.NONE, None)
-            self._commands_monitor.connect(
-                "changed", lambda *_: GLib.idle_add(self._on_commands_file_changed))
-        except Exception as e:
-            print(f"Not watching custom commands for outside changes: {e}")
+        from . import config, custom_words
+        self._file_monitors = []
+        for path in (config.CUSTOM_COMMANDS_PATH, custom_words.path()):
+            try:
+                monitor = Gio.File.new_for_path(path).monitor_file(Gio.FileMonitorFlags.NONE, None)
+                monitor.connect("changed", lambda *_: GLib.idle_add(self._on_commands_file_changed))
+                self._file_monitors.append(monitor)
+            except Exception as e:
+                print(f"Not watching {path} for outside changes: {e}")
 
     def _on_commands_file_changed(self):
-        """Show a fix saved from outside this window (Fix a Word).
+        """Show what was saved from outside this window (Fix a Word), or by
+        the word dialog.
 
-        Left alone while the user has unsaved edits in the list: refilling it
-        would throw those away. Saving merges instead (_save_custom_commands),
-        so nothing on disk is lost either way.
+        Your Words are saved as they're made, so that list is always shown as
+        it is on disk. The snippets are left alone while the user has unsaved
+        edits there: refilling would throw those away. Saving merges instead
+        (_save_custom_commands), so nothing on disk is lost either way.
         """
         on_disk = load_custom_commands()
-        if on_disk == self._commands_loaded:
-            return False
+        rows, snippets = self._split_commands(on_disk)
         if self._commands_from_store() == self._commands_loaded:
             self._fill_commands_store(on_disk)
+        else:
+            self._fill_words_store(rows)
         return False  # one-shot idle callback
+
+    def _selected_word(self):
+        """(word, its mishearings) for the selected Your Words row, or None."""
+        model, it = self.words_tree.get_selection().get_selected()
+        if it is None:
+            return None
+        index = model.get_path(it).get_indices()[0]
+        rows = getattr(self, "_word_rows", [])
+        return rows[index] if index < len(rows) else None
+
+    def _on_add_word(self, _button):
+        self._edit_word_dialog(None, [])
+
+    def _on_edit_word(self, _button):
+        row = self._selected_word()
+        if row is None:
+            self._message(Gtk.MessageType.INFO, "Pick a word first",
+                          "Click a word in the list, then Edit. Double-clicking it works too.")
+            return
+        self._edit_word_dialog(*row)
+
+    def _on_remove_word(self, _button):
+        from . import vocabulary
+        row = self._selected_word()
+        if row is None:
+            return
+        word, phrases = row
+        ask = message_dialog(
+            transient_for=self.window, modal=True,
+            message_type=Gtk.MessageType.QUESTION, buttons=Gtk.ButtonsType.YES_NO,
+            text=f"Remove {word}?")
+        ask.format_secondary_text(
+            "TuxTalk stops spelling it your way"
+            + (f", and stops fixing what it hears instead ({', '.join(phrases)})."
+               if phrases else "."))
+        answer = ask.run()
+        ask.destroy()
+        if answer != Gtk.ResponseType.YES:
+            return
+        try:
+            vocabulary.remove_word(word)
+        except Exception as e:
+            self._message(Gtk.MessageType.ERROR, "That word wasn't removed", str(e))
+        self._on_commands_file_changed()
+
+    def _edit_word_dialog(self, old, phrases):
+        """Add a word (*old* None) or change one: its spelling and the phrases
+        TuxTalk hears instead, one per line. Saved straight away."""
+        from . import vocabulary
+        dialog = Gtk.Dialog(title="Your Word" if old else "Add a Word",
+                            transient_for=self.window, modal=True)
+        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        dialog.add_button("Save", Gtk.ResponseType.OK)
+        dialog.set_default_response(Gtk.ResponseType.OK)
+        box = dialog.get_content_area()
+        for side in ("start", "end", "top", "bottom"):
+            getattr(box, f"set_margin_{side}")(16)
+        box.set_spacing(8)
+
+        box.pack_start(Gtk.Label(label="Spelled", xalign=0), False, False, 0)
+        entry = Gtk.Entry(text=old or "")
+        entry.set_placeholder_text("TuxTalk")
+        entry.set_activates_default(True)
+        box.pack_start(entry, False, False, 0)
+
+        heard = Gtk.Label(xalign=0)
+        heard.set_markup("What TuxTalk hears instead, <b>one per line</b> (if anything)")
+        heard.set_margin_top(6)
+        box.pack_start(heard, False, False, 0)
+        view = Gtk.TextView()
+        view.set_left_margin(6)
+        view.get_buffer().set_text("\n".join(phrases))
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        scrolled.set_min_content_height(110)
+        scrolled.set_min_content_width(380)
+        scrolled.set_shadow_type(Gtk.ShadowType.IN)
+        scrolled.add(view)
+        box.pack_start(scrolled, True, True, 0)
+
+        how = Gtk.Label(xalign=0)
+        how.set_line_wrap(True)
+        how.set_max_width_chars(56)
+        how.set_markup(
+            "<small>Whisper models are told about your words before they listen. "
+            "Every model, Parakeet included, fixes them when they come out split up "
+            "or with the wrong capitals (\u201ctux talk\u201d becomes TuxTalk), and "
+            "fixes what you list above.</small>")
+        box.pack_start(how, False, False, 0)
+
+        dialog.show_all()
+        try:
+            while dialog.run() == Gtk.ResponseType.OK:
+                buf = view.get_buffer()
+                lines = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False).splitlines()
+                try:
+                    vocabulary.save_word(entry.get_text(), lines, old=old)
+                except vocabulary.WordProblem as e:
+                    self._message(Gtk.MessageType.WARNING, "That word wasn't saved", str(e))
+                    continue
+                except Exception as e:
+                    self._message(Gtk.MessageType.ERROR, "That word wasn't saved", str(e))
+                break
+        finally:
+            dialog.destroy()
+        self._on_commands_file_changed()
 
     def bring_to_front(self, tab=None):
         """Show this window in front of the others (another "open" happened)."""
@@ -3665,79 +3783,6 @@ class PreferencesWindow:
     def _on_fix_word(self, _button):
         from .fix_word_dialog import show_fix_word_dialog
         show_fix_word_dialog(0)
-
-    def _on_your_words(self, _button):
-        """Edit Your Words: one per line, saved straight to custom_words.txt
-        (like Fix a Word, not on Apply). The service reloads the file before
-        the next dictation."""
-        from . import custom_words
-        try:
-            words = custom_words.load(strict=True)
-        except (OSError, UnicodeDecodeError) as e:
-            # Opening it empty would let Save wipe the user's words.
-            err = message_dialog(
-                transient_for=self.window, modal=True,
-                message_type=Gtk.MessageType.ERROR, buttons=Gtk.ButtonsType.OK,
-                text="Couldn't read your words")
-            err.format_secondary_text(f"{custom_words.path()}\n\n{e}")
-            err.run()
-            err.destroy()
-            return
-        dialog = Gtk.Dialog(title="Your Words", transient_for=self.window, modal=True)
-        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
-        dialog.add_button("Save", Gtk.ResponseType.OK)
-        dialog.set_default_response(Gtk.ResponseType.OK)
-        box = dialog.get_content_area()
-        for side in ("start", "end", "top", "bottom"):
-            getattr(box, f"set_margin_{side}")(16)
-        box.set_spacing(10)
-
-        intro = Gtk.Label(xalign=0)
-        intro.set_markup("Names and terms you want spelled your way, <b>one per line</b>.")
-        box.pack_start(intro, False, False, 0)
-
-        view = Gtk.TextView()
-        view.set_wrap_mode(Gtk.WrapMode.NONE)
-        view.set_left_margin(6)
-        view.get_buffer().set_text("\n".join(words))
-        scrolled = Gtk.ScrolledWindow()
-        scrolled.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        scrolled.set_min_content_height(180)
-        scrolled.set_min_content_width(420)
-        scrolled.set_shadow_type(Gtk.ShadowType.IN)
-        scrolled.add(view)
-        box.pack_start(scrolled, True, True, 0)
-
-        how = Gtk.Label(xalign=0)
-        how.set_line_wrap(True)
-        how.set_max_width_chars(60)
-        how.set_markup(
-            "<small>Whisper models are told about these before they listen, so "
-            "they spell them your way. Every model, Parakeet included, also fixes "
-            "them when they come out split up or with the wrong capitals: "
-            "\u201ctux talk\u201d becomes TuxTalk. Parakeet can\u2019t be told about "
-            "words ahead of time, so if it hears one as something else entirely, "
-            "use Fix a Word.</small>")
-        box.pack_start(how, False, False, 0)
-
-        dialog.show_all()
-        try:
-            if dialog.run() == Gtk.ResponseType.OK:
-                buf = view.get_buffer()
-                text = buf.get_text(buf.get_start_iter(), buf.get_end_iter(), False)
-                try:
-                    custom_words.save(custom_words.parse(text))
-                except OSError as e:
-                    print(f"Could not save your words: {e}")
-                    err = message_dialog(
-                        transient_for=self.window, modal=True,
-                        message_type=Gtk.MessageType.ERROR, buttons=Gtk.ButtonsType.OK,
-                        text="Couldn't save your words")
-                    err.format_secondary_text(str(e))
-                    err.run()
-                    err.destroy()
-        finally:
-            dialog.destroy()
 
     def _save_custom_commands(self):
         """Save custom commands from the list store.

@@ -139,7 +139,8 @@ def _commands_window(rows, loaded=None):
     """A stand-in PreferencesWindow with just the Voice Commands list."""
     import types
     d = SimpleNamespace(commands_store=rows, _commands_loaded=loaded or {})
-    for name in ("_commands_from_store", "_fill_commands_store", "_save_custom_commands"):
+    for name in ("_commands_from_store", "_fill_commands_store", "_save_custom_commands",
+                 "_split_commands", "_fill_words_store"):
         setattr(d, name, types.MethodType(getattr(PreferencesWindow, name), d))
     return d
 

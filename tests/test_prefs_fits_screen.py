@@ -73,13 +73,13 @@ def test_short_screen_caps_the_opening_height(monkeypatch):
         w.window.destroy()
 
 
-def test_tall_screen_opens_with_snippets_shown_whole(monkeypatch):
-    """At full size the Snippets tab needs no scrolling, as before."""
+def test_tall_screen_opens_with_words_shown_whole(monkeypatch):
+    """At full size the Words tab (Your Words and the snippets) needs no scrolling."""
     w = _build(monkeypatch, 2000)
     try:
         _width, height = w.window.get_default_size()
         snippets = w.notebook.get_nth_page(3)
-        assert w.notebook.get_tab_label_text(snippets) == "Snippets"
+        assert w.notebook.get_tab_label_text(snippets) == "Words"
         content = snippets.get_child()
         if isinstance(content, Gtk.Viewport):
             content = content.get_child()

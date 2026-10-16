@@ -27,7 +27,8 @@ def _window(rows):
     d.commands_tree = SimpleNamespace(set_cursor=lambda *a: None, get_column=lambda i: i)
     d._message = lambda kind, title, text, buttons=None: d.messages.append(title)
     for name in ("_commands_from_store", "_fill_commands_store", "_save_custom_commands",
-                 "_on_add_command", "_on_phrase_edited", "_warn_duplicate_phrase"):
+                 "_on_add_command", "_on_phrase_edited", "_warn_duplicate_phrase",
+                 "_split_commands", "_fill_words_store"):
         setattr(d, name, types.MethodType(getattr(PreferencesWindow, name), d))
     return d
 

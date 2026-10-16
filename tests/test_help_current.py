@@ -32,9 +32,9 @@ def test_no_red_indicator_or_dimmed_icon():
     assert "Preferences → Audio" in HELP
 
 
-def test_fix_a_word_lives_on_the_commands_tab():
+def test_fix_a_word_lives_on_the_words_tab():
     assert "Preferences → Voice Commands" not in HELP
-    assert "Preferences → Snippets → Fix a Word" in HELP
+    assert "Preferences → Words → Fix a Word" in HELP
 
 
 def test_quote_lines_show_curly_quotes():

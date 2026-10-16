@@ -166,3 +166,14 @@ def _no_real_hotkey_helper_or_pkexec(monkeypatch, tmp_path):
             pytest.fail(f"a test tried to run pkexec: {cmd[:3]}")
         return real_run(cmd, *args, **kwargs)
     monkeypatch.setattr(subprocess, "run", guarded_run)
+
+
+@pytest.fixture(autouse=True)
+def _no_real_snippets_or_words(monkeypatch, tmp_path_factory):
+    """Snippets (custom_commands.toml) and Your Words (custom_words.txt, beside
+    it) live in a throwaway folder for every test. Building Preferences moves
+    word fixes into Your Words the first time (vocabulary.adopt_fixes); run
+    against the user's real files, a test would do that for real."""
+    from tuxtalk import config
+    folder = tmp_path_factory.mktemp("snippets")
+    monkeypatch.setattr(config, "CUSTOM_COMMANDS_PATH", str(folder / "custom_commands.toml"))

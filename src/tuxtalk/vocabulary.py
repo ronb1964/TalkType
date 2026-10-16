@@ -7,15 +7,20 @@ voice command, so:
 
 - it works for every engine. It rewrites the transcription after the model
   heard it; Parakeet has no way to be told about words beforehand.
-- it shows up (and can be edited or removed) in Preferences > Snippets.
 - the corrected word is also added to Your Words (custom_words.py), so
-  Whisper models are told about it before they listen.
+  Whisper models are told about it before they listen, and the fix shows up
+  under that word in Preferences > Words, where it can be edited or removed.
 - the dictation service picks it up on the next dictation, because it
   reloads custom_commands.toml whenever the file changes.
+
+The Words tab works the same way: a word's mishearings are custom voice
+commands that type that word, so the dictation service treats them like any
+other. Commands that type something else are the Snippets.
 
 The dialog lives in fix_word_dialog.py; this module is the part with no GTK,
 so the rules can be tested.
 """
+import os
 import re
 
 from . import config
@@ -134,3 +139,117 @@ def save_fix(phrase, replacement):
         from .logger import setup_logger
         setup_logger(__name__).warning(f"Fix saved, but not added to your words: {e}")
     return previous
+
+
+# --- the Words tab ------------------------------------------------------------
+
+class WordProblem(ValueError):
+    """A word or mishearing the Words tab can't save; the message says why."""
+
+
+def _clean_phrase(phrase):
+    return " ".join(phrase.split()).lower()
+
+
+def split_commands(words, commands):
+    """(rows, snippets) for the Words tab. rows: each of *words* with the
+    command phrases that type exactly it, [(word, [phrase, ...])] in the
+    words' order. snippets: every other command."""
+    fixes = {word: [] for word in words}
+    snippets = {}
+    for phrase, replacement in commands.items():
+        if replacement in fixes:
+            fixes[replacement].append(phrase)
+        else:
+            snippets[phrase] = replacement
+    return [(word, fixes[word]) for word in words], snippets
+
+
+def adopt_fixes():
+    """Once, the first time the Words tab opens: add the spelling each word
+    fix types ("clawed claw" -> ClaudeClaw) to Your Words, so the fixes are
+    listed under their word and not among the snippets. Only what Fix a Word
+    would add itself (custom_words.learn_fix); a copy of the old words file
+    is kept beside it. Returns whether Your Words changed."""
+    import shutil
+    from . import custom_words
+    if custom_words.has_header():
+        return False
+    commands = config.load_custom_commands()
+    if config._commands_read_failed:
+        return False            # try again when the file can be read
+    try:
+        words = custom_words.load(strict=True)
+    except (OSError, UnicodeDecodeError):
+        return False
+    known = {w.casefold() for w in words}
+    added = []
+    for replacement in commands.values():
+        word = replacement.strip()
+        if (custom_words.is_word_like(word) and word.casefold() not in _COMMON_WORDS
+                and word.casefold() not in known):
+            known.add(word.casefold())
+            added.append(word)
+    old = custom_words.path()
+    if os.path.exists(old):
+        shutil.copyfile(old, old + ".before-words-tab")
+    custom_words.save(words + added)       # the header marks it done
+    return bool(added)
+
+
+def save_word(word, phrases, old=None):
+    """Save one row of the Words tab: *word*, and the *phrases* TuxTalk hears
+    instead, which are fixed to it. *old* is the word the row had (None for a
+    new row). Raises WordProblem (nothing written) for a clash, and
+    config.ConfigNotLoadedError for a snippets file that can't be read."""
+    from . import custom_words
+    word = word.strip()
+    if not custom_words.is_word_like(word):
+        raise WordProblem("Type the word the way it should be spelled: a name or a "
+                          "short term, not a sentence or an address.")
+    commands = config.load_custom_commands()
+    if config._commands_read_failed:
+        raise config.ConfigNotLoadedError("The snippets file couldn't be read.")
+    words = custom_words.load(strict=True)
+    if old is not None and old not in words:
+        old = None                       # removed meanwhile: save it as new
+    for other in words:
+        if other != old and other.casefold() == word.casefold():
+            raise WordProblem(f"{other} is already one of your words.")
+    wanted = []
+    for phrase in map(_clean_phrase, phrases):
+        if not phrase or phrase in wanted:
+            continue
+        if is_risky(phrase):
+            raise WordProblem(f"\u201c{phrase}\u201d is an everyday word: TuxTalk would "
+                              f"change it every time you say it.")
+        taken = commands.get(phrase)
+        if taken is not None and taken not in (old, word):
+            raise WordProblem(f"\u201c{phrase}\u201d already types \u201c{taken}\u201d. "
+                              "Change or remove that one first.")
+        wanted.append(phrase)
+    if old is not None:
+        # The row's own list is the whole list: a phrase taken off stops.
+        # (A new word keeps any snippet already typing it; it's listed
+        # under the word from now on.)
+        commands = {p: r for p, r in commands.items() if r not in (old, word) or p in wanted}
+    for phrase in wanted:
+        commands[phrase] = word
+    config.save_custom_commands(commands)
+    if old is not None:
+        words[words.index(old)] = word
+    elif word not in words:
+        words.append(word)
+    custom_words.save(words)
+
+
+def remove_word(word):
+    """Take *word* off Your Words, and the mishearings fixed to it. Raises
+    config.ConfigNotLoadedError for a snippets file that can't be read."""
+    from . import custom_words
+    commands = config.load_custom_commands()
+    if config._commands_read_failed:
+        raise config.ConfigNotLoadedError("The snippets file couldn't be read.")
+    words = custom_words.load(strict=True)
+    config.save_custom_commands({p: r for p, r in commands.items() if r != word})
+    custom_words.save([w for w in words if w != word])

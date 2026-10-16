@@ -272,11 +272,12 @@ After choosing one, the tray's Device line shows where it really runs.
 <b>Fix a Word</b> (teach TuxTalk a word it keeps getting wrong)
 • Say <b>fix that word</b> right after a dictation: Fix a Word opens over your window
   on what you just said
-• Or tray menu → Fix a Word..., or Preferences → Snippets → Fix a Word...
+• Or tray menu → Fix a Word..., or Preferences → Words → Fix a Word...
 • Pick a recent dictation, click the wrong word (or drag across a few),
   type the right spelling, then click Always fix this
 • From then on it's fixed in every dictation, with any speech model
-• Your fixes live in Preferences → Snippets, where you can edit or remove them
+• Your fixes are listed under the word in Preferences → Words, where you can
+  edit or remove them
 • Handy for names, brands and technical terms, like "bamboo studio" → BambuStudio
 
 <b>Transcribe a File</b> (tray menu → Transcribe a File...)
@@ -608,7 +609,7 @@ Result: First sentence.
 Second sentence!
 
 <b>Snippets:</b>
-Say a short phrase and TuxTalk types the full text. Add your own in Preferences → Snippets.
+Say a short phrase and TuxTalk types the full text. Add your own in Preferences → Words.
 
 Examples:
 • "my email" → "user@example.com"
@@ -618,13 +619,14 @@ To type a snippet exactly as written — bypassing auto-capitalization
 and punctuation — wrap its text in double quotes.
 
 <b>Your Words:</b>
-Names and terms TuxTalk should spell your way, in Preferences → Snippets → Your Words.
+Names and terms TuxTalk should spell your way, in Preferences → Words.
 • Whisper models are told about them before they listen
 • Every model fixes them when they come out split up or with the wrong
   capitals: "tux talk" → TuxTalk
-• Parakeet can't be told about words ahead of time, so for a word it hears as
-  something else entirely, use Fix a Word
-• Words you fix with Fix a Word are added here too
+• Beside each word, list what TuxTalk hears instead ("clawed claw" for
+  ClaudeClaw) and it fixes that too. Parakeet can't be told about words
+  ahead of time, so this is how to teach it
+• Fix a Word adds to this list: the word, and what it heard
 
 <b>Undo Commands:</b>
 • Say <b>undo last word</b> to delete the last word you dictated

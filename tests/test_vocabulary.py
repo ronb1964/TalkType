@@ -181,3 +181,121 @@ def test_an_unreadable_words_file_is_left_alone(commands_file):
     vocabulary.save_fix("bamboo studio", "BambuStudio")
     assert config.load_custom_commands()["bamboo studio"] == "BambuStudio"
     assert words.read_bytes() == b"caf\xe9\n"
+
+
+# --- the Words tab: each word with the mishearings fixed to it -----------------
+
+@pytest.fixture
+def words_file(commands_file):
+    return commands_file.parent / "custom_words.txt"
+
+
+def test_fixes_are_listed_under_their_word():
+    words = ["ClaudeClaw", "TuxTalk"]
+    commands = {"clawed claw": "ClaudeClaw", "my email": "me@example.com",
+                "claude claw": "ClaudeClaw", "bamboo studio": "BambuStudio"}
+    rows, snippets = vocabulary.split_commands(words, commands)
+    assert rows == [("ClaudeClaw", ["clawed claw", "claude claw"]), ("TuxTalk", [])]
+    assert snippets == {"my email": "me@example.com", "bamboo studio": "BambuStudio"}
+
+
+def test_word_fixes_become_your_words_once(commands_file, words_file):
+    from tuxtalk import custom_words
+    custom_words.save(["TuxTalk"])
+    words_file.write_text("# an older header\nTuxTalk\n")
+    config.save_custom_commands({
+        "my email address": "me@example.com", "my address": "37 Main Street, Hamilton, NJ",
+        "by the way": '"/btw "', "clawed claw": "ClaudeClaw", "claude claw": "ClaudeClaw",
+        "kashi os": "CachyOS", "tux talk": "TuxTalk", "and": "their"})
+    assert vocabulary.adopt_fixes() is True
+    assert custom_words.load() == ["TuxTalk", "ClaudeClaw", "CachyOS"]
+    assert (words_file.parent / "custom_words.txt.before-words-tab").read_text() == \
+        "# an older header\nTuxTalk\n"
+    # Done once: a short snippet added later stays a snippet.
+    config.save_custom_commands({"sig": "Ron"})
+    assert vocabulary.adopt_fixes() is False
+    assert custom_words.load() == ["TuxTalk", "ClaudeClaw", "CachyOS"]
+
+
+def test_adopting_leaves_an_unreadable_commands_file_alone(commands_file, words_file):
+    commands_file.write_text("this is [not valid toml")
+    assert vocabulary.adopt_fixes() is False
+    assert not words_file.exists()
+
+
+def test_a_new_word_is_saved_with_its_mishearings(commands_file):
+    from tuxtalk import custom_words
+    config.save_custom_commands({"my email": "me@example.com"})
+    vocabulary.save_word("ClaudeClaw", ["Clawed  Claw", "", "claude claw", "clawed claw"])
+    assert custom_words.load() == ["ClaudeClaw"]
+    assert config.load_custom_commands() == {
+        "my email": "me@example.com", "clawed claw": "ClaudeClaw", "claude claw": "ClaudeClaw"}
+
+
+def test_renaming_a_word_moves_its_fixes_and_keeps_its_place(commands_file):
+    from tuxtalk import custom_words
+    custom_words.save(["TuxTalk", "Claudeclaw", "CachyOS"])
+    config.save_custom_commands({"clawed claw": "Claudeclaw", "kashi os": "CachyOS"})
+    vocabulary.save_word("ClaudeClaw", ["clawed claw", "claude claw"], old="Claudeclaw")
+    assert custom_words.load() == ["TuxTalk", "ClaudeClaw", "CachyOS"]
+    assert config.load_custom_commands() == {
+        "kashi os": "CachyOS", "clawed claw": "ClaudeClaw", "claude claw": "ClaudeClaw"}
+
+
+def test_a_mishearing_taken_off_the_list_stops_being_fixed(commands_file):
+    from tuxtalk import custom_words
+    custom_words.save(["ClaudeClaw"])
+    config.save_custom_commands({"clawed claw": "ClaudeClaw", "claude claw": "ClaudeClaw"})
+    vocabulary.save_word("ClaudeClaw", ["claude claw"], old="ClaudeClaw")
+    assert config.load_custom_commands() == {"claude claw": "ClaudeClaw"}
+
+
+@pytest.mark.parametrize("word, phrases, old, says", [
+    ("ClaudeClaw", ["my email"], None, "my email"),       # a snippet's phrase
+    ("ClaudeClaw", ["kashi os"], None, "CachyOS"),        # another word's
+    ("ClaudeClaw", ["the"], None, "the"),                 # an everyday word
+    ("cachyos", [], None, "CachyOS"),                     # already a word
+    ("", ["clawed claw"], None, "word"),
+    ("TuxTalk\\nhi", [], None, "word"),                   # snippet-like text
+])
+def test_a_word_that_clashes_is_refused_and_nothing_written(commands_file, word, phrases, old, says):
+    from tuxtalk import custom_words
+    custom_words.save(["CachyOS"])
+    config.save_custom_commands({"my email": "me@example.com", "kashi os": "CachyOS"})
+    before = (commands_file.read_text(), (commands_file.parent / "custom_words.txt").read_text())
+    with pytest.raises(vocabulary.WordProblem, match=says):
+        vocabulary.save_word(word, phrases, old=old)
+    assert (commands_file.read_text(), (commands_file.parent / "custom_words.txt").read_text()) == before
+
+
+def test_removing_a_word_removes_its_fixes_only(commands_file):
+    from tuxtalk import custom_words
+    custom_words.save(["ClaudeClaw", "CachyOS"])
+    config.save_custom_commands({"clawed claw": "ClaudeClaw", "my email": "me@example.com",
+                                 "kashi os": "CachyOS"})
+    vocabulary.remove_word("ClaudeClaw")
+    assert custom_words.load() == ["CachyOS"]
+    assert config.load_custom_commands() == {"my email": "me@example.com", "kashi os": "CachyOS"}
+
+
+def test_saving_a_word_refuses_an_unreadable_commands_file(commands_file, words_file):
+    commands_file.write_text("this is [not valid toml")
+    with pytest.raises(config.ConfigNotLoadedError):
+        vocabulary.save_word("ClaudeClaw", ["clawed claw"])
+    assert commands_file.read_text() == "this is [not valid toml"
+    assert not words_file.exists()
+
+
+def test_a_new_word_takes_in_snippets_that_already_type_it(commands_file):
+    config.save_custom_commands({"clawed claw": "ClaudeClaw"})
+    vocabulary.save_word("ClaudeClaw", ["claude claw"])
+    assert config.load_custom_commands() == {"clawed claw": "ClaudeClaw", "claude claw": "ClaudeClaw"}
+
+
+def test_saving_a_word_leaves_an_unreadable_words_file_alone(commands_file, words_file):
+    """Never save a list read as empty over the user's real words."""
+    words_file.write_bytes(b"caf\xe9\n")
+    with pytest.raises(UnicodeDecodeError):
+        vocabulary.save_word("ClaudeClaw", ["clawed claw"])
+    assert words_file.read_bytes() == b"caf\xe9\n"
+    assert config.load_custom_commands() == {}
