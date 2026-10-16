@@ -2609,7 +2609,36 @@ def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: b
     return text
 
 
+# wl-copy opens a window of its own for a moment to set the clipboard. It
+# never receives the dictation, so it's never the window the text went to.
+_CLIPBOARD_TOOL_CLASSES = frozenset({"io.github.bugaevc.wl-clipboard", "wl-clipboard"})
+
+
 def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = False) -> str:
+    """Insert *text* into the active app (_deliver_text), then remember the
+    window it really landed in, for undo, "fix that word" and select and move.
+
+    The focus is checked once more after typing because the report from
+    before can be out of date. On KDE, clicking the desktop reports
+    plasmashell; wl-copy's clipboard window then hands the focus back to the
+    last real window, and the text lands there. Remembering plasmashell made
+    "delete last sentence" refuse in the very window that got the text
+    (Ron, 2026-10-15).
+    """
+    outcome = _deliver_text(text, injection_mode, t0, one_block)
+    if outcome != "failed":
+        try:
+            landed = _query_focused_window_class()
+        except Exception:
+            landed = None
+        if landed and landed not in _CLIPBOARD_TOOL_CLASSES:
+            if landed != state.last_inserted_window:
+                logger.info(f"The text landed in {landed!r}, not {state.last_inserted_window!r}")
+            state.last_inserted_window = landed
+    return outcome
+
+
+def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = False) -> str:
     """Determine the best injection method and insert text into the active app.
 
     Pastes or types as _determine_injection_method decides, typing whatever a
