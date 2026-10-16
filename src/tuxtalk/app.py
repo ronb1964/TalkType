@@ -294,6 +294,18 @@ class RecordingState:
     # Speech the pause detector heard after its last cut, taken at the stop:
     # 0.0 means the rest of the recording is room noise only.
     last_chunk_speech: float = None
+    # A recording typed in phrases (Type at pause) is still one dictation.
+    # recording_serial counts recordings (_arm_chunker). said_text is all the
+    # one numbered said_serial has typed or tried to: its Recent Dictations
+    # entry (_remember_said). shown_text is the part of it on screen in
+    # shown_window, ending at the cursor, for "fix that word" to fix in
+    # place; None once that isn't known (_remember_shown).
+    recording_serial: int = 0
+    said_serial: int = -1
+    said_text: str = ""
+    shown_serial: int = -1
+    shown_text: object = None
+    shown_window: object = None
 
     def __post_init__(self):
         if self.frames is None:
@@ -931,6 +943,7 @@ def _arm_chunker(rec_sr, edit_mode=False):
         # Started here, so the audio callback never has to build it.
         _chunk_worker()
     with _chunk_lock:
+        state.recording_serial += 1
         state.chunks_submitted = 0
         state.pending_boundary = None
         state.chunk_typed = False
@@ -2518,6 +2531,7 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
             cleared = _output_backend().select_all_delete()
         if cleared:
             state.last_inserted_text = ""
+            _forget_shown()
             state.continue_mid_sentence = False
             _beep(beeps_on, *READY_BEEP)
             if notify_on: _notify("TuxTalk", "Cleared input field")
@@ -2563,6 +2577,7 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
             print("Undo stopped partway")
             logger.error("Undo stopped partway: an unknown number of backspaces landed; undo buffer cleared")
             state.last_inserted_text = ""
+            _forget_shown()
             state.continue_mid_sentence = False
             _beep(beeps_on, *CANCEL_BEEP)
             if notify_on:
@@ -2577,6 +2592,7 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
             return True
 
         # Update last_inserted_text to reflect what remains
+        _trim_shown(state.last_inserted_text, delete_count)
         if delete_count >= len(state.last_inserted_text):
             state.last_inserted_text = ""
             state.continue_mid_sentence = False
@@ -3098,6 +3114,49 @@ def _context_samples() -> int:
     return int(CONTEXT_S * SAMPLE_RATE)
 
 
+def _remember_said(text: str, chunked: bool, takes_back: str = "") -> None:
+    """Put *text* in Recent Dictations, one entry per recording: a phrase of
+    a recording typed at pauses (*chunked*) adds to its recording's entry.
+    *takes_back* is the end of that entry a correction across a pause
+    replaced ("Meet at three. " for "Meet at four")."""
+    from . import history
+    text = text.replace(history._LINE_BREAK_MARKER, "\n")
+    old = state.said_text if chunked and state.said_serial == state.recording_serial else ""
+    base = old[:len(old) - len(takes_back)] if takes_back and old.endswith(takes_back) else old
+    state.said_serial, state.said_text = state.recording_serial, base + text
+    if old:
+        history.add_entry(state.said_text, replaces=old)
+    else:
+        history.add_entry(state.said_text)
+
+
+def _remember_shown(piece: str, chunked: bool, ok: bool) -> None:
+    """*piece* was just typed (*ok*) or tried: add it to this recording's
+    screen copy. The copy is only trusted while every piece landed, in one
+    window, one after the other."""
+    if not (chunked and state.shown_serial == state.recording_serial):
+        state.shown_serial, state.shown_text = state.recording_serial, ""
+        state.shown_window = state.last_inserted_window
+    if state.shown_text is None:
+        return
+    if ok and state.last_inserted_window == state.shown_window:
+        state.shown_text += piece
+    else:
+        state.shown_text = None
+
+
+def _trim_shown(tail: str, count: int) -> None:
+    """*count* characters were backspaced off *tail*, the newest typing."""
+    shown = state.shown_text
+    if shown is not None:
+        state.shown_text = shown[:len(shown) - count] if tail and shown.endswith(tail) else None
+
+
+def _forget_shown() -> None:
+    """The cursor moved or the text changed: the screen copy can't be trusted."""
+    state.shown_text = None
+
+
 def _corrects_across_pause(raw: str, chunk_role) -> bool:
     """True when this phrase corrects the one typed before the pause ("no
     wait, four" after "meet at three"), so the AI should hear both together.
@@ -3125,20 +3184,24 @@ def _erase_typed(text: str) -> bool:
     except KeystrokesStoppedPartway:
         logger.error("Correction across a pause stopped partway; typing the phrase as said")
         state.last_inserted_text = ""
+        _forget_shown()
         _notify("TuxTalk", "A correction stopped partway, so check the text before it")
         return False
     if deleted:
+        _trim_shown(text, len(text))
         state.last_inserted_text = ""
     return bool(deleted)
 
 
-def _correct_across_pause(text: str) -> str:
-    """The text to type for a phrase that corrects the one before the pause.
+def _correct_across_pause(text: str):
+    """(text to type, text taken back) for a phrase that corrects the one
+    before the pause.
 
     The AI hears both phrases as one ("Meet at three. No wait, four."). When
     it fixes the correction, the earlier phrase is backspaced and the fixed
     whole is typed in its place ("Meet at four."); otherwise the phrase is
-    typed as said, a cue held back from the phrase before included."""
+    typed as said, a cue held back from the phrase before included, and
+    nothing is taken back."""
     from . import ai_cleanup
     prev = state.last_inserted_text
     cue, state.held_cue = state.held_cue, ""
@@ -3150,11 +3213,11 @@ def _correct_across_pause(text: str) -> str:
     joined = prev + ("" if prev[-1:].isspace() else " ") + said
     fixed = ai_cleanup.fix_self_corrections(joined, _ai_engine)
     if fixed == joined or not fixed.strip():
-        return said
+        return said, ""
     if not _erase_typed(prev):
-        return said
+        return said, ""
     logger.info("AI cleanup fixed a self-correction across a pause")
-    return fixed
+    return fixed, prev
 
 
 def _last_word(text: str) -> str:
@@ -3187,7 +3250,12 @@ def _hold_back_boundary(text: str, raw: str):
 
 def _type_boundary(pending: dict, tail: str, injection_mode: str) -> None:
     """Type what goes between a held-back chunk and what follows it."""
-    if tail and _inject_text(tail, injection_mode, time.time()) == "ok":
+    if not tail:
+        return
+    _remember_said(tail, chunked=True)
+    ok = _inject_text(tail, injection_mode, time.time()) == "ok"
+    _remember_shown(tail, chunked=True, ok=ok)
+    if ok:
         # Undo and "delete last sentence" then see the whole chunk.
         state.last_inserted_text = pending["typed"] + tail
 
@@ -3331,6 +3399,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         across = _corrects_across_pause(raw, chunk_role)
         text = _prepare_text(raw, smart_quotes, chunk_period, auto_space, app_kind=kind,
                              ai=not across)
+        taken_back = ""
         if across:
             from . import ai_cleanup
             if chunk_role == "middle" and ai_cleanup.is_bare_cue(text):
@@ -3338,7 +3407,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                 state.held_cue = text.strip()
                 logger.info("Chunk is only a correction cue; waiting for the next phrase")
                 return
-            text = _correct_across_pause(text)
+            text, taken_back = _correct_across_pause(text)
         held_mark = None
         if chunk_role == "middle" and _chunk_context_marks:
             text, held_mark = _hold_back_boundary(text, raw)
@@ -3353,8 +3422,8 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         # Recent Dictations list first, so it can be recovered even if the
         # injection lands in the wrong window or fails outright.
         if text:
-            from .history import add_entry
-            add_entry(text)
+            chunked = chunk_role is not None
+            _remember_said(text, chunked, taken_back)
             try:
                 outcome = _inject_text(text, injection_mode, t0)
             except Exception as e:
@@ -3363,6 +3432,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                 # "Transcription error" below.
                 logger.error(f"Injection error: {e}", exc_info=True)
                 outcome = "failed"
+            _remember_shown(state.last_inserted_text, chunked, outcome == "ok")
             if outcome in _UNDELIVERED_NOTICES:
                 _report_undelivered(outcome, beeps_on)
             if chunk_role == "middle" and not _chunk_context_marks and outcome == "ok":
@@ -3584,7 +3654,10 @@ def _handle_fix_word(raw: str, beeps_on: bool) -> bool:
     # user can read (the runtime folder), which it deletes once read.
     args = []
     focused = _query_focused_window_class()
-    if state.last_inserted_text.strip() and not (
+    typed = state.last_inserted_text
+    if typed and state.shown_text and state.shown_text.endswith(typed):
+        typed = state.shown_text        # the whole recording, phrases and all
+    if typed.strip() and not (
             focused is not None and state.last_inserted_window is not None
             and focused != state.last_inserted_window):
         try:
@@ -3593,11 +3666,12 @@ def _handle_fix_word(raw: str, beeps_on: bool) -> bool:
                                 "tuxtalk-fix-word.json")
             fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
             with os.fdopen(fd, "w") as f:
-                json.dump({"text": state.last_inserted_text, "window": focused}, f)
+                json.dump({"text": typed, "window": focused}, f)
             args = ["--in-place", path]
             # The text is about to change: undo and voice moves can't trust
             # their counts any more.
             state.last_inserted_text = ""
+            _forget_shown()
             state.nav_context = None
         except OSError as e:
             logger.debug(f"Fix a Word can't fix it in the text: {e}")
@@ -3657,6 +3731,7 @@ def _handle_navigation(raw: str, beeps_on: bool, focused_class=_UNKNOWN_WINDOW) 
     # The cursor has moved (or may have): undo's character count no longer
     # matches the document, and "delete last word" would eat the wrong text.
     state.last_inserted_text = ""
+    _forget_shown()
     state.nav_context = (plan.left, plan.right) if pressed and plan.left is not None else None
     if pressed:
         _beep(beeps_on, *READY_BEEP)

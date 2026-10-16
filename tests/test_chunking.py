@@ -10,6 +10,8 @@ import time
 import numpy as np
 import pytest
 
+from tuxtalk.history import add_entry as REAL_ADD_ENTRY
+
 SR = 16000
 BLOCK = 320   # 20 ms at 16 kHz
 rng = np.random.default_rng(1)
@@ -365,7 +367,7 @@ def pipeline(monkeypatch):
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: None)
     monkeypatch.setattr(app, "_adapt_to_app", False)
     monkeypatch.setattr(app, "_usage_stats", False)
-    monkeypatch.setattr(history, "add_entry", lambda text: None)
+    monkeypatch.setattr(history, "add_entry", lambda text, replaces=None: None)
     monkeypatch.setattr(app.state, "continue_mid_sentence", False)
     monkeypatch.setattr(app.state, "pending_boundary", None)
     monkeypatch.setattr(app.state, "last_inserted_text", "")
@@ -938,3 +940,134 @@ def test_describe_says_how_close_a_pause_came():
         assert not det.feed(b)
     assert 0.4 < det.longest_quiet < 0.6
     assert "longest quiet 0.5" in det.describe()
+
+
+# --- one recording, one Recent Dictations entry -------------------------------
+
+@pytest.fixture
+def recent(pipeline, monkeypatch, tmp_path):
+    """`pipeline` with the real Recent Dictations list (in a private runtime
+    folder) and a recording just started."""
+    from tuxtalk import app, history
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    monkeypatch.delenv("FLATPAK_ID", raising=False)
+    monkeypatch.setattr(history, "add_entry", REAL_ADD_ENTRY)    # `pipeline` stubbed it
+    app._arm_chunker(SR)
+    return pipeline
+
+
+def test_a_recording_is_one_recent_dictation(recent):
+    """Phrases typed at pauses make one entry, so Fix a Word and Paste Last
+    get the whole recording, not its last phrase."""
+    from tuxtalk import app, history
+    texts, typed, _ = recent
+    texts.extend(["we meet.", "the end.", "we meet. The end."])
+    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    call(frames_of(speech(1.0)), "last", auto_period=True)
+    assert typed == ["We meet", ". ", "The end. "]
+    assert history.get_entries() == ["We meet. The end."]
+    app._arm_chunker(SR)            # the next recording is an entry of its own
+    texts.append("hello there.")
+    call(frames_of(speech(1.0)), None, auto_period=True)
+    assert history.get_entries() == ["Hello there.", "We meet. The end."]
+
+
+def test_a_correction_across_a_pause_leaves_one_entry(recent, ai_on):
+    from tuxtalk import history
+    texts, typed, erased, _ = ai_on
+    texts.extend(["meet at three.", "no wait, four.", "meet at three. No wait, four."])
+    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    call(frames_of(speech(1.0)), "last", auto_period=True)
+    assert typed[-1] == "Meet at four. "
+    assert history.get_entries() == ["Meet at four."]
+
+
+@pytest.fixture
+def fix_word(recent, monkeypatch):
+    """`recent`, with "fix that word" handing its in-place file to a list
+    instead of opening the window. Returns (texts, typed, opened)."""
+    import json
+    from tuxtalk import explain
+    opened = []
+
+    def fake_start(module, *args):
+        data = None
+        if args:
+            with open(args[1]) as f:
+                data = json.load(f)
+        opened.append(data)
+
+    monkeypatch.setattr(explain, "start_helper_window", fake_start)
+    texts, typed, _ = recent
+    return texts, typed, opened
+
+
+def say_fix_that_word(texts):
+    from tuxtalk import app
+    app._arm_chunker(SR)
+    texts.append("fix that word")
+    call(frames_of(speech(1.0)), None)
+
+
+def test_fix_that_word_gets_the_whole_recording(fix_word):
+    texts, typed, opened = fix_word
+    texts.extend(["we meet.", "the end.", "we meet. The end."])
+    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    call(frames_of(speech(1.0)), "last", auto_period=True)
+    say_fix_that_word(texts)
+    assert opened[0]["text"] == "We meet. The end. "
+
+
+def test_fix_that_word_after_a_delete_gets_what_is_left(fix_word, monkeypatch):
+    from types import SimpleNamespace
+    from tuxtalk import app
+    texts, typed, opened = fix_word
+    monkeypatch.setattr(app, "_output_backend",
+                        lambda: SimpleNamespace(backspaces=lambda n: True))
+    texts.extend(["we meet.", "the end is near.", "we meet. The end is near."])
+    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    call(frames_of(speech(1.0)), "last", auto_period=True)
+    app._arm_chunker(SR)
+    texts.append("delete last word")
+    call(frames_of(speech(1.0)), None)
+    left = app.state.last_inserted_text
+    assert left and "near" not in left
+    say_fix_that_word(texts)
+    assert opened[0]["text"] == "We meet. " + left
+
+
+def test_fix_that_word_after_a_window_change_gets_the_last_phrase(fix_word, monkeypatch):
+    """The phrases landed in two windows: only the last one is at the cursor,
+    so fixing in place may only count on that one."""
+    from tuxtalk import app
+    texts, typed, opened = fix_word
+    windows = iter(["kwrite", "kwrite", "konsole"])
+
+    def fake_inject(text, mode, t0, one_block=False):
+        typed.append(text)
+        app.state.last_inserted_text = text
+        app.state.last_inserted_window = next(windows)
+        return "ok"
+
+    monkeypatch.setattr(app, "_inject_text", fake_inject)
+    texts.extend(["we meet.", "the end.", "we meet. The end."])
+    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    call(frames_of(speech(1.0)), "last", auto_period=True)
+    say_fix_that_word(texts)
+    assert opened[0]["text"] == "The end. "
+
+
+def test_fix_that_word_after_a_voice_move_gets_the_last_phrase(fix_word, monkeypatch):
+    """A phrase moved the cursor ("go to the start of the line"): what came
+    before isn't beside the cursor any more."""
+    from tuxtalk import app
+    texts, typed, opened = fix_word
+    texts.extend(["we meet.", "the end.", "we meet. The end."])
+    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    app.state.last_inserted_text = ""       # what a voice move does
+    app._forget_shown()
+    texts.extend(["at noon.", "the end. At noon."])
+    call(frames_of(speech(1.0)), "last", auto_period=True)
+    say_fix_that_word(texts)
+    assert opened[0]["text"] == "At noon. "
