@@ -87,23 +87,49 @@
     updateBtns();
   }
 
-  /* ---------- The story: switch the sticky stage as each step scrolls by ---------- */
+  /* ---------- The story: switch the sticky stage as each step scrolls by ----------
+     The bright step is always the one level with the panel: on a wide
+     screen, the step whose text is closest to the panel's middle; on a
+     phone (panel stuck at the top), the step just below the panel. The
+     panel and the bright step change together because one function sets
+     both. */
   var stage = document.getElementById("stage");
   var stepList = document.querySelector(".steps");
-  if (stage && stepList && "IntersectionObserver" in window) {
+  if (stage && stepList) {
     stage.classList.add("js");
     stepList.classList.add("js");
-    stage.setAttribute("data-step", "1");
-    var steps = stepList.querySelectorAll("li");
-    var watch = new IntersectionObserver(function (entries) {
-      entries.forEach(function (en) {
-        if (!en.isIntersecting) return;
-        steps.forEach(function (li) { li.classList.toggle("active", li === en.target); });
-        stage.setAttribute("data-step", en.target.getAttribute("data-step"));
+    var steps = Array.prototype.slice.call(stepList.querySelectorAll("li"));
+    var wide = window.matchMedia("(min-width: 861px)");
+    var current = null, queued = false;
+
+    // Middle of a step's visible text (the number down to the paragraph),
+    // not the whole tall list item.
+    var textMiddle = function (li) {
+      var first = li.firstElementChild.getBoundingClientRect();
+      var last = li.lastElementChild.getBoundingClientRect();
+      return (first.top + last.bottom) / 2;
+    };
+
+    var pickStep = function () {
+      queued = false;
+      var r = stage.getBoundingClientRect();
+      var line = wide.matches ? r.top + r.height / 2 : r.bottom + (window.innerHeight - r.bottom) * 0.4;
+      var best = steps[0], bestDist = Infinity;
+      steps.forEach(function (li) {
+        var d = Math.abs(textMiddle(li) - line);
+        if (d < bestDist) { bestDist = d; best = li; }
       });
-    }, { rootMargin: "-45% 0px -45% 0px" });
-    steps.forEach(function (li) { watch.observe(li); });
-    steps[0].classList.add("active");
+      if (best === current) return;
+      current = best;
+      steps.forEach(function (li) { li.classList.toggle("active", li === best); });
+      stage.setAttribute("data-step", best.getAttribute("data-step"));
+    };
+    var queue = function () {
+      if (!queued) { queued = true; requestAnimationFrame(pickStep); }
+    };
+    window.addEventListener("scroll", queue, { passive: true });
+    window.addEventListener("resize", queue);
+    pickStep();
   }
 
   /* ---------- The F8 demo ---------- */

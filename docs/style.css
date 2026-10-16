@@ -500,8 +500,12 @@ footer .brand { color: var(--ink); }
 
 .steps { list-style: none; margin: 0; padding: 0; }
 .steps li { min-height: 62vh; display: grid; align-content: center; gap: 10px; transition: opacity 0.4s ease; }
-.steps.js li { opacity: 0.35; }
-.steps.js li.active { opacity: 1; }
+/* Dim the steps that aren't beside the panel, on wide screens only.
+   On a phone every step stays fully readable. */
+@media (min-width: 861px) {
+  .steps.js li { opacity: 0.35; }
+  .steps.js li.active { opacity: 1; }
+}
 .steps li:first-child { min-height: 40vh; align-content: start; padding-top: 6vh; }
 .steps li:last-child { min-height: 50vh; }
 .steps .num { font: 850 clamp(3rem, 2rem + 4vw, 5.5rem)/0.9 var(--f-display); font-stretch: 125%; color: var(--link); letter-spacing: -0.03em; }
