@@ -6,6 +6,28 @@
 
   var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+  /* ---------- Every page starts at the top (or at its #section) ----------
+     Going from the long home page to Privacy must not keep the old scroll
+     position. The browser normally handles this, but the preview's frame can
+     put an old position back after the page loads, so until the visitor
+     scrolls or clicks, keep them at the spot they were sent to. */
+  try { history.scrollRestoration = "manual"; } catch (e) { /* older browsers */ }
+  var visitorMoved = false;
+  ["wheel", "touchstart", "keydown", "mousedown"].forEach(function (ev) {
+    window.addEventListener(ev, function () { visitorMoved = true; }, { passive: true, once: true });
+  });
+  var goToLandingSpot = function () {
+    if (visitorMoved) return;
+    var id = location.hash.slice(1);
+    var target = id && document.getElementById(id);
+    if (target) target.scrollIntoView({ block: "start", behavior: "instant" });
+    else window.scrollTo({ top: 0, behavior: "instant" });
+  };
+  goToLandingSpot();
+  window.addEventListener("load", goToLandingSpot);
+  setTimeout(goToLandingSpot, 250);
+  setTimeout(goToLandingSpot, 800);
+
   /* ---------- Light / dark switch ---------- */
   var root = document.documentElement;
   var themeBtn = document.getElementById("theme-btn");
@@ -85,6 +107,63 @@
     });
     strip.addEventListener("scroll", updateBtns, { passive: true });
     updateBtns();
+  }
+
+  /* ---------- Screenshot viewer ----------
+     Each screenshot is a link to its file, so it still opens with
+     JavaScript off. With it on, the click opens the big version in a
+     dialog on this page instead: Esc or Close shuts it, the arrow keys
+     (or a swipe on a phone) step through, and focus goes back to the
+     screenshot you opened. It shows the same image the page already
+     loaded, so it works in the preview too. */
+  var lb = document.getElementById("lightbox");
+  var zooms = Array.prototype.slice.call(document.querySelectorAll(".strip .zoom"));
+  if (lb && zooms.length && typeof lb.showModal === "function") {
+    var lbImg = document.getElementById("lb-img");
+    var lbCap = document.getElementById("lb-cap");
+    var lbCount = document.getElementById("lb-count");
+    var at = 0, opener = null;
+    var show = function (i) {
+      at = (i + zooms.length) % zooms.length;
+      var thumb = zooms[at].querySelector("img");
+      thumb.loading = "eager";  // a lazy one may not have loaded yet
+      lbImg.src = thumb.currentSrc || thumb.src;
+      lbImg.alt = thumb.alt;
+      var cap = zooms[at].parentElement.querySelector("figcaption");
+      lbCap.textContent = cap ? cap.textContent : thumb.alt;
+      lbCount.textContent = (at + 1) + " of " + zooms.length;
+    };
+    zooms.forEach(function (z, i) {
+      z.addEventListener("click", function (e) {
+        e.preventDefault();
+        opener = z;
+        show(i);
+        lb.showModal();
+        document.getElementById("lb-close").focus();
+      });
+    });
+    document.getElementById("lb-close").addEventListener("click", function () { lb.close(); });
+    document.getElementById("lb-prev").addEventListener("click", function () { show(at - 1); });
+    document.getElementById("lb-next").addEventListener("click", function () { show(at + 1); });
+    lb.addEventListener("keydown", function (e) {
+      if (e.key === "ArrowLeft") { e.preventDefault(); show(at - 1); }
+      else if (e.key === "ArrowRight") { e.preventDefault(); show(at + 1); }
+    });
+    // A click on the dark area around the picture closes it.
+    lb.addEventListener("click", function (e) {
+      if (e.target === lb || e.target.classList.contains("lb-figure")) lb.close();
+    });
+    lb.addEventListener("close", function () {
+      if (opener) opener.focus({ preventScroll: true });
+    });
+    var touchX = null;
+    lb.addEventListener("touchstart", function (e) { touchX = e.touches[0].clientX; }, { passive: true });
+    lb.addEventListener("touchend", function (e) {
+      if (touchX === null) return;
+      var dx = e.changedTouches[0].clientX - touchX;
+      if (Math.abs(dx) > 50) show(dx < 0 ? at + 1 : at - 1);
+      touchX = null;
+    });
   }
 
   /* ---------- The story: switch the sticky stage as each step scrolls by ----------

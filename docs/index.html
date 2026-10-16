@@ -476,6 +476,18 @@
   </div>
 </section>
 
+<!-- Screenshot viewer, opened from "A look around" (site.js) -->
+<dialog class="lightbox" id="lightbox" aria-labelledby="lb-cap">
+  <figure class="lb-figure">
+    <img id="lb-img" src="data:," alt="">
+    <figcaption id="lb-cap"></figcaption>
+  </figure>
+  <p class="lb-count" id="lb-count" aria-live="polite"></p>
+  <button type="button" class="lb-btn lb-close" id="lb-close" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  <button type="button" class="lb-btn lb-prev" id="lb-prev" aria-label="Previous screenshot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+  <button type="button" class="lb-btn lb-next" id="lb-next" aria-label="Next screenshot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>
+</dialog>
+
 </main>
 
 <footer>
