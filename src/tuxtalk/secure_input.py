@@ -173,8 +173,8 @@ def _leave_group_lines():
     can't fake) out of the input group, with the old rule that gave that
     group /dev/uinput."""
     from .uinput_helper import UDEV_RULE_PATH
-    return (f'user=$(id -nu "${{PKEXEC_UID:?}}")\n'
-            f'gpasswd -d "$user" input || true\n'
+    return ('user=$(id -nu "${PKEXEC_UID:?}")\n'
+            'gpasswd -d "$user" input || true\n'
             + _still_in_group_check()
             + f'rm -f {UDEV_RULE_PATH}\n')
 
