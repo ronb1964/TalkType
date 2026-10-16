@@ -20,6 +20,29 @@
     });
   }
 
+  /* ---------- In-page links (header menu, the TuxTalk name, skip link) ----------
+     Plain "#section" links work on their own on the real site, but inside a
+     sandboxed frame (like the private preview) the browser may ignore them.
+     So scroll in script: smooth unless reduce motion is on, landing below
+     the sticky header (scroll-margin-top in style.css), and move keyboard
+     focus there too. "#top" goes to the very top. */
+  document.querySelectorAll('a[href^="#"]').forEach(function (a) {
+    var id = a.getAttribute("href").slice(1);
+    if (!id) return;
+    a.addEventListener("click", function (e) {
+      var target = document.getElementById(id);
+      if (!target) return;
+      e.preventDefault();
+      var behavior = reduceMotion ? "auto" : "smooth";
+      if (id === "top") window.scrollTo({ top: 0, behavior: behavior });
+      else target.scrollIntoView({ behavior: behavior, block: "start" });
+      if (id !== "top") {
+        if (!target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
+        target.focus({ preventScroll: true });
+      }
+    });
+  });
+
   /* ---------- Copy buttons on the install commands ---------- */
   document.querySelectorAll(".cmd .copy").forEach(function (btn) {
     btn.addEventListener("click", function () {

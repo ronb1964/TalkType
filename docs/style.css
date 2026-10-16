@@ -548,3 +548,7 @@ footer .brand { color: var(--ink); }
 .strip-btn:disabled { opacity: 0.3; cursor: default; background: transparent; color: var(--ink); }
 .strip-btn svg { width: 20px; height: 20px; }
 @media (hover: none) { .strip-nav { display: none; } }
+
+/* In-page links land below the sticky header instead of under it */
+section[id], #main, [tabindex="-1"] { scroll-margin-top: calc(env(safe-area-inset-top, 0px) + 72px); }
+[tabindex="-1"]:focus { outline: none; }
