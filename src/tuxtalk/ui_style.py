@@ -229,6 +229,84 @@ def fit_dialog_to_screen(dialog, width, desired_height, min_height=320, margin=9
     return dialog
 
 
+# Onboarding screens that scroll. While there's more below, the bottom edge of
+# the text fades into a shadow (GTK draws the "undershoot" only then) and a
+# "More below" bar sits above the buttons.
+_MORE_BELOW_CSS = b"""
+scrolledwindow.tt-more-scroll undershoot.bottom {
+    background-image: linear-gradient(to top, @theme_bg_color, alpha(@theme_bg_color, 0));
+    background-size: 100% 40px;
+    background-position: bottom;
+    background-repeat: no-repeat;
+}
+button.tt-more-below {
+    background-image: none;
+    background-color: alpha(@theme_selected_bg_color, 0.14);
+    border: 1px solid alpha(@theme_selected_bg_color, 0.6);
+    border-radius: 6px;
+    padding: 2px 10px;
+    color: @theme_selected_bg_color;
+    font-weight: bold;
+}
+button.tt-more-below:hover {
+    background-color: alpha(@theme_selected_bg_color, 0.26);
+}
+"""
+_more_below_css_installed = False
+
+
+def more_below_bar(scrolled, label="More below: scroll down to see everything",
+                   tooltip="There's more on this page"):
+    """Make it obvious that `scrolled` has more to read, and return a
+    "▼ More below ▼" bar to pack just above the window's buttons.
+
+    GTK's scrollbar hides until the mouse moves over it, so an onboarding
+    screen that ends neatly at the window's edge looks finished, and people
+    clicked "Set it up" without seeing what was below (Ron, 2026-10-16). So:
+    the scrollbar is always shown, the bottom edge fades while there's more,
+    and the bar shows only while there's more. Clicking it scrolls down most
+    of a page. It keeps its height when hidden, so nothing jumps around.
+    """
+    global _more_below_css_installed
+    scrolled.set_overlay_scrolling(False)
+    scrolled.get_style_context().add_class("tt-more-scroll")
+    if not _more_below_css_installed:
+        screen = Gdk.Screen.get_default()
+        if screen is not None:
+            provider = Gtk.CssProvider()
+            provider.load_from_data(_MORE_BELOW_CSS)
+            Gtk.StyleContext.add_provider_for_screen(
+                screen, provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+            _more_below_css_installed = True
+
+    button = Gtk.Button(label=f"▼  {label}  ▼")
+    button.get_style_context().add_class("tt-more-below")
+    button.set_relief(Gtk.ReliefStyle.NONE)
+    button.set_halign(Gtk.Align.CENTER)
+    button.set_margin_top(6)
+    button.set_margin_bottom(2)
+    button.set_tooltip_text(tooltip)
+    adj = scrolled.get_vadjustment()
+
+    def more_to_see():
+        # A few pixels of slack: the last bit is the content's bottom margin.
+        return adj.get_value() + adj.get_page_size() < adj.get_upper() - 8
+
+    def update(*_args):
+        # set_child_visible hides it but keeps its height in the layout.
+        button.set_child_visible(more_to_see())
+
+    def scroll_down(_button):
+        adj.set_value(min(adj.get_value() + adj.get_page_size() * 0.8,
+                          adj.get_upper() - adj.get_page_size()))
+
+    button.connect("clicked", scroll_down)
+    adj.connect("value-changed", update)
+    adj.connect("changed", update)  # the content or the window was resized
+    update()
+    return button
+
+
 def message_dialog(closable=True, **kwargs):
     """A Gtk.MessageDialog in the desktop's own window frame. Takes the same
     keyword arguments; use it instead of Gtk.MessageDialog everywhere.

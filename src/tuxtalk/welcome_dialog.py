@@ -20,7 +20,7 @@ gi.require_version('Gtk', '3.0')
 gi.require_version('Gdk', '3.0')
 gi.require_version('GdkPixbuf', '2.0')
 from gi.repository import Gtk, Gdk, GLib, GdkPixbuf
-from .ui_style import message_dialog
+from .ui_style import message_dialog, more_below_bar
 
 from .logger import setup_logger
 from .uinput_helper import (
@@ -591,6 +591,11 @@ class WelcomeDialog:
         footer.set_margin_end(30)
         content.pack_end(footer, False, False, 0)
         self._build_footer(footer)
+        # A "More below" bar just above the footer (packed after it), so the
+        # optional features under the fold don't get missed.
+        content.pack_end(more_below_bar(
+            scrolled, tooltip="There's more on this page, including optional features"),
+            False, False, 0)
 
     def _build_header(self, vbox):
         """Build the header section."""
@@ -2317,6 +2322,9 @@ def show_tips_and_features_dialog(extension_installed=False):
     get_started_button.connect("clicked", on_get_started_clicked)
 
     button_box.pack_end(get_started_button, False, False, 0)
+    # "More below" between the tips and Continue, while there's more to read.
+    content.pack_start(more_below_bar(scrolled, tooltip="There are more tips below"),
+                       False, False, 0)
     content.pack_start(button_box, False, False, 0)
 
     # Start pulsing animation for logout reminder if extension was installed
