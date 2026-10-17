@@ -69,17 +69,18 @@ def labels(widget):
 def test_the_entry_has_its_heading_and_switch(win):
     assert "Type at pause" in labels(win.grid)
     assert win.tap_check.get_label() == "Type each phrase when you pause"
-    title = win.tap_expander.get_label_widget().get_label()
-    assert title.startswith("Adjust: pause length, noise filter")
-    assert "pause 0.8 s" in title and "noise filter 6" in title
-    assert win.tap_expander.get_style_context().has_class("tt-options")
-    assert win.tap_expander.get_expanded() is False
+    assert win.tap_adjust_btn.get_label() == "Adjust Settings"
+    summary = win.tap_summary.get_text()
+    assert "pause 0.8 s" in summary and "noise filter 6" in summary
+    assert win.tap_settings.get_reveal_child() is False
 
 
 def test_the_switch_greys_the_fine_tuning(win):
     assert win.tap_fine.get_sensitive() is False
+    assert win.tap_adjust_row.get_sensitive() is False
     win.tap_check.set_active(True)
     assert win.tap_fine.get_sensitive() is True
+    assert win.tap_adjust_row.get_sensitive() is True
     assert ("chunked_dictation", True) in win.updates
 
 
@@ -124,11 +125,15 @@ def test_turning_the_feature_off_stops_the_test(win):
     assert win.streams[-1].stopped
 
 
-def test_collapsing_the_fine_tuning_stops_the_test(win):
+def test_the_button_opens_the_settings_and_hiding_them_stops_the_test(win):
     win.tap_check.set_active(True)
-    win.tap_expander.set_expanded(True)
+    win.tap_adjust_btn.clicked()
+    assert win.tap_settings.get_reveal_child() is True
+    assert win.tap_adjust_btn.get_label() == "Hide Settings"
     win.tap_test_btn.clicked()
-    win.tap_expander.set_expanded(False)
+    win.tap_adjust_btn.clicked()
+    assert win.tap_settings.get_reveal_child() is False
+    assert win.tap_adjust_btn.get_label() == "Adjust Settings"
     assert win.streams[-1].stopped
 
 
@@ -246,5 +251,16 @@ def test_the_title_follows_the_settings(win):
     win.tap_check.set_active(True)
     win.tap_pause_spin.set_value(1.2)
     win.tap_context_check.set_active(False)
-    title = win.tap_expander.get_label_widget().get_label()
-    assert "pause 1.2 s" in title and "punctuation from context off" in title
+    summary = win.tap_summary.get_text()
+    assert "pause 1.2 s" in summary and "punctuation from context off" in summary
+
+
+def test_opening_the_settings_scrolls_them_into_view(win, monkeypatch):
+    shown = []
+    monkeypatch.setattr(type(win), "_scroll_into_view",
+                        lambda self, widget, delay_ms=60: shown.append(widget), raising=False)
+    win.tap_check.set_active(True)
+    win.tap_adjust_btn.clicked()
+    assert shown == [win.tap_settings]
+    win.tap_adjust_btn.clicked()                # closing doesn't scroll
+    assert shown == [win.tap_settings]

@@ -4863,6 +4863,36 @@ class PreferencesWindow:
     def _on_auto_timeout_toggled(self, checkbox):
         """Handle auto-timeout checkbox toggle."""
         self._update_timeout_ui_state()
+        if checkbox.get_active():
+            # The last thing on the General tab: what it just showed (the
+            # minutes and what happens then) would sit below the window's edge.
+            self._scroll_into_view(self.timeout_note)
+
+    def _scroll_into_view(self, widget, delay_ms=60):
+        """Scroll the tab so *widget*, just shown, is in view, once GTK has
+        laid it out (after *delay_ms*, longer for a sliding reveal). Ticking
+        a box whose settings appear below the window's edge looked like
+        nothing had happened."""
+        def scroll():
+            sw = widget.get_parent()
+            while sw is not None and not isinstance(sw, Gtk.ScrolledWindow):
+                sw = sw.get_parent()
+            if sw is None or not widget.get_mapped():
+                return False
+            coords = widget.translate_coordinates(sw, 0, 0)
+            if coords is None:
+                return False
+            top = coords[1]
+            bottom = top + widget.get_allocated_height()
+            adj = sw.get_vadjustment()
+            page = adj.get_page_size()
+            if bottom > page:
+                # Down until its bottom shows, but never past its top.
+                adj.set_value(adj.get_value() + min(bottom - page + 12, max(0, top - 12)))
+            elif top < 0:
+                adj.set_value(adj.get_value() + top - 12)
+            return False
+        GLib.timeout_add(delay_ms, scroll)
 
     def _on_ai_corrections_toggled(self, check):
         """Turn AI self-corrections on or off (see _toggle_ai_feature)."""
@@ -5805,16 +5835,25 @@ class PreferencesWindow:
         grid.attach(self.tap_check, 0, row, 2, 1)
         row += 1
 
-        # Says what's inside, with the settings as they are now, and drawn as
-        # a framed button (tt-options): "Fine-tuning" on its own was easy to
-        # miss and didn't say there was anything to change in there.
-        self.tap_expander = Gtk.Expander()
-        self.tap_expander_title = Gtk.Label(xalign=0)
-        self.tap_expander_title.set_line_wrap(True)
-        self.tap_expander.set_label_widget(self.tap_expander_title)
-        self.tap_expander.get_style_context().add_class("tt-options")
-        self.tap_expander.set_halign(Gtk.Align.START)
-        self.tap_expander.set_margin_start(indent)
+        # Several settings, so they sit behind an "Adjust Settings" button with
+        # their values beside it (one setting would sit by its tickbox, like
+        # Power Saving's minutes). The button opens them right below and
+        # becomes "Hide Settings". A "Fine-tuning" fold-out was easy to miss.
+        adjust_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        adjust_row.set_margin_start(indent)
+        self.tap_adjust_btn = Gtk.Button(label="Adjust Settings")
+        self.tap_adjust_btn.connect("clicked", self._tap_toggle_settings)
+        self.tap_summary = Gtk.Label(xalign=0)
+        self.tap_summary.set_line_wrap(True)
+        self.tap_summary.set_opacity(0.65)
+        adjust_row.pack_start(self.tap_adjust_btn, False, False, 0)
+        adjust_row.pack_start(self.tap_summary, False, False, 0)
+        self.tap_adjust_row = adjust_row
+        # A revealer: show_all() on the window leaves it closed.
+        self.tap_settings = Gtk.Revealer()
+        self.tap_settings.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
+        self.tap_settings.set_transition_duration(150)
+        self.tap_settings.set_margin_start(indent)
         fine = Gtk.Grid(column_spacing=8, row_spacing=6)
         fine.set_margin_start(16)
         fine.set_margin_top(6)
@@ -5884,8 +5923,10 @@ class PreferencesWindow:
         self.tap_status.set_opacity(0.7)
         fine.attach(self.tap_status, 0, r, 2, 1)
 
-        self.tap_expander.add(fine)
-        grid.attach(self.tap_expander, 0, row, 2, 1)
+        self.tap_settings.add(fine)
+        grid.attach(adjust_row, 0, row, 2, 1)
+        row += 1
+        grid.attach(self.tap_settings, 0, row, 2, 1)
         row += 1
         self._tap_update_title()
 
@@ -5902,8 +5943,7 @@ class PreferencesWindow:
             self.update_config("chunk_context_marks", c.get_active()),
             self._tap_update_title()))
         self.tap_test_btn.connect("clicked", self._tap_toggle_test)
-        self.tap_expander.connect("notify::expanded", lambda e, _p: (
-            None if e.get_expanded() else self._stop_pause_test()))
+
         window = getattr(self, "window", None)
         if window is not None:
             window.connect("notify::is-active", self._tap_on_window_active)
@@ -5918,17 +5958,29 @@ class PreferencesWindow:
             self._stop_pause_test()
 
     def _tap_update_title(self):
-        """The fold-out's title: what's inside, with the values now."""
+        """The values beside the Adjust Settings button, as they are now."""
         context = "on" if self.tap_context_check.get_active() else "off"
-        self.tap_expander_title.set_markup(
-            "Adjust: pause length, noise filter, punctuation, test\n"
-            f'<span alpha="65%" size="small">Now: pause {self.tap_pause_spin.get_value():.1f} s'
+        self.tap_summary.set_text(
+            f"pause {self.tap_pause_spin.get_value():.1f} s"
             f" \u00b7 noise filter {self.tap_db_spin.get_value():.0f}"
-            f" \u00b7 punctuation from context {context}</span>")
+            f" \u00b7 punctuation from context {context}")
+
+    def _tap_toggle_settings(self, _button=None):
+        """Open the settings below the button, or close them (and the test)."""
+        opening = not self.tap_settings.get_reveal_child()
+        self.tap_settings.set_reveal_child(opening)
+        self.tap_adjust_btn.set_label("Hide Settings" if opening else "Adjust Settings")
+        if opening:
+            # After the slide-down, so its full height is known.
+            self._scroll_into_view(self.tap_settings,
+                                   self.tap_settings.get_transition_duration() + 60)
+        else:
+            self._stop_pause_test()
 
     def _tap_sync_sensitivity(self):
         on = self.tap_check.get_active()
         self.tap_fine.set_sensitive(on)
+        self.tap_adjust_row.set_sensitive(on)
         if not on:
             self._stop_pause_test()
 

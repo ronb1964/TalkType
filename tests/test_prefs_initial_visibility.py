@@ -71,3 +71,17 @@ def test_the_language_button_says_it_changes_the_list():
     from tuxtalk.prefs import _auto_langs_label
     assert _auto_langs_label("") == "Any language · Change…"
     assert _auto_langs_label("en,es").startswith("English, Spanish")
+
+
+def test_turning_power_saving_on_scrolls_its_settings_into_view():
+    """It's the last thing on the General tab: the minutes and the note it
+    shows were below the window's edge (Ron, 2026-10-17)."""
+    shown = []
+    stub = _stub({"auto_timeout_enabled": True, "language_mode": "auto"})
+    stub._scroll_into_view = lambda widget, delay_ms=60: shown.append(widget)
+    on = SimpleNamespace(get_active=lambda: True)
+    off = SimpleNamespace(get_active=lambda: False)
+    PreferencesWindow._on_auto_timeout_toggled(stub, off)
+    assert shown == []
+    PreferencesWindow._on_auto_timeout_toggled(stub, on)
+    assert shown == [stub.timeout_note]
