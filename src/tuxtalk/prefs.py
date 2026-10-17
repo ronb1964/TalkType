@@ -1943,6 +1943,18 @@ class PreferencesWindow:
             "Everywhere else, including chat apps, punctuation is as usual.")
         grid.attach(plain_check, 0, row, 2, 1)
         row += 1
+
+        # A real Enter after each dictation (app._press_enter_key). Saying
+        # "press enter" at the end does the same for one dictation.
+        enter_check = Gtk.CheckButton(label="Press Enter after each dictation")
+        enter_check.set_active(bool(self.config.get("press_enter_after", False)))
+        enter_check.connect("toggled", lambda x: self.update_config("press_enter_after", x.get_active()))
+        enter_check.set_tooltip_text(
+            "After typing, press Enter: a chat message is sent, a terminal command runs,\n"
+            "a search starts. Handy for chat and AI prompts, risky in documents.\n\n"
+            "With this off you can still end any dictation with \u201cpress enter\u201d.")
+        grid.attach(enter_check, 0, row, 2, 1)
+        row += 1
         
         # Injection mode
         inject_label = Gtk.Label(label="Text Injection 💡:", xalign=0)

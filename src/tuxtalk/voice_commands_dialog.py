@@ -132,6 +132,7 @@ The commands are English words, whatever language you dictate in.
   <b>new paragraph</b> / <b>paragraph break</b> → double line break
   <b>tab</b> → tab character
   <b>soft break</b> → three spaces
+  <b>press enter</b> / <b>hit enter</b> at the end → types it, then presses Enter (sends a message, runs a command)
 
 <b>Undo</b>
   <b>delete last word</b> / <b>undo last word</b> / <b>remove last word</b> → delete last dictated word

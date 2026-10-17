@@ -34,7 +34,8 @@ KEY_ENTER = 28
 # Names voice_navigation uses -> key codes, for press_chords.
 _CHORD_KEYS = {"CTRL": KEY_LEFTCTRL, "SHIFT": KEY_LEFTSHIFT, "A": KEY_A, "E": 18, "U": 22,
                "LEFT": 105,
-               "RIGHT": 106, "UP": 103, "DOWN": 108, "HOME": 102, "END": 107}
+               "RIGHT": 106, "UP": 103, "DOWN": 108, "HOME": 102, "END": 107,
+               "ENTER": KEY_ENTER}
 
 # Soft-line-break marker used across TuxTalk (§SHIFT_ENTER§): type Shift+Enter,
 # not plain Enter, so it doesn't submit in chat apps.

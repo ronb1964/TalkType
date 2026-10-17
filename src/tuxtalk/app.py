@@ -97,6 +97,9 @@ _numbers_language = "en"
 _voice_navigation = False
 # Plain text in terminals and code editors (app_kind, plain_for_app).
 _adapt_to_app = True
+# Press Enter after every dictation, as if each ended with "press enter"
+# (enter_command.py).
+_press_enter_after = False
 # The languages auto-detect may pick from, () for any (language_limit.py).
 _auto_languages = ()
 _ai_engine = None
@@ -114,12 +117,14 @@ def _apply_cleanup_settings(cfg):
     stop the AI engine."""
     global _remove_fillers, _ai_engine, _auto_stop_seconds, _ai_corrections, _voice_editing, _swiss_spelling
     global _numbers_mode, _numbers_language, _voice_navigation, _adapt_to_app, _auto_languages
+    global _press_enter_after
     _auto_stop_seconds = (float(getattr(cfg, "auto_stop_seconds", 2.0))
                           if getattr(cfg, "auto_stop_silence", False) else 0.0)
     _remove_fillers = bool(getattr(cfg, "remove_fillers", False))
     _swiss_spelling = bool(getattr(cfg, "swiss_spelling", False))
     _voice_navigation = bool(getattr(cfg, "voice_navigation", False))
     _adapt_to_app = bool(getattr(cfg, "adapt_to_app", True))
+    _press_enter_after = bool(getattr(cfg, "press_enter_after", False))
     from . import language_limit
     _auto_languages = language_limit.parse(getattr(cfg, "auto_languages", ""))
     if getattr(cfg, "numbers_as_digits", False):
@@ -1641,6 +1646,20 @@ def _typed_breaks_for(text: str, window_class) -> str:
     return joined
 
 
+def _press_enter_key(why: str) -> bool:
+    """A real Enter after a dictation (enter_command.py): it sends a chat
+    message, runs a terminal command or submits a form, which is the point.
+    Undo can't take back a sent message, so it forgets the dictation."""
+    time.sleep(0.05)   # let the app take in the typed text first
+    ok = _output_backend().press_keys([((), "ENTER")])
+    state.last_inserted_text = ""
+    if ok:
+        logger.info(f"Pressed Enter ({why})")
+    else:
+        logger.warning(f"Couldn't press Enter ({why})")
+    return ok
+
+
 def _send_shift_enter():
     """Send Shift+Enter keystrokes to create line break without submitting."""
     # KEY_LEFTSHIFT (42), KEY_ENTER (28)
@@ -2220,7 +2239,7 @@ def _send_backspaces(count: int) -> bool:
 # Key names voice_navigation uses -> Linux key codes (the letter A is looked up
 # on the active layout, as Ctrl shortcuts are matched by letter).
 _NAV_KEYCODES = {"CTRL": 29, "SHIFT": 42, "LEFT": 105, "RIGHT": 106, "UP": 103,
-                 "DOWN": 108, "HOME": 102, "END": 107}
+                 "DOWN": 108, "HOME": 102, "END": 107, "ENTER": 28}
 
 
 def _nav_keycode(name: str) -> int:
@@ -3033,11 +3052,26 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         if _handle_fix_word(raw, beeps_on):
             return
 
+        # "... press enter": type the words, then a real Enter that sends the
+        # message or runs the command (enter_command.py). Or every time, when
+        # "Press Enter after each dictation" is on.
+        from .enter_command import split_press_enter
+        raw, said_enter = split_press_enter(raw)
+        press_enter = said_enter or _press_enter_after
+        if said_enter and not raw.strip():
+            # Only "press enter" was said.
+            _beep(beeps_on, *READY_BEEP)
+            _press_enter_key("said \"press enter\"")
+            return
+
         # Stage 3: Normalize text (voice commands, punctuation, spacing),
         # plainer for a terminal or code editor ("Plain text in terminals and
         # code editors").
         kind = app_kind(_query_focused_window_class()) if _adapt_to_app else ""
         text = _prepare_text(raw, smart_quotes, auto_period, auto_space, app_kind=kind)
+        if press_enter:
+            # No auto-space before Enter: it would end up in the sent message.
+            text = text.rstrip(" ")
 
         # Beep to confirm transcription is done
         _beep(beeps_on, *READY_BEEP)
@@ -3060,6 +3094,9 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                 outcome = "failed"
             if outcome in _UNDELIVERED_NOTICES:
                 _report_undelivered(outcome, beeps_on)
+            elif press_enter:
+                _press_enter_key("said \"press enter\"" if said_enter
+                                 else "Press Enter after each dictation is on")
             if _usage_stats:
                 # After typing, so saving the counts never delays the text.
                 # Counts only (words, seconds dictating); see stats.py.

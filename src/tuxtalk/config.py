@@ -141,6 +141,8 @@ class Settings:
     voice_navigation: bool = False
     # No closing period in terminals and code editors, no starting capital in terminals
     adapt_to_app: bool = True
+    # Press Enter after every dictation, as if each ended with "press enter"
+    press_enter_after: bool = False
     mode: str = "hold"          # "hold" or "toggle"
     toggle_hotkey: str = ""     # used only when mode="toggle" (empty until user picks during onboarding)
     mic: str = ""               # substring to match input device (empty = default)
@@ -747,6 +749,7 @@ LIVE_APPLIED_KEYS = {
     "numbers_small_as_words",
     "voice_navigation",
     "adapt_to_app",
+    "press_enter_after",
     "ai_corrections",
     "voice_editing",
     # Hands-free auto-stop; read when each toggle recording starts.
