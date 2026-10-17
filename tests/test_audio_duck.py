@@ -48,8 +48,14 @@ class FakePactl:
         return subprocess.CompletedProcess(cmd, 1, "", "unknown")
 
 
-def _ducker(tmp_path, pactl):
-    return audio_duck.AudioDucker(run=pactl, own_pid=OWN_PID, state_path=str(tmp_path / "ducked.json"))
+def _no_reset(app, volumes):
+    """Tests never play sound: resetting the desktop's memory 'fails'."""
+    return False
+
+
+def _ducker(tmp_path, pactl, reset=_no_reset):
+    return audio_duck.AudioDucker(run=pactl, own_pid=OWN_PID, state_path=str(tmp_path / "ducked.json"),
+                                  reset=reset)
 
 
 def test_other_apps_go_down_and_come_back(tmp_path):
@@ -98,7 +104,7 @@ def test_left_over_volumes_are_put_back_at_the_next_start(tmp_path):
     d = _ducker(tmp_path, pactl)
     d._duck_now()                                   # ...and the service dies here
     assert pactl.streams[7]["volumes"] == [16384]
-    restored = audio_duck.restore_left_over(run=pactl, state_path=str(tmp_path / "ducked.json"))
+    restored = audio_duck.restore_left_over(run=pactl, state_path=str(tmp_path / "ducked.json"), reset=_no_reset)
     assert restored == 1
     assert pactl.streams[7]["volumes"] == [65536]
     assert not (tmp_path / "ducked.json").exists()
@@ -110,7 +116,7 @@ def test_no_pactl_is_not_an_error(tmp_path):
     d = _ducker(tmp_path, missing)
     d._duck_now()
     d._restore_now()
-    assert audio_duck.restore_left_over(run=missing, state_path=str(tmp_path / "none.json")) == 0
+    assert audio_duck.restore_left_over(run=missing, state_path=str(tmp_path / "none.json"), reset=_no_reset) == 0
 
 
 def test_setting_is_off_by_default_and_live():
@@ -226,3 +232,31 @@ def test_a_paused_player_isnt_turned_down(tmp_path):
     d = _ducker(tmp_path, pactl)
     d._duck_now()
     assert pactl.streams[5]["volumes"] == [65536] and d._ducked == {}
+
+
+def test_a_stream_gone_while_down_has_the_desktops_memory_put_right_at_once(tmp_path):
+    """Ron, 2026-10-17: Brave's video was already paused, so its silent stream
+    was turned down and then closed; Brave played quiet for minutes after.
+    Now the desktop's remembered volume for the app is reset right away."""
+    resets = []
+    pactl = FakePactl({5: {"pid": 77, "volumes": [65536, 65536], "app": "Brave"}})
+    d = _ducker(tmp_path, pactl, reset=lambda app, v: resets.append((app, v)) or True)
+    d._duck_now()
+    del pactl.streams[5]
+    d._restore_now()
+    assert resets == [("Brave", [65536, 65536])]
+    assert d._owed == {}
+
+
+def test_owed_apps_from_before_are_reset_at_the_next_start(tmp_path):
+    resets = []
+    pactl = FakePactl({5: {"pid": 77, "volumes": [50000], "app": "Brave"}})
+    d = _ducker(tmp_path, pactl)
+    d._duck_now()
+    del pactl.streams[5]
+    d._restore_now()                                # reset "failed": owed, in the file
+    assert d._owed
+    audio_duck.restore_left_over(run=pactl, state_path=str(tmp_path / "ducked.json"),
+                                 reset=lambda app, v: resets.append(app) or True)
+    assert resets == ["Brave"]
+    assert not (tmp_path / "ducked.json").exists()

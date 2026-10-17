@@ -12,12 +12,15 @@ never touched: on PipeWire a stream doesn't carry its process id, its client
 does, so streams are matched to their client's pid. Short system sounds
 (media.role "event") are left alone too.
 
-The desktop remembers each app's volume. A sound that ends while it's turned
-down (a beep, a notification) would come back that quiet next time, and a
-second dictation would lower it again. So such an app is remembered as owed
-its volume (by application.name, the desktop's own key) until TuxTalk next
-sees it at the lowered level and puts it back; it's never lowered from there.
-On 2026-10-17 the beeps did exactly that and went silent in three presses.
+The desktop remembers each app's volume (by application.name). A sound that
+ends while it's turned down (a beep, a notification, a browser closing its
+stream while its video is paused) would come back that quiet next time, and
+a second dictation would lower it again. On 2026-10-17 the beeps went silent
+in three presses that way, and Brave's videos played quiet for minutes. So
+the desktop's memory is corrected at once (reset_remembered: a moment of
+silence played under the app's name at its real volume). Where that can't
+be done, the app is owed its volume until TuxTalk next sees it at the
+lowered level and puts it back; it's never lowered from there.
 
 If the service stops mid-dictation, the volumes it lowered are written to a
 small file in the runtime folder, and the next start puts them back
@@ -116,11 +119,61 @@ def _set_volume(index, volumes, run=subprocess.run):
     return _pactl("set-sink-input-volume", str(index), *[str(v) for v in volumes], run=run) is not None
 
 
+RESET_TIMEOUT_S = 3.0
+
+
+def reset_remembered(app, volumes, run=subprocess.run, popen=subprocess.Popen):
+    """Make the desktop remember *volumes* for *app* again, when the stream
+    TuxTalk turned down is gone: play a moment of silence under the app's
+    name (paplay, from the same pulseaudio-utils as pactl), set that to the
+    real volume, which the desktop stores for the app, and stop. True if it
+    took."""
+    import time
+    try:
+        player = popen(["paplay", "--raw", "--format=s16le", "--rate=48000", "--channels=2",
+                        f"--client-name={app}", f"--property=application.name={app}"],
+                       stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError as e:
+        logger.debug(f"Audio duck: paplay failed: {e}")
+        return False
+    done = False
+    try:
+        silence = b"\0" * (48000 * 4 // 10)            # 0.1 s
+        deadline = time.monotonic() + RESET_TIMEOUT_S
+        while time.monotonic() < deadline:
+            player.stdin.write(silence)
+            player.stdin.flush()
+            mine = [st for st in list_streams(run) if st["pid"] == player.pid]
+            if mine:
+                st = mine[0]
+                want = volumes if len(volumes) == len(st["volumes"]) else [max(volumes)] * len(st["volumes"])
+                done = _set_volume(st["index"], want, run)
+                break
+        if done:
+            player.stdin.write(silence)     # let the desktop see it before the stream ends
+            player.stdin.flush()
+    except (OSError, ValueError) as e:
+        logger.debug(f"Audio duck: resetting {app!r}: {e}")
+    finally:
+        try:
+            player.stdin.close()
+        except OSError:
+            pass
+        try:
+            player.wait(timeout=RESET_TIMEOUT_S)
+        except subprocess.TimeoutExpired:
+            player.kill()
+    if done:
+        logger.info(f"Put {app!r} back to its volume for next time (its sound had ended)")
+    return done
+
+
 class AudioDucker:
     """duck() lowers every other app; restore() puts back what it lowered."""
 
-    def __init__(self, run=subprocess.run, own_pid=None, state_path=None):
+    def __init__(self, run=subprocess.run, own_pid=None, state_path=None, reset=None):
         self._run = run
+        self._reset = reset or (lambda app, volumes: reset_remembered(app, volumes, run))
         self._own_pid = os.getpid() if own_pid is None else own_pid
         self._state_path = state_path or _state_path()
         self._ducked = {}          # index -> (original volumes, ducked volumes, app)
@@ -192,9 +245,10 @@ class AudioDucker:
         put_back = 0
         for index, (original, lowered, app) in ducked.items():
             if index not in now:
-                # Ended while turned down: the desktop keeps it that quiet for
-                # the app's next sound, until it's seen and put back.
-                if app:
+                # Ended while turned down: the desktop would keep it that
+                # quiet for the app's next sound. Put that right now, or else
+                # owe it until the app is seen again.
+                if app and not self._reset(app, original):
                     self._owed[app] = {"original": original, "lowered": lowered}
                 continue
             if now[index] != lowered:
@@ -278,7 +332,7 @@ class AudioDucker:
             logger.debug(f"Audio duck: could not remove {self._state_path}: {e}")
 
 
-def restore_left_over(run=subprocess.run, state_path=None):
+def restore_left_over(run=subprocess.run, state_path=None, reset=None):
     """Put back volumes a service that stopped mid-dictation left lowered."""
     path = state_path or _state_path()
     try:
@@ -288,7 +342,7 @@ def restore_left_over(run=subprocess.run, state_path=None):
         return 0
     except (OSError, ValueError):
         data = {}
-    ducker = AudioDucker(run=run, state_path=path)
+    ducker = AudioDucker(run=run, state_path=path, reset=reset)
     for index, entry in data.items():
         if index == "owed":
             continue
@@ -301,5 +355,11 @@ def restore_left_over(run=subprocess.run, state_path=None):
     if ducker._ducked:
         logger.info("Putting back sounds a stopped dictation left turned down")
     count = len(ducker._ducked)
-    ducker._restore_now()       # what's still owed stays in the file for later
+    ducker._restore_now()
+    # Apps owed their volume from before: put the desktop's memory right now
+    # rather than wait for them to play again.
+    for app, owed in list(ducker._owed.items()):
+        if ducker._reset(app, owed["original"]):
+            del ducker._owed[app]
+    ducker._save()
     return count
