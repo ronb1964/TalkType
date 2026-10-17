@@ -123,6 +123,40 @@ class ParakeetModel:
         """Transcribe 16 kHz mono float32 audio and return the text."""
         return (self._model.recognize(audio_f32, sample_rate=16000) or "").strip()
 
+    def set_words(self, words) -> None:
+        """Lean toward Your Words (parakeet_bias.py). Cheap to call before
+        every dictation: nothing happens unless the list changed. Anything
+        unexpected inside onnx-asr leaves the plain decoder in place."""
+        words = tuple(words or ())
+        if words == getattr(self, "_words", ()):
+            return
+        self._words = words
+        asr = getattr(self._model, "asr", None)
+        if asr is None:
+            return
+        plain = getattr(self, "_plain_decoding", None)
+        if plain is None:
+            plain = self._plain_decoding = asr._decoding
+        asr._decoding = plain
+        if not words:
+            logger.info("Your Words for Parakeet: none")
+            return
+        try:
+            from . import parakeet_bias
+            booster = parakeet_bias.WordBooster(asr._vocab, words, asr._blank_idx)
+            if booster:
+                asr._decoding = parakeet_bias.boosted_tdt_decoding(asr, booster, on_word=_log_word)
+            logger.info(f"Your Words for Parakeet: {len(booster.targets)} spellings of {len(words)} words")
+        except Exception as e:
+            asr._decoding = plain
+            logger.warning(f"Your Words can't steer Parakeet, so only the spelling pass applies: {e}")
+
+
+def _log_word(word, cost, kept):
+    """Log the words parakeet_bias wrote (not every try: there are many)."""
+    if kept:
+        logger.info(f"Your Words: Parakeet wrote {word!r} (cost {cost:.1f})")
+
 
 def load_parakeet_model():
     """Load Parakeet from the local download.

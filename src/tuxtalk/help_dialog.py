@@ -622,11 +622,13 @@ and punctuation — wrap its text in double quotes.
 <b>Your Words:</b>
 Names and terms TuxTalk should spell your way, in Preferences → Words.
 • Whisper models are told about them before they listen
+• Parakeet on the processor leans toward them while it listens: a name it
+  would write as "Tuck's talk" comes out TuxTalk. Parakeet on the graphics
+  card can't do this yet
 • Every model fixes them when they come out split up or with the wrong
   capitals: "tux talk" → TuxTalk
 • Beside each word, list what TuxTalk hears instead ("clawed claw" for
-  ClaudeClaw) and it fixes that too. Parakeet can't be told about words
-  ahead of time, so this is how to teach it
+  ClaudeClaw) and it fixes that too, whatever the model
 • Fix a Word adds to this list: the word, and what it heard
 
 <b>Undo Commands:</b>

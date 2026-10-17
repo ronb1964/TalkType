@@ -6,9 +6,10 @@ to the snippets file. They are used twice:
 - Whisper models are told about them before they listen: faster-whisper's
   `hotwords` and whisper.cpp's `prompt`. That steers Whisper towards the
   user's spelling of a name it would otherwise guess at.
-- Every engine then gets a spelling pass (fix_spelling). Parakeet has no way
-  to be told about words beforehand, in either of its engines, so for
-  Parakeet this pass is all there is. It only fixes a word that came out
+- Parakeet on the processor leans toward them while it decodes
+  (parakeet_bias.py): a word is written whole where the audio fits it.
+  Parakeet on the graphics card (whisper.cpp) can't be steered yet.
+- Every engine then gets a spelling pass (fix_spelling). It only fixes a word that came out
   split up, hyphenated or with the wrong capitals ("tux talk", "Tux-Talk",
   "tuxtalk" -> "TuxTalk"). Nothing fuzzy: a word heard as something else
   entirely ("bamboo studio") is Fix a Word's job, and guessing at

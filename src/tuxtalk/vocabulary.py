@@ -6,7 +6,8 @@ what they should be ("BambuStudio"). The fix is saved as an ordinary custom
 voice command, so:
 
 - it works for every engine. It rewrites the transcription after the model
-  heard it; Parakeet has no way to be told about words beforehand.
+  heard it, which catches what steering the model (Whisper's prompt,
+  parakeet_bias for Parakeet on the processor) still misses.
 - the corrected word is also added to Your Words (custom_words.py), so
   Whisper models are told about it before they listen, and the fix shows up
   under that word in Preferences > Words, where it can be edited or removed.

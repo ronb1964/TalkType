@@ -37,6 +37,16 @@ START_TIMEOUT = 180          # the very first run on a chip compiles shaders (8 
 MIN_SAMPLES = SAMPLE_RATE    # shorter recordings are padded with silence to one second
 
 
+def _steer(model, words):
+    """Hand *model* Your Words if it takes them; never in the way of a dictation."""
+    set_words = getattr(model, "set_words", None)
+    if set_words is not None:
+        try:
+            set_words(words)
+        except Exception as e:
+            logger.warning(f"Couldn't hand Parakeet your words: {e}")
+
+
 class ParakeetGpuModel:
     """Parakeet running on graphics chip *device_index* in a helper process.
 
@@ -53,6 +63,7 @@ class ParakeetGpuModel:
         self._proc = None
         self._stderr = None
         self._cpu = None
+        self._words = ()
         self._lock = threading.Lock()
         # The helper dies with the thread that started it (PR_SET_PDEATHSIG
         # is per thread), and a restart can happen on a short-lived dictation
@@ -150,7 +161,15 @@ class ParakeetGpuModel:
                 raise RuntimeError("Parakeet failed on the graphics chip, and its processor "
                                    f"version isn't available ({e})") from e
             logger.warning("Parakeet moved to the processor for the rest of this session")
+            _steer(self._cpu, self._words)
             return self._cpu.recognize(audio)
+
+    def set_words(self, words) -> None:
+        """Your Words. The graphics chip's engine can't be steered yet, so
+        they only reach the processor engine this falls back to."""
+        self._words = tuple(words or ())
+        if self._cpu is not None:
+            _steer(self._cpu, self._words)
 
     def close(self):
         """Stop the helper for good."""
