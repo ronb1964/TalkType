@@ -27,13 +27,6 @@ Old folders, launchers and KDE shortcuts are moved or cleaned on start by
 - Make and test code changes in `/home/ron/Projects/TalkType/src/`
 - NEVER edit files in `.claude/worktrees/` — Ron's dev version runs from the main project
 
-### Before 0.16 only: publish the Vulkan engine 1.9.5 build 1
-`src/tuxtalk/whisper_vulkan.py` points at `whisper-vulkan-1.9.5-b1`
-(Your Words for Parakeet on the graphics chip). It must be uploaded as a
-GitHub **pre-release** before any release, or every new Vulkan user gets a
-404: check with `gh release view whisper-vulkan-1.9.5-b1`. Ask Ron first
-(see VULKAN GRAPHICS ENGINE below). Delete this step once it's published.
-
 ### Step 2: Ask Before Building
 - **NEVER run `./build-release.sh` without asking Ron first**
 - Say: "Ready to build the AppImage?" and WAIT for confirmation
