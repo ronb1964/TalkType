@@ -2491,6 +2491,26 @@ def _open_key_devices(list_devices, input_device):
     return devices
 
 
+def _hotkey_test_helper(ecodes, connect=None):
+    """The hotkey helper as a keyboard for the hotkey test, or None when it
+    isn't running. It reports only the keys it's asked to watch, so ask for
+    every key the test accepts on its own: F1 to F24, Esc, Pause, Scroll Lock."""
+    try:
+        if connect is None:
+            from .hotkey_helper_client import connect_helper as connect
+        helper = connect()
+        if helper is None:
+            return None
+        codes = [getattr(ecodes, f"KEY_F{n}") for n in range(1, 25)]
+        codes += [ecodes.KEY_ESC, ecodes.KEY_PAUSE, ecodes.KEY_SCROLLLOCK]
+        helper.watch([str(code) for code in codes])
+        logger.info("Hotkey test: reading the keys through the hotkey helper")
+        return helper
+    except Exception as e:
+        logger.warning(f"Hotkey test: could not use the hotkey helper: {e}")
+        return None
+
+
 def _key_seen_markup(service_can_read):
     """A tested key's status. Without evdev access only this dialog saw the
     key, and the dictation service, which reads evdev alone, would not."""
@@ -2759,8 +2779,13 @@ def show_hotkey_test_dialog():
 
         while not stop_evdev.is_set():
             try:
-                # Use select to wait for events with timeout
-                r, w, x = select.select(keyboards, [], [], 0.1)
+                # The helper can hold events already taken in, with nothing
+                # left on its socket for select() to see.
+                r = [d for d in keyboards
+                     if hasattr(d, "needs_service") and d.needs_service()]
+                if not r:
+                    # Use select to wait for events with timeout
+                    r, w, x = select.select(keyboards, [], [], 0.1)
                 for dev in r:
                     try:
                         for event in dev.read():
@@ -2914,6 +2939,14 @@ def show_hotkey_test_dialog():
         # already shows whether the service will hear it.
         if EVDEV_AVAILABLE:
             keyboards.extend(_open_key_devices(list_devices, InputDevice))
+            if not keyboards:
+                # With the hotkey helper the user isn't in the "input" group,
+                # so the keyboards can't be opened here: hear the keys through
+                # the helper, as the dictation service does. Without this the
+                # test said the keys wouldn't work until a restart.
+                helper = _hotkey_test_helper(ecodes)
+                if helper is not None:
+                    keyboards.append(helper)
         if not keyboards:
             logger.warning("No keyboards found via evdev")
             keyboard_notice.set_markup(
