@@ -1551,6 +1551,17 @@ class PreferencesWindow:
         pause_media_check.set_tooltip_text("Pauses YouTube, Spotify and other players while you talk, so the microphone hears only you.\nOnly what TuxTalk paused starts again when you finish.")
         grid.attach(pause_media_check, 0, row, 2, 1)
         row += 1
+
+        # Covers what pausing can't reach: calls, games, apps without media keys.
+        duck_check = Gtk.CheckButton(label="Turn other sounds down while dictating")
+        duck_check.set_active(bool(self.config.get("duck_audio", False)))
+        duck_check.connect("toggled", lambda x: self.update_config("duck_audio", x.get_active()))
+        duck_check.set_tooltip_text(
+            "Lowers every other app to a quarter of its volume while you talk, and puts it\n"
+            "back when you finish: Discord calls, games and anything pausing can't reach.\n"
+            "A volume you change yourself in the meantime is left as you set it.")
+        grid.attach(duck_check, 0, row, 2, 1)
+        row += 1
         
         # Notifications
         notify_check = Gtk.CheckButton(label="Show desktop notifications")

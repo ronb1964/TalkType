@@ -114,6 +114,7 @@ def test_both_typing_paths_know_the_enter_key():
 
 def test_setting_is_off_by_default_and_applies_live():
     assert config.Settings().press_enter_after is False
+    assert "press_enter_after" in config.LIVE_APPLIED_KEYS
     cfg = config.Settings(press_enter_after=True)
     app._apply_cleanup_settings(cfg)
     try:

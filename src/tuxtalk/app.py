@@ -53,14 +53,26 @@ _clipboard_keeper = None        # clipboard.ClipboardKeeper, created on the firs
 # start_recording never pause anyone's music; refreshed with the live settings.
 _pause_media = False
 _media_pauser = None            # media_pause.MediaPauser, created on the first pause
+# Turn other apps' sound down while recording (config duck_audio, audio_duck.py).
+# Off until the service reads config, for the same reason as _pause_media.
+_duck_audio = False
+_audio_ducker = None            # audio_duck.AudioDucker, created on the first duck
 # The Paste Last Dictation combo (config paste_last_hotkey), for the "couldn't
 # type that" notice; refreshed with the live settings. "" when turned off.
 _paste_last_hotkey = ""
 
 
 def _pause_media_players():
-    """Pause playing music and videos, in the background (the keyboard is grabbed)."""
-    global _media_pauser
+    """Pause playing music and videos and turn other sounds down, as the
+    options say, in the background (the keyboard is grabbed)."""
+    global _media_pauser, _audio_ducker
+    if _duck_audio:
+        if _audio_ducker is None:
+            from .audio_duck import AudioDucker
+            _audio_ducker = AudioDucker()
+            # Quitting mid-dictation would otherwise leave everything quiet.
+            atexit.register(_audio_ducker.restore_now)
+        _audio_ducker.duck()
     if not _pause_media:
         return
     if _media_pauser is None:
@@ -72,10 +84,13 @@ def _pause_media_players():
 
 
 def _resume_media_players():
-    """Resume what _pause_media_players paused. Runs even if the option was
-    switched off mid-recording, so nothing is left paused."""
+    """Resume what _pause_media_players paused and put back what it turned
+    down. Runs even if an option was switched off mid-recording, so nothing
+    is left paused or quiet."""
     if _media_pauser is not None:
         _media_pauser.resume()
+    if _audio_ducker is not None:
+        _audio_ducker.restore()
 
 
 def _loggable(text):
@@ -1165,8 +1180,9 @@ def _reload_live_settings(cfg, indicator):
         global _restore_clipboard
         _restore_clipboard = getattr(cfg, "restore_clipboard", False)
 
-        global _pause_media
+        global _pause_media, _duck_audio
         _pause_media = getattr(cfg, "pause_media", True)
+        _duck_audio = getattr(cfg, "duck_audio", False)
 
         global _paste_last_hotkey
         _paste_last_hotkey = getattr(cfg, "paste_last_hotkey", "")
@@ -4496,8 +4512,15 @@ def main():
     _usage_stats = getattr(cfg, 'usage_stats', True)
     global _restore_clipboard
     _restore_clipboard = getattr(cfg, 'restore_clipboard', False)
-    global _pause_media
+    global _pause_media, _duck_audio
     _pause_media = getattr(cfg, 'pause_media', True)
+    _duck_audio = getattr(cfg, 'duck_audio', False)
+    # A service that stopped mid-dictation may have left other apps quiet.
+    try:
+        from .audio_duck import restore_left_over
+        restore_left_over()
+    except Exception as e:
+        logger.debug(f"Could not check for sounds left turned down: {e}")
     global _paste_last_hotkey
     _paste_last_hotkey = getattr(cfg, 'paste_last_hotkey', '')
 

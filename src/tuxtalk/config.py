@@ -185,6 +185,7 @@ class Settings:
     recommend_notice_shown: bool = False  # the one-time "better setup" notice was shown (or not needed)
     vulkan_slower: bool = False          # the speed check found the processor faster than the graphics chip
     pause_media: bool = True             # pause playing music/videos while dictating, resume after (media_pause.py)
+    duck_audio: bool = False             # turn other apps' sound down while dictating, back after (audio_duck.py)
 
 
 # ---------------------------------------------------------------------------
@@ -761,6 +762,7 @@ LIVE_APPLIED_KEYS = {
     "restore_clipboard",
     # Read into a module global on each reload, checked when each recording starts.
     "pause_media",
+    "duck_audio",
     # Read by the tray and first run (recommend.py), never by the service.
     "dictation_language",
     "recommend_notice_shown",
