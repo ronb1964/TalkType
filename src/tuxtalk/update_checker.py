@@ -1111,6 +1111,24 @@ def _install_app_icon() -> Optional[str]:
         return None
 
 
+# The launcher's right-click shortcuts (tuxtalk --open / --quit, control.py).
+# Plain GNOME has no tray, so without the extension these and opening TuxTalk
+# again (its menu window) are how people reach Preferences and the rest.
+# Same list as io.github.ronb1964.TuxTalk.desktop and aur/tuxtalk.desktop.
+DESKTOP_ACTIONS = (("Preferences", "Preferences", "--open preferences"),
+                   ("TranscribeFile", "Transcribe a File", "--open transcribe"),
+                   ("Help", "Help", "--open help"),
+                   ("Quit", "Quit TuxTalk", "--quit"))
+
+
+def desktop_actions(program: str) -> str:
+    """The Actions= line and [Desktop Action] groups for *program*."""
+    out = "Actions=" + "".join(f"{aid};" for aid, _, _ in DESKTOP_ACTIONS) + "\n"
+    for aid, name, args in DESKTOP_ACTIONS:
+        out += f"\n[Desktop Action {aid}]\nName={name}\nExec={program} {args}\n"
+    return out
+
+
 def create_desktop_launcher() -> Tuple[bool, str]:
     """
     Create a desktop launcher (.desktop file) for TuxTalk.
@@ -1150,7 +1168,7 @@ Categories=Utility;Accessibility;AudioVideo;
 Keywords=dictation;speech;voice;transcription;whisper;
 StartupNotify=true
 Terminal=false
-"""
+{desktop_actions(appimage_exec_path)}"""
 
         # Write the desktop file
         with open(DESKTOP_FILE_PATH, "w") as f:
@@ -1188,6 +1206,43 @@ def _desktop_exec_program(path: str) -> str:
         return path
     quoted = "".join("\\" + c if c in '"`$\\' else c for c in path)
     return '"' + quoted.replace("\\", "\\\\").replace("\n", "\\n") + '"'
+
+
+def add_launcher_actions() -> bool:
+    """Give a menu launcher written before 0.16 the right-click shortcuts
+    (desktop_actions). Only a self-managed AppImage's own launcher is
+    touched, and only once (it then has an Actions= line). True if changed."""
+    try:
+        if get_install_type(pkg_query=lambda: "package") != "appimage":
+            return False        # packages ship their launcher with the shortcuts
+        with open(DESKTOP_FILE_PATH) as f:
+            text = f.read()
+        lines = text.splitlines()
+        if _HIDDEN_ENTRY_MARK in text or any(l.startswith("Actions=") for l in lines):
+            return False
+        exec_line = next((l for l in lines if l.startswith("Exec=")), None)
+        if exec_line is None:
+            return False
+        # The program as the launcher runs it, without field codes like %U.
+        program = " ".join(w for w in exec_line[len("Exec="):].split(" ")
+                           if not (len(w) == 2 and w.startswith("%")))
+        # The new groups go at the end, so Actions= must land in the main group.
+        main_end = next((i for i, l in enumerate(lines[1:], 1) if l.startswith("[")), len(lines))
+        actions = desktop_actions(program).split("\n", 1)
+        new_lines = lines[:main_end] + [actions[0]] + lines[main_end:]
+        tmp = DESKTOP_FILE_PATH + ".tmp"
+        with open(tmp, "w") as f:
+            f.write("\n".join(new_lines).rstrip("\n") + "\n" + actions[1])
+        os.replace(tmp, DESKTOP_FILE_PATH)
+        import threading
+        threading.Thread(target=_refresh_desktop_menu_cache, daemon=True).start()
+        logger.info("Added the right-click shortcuts to the menu launcher")
+        return True
+    except OSError:
+        return False            # no launcher yet
+    except Exception as e:
+        logger.warning(f"Could not add the launcher's right-click shortcuts: {e}")
+        return False
 
 
 def desktop_launcher_exists() -> bool:

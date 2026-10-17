@@ -93,7 +93,7 @@ chmod +x "$STAGE/usr/bin/tuxtalk"
 # updater (which restarts /usr/bin/talktype after installing this) still use it.
 ln -s tuxtalk "$STAGE/usr/bin/talktype"
 
-sed 's/^Exec=.*/Exec=tuxtalk tray/' "$PROJECT_DIR/io.github.ronb1964.TuxTalk.desktop" \
+sed 's/^Exec=AppRun/Exec=tuxtalk/' "$PROJECT_DIR/io.github.ronb1964.TuxTalk.desktop" \
     > "$STAGE/usr/share/applications/io.github.ronb1964.TuxTalk.desktop"
 cp "$PROJECT_DIR/io.github.ronb1964.TuxTalk.png" "$STAGE/usr/share/pixmaps/"
 install -Dm644 "$PROJECT_DIR/icons/OFFICIAL_ICON_DO_NOT_CHANGE.svg" \

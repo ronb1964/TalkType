@@ -7,3 +7,20 @@ Type=Application
 Categories=Utility;AudioVideo;Audio;Accessibility;
 Terminal=false
 StartupNotify=false
+Actions=Preferences;TranscribeFile;Help;Quit;
+
+[Desktop Action Preferences]
+Name=Preferences
+Exec=AppRun --open preferences
+
+[Desktop Action TranscribeFile]
+Name=Transcribe a File
+Exec=AppRun --open transcribe
+
+[Desktop Action Help]
+Name=Help
+Exec=AppRun --open help
+
+[Desktop Action Quit]
+Name=Quit TuxTalk
+Exec=AppRun --quit

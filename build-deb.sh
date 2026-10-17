@@ -98,7 +98,7 @@ chmod +x "$STAGE/usr/bin/tuxtalk"
 ln -s tuxtalk "$STAGE/usr/bin/talktype"
 
 # Desktop entry — same as the AppImage's, but Exec points at the system launcher.
-sed 's/^Exec=.*/Exec=tuxtalk tray/' "$PROJECT_DIR/io.github.ronb1964.TuxTalk.desktop" \
+sed 's/^Exec=AppRun/Exec=tuxtalk/' "$PROJECT_DIR/io.github.ronb1964.TuxTalk.desktop" \
     > "$STAGE/usr/share/applications/io.github.ronb1964.TuxTalk.desktop"
 cp "$PROJECT_DIR/io.github.ronb1964.TuxTalk.png" "$STAGE/usr/share/pixmaps/"
 # Crisp scalable icon in the hicolor theme — used by the app menu AND the first-run

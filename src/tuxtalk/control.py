@@ -49,25 +49,88 @@ MESSAGES = {
 _FAILED = {"setup", "starting", "unknown"}
 
 
-def parse_action(argv):
-    """"toggle", "start", "stop" or None from the command line.
+# tuxtalk --open NAME (and --quit): the running TuxTalk's D-Bus method for
+# each. The launcher's right-click shortcuts use these.
+OPEN_METHODS = {
+    "menu": "ShowMenu",
+    "preferences": "OpenPreferences",
+    "transcribe": "TranscribeFile",
+    "fix-word": "FixWordInDictation",
+    "help": "ShowHelp",
+    "quit": "Quit",
+}
 
-    Anything else is left alone: launchers pass their own arguments (the
-    AppImage's desktop entry runs "AppRun tray").
-    """
+
+def _parse(argv):
     ap = argparse.ArgumentParser(
         prog="tuxtalk",
         description="Voice dictation for Linux. With no options, starts TuxTalk.",
         epilog="If TuxTalk isn't running, --toggle and --start start it, and "
-               "recording begins once the speech model has loaded.")
+               "recording begins once the speech model has loaded. --open "
+               "starts it too, then opens the window.")
     group = ap.add_mutually_exclusive_group()
     for action, text in (("toggle", "start recording, or stop it if it's recording"),
                          ("start", "start recording (nothing changes if it already is)"),
                          ("stop", "stop recording and type what was said")):
         group.add_argument(f"--{action}", dest="action", action="store_const",
                            const=action, help=text)
+    group.add_argument("--open", dest="open", metavar="WINDOW",
+                       choices=[name for name in OPEN_METHODS if name != "quit"],
+                       help="open a window: menu, preferences, transcribe, fix-word or help")
+    group.add_argument("--quit", dest="open", action="store_const", const="quit",
+                       help="quit TuxTalk")
     args, _others = ap.parse_known_args(argv)
-    return args.action
+    return args
+
+
+def parse_action(argv):
+    """"toggle", "start", "stop" or None from the command line.
+
+    Anything else is left alone: launchers pass their own arguments (the
+    AppImage's desktop entry runs "AppRun tray").
+    """
+    return _parse(argv).action
+
+
+def parse_open(argv):
+    """The window --open names ("menu", "preferences"...), "quit" for
+    --quit, or None."""
+    return _parse(argv).open
+
+
+def open_in_running(name, tray_starting=lambda: False, bus=None,
+                    sleep=time.sleep, clock=time.monotonic):
+    """Ask the running TuxTalk to open window *name* (or quit).
+
+    True when it did, False when TuxTalk runs but can't (a version from
+    before the menu window, or one still starting after TRAY_START_WAIT_S),
+    None when no TuxTalk runs. Uses its own D-Bus connection: a shared one
+    opened now, before the tray sets up its main loop, would stop the tray
+    this process may become from exporting its D-Bus service.
+    """
+    import dbus
+    own = bus is None
+    if own:
+        bus = dbus.SessionBus(private=True)
+    try:
+        deadline = clock() + TRAY_START_WAIT_S
+        while not bus.name_has_owner(DBUS_NAME):
+            if not tray_starting():
+                return None
+            if clock() >= deadline:
+                return False
+            sleep(0.2)
+        obj = bus.get_object(DBUS_NAME, DBUS_PATH, introspect=False)
+        try:
+            result = getattr(obj, OPEN_METHODS[name])(dbus_interface=DBUS_INTERFACE)
+        except dbus.DBusException as e:
+            if e.get_dbus_name() == "org.freedesktop.DBus.Error.UnknownMethod":
+                return False
+            raise
+        return result is None or bool(result)    # only ShowMenu answers
+    finally:
+        if own:
+            bus.close()
 
 
 def act_now(action, recording):
@@ -120,25 +183,33 @@ def ask_running(action, tray_starting=lambda: False, bus=None,
     for, so a shortcut pressed during login doesn't start a second one.
     """
     import dbus
-    if bus is None:
-        bus = dbus.SessionBus()
-    deadline = clock() + TRAY_START_WAIT_S
-    while not bus.name_has_owner(DBUS_NAME):
-        if not tray_starting():
-            return None
-        if clock() >= deadline:
-            return "starting"
-        sleep(0.2)
-    obj = bus.get_object(DBUS_NAME, DBUS_PATH, introspect=False)
+    own = bus is None
+    if own:
+        # Private, as in open_in_running: with nothing running this process
+        # becomes the tray, which a shared connection opened now would stop
+        # from exporting its D-Bus service.
+        bus = dbus.SessionBus(private=True)
     try:
-        return str(obj.ControlDictation(action, dbus_interface=DBUS_INTERFACE))
-    except dbus.DBusException as e:
-        if e.get_dbus_name() != "org.freedesktop.DBus.Error.UnknownMethod":
-            raise
-    # A TuxTalk from before this command: what its menus use.
-    old = {"toggle": "ToggleRecording", "start": "StartRecording", "stop": "StopRecording"}
-    getattr(obj, old[action])(dbus_interface=DBUS_INTERFACE)
-    return "old"
+        deadline = clock() + TRAY_START_WAIT_S
+        while not bus.name_has_owner(DBUS_NAME):
+            if not tray_starting():
+                return None
+            if clock() >= deadline:
+                return "starting"
+            sleep(0.2)
+        obj = bus.get_object(DBUS_NAME, DBUS_PATH, introspect=False)
+        try:
+            return str(obj.ControlDictation(action, dbus_interface=DBUS_INTERFACE))
+        except dbus.DBusException as e:
+            if e.get_dbus_name() != "org.freedesktop.DBus.Error.UnknownMethod":
+                raise
+        # A TuxTalk from before this command: what its menus use.
+        old = {"toggle": "ToggleRecording", "start": "StartRecording", "stop": "StopRecording"}
+        getattr(obj, old[action])(dbus_interface=DBUS_INTERFACE)
+        return "old"
+    finally:
+        if own:
+            bus.close()
 
 
 def shortcut_command(appimage_env=None, home=None):

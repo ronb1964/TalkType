@@ -63,6 +63,30 @@ def is_gnome() -> bool:
     return get_desktop_environment() == 'gnome'
 
 
+def tray_host_available(bus=None) -> bool:
+    """True when the desktop shows tray icons (a StatusNotifierWatcher runs).
+
+    KDE, Cinnamon, XFCE and Ubuntu's GNOME have one. Plain GNOME (Fedora,
+    Silverblue, Debian, Arch) has none unless the AppIndicator extension is
+    added, so there TuxTalk's tray icon, and with it the whole menu, never
+    appears. Our GNOME extension draws its own menu and doesn't count here.
+    Unknown (no session bus) counts as available, so nothing nags by mistake.
+    """
+    try:
+        import dbus
+        if bus is None:
+            # Private: a shared connection opened before the tray sets up its
+            # GLib main loop couldn't export the tray's D-Bus service later.
+            bus = dbus.SessionBus(private=True)
+            try:
+                return bool(bus.name_has_owner("org.kde.StatusNotifierWatcher"))
+            finally:
+                bus.close()
+        return bool(bus.name_has_owner("org.kde.StatusNotifierWatcher"))
+    except Exception:
+        return True
+
+
 def get_gnome_shell_version() -> Optional[str]:
     """
     Get GNOME Shell version

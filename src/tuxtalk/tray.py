@@ -120,6 +120,16 @@ def _acquire_tray_singleton():
                         pass  # exited between the scan and the kill
             if not (old_trays and _wait_for_lock(lockfile, _OLD_TRAY_EXIT_WAIT_S)):
                 print("Another tray instance is already running. Exiting.", file=sys.stderr)
+                # Opened again from the app list: show the running TuxTalk's
+                # menu as a window. Plain GNOME has no tray to point people
+                # at, so "look for the tray icon" was a dead end there.
+                if not old_trays:
+                    from . import control
+                    try:
+                        if control.open_in_running("menu", tray_starting=lambda: True):
+                            sys.exit(0)
+                    except Exception as e:
+                        logger.debug(f"Could not ask the running TuxTalk for its menu: {e}")
                 _show_already_running(older_talktype=bool(pre_rename_tray_pids()))
                 sys.exit(0)
 
@@ -181,6 +191,28 @@ def _run_command_line(action):
         sys.exit(control.report(status))
     if action == "stop":
         sys.exit(control.report("idle"))
+    print("Starting TuxTalk.")
+
+
+def _open_from_command_line(name):
+    """tuxtalk --open NAME / --quit with TuxTalk running: asks it and exits.
+    Returns only when nothing runs and this process should start TuxTalk
+    (main() opens the window once it's up)."""
+    from . import control
+    try:
+        status = control.open_in_running(name, tray_starting=_tray_lock_held)
+    except Exception as e:
+        print(f"Couldn't reach TuxTalk: {e}", file=sys.stderr)
+        sys.exit(1)
+    if status is True:
+        sys.exit(0)
+    if status is False:
+        print("The running TuxTalk can't do that. It may be an older version "
+              "or still starting; try again in a moment.", file=sys.stderr)
+        sys.exit(1)
+    if name == "quit":
+        print("TuxTalk isn't running.")
+        sys.exit(0)
     print("Starting TuxTalk.")
 
 
@@ -449,6 +481,7 @@ class DictationTray:
 
         # Track subprocess windows
         self.preferences_process = None
+        self._menu_window = None    # menu_window.MenuWindow while it's open
 
         # Cached PID of the dictation service (for fast /proc-based status checks)
         self._service_pid = None
@@ -598,6 +631,10 @@ class DictationTray:
                 def show_transcribe_file(self):
                     """Open Transcribe a File (GNOME extension D-Bus)."""
                     GLib.idle_add(self.tray.open_transcribe_window, None)
+
+                def show_menu(self):
+                    """The menu window: TuxTalk opened again (ShowMenu)."""
+                    GLib.idle_add(self.tray.show_menu_window)
 
                 def show_about(self):
                     """Show about dialog via tray."""
@@ -1317,6 +1354,58 @@ class DictationTray:
             launch_transcribe_window()
         except Exception as e:
             logger.error(f"Failed to open Transcribe a File: {e}")
+        return False
+
+    def show_menu_window(self, _=None):
+        """TuxTalk's menu as a window (menu_window.py): what opening TuxTalk
+        again from the app list shows. On plain GNOME without the extension
+        there's no tray, so this is the only menu there is."""
+        try:
+            if self._menu_window is not None:
+                self._menu_window.present()
+                return False
+            from . import desktop_detect, extension_helper
+            from .menu_window import MenuWindow
+            extension_on = extension_helper.is_extension_enabled()
+            no_tray = not extension_on and not desktop_detect.tray_host_available()
+            self._menu_window = MenuWindow(
+                self, no_tray=no_tray,
+                extension_installed=extension_helper.is_extension_installed(),
+                offer_extension=desktop_detect.is_gnome())
+            logger.info("Opened the menu window" + (" (no system tray here)" if no_tray else ""))
+        except Exception as e:
+            logger.error(f"Failed to open the menu window: {e}", exc_info=True)
+        return False  # one-shot when scheduled through GLib.idle_add
+
+    def open_window(self, name):
+        """Open a window by its command-line name (tuxtalk --open NAME, and
+        the launcher's right-click shortcuts; see control.OPEN_METHODS)."""
+        actions = {
+            "menu": self.show_menu_window,
+            "preferences": lambda: self.open_preferences(None),
+            "transcribe": self.open_transcribe_window,
+            "fix-word": lambda: self.show_fix_word_dialog(0),
+            "help": lambda: self.show_help(None),
+        }
+        action = actions.get(name)
+        if action is None:
+            logger.info(f"Ignoring unknown window {name!r}")
+        else:
+            logger.info(f"Opening {name} (asked from the command line or the launcher)")
+            action()
+        return False  # one-shot when scheduled through GLib
+
+    def show_menu_window_if_no_tray(self):
+        """After first-run setup: with no tray and no extension running, the
+        user would see no menu at all, so show the menu window once."""
+        try:
+            from . import desktop_detect, extension_helper
+            if extension_helper.is_extension_enabled() or desktop_detect.tray_host_available():
+                return False
+            logger.info("No system tray and no extension running: showing the menu window")
+            self.show_menu_window()
+        except Exception as e:
+            logger.debug(f"Could not check for a system tray: {e}")
         return False
 
     def show_help(self, _):
@@ -2057,27 +2146,33 @@ class DictationTray:
 
     def _refresh_history_menu(self):
         """Refill the Recent Dictations submenu from history.py."""
+        self._fill_history_menu(self.history_menu)
+        return False  # one-shot when scheduled through GLib.idle_add
+
+    def _fill_history_menu(self, menu):
+        """Fill *menu* with the recent dictations: the tray's submenu, and the
+        menu window's popup (menu_window.py)."""
         from .history import get_entries, preview
 
-        for child in self.history_menu.get_children():
-            self.history_menu.remove(child)
+        for child in menu.get_children():
+            menu.remove(child)
 
         entries = get_entries()
         if not entries:
             empty = Gtk.MenuItem(label="No dictations yet")
             empty.set_sensitive(False)
-            self.history_menu.append(empty)
+            menu.append(empty)
         else:
             hint = Gtk.MenuItem(label="Hover to read one, click it to copy, then press Ctrl+V")
             hint.set_sensitive(False)
-            self.history_menu.append(hint)
+            menu.append(hint)
             from .config import load_config
             from .history import paste_last_hint
             paste_hint = paste_last_hint(getattr(load_config(), "paste_last_hotkey", ""))
             if paste_hint:
                 hint2 = Gtk.MenuItem(label=paste_hint)
                 hint2.set_sensitive(False)
-                self.history_menu.append(hint2)
+                menu.append(hint2)
             for index, text in enumerate(entries):
                 # Each entry opens a submenu with the full text on hover. A
                 # tooltip would be simpler, but KDE draws this menu itself from
@@ -2085,14 +2180,13 @@ class DictationTray:
                 # show. Submenus work on every desktop.
                 entry = Gtk.MenuItem(label=preview(text))
                 entry.set_submenu(self._build_history_entry_submenu(text, index))
-                self.history_menu.append(entry)
-            self.history_menu.append(Gtk.SeparatorMenuItem())
+                menu.append(entry)
+            menu.append(Gtk.SeparatorMenuItem())
             clear_item = Gtk.MenuItem(label="Clear History")
             clear_item.connect("activate", lambda _w: self._clear_history())
-            self.history_menu.append(clear_item)
+            menu.append(clear_item)
 
-        self.history_menu.show_all()
-        return False  # one-shot when scheduled through GLib.idle_add
+        menu.show_all()
 
     def _build_history_entry_submenu(self, text, index):
         """The hover view of one recent dictation: its full text, then Copy
@@ -2292,6 +2386,10 @@ def main():
     command = control.parse_action(sys.argv[1:])
     if command:
         _run_command_line(command)
+    # tuxtalk --open NAME / --quit (the launcher's right-click shortcuts).
+    open_window = control.parse_open(sys.argv[1:])
+    if open_window:
+        _open_from_command_line(open_window)
 
     # Before anything opens the shared D-Bus connection: one opened without
     # the GLib main loop can't export the tray's D-Bus service later.
@@ -2325,8 +2423,9 @@ def main():
         except Exception as e:      # never stop the tray from starting
             logger.warning(f"Rename to TuxTalk: could not move the launchers: {e}")
         # After the rename, which treats an existing tuxtalk.desktop as done.
-        from .update_checker import create_hidden_desktop_entry
+        from .update_checker import add_launcher_actions, create_hidden_desktop_entry
         create_hidden_desktop_entry()   # TuxTalk's icon on first-run windows
+        add_launcher_actions()          # right-click shortcuts for older launchers
 
     # A copy of the settings to roll back to (Preferences → Advanced →
     # Restore Earlier Settings), taken before this version touches them.
@@ -2426,6 +2525,9 @@ def main():
                         cuda_helper.mark_first_run_complete()
                     except Exception as e:
                         logger.error(f"Failed to mark first run complete: {e}")
+                    # No tray and no extension running yet: without this
+                    # the user would see no menu at all.
+                    GLib.timeout_add(2500, tray.show_menu_window_if_no_tray)
                 else:
                     logger.info("User cancelled onboarding - will show again next launch")
 
@@ -2466,6 +2568,9 @@ def main():
                 logger.info(f"Started with --{command}: {status}")
                 control.report(status)
             GLib.timeout_add(1000, tray._auto_start_service)
+            if open_window and open_window != "quit":
+                # Started by --open (a launcher shortcut) with nothing running.
+                GLib.timeout_add(1500, tray.open_window, open_window)
             # Check for updates after a delay (don't interfere with startup)
             GLib.timeout_add(5000, tray.auto_check_for_updates)
     except Exception as e:

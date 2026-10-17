@@ -1661,6 +1661,23 @@ class WelcomeDialog:
         )
         ext_box.pack_start(self.extension_check, False, False, 0)
 
+        # Plain GNOME (Fedora, Silverblue, Debian...) shows no tray icons, so
+        # without the extension TuxTalk has no menu on screen at all: tick it
+        # and say why. Ubuntu's GNOME has a tray, so there it stays optional.
+        from .desktop_detect import tray_host_available
+        if not tray_host_available():
+            self.extension_check.set_active(True)
+            no_tray = Gtk.Label(xalign=0)
+            no_tray.set_markup(
+                '<span color="#e6aa3c"><b>⚠️ Recommended here: this desktop has no system tray.</b>\n'
+                'Without the extension, TuxTalk has no menu on screen. Its menu '
+                '(Preferences, Transcribe a File and more) then opens only when you '
+                'start TuxTalk again from your apps.</span>')
+            no_tray.set_line_wrap(True)
+            no_tray.set_max_width_chars(60)
+            no_tray.set_margin_start(30)
+            ext_box.pack_start(no_tray, False, False, 0)
+
         # GNOME detected badge
         gnome_badge = Gtk.Label()
         gnome_badge.set_markup('<b>GNOME Desktop Detected!</b>')

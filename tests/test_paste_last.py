@@ -223,7 +223,7 @@ def test_the_tray_menu_line_really_appears(monkeypatch):
     fake = types.SimpleNamespace(history_menu=Gtk.Menu(),
                                  _build_history_entry_submenu=lambda text, i: Gtk.Menu(),
                                  _clear_history=lambda: None)
-    tray.DictationTray._refresh_history_menu(fake)
+    tray.DictationTray._fill_history_menu(fake, fake.history_menu)
     assert "Ctrl+Alt+P types the newest one again" in _labels(fake.history_menu)
 
 

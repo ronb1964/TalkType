@@ -326,6 +326,16 @@ class TuxTalkDBusService(dbus.service.Object):
         """Open the Transcribe a File window."""
         self._dispatch('show_transcribe_file')
 
+    @dbus.service.method(DBUS_INTERFACE, out_signature='b')
+    def ShowMenu(self):
+        """Show TuxTalk's menu as a window (menu_window.py). Called when
+        TuxTalk is opened again while it runs. False when this process has no
+        menu window (the dictation service standing in for a missing tray)."""
+        if not hasattr(self.app, 'show_menu'):
+            return False
+        self._dispatch('show_menu')
+        return True
+
     @dbus.service.method(DBUS_INTERFACE)
     def OpenPreferences(self):
         """Open the preferences window"""
