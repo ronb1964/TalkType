@@ -3,7 +3,7 @@
 All notable changes to TuxTalk are documented here. It was called TalkType
 before 0.15.0, so older entries use that name.
 
-## [Unreleased]
+## [0.15.1] - 2026-10-15
 
 - New: `tuxtalk --toggle`, plus `--start` and `--stop`, for your own desktop
   shortcut or a script. AppImage users run the AppImage file with it. If
@@ -20,6 +20,12 @@ before 0.15.0, so older entries use that name.
   loading included. Subtitle timing is shared out by sentence length inside
   each half minute, so a line can land a second or two off. Good enough for
   most things, not for a film.
+  It keeps your last 10 transcripts under Earlier Transcripts, so you can
+  close the window and still save one as subtitles later. Remove ums and
+  repeats takes out the um, uh and "this is this is" without touching anything
+  else, and unticking it shows the text exactly as it was heard. Closing asks
+  first unless you saved it to a file, and you can drop a file anywhere on the
+  window.
 - Auto-detect can be held to the languages you actually speak. Whisper picks
   from 99 languages, and on a short dictation it sometimes picks wrong, so you
   say something in Spanish and get French back. Preferences, General, Only
@@ -91,6 +97,10 @@ before 0.15.0, so older entries use that name.
 - GNOME: after Uninstall Extension, the Install button no longer still says
   "Installed", and installing it again later starts it properly on the next
   login. Uninstalling had left it on GNOME's list of disabled extensions.
+- Saying "question mark" at the end of a sentence sometimes typed ". ?".
+  Parakeet puts its own period there before it hears the command. Now the
+  question mark takes the period's place, and "exclamation point" works the
+  same way.
 
 ## [0.15.0] - 2026-10-13
 

@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TuxTalk Privacy</title>
+<meta name="description" content="What TuxTalk keeps, what it never sends anywhere, and the few times it goes online.">
+<link rel="canonical" href="https://tuxtalk.app/privacy.html">
+<meta name="theme-color" content="#3aa8ff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f2c49" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="img/icon-64.png" type="image/png" sizes="64x64">
+<link rel="stylesheet" href="style.css">
+<script>
+  try { var t = localStorage.getItem("tuxtalk-theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}
+</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to the content</a>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="index.html" aria-label="TuxTalk home">
+      <img src="img/icon-64.png" alt="" width="32" height="32">
+      TuxTalk
+    </a>
+    <nav aria-label="Main">
+      <a class="nav-hide" href="index.html#features">Features</a>
+      <a class="nav-hide" href="index.html#videos">Videos</a>
+      <a class="nav-hide" href="privacy.html" aria-current="page">Privacy</a>
+      <a class="nav-hide" href="https://github.com/ronb1964/TuxTalk" target="_blank" rel="noopener">GitHub</a>
+      <a class="nav-dl" href="index.html#download">Download</a>
+      <button class="theme-btn" type="button" id="theme-btn" aria-label="Switch between light and dark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/></svg>
+      </button>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+  <div class="page-head">
+    <div class="wrap">
+      <h1>Privacy</h1>
+      <p>Short version: what you say stays on your computer. The rest of this page is the details.</p>
+    </div>
+  </div>
+
+  <div class="doc-page">
+    <div class="wrap">
+
+      <div class="prose">
+        <h2>Your voice and your words</h2>
+        <p>The speech model runs on your own computer, and that's where your voice gets turned into text. The audio and the text never get sent anywhere. There's no account to make and nothing in the cloud.</p>
+        <p>What you dictate doesn't get written to TuxTalk's log file either. There's a setting in Preferences called "Log transcribed text (for troubleshooting)" for when something goes wrong and you want to see exactly what it heard. It's off unless you turn it on.</p>
+      </div>
+
+      <div class="prose">
+        <h2>The AI is optional</h2>
+        <p>TuxTalk can use a small AI model to fix it when you change your mind mid-sentence, like "three, no wait, four". It's off until you turn it on in Preferences, Advanced. Turning it on downloads the model once (about 1.1 GB), and after that it runs on your computer like everything else. It only looks at sentences that have a correction phrase in them, and if its answer changes anything besides the correction, TuxTalk throws the answer out and types your words exactly as you said them.</p>
+        <p>Voice editing in TuxTalk Labs uses the same local model, and it's off until you turn it on too.</p>
+      </div>
+
+      <div class="prose">
+        <h2>What it keeps on your computer</h2>
+        <ul>
+          <li><strong>Your settings</strong>, your snippets and Your Words, in <code>~/.config/tuxtalk</code>.</li>
+          <li><strong>Your Stats</strong> keeps numbers only, like how many words you dictated today. Never what you said. You can turn it off or reset it.</li>
+          <li><strong>Recent Dictations</strong>, your last 20, are only held in memory. They're never saved to disk and they're gone when you log out.</li>
+          <li><strong>Transcribe a File</strong> keeps your last 10 transcripts so you can come back to one. There's a button to clear that list.</li>
+          <li><strong>Backups</strong> are only made when you save one, plus the last 10 copies of your settings that TuxTalk keeps so you can undo a change.</li>
+        </ul>
+      </div>
+
+      <div class="prose">
+        <h2>When it does go online</h2>
+        <p>None of these send anything you said. They're just downloads, or a check for a newer version.</p>
+        <ul>
+          <li><strong>Speech models</strong> come from Hugging Face the first time you use one, and so does the optional AI model.</li>
+          <li><strong>The graphics card engine</strong> and the GNOME extension come from TuxTalk's own GitHub releases.</li>
+          <li><strong>The NVIDIA graphics card option</strong>, if you pick it, downloads NVIDIA's libraries from PyPI.</li>
+          <li><strong>Update check.</strong> Once a day when it starts, TuxTalk asks GitHub if there's a newer version. You can turn that off in Preferences, Updates &amp; Backup, under "Check automatically when TuxTalk starts". If there's an update and you say yes, it downloads from GitHub too.</li>
+        </ul>
+        <p>Once your models are downloaded you can dictate with the internet unplugged.</p>
+      </div>
+
+      <div class="prose">
+        <h2>This website</h2>
+        <p>There's no tracking and no ads, and the site doesn't set cookies. The fonts are hosted here instead of loading from Google. The site itself is hosted by GitHub Pages, so GitHub's own <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement" target="_blank" rel="noopener">privacy statement</a> covers their servers.</p>
+        <p>Questions? Ask in <a href="https://github.com/ronb1964/TuxTalk/discussions" target="_blank" rel="noopener">Discussions</a>. The code's all on <a href="https://github.com/ronb1964/TuxTalk" target="_blank" rel="noopener">GitHub</a> if you want to check.</p>
+      </div>
+
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="made">
+      <a class="brand" href="index.html"><img src="img/icon-64.png" alt="" width="32" height="32">TuxTalk</a>
+      <p>Made by Ron Brand. Free and open source under the MIT license.</p>
+    </div>
+    <ul class="links">
+      <li><a href="index.html">Home</a></li>
+      <li><a href="index.html#download">Download</a></li>
+      <li><a href="https://github.com/ronb1964/TuxTalk" target="_blank" rel="noopener">GitHub</a></li>
+      <li><a href="https://github.com/ronb1964/TuxTalk/discussions" target="_blank" rel="noopener">Discussions</a></li>
+    </ul>
+  </div>
+</footer>
+
+<script src="site.js"></script>
+</body>
+</html>

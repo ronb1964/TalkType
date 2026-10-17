@@ -1,0 +1,9 @@
+The fonts in this folder are used under the SIL Open Font License 1.1
+(https://openfontlicense.org), which allows bundling them with a website.
+
+archivo.woff2         Archivo, by Omnibus-Type
+atkinson-next.woff2   Atkinson Hyperlegible Next, by the Braille Institute
+atkinson-mono.woff2   Atkinson Hyperlegible Mono, by the Braille Institute
+
+They were downloaded from Google Fonts (Latin subset) and are served from
+this site so visitors' browsers never contact Google.

@@ -391,3 +391,41 @@ def test_the_typed_remainder_after_a_failed_paste_has_no_breaks_in_a_terminal(mo
     monkeypatch.setattr(app, "_paste_text", lambda *a, **k: False)
     app._inject_text(f"First line.{MARK}Second line.", "paste", 0.0)
     assert typed and all(MARK not in t and "\n" not in t for t in typed)
+
+
+# --- the remembered window is the one the text landed in -------------------
+
+def _focus_moves_on_paste(monkeypatch, before, after):
+    """The focus report says *before* until the paste lands, then *after*.
+    On KDE, clicking the desktop reports plasmashell, then wl-copy's brief
+    clipboard window hands the focus back to the last real window, so the
+    text lands there (Ron, 2026-10-15)."""
+    focus = {"now": before}
+
+    def fake_paste(*a, **k):
+        focus["now"] = after
+        return True
+
+    monkeypatch.setattr(app, "_paste_text", fake_paste)
+    monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: focus["now"])
+
+
+def test_the_window_the_text_landed_in_is_remembered(monkeypatch, wayland):
+    """Ron clicked the desktop, dictated, and the text landed in Claude. Undo
+    then refused to delete it there, saying it went to plasmashell."""
+    _focus_moves_on_paste(monkeypatch, "plasmashell", "com.anthropic.Claude")
+    assert app._inject_text("Testing 1, 2, 3. ", "paste", 0.0) == "ok"
+    assert app.state.last_inserted_window == "com.anthropic.Claude"
+
+
+def test_the_clipboard_tools_own_window_is_never_remembered(monkeypatch, wayland):
+    _focus_moves_on_paste(monkeypatch, "org.kde.kwrite", "io.github.bugaevc.wl-clipboard")
+    app._inject_text("Hello. ", "paste", 0.0)
+    assert app.state.last_inserted_window == "org.kde.kwrite"
+
+
+def test_an_unknown_window_after_typing_keeps_the_one_before(monkeypatch, wayland):
+    _focus_moves_on_paste(monkeypatch, "org.kde.kwrite", None)
+    app._inject_text("Hello. ", "paste", 0.0)
+    assert app.state.last_inserted_window == "org.kde.kwrite"
