@@ -82,6 +82,22 @@ def _no_real_kwin(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_real_tuxtalk(monkeypatch):
+    """Never let a test send commands to the user's running TuxTalk.
+
+    A second tray asks the running one to show its menu window, so a test of
+    the single-instance lock opened the menu on Ron's desktop (2026-10-16);
+    --toggle could even start a recording. Tests of control pass a fake bus.
+    """
+    from tuxtalk import control
+
+    def _refuse():
+        raise RuntimeError("tests must not talk to the running TuxTalk")
+
+    monkeypatch.setattr(control, "_session_bus", _refuse)
+
+
+@pytest.fixture(autouse=True)
 def _no_real_media_players(monkeypatch):
     """Never let a test pause the user's music.
 

@@ -367,3 +367,15 @@ def test_setup_ticks_the_extension_only_without_a_tray(monkeypatch, has_tray):
         assert dialog.extension_check.get_active() is (not has_tray)
     finally:
         dialog.dialog.destroy()
+
+
+def test_menu_window_buttons_dont_keep_a_focus_box():
+    """A clicked item kept a focus box after its popup closed (Breeze).
+    Menu items don't take focus on click, and nothing starts focused."""
+    _tray, win = _menu_window()
+    try:
+        assert all(not b.get_focus_on_click() for b in _buttons(win))
+        assert not win.switch.get_focus_on_click()
+        assert win.window.get_focus() is None
+    finally:
+        win.window.destroy()

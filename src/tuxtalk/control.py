@@ -104,14 +104,12 @@ def open_in_running(name, tray_starting=lambda: False, bus=None,
 
     True when it did, False when TuxTalk runs but can't (a version from
     before the menu window, or one still starting after TRAY_START_WAIT_S),
-    None when no TuxTalk runs. Uses its own D-Bus connection: a shared one
-    opened now, before the tray sets up its main loop, would stop the tray
-    this process may become from exporting its D-Bus service.
+    None when no TuxTalk runs. Uses its own D-Bus connection (_session_bus).
     """
     import dbus
     own = bus is None
     if own:
-        bus = dbus.SessionBus(private=True)
+        bus = _session_bus()
     try:
         deadline = clock() + TRAY_START_WAIT_S
         while not bus.name_has_owner(DBUS_NAME):
@@ -175,6 +173,15 @@ class WaitingStart:
         return pending
 
 
+def _session_bus():
+    """A private connection to the session bus. Private: with nothing running
+    this process becomes the tray, which a shared connection opened now
+    (before its GLib main loop) would stop from exporting its D-Bus service.
+    Tests replace this so they can never reach the user's real TuxTalk."""
+    import dbus
+    return dbus.SessionBus(private=True)
+
+
 def ask_running(action, tray_starting=lambda: False, bus=None,
                 sleep=time.sleep, clock=time.monotonic):
     """Send *action* to the running TuxTalk; its status, or None if none runs.
@@ -185,10 +192,7 @@ def ask_running(action, tray_starting=lambda: False, bus=None,
     import dbus
     own = bus is None
     if own:
-        # Private, as in open_in_running: with nothing running this process
-        # becomes the tray, which a shared connection opened now would stop
-        # from exporting its D-Bus service.
-        bus = dbus.SessionBus(private=True)
+        bus = _session_bus()
     try:
         deadline = clock() + TRAY_START_WAIT_S
         while not bus.name_has_owner(DBUS_NAME):

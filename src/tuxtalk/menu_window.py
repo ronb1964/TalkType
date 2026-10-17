@@ -69,6 +69,7 @@ class MenuWindow:
         row.pack_start(text, True, True, 0)
         self.switch = Gtk.Switch(valign=Gtk.Align.CENTER)
         self.switch.set_tooltip_text("Turn the dictation service on or off")
+        self.switch.set_focus_on_click(False)
         self.switch.connect("notify::active", self._on_switch)
         row.pack_end(self.switch, False, False, 0)
         row.set_margin_bottom(8)
@@ -122,6 +123,8 @@ class MenuWindow:
         # Keep the switch and the model line current, as the tray menu is.
         self._timer = GLib.timeout_add_seconds(1, self.refresh)
         win.show_all()
+        # No button starts out focused (GTK would pick one and box it).
+        win.set_focus(None)
         win.present()
 
     # ----- building blocks -----
@@ -133,6 +136,10 @@ class MenuWindow:
                              self._popup_injection)
         button = Gtk.Button(label=f"{label}  ▸" if submenu else label)
         button.set_relief(Gtk.ReliefStyle.NONE)
+        # Like a menu item, a click doesn't take keyboard focus: with focus,
+        # Breeze kept a box around the last clicked item after its popup
+        # closed (Ron, 2026-10-16). Tab still reaches every button.
+        button.set_focus_on_click(False)
         child = button.get_child()
         if isinstance(child, Gtk.Label):
             child.set_xalign(0)
