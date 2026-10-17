@@ -100,7 +100,9 @@ def test_the_test_opens_the_chosen_mic_and_shows_what_it_hears(win):
     block = (np.random.default_rng(3).normal(0, 380, 320)).astype(np.int16).reshape(-1, 1)
     stream.kwargs["callback"](block, 320, None, None)
     win._tap_show()
-    assert win.tap_status.get_text().startswith(("Quiet", "Hearing your voice"))
+    assert win.tap_status.get_text().startswith(("Waiting", "Quiet", "Hearing you talk"))
+    win.tap_test_btn.clicked()                  # Stop: the result, not the frozen live line
+    assert win.tap_status.get_text().startswith(("Test done", "Test stopped"))
 
 
 def test_closing_preferences_stops_the_test(win):

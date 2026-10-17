@@ -38,6 +38,7 @@ class PauseTest:
         self.sample_rate = int(sample_rate)
         self._earlier_cuts = 0
         self._cut_pending = False
+        self._heard_speech = False
         self._detector = PauseDetector(pause_seconds, self.sample_rate, speech_db=speech_db)
 
     def configure(self, pause_seconds: float, speech_db: float) -> None:
@@ -50,6 +51,8 @@ class PauseTest:
         fired = self._detector.feed(block)
         if fired:
             self._cut_pending = True
+        if fired or self._detector.speech_time >= MIN_SPEECH_S:
+            self._heard_speech = True
         return fired
 
     def take_cut(self) -> bool:
@@ -62,18 +65,36 @@ class PauseTest:
         return snap._replace(cuts=self._earlier_cuts + snap.cuts)
 
     def status_text(self) -> str:
-        """What the test hears, in plain words. The raw levels stay in the log
-        line PauseDetector.describe() writes; they mean nothing to most people."""
+        """What the test hears right now, in plain words, while it runs. The
+        raw levels stay in the log line PauseDetector.describe() writes; they
+        mean nothing to most people."""
         snap = self.snapshot()
         detector = self._detector
         if snap.level >= snap.threshold:
-            now = "Hearing your voice"
+            now = "Hearing you talk"
         elif detector.speech_time >= MIN_SPEECH_S:
-            now = (f"Quiet for {snap.silence_s:.1f} of the "
-                   f"{detector.pause_seconds:.1f} seconds a pause needs")
+            now = (f"Quiet for {snap.silence_s:.1f} s. At {detector.pause_seconds:.1f} s "
+                   "it types what you said")
         else:
-            now = "Quiet. Say something, then pause"
+            now = "Waiting for you to talk"
         if not snap.cuts:
             return now
-        pauses = "1 pause" if snap.cuts == 1 else f"{snap.cuts} pauses"
-        return f"{now} · {pauses} heard"
+        return f"{now} · {_pauses(snap.cuts)} so far"
+
+    def result_text(self) -> str:
+        """What the test found, for when it stops: the count, what it means,
+        and what to change if it's wrong."""
+        cuts = self.snapshot().cuts
+        if cuts:
+            phrases = "1 phrase" if cuts == 1 else f"{cuts} phrases"
+            return (f"Test done: {_pauses(cuts)} found, so TuxTalk would have typed "
+                    f"{phrases} while you talked. If one came while you were still "
+                    "talking, lower the noise filter or make the pause longer.")
+        if self._heard_speech:
+            return ("Test done: no pauses found, so everything would have been typed "
+                    "at the end. If you did pause, raise the noise filter.")
+        return "Test stopped. It didn't hear you talk."
+
+
+def _pauses(count: int) -> str:
+    return "1 pause" if count == 1 else f"{count} pauses"

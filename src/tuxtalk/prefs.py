@@ -5968,8 +5968,12 @@ class PreferencesWindow:
     def _stop_pause_test(self):
         """Stop Type at pause's live test, if it is running, and free the mic."""
         stream = getattr(self, "_pause_test_stream", None)
+        test = getattr(self, "_pause_test", None)
         self._pause_test_stream = None
         self._pause_test = None
+        if test is not None and hasattr(self, "tap_status"):
+            # Not the live line frozen at its last words: what it found.
+            self.tap_status.set_text(test.result_text())
         if stream is not None:
             try:
                 stream.stop()
