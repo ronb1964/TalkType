@@ -69,7 +69,10 @@ def labels(widget):
 def test_the_entry_has_its_heading_and_switch(win):
     assert "Type at pause" in labels(win.grid)
     assert win.tap_check.get_label() == "Type each phrase when you pause"
-    assert win.tap_expander.get_label() == "Fine-tuning"
+    title = win.tap_expander.get_label_widget().get_label()
+    assert title.startswith("Adjust: pause length, noise filter")
+    assert "pause 0.8 s" in title and "noise filter 6" in title
+    assert win.tap_expander.get_style_context().has_class("tt-options")
     assert win.tap_expander.get_expanded() is False
 
 
@@ -237,3 +240,11 @@ def test_no_mark_before_the_first_test(win):
     win.tap_check.set_active(True)
     win.tap_db_spin.set_value(12)
     assert win.tap_meter.threshold == 0.0
+
+
+def test_the_title_follows_the_settings(win):
+    win.tap_check.set_active(True)
+    win.tap_pause_spin.set_value(1.2)
+    win.tap_context_check.set_active(False)
+    title = win.tap_expander.get_label_widget().get_label()
+    assert "pause 1.2 s" in title and "punctuation from context off" in title

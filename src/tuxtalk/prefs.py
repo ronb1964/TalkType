@@ -5805,7 +5805,15 @@ class PreferencesWindow:
         grid.attach(self.tap_check, 0, row, 2, 1)
         row += 1
 
-        self.tap_expander = Gtk.Expander(label="Fine-tuning")
+        # Says what's inside, with the settings as they are now, and drawn as
+        # a framed button (tt-options): "Fine-tuning" on its own was easy to
+        # miss and didn't say there was anything to change in there.
+        self.tap_expander = Gtk.Expander()
+        self.tap_expander_title = Gtk.Label(xalign=0)
+        self.tap_expander_title.set_line_wrap(True)
+        self.tap_expander.set_label_widget(self.tap_expander_title)
+        self.tap_expander.get_style_context().add_class("tt-options")
+        self.tap_expander.set_halign(Gtk.Align.START)
         self.tap_expander.set_margin_start(indent)
         fine = Gtk.Grid(column_spacing=8, row_spacing=6)
         fine.set_margin_start(16)
@@ -5879,18 +5887,20 @@ class PreferencesWindow:
         self.tap_expander.add(fine)
         grid.attach(self.tap_expander, 0, row, 2, 1)
         row += 1
+        self._tap_update_title()
 
         self.tap_check.connect("toggled", lambda c: (
             self.update_config("chunked_dictation", c.get_active()),
             self._tap_sync_sensitivity()))
         self.tap_pause_spin.connect("value-changed", lambda sp: (
             self.update_config("chunk_pause_seconds", round(sp.get_value(), 1)),
-            self._tap_reconfigure()))
+            self._tap_reconfigure(), self._tap_update_title()))
         self.tap_db_spin.connect("value-changed", lambda sp: (
             self.update_config("chunk_speech_db", float(round(sp.get_value()))),
-            self._tap_reconfigure()))
-        self.tap_context_check.connect("toggled", lambda c: self.update_config(
-            "chunk_context_marks", c.get_active()))
+            self._tap_reconfigure(), self._tap_update_title()))
+        self.tap_context_check.connect("toggled", lambda c: (
+            self.update_config("chunk_context_marks", c.get_active()),
+            self._tap_update_title()))
         self.tap_test_btn.connect("clicked", self._tap_toggle_test)
         self.tap_expander.connect("notify::expanded", lambda e, _p: (
             None if e.get_expanded() else self._stop_pause_test()))
@@ -5906,6 +5916,15 @@ class PreferencesWindow:
         beep, so the test stops."""
         if not window.is_active():
             self._stop_pause_test()
+
+    def _tap_update_title(self):
+        """The fold-out's title: what's inside, with the values now."""
+        context = "on" if self.tap_context_check.get_active() else "off"
+        self.tap_expander_title.set_markup(
+            "Adjust: pause length, noise filter, punctuation, test\n"
+            f'<span alpha="65%" size="small">Now: pause {self.tap_pause_spin.get_value():.1f} s'
+            f" \u00b7 noise filter {self.tap_db_spin.get_value():.0f}"
+            f" \u00b7 punctuation from context {context}</span>")
 
     def _tap_sync_sensitivity(self):
         on = self.tap_check.get_active()

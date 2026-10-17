@@ -482,3 +482,17 @@ window.talktype-prefs {
     border: none;
     box-shadow: none;
 }
+
+/* A fold-out with settings inside (Type at pause's "Adjust ..."): drawn as a
+ * framed button, like first-run's "Change language, model or graphics card",
+ * so it reads as something to open, not a quiet caption. */
+.talktype-prefs expander.tt-options > title {
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 6px;
+    padding: 4px 10px;
+    background-color: rgba(255, 255, 255, 0.06);
+}
+
+.talktype-prefs expander.tt-options > title:hover {
+    background-color: rgba(255, 255, 255, 0.12);
+}
