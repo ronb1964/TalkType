@@ -1676,6 +1676,9 @@ class WelcomeDialog:
             no_tray.set_line_wrap(True)
             no_tray.set_max_width_chars(60)
             no_tray.set_margin_start(30)
+            # Clear of the checkbox's glow (up to 16px of box-shadow).
+            no_tray.set_margin_top(14)
+            no_tray.set_margin_bottom(4)
             ext_box.pack_start(no_tray, False, False, 0)
 
         # GNOME detected badge

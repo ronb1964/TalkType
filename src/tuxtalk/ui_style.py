@@ -239,17 +239,22 @@ scrolledwindow.tt-more-scroll undershoot.bottom {
     background-position: bottom;
     background-repeat: no-repeat;
 }
+/* The theme's own text colour: accent-blue text on the accent tint was
+   unreadable on GNOME's dark theme (Ron, Silverblue, 2026-10-16). */
+button.tt-more-below,
+button.tt-more-below label {
+    color: @theme_fg_color;
+}
 button.tt-more-below {
     background-image: none;
-    background-color: alpha(@theme_selected_bg_color, 0.14);
-    border: 1px solid alpha(@theme_selected_bg_color, 0.6);
+    background-color: alpha(@theme_selected_bg_color, 0.25);
+    border: 1px solid @theme_selected_bg_color;
     border-radius: 6px;
-    padding: 2px 10px;
-    color: @theme_selected_bg_color;
+    padding: 2px 12px;
     font-weight: bold;
 }
 button.tt-more-below:hover {
-    background-color: alpha(@theme_selected_bg_color, 0.26);
+    background-color: alpha(@theme_selected_bg_color, 0.4);
 }
 """
 _more_below_css_installed = False
