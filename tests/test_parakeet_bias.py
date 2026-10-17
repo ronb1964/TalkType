@@ -182,3 +182,28 @@ def test_dictation_hands_parakeet_the_word_list(monkeypatch, raw):
     audio = np.zeros(16000, dtype=np.float32)
     app._transcribe_audio(audio, None)
     assert seen == [("TuxTalk",)]
+
+
+def test_engine_tables_flatten_every_spelling():
+    """The lists TuxTalk's patched whisper.cpp takes (parakeet_set_word_boost):
+    each target's positions, each position's (piece, next position)."""
+    booster = pb.WordBooster(VOCAB, ["TuxTalk"], BLANK)
+    targets, positions, pids, nexts = pb.engine_tables(booster)
+    assert targets[0] == 0 and targets[-1] == len(positions) - 1
+    assert positions[0] == 0 and positions[-1] == len(pids) == len(nexts)
+    # Walk the first target from position 0 along the listed pieces.
+    text = booster.targets[0].text
+    pos, spelled = 0, ""
+    while pos < len(text):
+        p = targets[0] + pos
+        options = list(zip(pids[positions[p]:positions[p + 1]], nexts[positions[p]:positions[p + 1]]))
+        pid, nxt = max(options, key=lambda o: o[1])        # the longest piece
+        spelled += VOCAB[pid]
+        pos = nxt
+    assert spelled.replace(" ", pb.WORD_START) == text
+    assert pb.engine_settings(booster) == [6.0, 6.0, 3.0, 8.0, 30.0, 3.0]
+
+
+def test_no_words_make_empty_tables():
+    targets, positions, pids, nexts = pb.engine_tables(pb.WordBooster(VOCAB, [], BLANK))
+    assert targets == [0] and positions == [0] and pids == [] and nexts == []

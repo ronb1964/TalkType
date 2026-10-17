@@ -38,6 +38,11 @@ FAKE_WORKER = textwrap.dedent("""
         if len(head) < 4:
             break
         n = struct.unpack("<I", head)[0]
+        if n == 0xFFFFFFFF:                       # Your Words (WORDS_REQUEST)
+            size = struct.unpack("<I", inp.read(4))[0]
+            words = json.loads(inp.read(size))
+            reply({"words": None if mode == "old" else len(words)})
+            continue
         inp.read(n * 4)
         if mode == "die" or (mode == "once" and answered):
             sys.exit(3)
@@ -172,3 +177,39 @@ def test_a_helper_that_never_answers_is_stopped(fake, monkeypatch):
     with pytest.raises(RuntimeError):
         parakeet_gpu.ParakeetGpuModel(0, command=fake("silent"))
     assert started and started[0].poll() is not None
+
+
+def test_your_words_reach_the_helper_once_per_change(fake, caplog):
+    import logging
+    caplog.set_level(logging.INFO, logger="tuxtalk.parakeet_gpu")
+    model = parakeet_gpu.ParakeetGpuModel(0, command=fake("ok"))
+    try:
+        assert model.recognize(_audio()) == "16000 samples"      # no words: nothing sent
+        model.set_words(["TuxTalk", "ClaudeClaw"])
+        assert model.recognize(_audio()) == "16000 samples"
+        model.set_words(["TuxTalk", "ClaudeClaw"])
+        assert model.recognize(_audio()) == "16000 samples"
+        sent = [r.message for r in caplog.records if "Your Words" in r.message]
+        assert len(sent) == 1 and "2 spellings of 2 words" in sent[0]
+    finally:
+        model.close()
+
+
+def test_an_engine_without_the_patch_still_transcribes(fake, caplog):
+    import logging
+    caplog.set_level(logging.INFO, logger="tuxtalk.parakeet_gpu")
+    model = parakeet_gpu.ParakeetGpuModel(0, command=fake("old"))
+    try:
+        model.set_words(["TuxTalk"])
+        assert model.recognize(_audio()) == "16000 samples"
+        assert any("can't steer Parakeet" in r.message for r in caplog.records)
+    finally:
+        model.close()
+
+
+def test_worker_reads_a_word_list_between_recordings():
+    stream = io.BytesIO(worker.encode_words(["TuxTalk", "Ärger"])
+                        + worker.encode_request(np.zeros(3, dtype=np.float32)))
+    assert worker.read_request(stream) == ["TuxTalk", "Ärger"]
+    assert len(worker.read_request(stream)) == 12
+    assert worker.read_request(stream) is None

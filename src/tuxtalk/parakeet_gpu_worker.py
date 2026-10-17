@@ -15,6 +15,10 @@ Protocol, over stdin and stdout:
   service -> helper: a 4-byte little-endian sample count, then that many
                      float32 samples (16 kHz mono)
   helper -> service: one line of JSON, {"text": ...} or {"error": ...}
+  service -> helper: WORDS_REQUEST as the count, a 4-byte length and a JSON
+                     list of Your Words (parakeet_bias.py)
+  helper -> service: {"words": number of spellings}, or {"words": null} when
+                     the engine predates TuxTalk's word-boost patch
 Once the model is loaded and warmed up the helper sends {"ready": true}, or
 {"error": ...} if it couldn't load.
 """
@@ -25,6 +29,7 @@ import struct
 import sys
 
 SAMPLE_RATE = 16000
+WORDS_REQUEST = 0xFFFFFFFF        # in the count's place: a word list follows
 WARM_UP_SECONDS = (1, 30, 90)     # silence, covering short, long and very long dictations
 
 
@@ -33,6 +38,12 @@ WARM_UP_SECONDS = (1, 30, 90)     # silence, covering short, long and very long 
 def encode_request(samples) -> bytes:
     """A request for float32 *samples* (a numpy array)."""
     return struct.pack("<I", len(samples)) + samples.astype("<f4").tobytes()
+
+
+def encode_words(words) -> bytes:
+    """A request that sets Your Words."""
+    data = json.dumps(list(words)).encode()
+    return struct.pack("<II", WORDS_REQUEST, len(data)) + data
 
 
 def _read_exact(stream, n):
@@ -47,12 +58,18 @@ def _read_exact(stream, n):
 
 
 def read_request(stream):
-    """The raw float32 bytes of the next request, or None when the service
-    has closed the pipe."""
+    """The raw float32 bytes of the next request, a list for a word list,
+    or None when the service has closed the pipe."""
     head = _read_exact(stream, 4)
     if head is None:
         return None
     (count,) = struct.unpack("<I", head)
+    if count == WORDS_REQUEST:
+        size = _read_exact(stream, 4)
+        if size is None:
+            return None
+        data = _read_exact(stream, struct.unpack("<I", size)[0])
+        return None if data is None else json.loads(data.decode())
     return _read_exact(stream, count * 4) if count else b""
 
 
@@ -82,9 +99,29 @@ class _FullParams(C.Structure):
                [(f"callback_{i}", C.c_void_p) for i in range(12)]   # 6 callbacks + user data
 
 
+class Engine:
+    """The loaded model: transcribe(raw float32 bytes) -> text, and
+    set_words(words) -> number of spellings, or None without the patch."""
+
+    def __init__(self, transcribe, set_words):
+        self.transcribe = transcribe
+        self.set_words = set_words
+
+
+def _word_booster(lib, ctx, words):
+    """parakeet_bias's spellings of *words* in this engine's vocabulary."""
+    from .parakeet_bias import WordBooster
+    lib.parakeet_n_vocab.argtypes = [C.c_void_p]
+    lib.parakeet_token_to_str.restype = C.c_char_p
+    lib.parakeet_token_to_str.argtypes = [C.c_void_p, C.c_int]
+    n_vocab = lib.parakeet_n_vocab(ctx)
+    vocab = {i: (lib.parakeet_token_to_str(ctx, i) or b"").decode("utf-8", "replace")
+             for i in range(n_vocab)}
+    return WordBooster(vocab, words, n_vocab)    # the blank comes right after the pieces
+
+
 def load_engine(engine_dir, model, device, threads):
-    """Load *model* onto graphics chip *device*; returns a function that
-    turns raw float32 bytes into text."""
+    """Load *model* onto graphics chip *device*; returns an Engine."""
     # ggml's libraries first, shared, so libparakeet and the backends find them.
     # Opening libggml.so again only returns a handle to the loaded copy.
     for name in ("libggml-base.so", "libggml.so"):
@@ -122,7 +159,27 @@ def load_engine(engine_dir, model, device, threads):
             (lib.parakeet_full_get_segment_text(ctx, i) or b"").decode("utf-8", "replace")
             for i in range(lib.parakeet_full_n_segments(ctx)))
 
-    return transcribe
+    def set_words(words):
+        try:
+            setter = lib.parakeet_set_word_boost
+        except AttributeError:
+            return None             # an engine without TuxTalk's patch
+        from .parakeet_bias import engine_settings, engine_tables
+        booster = _word_booster(lib, ctx, words)
+        targets, positions, pids, nexts = engine_tables(booster)
+        settings = engine_settings(booster)
+        ints = lambda xs: (C.c_int * max(1, len(xs)))(*xs)
+        setter.restype = C.c_int
+        setter.argtypes = [C.c_void_p, C.c_int, C.POINTER(C.c_int), C.c_int, C.POINTER(C.c_int),
+                           C.c_int, C.POINTER(C.c_int), C.POINTER(C.c_int),
+                           C.POINTER(C.c_float), C.c_int]
+        n = setter(ctx, len(targets) - 1, ints(targets), len(positions) - 1, ints(positions),
+                   len(pids), ints(pids), ints(nexts), (C.c_float * 6)(*settings), 6)
+        if n < 0:
+            raise RuntimeError("the engine refused the word tables")
+        return n
+
+    return Engine(transcribe, set_words)
 
 
 def main(argv):
@@ -134,7 +191,8 @@ def main(argv):
     os.dup2(2, 1)
     inp = sys.stdin.buffer
     try:
-        transcribe = load_engine(engine_dir, model, device, threads)
+        engine = load_engine(engine_dir, model, device, threads)
+        transcribe = engine.transcribe
         # The engine sets up its graphics shaders lazily, for each size range
         # of work the first time it meets one: 8 s for the first 1 s clip and
         # 7 s for the first 22 s one on an RTX 4070 Super. The driver keeps
@@ -148,7 +206,10 @@ def main(argv):
     write_reply(out, {"ready": True})
     while (raw := read_request(inp)) is not None:
         try:
-            write_reply(out, {"text": transcribe(raw)})
+            if isinstance(raw, list):
+                write_reply(out, {"words": engine.set_words(raw)})
+            else:
+                write_reply(out, {"text": transcribe(raw)})
         except Exception as e:
             write_reply(out, {"error": str(e)})
     return 0

@@ -124,6 +124,28 @@ class WordBooster:
         return found[:MAX_TRIES]
 
 
+def engine_settings(booster):
+    """The six settings whisper.cpp's parakeet_set_word_boost takes (TuxTalk's
+    patch of the Vulkan engine), in its order."""
+    return [booster.start_margin, booster.step_margin, booster.blank_margin,
+            booster.word_budget, float(booster.max_frames), float(MAX_TRIES)]
+
+
+def engine_tables(booster):
+    """The booster's spellings as the flat number lists the engine takes:
+    target_pos_begin, pos_entry_begin, entry_pid, entry_next (see
+    parakeet_set_word_boost in the patched include/parakeet.h)."""
+    target_pos_begin, pos_entry_begin, entry_pid, entry_next = [0], [0], [], []
+    for target in booster.targets:
+        for fits in target.steps:
+            for pid, nxt in fits:
+                entry_pid.append(pid)
+                entry_next.append(nxt)
+            pos_entry_begin.append(len(entry_pid))
+        target_pos_begin.append(len(pos_entry_begin) - 1)
+    return target_pos_begin, pos_entry_begin, entry_pid, entry_next
+
+
 def boosted_tdt_decoding(asr, booster, on_word=None):
     """A stand-in for onnx-asr's _AsrWithTransducerDecoding._decoding on *asr*.
     The plain path follows onnx-asr 0.12 (MIT) line for line; where one of

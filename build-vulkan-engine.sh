@@ -15,6 +15,10 @@
 # It also builds whisper.cpp's Parakeet library (libparakeet.so), which
 # parakeet_gpu_worker.py loads to run Parakeet on the graphics chip.
 #
+# Patches in vulkan-engine-patches/ are applied to whisper.cpp first (from
+# 1.9.5 build 1: Your Words for Parakeet, parakeet_set_word_boost). Check
+# they still apply when moving to a new whisper.cpp version.
+#
 # Usage: ./build-vulkan-engine.sh <whisper.cpp version> <build number>
 # The build number tells apart builds of the SAME whisper.cpp version with
 # different contents. A published build must never be replaced: released

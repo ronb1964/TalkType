@@ -1,0 +1,336 @@
+diff --git a/include/parakeet.h b/include/parakeet.h
+index c10442d..0fbf79e 100644
+--- a/include/parakeet.h
++++ b/include/parakeet.h
+@@ -160,6 +160,23 @@ extern "C" {
+     // Equivalent to: -parakeet_tokenize(ctx, text, NULL, 0)
+     int parakeet_token_count(struct parakeet_context * ctx, const char * text);
+ 
++    // TuxTalk: lean the greedy decoder toward the user's words. Each target is
++    // one spelling; for each of its positions, the pieces that fit there and
++    // the position each leads to. n_targets = 0 turns it off. settings:
++    // start margin, step margin, blank margin, word budget, max frames,
++    // max tries. Returns the number of targets, or -1 for malformed tables.
++    PARAKEET_API int parakeet_set_word_boost(
++            struct parakeet_context * ctx,
++                              int   n_targets,
++                        const int * target_pos_begin,
++                              int   n_pos,
++                        const int * pos_entry_begin,
++                              int   n_entries,
++                        const int * entry_pid,
++                        const int * entry_next,
++                      const float * settings,
++                              int   n_settings);
++
+     PARAKEET_API int parakeet_n_len           (struct parakeet_context * ctx); // mel length
+     PARAKEET_API int parakeet_n_len_from_state(struct parakeet_state * state); // mel length
+     PARAKEET_API int parakeet_n_vocab         (struct parakeet_context * ctx);
+diff --git a/src/parakeet.cpp b/src/parakeet.cpp
+index ed66382..5f77bff 100644
+--- a/src/parakeet.cpp
++++ b/src/parakeet.cpp
+@@ -506,6 +506,28 @@ struct parakeet_mel_cache {
+     }
+ };
+ 
++// TuxTalk: the user's words for the greedy decoder (see parakeet_set_word_boost).
++// Target k is one spelling of one word; its positions are
++// target_pos_begin[k] .. target_pos_begin[k+1]-1, and position p fits the
++// pieces entry_pid[e] (moving to local position entry_next[e]) for
++// e in pos_entry_begin[p] .. pos_entry_begin[p+1]-1.
++struct parakeet_word_boost {
++    std::vector<int> target_pos_begin;
++    std::vector<int> pos_entry_begin;
++    std::vector<int> entry_pid;
++    std::vector<int> entry_next;
++    float start_margin = 6.0f;
++    float step_margin  = 6.0f;
++    float blank_margin = 3.0f;
++    float word_budget  = 8.0f;
++    int   max_frames   = 30;
++    int   max_tries    = 3;
++
++    bool active() const { return target_pos_begin.size() > 1; }
++    int  n_targets() const { return (int) target_pos_begin.size() - 1; }
++    int  length(int k) const { return target_pos_begin[k + 1] - target_pos_begin[k]; }
++};
++
+ struct parakeet_context {
+     int64_t t_load_us  = 0;
+     int64_t t_start_us = 0;
+@@ -523,6 +545,8 @@ struct parakeet_context {
+     parakeet_mel_cache mel_cache;
+ 
+     std::string path_model;
++
++    parakeet_word_boost word_boost;
+ };
+ 
+ struct parakeet_global {
+@@ -2499,6 +2523,45 @@ static parakeet_token_data create_token_data(
+     return token_data;
+ }
+ 
++// TuxTalk: the prediction network's memory (LSTM h/c, its output) and the
++// last joint logits, so a word tried on a branch can be taken back.
++struct parakeet_decoder_snapshot {
++    std::vector<std::vector<float>> h;
++    std::vector<std::vector<float>> c;
++    std::vector<float> pred_out;
++    std::vector<float> logits;
++};
++
++static void parakeet_tensor_save(struct ggml_tensor * t, std::vector<float> & out) {
++    out.resize(ggml_nelements(t));
++    ggml_backend_tensor_get(t, out.data(), 0, ggml_nbytes(t));
++}
++
++static void parakeet_tensor_load(struct ggml_tensor * t, const std::vector<float> & in) {
++    ggml_backend_tensor_set(t, in.data(), 0, ggml_nbytes(t));
++}
++
++static void parakeet_decoder_save(parakeet_state & pstate, parakeet_decoder_snapshot & snap) {
++    const size_t n = pstate.lstm_state.layer.size();
++    snap.h.resize(n);
++    snap.c.resize(n);
++    for (size_t il = 0; il < n; ++il) {
++        parakeet_tensor_save(pstate.lstm_state.layer[il].h_state, snap.h[il]);
++        parakeet_tensor_save(pstate.lstm_state.layer[il].c_state, snap.c[il]);
++    }
++    parakeet_tensor_save(pstate.pred_out, snap.pred_out);
++    snap.logits = pstate.logits;
++}
++
++static void parakeet_decoder_load(parakeet_state & pstate, const parakeet_decoder_snapshot & snap) {
++    for (size_t il = 0; il < snap.h.size(); ++il) {
++        parakeet_tensor_load(pstate.lstm_state.layer[il].h_state, snap.h[il]);
++        parakeet_tensor_load(pstate.lstm_state.layer[il].c_state, snap.c[il]);
++    }
++    parakeet_tensor_load(pstate.pred_out, snap.pred_out);
++    pstate.logits = snap.logits;
++}
++
+ static bool parakeet_decode(
+               parakeet_context & pctx,
+                 parakeet_state & pstate,
+@@ -2583,6 +2646,166 @@ static bool parakeet_decode(
+         // get the actual duration value.
+         int duration = tdt_durations[best_duration_idx];
+ 
++        // TuxTalk: where one of the user's words could start, try writing the
++        // whole word on a branch. Keep it only if it is complete and each
++        // piece was close to the model's own choice; otherwise take the
++        // branch back and carry on exactly as before. Never on a blank.
++        if (best_token != blank_id && pctx.word_boost.active()) {
++            const auto & wb = pctx.word_boost;
++            struct word_start { float score; int target; int pid; int next; };
++            std::vector<word_start> starts;
++            const float floor_logit = max_logit - wb.start_margin;
++            for (int k = 0; k < wb.n_targets(); ++k) {
++                const int p0 = wb.target_pos_begin[k];
++                for (int e = wb.pos_entry_begin[p0]; e < wb.pos_entry_begin[p0 + 1]; ++e) {
++                    const int pid = wb.entry_pid[e];
++                    if (pid >= 0 && pid < blank_id && pstate.logits[pid] >= floor_logit) {
++                        starts.push_back({pstate.logits[pid], k, pid, wb.entry_next[e]});
++                    }
++                }
++            }
++            std::sort(starts.begin(), starts.end(),
++                      [](const word_start & a, const word_start & b) { return a.score > b.score; });
++            if ((int) starts.size() > wb.max_tries) {
++                starts.resize(wb.max_tries);
++            }
++
++            bool kept = false;
++            if (!starts.empty()) {
++                parakeet_decoder_snapshot snap;
++                parakeet_decoder_save(pstate, snap);
++
++                auto pick_duration = [&](int & dur_idx) {
++                    dur_idx = 0;
++                    float best_d = pstate.logits[n_vocab_logits];
++                    for (int i = 1; i < n_tdt_durations; ++i) {
++                        if (pstate.logits[n_vocab_logits + i] > best_d) {
++                            best_d = pstate.logits[n_vocab_logits + i];
++                            dur_idx = i;
++                        }
++                    }
++                    return tdt_durations[dur_idx];
++                };
++                auto advance_emitted = [&](int & tb, int & eb, int dur) {
++                    if (dur > 0) {
++                        tb += dur;
++                        eb = 0;
++                    } else if (++eb >= max_tokens_per_timestep) {
++                        tb += 1;
++                        eb = 0;
++                    }
++                };
++
++                for (const auto & st : starts) {
++                    std::vector<parakeet_token_data> toks;
++                    int   tb   = t;
++                    int   eb   = tokens_emitted;
++                    float cost = max_logit - st.score;
++                    bool  ok   = true;
++
++                    toks.push_back(create_token_data(pctx, pstate, st.pid, best_duration_idx, duration, tb,
++                                                     pstate.logits[st.pid], n_vocab_logits));
++                    batch.token[0] = st.pid;
++                    if (!parakeet_predict(pctx, pstate, batch, n_threads,
++                            params ? params->abort_callback           : nullptr,
++                            params ? params->abort_callback_user_data : nullptr)) {
++                        return false;
++                    }
++                    advance_emitted(tb, eb, duration);
++
++                    const int base    = wb.target_pos_begin[st.target];
++                    const int len     = wb.length(st.target);
++                    const int first_t = tb;
++                    int pos = st.next;
++                    while (pos < len) {
++                        if (tb >= n_frames || tb - first_t > wb.max_frames || cost > wb.word_budget) {
++                            ok = false;
++                            break;
++                        }
++                        batch.n_tokens  = 1;
++                        batch.i_time[0] = tb;
++                        batch.logits[0] = 1;
++                        if (!parakeet_joint(pctx, pstate, batch, n_threads,
++                                params ? params->abort_callback           : nullptr,
++                                params ? params->abort_callback_user_data : nullptr)) {
++                            return false;
++                        }
++                        int   best = 0;
++                        float best_l = -1e10f;
++                        for (int i = 0; i < n_vocab_logits; ++i) {
++                            if (pstate.logits[i] > best_l) {
++                                best_l = pstate.logits[i];
++                                best = i;
++                            }
++                        }
++                        int dur_idx = 0;
++                        int dur = pick_duration(dur_idx);
++
++                        const int p = base + pos;
++                        int pid = -1, nxt = -1;
++                        float pid_l = -1e10f;
++                        for (int e = wb.pos_entry_begin[p]; e < wb.pos_entry_begin[p + 1]; ++e) {
++                            const int cand = wb.entry_pid[e];
++                            if (cand >= 0 && cand < blank_id && pstate.logits[cand] > pid_l) {
++                                pid_l = pstate.logits[cand];
++                                pid = cand;
++                                nxt = wb.entry_next[e];
++                            }
++                        }
++                        if (pid < 0) {
++                            ok = false;
++                            break;
++                        }
++                        const float gap = best_l - pid_l;
++                        if (best == blank_id && gap > wb.blank_margin) {
++                            // nothing heard yet: wait for the next frame
++                            tb += (dur == 0) ? 1 : dur;
++                            eb = 0;
++                            continue;
++                        }
++                        if (best != blank_id && best != pid && gap > wb.step_margin) {
++                            ok = false;
++                            break;
++                        }
++                        if (best != pid) {
++                            cost += gap;
++                        }
++                        toks.push_back(create_token_data(pctx, pstate, pid, dur_idx, dur, tb, pid_l, n_vocab_logits));
++                        batch.token[0] = pid;
++                        if (!parakeet_predict(pctx, pstate, batch, n_threads,
++                                params ? params->abort_callback           : nullptr,
++                                params ? params->abort_callback_user_data : nullptr)) {
++                            return false;
++                        }
++                        advance_emitted(tb, eb, dur);
++                        pos = nxt;
++                    }
++
++                    if (ok && pos >= len && cost <= wb.word_budget) {
++                        for (auto & td : toks) {
++                            pstate.decoded_tokens.push_back(td.id);
++                            pstate.decoded_token_data.push_back(td);
++                            pstate.n_sample++;
++                            if (params && params->new_token_callback) {
++                                params->new_token_callback(&pctx, &pstate, &td, params->new_token_callback_user_data);
++                            }
++                        }
++                        last_token     = toks.back().id;
++                        t              = tb;
++                        tokens_emitted = eb;
++                        kept = true;
++                        PARAKEET_LOG_DEBUG("%s: wrote one of the user's words (%d pieces, cost %.1f)\n",
++                                           __func__, (int) toks.size(), cost);
++                        break;
++                    }
++                    parakeet_decoder_load(pstate, snap);
++                }
++            }
++            if (kept) {
++                continue;
++            }
++        }
++
+         if (best_token == blank_id) {
+             if (duration == 0) {
+                 duration = 1;
+@@ -3388,6 +3611,52 @@ int parakeet_n_len(struct parakeet_context * ctx) {
+     return ctx->state->mel.n_len_org;
+ }
+ 
++int parakeet_set_word_boost(
++        struct parakeet_context * ctx,
++                          int   n_targets,
++                    const int * target_pos_begin,
++                          int   n_pos,
++                    const int * pos_entry_begin,
++                          int   n_entries,
++                    const int * entry_pid,
++                    const int * entry_next,
++                  const float * settings,
++                          int   n_settings) {
++    auto & wb = ctx->word_boost;
++    wb = parakeet_word_boost();
++    if (n_targets <= 0) {
++        return 0;
++    }
++    if (!target_pos_begin || !pos_entry_begin || !entry_pid || !entry_next || n_pos <= 0 || n_entries <= 0 ||
++        target_pos_begin[0] != 0 || target_pos_begin[n_targets] != n_pos ||
++        pos_entry_begin[0] != 0 || pos_entry_begin[n_pos] != n_entries) {
++        return -1;
++    }
++    for (int k = 0; k < n_targets; ++k) {
++        if (target_pos_begin[k + 1] <= target_pos_begin[k]) {
++            return -1;
++        }
++    }
++    for (int p = 0; p < n_pos; ++p) {
++        if (pos_entry_begin[p + 1] < pos_entry_begin[p]) {
++            return -1;
++        }
++    }
++    wb.target_pos_begin.assign(target_pos_begin, target_pos_begin + n_targets + 1);
++    wb.pos_entry_begin.assign(pos_entry_begin, pos_entry_begin + n_pos + 1);
++    wb.entry_pid.assign(entry_pid, entry_pid + n_entries);
++    wb.entry_next.assign(entry_next, entry_next + n_entries);
++    if (settings && n_settings >= 6) {
++        wb.start_margin = settings[0];
++        wb.step_margin  = settings[1];
++        wb.blank_margin = settings[2];
++        wb.word_budget  = settings[3];
++        wb.max_frames   = (int) settings[4];
++        wb.max_tries    = (int) settings[5];
++    }
++    return n_targets;
++}
++
+ int parakeet_n_vocab(struct parakeet_context * ctx) {
+     return ctx->vocab.n_vocab;
+ }

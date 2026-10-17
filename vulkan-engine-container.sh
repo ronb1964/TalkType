@@ -22,6 +22,14 @@ WORK=/tmp/whisper-build
 rm -rf "$WORK" && mkdir -p "$WORK" && cd "$WORK"
 git clone -q --depth 1 --branch "v${WHISPER_CPP_VERSION}" https://github.com/ggml-org/whisper.cpp
 cd whisper.cpp
+# TuxTalk's own changes (vulkan-engine-patches/): Your Words for Parakeet's
+# greedy decoder (parakeet_set_word_boost). A patch that doesn't apply
+# stops the build rather than ship an engine without it.
+for patch in /build/vulkan-engine-patches/*.patch; do
+    [ -e "$patch" ] || continue
+    git apply "$patch" || { echo "❌ $(basename "$patch") does not apply to whisper.cpp v${WHISPER_CPP_VERSION}"; exit 1; }
+    echo "Applied $(basename "$patch")"
+done
 # GGML_BACKEND_DL + GGML_CPU_ALL_VARIANTS: the CPU part is chosen at run time
 # for the user's processor, like the official builds, so one download fits all.
 cmake -B build -DGGML_VULKAN=ON -DGGML_NATIVE=OFF -DGGML_BACKEND_DL=ON \
@@ -42,6 +50,7 @@ cp samples/jfk.wav "$OUT/speed-check.wav"
 # Refuse to publish a build that can't do what it's for.
 test -f "$OUT/libggml-vulkan.so" || { echo "❌ no Vulkan backend in the build"; exit 1; }
 test -f "$OUT/libparakeet.so" || { echo "❌ no Parakeet library in the build"; exit 1; }
+nm -D "$OUT/libparakeet.so" | grep -q parakeet_set_word_boost || { echo "❌ the Parakeet library has no word boost"; exit 1; }
 MAXGLIBC=$(objdump -T "$OUT"/whisper-server "$OUT"/*.so* 2>/dev/null | grep -oE "GLIBC_[0-9.]+" | sort -Vu | tail -1)
 echo "Newest glibc needed: $MAXGLIBC"
 

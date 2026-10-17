@@ -64,6 +64,7 @@ class ParakeetGpuModel:
         self._stderr = None
         self._cpu = None
         self._words = ()
+        self._sent_words = ()       # the list the running helper has (a new one has none)
         self._lock = threading.Lock()
         # The helper dies with the thread that started it (PR_SET_PDEATHSIG
         # is per thread), and a restart can happen on a short-lived dictation
@@ -94,6 +95,7 @@ class ParakeetGpuModel:
         if not reply.get("ready"):
             self._stop()
             raise RuntimeError(reply.get("error") or "the helper did not start")
+        self._sent_words = ()
         logger.info("Parakeet graphics helper ready")
 
     def _engine_messages(self):
@@ -125,11 +127,35 @@ class ParakeetGpuModel:
             self._stderr.close()
             self._stderr = None
 
+    def _send_words(self):
+        """Give the helper Your Words when they changed since it last had them.
+        A problem here costs only the steering, never the dictation."""
+        if self._sent_words == self._words:
+            return
+        from .parakeet_gpu_worker import encode_words
+        try:
+            self._proc.stdin.write(encode_words(self._words))
+            self._proc.stdin.flush()
+            reply = self._read_reply(30)
+        except Exception as e:
+            logger.warning(f"Couldn't give Parakeet on the graphics chip your words: {e}")
+            raise
+        self._sent_words = self._words
+        if "error" in reply:
+            logger.warning(f"Parakeet on the graphics chip can't take your words: {reply['error']}")
+        elif reply.get("words") is None:
+            logger.info("This Vulkan engine can't steer Parakeet toward your words; "
+                        "only the spelling pass applies")
+        else:
+            logger.info(f"Your Words for Parakeet on the graphics chip: {reply['words']} spellings "
+                        f"of {len(self._words)} words")
+
     def _recognize_on_gpu(self, audio):
         """Send one recording to the helper (restarting it if it died) and return its text."""
         if self._proc is None or self._proc.poll() is not None:
             logger.warning("Parakeet graphics helper had stopped; starting it again")
             self._start()
+        self._send_words()
         self._proc.stdin.write(struct.pack("<I", len(audio)) + audio.tobytes())
         self._proc.stdin.flush()
         reply = self._read_reply(60 + len(audio) / SAMPLE_RATE)
@@ -165,8 +191,9 @@ class ParakeetGpuModel:
             return self._cpu.recognize(audio)
 
     def set_words(self, words) -> None:
-        """Your Words. The graphics chip's engine can't be steered yet, so
-        they only reach the processor engine this falls back to."""
+        """Your Words: sent to the helper before the next recording (a
+        Vulkan engine with TuxTalk's patch steers Parakeet with them), and
+        handed to the processor engine if this has fallen back to it."""
         self._words = tuple(words or ())
         if self._cpu is not None:
             _steer(self._cpu, self._words)
