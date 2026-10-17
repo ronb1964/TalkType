@@ -20,7 +20,7 @@ from pathlib import Path
 #      dev venv on LD_LIBRARY_PATH): leave it visible.
 #   3. Otherwise set CUDA_VISIBLE_DEVICES='' for CPU-only mode.
 _appimage_cuda_path = Path.home() / ".local" / "share" / "TuxTalk" / "cuda" / "lib"
-_dev_cuda_path = Path.home() / ".local" / "share" / "talktype-dev" / "cuda" / "lib"
+_dev_cuda_path = Path.home() / ".local" / "share" / "TuxTalk-dev" / "cuda" / "lib"
 
 if not _appimage_cuda_path.exists() and not _dev_cuda_path.exists():
     try:
