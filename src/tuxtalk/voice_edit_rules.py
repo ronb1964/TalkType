@@ -16,6 +16,36 @@ Every pattern here matches the whole instruction, so anything longer
 """
 import re
 
+# --- "edit that, ..." said in a dictation ------------------------------------------------
+
+# Voice editing without its key: a dictation (or a Type at pause phrase) that
+# STARTS with "edit that" is an instruction for what TuxTalk typed just
+# before it. Anywhere else in a sentence it's words. So that "Edit that file
+# and send it" stays words, the instruction must come after a pause (the
+# engine writes a comma or a period there) or start with an editing word.
+_SPOKEN_EDIT = re.compile(r"^\s*(?:please\s+)?edit\s+that\b(?P<pause>[\s]*[,.:;!?-])?\s*(?P<rest>.*?)\s*$",
+                          re.IGNORECASE | re.DOTALL)
+_EDIT_VERBS = frozenset("""make change turn remove delete take add put replace rewrite reword
+    fix correct shorten lengthen expand simplify use say write translate capitalize
+    capitalise uppercase lowercase bold italicize underline swap move cut drop
+    spell format convert""".split())
+
+
+def spoken_edit(raw: str):
+    """The instruction in "edit that, make it shorter": "make it shorter";
+    "" for "edit that" alone (the next phrase says what); None when the
+    dictation doesn't start with "edit that", or what follows it reads as
+    a sentence ("edit that file")."""
+    m = _SPOKEN_EDIT.match(raw or "")
+    if m is None:
+        return None
+    rest = m.group("rest")
+    if not rest or m.group("pause"):
+        return rest
+    first = re.sub(r"[^a-z]", "", rest.split()[0].lower())
+    return rest if first in _EDIT_VERBS or first in ("please", "can", "could") else None
+
+
 # --- the instruction, tidied ------------------------------------------------------------
 
 def _norm(instruction: str) -> str:

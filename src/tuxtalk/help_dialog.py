@@ -474,6 +474,15 @@ Change text by saying how you want it changed.
 3. A moment later the selection is replaced with the rewritten text.
 4. Not what you wanted? Press <b>Ctrl+Z</b> in the app to get your original back.
 
+<b>Without the keys: "edit that"</b>
+Right after you dictate something, start your next dictation with <b>edit that</b> and say
+the change: <b>edit that, make it shorter</b>. TuxTalk selects what it just typed and
+changes it, with no Shift needed. With hands-free (double-tap F9) and Type at pause,
+you can say a message, look it over, say <b>edit that, make it friendlier</b>, then
+<b>press enter</b> to send it, all without touching the keyboard.
+Only a dictation that starts with "edit that" and a pause, or with a change like
+"edit that make it shorter", counts. "Edit that file tonight" is typed as words.
+
 <b>What to say</b>
 Say it in your own words; there's no fixed list. Some that work well:
   • <b>make this more formal</b>  •  <b>make it friendlier</b>  •  <b>make it sound more professional</b>

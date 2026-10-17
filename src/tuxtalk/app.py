@@ -311,6 +311,9 @@ class RecordingState:
     # A phrase that was only a correction cue ("No wait."), not typed yet: the
     # corrected value comes in the next phrase.
     held_cue: str = ""
+    # "edit that" said alone as a Type at pause phrase: the next phrase of
+    # this recording says what to change (_handle_spoken_edit).
+    edit_waiting: object = None
     # Speech the pause detector heard after its last cut, taken at the stop:
     # 0.0 means the rest of the recording is room noise only.
     last_chunk_speech: float = None
@@ -968,6 +971,7 @@ def _arm_chunker(rec_sr, edit_mode=False):
         state.pending_boundary = None
         state.chunk_typed = False
         state.held_cue = ""
+        state.edit_waiting = None
         state.chunker = chunker
 
 
@@ -3398,8 +3402,8 @@ def _flush_boundary(auto_period: bool, auto_space: bool, injection_mode: str) ->
 
 
 def _chunk_message_sent() -> None:
-    """Type at pause pressed Enter mid-recording ("... press enter"): the
-    message is sent, so what's said next starts a new one. Nothing reaches
+    """Type at pause pressed Enter mid-recording ("... press enter"), or
+    "edit that" rewrote what was typed: what's said next starts afresh. Nothing reaches
     back across it: no held-back mark, no correction, no lowercase start,
     and the screen copy starts again."""
     state.pending_boundary = None
@@ -3522,6 +3526,11 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
 
         # "fix that word": Fix a Word on the dictation before this one.
         if _handle_fix_word(raw, beeps_on):
+            return
+
+        # "edit that, make it shorter": voice editing without its key, on
+        # what was just typed (TuxTalk Labs, with voice editing on).
+        if _handle_spoken_edit(raw, chunk_role, beeps_on, injection_mode):
             return
 
         # "... press enter": type the words, then a real Enter that sends the
@@ -3707,6 +3716,8 @@ _EDIT_NOTICES = {
                     "keys mean other things.",
     "undo_other_window": "TuxTalk can only delete what you just dictated, right after "
                          "you dictate it. Use Ctrl+Z in this app instead.",
+    "edit_that_what": "Say what to change after \u201cedit that\u201d, for example "
+                      "\u201cedit that, make it shorter\u201d.",
 }
 
 
@@ -3732,6 +3743,7 @@ _EDIT_LABELS = {
     "nothing_said": "Works only right after dictating",
     "nav_terminal": "Can't select or move in a terminal",
     "undo_other_window": "Works only right after dictating",
+    "edit_that_what": "Say what to change",
 }
 
 
@@ -3904,11 +3916,82 @@ def _handle_navigation(raw: str, beeps_on: bool, focused_class=_UNKNOWN_WINDOW) 
     return True
 
 
+def _spoken_edit_target():
+    """What "edit that" changes: this recording's text on screen (every
+    phrase since the last Enter, with Type at pause), else the last
+    dictation; "" when there's nothing fresh in the focused window."""
+    typed = state.last_inserted_text
+    if not typed or not typed.strip():
+        return ""
+    focused = _query_focused_window_class()
+    if (focused is not None and state.last_inserted_window is not None
+            and focused != state.last_inserted_window):
+        return ""
+    shown = state.shown_text
+    if shown and state.shown_serial == state.recording_serial and shown.endswith(typed):
+        return shown
+    return typed
+
+
+def _handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: str) -> bool:
+    """Voice editing by voice alone (TuxTalk Labs): a dictation that starts
+    with "edit that" selects what TuxTalk just typed and changes it as the
+    rest says, as Shift+F8 does for a selection. True when it was handled
+    (done, or refused with a notice); False to type the words as text, which
+    is also what happens when nothing was just typed to edit."""
+    if not _voice_editing:
+        return False
+    from . import voice_edit_rules
+    from . import voice_navigation as nav
+    waiting, state.edit_waiting = state.edit_waiting, None
+    if waiting is not None and waiting["serial"] == state.recording_serial:
+        instruction, target = raw, waiting["target"]
+    else:
+        instruction = voice_edit_rules.spoken_edit(raw)
+        if instruction is None:
+            return False
+        target = _spoken_edit_target()
+        if not target:
+            return False
+    logger.info(f"Voice command: edit that ({len(target)} characters)")
+    if not _is_wayland_session():
+        _edit_problem("needs_wayland", beeps_on)
+        return True
+    focused_class = _query_focused_window_class()
+    if is_terminal_class(focused_class):
+        _edit_problem("terminal", beeps_on)
+        return True
+    if not instruction.strip():
+        if chunk_role == "middle":
+            # "edit that", then a pause: the next phrase says what to change.
+            state.edit_waiting = {"serial": state.recording_serial, "target": target}
+            logger.info("Voice edit: waiting for the next phrase to say what to change")
+        else:
+            _edit_problem("edit_that_what", beeps_on)
+        return True
+    plan = nav.plan(nav.parse("select that"), target, "")
+    try:
+        selected = plan is not None and _output_backend().press_keys(plan.chords)
+    except Exception as e:
+        logger.error(f"Voice edit: selecting the text failed: {e}")
+        selected = False
+    # The text is selected now (and then replaced): undo's count and the
+    # screen copy no longer match it, and nothing in it reaches the next phrase.
+    state.last_inserted_text = ""
+    _chunk_message_sent()
+    _forget_shown()
+    if not selected:
+        _edit_problem("shortcut_failed", beeps_on)
+        return True
+    _edit_selection(lambda: instruction, beeps_on, injection_mode, focused_class,
+                    time.time(), spoken=True)
+    return True
+
+
 def _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
     """Voice editing: the recording is an instruction ("make this more formal")
     for the text selected in the focused app, which the AI rewrites and the
     rewrite replaces. Ctrl+Z in the app undoes it."""
-    from . import ai_cleanup, clipboard, history, voice_edit_rules
     from .silence import is_speechless_tap
     t0 = time.time()
     pcm_int16 = np.frombuffer(b''.join(frames), dtype=np.int16)
@@ -3929,7 +4012,22 @@ def _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
     if is_terminal_class(focused_class):
         _edit_problem("terminal", beeps_on)
         return
+    heard = []
 
+    def instruction():
+        if not heard:
+            heard.append(_transcribe_audio(audio_f32, language))
+        return heard[0]
+    _edit_selection(instruction, beeps_on, injection_mode, focused_class, t0)
+
+
+def _edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0,
+                    spoken=False):
+    """Change the text selected in *focused_class* as the instruction
+    *get_instruction()* says (called only once a selection is found), and
+    type the result over it. *spoken*: the instruction came after "edit
+    that" in a dictation, which selected the text itself."""
+    from . import ai_cleanup, clipboard, history, voice_edit_rules
     # The selection first, so "select some text first" comes up even when
     # nothing was said.
     try:
@@ -3941,15 +4039,15 @@ def _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
         # "select the last sentence" needs nothing selected: it makes the
         # selection the next edit works on (select and move by voice). The
         # clipboard is already back (copy_selection does that when empty).
-        if _voice_navigation:
-            instruction = _transcribe_audio(audio_f32, language)
-            if instruction and _handle_navigation(instruction, beeps_on, focused_class):
+        if _voice_navigation and not spoken:
+            said = get_instruction()
+            if said and _handle_navigation(said, beeps_on, focused_class):
                 return
         _edit_problem("no_selection", beeps_on)
         return
     result = None
     try:
-        instruction = _transcribe_audio(audio_f32, language)
+        instruction = get_instruction()
         if not instruction:
             _edit_problem("no_instruction", beeps_on)
             return

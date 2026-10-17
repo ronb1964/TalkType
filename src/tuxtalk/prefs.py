@@ -2398,7 +2398,9 @@ class PreferencesWindow:
                 "Select some text in any app, hold Shift+F8 (Shift with your hold key, or tap\n"
                 "Shift with your toggle key), and say what you want: “make this more formal”,\n"
                 "“shorten this”, “fix the grammar”, “turn this into a bullet list”.\n"
-                "The selection is replaced with the rewrite. Ctrl+Z puts it back.\n\n"
+                "The selection is replaced with the rewrite. Ctrl+Z puts it back.\n"
+                "Or, right after dictating, say “edit that, make it shorter”: no keys needed,\n"
+                "handy with hands-free and Type at pause.\n\n"
                 "Uses the same small AI as self-corrections (one shared 1.1 GB download),\n"
                 "on this computer. Simple, clear changes work best.")
             self.voice_editing_check.connect("toggled", self._on_voice_editing_toggled)
