@@ -1661,8 +1661,10 @@ class PreferencesWindow:
         duck_check.set_active(bool(self.config.get("duck_audio", False)))
         duck_check.connect("toggled", lambda x: self.update_config("duck_audio", x.get_active()))
         duck_check.set_tooltip_text(
-            "Lowers every other app to a quarter of its volume while you talk, and puts it\n"
-            "back when you finish: Discord calls, games and anything pausing can't reach.\n"
+            "Turns every other app's sound way down while you talk (to 25% on its volume\n"
+            "slider, which sounds much quieter than a quarter) and puts it back when you\n"
+            "finish: Discord calls, games and anything pausing can't reach.\n"
+            "Only what you hear: a call still hears your microphone, so mute yourself there.\n"
             "A volume you change yourself in the meantime is left as you set it.")
         grid.attach(duck_check, 0, row, 2, 1)
         row += 1

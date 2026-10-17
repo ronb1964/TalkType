@@ -34,6 +34,7 @@ big ways. Roughly in order:
 - [ ] A choice of beep sounds, a volume control for them, or your own sound files.
 - [ ] Warn when the room is too noisy to dictate well.
 - [ ] Pick the best microphone automatically, and switch microphones from the tray.
+- [ ] With "Turn other sounds down while dictating" on, a second choice: also mute your microphone for other apps while you dictate, so a Zoom or Discord call doesn't hear you. Off by default. Left off, you mute yourself in the call app. It has to be just as careful as the volume feature that a call is never left muted.
 - [~] Live audio level in the GNOME panel. The recording indicator and the Preferences mic test have one, the panel icon doesn't.
 
 ## Look and feel
