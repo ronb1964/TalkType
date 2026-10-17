@@ -1253,10 +1253,29 @@ class WelcomeDialog:
         header_box.pack_start(header_label, False, False, 0)
         typing_box.pack_start(header_box, False, False, 0)
 
+        # What Fix Typing will do, worked out first so the line below only
+        # asks for a restart when the fix really needs one (the hotkey
+        # helper doesn't; the "input" group and a new ydotoold service do).
+        details = []
+        if self.needs_ydotoold_setup and self.ydotoold_status.get('ydotool_installed'):
+            details.append("🔧 Sets up ydotoold daemon as a user service")
+        fix_restarts = False
+        if self.needs_uinput_fix:
+            from tuxtalk.secure_input import fix_description
+            lines, fix_restarts = fix_description()
+            details.extend(f"🔧 {GLib.markup_escape_text(line)}" for line in lines)
+        needs_restart = fix_restarts or (self.needs_ydotoold_setup and not self.needs_uinput_fix)
+        if needs_restart:
+            details.append("🔄 Restart your computer to apply (logging out is often not enough)")
+        elif self.needs_uinput_fix:
+            details.append("✓ No restart needed")
+
         explain_text = (
             '<span><b>This step is required for TuxTalk to work.</b>\n'
             'Without this setup, dictated text cannot be typed into your applications.\n'
-            'Click "Fix Typing" below, then restart your computer.</span>'
+            + ('Click "Fix Typing" below, then restart your computer.' if needs_restart
+               else 'Click "Fix Typing" below.')
+            + '</span>'
         )
         explain_label = Gtk.Label()
         explain_label.set_markup(explain_text)
@@ -1305,20 +1324,7 @@ class WelcomeDialog:
         what_label.set_margin_top(10)
         typing_box.pack_start(what_label, False, False, 0)
 
-        # Details - show relevant items based on what's needed
-        details = []
-        if self.needs_ydotoold_setup and self.ydotoold_status.get('ydotool_installed'):
-            details.append("🔧 Sets up ydotoold daemon as a user service")
-        fix_restarts = False
-        if self.needs_uinput_fix:
-            from tuxtalk.secure_input import fix_description
-            lines, fix_restarts = fix_description()
-            details.extend(f"🔧 {GLib.markup_escape_text(line)}" for line in lines)
-        if fix_restarts or (self.needs_ydotoold_setup and not self.needs_uinput_fix):
-            details.append("🔄 Restart your computer to apply (logging out is often not enough)")
-        elif self.needs_uinput_fix:
-            details.append("✓ No restart needed")
-
+        # Details (worked out above) - show relevant items based on what's needed
         details_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         details_box.set_margin_start(25)
 
