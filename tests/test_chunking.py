@@ -1188,3 +1188,20 @@ def test_a_phrase_being_worked_on_holds_hands_free_open(monkeypatch):
     monkeypatch.setattr(app, "_transcribe_and_inject", lambda *a, **k: events.append("work"))
     app._transcribe_chunk([b""], SR, "middle")
     assert events == ["hold", "work", "release"]
+
+
+def test_a_held_mark_stays_in_the_window_its_phrase_went_to(pipeline, monkeypatch):
+    """Ron, 2026-10-17: "What's next" typed into the wrong window, a click into
+    the chat, "What's next" again: the chat got "? What's next". The first
+    phrase's held "?" belongs in the first window; the chat starts afresh."""
+    from tuxtalk import app
+    texts, typed, _ = pipeline
+    focus = {"now": "brave-browser"}
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: focus["now"])
+    texts.extend(["what's next?", "what's next?"])
+    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    app.state.pending_boundary["window"] = "brave-browser"
+    focus["now"] = "com.anthropic.Claude"             # the click into the chat
+    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    assert typed == ["What's next", "What's next"]
+    assert texts == []                                # no context pass across windows

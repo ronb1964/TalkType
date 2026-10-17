@@ -3385,6 +3385,16 @@ def _resolve_boundary(audio_f32, language, injection_mode, raw="", auto_period=T
     one, from the engine hearing both chunks together, and type it. Returns
     the chunk's text, "press enter" when only the context pass heard that."""
     pending, state.pending_boundary = state.pending_boundary, None
+    focused = _query_focused_window_class()
+    if (focused is not None and pending.get("window") is not None
+            and focused != pending["window"]):
+        # The user switched windows during the pause: that phrase's mark
+        # belongs at its end, in the other window, not at the start of this
+        # one ("? What's next?", Ron 2026-10-17). This window starts afresh.
+        logger.info("Chunk boundary: another window has the focus now; "
+                    "its mark stays with its phrase")
+        state.continue_mid_sentence = False
+        return raw
     mark = pending["mark"]
     joint = ""
     try:
@@ -3648,7 +3658,8 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                 # the start of the next one to decide the mark between them.
                 state.pending_boundary = {"mark": held_mark,
                                           "audio": audio_f32[-_context_samples():],
-                                          "raw": raw, "typed": state.last_inserted_text}
+                                          "raw": raw, "typed": state.last_inserted_text,
+                                          "window": state.last_inserted_window}
             if _usage_stats:
                 # After typing, so saving the counts never delays the text.
                 # Counts only (words, seconds dictating); see stats.py.
