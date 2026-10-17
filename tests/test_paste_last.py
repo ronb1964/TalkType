@@ -261,3 +261,24 @@ def test_a_hold_started_while_the_combo_is_pending_still_stops(keys, monkeypatch
     send(ecodes.KEY_F8, 1, held)
     send(ecodes.KEY_F8, 0, held)
     assert stopped, "the hold key's release was swallowed"
+
+
+@pytest.mark.parametrize("on", [True, False])
+def test_the_saving_battery_tip_appears_only_when_power_saving_is_on(monkeypatch, on):
+    import gi
+    gi.require_version("Gtk", "3.0")
+    from gi.repository import Gtk
+    from tuxtalk import welcome_dialog
+    monkeypatch.setattr(config, "load_config", lambda: config.Settings(
+        hotkey="F8", toggle_hotkey="F9", auto_timeout_enabled=on, auto_timeout_minutes=5))
+    seen = []
+
+    def fake_run(dialog):
+        seen.extend(_labels(dialog))
+        return Gtk.ResponseType.OK
+    monkeypatch.setattr(Gtk.Dialog, "run", fake_run)
+    welcome_dialog.show_tips_and_features_dialog()
+    tip = [t for t in seen if "turns dictation off to save battery" in t]
+    assert bool(tip) is on
+    if on:
+        assert "After 5 minutes without dictating" in tip[0] and "F8 and F9 do nothing" in tip[0]

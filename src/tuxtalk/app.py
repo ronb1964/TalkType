@@ -4463,9 +4463,14 @@ def _service_tick(cfg, svc: "_ServiceState") -> "LiveSettings | None":
         if now - svc.last_activity > svc.timeout_seconds:
             print(f"Auto-timeout: No activity for {svc.timeout_minutes} "
                   f"minutes, shutting down...")
-            if cfg.notify:
-                _notify("TuxTalk Auto-Timeout",
-                        f"Service stopped after {svc.timeout_minutes} minutes of inactivity")
+            logger.info(f"Power saving: no dictation for {svc.timeout_minutes} minutes; "
+                        "turning dictation off")
+            # Always, even with notifications off: the hotkeys stop working
+            # now, and without a word that looks like TuxTalk broke.
+            _notify("TuxTalk: dictation is off",
+                    f"No dictation for {svc.timeout_minutes} minutes, so TuxTalk turned it "
+                    "off to save power. Turn it back on from the TuxTalk menu (Dictation "
+                    "Service), or change this in Preferences → General → Power Saving.")
             sys.exit(0)
 
     # Pick up Preferences changes without a restart — indicator style/position,

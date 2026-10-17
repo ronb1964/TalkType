@@ -1423,7 +1423,67 @@ class PreferencesWindow:
         self.launch_at_login_check.set_tooltip_text("Automatically start TuxTalk when you log in to your desktop.\nUseful for having dictation always available.")
         grid.attach(self.launch_at_login_check, 0, row, 2, 1)
         row += 1
-        
+
+        # ===== POWER SAVING SECTION =====
+        # In General, not Advanced: when it kicks in the hotkeys stop working,
+        # which looks like TuxTalk broke to anyone who doesn't know it's there.
+        power_sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        power_sep.set_margin_top(20)
+        power_sep.set_margin_bottom(15)
+        grid.attach(power_sep, 0, row, 2, 1)
+        row += 1
+
+        power_header = Gtk.Label()
+        power_header.set_markup('<b>Power Saving</b>')
+        power_header.set_xalign(0)
+        power_header.set_margin_bottom(10)
+        grid.attach(power_header, 0, row, 2, 1)
+        row += 1
+
+        self.auto_timeout_check = Gtk.CheckButton(
+            label="Turn dictation off when it isn't used for a while")
+        self.auto_timeout_check.set_active(self.config.get("auto_timeout_enabled", False))
+        self.auto_timeout_check.connect("toggled", lambda x: self.update_config("auto_timeout_enabled", x.get_active()))
+        self.auto_timeout_check.connect("toggled", self._on_auto_timeout_toggled)
+        self.auto_timeout_check.set_tooltip_text(
+            "Saves battery on a laptop: while dictation is off, the speech model lets go\n"
+            "of the processor and the graphics card.\n\n"
+            "On by default on laptops, off on desktop computers.")
+        grid.attach(self.auto_timeout_check, 0, row, 2, 1)
+        row += 1
+
+        # The minutes, and what happens then, indented under the tickbox and
+        # hidden with it off (_update_timeout_ui_state).
+        self.timeout_label = Gtk.Label(label="After", xalign=0)
+        self.timeout_spin = Gtk.SpinButton()
+        self.timeout_spin.set_range(1, 60)  # 1 to 60 minutes
+        self.timeout_spin.set_increments(1, 5)
+        self.timeout_spin.set_value(self.config.get("auto_timeout_minutes", 5))
+        self.timeout_spin.connect("value-changed", lambda x: self.update_config("auto_timeout_minutes", int(x.get_value())))
+        self.timeout_spin.connect("scroll-event", lambda *a: True)  # Disable scroll wheel to prevent accidental changes
+        self.timeout_spin.set_tooltip_text("Minutes without dictating before dictation turns off.")
+        timeout_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        timeout_row.set_margin_start(28)
+        timeout_row.pack_start(self.timeout_label, False, False, 0)
+        timeout_row.pack_start(self.timeout_spin, False, False, 0)
+        self.timeout_minutes_label = Gtk.Label(label="minutes without dictating", xalign=0)
+        timeout_row.pack_start(self.timeout_minutes_label, False, False, 0)
+        grid.attach(timeout_row, 0, row, 2, 1)
+        row += 1
+
+        keys = " and ".join(k for k in (self.config.get("hotkey"), self.config.get("toggle_hotkey"))
+                            if k) or "your dictation keys"
+        self.timeout_note = Gtk.Label(xalign=0)
+        self.timeout_note.set_text(
+            f"Then {keys} do nothing until you turn dictation back on: "
+            "TuxTalk's menu \u2192 Dictation Service.")
+        self.timeout_note.set_line_wrap(True)
+        self.timeout_note.set_max_width_chars(70)
+        self.timeout_note.set_opacity(0.7)
+        self.timeout_note.set_margin_start(28)
+        grid.attach(self.timeout_note, 0, row, 2, 1)
+        row += 1
+
         return grid
     
     def create_audio_tab(self):
@@ -2094,48 +2154,6 @@ class PreferencesWindow:
         grid.attach(ai_note, 0, row, 2, 1)
         row += 1
 
-
-        # ===== POWER MANAGEMENT SECTION =====
-        separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
-        separator.set_margin_top(20)
-        separator.set_margin_bottom(15)
-        grid.attach(separator, 0, row, 2, 1)
-        row += 1
-
-        power_header = Gtk.Label()
-        power_header.set_markup('<b>Power Management</b>')
-        power_header.set_xalign(0)
-        power_header.set_margin_bottom(10)
-        grid.attach(power_header, 0, row, 2, 1)
-        row += 1
-
-        # Auto timeout checkbox
-        self.auto_timeout_check = Gtk.CheckButton(label="Enable auto-timeout after inactivity")
-        self.auto_timeout_check.set_active(self.config.get("auto_timeout_enabled", False))
-        self.auto_timeout_check.connect("toggled", lambda x: self.update_config("auto_timeout_enabled", x.get_active()))
-        self.auto_timeout_check.connect("toggled", self._on_auto_timeout_toggled)
-        self.auto_timeout_check.set_tooltip_text("Automatically stop the dictation service after a period of inactivity.\nThis helps save battery life on laptops and reduces CPU usage.")
-        grid.attach(self.auto_timeout_check, 0, row, 2, 1)
-        row += 1
-
-        # Timeout duration (only visible when timeout is enabled)
-        self.timeout_label = Gtk.Label(label="Timeout after (minutes):", xalign=0)
-
-        self.timeout_spin = Gtk.SpinButton()
-        self.timeout_spin.set_range(1, 60)  # 1 to 60 minutes
-        self.timeout_spin.set_increments(1, 5)
-        self.timeout_spin.set_value(self.config.get("auto_timeout_minutes", 5))
-        self.timeout_spin.connect("value-changed", lambda x: self.update_config("auto_timeout_minutes", int(x.get_value())))
-        self.timeout_spin.connect("scroll-event", lambda *a: True)  # Disable scroll wheel to prevent accidental changes
-        self.timeout_spin.set_tooltip_text("Number of minutes of inactivity before automatically stopping dictation.\n• 1-5 minutes: Very aggressive (good for short sessions)\n• 5-15 minutes: Balanced (recommended for laptop use)\n• 15-30 minutes: Conservative (good for desktop use)")
-        # Indented under the tickbox it belongs to, with the number right
-        # beside its label. The label and the box hide with the tickbox off.
-        timeout_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        timeout_row.set_margin_start(28)
-        timeout_row.pack_start(self.timeout_label, False, False, 0)
-        timeout_row.pack_start(self.timeout_spin, False, False, 0)
-        grid.attach(timeout_row, 0, row, 2, 1)
-        row += 1
 
         # ===== PRIVACY SECTION =====
         privacy_sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
@@ -5109,8 +5127,10 @@ class PreferencesWindow:
         """Update timeout UI visibility based on checkbox state."""
         if hasattr(self, 'timeout_label'):
             is_enabled = self.config.get("auto_timeout_enabled", False)
-            self.timeout_label.set_visible(is_enabled)
-            self.timeout_spin.set_visible(is_enabled)
+            for name in ("timeout_label", "timeout_spin", "timeout_minutes_label", "timeout_note"):
+                widget = getattr(self, name, None)
+                if widget is not None:
+                    widget.set_visible(is_enabled)
         return False  # Don't repeat
 
     def _initial_gpu_check(self):

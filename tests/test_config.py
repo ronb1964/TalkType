@@ -194,3 +194,30 @@ def test_first_run_and_preferences_recommend_parakeet():
     prefs = (src / "prefs.py").read_text()
     assert '"small":    "small — recommended balance"' not in prefs
     assert "Parakeet — recommended" in prefs
+
+
+def test_power_saving_defaults_on_with_a_battery_only(tmp_path):
+    """A laptop's battery turns it on; a wireless mouse's battery (scope
+    Device) and a desktop with none leave it off, so F8 always works there."""
+    from tuxtalk.config import has_battery
+    power = tmp_path / "power_supply"
+    mouse = power / "hidpp_battery_0"
+    mouse.mkdir(parents=True)
+    (mouse / "type").write_text("Battery\n")
+    (mouse / "scope").write_text("Device\n")
+    (power / "AC").mkdir()
+    (power / "AC" / "type").write_text("Mains\n")
+    assert has_battery(str(power)) is False
+    laptop = power / "BAT0"
+    laptop.mkdir()
+    (laptop / "type").write_text("Battery\n")
+    assert has_battery(str(power)) is True
+    assert has_battery(str(tmp_path / "missing")) is False
+
+
+def test_power_saving_default_follows_the_battery(monkeypatch):
+    import tuxtalk.config as config
+    monkeypatch.setattr(config, "has_battery", lambda: True)
+    assert config.Settings().auto_timeout_enabled is True
+    monkeypatch.setattr(config, "has_battery", lambda: False)
+    assert config.Settings().auto_timeout_enabled is False

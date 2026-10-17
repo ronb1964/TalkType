@@ -148,3 +148,20 @@ class TestAutoTimeoutIsLive:
 
         monkeypatch.setattr(app, "_config_file_changed", lambda: False)
         app._service_tick(cfg, svc)   # must not raise SystemExit
+
+
+def test_power_saving_says_dictation_is_off_even_with_notifications_off(monkeypatch):
+    """Mio, Lemmy 2026-10-17: dictation 'just stops after a while'. When the
+    timeout turns it off, the user is told, whatever the notifications setting."""
+    import pytest
+    _idle(monkeypatch)
+    monkeypatch.setattr(app, "_config_file_changed", lambda: False)
+    shown = []
+    monkeypatch.setattr(app, "_notify", lambda title, body: shown.append((title, body)))
+    cfg = _cfg(auto_timeout_enabled=True, auto_timeout_minutes=5, notify=False)
+    svc = app._ServiceState(cfg)
+    svc.last_activity = 0.0
+    with pytest.raises(SystemExit):
+        app._service_tick(cfg, svc)
+    assert shown and shown[0][0] == "TuxTalk: dictation is off"
+    assert "Dictation Service" in shown[0][1] and "Power Saving" in shown[0][1]

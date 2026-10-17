@@ -108,7 +108,8 @@ def test_battery_saver_sets_its_timeout(env):
 @pytest.mark.parametrize("preset_id", ["recommended", "lightest"])
 def test_leaving_battery_saver_puts_the_timeout_back_to_5_minutes(env, monkeypatch, preset_id):
     """After Battery saver, the other presets must not keep its 2-minute
-    auto-stop."""
+    auto-stop: back to this computer's default (on only with a battery)."""
+    monkeypatch.setattr("tuxtalk.config.has_battery", lambda: True)
     cfg, saved = env
     monkeypatch.setattr("tuxtalk.vulkan_setup_dialogs.ensure_files", lambda p, m, confirm: True)
     monkeypatch.setattr("tuxtalk.vulkan_setup_dialogs.run_speed_check", lambda p, m: True)
@@ -203,3 +204,11 @@ def test_dbus_presets_failure_is_an_empty_list_not_an_error(caplog):
     svc.app = types.SimpleNamespace(get_presets=broken)
     assert list(svc.GetPresets()) == []
     assert "no presets" in caplog.text
+
+
+def test_leaving_battery_saver_on_a_desktop_turns_the_timeout_off(env, monkeypatch):
+    monkeypatch.setattr("tuxtalk.config.has_battery", lambda: False)
+    cfg, saved = env
+    FakeTray().set_performance_preset("battery")
+    FakeTray().set_performance_preset("lightest")
+    assert (cfg.auto_timeout_enabled, cfg.auto_timeout_minutes) == (False, 5)

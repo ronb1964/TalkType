@@ -122,6 +122,25 @@ def swiss_german_locale(env=None) -> bool:
     return any(v.replace("-", "_").startswith(("de_CH", "gsw")) for v in values if v)
 
 
+def has_battery(power_dir="/sys/class/power_supply") -> bool:
+    """Whether this computer runs on a battery (a laptop). A wireless mouse's
+    or keyboard's battery doesn't count: the kernel marks those scope=Device."""
+    try:
+        names = os.listdir(power_dir)
+    except OSError:
+        return False
+    for name in names:
+        def read(what):
+            try:
+                with open(os.path.join(power_dir, name, what)) as f:
+                    return f.read().strip()
+            except OSError:
+                return ""
+        if read("type") == "Battery" and read("scope") != "Device":
+            return True
+    return False
+
+
 @dataclass
 class Settings:
     model: str = "parakeet-v3"  # parakeet-v3 or tiny/base/small/medium/large-v3 …
@@ -152,7 +171,9 @@ class Settings:
     auto_period: bool = True   # append a period when an utterance ends without terminal punctuation
     injection_mode: str = "auto"  # "auto" (smart detection), "type" (ydotool/wtype), or "paste" (wl-copy + Ctrl+V)
     typing_delay: int = 12  # milliseconds between keystrokes when typing (5-50, higher = slower but more reliable)
-    auto_timeout_enabled: bool = True   # enable automatic timeout after inactivity (default: on)
+    # Turn dictation off after a while unused, to save power: on by default
+    # on a laptop, off on a desktop, where F8 then simply always works.
+    auto_timeout_enabled: bool = field(default_factory=lambda: has_battery())
     auto_timeout_minutes: int = 5       # minutes of inactivity before auto-stop
     recording_indicator: bool = True    # show visual recording indicator near cursor
     indicator_position: str = "center"  # screen position: center, top-left, top-center, top-right, bottom-left, bottom-center, bottom-right, left-center, right-center

@@ -394,12 +394,13 @@ Preferences → General → Device:
 • If the graphics card can't start, TuxTalk uses the processor instead and tells
   you, and the tray's Device line shows it, for example "CPU (Vulkan didn't start)".
 
-<b>🔋 Power Management</b>
-TuxTalk includes intelligent timeout to save system resources:
-• <b>Auto-timeout:</b> Service stops automatically after inactivity
-• <b>Configurable:</b> Set duration in Preferences → Advanced
-• <b>Smart detection:</b> Timer resets when you use hotkeys
-• <b>Battery friendly:</b> Reduces CPU/GPU usage when idle
+<b>🔋 Power Saving</b>
+In Preferences → General, "Turn dictation off when it isn't used for a while"
+saves battery: after the minutes you pick without dictating, the speech model lets
+go of the processor and the graphics card. Then your hotkeys do nothing until you
+turn dictation back on from TuxTalk's menu (Dictation Service).
+It's on by default on laptops and off on desktop computers. If F8 stops working
+after a break, this is usually why.
 
 <b>💾 Backup</b>
 In Preferences → Updates &amp; Backup:

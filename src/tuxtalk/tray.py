@@ -1196,8 +1196,11 @@ class DictationTray:
                 from .config import Settings
                 battery = next((p for p in self._current_presets() if p.id == "battery"), None)
                 if battery and all(getattr(cfg, k, None) == v for k, v in battery.extras):
+                    # An instance, not the class: some defaults are worked out
+                    # for this computer (the timeout is on only with a battery).
+                    defaults = Settings()
                     for key, _ in battery.extras:
-                        setattr(cfg, key, getattr(Settings, key))
+                        setattr(cfg, key, getattr(defaults, key))
             save_config(cfg)
             from .notify import notify as _notify
             try:
