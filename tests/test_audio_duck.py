@@ -13,10 +13,14 @@ OWN_PID = 4242
 
 
 class FakePactl:
-    """Sink inputs with per-channel volumes; answers list and set-volume."""
+    """Sink inputs with per-channel volumes; answers list and set-volume.
+
+    As on real PipeWire, a sink input carries no process id: its client does
+    (a stream's own properties had none, so TuxTalk's beeps were taken for
+    another app's and turned down until silent, 2026-10-17)."""
 
     def __init__(self, streams):
-        # index -> {"pid":, "volumes": [...], "mute":}
+        # index -> {"pid":, "volumes": [...], "mute":, "app":, "role":}
         self.streams = streams
         self.calls = []
 
@@ -24,9 +28,14 @@ class FakePactl:
         self.calls.append(cmd[1:])
         args = cmd[1:]
         if args[:4] == ["-f", "json", "list", "sink-inputs"]:
-            out = [{"index": i, "mute": s.get("mute", False),
-                    "properties": {"application.process.id": str(s["pid"])},
+            out = [{"index": i, "mute": s.get("mute", False), "client": str(1000 + i),
+                    "properties": {"application.name": s.get("app", f"app{i}"),
+                                   **({"media.role": s["role"]} if "role" in s else {})},
                     "volume": {f"ch{n}": {"value": v} for n, v in enumerate(s["volumes"])}}
+                   for i, s in self.streams.items()]
+            return subprocess.CompletedProcess(cmd, 0, json.dumps(out), "")
+        if args[:4] == ["-f", "json", "list", "clients"]:
+            out = [{"index": 1000 + i, "properties": {"application.process.id": str(s["pid"])}}
                    for i, s in self.streams.items()]
             return subprocess.CompletedProcess(cmd, 0, json.dumps(out), "")
         if args[0] == "set-sink-input-volume":
@@ -129,3 +138,64 @@ def test_recording_hooks_duck_and_restore(monkeypatch):
     monkeypatch.setattr(app, "_duck_audio", False)
     app._resume_media_players()
     assert calls[-1] == "restore"
+
+
+def test_tuxtalks_beep_is_known_by_its_client_pid(tmp_path):
+    """The real failure: the beep stream's own properties have no pid."""
+    pactl = FakePactl({5: {"pid": OWN_PID, "volumes": [65536], "app": "PipeWire ALSA [python3.14]"}})
+    d = _ducker(tmp_path, pactl)
+    d._duck_now()
+    assert pactl.streams[5]["volumes"] == [65536]
+
+
+def test_short_system_sounds_are_left_alone(tmp_path):
+    pactl = FakePactl({5: {"pid": 77, "volumes": [65536], "role": "event"}})
+    d = _ducker(tmp_path, pactl)
+    d._duck_now()
+    assert pactl.streams[5]["volumes"] == [65536]
+
+
+def test_a_sound_that_ends_while_down_is_put_back_and_never_lowered_twice(tmp_path):
+    """Another app's beep ends while turned down; the desktop then starts its
+    next one at that level. It's put back, and ducked from its real volume,
+    not from the lowered one (three presses made Ron's beeps silent)."""
+    pactl = FakePactl({5: {"pid": 77, "volumes": [65536], "app": "Beeper"}})
+    d = _ducker(tmp_path, pactl)
+    d._duck_now()
+    assert pactl.streams[5]["volumes"] == [16384]
+    del pactl.streams[5]                            # the beep ended
+    d._restore_now()
+    assert d._owed["Beeper"] == {"original": [65536], "lowered": [16384]}
+    # The next beep starts where the desktop remembered it: lowered.
+    pactl.streams[6] = {"pid": 77, "volumes": [16384], "app": "Beeper"}
+    d._duck_now()
+    assert pactl.streams[6]["volumes"] == [16384]   # a quarter of 65536, not of 16384
+    d._restore_now()
+    assert pactl.streams[6]["volumes"] == [65536]
+    assert d._owed == {}
+
+
+def test_an_owed_volume_is_put_back_when_the_app_plays_again_after_dictation(tmp_path):
+    pactl = FakePactl({5: {"pid": 77, "volumes": [50000], "app": "Beeper"}})
+    d = _ducker(tmp_path, pactl)
+    d._duck_now()
+    del pactl.streams[5]
+    d._restore_now()
+    # A new TuxTalk start (the service restarted): read from the state file.
+    pactl.streams[8] = {"pid": 77, "volumes": [12500], "app": "Beeper"}
+    d2 = _ducker(tmp_path, pactl)
+    d2._duck_now()
+    d2._restore_now()
+    assert pactl.streams[8]["volumes"] == [50000]
+    assert not (tmp_path / "ducked.json").exists()
+
+
+def test_an_owed_app_the_user_set_themselves_is_left_alone(tmp_path):
+    pactl = FakePactl({5: {"pid": 77, "volumes": [50000], "app": "Beeper"}})
+    d = _ducker(tmp_path, pactl)
+    d._duck_now()
+    del pactl.streams[5]
+    d._restore_now()
+    pactl.streams[9] = {"pid": 77, "volumes": [30000], "app": "Beeper"}   # set by hand
+    d._restore_now()
+    assert pactl.streams[9]["volumes"] == [30000] and d._owed == {}

@@ -8,7 +8,16 @@ changed in the meantime is left as they set it.
 
 It talks to PipeWire or PulseAudio through pactl (pulseaudio-utils, present
 on every desktop that uses either). TuxTalk's own streams, its beeps, are
-never touched.
+never touched: on PipeWire a stream doesn't carry its process id, its client
+does, so streams are matched to their client's pid. Short system sounds
+(media.role "event") are left alone too.
+
+The desktop remembers each app's volume. A sound that ends while it's turned
+down (a beep, a notification) would come back that quiet next time, and a
+second dictation would lower it again. So such an app is remembered as owed
+its volume (by application.name, the desktop's own key) until TuxTalk next
+sees it at the lowered level and puts it back; it's never lowered from there.
+On 2026-10-17 the beeps did exactly that and went silent in three presses.
 
 If the service stops mid-dictation, the volumes it lowered are written to a
 small file in the runtime folder, and the next start puts them back
@@ -50,8 +59,27 @@ def _pactl(*args, run=subprocess.run):
     return result.stdout
 
 
+def _client_pids(run=subprocess.run):
+    """{client index: pid} from pactl's clients, where PipeWire puts the pid."""
+    out = _pactl("-f", "json", "list", "clients", run=run)
+    try:
+        clients = json.loads(out) if out else []
+    except ValueError:
+        return {}
+    pids = {}
+    for c in clients:
+        try:
+            pid = int(c.get("properties", {}).get("application.process.id") or 0)
+            if pid:
+                pids[int(c["index"])] = pid
+        except (KeyError, TypeError, ValueError):
+            continue
+    return pids
+
+
 def list_streams(run=subprocess.run):
-    """[(index, pid, [channel volumes, raw], muted)] of the apps playing now."""
+    """The apps playing now: dicts of index, pid (0 if unknown), app (its
+    application.name), role, volumes ([channel volumes, raw]) and muted."""
     out = _pactl("-f", "json", "list", "sink-inputs", run=run)
     if not out:
         return []
@@ -59,13 +87,21 @@ def list_streams(run=subprocess.run):
         streams = json.loads(out)
     except ValueError:
         return []
+    clients = None
     found = []
     for s in streams:
         try:
             props = s.get("properties", {})
             pid = int(props.get("application.process.id") or 0)
-            volumes = [int(ch["value"]) for ch in s.get("volume", {}).values()]
-            found.append((int(s["index"]), pid, volumes, bool(s.get("mute"))))
+            if not pid and s.get("client") not in (None, ""):
+                if clients is None:
+                    clients = _client_pids(run)
+                pid = clients.get(int(s["client"]), 0)
+            found.append({"index": int(s["index"]), "pid": pid,
+                          "app": props.get("application.name") or "",
+                          "role": props.get("media.role") or "",
+                          "volumes": [int(ch["value"]) for ch in s.get("volume", {}).values()],
+                          "muted": bool(s.get("mute"))})
         except (KeyError, TypeError, ValueError):
             continue
     return found
@@ -82,7 +118,10 @@ class AudioDucker:
         self._run = run
         self._own_pid = os.getpid() if own_pid is None else own_pid
         self._state_path = state_path or _state_path()
-        self._ducked = {}          # index -> (original volumes, ducked volumes)
+        self._ducked = {}          # index -> (original volumes, ducked volumes, app)
+        # app -> {"original":, "lowered":}: its stream ended while turned
+        # down, so the desktop remembers it lowered (see the top).
+        self._owed = self._load_owed()
         self._jobs = queue.Queue()
         self._worker = None
 
@@ -121,38 +160,82 @@ class AudioDucker:
                 logger.debug(f"Audio duck: {e}")
 
     def _duck_now(self):
-        for index, pid, volumes, muted in list_streams(self._run):
-            if pid == self._own_pid or muted or index in self._ducked or not volumes:
+        streams = list_streams(self._run)
+        self._settle_owed(streams)
+        for st in streams:
+            index, volumes = st["index"], st["volumes"]
+            if (st["pid"] == self._own_pid or st["muted"] or st["role"] == "event"
+                    or index in self._ducked or not volumes):
                 continue
             lowered = [max(0, int(v * DUCK_TO)) for v in volumes]
             if _set_volume(index, lowered, self._run):
-                self._ducked[index] = (volumes, lowered)
+                self._ducked[index] = (volumes, lowered, st["app"])
         if self._ducked:
             logger.info(f"Turned {len(self._ducked)} other sound(s) down while dictating")
-            self._save()
+        self._save()
 
     def _restore_now(self):
         ducked, self._ducked = self._ducked, {}
-        if not ducked:
+        if not ducked and not self._owed:
             return
-        now = {index: volumes for index, _pid, volumes, _m in list_streams(self._run)}
+        streams = list_streams(self._run)
+        now = {st["index"]: st["volumes"] for st in streams}
         put_back = 0
-        for index, (original, lowered) in ducked.items():
-            # Gone, or the user set its volume themselves meanwhile: leave it.
-            if now.get(index) != lowered:
+        for index, (original, lowered, app) in ducked.items():
+            if index not in now:
+                # Ended while turned down: the desktop keeps it that quiet for
+                # the app's next sound, until it's seen and put back.
+                if app:
+                    self._owed[app] = {"original": original, "lowered": lowered}
                 continue
+            if now[index] != lowered:
+                continue        # the user set its volume themselves meanwhile
             if _set_volume(index, original, self._run):
                 put_back += 1
-        logger.info(f"Put {put_back} sound(s) back to their volume")
-        self._clear()
+        put_back += self._settle_owed(streams)
+        if ducked:
+            logger.info(f"Put {put_back} sound(s) back to their volume")
+        self._save()
+
+    def _settle_owed(self, streams):
+        """Put back an app owed its volume, playing now at the lowered level;
+        its streams are then counted at their real volume. How many."""
+        fixed = 0
+        for st in streams:
+            owed = self._owed.get(st["app"])
+            if owed is None or st["index"] in self._ducked:
+                continue
+            if st["volumes"] == owed["lowered"] and _set_volume(st["index"], owed["original"], self._run):
+                st["volumes"] = list(owed["original"])
+                fixed += 1
+            # At the lowered level or not (the user set another), it's settled.
+            del self._owed[st["app"]]
+        if fixed:
+            logger.info(f"Put {fixed} app(s) back to the volume a dictation turned down")
+        return fixed
 
     def _save(self):
+        if not self._ducked and not self._owed:
+            self._clear()
+            return
         try:
-            data = {str(i): {"original": o, "lowered": low} for i, (o, low) in self._ducked.items()}
+            data = {str(i): {"original": o, "lowered": low, "app": app}
+                    for i, (o, low, app) in self._ducked.items()}
+            data["owed"] = self._owed
             with open(self._state_path, "w", encoding="utf-8") as f:
                 json.dump(data, f)
         except OSError as e:
             logger.debug(f"Audio duck: could not save {self._state_path}: {e}")
+
+    def _load_owed(self):
+        try:
+            with open(self._state_path, encoding="utf-8") as f:
+                owed = json.load(f).get("owed", {})
+            return {str(app): {"original": [int(v) for v in e["original"]],
+                               "lowered": [int(v) for v in e["lowered"]]}
+                    for app, e in owed.items()}
+        except (OSError, ValueError, AttributeError, KeyError, TypeError):
+            return {}
 
     def _clear(self):
         try:
@@ -175,14 +258,16 @@ def restore_left_over(run=subprocess.run, state_path=None):
         data = {}
     ducker = AudioDucker(run=run, state_path=path)
     for index, entry in data.items():
+        if index == "owed":
+            continue
         try:
             ducker._ducked[int(index)] = ([int(v) for v in entry["original"]],
-                                          [int(v) for v in entry["lowered"]])
-        except (KeyError, TypeError, ValueError):
+                                          [int(v) for v in entry["lowered"]],
+                                          str(entry.get("app", "")))
+        except (KeyError, TypeError, ValueError, AttributeError):
             continue
     if ducker._ducked:
         logger.info("Putting back sounds a stopped dictation left turned down")
     count = len(ducker._ducked)
-    ducker._restore_now()
-    ducker._clear()
+    ducker._restore_now()       # what's still owed stays in the file for later
     return count
