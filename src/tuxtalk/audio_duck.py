@@ -37,6 +37,10 @@ from .logger import setup_logger
 logger = setup_logger(__name__)
 
 DUCK_TO = 0.25          # other apps play at a quarter of their volume
+# After a dictation, look again this long after (seconds) for an app owed
+# its volume: a browser closes its sound while its video is paused and opens
+# a new one on resume, a moment after TuxTalk restored, at the lowered level.
+FOLLOW_UP_S = (0.5, 1.0, 2.0, 4.0, 8.0)
 PACTL_TIMEOUT_S = 2.0
 STATE_FILE = "tuxtalk-ducked-audio.json"
 
@@ -101,7 +105,8 @@ def list_streams(run=subprocess.run):
                           "app": props.get("application.name") or "",
                           "role": props.get("media.role") or "",
                           "volumes": [int(ch["value"]) for ch in s.get("volume", {}).values()],
-                          "muted": bool(s.get("mute"))})
+                          "muted": bool(s.get("mute")),
+                          "corked": bool(s.get("corked"))})
         except (KeyError, TypeError, ValueError):
             continue
     return found
@@ -124,6 +129,7 @@ class AudioDucker:
         self._owed = self._load_owed()
         self._jobs = queue.Queue()
         self._worker = None
+        self._round = 0            # each duck starts a new one; old follow-ups stop
 
     # -- called from the dictation service; never block -------------------
 
@@ -160,12 +166,15 @@ class AudioDucker:
                 logger.debug(f"Audio duck: {e}")
 
     def _duck_now(self):
+        self._round += 1
         streams = list_streams(self._run)
         self._settle_owed(streams)
         for st in streams:
             index, volumes = st["index"], st["volumes"]
+            # Paused (corked) already: silent, and likely to close and come
+            # back as a new stream, so there's nothing to gain lowering it.
             if (st["pid"] == self._own_pid or st["muted"] or st["role"] == "event"
-                    or index in self._ducked or not volumes):
+                    or st["corked"] or index in self._ducked or not volumes):
                 continue
             lowered = [max(0, int(v * DUCK_TO)) for v in volumes]
             if _set_volume(index, lowered, self._run):
@@ -196,6 +205,29 @@ class AudioDucker:
         if ducked:
             logger.info(f"Put {put_back} sound(s) back to their volume")
         self._save()
+        if self._owed:
+            self._follow_up(self._round, 0)
+
+    def _follow_up(self, round_, step):
+        """Look again for apps owed their volume, at FOLLOW_UP_S, until none
+        is owed or a new dictation starts (which settles them itself)."""
+        if step >= len(FOLLOW_UP_S):
+            return
+        wait = FOLLOW_UP_S[step] - (FOLLOW_UP_S[step - 1] if step else 0)
+
+        def due():
+            self._submit(lambda: self._settle_later(round_, step))
+        timer = threading.Timer(wait, due)
+        timer.daemon = True
+        timer.start()
+
+    def _settle_later(self, round_, step):
+        if round_ != self._round or self._ducked or not self._owed:
+            return
+        self._settle_owed(list_streams(self._run))
+        self._save()
+        if self._owed:
+            self._follow_up(round_, step + 1)
 
     def _settle_owed(self, streams):
         """Put back an app owed its volume, playing now at the lowered level;

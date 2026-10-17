@@ -29,6 +29,7 @@ class FakePactl:
         args = cmd[1:]
         if args[:4] == ["-f", "json", "list", "sink-inputs"]:
             out = [{"index": i, "mute": s.get("mute", False), "client": str(1000 + i),
+                    "corked": s.get("corked", False),
                     "properties": {"application.name": s.get("app", f"app{i}"),
                                    **({"media.role": s["role"]} if "role" in s else {})},
                     "volume": {f"ch{n}": {"value": v} for n, v in enumerate(s["volumes"])}}
@@ -199,3 +200,29 @@ def test_an_owed_app_the_user_set_themselves_is_left_alone(tmp_path):
     pactl.streams[9] = {"pid": 77, "volumes": [30000], "app": "Beeper"}   # set by hand
     d._restore_now()
     assert pactl.streams[9]["volumes"] == [30000] and d._owed == {}
+
+
+def test_a_player_reopening_its_sound_after_resume_gets_its_volume_back(tmp_path, monkeypatch):
+    """Ron, 2026-10-17: YouTube in Brave stayed quiet after a hands-free
+    dictation. Paused, Brave closed its stream; resumed, it opened a new one
+    at the level the desktop remembered, a moment after the restore. It's
+    looked for again for a few seconds after, not only at the next dictation."""
+    monkeypatch.setattr(audio_duck, "FOLLOW_UP_S", (0.05, 0.1, 0.2))
+    pactl = FakePactl({5: {"pid": 77, "volumes": [65536], "app": "Brave"}})
+    d = _ducker(tmp_path, pactl)
+    d._duck_now()
+    del pactl.streams[5]                            # paused: Brave closed its sound
+    d._restore_now()
+    pactl.streams[6] = {"pid": 77, "volumes": [16384], "app": "Brave"}   # resumed
+    import time
+    time.sleep(0.4)
+    assert d.wait_idle(2)
+    assert pactl.streams[6]["volumes"] == [65536]
+    assert d._owed == {}
+
+
+def test_a_paused_player_isnt_turned_down(tmp_path):
+    pactl = FakePactl({5: {"pid": 77, "volumes": [65536], "app": "Brave", "corked": True}})
+    d = _ducker(tmp_path, pactl)
+    d._duck_now()
+    assert pactl.streams[5]["volumes"] == [65536] and d._ducked == {}
