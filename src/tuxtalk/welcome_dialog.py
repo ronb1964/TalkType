@@ -1317,6 +1317,7 @@ class WelcomeDialog:
         ydotoold_label.set_markup(f'{ydotoold_icon} {ydotoold_text}')
         ydotoold_label.set_halign(Gtk.Align.START)
         status_box.pack_start(ydotoold_label, False, False, 0)
+        self._ydotoold_status_label = ydotoold_label
 
         # uinput permission status
         uinput_icon = "✅" if not self.needs_uinput_fix else "❌"
@@ -1325,6 +1326,7 @@ class WelcomeDialog:
         uinput_label.set_markup(f'{uinput_icon} {uinput_text}')
         uinput_label.set_halign(Gtk.Align.START)
         status_box.pack_start(uinput_label, False, False, 0)
+        self._uinput_status_label = uinput_label
 
         # ydotool installed status (only show if not installed)
         if not self.ydotoold_status.get('ydotool_installed'):
@@ -1519,6 +1521,13 @@ class WelcomeDialog:
             # Full success - everything is working
             button.set_label("✅ Fixed!")
             button.set_sensitive(False)  # Disable - no more action needed
+            # The ❌ lines above the button still said "not running" and
+            # "needed" after the fix worked (Silverblue VM, 2026-10-16).
+            for attr, text in (("_ydotoold_status_label", "ydotoold daemon running"),
+                               ("_uinput_status_label", "Input device permissions OK")):
+                label = getattr(self, attr, None)
+                if label is not None:
+                    label.set_markup(f"✅ {text}")
 
             restart_note = " Restart your computer to complete." if needs_restart else ""
             self.typing_status_label.set_markup(

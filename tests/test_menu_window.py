@@ -404,3 +404,26 @@ def test_hotkey_test_without_the_helper():
     def broken():
         raise OSError("no socket")
     assert welcome_dialog._hotkey_test_helper(ecodes, connect=broken) is None
+
+
+def test_fix_typing_success_updates_the_status_lines(monkeypatch):
+    """After Fix Typing worked, the ❌ "not running" / "needed" lines above
+    the button stayed (Silverblue VM, 2026-10-16)."""
+    if not Gtk.init_check()[0]:
+        pytest.skip("no display")
+    from tuxtalk import welcome_dialog
+    fake_msg = types.SimpleNamespace(format_secondary_text=lambda t: None,
+                                     run=lambda: None, destroy=lambda: None)
+    monkeypatch.setattr(welcome_dialog, "message_dialog", lambda **k: fake_msg)
+    ydotoold, uinput = Gtk.Label(), Gtk.Label()
+    me = types.SimpleNamespace(
+        dialog=None, ydotoold_fixed=False, uinput_fixed=False, restart_needed=False,
+        needs_uinput_fix=True, needs_ydotoold_setup=True,
+        typing_status_label=Gtk.Label(),
+        _ydotoold_status_label=ydotoold, _uinput_status_label=uinput)
+    button = Gtk.Button()
+    welcome_dialog.WelcomeDialog._report_fix_typing(me, button, {
+        "results": [], "ydotoold_fixed": True, "uinput_fixed": True,
+        "needs_restart": False, "ydotoold_running": True})
+    assert ydotoold.get_text() == "✅ ydotoold daemon running"
+    assert uinput.get_text() == "✅ Input device permissions OK"
