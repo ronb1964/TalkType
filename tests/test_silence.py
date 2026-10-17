@@ -341,3 +341,31 @@ def test_a_quiet_microphone_saying_a_sign_off_is_speech():
     audio = np.concatenate([noise(0.5, 15), speech(1.0, level=250, noise_level=15),
                             noise(1.5, 15)])
     assert not has_no_speech(f32(audio), SR)
+
+
+# --- A microphone that sends nothing at all (2026-10-17) ---------------------
+
+def test_dead_mic_is_digital_silence_only():
+    from tuxtalk.silence import is_dead_mic
+    sr = 16000
+    assert is_dead_mic(np.zeros(sr * 2, dtype=np.float32), sr)
+    assert is_dead_mic(np.full(sr * 2, 1 / 32768, dtype=np.float32), sr)    # one bit of hum
+    # A quiet room still has the mic's own hiss (Ron's: RMS ~0.003).
+    rng = np.random.default_rng(0)
+    room = (rng.standard_normal(sr * 2) * 0.003).astype(np.float32)
+    assert not is_dead_mic(room, sr)
+    # Too short to judge: a quick tap is handled elsewhere.
+    assert not is_dead_mic(np.zeros(sr // 2, dtype=np.float32), sr)
+
+
+def test_a_dead_mic_is_reported_not_transcribed(monkeypatch):
+    from tuxtalk import app
+    said, transcribed = [], []
+    monkeypatch.setattr(app, "_notify", lambda title, msg: said.append(msg))
+    monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
+    monkeypatch.setattr(app, "_transcribe_audio", lambda *a: transcribed.append(1) or "hi")
+    frames = [np.zeros(app.SAMPLE_RATE * 2, dtype=np.int16).tobytes()]
+    app._transcribe_and_inject(frames, app.SAMPLE_RATE, beeps_on=False,
+                               smart_quotes=False, notify_on=False)
+    assert transcribed == []
+    assert said == [app.SILENT_MIC_NOTICE]

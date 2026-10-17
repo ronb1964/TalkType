@@ -108,7 +108,7 @@ def dictation(monkeypatch):
             monkeypatch.setattr(app, "_inject_text", boom)
         else:
             monkeypatch.setattr(app, "_inject_text", lambda text, mode, t0: outcome)
-        frames = [np.ones(app.SAMPLE_RATE, dtype=np.int16).tobytes()]
+        frames = [(np.ones(app.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
         app._transcribe_and_inject(frames, app.SAMPLE_RATE, beeps_on=beeps_on,
                                    smart_quotes=False, notify_on=notify_on)
         return notes, beeps

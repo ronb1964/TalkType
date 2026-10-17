@@ -48,7 +48,7 @@ def _dictate(monkeypatch, raw, prepared=None, outcome="ok"):
         return outcome
     monkeypatch.setattr(app, "_inject_text", inject)
     monkeypatch.setattr(app, "_press_enter_key", lambda why: events.append(("enter", why)))
-    frames = [np.ones(app.SAMPLE_RATE, dtype=np.int16).tobytes()]
+    frames = [(np.ones(app.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
     app._transcribe_and_inject(frames, app.SAMPLE_RATE, beeps_on=False,
                                smart_quotes=False, notify_on=False)
     return events

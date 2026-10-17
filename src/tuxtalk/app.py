@@ -2941,7 +2941,11 @@ def _finish_capture(beeps_on: bool, notify_on: bool):
         # Hands-free with nothing said: drop it. Transcribing room noise can
         # type a stray "Thank you." (see silence.is_speechless_tap).
         state.silence = None
-        cancel_recording(beeps_on, notify_on, "Nothing heard, so nothing was typed")
+        dead_mic = _frames_are_dead_mic(state.frames,
+                                        getattr(state, "recording_samplerate", SAMPLE_RATE))
+        cancel_recording(beeps_on, notify_on and not dead_mic, "Nothing heard, so nothing was typed")
+        if dead_mic:
+            _warn_silent_mic()
         return None
     held_ms = int((time.time() - (state.press_t0 or time.time())) * 1000)
     if held_ms < MIN_HOLD_MS:
@@ -2971,6 +2975,31 @@ _UNDELIVERED_NOTICES = {
                "in Recent Dictations in the TuxTalk menu: click it to copy, then paste "
                "with Ctrl+V.",
 }
+
+
+SILENT_MIC_NOTICE = ("TuxTalk heard only silence from the microphone. If you spoke, check "
+                     "that it isn't muted or unplugged, and that the right one is picked in "
+                     "Preferences \u2192 Audio.")
+
+
+def _warn_silent_mic():
+    """The microphone sent nothing at all (silence.is_dead_mic). Always
+    said, like a dictation that didn't arrive: a dead wireless mic otherwise
+    looks like TuxTalk ignoring you (asked for in Handy, Wispr Flow added it
+    Oct 2026)."""
+    print(SILENT_MIC_NOTICE)
+    logger.warning("The microphone sent only silence (muted, unplugged or the wrong one?)")
+    _notify("TuxTalk", SILENT_MIC_NOTICE)
+
+
+def _frames_are_dead_mic(frames, rec_sr) -> bool:
+    """silence.is_dead_mic for raw int16 recording frames."""
+    from .silence import is_dead_mic
+    try:
+        pcm = np.frombuffer(b"".join(frames), dtype=np.int16)
+    except Exception:
+        return False
+    return is_dead_mic(pcm.astype(np.float32) / 32768.0, rec_sr)
 
 
 def _report_undelivered(outcome: str, beeps_on: bool):
@@ -3021,6 +3050,14 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         audio_f32 = pcm_int16.astype(np.float32) / 32768.0
         if rec_sr != SAMPLE_RATE:
             audio_f32 = _resample_audio(audio_f32, rec_sr, SAMPLE_RATE)
+
+        # A second or more of pure digital silence: the microphone is muted,
+        # unplugged or dead, not a quiet room. Say so instead of typing nothing.
+        from .silence import is_dead_mic
+        if is_dead_mic(audio_f32, SAMPLE_RATE):
+            _beep(beeps_on, *CANCEL_BEEP)
+            _warn_silent_mic()
+            return
 
         # A quick tap of the key with nothing said: speech engines can invent
         # a word ("Thank you.") in a fraction of a second of room noise.

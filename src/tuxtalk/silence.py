@@ -160,6 +160,22 @@ def _loud_seconds(audio_f32, sample_rate) -> float:
     return loud.sum() * _TAP_BLOCK_S
 
 
+# A working microphone is never this quiet: even in a silent room its own
+# electronics hiss well above this. A muted, unplugged or dead one (a wireless
+# mic whose battery died) sends digital silence. int16 peak; about -72 dBFS.
+_DEAD_MIC_PEAK = 8.0
+DEAD_MIC_MIN_S = 1.0
+
+
+def is_dead_mic(audio_f32, sample_rate) -> bool:
+    """True for a recording of at least a second that is digital silence
+    from start to end: the microphone sent nothing at all, which is not the
+    same as a quiet room."""
+    if len(audio_f32) < DEAD_MIC_MIN_S * sample_rate:
+        return False
+    return float(np.max(np.abs(audio_f32))) * 32768.0 <= _DEAD_MIC_PEAK
+
+
 def is_speechless_tap(audio_f32, sample_rate) -> bool:
     """True for a recording shorter than TAP_MAX_S with no stretch of speech
     in it, which should be dropped rather than transcribed."""
