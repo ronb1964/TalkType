@@ -124,8 +124,11 @@ class _FixWordDialog:
         # to nearly nothing once focus moves to the "Should be" box.
         self.picked_tag = self.view.get_buffer().create_tag(
             "picked", background="#3584e4", foreground="#ffffff")
-        self.view.connect("button-release-event", lambda *_: GLib.idle_add(self._on_pick))
-        self.view.connect("key-release-event", lambda *_: GLib.idle_add(self._on_pick))
+        # False: the text box must still get the release itself. idle_add's
+        # return value (a source id) read as "handled", so the box never saw
+        # the button come up and ignored every click after the first pick.
+        self.view.connect("button-release-event", self._pick_soon)
+        self.view.connect("key-release-event", self._pick_soon)
         scroller = Gtk.ScrolledWindow()
         scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         scroller.set_shadow_type(Gtk.ShadowType.IN)
@@ -206,6 +209,12 @@ class _FixWordDialog:
 
     # --- picking words ----------------------------------------------------
 
+    def _pick_soon(self, *_args):
+        """After a click, drag or key in the text box, once GTK has moved the
+        cursor: pick the words. Never stops the event."""
+        GLib.idle_add(self._on_pick)
+        return False
+
     def _on_pick(self):
         """Snap whatever was clicked or dragged in the text box to whole words."""
         buf = self.view.get_buffer()
@@ -220,7 +229,9 @@ class _FixWordDialog:
             self.first = self.last = None
         else:
             self.first, self.last = picked
-            a, b = vocabulary.word_span(self.text, *picked)
+            # The words alone, without punctuation around them ("Goul's",
+            # not "Goul's?"): that's what gets replaced.
+            a, b = vocabulary.core_span(self.text, *picked)
             buf.apply_tag(self.picked_tag, buf.get_iter_at_offset(a), buf.get_iter_at_offset(b))
             # Drop the native selection so only the snapped words show.
             end_iter = buf.get_iter_at_offset(b)
