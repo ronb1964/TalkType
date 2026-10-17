@@ -1141,3 +1141,30 @@ def test_press_enter_after_each_dictation_when_it_ends_in_a_pause(enter, monkeyp
     app.state.chunk_typed = True
     call([], "last", auto_period=True)
     assert typed == ["We meet", ".", "<ENTER>"]
+
+
+def test_a_press_enter_misheard_alone_is_caught_by_the_context_pass(enter):
+    """Ron, 2026-10-17: alone the short phrase came out "Press center.", heard
+    with the end of the one before it was "... to say. Press enter."."""
+    texts, typed, _ = enter
+    texts.extend(["we meet at three", "Press center.", "We meet at three. Press enter."])
+    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    assert typed == ["We meet at three", ".", "<ENTER>"]
+
+
+def test_words_the_context_pass_doesnt_hear_as_press_enter_stay_words(enter):
+    texts, typed, _ = enter
+    texts.extend(["we meet at three", "press center.", "We meet at three. Press center."])
+    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    assert "<ENTER>" not in typed and typed[-1] == "Press center"
+
+
+def test_a_longer_phrase_is_never_turned_into_press_enter(enter):
+    texts, typed, _ = enter
+    texts.extend(["we meet at three", "then go to the press center",
+                  "We meet at three. Then go to the press enter."])
+    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    assert "<ENTER>" not in typed

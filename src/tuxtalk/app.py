@@ -3365,25 +3365,45 @@ def _type_boundary(pending: dict, tail: str, injection_mode: str) -> None:
         state.last_inserted_text = pending["typed"] + tail
 
 
-def _resolve_boundary(audio_f32, language, injection_mode) -> None:
+# A phrase this short that the context pass hears as "press enter" is taken
+# as "press enter": alone it's barely a second of audio, and Parakeet heard
+# "Press center." where both together read "... to say. Press enter."
+ENTER_IN_CONTEXT_MAX_WORDS = 3
+
+
+def _resolve_boundary(audio_f32, language, injection_mode, raw="", auto_period=True) -> str:
     """The next chunk has arrived: decide the mark held back after the last
-    one, from the engine hearing both chunks together, and type it."""
+    one, from the engine hearing both chunks together, and type it. Returns
+    the chunk's text, "press enter" when only the context pass heard that."""
     pending, state.pending_boundary = state.pending_boundary, None
     mark = pending["mark"]
+    joint = ""
     try:
         from .chunking import boundary_mark
         gap = np.zeros(int(JOINT_GAP_S * SAMPLE_RATE), dtype=np.float32)
         joint = _transcribe_audio(np.concatenate(
-            [pending["audio"], gap, audio_f32[:_context_samples()]]), language)
-        found = boundary_mark(pending["raw"], joint or "")
+            [pending["audio"], gap, audio_f32[:_context_samples()]]), language) or ""
+        found = boundary_mark(pending["raw"], joint)
         logger.info(f"Chunk boundary: {pending['mark']!r} alone, {found!r} in context")
         if found is not None:
             mark = found
     except Exception as e:
         logger.warning(f"Couldn't hear the chunk boundary in context: {e}")
+    from .enter_command import split_press_enter
+    if (raw and len(raw.split()) <= ENTER_IN_CONTEXT_MAX_WORDS
+            and not split_press_enter(raw)[1] and split_press_enter(joint)[1]):
+        logger.info(f"Heard \"press enter\" in context ({_loggable(raw)} alone)")
+        raw = "press enter"
+        # The sentence ends here, as it would after "press enter" said
+        # clearly (_flush_boundary): its mark, and no space to send.
+        mark = mark or ("." if auto_period else "")
+        _type_boundary(pending, mark, injection_mode)
+        state.continue_mid_sentence = False
+        return raw
     _type_boundary(pending, (mark + " ") if mark else " ", injection_mode)
     # Lowercase on after a comma or no mark; a sentence end starts afresh.
     state.continue_mid_sentence = mark not in _SENTENCE_ENDS
+    return raw
 
 
 def _flush_boundary(auto_period: bool, auto_space: bool, injection_mode: str) -> None:
@@ -3513,7 +3533,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                 # space to go out in the sent message.
                 _flush_boundary(auto_period, False, injection_mode)
             else:
-                _resolve_boundary(audio_f32, language, injection_mode)
+                raw = _resolve_boundary(audio_f32, language, injection_mode, raw, auto_period)
 
         # Stage 2: Check for undo commands ("undo that", "undo word", etc.)
         if _handle_undo(raw, beeps_on, notify_on):
