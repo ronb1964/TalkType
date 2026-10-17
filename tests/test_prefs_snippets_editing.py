@@ -28,7 +28,7 @@ def _window(rows):
     d._message = lambda kind, title, text, buttons=None: d.messages.append(title)
     for name in ("_commands_from_store", "_fill_commands_store", "_save_custom_commands",
                  "_on_add_command", "_on_phrase_edited", "_warn_duplicate_phrase",
-                 "_split_commands", "_fill_words_store"):
+                 "_split_commands", "_fill_words_store", "_apply_snippet_edit"):
         setattr(d, name, types.MethodType(getattr(PreferencesWindow, name), d))
     return d
 
@@ -108,3 +108,26 @@ def test_ok_stays_open_when_the_snippets_could_not_be_written():
     PreferencesWindow.on_ok(d, None)
 
     assert steps == []
+
+
+# --- the Edit... window ------------------------------------------------------
+
+def test_editing_a_snippet_changes_its_row():
+    d = _window([["my email", "me@example.com"], ["sig", "Ron"]])
+    assert d._apply_snippet_edit("1", " My Signature ", "Ron Brand") is True
+    assert d.commands_store[1] == ["my signature", "Ron Brand"]
+    assert d.commands_store[0] == ["my email", "me@example.com"]
+
+
+def test_editing_a_snippet_onto_another_phrase_is_refused(monkeypatch):
+    monkeypatch.setattr(P.GLib, "idle_add", lambda fn, *a: fn(*a))
+    d = _window([["my email", "me@example.com"], ["sig", "Ron"]])
+    assert d._apply_snippet_edit("1", "my email", "Ron Brand") is False
+    assert d.commands_store[1] == ["sig", "Ron"], "nothing changes when it's refused"
+    assert "That phrase is already a snippet" in d.messages
+
+
+def test_a_snippet_needs_a_phrase():
+    d = _window([["sig", "Ron"]])
+    assert d._apply_snippet_edit("0", "   ", "Ron Brand") is False
+    assert d.commands_store[0] == ["sig", "Ron"]

@@ -2754,7 +2754,8 @@ class PreferencesWindow:
         self.commands_tree.append_column(replacement_column)
 
         buttons(("Add Snippet", "Add a new snippet", self._on_add_command, False),
-                ("Remove Selected", "Remove the selected snippet", self._on_remove_command, False))
+                ("Edit...", "Change the selected snippet", self._on_edit_command, False),
+                ("Remove", "Remove the selected snippet", self._on_remove_command, False))
 
         # Load both lists, and follow the files while this window is open:
         # Fix a Word (tray or the button above) writes to them directly.
@@ -3596,6 +3597,65 @@ class PreferencesWindow:
         path = self.commands_store.get_path(iter)
         self.commands_tree.set_cursor(path, self.commands_tree.get_column(0), True)
     
+    def _apply_snippet_edit(self, path, phrase, text):
+        """Put the Edit... window's *phrase* and *text* into snippet row *path*.
+        False, with the row unchanged, for an empty phrase or one another row
+        or word already has (_on_phrase_edited says which)."""
+        wanted = phrase.strip().lower()
+        if not wanted:
+            return False
+        self._on_phrase_edited(None, path, phrase)
+        if self.commands_store[path][0] != wanted:
+            return False
+        self.commands_store[path][1] = text
+        return True
+
+    def _on_edit_command(self, _button):
+        """Edit the selected snippet in a small window, the way Your Words'
+        Edit... works. Like editing in the list, it's saved with Apply or OK."""
+        model, it = self.commands_tree.get_selection().get_selected()
+        if it is None:
+            self._message(Gtk.MessageType.INFO, "Pick a snippet first",
+                          "Click a snippet in the list, then Edit.")
+            return
+        path = str(model.get_path(it))
+        dialog = Gtk.Dialog(title="Snippet", transient_for=self.window, modal=True)
+        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        dialog.add_button("Save", Gtk.ResponseType.OK)
+        dialog.set_default_response(Gtk.ResponseType.OK)
+        box = dialog.get_content_area()
+        for side in ("start", "end", "top", "bottom"):
+            getattr(box, f"set_margin_{side}")(16)
+        box.set_spacing(8)
+        entries = []
+        for label, value, hint in (("You say", model[it][0], "my email"),
+                                   ("TuxTalk types", model[it][1], "user@example.com")):
+            box.pack_start(Gtk.Label(label=label, xalign=0), False, False, 0)
+            entry = Gtk.Entry(text=value)
+            entry.set_placeholder_text(hint)
+            entry.set_width_chars(48)
+            entry.set_activates_default(True)
+            box.pack_start(entry, False, False, 0)
+            entries.append(entry)
+        note = Gtk.Label(xalign=0)
+        note.set_line_wrap(True)
+        note.set_max_width_chars(56)
+        note.set_markup('<small>Use \\n in the text for a line break, and wrap it in '
+                        '"quotes" to type it exactly as written.</small>')
+        box.pack_start(note, False, False, 0)
+        dialog.show_all()
+        try:
+            while dialog.run() == Gtk.ResponseType.OK:
+                phrase, text = (e.get_text() for e in entries)
+                if not phrase.strip():
+                    self._message(Gtk.MessageType.WARNING, "Type what you'll say",
+                                  "A snippet needs a phrase to say.")
+                    continue
+                if self._apply_snippet_edit(path, phrase, text):
+                    break
+        finally:
+            dialog.destroy()
+
     def _on_remove_command(self, button):
         """Remove the selected command."""
         selection = self.commands_tree.get_selection()

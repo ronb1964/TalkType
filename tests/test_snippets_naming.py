@@ -35,6 +35,14 @@ def test_the_preferences_tab_is_called_words():
     assert '"Add Word"' in prefs
 
 
+def test_both_lists_have_the_same_buttons():
+    """Your Words and Snippets work the same way: Add, Edit..., Remove."""
+    prefs = (SRC / "prefs.py").read_text()
+    assert prefs.count('("Edit...",') == 2
+    assert prefs.count('("Remove",') == 2
+    assert "Remove Selected" not in prefs
+
+
 def test_every_old_tab_name_opens_words():
     """--tab=commands or --tab=snippets from an older launcher or script still lands there."""
     window = _window("General", "Audio", "Advanced", "Words", "Stats")
