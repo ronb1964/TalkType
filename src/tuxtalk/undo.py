@@ -99,8 +99,14 @@ def single_unit_length(text: str, undo_type: str) -> int:
         for i in range(len(text_stripped) - 1, -1, -1):
             if text_stripped[i] in '.?!…' and _is_sentence_end(text_stripped, i):
                 # Delete from just past the punctuation — and past any closing
-                # quote or bracket that belongs with it — to the end.
-                return len(text) - _end_of_sentence(text_stripped, i)
+                # quote or bracket that belongs with it, and the space or line
+                # break after it — to the end. That space stays, as it does for
+                # a word: the next dictation brings only a space of its own at
+                # its END, so "message." would run on into "message.The".
+                end = _end_of_sentence(text_stripped, i)
+                while end < len(text_stripped) and text_stripped[end] in ' \t\n':
+                    end += 1
+                return len(text) - end
         return len(text)
 
     if undo_type == 'paragraph':

@@ -109,17 +109,18 @@ def test_word_count_two():
 
 def test_sentence_single():
     text = "First. Second."  # 14 chars
-    # Removing last sentence — back to and including the previous "."
+    # Removing last sentence — back to the previous "." and the space after
+    # it, which stays for the next dictation.
     result = calculate_undo_length(text, "sentence")
-    # Should remove " Second." (8 chars)
-    assert result == 8
+    # Should remove "Second." (7 chars)
+    assert result == 7
 
 
 def test_sentence_count_two():
     text = "First. Second. Third."  # 21 chars
-    # Should remove " Second. Third." (15 chars) — both back to "First."
+    # Should remove "Second. Third." (14 chars) — both, back to "First. "
     result = calculate_undo_length(text, "sentence", count=2)
-    assert result == 15
+    assert result == 14
 
 
 def test_sentence_clamps_to_available():
@@ -230,17 +231,17 @@ def test_sentence_undo_does_not_cut_inside_a_time_abbreviation():
 def test_abbreviation_ending_a_sentence_is_still_a_boundary():
     """When the next word is capitalized the period is doing double duty."""
     text = "I live in the U.S. It is nice."
-    assert calculate_undo_length(text, "sentence", 1) == len(" It is nice.")
+    assert calculate_undo_length(text, "sentence", 1) == len("It is nice.")
 
 
 def test_sentence_undo_still_finds_an_ordinary_boundary():
     text = "First sentence. Second sentence."
-    assert calculate_undo_length(text, "sentence", 1) == len(" Second sentence.")
+    assert calculate_undo_length(text, "sentence", 1) == len("Second sentence.")
 
 
 def test_sentence_undo_handles_a_decimal_in_an_earlier_sentence():
     text = "It cost $19.99. That was too much."
-    assert calculate_undo_length(text, "sentence", 1) == len(" That was too much.")
+    assert calculate_undo_length(text, "sentence", 1) == len("That was too much.")
 
 
 # --- a sentence ending inside a closing quote is still a boundary
@@ -251,17 +252,17 @@ def test_sentence_undo_handles_a_decimal_in_an_earlier_sentence():
 
 def test_sentence_ending_in_a_closing_quote_is_a_boundary():
     text = 'He said, "Go." Then he left.'
-    assert calculate_undo_length(text, "sentence", 1) == len(" Then he left.")
+    assert calculate_undo_length(text, "sentence", 1) == len("Then he left.")
 
 
 def test_sentence_ending_in_a_closing_smart_quote_is_a_boundary():
     text = 'He said, “Go.” Then he left.'
-    assert calculate_undo_length(text, "sentence", 1) == len(" Then he left.")
+    assert calculate_undo_length(text, "sentence", 1) == len("Then he left.")
 
 
 def test_sentence_ending_in_a_closing_parenthesis_is_a_boundary():
     text = "We shipped it (finally.) Then we slept."
-    assert calculate_undo_length(text, "sentence", 1) == len(" Then we slept.")
+    assert calculate_undo_length(text, "sentence", 1) == len("Then we slept.")
 
 
 def test_undo_does_not_swallow_the_whole_buffer_on_quoted_text():
@@ -274,11 +275,11 @@ def test_undo_does_not_swallow_the_whole_buffer_on_quoted_text():
 # search must not stop at its own period and measure nothing, or "delete last
 # sentence" deletes nothing after 'Hello. Hi.”'.
 def test_last_sentence_ending_in_a_closing_smart_quote_is_deleted():
-    assert calculate_undo_length("Hello. Hi.”", "sentence", 1) == len(" Hi.”")
+    assert calculate_undo_length("Hello. Hi.”", "sentence", 1) == len("Hi.”")
 
 
 def test_last_sentence_ending_in_a_closing_quote_is_deleted():
-    assert calculate_undo_length('Hello. Hi."', "sentence", 1) == len(' Hi."')
+    assert calculate_undo_length('Hello. Hi."', "sentence", 1) == len('Hi."')
 
 
 def test_only_sentence_ending_in_a_closing_quote_is_deleted():
@@ -287,4 +288,20 @@ def test_only_sentence_ending_in_a_closing_quote_is_deleted():
 
 def test_two_sentences_ending_in_closing_quotes():
     text = "One. “Two.” “Three.”"
-    assert calculate_undo_length(text, "sentence", 2) == len(" “Two.” “Three.”")
+    assert calculate_undo_length(text, "sentence", 2) == len("“Two.” “Three.”")
+
+
+def test_deleting_a_sentence_keeps_the_space_before_the_next_dictation():
+    """Ron, 2026-10-17: "delete last sentence", then dictating again gave
+    "message.The power". Each dictation ends with its own space and starts
+    with none, so the space after the sentence before must stay."""
+    typed = "One thing popped in my head after Mio's message. The power saving feature to. "
+    left = typed[:len(typed) - calculate_undo_length(typed, "sentence")]
+    assert left == "One thing popped in my head after Mio's message. "
+    assert left + "The power management feature. " == (
+        "One thing popped in my head after Mio's message. The power management feature. ")
+
+
+def test_a_line_break_before_the_sentence_stays_too():
+    typed = "Dear Sam.\nSee you at noon. "
+    assert typed[:len(typed) - calculate_undo_length(typed, "sentence")] == "Dear Sam.\n"
