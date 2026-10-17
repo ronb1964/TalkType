@@ -1168,3 +1168,23 @@ def test_a_longer_phrase_is_never_turned_into_press_enter(enter):
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     assert "<ENTER>" not in typed
+
+
+def test_a_phrase_being_worked_on_holds_hands_free_open(monkeypatch):
+    """_transcribe_chunk holds the silence detector for as long as the phrase
+    is being transcribed, edited and typed, and releases it after."""
+    from tuxtalk import app
+    events = []
+
+    class Detector:
+        def hold(self):
+            events.append("hold")
+
+        def release(self):
+            events.append("release")
+    monkeypatch.setattr(app.state, "silence", Detector())
+    from tuxtalk.config import Settings
+    monkeypatch.setattr(app, "_chunk_cfg", Settings())
+    monkeypatch.setattr(app, "_transcribe_and_inject", lambda *a, **k: events.append("work"))
+    app._transcribe_chunk([b""], SR, "middle")
+    assert events == ["hold", "work", "release"]

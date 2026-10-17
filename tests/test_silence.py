@@ -369,3 +369,37 @@ def test_a_dead_mic_is_reported_not_transcribed(monkeypatch):
                                smart_quotes=False, notify_on=False)
     assert transcribed == []
     assert said == [app.SILENT_MIC_NOTICE]
+
+
+def _feed(det, audio):
+    """Feed audio; the second it fired at (from this audio's start), or None."""
+    for i in range(0, len(audio), BLOCK):
+        if det.feed(audio[i:i + BLOCK].tobytes()):
+            return (i + BLOCK) / SR
+    return None
+
+
+def test_the_quiet_waits_while_tuxtalk_works_on_a_phrase():
+    """Ron, 2026-10-17: "edit that, make it more formal", and hands-free
+    stopped 2 s after the rewrite appeared, before he could say "press
+    enter". While a phrase is worked on the quiet doesn't count; once it's on
+    screen, the full silence time starts."""
+    det = SilenceDetector(1.5, SR)
+    assert _feed(det, np.concatenate([noise(0.5), speech(2.0), noise(1.0)])) is None
+    det.hold()                                   # the AI rewrite takes 4 s
+    assert _feed(det, noise(4.0)) is None
+    det.release()                                # the rewrite is typed
+    assert _feed(det, noise(1.2)) is None        # still reading
+    assert _feed(det, noise(0.5)) is not None    # 1.5 s after it appeared
+
+
+def test_holds_nest_and_release_never_goes_below_zero():
+    det = SilenceDetector(1.0, SR)
+    _feed(det, speech(1.0))
+    det.hold()
+    det.hold()
+    det.release()
+    assert _feed(det, noise(2.0)) is None        # one job still running
+    det.release()
+    det.release()                                # an extra release is harmless
+    assert _feed(det, noise(1.2)) is not None

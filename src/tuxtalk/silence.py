@@ -93,6 +93,19 @@ class SilenceDetector:
         self.elapsed = 0.0
         self.fired = False
         self.nothing_said = False
+        self._busy = 0           # hold() calls not yet released
+
+    def hold(self) -> None:
+        """TuxTalk is working on a phrase (Type at pause: transcribing, an AI
+        rewrite, typing): the quiet that passes meanwhile is the user waiting
+        for it, not the user finished. Called from another thread."""
+        self._busy += 1
+
+    def release(self) -> None:
+        """The phrase is done and on screen: the quiet counts from now, so
+        there's the full silence_seconds to read it (and say "press enter")."""
+        self._busy = max(0, self._busy - 1)
+        self.silence_time = 0.0
 
     @property
     def noise_floor(self):
@@ -127,6 +140,9 @@ class SilenceDetector:
 
         if self._floor.update(rms, duration):
             self.speech_time += duration
+            self.silence_time = 0.0
+            return False
+        if self._busy:
             self.silence_time = 0.0
             return False
 

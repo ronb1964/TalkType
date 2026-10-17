@@ -951,9 +951,18 @@ def _transcribe_chunk(frames, rec_sr, role, number=None, pause=None):
         logger.info(f"Chunk {number}: {seconds:.1f}s of audio, cut after a "
                     f"{pause:.2f}s pause")
     cfg = _chunk_cfg
-    _transcribe_and_inject(frames, rec_sr, cfg.beeps, cfg.smart_quotes, cfg.notify,
-                           cfg.language, cfg.auto_space, cfg.auto_period,
-                           cfg.injection_mode, chunk_role=role)
+    # Hands-free's "stop when quiet" waits while this phrase is worked on: an
+    # AI rewrite can take seconds, and the user is reading, not finished.
+    detector = state.silence
+    if detector is not None:
+        detector.hold()
+    try:
+        _transcribe_and_inject(frames, rec_sr, cfg.beeps, cfg.smart_quotes, cfg.notify,
+                               cfg.language, cfg.auto_space, cfg.auto_period,
+                               cfg.injection_mode, chunk_role=role)
+    finally:
+        if detector is not None:
+            detector.release()
 
 
 def _arm_chunker(rec_sr, edit_mode=False):
