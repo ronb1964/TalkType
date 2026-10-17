@@ -4887,8 +4887,10 @@ class PreferencesWindow:
             adj = sw.get_vadjustment()
             page = adj.get_page_size()
             if bottom > page:
-                # Down until its bottom shows, but never past its top.
-                adj.set_value(adj.get_value() + min(bottom - page + 12, max(0, top - 12)))
+                # Down until its bottom clears the "more below" fade (70 px,
+                # prefs_style.css), but never past its top. At a page's end
+                # there's no fade: the page just scrolls to the bottom.
+                adj.set_value(adj.get_value() + min(bottom - page + 76, max(0, top - 12)))
             elif top < 0:
                 adj.set_value(adj.get_value() + top - 12)
             return False
