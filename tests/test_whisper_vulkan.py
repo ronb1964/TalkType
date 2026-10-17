@@ -115,11 +115,13 @@ def test_engine_download_fetches_again_when_parakeet_is_missing(tmp_path, monkey
     assert fetched == [wv.ENGINE_URL]
 
 
-def test_engine_build_2_has_its_own_asset_so_build_1_stays_valid():
-    """0.12.0 to 0.13.1 check build 1's SHA256, so build 2 can't reuse its name."""
-    assert wv.ENGINE_ASSET == "talktype-whisper-vulkan-1.9.4-b2-x64.tar.gz"
-    assert wv.ENGINE_TAG == "whisper-vulkan-1.9.4-b2"
-    assert wv.ENGINE_NAME == "talktype-whisper-vulkan-1.9.4"    # unpacks over build 1
+def test_each_engine_build_has_its_own_asset():
+    """Released versions check their build's SHA256 (0.12.0-0.13.1: 1.9.4 b1,
+    0.14.x-0.15.x: 1.9.4 b2), so a new build never reuses a published name.
+    1.9.5 b1 adds Your Words for Parakeet (vulkan-engine-patches/)."""
+    assert wv.ENGINE_ASSET == "talktype-whisper-vulkan-1.9.5-b1-x64.tar.gz"
+    assert wv.ENGINE_TAG == "whisper-vulkan-1.9.5-b1"
+    assert wv.ENGINE_NAME == "talktype-whisper-vulkan-1.9.5"
 
 
 def test_wav_is_16_bit_mono_and_keeps_the_samples():

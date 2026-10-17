@@ -56,20 +56,22 @@ DEVICE_LABEL = "Vulkan (any GPU)"       # Preferences' Device dropdown
 
 # --- The engine download ------------------------------------------------------
 
-ENGINE_VERSION = "1.9.4"                           # whisper.cpp release it is built from
-# Build 2 adds Parakeet (libparakeet.so, parakeet-cli). Each build has its own
-# asset and pre-release, because TuxTalk 0.12.0 to 0.13.1 download build 1 and
-# check its SHA256, so build 1 must stay exactly as published. The folder inside
-# keeps build 1's name, so build 2 unpacks over build 1 as a superset.
-ENGINE_BUILD = 2
+ENGINE_VERSION = "1.9.5"                           # whisper.cpp release it is built from
+# 1.9.4 build 2 added Parakeet (libparakeet.so, parakeet-cli). 1.9.5 build 1
+# adds TuxTalk's patch (vulkan-engine-patches/): Your Words for Parakeet on
+# the graphics chip. Each build has its own asset and pre-release, because
+# released versions download theirs and check its SHA256, so a published
+# build must stay exactly as it is. The folder inside is named after the
+# whisper.cpp version, and a new version's folder replaces the old one.
+ENGINE_BUILD = 1
 ENGINE_NAME = f"talktype-whisper-vulkan-{ENGINE_VERSION}"
 ENGINE_ASSET = f"{ENGINE_NAME}-b{ENGINE_BUILD}-x64.tar.gz"
 ENGINE_TAG = f"whisper-vulkan-{ENGINE_VERSION}-b{ENGINE_BUILD}"     # TuxTalk GitHub pre-release
 ENGINE_URL = f"https://github.com/ronb1964/TuxTalk/releases/download/{ENGINE_TAG}/{ENGINE_ASSET}"
 # From build-vulkan-engine.sh's .sha256; the download is refused if it doesn't
 # match, so a tampered or truncated engine is never run.
-ENGINE_SHA256 = "deb77b2912a90a584ecdec1017f14e75d0037ca78db601f030017a66f7b10b92"
-ENGINE_SIZE_TEXT = "24 MB"
+ENGINE_SHA256 = "053e45a2cf67da523840f01e2d4c3d5b934685e71603c47d6d896ee23ce639f2"
+ENGINE_SIZE_TEXT = "22 MB"
 
 # --- Models, in whisper.cpp's format -------------------------------------------
 # Quantized: about half the download, and less graphics memory, which matters

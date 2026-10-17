@@ -85,7 +85,7 @@ def join_segments(texts) -> str:
 
 
 # --- The engine ----------------------------------------------------------------------
-# Mirrors include/parakeet.h of whisper.cpp 1.9.4, the version the engine is
+# Mirrors include/parakeet.h of whisper.cpp 1.9.5 (unchanged from 1.9.4), the version the engine is
 # built from (whisper_vulkan.ENGINE_VERSION). Recheck these when it changes.
 
 class _ContextParams(C.Structure):
