@@ -66,3 +66,10 @@ def test_the_words_tab_offers_fix_a_word_and_saves_through_vocabulary():
     assert 'Fix a Word...' in prefs
     assert "vocabulary.save_word(" in prefs
     assert "vocabulary.remove_word(" in prefs
+
+
+def test_the_command_line_opens_the_words_tab():
+    """--tab=words, not only the old snippets/commands names, gets past argparse."""
+    prefs = (SRC / "prefs.py").read_text()
+    choices = prefs[prefs.index('parser.add_argument("--tab"'):][:300]
+    assert '"words"' in choices and '"snippets"' in choices and '"commands"' in choices

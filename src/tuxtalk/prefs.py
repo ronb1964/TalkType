@@ -2703,7 +2703,10 @@ class PreferencesWindow:
                 "Names and terms TuxTalk spells your way. Add what it hears them as, "
                 "and it fixes those too.")
         self.words_store = Gtk.ListStore(str, str)      # word, its mishearings
-        self.words_tree = table(self.words_store, None, 150, 230)
+        # Fixed heights: a tree view measures its rows only once the window is
+        # on screen, too late for the opening height (_fit_to_screen), so a
+        # list sized by its rows opened squeezed. About six words; then it scrolls.
+        self.words_tree = table(self.words_store, None, 190, 190)
         for i, (title, expand) in enumerate((("Spelled", False),
                                              ("Also fixes when it hears", True))):
             column = Gtk.TreeViewColumn(title, Gtk.CellRendererText(), text=i)
@@ -2727,7 +2730,7 @@ class PreferencesWindow:
                 'Say a short phrase and TuxTalk types the full text. For example, '
                 'say "my email" and it types user@example.com.')
         self.commands_store = Gtk.ListStore(str, str)   # phrase, replacement
-        self.commands_tree = table(self.commands_store, None, 110, 200)
+        self.commands_tree = table(self.commands_store, None, 140, 140)   # about four snippets
 
         # Phrase column (editable)
         phrase_renderer = Gtk.CellRendererText()
@@ -2764,6 +2767,9 @@ class PreferencesWindow:
 
         tips = Gtk.Label(xalign=0)
         tips.set_line_wrap(True)
+        # A width to wrap at: without one the opening height counts this as one
+        # line, it wraps to two, and the tab grows a scrollbar for the difference.
+        tips.set_max_width_chars(90)
         tips.set_markup(
             '<small>Click a snippet to edit it. Use \\n in the text for a line break, and '
             'wrap it in "quotes" to type it exactly as written. Snippets are saved '
@@ -6455,7 +6461,8 @@ def main():
         pass
     import argparse
     parser = argparse.ArgumentParser(description="TuxTalk Preferences")
-    parser.add_argument("--tab", choices=["general", "audio", "advanced", "snippets", "commands", "stats", "updates", "backup"],
+    parser.add_argument("--tab", choices=["general", "audio", "advanced", "words", "snippets", "commands",
+                                          "stats", "updates", "backup"],
                         help="Tab to open initially")
     args = parser.parse_args()
 
