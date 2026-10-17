@@ -31,7 +31,9 @@ class FakeKeyboard(hh.Keyboard):
         self.calls = []
 
     def _event(self, code, value):
-        os.write(self.w, hh.EVENT.pack(0, 0, hh.EV_KEY, code, value))
+        # Stamped like the kernel does after EVIOCSCLOCKID(CLOCK_MONOTONIC).
+        sec, usec = divmod(int(time.monotonic() * 1e6), 1_000_000)
+        os.write(self.w, hh.EVENT.pack(sec, usec, hh.EV_KEY, code, value))
 
     def press(self, code, value=1):
         """The user presses (1) or lets go of (0) a key."""
@@ -281,16 +283,13 @@ def test_a_release_waiting_to_be_read_beats_the_hide(setup):
     assert ("grab", True) not in kb.calls
 
 
-def test_the_keyboards_come_back_by_themselves_after_letting_go(setup, monkeypatch):
+def test_the_keyboards_come_back_by_themselves_on_letting_go(setup):
     helper, kb, connect, say, heard, _seat = setup
-    monkeypatch.setattr(hh, "HIDE_RELEASE_GRACE_S", 0.05)
     sock = _ready(connect, say, heard)
     kb.press(F8)
     heard(sock)
     say(sock, "HIDE 66")
     kb.press(F8, 0)                    # and TuxTalk never says UNHIDE
-    heard(sock)
-    time.sleep(0.1)
     heard(sock)
     assert helper.hide is None and kb.calls[-1] == ("grab", False)
 
@@ -570,10 +569,9 @@ def test_a_virtual_keyboard_still_cant_lend_to_real_ones(setup):
 
 def test_holding_the_hotkey_on_a_virtual_keyboard_cant_pin_the_grab(setup, monkeypatch):
     """A program holds F8 on its own virtual keyboard while the user holds
-    the real one, then asks for the grab: the real keyboard comes back a
-    second after the user lets go, and TuxTalk hears the release."""
+    the real one, then asks for the grab: the real keyboard comes back as
+    soon as the user lets go, and TuxTalk hears the release."""
     helper, kb, connect, say, heard, _seat = setup
-    monkeypatch.setattr(hh, "HIDE_RELEASE_GRACE_S", 0.05)
     virtual = FakeKeyboard("/dev/input/event-virtual")
     helper.keyboards[virtual.path] = virtual
     tuxtalk = _ready(connect, say, heard)
@@ -587,8 +585,6 @@ def test_holding_the_hotkey_on_a_virtual_keyboard_cant_pin_the_grab(setup, monke
     assert virtual.calls == []                  # only the press's own keyboard
     kb.press(F8, 0)
     assert heard(tuxtalk) == ["UP 66"]
-    time.sleep(0.1)
-    heard(tuxtalk)
     assert helper.hide is None and kb.calls[-1] == ("grab", False)
 
 
@@ -700,3 +696,168 @@ def test_a_keyboard_that_cant_be_let_go_is_closed(setup, monkeypatch):
     assert closed == [True]
     assert kb.path not in helper.keyboards and helper.hide is None
     assert heard(tuxtalk) == ["UP 66"]          # its key can't come up any more
+
+
+# --- fixes from guelz's review (helper 1.4) -------------------------------------------
+
+def test_a_client_gets_four_shortcuts_at_most(setup):
+    _helper, _kb, connect, say, heard, _seat = setup
+    sock = connect()
+    say(sock, "HELLO 1")
+    say(sock, "WATCH 66 CA:25 CA:30 CA:31 CA:32 CA:33")
+    assert heard(sock) == [f"HELLO 1 {hh.VERSION}", "ERR no more than 4 shortcuts"]
+    say(sock, "WATCH 66 67 1 CA:25 CA:30 CA:31 CA:32")
+    assert heard(sock) == ["OK WATCH"]
+
+
+def test_ctrl_alt_held_down_doesnt_turn_typing_into_shortcuts(setup):
+    """Two different shortcut keys per hold of Ctrl+Alt, then nothing: a
+    stuck Ctrl+Alt (or one meaning AltGr in a Windows VM) can't report what
+    is typed. Letting go starts a new hold."""
+    _helper, kb, connect, say, heard, _seat = setup
+    sock = _ready(connect, say, heard, specs="66 CA:25 CA:30 CA:31")
+    kb.press(LCTRL)
+    kb.press(LALT)
+    for code in (P, P, A, 31):
+        kb.press(code)
+        kb.press(code, 0)
+    assert heard(sock) == ["DOWN 25 29,56", "UP 25", "DOWN 25 29,56", "UP 25",
+                           "DOWN 30 29,56", "UP 30"]
+    kb.press(LALT, 0)
+    kb.press(LALT)
+    kb.press(31)
+    kb.press(31, 0)
+    assert heard(sock) == ["UP 56", "DOWN 31 29,56", "UP 31"]
+
+
+def test_esc_is_never_hidden(setup):
+    helper, kb, connect, say, heard, _seat = setup
+    sock = _ready(connect, say, heard)
+    kb.press(ESC)
+    heard(sock)
+    say(sock, "HIDE 1")
+    assert heard(sock) == ["ERR the hotkey isn't held"]
+    assert helper.hide is None and kb.calls == []
+
+
+def test_a_release_just_before_hiding_isnt_swallowed(setup):
+    """The key comes up between reading the kernel's state and our "it went
+    up": the kernel drops ours, and the real release must still count, or
+    the keyboard stays held with the key long up."""
+    helper, kb, connect, say, heard, _seat = setup
+    kb.monotonic = True
+    sock = _ready(connect, say, heard)
+    kb.press(F8)
+    assert heard(sock) == ["DOWN 66 -"]
+    real_kernel_down = kb.kernel_down
+
+    def releasing_kernel_down():
+        down = real_kernel_down()
+        kb.kernel_down = real_kernel_down
+        kb.press(F8, 0)               # the user lets go right now
+        return down
+    kb.kernel_down = releasing_kernel_down
+    say(sock, "HIDE 66")
+    assert heard(sock) == ["UP 66", "OK HIDE"]
+    assert helper.hide is None and helper.injected == []
+    assert F8 not in kb.kernel and kb.calls[-1] == ("grab", False)
+    kb.press(F8)                      # and the next press is a press
+    assert heard(sock) == ["DOWN 66 -"]
+
+
+def test_a_keyboard_programs_can_write_to_is_kept_apart(tmp_path):
+    data = tmp_path / "data"
+    data.mkdir()
+    rdev = os.makedev(13, 67)
+    (data / "c13:67").write_text("E:ID_INPUT_KEYBOARD=1\nG:uaccess\nQ:uaccess\n")
+    node = os.stat_result((0o20660, 0, 0, 1, 0, 0, 0, 0, 0, 0))
+    tagged = os.stat_result((0o20660, 0, 0, 1, 0, 0, 0, 0, 0, 0))
+    plain = os.makedev(13, 68)
+
+    def with_rdev(st, rdev):
+        class St:
+            st_mode, st_uid, st_gid = st.st_mode, st.st_uid, st.st_gid
+        St.st_rdev = rdev
+        return St
+    assert hh.others_can_write(with_rdev(tagged, rdev), str(data))
+    assert not hh.others_can_write(with_rdev(node, plain), str(data))
+    everyone = os.stat_result((0o20666, 0, 0, 1, 0, 0, 0, 0, 0, 0))
+    assert hh.others_can_write(with_rdev(everyone, plain), str(data))
+
+    chars = tmp_path / "char"
+    chars.mkdir()
+    (chars / "13:67").symlink_to("/sys/devices/pci0000:00/0000:11:00.0/usb1/1-3/input/input14/event3")
+    assert hh.device_group(rdev, str(chars)) == "real"
+    assert hh.device_group(rdev, str(chars), writable=True) == "own:13:67"
+
+
+def test_bluetooth_keyboards_are_real_while_uhid_is_roots_alone(tmp_path):
+    chars = tmp_path / "char"
+    chars.mkdir()
+    (chars / "13:69").symlink_to(
+        "/sys/devices/virtual/misc/uhid/0005:046D:B342.0009/input/input30/event9")
+    rdev = os.makedev(13, 69)
+    assert hh.device_group(rdev, str(chars), uhid_private=True) == "real"
+    assert hh.device_group(rdev, str(chars), uhid_private=False) == "virtual:13:69"
+
+
+def test_uhid_handed_out_by_a_rule_isnt_private(tmp_path, monkeypatch):
+    data = tmp_path / "data"
+    data.mkdir()
+    st = {"mode": 0o20600}
+
+    class FakeStat:
+        st_uid, st_gid, st_rdev = 0, 0, os.makedev(10, 239)
+
+    def fake_stat(path):
+        fake = FakeStat()
+        fake.st_mode = st["mode"]
+        return fake
+    monkeypatch.setattr(hh.os, "stat", fake_stat)
+    assert hh.uhid_is_private("/dev/uhid", str(data))
+    st["mode"] = 0o20660                         # GROUP="input", MODE="0660", uaccess
+    assert not hh.uhid_is_private("/dev/uhid", str(data))
+
+
+def test_everyone_waiting_is_let_in_at_once(setup):
+    helper, _kb, _connect, _say, _heard, _seat = setup
+    socks = []
+    for _ in range(5):
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.connect(helper.socket_path)
+        socks.append(sock)
+    helper.run_once(timeout=0.01)
+    assert len(helper.clients) == 5
+    for sock in socks:
+        sock.close()
+
+
+def test_a_full_house_pushes_out_the_newest_not_tuxtalk(setup):
+    helper, _kb, connect, say, heard, _seat = setup
+    tuxtalk = _ready(connect, say, heard)
+    for _ in range(hh.MAX_CLIENTS - 1):
+        _ready(connect, say, heard)
+    for _ in range(3):
+        _ready(connect, say, heard)              # a program connecting again and again
+    say(tuxtalk, "WATCH 66")
+    assert heard(tuxtalk) == ["OK WATCH"]
+
+
+def test_a_keyboard_turned_away_as_one_too_many_gets_in_later(setup, monkeypatch, tmp_path):
+    helper, _kb, _connect, _say, _heard, _seat = setup
+    folder = tmp_path / "input"
+    for i in range(hh.MAX_VIRTUAL_KEYBOARDS + 1):
+        (folder / f"event{i}").write_text("")
+
+    def fake_open(path):
+        keyboard = FakeKeyboard(path)
+        keyboard.virtual = True
+        return keyboard
+    monkeypatch.setattr(hh.Keyboard, "open", staticmethod(fake_open))
+    helper.scan()
+    waiting = str(folder / f"event{hh.MAX_VIRTUAL_KEYBOARDS}")
+    assert waiting not in helper.keyboards
+    helper.drop_keyboard(helper.keyboards[str(folder / "event0")])
+    (folder / "event0").unlink()
+    helper.scan()
+    assert waiting in helper.keyboards

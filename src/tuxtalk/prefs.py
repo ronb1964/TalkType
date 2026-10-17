@@ -5160,7 +5160,7 @@ class PreferencesWindow:
 
             running = secure_input.running_version() if has_access else None
             from .hotkey_helper import VERSION as HELPER_VERSION
-            if running is not None and running != HELPER_VERSION and secure_input.is_installed():
+            if secure_input.is_older(running) and secure_input.is_installed():
                 # A TuxTalk update brought a newer helper: the old one keeps
                 # running until it's installed again.
                 self.typing_status_label.set_markup(

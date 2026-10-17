@@ -177,6 +177,24 @@ def _typing_prefs(monkeypatch, *, running, installed=True, in_group=False):
     return P, prefs
 
 
+def test_only_an_older_helper_needs_an_update(monkeypatch):
+    monkeypatch.setattr(si, "is_installed", lambda: True)
+    for running, wanted in (("1.0", True), ("1.3", True), ("garbled", True),
+                            (hotkey_helper.VERSION, False), ("1.10", False), ("9.0", False)):
+        monkeypatch.setattr(si, "running_version", lambda: running)
+        assert si.needs_update() is wanted, running
+
+
+def test_a_newer_helper_than_this_tuxtalk_is_left_alone(monkeypatch):
+    P, prefs = _typing_prefs(monkeypatch, running="9.0")
+    assert prefs.fix_typing_button.label != P.UPDATE_HELPER_LABEL
+
+
+def test_the_service_cant_take_the_machine():
+    lines = si.UNIT.splitlines()
+    assert {"CPUQuota=25%", "MemoryMax=64M", "TasksMax=4"} <= set(lines)
+
+
 def test_an_older_helper_is_offered_an_update(monkeypatch):
     P, prefs = _typing_prefs(monkeypatch, running="1.0")
     assert prefs.fix_typing_button.label == P.UPDATE_HELPER_LABEL and prefs.fix_typing_button.sensitive

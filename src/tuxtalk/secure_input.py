@@ -58,6 +58,10 @@ Restart=on-failure
 RestartSec=2
 # select() can't watch descriptors from 1024 up; the helper never needs many.
 LimitNOFILE=512
+# A flood of events from programs' virtual keyboards can't take the machine.
+CPUQuota=25%
+MemoryMax=64M
+TasksMax=4
 
 # A throwaway user whose only extra right is reading the keyboards.
 DynamicUser=yes
@@ -249,11 +253,25 @@ def running_version():
         keyboard.close()
 
 
+def _version(text):
+    """"1.4" -> (1, 4); anything unreadable counts as oldest."""
+    try:
+        return tuple(int(part) for part in text.split("."))
+    except (AttributeError, ValueError):
+        return ()
+
+
+def is_older(running):
+    """Whether the running helper's version *running* is older than the one
+    this TuxTalk brings. Never for a newer one (an older TuxTalk run again):
+    no password prompt to go back."""
+    from .hotkey_helper import VERSION
+    return running is not None and _version(running) < _version(VERSION)
+
+
 def needs_update():
     """Installed, but older than the helper this TuxTalk brings."""
-    from .hotkey_helper import VERSION
-    running = running_version()
-    return is_installed() and running is not None and running != VERSION
+    return is_installed() and is_older(running_version())
 
 
 def _run_as_root(script, what):

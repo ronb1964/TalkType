@@ -447,9 +447,25 @@ to your files, it never reports a letter or a number, only F-keys, Esc and
 shortcuts with Ctrl, Alt or Super, and only to whoever's at the screen.
 `systemd-analyze security tuxtalk-hotkeys` rates it 0.6, "SAFE".
 
+A shortcut that isn't an F-key needs two of Ctrl, Alt and Super, and while
+those stay held the helper reports two different keys at most, so a stuck
+Ctrl+Alt can't turn your typing into "shortcuts". The check is per user, so
+two logins of the same user both count as the person at the screen.
+
 To type, TuxTalk still needs `/dev/uinput`, so whoever's at the screen gets
 it, the same rule Steam uses for game controllers. A program can use it to
-press keys but not to read them. To take the helper off again:
+press keys but not to read them. That's still real power: any program you run
+can type into any window, the lock screen included, and so can a Flatpak app
+given full device access. It's less than the `input` group gave, which also
+let programs read every key.
+
+Some packages give your user access to the keyboard itself. OpenRGB's rule,
+for one, does that for every Logitech device. Programs can then read that
+keyboard directly, helper or not. Check with
+`getfacl /dev/input/event*`: a line naming your user means that device is
+open to everything you run.
+
+To take the helper off again:
 
 ```bash
 sudo systemctl disable --now tuxtalk-hotkeys
