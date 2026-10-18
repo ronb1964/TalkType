@@ -45,11 +45,6 @@ def test_changing_injection_mode_does_not_load_the_dictation_engine():
     assert out.returncode == 0 and out.stdout.strip().endswith("ok"), out.stderr
 
 
-def test_notify_is_skipped_quietly_without_libnotify(monkeypatch):
-    monkeypatch.setattr(notify, "_ready", False)
-    notify.notify("TuxTalk", "should not appear")   # no error, nothing shown
-
-
 def test_the_mode_confirmation_follows_the_notifications_setting(monkeypatch):
     """Mint VM test, 2026-10-13: "Input mode: Clipboard Paste" popped up with
     "Show desktop notifications" off."""

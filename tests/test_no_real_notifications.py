@@ -1,33 +1,68 @@
 """Running the tests never pops a notification on the developer's desktop.
 
 Tests such as test_a_real_cuda_failure_still_falls_back_to_cpu go through the
-real notification path, so conftest holds back Notify.Notification.show for
-the whole suite.
+real notification path, so conftest holds back notify._send, the one place a
+notice leaves for the desktop, for the whole suite.
 """
-import gi
-
-gi.require_version("Notify", "0.7")
-from gi.repository import Notify  # noqa: E402
-
-from tuxtalk import app, notify  # noqa: E402
+from tuxtalk import app, notify
 
 
 def test_notifications_are_held_back_during_tests():
-    assert Notify.Notification.show.__name__ == "_held_back"
+    assert notify._send.__name__ == "_held_back"
 
 
 def test_app_notify_does_not_reach_the_desktop(monkeypatch):
     assert app._notify is notify.notify
-    # Count the calls that reach the held-back show(). A notify() that found
+    # Count the calls that reach the held-back _send(). A notify() that found
     # another way to the desktop would leave the count at zero.
-    held_back = Notify.Notification.show
+    held_back = notify._send
     shown = []
 
-    def counting_show(self, *args, **kwargs):
-        shown.append(self.props.summary)
-        return held_back(self, *args, **kwargs)
+    def counting_send(title, body):
+        shown.append(title)
+        return held_back(title, body)
 
-    monkeypatch.setattr(Notify.Notification, "show", counting_show)
-    monkeypatch.setattr(notify, "_ready", True)
+    monkeypatch.setattr(notify, "_send", counting_send)
     notify.notify("TuxTalk", "should not appear")
     assert shown == ["TuxTalk"]
+
+
+def test_a_notice_goes_to_the_desktops_notification_service(monkeypatch):
+    """Over D-Bus, not libnotify: the AppImage couldn't load libnotify on
+    Fedora-family systems, so its notices never appeared (2026-10-18)."""
+    import sys
+    import types
+    calls = []
+
+    class Proxy:
+        def Notify(self, *args, **kwargs):
+            calls.append((args, kwargs))
+
+    class Bus:
+        def get_object(self, name, path):
+            calls.append((name, path))
+            return Proxy()
+
+    fake_dbus = types.SimpleNamespace(
+        SessionBus=Bus, UInt32=int, Int32=int,
+        Array=lambda items, signature: list(items),
+        Dictionary=lambda items, signature: dict(items))
+    monkeypatch.setitem(sys.modules, "dbus", fake_dbus)
+    import importlib
+    real = importlib.reload(notify)          # the real _send, not the held-back one
+    try:
+        real._send("TuxTalk", "Heard only silence")
+    finally:
+        importlib.reload(notify)
+        notify._send = lambda title, body: None   # held back again
+    assert calls[0] == ("org.freedesktop.Notifications", "/org/freedesktop/Notifications")
+    args, kwargs = calls[1]
+    assert args[3:5] == ("TuxTalk", "Heard only silence")
+    assert kwargs["dbus_interface"] == "org.freedesktop.Notifications"
+
+
+def test_no_notification_service_is_not_an_error(monkeypatch):
+    def broken(title, body):
+        raise RuntimeError("org.freedesktop.Notifications was not provided")
+    monkeypatch.setattr(notify, "_send", broken)
+    notify.notify("TuxTalk", "nobody to show it")   # no error

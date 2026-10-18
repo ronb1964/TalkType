@@ -1,32 +1,36 @@
-"""Desktop notifications through libnotify, shared by the tray and the service.
+"""Desktop notifications, shared by the tray and the service.
+
+Sent straight to the desktop's notification service over D-Bus
+(org.freedesktop.Notifications), not through libnotify: the AppImage's
+Ubuntu-built GObject Introspection can't find a Fedora system's Notify
+typelib, so every notice from the AppImage silently vanished there, the
+silent-microphone warning included (Ron, 2026-10-18). dbus-python is
+bundled already and works the same in every package.
 
 This module has no heavy imports on purpose: the tray shows notices too, and
 importing app.py for them would load the whole dictation engine (numpy,
 faster_whisper, torch) into the tray for the rest of the session.
 """
 
-_ready = None   # None until the first notice; then True or False
+APP_ICON = "io.github.ronb1964.TuxTalk"
+# A notice is never worth stalling the hotkey loop for.
+TIMEOUT_S = 2.0
 
 
-def _init():
-    """Initialise libnotify on first use. It is optional: without it, notices are skipped."""
-    global _ready
-    if _ready is None:
-        try:
-            import gi
-            gi.require_version("Notify", "0.7")
-            from gi.repository import Notify
-            _ready = bool(Notify.init("TuxTalk"))
-        except Exception:
-            _ready = False
-    return _ready
+def _send(title: str, body: str) -> None:
+    import dbus
+    proxy = dbus.SessionBus().get_object("org.freedesktop.Notifications",
+                                         "/org/freedesktop/Notifications")
+    proxy.Notify("TuxTalk", dbus.UInt32(0), APP_ICON, title, body,
+                 dbus.Array([], signature="s"), dbus.Dictionary({}, signature="sv"),
+                 dbus.Int32(-1), dbus_interface="org.freedesktop.Notifications",
+                 timeout=TIMEOUT_S)
 
 
-def notify(title: str, body: str):
-    if not _init():
-        return
+def notify(title: str, body: str) -> None:
+    """Show a desktop notification; skipped quietly when the desktop has no
+    notification service."""
     try:
-        from gi.repository import Notify
-        Notify.Notification.new(title, body).show()
+        _send(title, body)
     except Exception:
         pass

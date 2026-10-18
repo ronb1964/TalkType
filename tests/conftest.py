@@ -27,17 +27,12 @@ def _hold_back_notifications():
     Patched here, at conftest import, so it covers module-level code too;
     tests that check a message stub app._notify themselves.
     """
-    try:
-        import gi
-        gi.require_version("Notify", "0.7")
-        from gi.repository import Notify
-    except Exception:
-        return
+    from tuxtalk import notify
 
-    def _held_back(self, *args, **kwargs):
-        return True
+    def _held_back(title, body):
+        return None
 
-    Notify.Notification.show = _held_back
+    notify._send = _held_back
 
 
 _hold_back_notifications()
