@@ -1736,21 +1736,43 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
 
     return True
 
+# How long stopping the microphone may take before TuxTalk carries on without
+# it. On 2026-10-18 a stream vanished from PipeWire mid-recording (Ron, muting
+# the mic) and PortAudio's stop() waited for it forever: the indicator stayed
+# up and no hotkey worked again until the service was restarted.
+STREAM_STOP_TIMEOUT_S = 2.0
+# Streams whose stop() never returned. Kept so nothing tries to close them
+# again from another thread; a few kilobytes each.
+_stuck_streams = []
+
+
 def _stop_stream_safely():
     """Stop and close the microphone stream. close() runs even when stop()
-    fails (an unplugged mic), so the device is free to be opened again."""
+    fails (an unplugged mic), so the device is free to be opened again. Both
+    run on a helper thread, so an audio system that stops answering costs
+    STREAM_STOP_TIMEOUT_S, not the whole service."""
     stream, state.stream = state.stream, None
     if stream is None:
         return
-    try:
-        stream.stop()
-    except Exception as e:
-        logger.warning(f"Could not stop the microphone stream: {e}")
-    finally:
+
+    def finish():
         try:
-            stream.close()
+            stream.stop()
         except Exception as e:
-            logger.warning(f"Could not close the microphone stream: {e}")
+            logger.warning(f"Could not stop the microphone stream: {e}")
+        finally:
+            try:
+                stream.close()
+            except Exception as e:
+                logger.warning(f"Could not close the microphone stream: {e}")
+
+    closer = threading.Thread(target=finish, daemon=True, name="tt-mic-stop")
+    closer.start()
+    closer.join(STREAM_STOP_TIMEOUT_S)
+    if closer.is_alive():
+        _stuck_streams.append(stream)
+        logger.error(f"The microphone stream didn't stop within {STREAM_STOP_TIMEOUT_S:g}s "
+                     "(the audio system stopped answering); carrying on without it")
 
 def cancel_recording(beeps_on: bool, notify_on: bool, reason="Cancelled"):
     """End a recording without transcribing it, telling the user *reason*."""

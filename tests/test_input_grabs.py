@@ -768,3 +768,44 @@ def test_a_toggle_tap_with_nothing_counting_down_starts_recording(key_env, monke
     app._handle_key_event(FakeEvent(TOGGLE, 1), "hold", HOLD, TOGGLE,
                           None, set(), [keyboard()], FakeConfig(), 0)
     assert len(started) == 1
+
+
+def test_a_microphone_that_never_stops_cannot_freeze_the_service(monkeypatch):
+    """Ron, 2026-10-18: the stream vanished from PipeWire and stop() waited
+    forever, leaving the indicator up and every hotkey dead."""
+    import threading as _t
+    release = _t.Event()
+
+    class StuckStream:
+        def stop(self):
+            release.wait(5)
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(app, "STREAM_STOP_TIMEOUT_S", 0.1)
+    monkeypatch.setattr(app, "_stuck_streams", [])
+    stream = StuckStream()
+    app.state.stream = stream
+    started = app.time.monotonic()
+    app._stop_stream_safely()
+    assert app.time.monotonic() - started < 1.0
+    assert app.state.stream is None
+    assert app._stuck_streams == [stream]
+    release.set()
+
+
+def test_a_normal_stop_closes_the_stream(monkeypatch):
+    calls = []
+
+    class Stream:
+        def stop(self):
+            calls.append("stop")
+
+        def close(self):
+            calls.append("close")
+
+    monkeypatch.setattr(app, "_stuck_streams", [])
+    app.state.stream = Stream()
+    app._stop_stream_safely()
+    assert calls == ["stop", "close"] and app._stuck_streams == []
