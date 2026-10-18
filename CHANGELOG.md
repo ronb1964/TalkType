@@ -72,6 +72,22 @@ before 0.15.0, so older entries use that name.
 - Fixed: "F eight" sometimes came out as words. A capital letter and a
   number now always go together, so you get F8, vitamin B12, row E9 and grid
   squares like B5 A7, whatever Write numbers as digits is set to.
+- Fixed: on KDE Plasma 6.7 the AppImage, .deb and .rpm could lose the start
+  of a dictation it pasted. The clipboard tool TuxTalk carries didn't know
+  the clipboard protocol newer KDE uses, so it opened a window of its own
+  that took the keyboard for a moment, and the paste went there.
+- Fixed: TuxTalk's notices never showed up from the AppImage, .deb or .rpm on
+  Fedora and similar systems, the "only silence from the microphone" warning
+  included. They go straight to the desktop's notification service now.
+- Fixed: with the microphone on System Default, switching inputs in GNOME's
+  Quick Settings or KDE's volume applet needed a restart before TuxTalk used
+  the new one. Thanks to Stefano Scipioni (issue #14).
+- Fixed: a microphone that stops answering mid-dictation (a USB headset
+  locking up) froze TuxTalk until it was restarted. Now it gives up on that
+  mic after two seconds, and if it has to record from another input it says
+  which.
+- Fixed: "select the last word" took the period after it along, and "it
+  inserted a carriage return" typed a line break.
 - TuxTalk has its own website now, tuxtalk.app. The About window links to it,
   and so do software centers and the .deb and .rpm packages.
 
