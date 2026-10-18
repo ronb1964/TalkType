@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Linux dictation apps compared: TuxTalk, Myna, Handy, Speech Note and more</title>
+<meta name="description" content="Free voice dictation apps for Linux side by side: TuxTalk, Canonical's Myna, Handy, Speech Note, Voxtype, nerd-dictation and OpenWhispr. License, offline, hold to talk on Wayland.">
+<link rel="canonical" href="https://tuxtalk.app/linux-dictation-apps.html">
+<meta property="og:title" content="Linux dictation apps compared: TuxTalk, Myna, Handy, Speech Note and more">
+<meta property="og:description" content="Free voice dictation apps for Linux side by side: TuxTalk, Canonical's Myna, Handy, Speech Note, Voxtype, nerd-dictation and OpenWhispr. License, offline, hold to talk on Wayland.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://tuxtalk.app/linux-dictation-apps.html">
+<meta property="og:image" content="https://tuxtalk.app/img/share.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#3aa8ff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f2c49" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="img/icon-64.png" type="image/png" sizes="64x64">
+<link rel="stylesheet" href="style.css">
+<script>
+  try { var t = localStorage.getItem("tuxtalk-theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}
+</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to the content</a>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="index.html" aria-label="TuxTalk home">
+      <img src="img/icon-64.png" alt="" width="32" height="32">
+      TuxTalk
+    </a>
+    <nav aria-label="Main">
+      <a class="nav-hide" href="index.html#features">Features</a>
+      <a class="nav-hide" href="index.html#videos">Videos</a>
+      <a class="nav-hide" href="privacy.html">Privacy</a>
+      <a class="nav-hide" href="https://github.com/ronb1964/TuxTalk" target="_blank" rel="noopener">GitHub</a>
+      <a class="nav-dl" href="index.html#download">Download</a>
+      <button class="theme-btn" type="button" id="theme-btn" aria-label="Switch between light and dark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/></svg>
+      </button>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+  <div class="page-head">
+    <div class="wrap">
+      <h1>Dictation apps for Linux, compared</h1>
+      <p>Every free dictation app for Linux I know of, side by side, as fairly as I can put it.</p>
+    </div>
+  </div>
+
+  <div class="doc-page">
+    <div class="wrap">
+      <div class="prose">
+        <h2>TuxTalk isn't the only one</h2>
+        <p>A few years ago there was almost nothing for dictation on Linux. Now there are several good free apps, and most of them run offline. Here's how they line up, as fairly as I can put it.</p>
+      </div>
+      <div class="prose compare">
+        <p class="scroll-hint">Swipe sideways to see the whole table.</p>
+        <table>
+          <caption>Dictation apps for Linux</caption>
+          <thead><tr><td></td><th scope="col">License</th><th scope="col">Runs on</th><th scope="col">Offline</th><th scope="col">Hold to talk on Wayland</th><th scope="col">Typing</th></tr></thead>
+          <tbody>
+          <tr><th scope="row">TuxTalk</th><td>MIT</td><td>Linux: KDE, GNOME, Sway, Hyprland, X11</td><td>Yes</td><td>Yes, any desktop, no shortcut to set up</td><td>Types into the app</td></tr>
+          <tr><th scope="row">Myna (Canonical)</th><td>AGPL-3.0</td><td>Ubuntu 24.04 and newer, GNOME on Wayland</td><td>Yes</td><td>Toggle with a desktop shortcut</td><td>Types through IBus</td></tr>
+          <tr><th scope="row">Handy</th><td>MIT</td><td>Linux, Windows, Mac</td><td>Yes</td><td>Yes, set up through your desktop's shortcuts</td><td>Needs wtype, dotool or ydotool on Wayland</td></tr>
+          <tr><th scope="row">Speech Note</th><td>MPL-2.0</td><td>Linux (Flathub), Sailfish OS</td><td>Yes</td><td>Shortcuts through the desktop portal</td><td>Needs ydotool on Wayland</td></tr>
+          <tr><th scope="row">Voxtype</th><td>MIT</td><td>Linux, with a Mac port</td><td>Yes</td><td>Yes on Hyprland, Sway and River; toggle on KDE</td><td>Types into the app</td></tr>
+          <tr><th scope="row">nerd-dictation</th><td>GPL-3.0</td><td>Linux</td><td>Yes</td><td>You bind its start and stop to keys</td><td>ydotool, dotool or wtype</td></tr>
+          <tr><th scope="row">OpenWhispr</th><td>MIT</td><td>Linux, Windows, Mac</td><td>Local or cloud</td><td>Not stated</td><td>Types into the app</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="prose">
+        <h2>Which one?</h2>
+        <p><strong>Myna</strong> is Canonical's own, still a preview, and likely to end up in Ubuntu. If you're on Ubuntu with GNOME and want the one Ubuntu supports, keep an eye on it.</p>
+        <p><strong>Handy</strong> is a nice pick if you also use Windows or a Mac, since it runs on all three.</p>
+        <p><strong>Speech Note</strong> also reads text aloud and translates, so it's more than dictation.</p>
+        <p><strong>Voxtype</strong> fits right in on Hyprland, Sway and River.</p>
+        <p><strong>nerd-dictation</strong> is a small script for people who like to wire things up themselves.</p>
+        <p><strong>TuxTalk</strong> is for hold F8 and talk on whatever desktop you're on, with nothing to set up in your desktop's settings, and it types straight into the app. It has Your Words and Fix a Word for names it gets wrong, an optional local AI for "no wait" corrections, Transcribe a File, and voice editing and Type at pause in TuxTalk Labs. Only TuxTalk's small hotkey helper reads your keyboard. It's Linux only.</p>
+        <p>Coming from something else? There are pages for <a href="dragon-for-linux.html">Dragon</a> and for <a href="wispr-flow-superwhisper-linux.html">Wispr Flow and Superwhisper</a>.</p>
+      </div>
+
+      <div class="prose">
+        <p class="note">Prices and details are as of October 2026, from each product's own pages where I could find them. They change, so check there before you decide. If something here is out of date, <a href="https://github.com/ronb1964/TuxTalk/discussions" target="_blank" rel="noopener">tell me in Discussions</a> and I'll fix it.</p>
+        <p><a class="btn btn-main" href="index.html#download">Get TuxTalk</a> &nbsp; <a href="index.html">See what it does</a> &nbsp; <a href="linux-dictation-apps.html">Every Linux dictation app compared</a></p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="made">
+      <a class="brand" href="index.html"><img src="img/icon-64.png" alt="" width="32" height="32">TuxTalk</a>
+      <p>Made by Ron Brand. Free and open source under the MIT license.</p>
+    </div>
+    <ul class="links">
+      <li><a href="index.html">Home</a></li>
+      <li><a href="index.html#download">Download</a></li>
+      <li><a href="linux-dictation-apps.html">Compared with others</a></li>
+      <li><a href="https://github.com/ronb1964/TuxTalk" target="_blank" rel="noopener">GitHub</a></li>
+      <li><a href="https://github.com/ronb1964/TuxTalk/discussions" target="_blank" rel="noopener">Discussions</a></li>
+    </ul>
+  </div>
+</footer>
+
+<script src="site.js"></script>
+</body>
+</html>

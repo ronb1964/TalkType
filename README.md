@@ -35,7 +35,7 @@
 
 https://github.com/user-attachments/assets/ddedf92d-bbd2-4fc2-94e1-05461e633784
 
-That works on GNOME, KDE, Sway, Hyprland and X11 with no setup, because TuxTalk's little hotkey helper reads the key straight from the keyboard instead of asking the desktop for it. It's the only part that reads the keyboard, so other programs you run can't read your typing. Most Linux dictation tools can't do hold-to-talk on Wayland at all.
+That works on GNOME, KDE, Sway, Hyprland and X11 with no setup, because TuxTalk's little hotkey helper reads the key straight from the keyboard instead of asking the desktop for it, so there's no shortcut to set up in your desktop's settings. It's the only part that reads the keyboard, so other programs you run can't read your typing.
 
 It's free, it runs completely offline, and nothing you say ever leaves your computer.
 
