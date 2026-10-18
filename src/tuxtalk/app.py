@@ -320,6 +320,10 @@ class RecordingState:
     # This recording's press held a pending send, so a tap that's too short
     # to be a dictation says "Not sent" rather than "Cancelled".
     held_send: bool = False
+    # The space a held send left off, waiting for the hotkey that held it to
+    # come up (_type_owed_space), or None. Typed while the key is down, GNOME
+    # without the extension sees the key too and the space is lost.
+    owed_space: object = None
     # A phrase of this recording has been typed, so a correction said after the
     # next pause ("no wait, four") may change it (app._correct_across_pause).
     chunk_typed: bool = False
@@ -2002,7 +2006,8 @@ def _hold_pending_send(announce: bool) -> bool:
         return False
     _cancel_timers(pending)
     logger.info("Held the send: the dictation stays unsent")
-    _type_space_left_off(pending)
+    if pending.get("space"):
+        state.owed_space = pending
     from . import screen_message
     if announce:
         screen_message.show_over_active_window(HELD_SEND_NOTICE, warning=False,
@@ -2023,6 +2028,22 @@ def _type_space_left_off(pending: dict) -> None:
     typed = state.last_inserted_text
     if _inject_text(space, pending["mode"], time.time()) == "ok":
         state.last_inserted_text = typed + space
+
+
+def _type_owed_space() -> None:
+    """The hotkey that held a send is up: type the space it left off."""
+    pending, state.owed_space = state.owed_space, None
+    if pending is not None:
+        _type_space_left_off(pending)
+
+
+def _with_owed_space(text: str) -> str:
+    """Put a held send's space in front of *text*, the dictation added onto
+    it, when it goes to the same window."""
+    pending, state.owed_space = state.owed_space, None
+    if pending is None or not text or text[0].isspace() or _focus_left(pending):
+        return text
+    return pending["space"] + text
 
 
 def _send_shift_enter():
@@ -3332,6 +3353,10 @@ def _finish_capture(beeps_on: bool, notify_on: bool):
         if dead_mic:
             _warn_silent_mic()
         return None
+    if state.held_send and state.owed_space is not None and not state.chunks_submitted:
+        # The hotkey that held the send is up now; a tap leaves the text as
+        # it is, a dictation goes after this space.
+        _type_owed_space()
     held_ms = int((time.time() - (state.press_t0 or time.time())) * 1000)
     if held_ms < MIN_HOLD_MS:
         if state.held_send:
@@ -3900,6 +3925,8 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         # Stage 4: Inject text into the active application. It goes into the
         # Recent Dictations list first, so it can be recovered even if the
         # injection lands in the wrong window or fails outright.
+        if text and state.owed_space is not None:
+            text = _with_owed_space(text)
         if text:
             chunked = chunk_role is not None
             _remember_said(text, chunked, taken_back)
@@ -4623,6 +4650,10 @@ def _handle_key_event(event, mode, hold_key, toggle_key,
                            cfg.auto_space, cfg.auto_period, cfg.injection_mode)
 
     # --- Tap-to-toggle: press once to start, press again to stop ---
+    if (toggle_key and event.code == toggle_key and event.value == 0
+            and state.owed_space is not None and not state.is_recording):
+        _type_owed_space()   # the tap that held the send is over
+
     if toggle_key and event.code == toggle_key and event.value == 1:
         shift = _held_shift(held_modifiers) if _voice_editing else set()
         if not state.is_recording and not shift and _hold_pending_send(announce=True):

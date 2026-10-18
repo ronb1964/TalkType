@@ -340,14 +340,42 @@ def test_the_wait_is_a_setting_applied_live():
         app._apply_cleanup_settings(config.Settings())
 
 
-def test_a_held_send_types_the_space_it_left_off(countdown, monkeypatch):
-    """Ron, 2026-10-18: held a send, kept talking, got "delay.All right"."""
+def test_a_held_send_types_its_space_once_the_key_is_up(countdown, monkeypatch):
+    """Ron, 2026-10-18: held a send, kept talking, got "delay.All right". The
+    space waits for the hotkey to come up: typed while it's down, GNOME
+    without the extension swallowed it (VM release test, 2026-10-18)."""
     monkeypatch.setattr(app.state, "last_inserted_text", "Testing the delay.")
+    monkeypatch.setattr(app.state, "owed_space", None)
     app._send_automatically("test", " ", "type")
     app._hold_pending_send(announce=True)
+    assert TYPED == []                     # the key is still down
+    app._type_owed_space()                 # ...and now it's up
     assert TYPED == [" "]
     # Undo still sees the whole dictation, space included.
     assert app.state.last_inserted_text == "Testing the delay. "
+    assert app.state.owed_space is None
+
+
+def test_a_dictation_added_to_a_held_send_starts_with_its_space(countdown, monkeypatch):
+    monkeypatch.setattr(app.state, "owed_space", None)
+    app._send_automatically("test", " ", "type")
+    app._hold_pending_send(announce=False)
+    assert app._with_owed_space("And this part was added. ") == " And this part was added. "
+    assert app._with_owed_space("Next one. ") == "Next one. "    # only once
+
+
+def test_a_short_tap_types_the_space_when_released(countdown, monkeypatch):
+    reasons = []
+    monkeypatch.setattr(app, "cancel_recording",
+                        lambda beeps, notify, reason="": reasons.append(reason))
+    monkeypatch.setattr(app.state, "owed_space", None)
+    app._send_automatically("test", " ", "type")
+    monkeypatch.setattr(app.state, "held_send", app._hold_pending_send(announce=False))
+    monkeypatch.setattr(app.state, "silence", None)
+    monkeypatch.setattr(app.state, "chunks_submitted", 0)
+    monkeypatch.setattr(app.state, "press_t0", app.time.time())
+    assert app._finish_capture(False, False) is None
+    assert TYPED == [" "] and reasons == [app.HELD_SEND_NOTICE]
 
 
 def test_a_sent_message_never_gets_the_space(countdown):
@@ -358,9 +386,11 @@ def test_a_sent_message_never_gets_the_space(countdown):
 
 
 def test_no_space_into_another_window(countdown, monkeypatch):
+    monkeypatch.setattr(app.state, "owed_space", None)
     app._send_automatically("test", " ", "type")
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "konsole")
     app._hold_pending_send(announce=True)
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "konsole")
+    app._type_owed_space()
     assert TYPED == []
 
 
