@@ -580,3 +580,16 @@ section[id], #main, [tabindex="-1"] { scroll-margin-top: calc(env(safe-area-inse
   .lb-prev, .lb-next { top: auto; bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); transform: none; }
   .lb-figure { padding: 64px 12px 76px; }
 }
+
+/* Comparison pages (dragon-for-linux.html and friends): a plain table that
+   scrolls sideways on a phone instead of squeezing, in the site's own colors. */
+.compare { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.compare table { width: 100%; min-width: 560px; border-collapse: collapse; background: var(--card);
+  border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; font-size: 0.95em; }
+.compare caption { text-align: left; font-family: var(--f-display); font-weight: 700; padding: 0 0 10px; color: var(--ink); }
+.compare th, .compare td { padding: 10px 14px; text-align: left; vertical-align: top; border-top: 1px solid var(--line); color: var(--ink-2); }
+.compare thead th { border-top: 0; color: var(--ink); font-family: var(--f-display); }
+.compare thead td { border-top: 0; }
+.compare tbody th { color: var(--ink); font-weight: 600; white-space: nowrap; }
+.compare .scroll-hint { display: none; font-family: var(--f-body); font-weight: 400; color: var(--ink-2); }
+@media (max-width: 700px) { .compare .scroll-hint { display: block; font-size: 0.9em; } }

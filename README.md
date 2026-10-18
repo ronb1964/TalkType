@@ -21,9 +21,10 @@
 <p align="center">
   <a href="https://tuxtalk.app/"><b>Website</b></a> &nbsp;&bull;&nbsp;
   <a href="#installation">Install</a> &nbsp;&bull;&nbsp;
-  <a href="#new-in-0151">New in 0.15.1</a> &nbsp;&bull;&nbsp;
+  <a href="#new-in-016">New in 0.16</a> &nbsp;&bull;&nbsp;
   <a href="#what-it-does">What it does</a> &nbsp;&bull;&nbsp;
   <a href="#all-the-features">All the features</a> &nbsp;&bull;&nbsp;
+  <a href="#how-its-made">How it's made</a> &nbsp;&bull;&nbsp;
   <a href="CHANGELOG.md">What's new</a>
 </p>
 
@@ -35,27 +36,25 @@
 
 https://github.com/user-attachments/assets/ddedf92d-bbd2-4fc2-94e1-05461e633784
 
-That works on GNOME, KDE, Sway, Hyprland and X11 with no setup, because TuxTalk reads the key straight from the keyboard instead of asking the desktop for it.
+That works on GNOME, KDE, Sway, Hyprland and X11 with no setup, because TuxTalk's little hotkey helper reads the key straight from the keyboard instead of asking the desktop for it, so there's no shortcut to set up in your desktop's settings. It's the only part that reads the keyboard, so other programs you run can't read your typing.
 
 It's free, it runs completely offline, and nothing you say ever leaves your computer.
 
+Claude, Anthropic's AI, writes the code. I test it and use it every day, and I hold the code to a standard a human developer would respect. [How it's made](#how-its-made) says more.
+
 ---
 
-## New in 0.15.1
+## New in 0.16
 
-<p align="center">
-  <img src="screenshots/transcribe-file.png" alt="Transcribe a File: a one-minute recording called shop-meeting.mp3 turned into three paragraphs of text, each starting with its time, with buttons to copy it or save it as text or as subtitles" width="600">
-</p>
+**No more `input` group.** TuxTalk used to put you in the input group so it could hear F8, and that group lets any program you run read every key you press. Now a small helper service is the only thing that reads the keyboard, and it only passes on TuxTalk's own hotkeys. Setup is one password and no restart. Already using TuxTalk? Preferences, Advanced, Typing Setup, Switch to Hotkey Helper.
 
-**Transcribe a File.** Give it a recording or a video and you get the text back, or subtitles for the video. It's in the tray menu right under Fix a Word. It uses the same model you dictate with, so there's nothing new to download, and dictation keeps working while it runs. On my NVIDIA card with Parakeet, three and a half minutes of talking took about nine seconds.
+**Talk, look it over, send it.** Say "press enter" at the end and your message goes. Or turn on Send each dictation automatically and every dictation goes out after a short countdown. Tap F8 during it and nothing is sent, so you can fix a word or add a screenshot first. It leaves text editors and word processors alone, where Enter would only start a new line. Turn on Type at pause in Labs and each phrase shows up when you pause, and with hands-free on F9 you can say "edit that, make it more formal" before you send it. No keyboard at all.
 
-**Say "fix that word"** right after a dictation and Fix a Word opens on what you just said. Click the word it got wrong, type it the right way, and it's fixed in your text and in every dictation after.
+**Your Words for Parakeet.** Names you add in the new Words tab now steer Parakeet too, and the words TuxTalk mishears sit right under the name they belong to.
 
-**Numbers as digits**, if you want them. Parakeet likes to write "twenty-five" out in words. Tick Write numbers as digits in Preferences, Advanced and you get 25.
+**Fixes worth knowing about.** On KDE Plasma 6.7, TuxTalk could lose the start of a dictation it pasted, and on Fedora and similar systems its notices never showed up at all. Both are fixed. Switching microphones in your desktop's sound menu now works without restarting TuxTalk.
 
-**Terminals get plain text.** Say "git status" into a terminal and you get git status, with no capital and no period.
-
-And there's `tuxtalk --toggle` for your own shortcut, a way to keep auto-detect to the languages you actually speak, and select and move by voice in TuxTalk Labs. The [changelog](CHANGELOG.md) has the rest.
+There's also a setting to turn other sounds down while you talk, a warning when your mic sends only silence, and power saving that's on for laptops and off for desktops. The [changelog](CHANGELOG.md) has the rest.
 
 ---
 
@@ -87,12 +86,12 @@ Want something else? One button shows every choice, with what it costs you in do
 
 ### Teach it your words
 
-Names, brands, the part numbers you use every day. Put them in **Your Words** and they come out spelled your way, even when the model hears them split up, like "tux talk". If one still comes out wrong, pick it out of a recent dictation with **Fix a Word**, type it the right way, and it's fixed from then on.
+Names, brands, the part numbers you use every day. Put them in **Your Words**, in the Words tab, and they come out spelled your way, with Parakeet or Whisper, even when the model hears them split up, like "tux talk". If one still comes out wrong, say "fix that word" or pick it out of a recent dictation with **Fix a Word**, type it the right way, and it's fixed from then on. Each fix is kept under its word.
 
 Snippets are your own shortcuts, like "my email" for your address.
 
 </td>
-<td width="50%"><img src="screenshots/your-words.png" alt="Your Words: names and terms TuxTalk should spell your way, one per line"></td>
+<td width="50%"><img src="screenshots/word-dialog.png" alt="One of Your Words: the right spelling, BambuStudio, and the ways TuxTalk tends to hear it, like bamboo studio"></td>
 </tr>
 <tr>
 <td width="50%"><img src="screenshots/tray-performance.png" alt="Tray menu with the Performance presets"></td>
@@ -129,12 +128,24 @@ Save your settings, voice commands, Fix a Word words and stats to one file, and 
 
 ### Try what's coming next
 
-TuxTalk Labs is at the bottom of Preferences, Advanced. It's for features that work but aren't finished, like voice editing and an indicator that follows the window you're dictating into. They're off until you turn them on, and there's a link right there to tell me how they're working for you.
+TuxTalk Labs is at the bottom of Preferences, Advanced. It's for features that work but aren't finished, like Type at pause, voice editing ("edit that, make it shorter") and an indicator that follows the window you're dictating into. They're off until you turn them on, and there's a link right there to tell me how they're working for you.
 
 </td>
-<td width="50%"><img src="screenshots/prefs-labs.png" alt="Preferences, Advanced: the TuxTalk Labs section with voice editing and the indicator that follows your window"></td>
+<td width="50%"><img src="screenshots/prefs-labs.png" alt="Preferences, Advanced: the TuxTalk Labs section with voice editing, Type at pause and the indicator that follows your window"></td>
 </tr>
 </table>
+
+---
+
+## How it's made
+
+I'm Ron, and I don't write code. TuxTalk is written by Claude, Anthropic's AI, and every commit says so. My part is deciding what it should do, testing it and living with it. I dictate almost everything I write with it.
+
+I know what a lot of people think of AI-written apps, and plenty of the time they've earned it. Thing is, I don't want TuxTalk to be one of those. Keeping the code clean matters to me as much as the app working. That means nothing left lying around that isn't used, no two pieces of code doing the same job, comments that explain why something is there, and a [written checklist](CLAUDE.md#code-a-human-reviewer-would-respect--every-change) every change has to meet before it goes in. The goal is that an experienced developer can open any file and think it's well put together, not just that it happens to work.
+
+And it's not only my word. Over 3,400 automated tests run on every change. Before a release it gets tested on Ubuntu, Mint and Fedora Silverblue in virtual machines, plus Nobara, which I use it on every day. The hotkey helper had a security review from another developer, guelz, who went on to contribute a feature too. If you read the code and something looks off, open an issue. I'd rather hear it.
+
+There's more about who's behind TuxTalk on the [About page](https://tuxtalk.app/about.html).
 
 ---
 
@@ -203,7 +214,7 @@ enough interest and I'll make it happen.
 |------------|---------|
 | **OS** | Linux, on Wayland or X11 (GNOME, KDE, Sway, Hyprland and more) |
 | **Dependencies** | None to install by hand — ydotool, ydotoold and wl-clipboard ship inside TuxTalk, and the ydotoold daemon starts automatically on first run |
-| **Permissions** | First run asks for your admin password once, to let TuxTalk read your keyboard and type into other apps. **Restart afterwards** for it to take effect |
+| **Permissions** | First run asks for your admin password once, to set up the hotkey helper and let TuxTalk type into other apps. No restart needed (without systemd it uses the `input` group, and then it does) |
 | **Audio** | Working microphone |
 | **GPU (optional)** | Any NVIDIA, AMD or Intel graphics chip (Vulkan), or CUDA on NVIDIA |
 
@@ -291,10 +302,10 @@ Want your own shortcut, or a script? Run `tuxtalk --toggle` (or `--start`, `--st
 <p align="center"><em>Microphone test and recording indicator &bull; The Voice Commands quick reference</em></p>
 
 <p align="center">
-  <img src="screenshots/prefs-snippets.png" alt="Preferences, Snippets: your own phrases, Fix a Word and Your Words" width="45%">
+  <img src="screenshots/prefs-words.png" alt="Preferences, Words: Your Words with the ways each one gets misheard, and Snippets below" width="45%">
   <img src="screenshots/prefs-stats.png" alt="Preferences, Stats" width="45%">
 </p>
-<p align="center"><em>Snippets, Fix a Word and Your Words &bull; Your Stats</em></p>
+<p align="center"><em>The Words tab: Your Words and Snippets &bull; Your Stats</em></p>
 
 <p align="center">
   <img src="screenshots/help-getting-started.png" alt="Help, Getting Started" width="70%">

@@ -27,6 +27,7 @@
     <nav aria-label="Main">
       <a class="nav-hide" href="index.html#features">Features</a>
       <a class="nav-hide" href="index.html#videos">Videos</a>
+      <a class="nav-hide" href="about.html">About</a>
       <a class="nav-hide" href="privacy.html" aria-current="page">Privacy</a>
       <a class="nav-hide" href="https://github.com/ronb1964/TuxTalk" target="_blank" rel="noopener">GitHub</a>
       <a class="nav-dl" href="index.html#download">Download</a>
@@ -55,9 +56,15 @@
       </div>
 
       <div class="prose">
+        <h2>Your keyboard</h2>
+        <p>To hear F8 while you're in another app, something has to read the keyboard. In TuxTalk that's the hotkey helper, a small system service that's the only part that reads it. It passes on F-keys, Esc and shortcuts with Ctrl, Alt or Super, never letters or numbers, and only to whoever's at the screen. So other programs you run don't get to read your typing the way they could if you were in the <code>input</code> group, which is how a lot of Linux tools that read keys work.</p>
+        <p>To type your words, TuxTalk makes a virtual keyboard, the same way Steam does for game controllers. That lets programs type, but not read anything. On a system without systemd TuxTalk falls back to the <code>input</code> group, and it tells you so when it sets up.</p>
+      </div>
+
+      <div class="prose">
         <h2>The AI is optional</h2>
         <p>TuxTalk can use a small AI model to fix it when you change your mind mid-sentence, like "three, no wait, four". It's off until you turn it on in Preferences, Advanced. Turning it on downloads the model once (about 1.1 GB), and after that it runs on your computer like everything else. It only looks at sentences that have a correction phrase in them, and if its answer changes anything besides the correction, TuxTalk throws the answer out and types your words exactly as you said them.</p>
-        <p>Voice editing in TuxTalk Labs uses the same local model, and it's off until you turn it on too.</p>
+        <p>Voice editing in TuxTalk Labs, including "edit that", uses the same local model, and it's off until you turn it on too.</p>
       </div>
 
       <div class="prose">
@@ -103,6 +110,7 @@
       <li><a href="index.html">Home</a></li>
       <li><a href="index.html#download">Download</a></li>
       <li><a href="https://github.com/ronb1964/TuxTalk" target="_blank" rel="noopener">GitHub</a></li>
+      <li><a href="about.html">About</a></li>
       <li><a href="https://github.com/ronb1964/TuxTalk/discussions" target="_blank" rel="noopener">Discussions</a></li>
     </ul>
   </div>
