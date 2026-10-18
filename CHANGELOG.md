@@ -31,7 +31,8 @@ before 0.15.0, so older entries use that name.
   screen: tap F8 in that time and it isn't sent, so you can fix it or add a
   screenshot, or hold F8 to keep talking. It also doesn't send when you
   stopped on a word like "and" or "the", since that sentence was probably
-  cut off.
+  cut off, or in a text editor or word processor, where Enter would only
+  start a new line.
 - New: with voice editing on (Labs), start a dictation with "edit that" right
   after dictating something, like "edit that, make it shorter", and it
   rewrites what you just said. No Shift needed. "Edit that file tonight" is
