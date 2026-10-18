@@ -809,3 +809,54 @@ def test_a_normal_stop_closes_the_stream(monkeypatch):
     app.state.stream = Stream()
     app._stop_stream_safely()
     assert calls == ["stop", "close"] and app._stuck_streams == []
+
+
+def test_falling_back_to_another_mic_says_so(monkeypatch, quiet_recording):
+    """Ron, 2026-10-18: the USB headset stopped answering and TuxTalk quietly
+    recorded from the motherboard input instead."""
+    class FakeStream:
+        def start(self):
+            pass
+
+    def fake_input_stream(*args, **kwargs):
+        if kwargs.get("device") == 14:
+            raise Exception("Unanticipated host error")
+        return FakeStream()
+
+    names = {14: "Sennheiser Profile Mono", 8: "HD-Audio Generic: ALC897 Analog"}
+    notices = []
+    monkeypatch.setattr(app.sd, "InputStream", fake_input_stream)
+    monkeypatch.setattr(app.sd, "query_devices", lambda idx: {"name": names[idx]})
+    monkeypatch.setattr(app, "_pick_input_device", lambda mic: 8)
+    monkeypatch.setattr(app, "load_config", lambda: FakeConfig())
+    monkeypatch.setattr(app, "_notify", lambda title, text: notices.append(text))
+
+    assert app.start_recording(beeps_on=False, notify_on=False, input_device_idx=14) is True
+    assert len(notices) == 1
+    assert notices[0].startswith("Sennheiser Profile Mono didn't respond, so TuxTalk is recording "
+                                 "from HD-Audio Generic: ALC897 Analog instead.")
+    app._release_all_grabs()
+
+
+def test_reopening_the_same_mic_says_nothing(monkeypatch, quiet_recording):
+    class FakeStream:
+        def start(self):
+            pass
+
+    tries = []
+
+    def fake_input_stream(*args, **kwargs):
+        tries.append(kwargs.get("device"))
+        if len(tries) == 1:
+            raise Exception("busy for a moment")
+        return FakeStream()
+
+    notices = []
+    monkeypatch.setattr(app.sd, "InputStream", fake_input_stream)
+    monkeypatch.setattr(app, "_pick_input_device", lambda mic: 14)
+    monkeypatch.setattr(app, "load_config", lambda: FakeConfig())
+    monkeypatch.setattr(app, "_notify", lambda title, text: notices.append(text))
+
+    assert app.start_recording(beeps_on=False, notify_on=False, input_device_idx=14) is True
+    assert notices == []
+    app._release_all_grabs()

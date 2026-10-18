@@ -1701,6 +1701,8 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
             fresh_idx = _pick_input_device(load_config().mic)
             _open_input_stream(fresh_idx)
             logger.info(f"Microphone re-resolved to device {fresh_idx}")
+            if fresh_idx != input_device_idx:
+                _warn_mic_switched(input_device_idx, fresh_idx)
         except Exception as e:
             # Genuinely unavailable: unplugged, or held exclusively by another
             # app. Undo everything and tell the user; failing silently would
@@ -3343,6 +3345,28 @@ def _warn_silent_mic():
     print(SILENT_MIC_NOTICE)
     logger.warning("The microphone sent only silence (muted, unplugged or the wrong one?)")
     _notify("TuxTalk", SILENT_MIC_NOTICE)
+
+
+def _device_name(idx) -> str:
+    """The microphone's name for a notice, or "" when it can't be read."""
+    try:
+        return sd.query_devices(idx)["name"] if idx is not None else ""
+    except Exception:
+        return ""
+
+
+def _warn_mic_switched(old_idx, new_idx):
+    """The microphone wouldn't open and TuxTalk is recording from another one.
+    Always said: otherwise you talk into a jack with nothing plugged in and
+    get silence or room noise with no idea why (Ron, 2026-10-18: a USB
+    headset stopped answering and TuxTalk quietly used the motherboard input)."""
+    old, new = _device_name(old_idx), _device_name(new_idx)
+    notice = (f"{old or 'Your microphone'} didn't respond, so TuxTalk is recording from "
+              f"{new or 'another input'} instead. Unplugging the microphone and plugging it "
+              "back in usually fixes this.")
+    print(notice)
+    logger.warning(f"Recording from {new or new_idx!r}: {old or old_idx!r} didn't open")
+    _notify("TuxTalk", notice)
 
 
 def _frames_are_dead_mic(frames, rec_sr) -> bool:
