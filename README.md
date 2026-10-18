@@ -24,6 +24,7 @@
   <a href="#new-in-016">New in 0.16</a> &nbsp;&bull;&nbsp;
   <a href="#what-it-does">What it does</a> &nbsp;&bull;&nbsp;
   <a href="#all-the-features">All the features</a> &nbsp;&bull;&nbsp;
+  <a href="#how-its-made">How it's made</a> &nbsp;&bull;&nbsp;
   <a href="CHANGELOG.md">What's new</a>
 </p>
 
@@ -38,6 +39,8 @@ https://github.com/user-attachments/assets/ddedf92d-bbd2-4fc2-94e1-05461e633784
 That works on GNOME, KDE, Sway, Hyprland and X11 with no setup, because TuxTalk's little hotkey helper reads the key straight from the keyboard instead of asking the desktop for it, so there's no shortcut to set up in your desktop's settings. It's the only part that reads the keyboard, so other programs you run can't read your typing.
 
 It's free, it runs completely offline, and nothing you say ever leaves your computer.
+
+Claude, Anthropic's AI, writes the code. I test it and use it every day, and I hold the code to a standard a human developer would respect. [How it's made](#how-its-made) says more.
 
 ---
 
@@ -129,6 +132,16 @@ TuxTalk Labs is at the bottom of Preferences, Advanced. It's for features that w
 <td width="50%"><img src="screenshots/prefs-labs.png" alt="Preferences, Advanced: the TuxTalk Labs section with voice editing, Type at pause and the indicator that follows your window"></td>
 </tr>
 </table>
+
+---
+
+## How it's made
+
+I'm Ron, and I don't write code. TuxTalk is written by Claude, Anthropic's AI, and every commit says so. My part is deciding what it should do, testing it and living with it. I dictate almost everything I write with it.
+
+I know what a lot of people think of AI-written apps, and plenty of the time they've earned it. Thing is, I don't want TuxTalk to be one of those. Keeping the code clean matters to me as much as the app working. That means nothing left lying around that isn't used, no two pieces of code doing the same job, comments that explain why something is there, and a [written checklist](CLAUDE.md#code-a-human-reviewer-would-respect--every-change) every change has to meet before it goes in. The goal is that an experienced developer can open any file and think it's well put together, not just that it happens to work.
+
+And it's not only my word. Over 3,400 automated tests run on every change. Before a release it gets tested on Ubuntu, Mint and Fedora Silverblue in virtual machines, plus Nobara, which I use it on every day. The hotkey helper had a security review from another developer, who then contributed a feature of his own. If you read the code and something looks off, open an issue. I'd rather hear it.
 
 ---
 
