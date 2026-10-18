@@ -69,6 +69,7 @@ def _no_real_send_countdown(monkeypatch, request):
     if request.module.__name__.rpartition(".")[2] != "test_window_messages":
         monkeypatch.setattr(screen_message, "show_over_active_window", lambda *a, **k: None)
         monkeypatch.setattr(screen_message, "hide", lambda *a, **k: None)
+        monkeypatch.setattr(screen_message, "relabel", lambda *a, **k: None)
     monkeypatch.setattr(app, "_press_enter_delay", 0.0)
     monkeypatch.setattr(app.state, "pending_send", None)
     monkeypatch.setattr(app.state, "held_send", False)

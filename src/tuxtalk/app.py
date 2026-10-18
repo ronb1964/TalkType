@@ -1919,17 +1919,39 @@ def _send_automatically(why: str, space: str = "", injection_mode: str = "type")
     pending = {"window": state.last_inserted_window, "why": why,
                "space": space, "mode": injection_mode}
     pending["timer"] = threading.Timer(delay, _send_when_due, args=(pending,))
-    pending["timer"].daemon = True
+    # The label counts down once a second: "Sending in 4 s", 3, 2, 1.
+    pending["ticks"] = [threading.Timer(delay - left, _count_down, args=(pending, left))
+                        for left in range(int(delay) - 1, 0, -1)]
+    for timer in [pending["timer"], *pending["ticks"]]:
+        timer.daemon = True
     with _send_lock:
         if state.pending_send is not None:
-            state.pending_send["timer"].cancel()
+            _cancel_timers(state.pending_send)
         state.pending_send = pending
-    pending["timer"].start()
+    for timer in [pending["timer"], *pending["ticks"]]:
+        timer.start()
     logger.info(f"Sending in {delay:g}s ({why})")
     from . import screen_message
     screen_message.show_over_active_window(
-        f"Sending in {delay:g} s. Tap {_hold_key_name} to hold it.",
-        seconds=delay, warning=False, tag=SEND_LABEL_TAG, low=True)
+        _send_label(delay), seconds=delay, warning=False, tag=SEND_LABEL_TAG, low=True)
+
+
+def _send_label(seconds_left: float) -> str:
+    return f"Sending in {seconds_left:g} s. Tap {_hold_key_name} to hold it."
+
+
+def _count_down(pending: dict, seconds_left: int) -> None:
+    """One second less on the "Sending in" label, unless that send is over."""
+    with _send_lock:
+        if state.pending_send is not pending:
+            return
+    from . import screen_message
+    screen_message.relabel(SEND_LABEL_TAG, _send_label(seconds_left))
+
+
+def _cancel_timers(pending: dict) -> None:
+    for timer in [pending["timer"], *pending.get("ticks", ())]:
+        timer.cancel()
 
 
 def _send_when_due(pending: dict) -> None:
@@ -1956,7 +1978,7 @@ def _hold_pending_send(announce: bool) -> bool:
         pending, state.pending_send = state.pending_send, None
     if pending is None:
         return False
-    pending["timer"].cancel()
+    _cancel_timers(pending)
     logger.info("Held the send: the dictation stays unsent")
     _type_space_left_off(pending)
     from . import screen_message

@@ -205,8 +205,8 @@ def test_a_send_waits_and_says_how_to_hold_it(countdown, monkeypatch):
     app._send_automatically("test")
     assert pressed == []
     assert labels == ["Sending in 2 s. Tap F8 to hold it."]
-    assert FakeTimer.made[0].delay == 2.0
-    FakeTimer.made[0].fire()
+    assert sends()[0].delay == 2.0
+    sends()[0].fire()
     assert pressed == ["test"]
     assert app.state.pending_send is None
 
@@ -222,7 +222,7 @@ def test_a_tap_of_the_toggle_key_holds_the_send(countdown):
     pressed, labels = countdown
     app._send_automatically("test")
     assert app._hold_pending_send(announce=True) is True
-    FakeTimer.made[0].fire()
+    sends()[0].fire()
     assert pressed == []
     assert labels[-1] == app.HELD_SEND_NOTICE
 
@@ -236,7 +236,7 @@ def test_no_enter_into_another_window(countdown, monkeypatch):
     pressed, _ = countdown
     app._send_automatically("test")
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "konsole")
-    FakeTimer.made[0].fire()
+    sends()[0].fire()
     assert pressed == []
 
 
@@ -252,7 +252,7 @@ def test_pressing_the_hold_key_holds_the_send_and_records(countdown, monkeypatch
     try:
         assert app.start_recording(False, False, 0) is True
         assert app.state.held_send is True
-        FakeTimer.made[0].fire()
+        sends()[0].fire()
         assert pressed == []
     finally:
         app.state.is_recording = False
@@ -272,13 +272,50 @@ def test_a_tap_too_short_to_dictate_says_not_sent(countdown, monkeypatch):
     assert labels == [app.HELD_SEND_NOTICE]
 
 
+def sends():
+    """The timers that press Enter, not the countdown's ticks."""
+    return [t for t in FakeTimer.made if t.fn is app._send_when_due]
+
+
 def test_a_new_send_replaces_one_still_counting(countdown):
     pressed, _ = countdown
     app._send_automatically("first")
     app._send_automatically("second")
-    assert FakeTimer.made[0].cancelled
-    FakeTimer.made[1].fire()
+    assert sends()[0].cancelled
+    sends()[1].fire()
     assert pressed == ["second"]
+
+
+def test_the_label_counts_down_each_second(countdown, monkeypatch):
+    """Ron, 2026-10-18: "Sending in 4 s", then 3, 2, 1."""
+    _, labels = countdown
+    from tuxtalk import screen_message
+    relabels = []
+    monkeypatch.setattr(screen_message, "relabel", lambda tag, text: relabels.append(text))
+    monkeypatch.setattr(app, "_press_enter_delay", 4.0)
+    monkeypatch.setattr(app, "_hold_key_name", "F8")
+    app._send_automatically("test")
+    ticks = [t for t in FakeTimer.made if t.fn is app._count_down]
+    assert [t.delay for t in ticks] == [1.0, 2.0, 3.0]
+    for tick in ticks:
+        tick.fire()
+    assert labels == ["Sending in 4 s. Tap F8 to hold it."]
+    assert relabels == ["Sending in 3 s. Tap F8 to hold it.",
+                        "Sending in 2 s. Tap F8 to hold it.",
+                        "Sending in 1 s. Tap F8 to hold it."]
+
+
+def test_a_held_send_stops_counting(countdown, monkeypatch):
+    from tuxtalk import screen_message
+    relabels = []
+    monkeypatch.setattr(screen_message, "relabel", lambda tag, text: relabels.append(text))
+    monkeypatch.setattr(app, "_press_enter_delay", 3.0)
+    app._send_automatically("test")
+    app._hold_pending_send(announce=True)
+    assert all(t.cancelled for t in FakeTimer.made)
+    for tick in [t for t in FakeTimer.made if t.fn is app._count_down]:
+        tick.fn(*tick.args)          # even a tick already on its way
+    assert relabels == []
 
 
 def test_saying_press_enter_never_waits(monkeypatch):
@@ -312,7 +349,7 @@ def test_a_held_send_types_the_space_it_left_off(countdown, monkeypatch):
 def test_a_sent_message_never_gets_the_space(countdown):
     pressed, _ = countdown
     app._send_automatically("test", " ", "type")
-    FakeTimer.made[0].fire()
+    sends()[0].fire()
     assert pressed == ["test"] and TYPED == []
 
 

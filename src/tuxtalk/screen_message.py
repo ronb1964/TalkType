@@ -21,6 +21,7 @@ MIN_SECONDS, MAX_SECONDS, SECONDS_PER_WORD = 4.0, 8.0, 0.4
 _PAD_X, _PAD_Y = 18, 10
 _current = None          # the label on screen, replaced by the next one
 _current_tag = None      # what the caller called it, so hide() takes only its own
+_current_relabel = None  # changes the text of the label on screen (relabel)
 
 
 # low=True puts the label this far above the window's bottom edge: over the
@@ -88,10 +89,26 @@ def hide(tag):
 
 
 def _hide_now(tag):
-    global _current, _current_tag
+    global _current, _current_tag, _current_relabel
     if _current is not None and _current_tag == tag:
         _current.destroy()
-        _current = _current_tag = None
+        _current = _current_tag = _current_relabel = None
+    return False
+
+
+def relabel(tag, text):
+    """Change the text of the label shown with *tag*, in place: a countdown
+    ticking on one label instead of a new label each second."""
+    try:
+        from gi.repository import GLib
+        GLib.idle_add(_relabel_now, tag, text)
+    except Exception as e:
+        logger.debug(f"Could not change the message: {e}")
+
+
+def _relabel_now(tag, text):
+    if _current_relabel is not None and _current_tag == tag:
+        _current_relabel(text)
     return False
 
 
@@ -113,7 +130,7 @@ def _show_over_window_now(text, report, seconds=None, warning=True, tag=None, lo
 def _show_now(text, center, seconds=None, warning=True, tag=None):
     """Build the label and show it for *seconds* (None: reading_seconds());
     GTK thread only."""
-    global _current, _current_tag
+    global _current, _current_tag, _current_relabel
     try:
         import gi
         gi.require_version("Gtk", "3.0")
@@ -140,7 +157,10 @@ def _show_now(text, center, seconds=None, warning=True, tag=None):
 
         layout = win.create_pango_layout("")
         sign = "⚠  " if warning else ""
-        layout.set_markup(f'<span size="large">{sign}{GLib.markup_escape_text(text)}</span>', -1)
+
+        def set_text(words):
+            layout.set_markup(f'<span size="large">{sign}{GLib.markup_escape_text(words)}</span>', -1)
+        set_text(text)
         text_w, text_h = layout.get_pixel_size()
         width, height = text_w + 2 * _PAD_X, text_h + 2 * _PAD_Y
         win.set_default_size(width, height)
@@ -172,15 +192,20 @@ def _show_now(text, center, seconds=None, warning=True, tag=None):
         win.connect("draw", draw)
         # Clicks go through to whatever is underneath.
         win.connect("realize", lambda w: w.input_shape_combine_region(cairo.Region()))
+        def relabel_this(words):
+            # Same size label: a countdown's text keeps its length.
+            set_text(words)
+            win.queue_draw()
+
         if _current is not None:
             _current.destroy()
-        _current, _current_tag = win, tag
+        _current, _current_tag, _current_relabel = win, tag, relabel_this
         win.show_all()
 
         def done():
-            global _current, _current_tag
+            global _current, _current_tag, _current_relabel
             if _current is win:
-                _current = _current_tag = None
+                _current = _current_tag = _current_relabel = None
             win.destroy()
             return False
         shown_for = reading_seconds(text) if seconds is None else seconds
