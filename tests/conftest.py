@@ -66,6 +66,20 @@ def _no_followed_default_mic(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_real_send_countdown(monkeypatch, request):
+    """No floating label on the user's screen and no Enter left counting down
+    between tests. Sends happen at once unless a test sets a wait itself.
+    test_window_messages tests the label itself, with its own fakes."""
+    from tuxtalk import app, screen_message
+    if request.module.__name__.rpartition(".")[2] != "test_window_messages":
+        monkeypatch.setattr(screen_message, "show_over_active_window", lambda *a, **k: None)
+        monkeypatch.setattr(screen_message, "hide", lambda *a, **k: None)
+    monkeypatch.setattr(app, "_press_enter_delay", 0.0)
+    monkeypatch.setattr(app.state, "pending_send", None)
+    monkeypatch.setattr(app.state, "held_send", False)
+
+
+@pytest.fixture(autouse=True)
 def _no_real_explanation_windows(monkeypatch, tmp_path):
     """Never open an explanation window on the user's desktop, and never read
     or write their "don't explain again" choices. Tests that want the window

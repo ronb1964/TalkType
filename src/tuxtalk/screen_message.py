@@ -20,6 +20,7 @@ logger = setup_logger(__name__)
 MIN_SECONDS, MAX_SECONDS, SECONDS_PER_WORD = 4.0, 8.0, 0.4
 _PAD_X, _PAD_Y = 18, 10
 _current = None          # the label on screen, replaced by the next one
+_current_tag = None      # what the caller called it, so hide() takes only its own
 
 
 def reading_seconds(text):
@@ -48,19 +49,39 @@ def show(text, center=None):
         logger.debug(f"Could not show the message: {e}")
 
 
-def show_over_active_window(text):
-    """Show *text* over the middle of the active window. Safe from any thread:
-    the lookups that need no GDK run here, the GDK ones on the GTK thread,
-    since GDK may only be used from the thread that runs Gtk.main()."""
+def show_over_active_window(text, seconds=None, warning=True, tag=None):
+    """Show *text* over the middle of the active window, for *seconds* (None:
+    reading_seconds). *warning* False drops the warning sign and the amber
+    edge, for news rather than a problem. Safe from any thread: the lookups
+    that need no GDK run here, the GDK ones on the GTK thread, since GDK may
+    only be used from the thread that runs Gtk.main()."""
     try:
         from gi.repository import GLib
         from . import window_geometry
-        GLib.idle_add(_show_over_window_now, text, window_geometry.active_window_report())
+        GLib.idle_add(_show_over_window_now, text, window_geometry.active_window_report(),
+                      seconds, warning, tag)
     except Exception as e:
         logger.debug(f"Could not show the message: {e}")
 
 
-def _show_over_window_now(text, report):
+def hide(tag):
+    """Take down the label shown with *tag*, if it is still the one on screen."""
+    try:
+        from gi.repository import GLib
+        GLib.idle_add(_hide_now, tag)
+    except Exception as e:
+        logger.debug(f"Could not hide the message: {e}")
+
+
+def _hide_now(tag):
+    global _current, _current_tag
+    if _current is not None and _current_tag == tag:
+        _current.destroy()
+        _current = _current_tag = None
+    return False
+
+
+def _show_over_window_now(text, report, seconds=None, warning=True, tag=None):
     """GTK-thread half of show_over_active_window."""
     try:
         from . import window_geometry
@@ -68,12 +89,13 @@ def _show_over_window_now(text, report):
     except Exception as e:
         logger.debug(f"Could not find the active window: {e}")
         center = None
-    return _show_now(text, center)
+    return _show_now(text, center, seconds, warning, tag)
 
 
-def _show_now(text, center):
-    """Build the label and show it for reading_seconds(); GTK thread only."""
-    global _current
+def _show_now(text, center, seconds=None, warning=True, tag=None):
+    """Build the label and show it for *seconds* (None: reading_seconds());
+    GTK thread only."""
+    global _current, _current_tag
     try:
         import gi
         gi.require_version("Gtk", "3.0")
@@ -99,7 +121,8 @@ def _show_now(text, center):
         win.set_keep_above(True)
 
         layout = win.create_pango_layout("")
-        layout.set_markup(f'<span size="large">⚠  {GLib.markup_escape_text(text)}</span>', -1)
+        sign = "⚠  " if warning else ""
+        layout.set_markup(f'<span size="large">{sign}{GLib.markup_escape_text(text)}</span>', -1)
         text_w, text_h = layout.get_pixel_size()
         width, height = text_w + 2 * _PAD_X, text_h + 2 * _PAD_Y
         win.set_default_size(width, height)
@@ -117,7 +140,10 @@ def _show_now(text, center):
             cr.close_path()
             cr.set_source_rgba(0.12, 0.12, 0.13, 0.94)
             cr.fill_preserve()
-            cr.set_source_rgba(0.94, 0.62, 0.15, 1.0)     # amber edge: a warning
+            if warning:
+                cr.set_source_rgba(0.94, 0.62, 0.15, 1.0)     # amber edge: a warning
+            else:
+                cr.set_source_rgba(0.45, 0.62, 0.90, 1.0)     # blue edge: news
             cr.set_line_width(1.5)
             cr.stroke()
             cr.move_to(_PAD_X, _PAD_Y)
@@ -130,16 +156,17 @@ def _show_now(text, center):
         win.connect("realize", lambda w: w.input_shape_combine_region(cairo.Region()))
         if _current is not None:
             _current.destroy()
-        _current = win
+        _current, _current_tag = win, tag
         win.show_all()
 
         def done():
-            global _current
+            global _current, _current_tag
             if _current is win:
-                _current = None
+                _current = _current_tag = None
             win.destroy()
             return False
-        GLib.timeout_add(int(reading_seconds(text) * 1000), done)
+        shown_for = reading_seconds(text) if seconds is None else seconds
+        GLib.timeout_add(int(shown_for * 1000), done)
     except Exception as e:
         logger.warning(f"Could not show the message on screen: {e}")
     return False

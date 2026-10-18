@@ -10,7 +10,7 @@ Only the very end of a dictation counts, so "press enter to continue" in the
 middle of a sentence is typed as words. Saying "literal press enter" types
 the words too.
 
-"Send each dictation right away" presses Enter without being asked, so it
+"Send each dictation automatically" presses Enter without being asked, so it
 holds back when the dictation was plainly cut off ("... and I think and"):
 sending half a sentence can't be taken back (ends_unfinished).
 """

@@ -1985,6 +1985,49 @@ class PreferencesWindow:
         box.pack_start(choices, False, False, 0)
         return box
 
+    def _send_automatically_option(self):
+        """The "Send each dictation automatically" tickbox with its wait
+        beneath it, greyed while the tickbox is off (app._send_automatically).
+        Saying "press enter" at the end sends one dictation at once."""
+        check = Gtk.CheckButton(label="Send each dictation automatically (press Enter)")
+        check.set_active(bool(self.config.get("press_enter_after", False)))
+        key = self.config.get("hotkey") or "the hotkey"
+        check.set_tooltip_text(
+            "After each dictation TuxTalk presses Enter for you: a chat message is sent,\n"
+            "a terminal command runs. Handy for chat and AI prompts, risky in documents.\n\n"
+            f"During the wait, tap {key} to hold the send: the text stays in the box, so you\n"
+            f"can fix it or add a screenshot, then press Enter yourself. Hold {key} instead\n"
+            "to keep talking; that message is sent when you're done.\n\n"
+            "If what you said ends on a word like \u201cand\u201d or \u201cthe\u201d, it was probably\n"
+            "cut off, so it isn't sent.\n\n"
+            "With this off, end any dictation with \u201cpress enter\u201d to send just that one.")
+
+        waits = Gtk.ComboBoxText()
+        for seconds, label in (("0", "Right away"), ("1", "After 1 second"),
+                               ("2", "After 2 seconds"), ("3", "After 3 seconds")):
+            waits.append(seconds, label)
+        current = int(round(float(self.config.get("press_enter_delay", 2.0))))
+        waits.set_active_id(str(min(3, max(0, current))))
+        waits.connect("changed", lambda c: self.update_config(
+            "press_enter_delay", float(c.get_active_id())) if c.get_active_id() else None)
+        waits.connect("scroll-event", lambda *a: True)  # no accidental scroll changes
+
+        choice = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        choice.set_margin_start(28)   # under the tickbox's label, not its box
+        choice.pack_start(Gtk.Label(label="Send:", xalign=0), False, False, 0)
+        choice.pack_start(waits, False, False, 0)
+        choice.set_sensitive(check.get_active())
+
+        def toggled(button):
+            self.update_config("press_enter_after", button.get_active())
+            choice.set_sensitive(button.get_active())
+
+        check.connect("toggled", toggled)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        box.pack_start(check, False, False, 0)
+        box.pack_start(choice, False, False, 0)
+        return box
+
     def _section_header(self, grid, row, title):
         """A divider line and a bold section title across the grid; returns the
         next free row."""
@@ -2061,19 +2104,7 @@ class PreferencesWindow:
         grid.attach(plain_check, 0, row, 2, 1)
         row += 1
 
-        # A real Enter after each dictation (app._press_enter_key). Saying
-        # "press enter" at the end does the same for one dictation.
-        enter_check = Gtk.CheckButton(label="Send each dictation right away (press Enter)")
-        enter_check.set_active(bool(self.config.get("press_enter_after", False)))
-        enter_check.connect("toggled", lambda x: self.update_config("press_enter_after", x.get_active()))
-        enter_check.set_tooltip_text(
-            "As soon as a dictation is typed, TuxTalk presses Enter: a chat message is\n"
-            "sent, a terminal command runs. There's no moment to fix a mistake first, so\n"
-            "it suits chat and AI prompts and is risky in documents.\n\n"
-            "If what you said ends on a word like \u201cand\u201d or \u201cthe\u201d, it was probably\n"
-            "cut off, so TuxTalk types it but waits for you to finish.\n\n"
-            "With this off, end any dictation with \u201cpress enter\u201d to send just that one.")
-        grid.attach(enter_check, 0, row, 2, 1)
+        grid.attach(self._send_automatically_option(), 0, row, 2, 1)
         row += 1
         
         # Injection mode

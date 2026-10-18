@@ -748,3 +748,23 @@ def test_the_voice_commands_combo_mid_hold_keeps_the_recordings_grab(key_env, mo
 
     assert app.state.is_recording
     assert kb.is_grabbed, "the hold recording lost its keyboard grab"
+
+
+def test_a_toggle_tap_during_a_send_countdown_only_holds_it(key_env, monkeypatch):
+    """Tap F9 while "Send each dictation automatically" counts down: the send
+    is held and no recording starts (Ron, 2026-10-18)."""
+    started, _ = key_env
+    held = []
+    monkeypatch.setattr(app, "_hold_pending_send", lambda announce: held.append(announce) or True)
+    app._handle_key_event(FakeEvent(TOGGLE, 1), "hold", HOLD, TOGGLE,
+                          None, set(), [keyboard()], FakeConfig(), 0)
+    assert held == [True]
+    assert started == []
+
+
+def test_a_toggle_tap_with_nothing_counting_down_starts_recording(key_env, monkeypatch):
+    started, _ = key_env
+    monkeypatch.setattr(app, "_hold_pending_send", lambda announce: False)
+    app._handle_key_event(FakeEvent(TOGGLE, 1), "hold", HOLD, TOGGLE,
+                          None, set(), [keyboard()], FakeConfig(), 0)
+    assert len(started) == 1

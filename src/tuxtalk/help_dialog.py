@@ -618,7 +618,7 @@ to pop up a compact cheat sheet anytime. Also available from the tray menu.
 • Say <b>new paragraph</b> or <b>paragraph break</b> for a double line break
 • Say <b>tab</b> for a tab character (indent)
 • Say <b>soft break</b> or <b>soft line</b> for three spaces
-• End with <b>press enter</b> or <b>hit enter</b> to type the dictation and then press Enter, which sends a chat message or runs a terminal command. A line break (<b>new line</b>) never sends anything. Say <b>literal press enter</b> to type the words
+• End with <b>press enter</b> or <b>hit enter</b> to type the dictation and then press Enter, which sends a chat message or runs a terminal command. A line break (<b>new line</b>) never sends anything. Say <b>literal press enter</b> to type the words. To send every dictation, tick <b>Send each dictation automatically</b> in Preferences → Advanced. It waits a moment first: tap your hotkey to hold the send (to fix it or add a screenshot), or hold the key to keep talking
 
 <b>Literal Words:</b>
 To output the word instead of executing the command, say <b>literal</b> or <b>the word</b> before it:

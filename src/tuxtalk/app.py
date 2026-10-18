@@ -115,6 +115,8 @@ _adapt_to_app = True
 # Press Enter after every dictation, as if each ended with "press enter"
 # (enter_command.py).
 _press_enter_after = False
+_press_enter_delay = 2.0    # ...after this many seconds (_send_automatically)
+_hold_key_name = "F8"       # named in the "Sending in 2 s" label
 # The languages auto-detect may pick from, () for any (language_limit.py).
 _auto_languages = ()
 _ai_engine = None
@@ -140,7 +142,7 @@ def _apply_cleanup_settings(cfg):
     stop the AI engine."""
     global _remove_fillers, _ai_engine, _auto_stop_seconds, _ai_corrections, _voice_editing, _swiss_spelling
     global _numbers_mode, _numbers_language, _voice_navigation, _adapt_to_app, _auto_languages
-    global _press_enter_after
+    global _press_enter_after, _press_enter_delay, _hold_key_name
     global _chunk_pause_seconds, _chunk_cfg, _chunk_speech_db, _chunk_context_marks
     _auto_stop_seconds = (float(getattr(cfg, "auto_stop_seconds", 2.0))
                           if getattr(cfg, "auto_stop_silence", False) else 0.0)
@@ -162,6 +164,8 @@ def _apply_cleanup_settings(cfg):
     _voice_navigation = bool(getattr(cfg, "voice_navigation", False))
     _adapt_to_app = bool(getattr(cfg, "adapt_to_app", True))
     _press_enter_after = bool(getattr(cfg, "press_enter_after", False))
+    _press_enter_delay = float(getattr(cfg, "press_enter_delay", 2.0))
+    _hold_key_name = getattr(cfg, "hotkey", "") or "the hotkey"
     from . import language_limit
     _auto_languages = language_limit.parse(getattr(cfg, "auto_languages", ""))
     if getattr(cfg, "numbers_as_digits", False):
@@ -309,6 +313,13 @@ class RecordingState:
     # question goes on, so this phrase ends with it, not a period
     # (_carry_question). Belongs to its recording only.
     question_open: bool = False
+    # "Send each dictation automatically" is counting down to its Enter:
+    # {"timer", "window", "why"} until it presses it or a tap of a hotkey
+    # holds it (_send_automatically), else None. Guarded by _send_lock.
+    pending_send: object = None
+    # This recording's press held a pending send, so a tap that's too short
+    # to be a dictation says "Not sent" rather than "Cancelled".
+    held_send: bool = False
     # A phrase of this recording has been typed, so a correction said after the
     # next pause ("no wait, four") may change it (app._correct_across_pause).
     chunk_typed: bool = False
@@ -1665,6 +1676,9 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
     keyboard is grabbed just before this is called, so without that release a
     microphone error would leave the user unable to type anywhere at all.
     """
+    # Pressing a hotkey while a send counts down holds it: a tap leaves the
+    # text unsent, a hold dictates more onto it.
+    state.held_send = _hold_pending_send(announce=False)
     state.frames = []
     state.was_cancelled = False
     state.silence = None
@@ -1857,6 +1871,72 @@ def _press_enter_key(why: str) -> bool:
     else:
         logger.warning(f"Couldn't press Enter ({why})")
     return ok
+
+
+_send_lock = threading.Lock()
+SEND_LABEL_TAG = "send-countdown"
+HELD_SEND_NOTICE = "Not sent. Press Enter when you're ready."
+
+
+def _send_automatically(why: str) -> None:
+    """Enter for "Send each dictation automatically", after its wait.
+
+    Sending can't be taken back, so the wait gives a moment to stop it: a tap
+    of the hold key (or the toggle key) holds the send and the text stays in
+    the box, to fix or add a screenshot to first; holding the key dictates
+    more onto it (_hold_pending_send). Asked for by Ron, 2026-10-18."""
+    delay = _press_enter_delay
+    if delay <= 0:
+        _press_enter_key(why)
+        return
+    pending = {"window": state.last_inserted_window, "why": why}
+    pending["timer"] = threading.Timer(delay, _send_when_due, args=(pending,))
+    pending["timer"].daemon = True
+    with _send_lock:
+        if state.pending_send is not None:
+            state.pending_send["timer"].cancel()
+        state.pending_send = pending
+    pending["timer"].start()
+    logger.info(f"Sending in {delay:g}s ({why})")
+    from . import screen_message
+    screen_message.show_over_active_window(
+        f"Sending in {delay:g} s. Tap {_hold_key_name} to hold it.",
+        seconds=delay, warning=False, tag=SEND_LABEL_TAG)
+
+
+def _send_when_due(pending: dict) -> None:
+    """The wait is over and nothing held it: press Enter, but only in the
+    window the text went to. Enter in whatever the user switched to could
+    send something else entirely."""
+    with _send_lock:
+        if state.pending_send is not pending:
+            return
+        state.pending_send = None
+    focused = _query_focused_window_class()
+    if (focused is not None and pending["window"] is not None
+            and focused != pending["window"]):
+        logger.info("Not sent: another window has the focus now")
+        return
+    _press_enter_key(pending["why"])
+
+
+def _hold_pending_send(announce: bool) -> bool:
+    """Stop a counting-down send; True when there was one. *announce* says
+    "Not sent" on screen at once (a tap of the toggle key); a press of the
+    hold key waits to see whether it's a tap or more dictation."""
+    with _send_lock:
+        pending, state.pending_send = state.pending_send, None
+    if pending is None:
+        return False
+    pending["timer"].cancel()
+    logger.info("Held the send: the dictation stays unsent")
+    from . import screen_message
+    if announce:
+        screen_message.show_over_active_window(HELD_SEND_NOTICE, warning=False,
+                                               tag=SEND_LABEL_TAG)
+    else:
+        screen_message.hide(SEND_LABEL_TAG)
+    return True
 
 
 def _send_shift_enter():
@@ -3168,7 +3248,13 @@ def _finish_capture(beeps_on: bool, notify_on: bool):
         return None
     held_ms = int((time.time() - (state.press_t0 or time.time())) * 1000)
     if held_ms < MIN_HOLD_MS:
-        cancel_recording(beeps_on, notify_on, f"Cancelled (held {held_ms} ms)")
+        if state.held_send:
+            cancel_recording(beeps_on, notify_on, HELD_SEND_NOTICE)
+            from . import screen_message
+            screen_message.show_over_active_window(HELD_SEND_NOTICE, warning=False,
+                                                   tag=SEND_LABEL_TAG)
+        else:
+            cancel_recording(beeps_on, notify_on, f"Cancelled (held {held_ms} ms)")
         return None
     with _chunk_lock:
         # No more cuts: from here on the audio is the last chunk.
@@ -3541,9 +3627,9 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                 _inject_text(cue + (" " if auto_space else ""), injection_mode, time.time())
             if _press_enter_after and state.chunk_typed:
                 # The recording ended in a pause; its phrases are typed, so
-                # "Send each dictation right away" sends them now.
+                # "Send each dictation automatically" sends them now.
                 _flush_boundary(auto_period, False, injection_mode)
-                _press_enter_key("Send each dictation right away is on")
+                _send_automatically("Send each dictation automatically is on")
                 _chunk_message_sent()
             else:
                 _flush_boundary(auto_period, auto_space, injection_mode)
@@ -3632,10 +3718,10 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
 
         # "... press enter": type the words, then a real Enter that sends the
         # message or runs the command (enter_command.py). Or every time, when
-        # "Send each dictation right away" is on.
+        # "Send each dictation automatically" is on.
         from .enter_command import split_press_enter, ends_unfinished
         raw, said_enter = split_press_enter(raw)
-        # "Send each dictation right away" waits for the end of the
+        # "Send each dictation automatically" waits for the end of the
         # recording, not each phrase of Type at pause.
         press_enter = said_enter or (_press_enter_after and chunk_role != "middle")
         if press_enter and not said_enter:
@@ -3710,8 +3796,10 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
             if outcome in _UNDELIVERED_NOTICES:
                 _report_undelivered(outcome, beeps_on)
             elif press_enter:
-                _press_enter_key("said \"press enter\"" if said_enter
-                                 else "Send each dictation right away is on")
+                if said_enter:
+                    _press_enter_key("said \"press enter\"")
+                else:
+                    _send_automatically("Send each dictation automatically is on")
                 if chunk_role is not None:
                     _chunk_message_sent()
             if chunk_role == "middle" and not _chunk_context_marks and outcome == "ok" \
@@ -4417,6 +4505,8 @@ def _handle_key_event(event, mode, hold_key, toggle_key,
     # --- Tap-to-toggle: press once to start, press again to stop ---
     if toggle_key and event.code == toggle_key and event.value == 1:
         shift = _held_shift(held_modifiers) if _voice_editing else set()
+        if not state.is_recording and not shift and _hold_pending_send(announce=True):
+            return   # the tap only held the send: no recording
         if not state.is_recording:
             if shift:
                 # An edit: no double-tap hands-free, so not "from_toggle".

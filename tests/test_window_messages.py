@@ -178,7 +178,7 @@ def test_gdk_is_only_used_on_the_gtk_thread(sources, monkeypatch):
     monkeypatch.setattr(wg, "screen_monitors",
                         lambda: gdk_calls.append("monitors") or [("DP-6", Rect(0, 0, 3440, 1440))])
     monkeypatch.setattr(GLib, "idle_add", lambda fn, *args: queued.append((fn, args)))
-    monkeypatch.setattr(screen_message, "_show_now", lambda text, center: shown.append((text, center)))
+    monkeypatch.setattr(screen_message, "_show_now", lambda text, center, *opts: shown.append((text, center)))
     screen_message.show_over_active_window("Select some text first")
     assert gdk_calls == [] and len(queued) == 1        # nothing from GDK yet
     fn, args = queued[0]
@@ -193,7 +193,7 @@ def test_on_x11_the_window_manager_is_asked_on_the_gtk_thread(sources, monkeypat
     queued, shown = [], []
     monkeypatch.setattr(wg, "_x11_active_rect", lambda: Rect(10, 10, 100, 100))
     monkeypatch.setattr(GLib, "idle_add", lambda fn, *args: queued.append((fn, args)))
-    monkeypatch.setattr(screen_message, "_show_now", lambda text, center: shown.append(center))
+    monkeypatch.setattr(screen_message, "_show_now", lambda text, center, *opts: shown.append(center))
     screen_message.show_over_active_window("x")
     assert queued[0][1][1] is None                      # no answer without GDK
     queued[0][0](*queued[0][1])
