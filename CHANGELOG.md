@@ -65,6 +65,9 @@ before 0.15.0, so older entries use that name.
   typed "a?". With "a" or "the" in front, the words stay words.
 - Fixed: in Type at pause, a question you paused in the middle of ended with
   a period.
+- Fixed: "F eight" sometimes came out as words. A capital letter and a
+  number now always go together, so you get F8, vitamin B12, row E9 and grid
+  squares like B5 A7, whatever Write numbers as digits is set to.
 - TuxTalk has its own website now, tuxtalk.app. The About window links to it,
   and so do software centers and the .deb and .rpm packages.
 

@@ -412,6 +412,33 @@ _RE_TIME_FORMAT = re.compile(
     re.IGNORECASE
 )
 
+# "F eight" -> "F8", "B five A seven" -> "B5 A7": a capital letter and a
+# number name one thing (a key, a grid square, a seat, vitamin B12), so the
+# number stays a digit whatever "Write numbers as digits" does with eight on
+# its own. Parakeet writes "F8" one time and "F eight" the next (Ron,
+# 2026-10-18). "A" and "I" are words too ("A five minute walk"), so they are
+# joined only beside another pair ("B five A seven"). A lowercase "f" counts
+# because Whisper writes "f eight".
+_LETTER_NUMBERS = {"zero": "0", "one": "1", "two": "2", "three": "3", "four": "4",
+                   "five": "5", "six": "6", "seven": "7", "eight": "8", "nine": "9",
+                   "ten": "10", "eleven": "11", "twelve": "12"}
+_NUM = r"((?i:" + "|".join(_LETTER_NUMBERS) + r")|\d{1,2})\b"
+_RE_LETTER_NUMBER = re.compile(r"(?<![\w'\u2019.-])([B-HJ-Zf])[ -]" + _NUM)
+_RE_A_I_AFTER_PAIR = re.compile(r"(\b[B-HJ-Z]\d{1,2})(\s+)([AI])[ -]" + _NUM)
+_RE_A_I_BEFORE_PAIR = re.compile(r"(?<![\w'\u2019.-])([AI])[ -]" + _NUM + r"(?=\s+[B-HJ-Z]\d)")
+
+
+def _letter_number(letter: str, number: str) -> str:
+    return letter.upper() + _LETTER_NUMBERS.get(number.lower(), number)
+
+
+def _join_letter_numbers(text: str) -> str:
+    text = _RE_LETTER_NUMBER.sub(lambda m: _letter_number(m.group(1), m.group(2)), text)
+    text = _RE_A_I_AFTER_PAIR.sub(
+        lambda m: m.group(1) + m.group(2) + _letter_number(m.group(3), m.group(4)), text)
+    return _RE_A_I_BEFORE_PAIR.sub(lambda m: _letter_number(m.group(1), m.group(2)), text)
+
+
 def _fix_time_ampm(m: re.Match) -> str:
     """Normalize a matched time string to HH:MM AM/PM or HH AM/PM format.
 
@@ -586,6 +613,7 @@ def normalize_text(text: str, auto_period: bool = True) -> str:
     # the "m." of "a. m." as a sentence end and capitalize the next word
     # ("meet at 9 a. m. tomorrow" → "9 AM Tomorrow").
     text = _RE_TIME_FORMAT.sub(_fix_time_ampm, text)
+    text = _join_letter_numbers(text)
 
     # --- 7) Ensure one space after sentence enders ---
     # (callable repl skips decimals like 3.5 and abbreviations like U.S.)

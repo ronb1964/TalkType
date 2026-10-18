@@ -805,3 +805,30 @@ def test_a_mark_talked_about_stays_words(said, typed):
 ])
 def test_a_dictated_mark_is_still_typed(said, typed):
     assert normalize_text(said) == typed
+
+
+# A capital letter and a number name one thing (a key, a grid square, a seat),
+# so the number is a digit whatever the numbers setting does (Ron, 2026-10-18).
+@pytest.mark.parametrize("said, typed", [
+    ("when I let go of F eight", "When I let go of F8."),
+    ("press F twelve", "Press F12."),
+    ("tap f one", "Tap F1."),                      # Whisper writes "f"
+    ("go to B five A seven", "Go to B5 A7."),      # A beside another pair
+    ("A seven B five", "A7 B5."),
+    ("vitamin B twelve", "Vitamin B12."),
+    ("I sat in row E nine", "I sat in row E9."),
+    ("I have F8 already", "I have F8 already."),
+])
+def test_a_letter_and_number_are_written_together(said, typed):
+    assert normalize_text(said) == typed
+
+
+@pytest.mark.parametrize("said, typed", [
+    ("A five minute walk", "A five minute walk."),    # A and I are words
+    ("I two think so", "I two think so."),
+    ("out of eight people", "Out of eight people."),  # "of" ends in f
+    ("if eight people come", "If eight people come."),
+    ("the grade was an F. Eight of us passed", "The grade was an F. Eight of us passed."),
+])
+def test_words_next_to_a_number_are_left_alone(said, typed):
+    assert normalize_text(said) == typed
