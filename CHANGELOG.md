@@ -3,6 +3,65 @@
 All notable changes to TuxTalk are documented here. It was called TalkType
 before 0.15.0, so older entries use that name.
 
+## [0.16.0] - 2026-10-18
+
+- New: TuxTalk no longer puts you in the `input` group. That group lets every
+  program you run read every key you press, passwords included, and it's how
+  TuxTalk, like a lot of Linux tools that read keys, heard its hotkey on
+  Wayland. Now a small system service, the hotkey helper, is the only thing
+  that reads the keyboard. It tells TuxTalk about F-keys, Esc and shortcuts
+  with Ctrl, Alt or Super, nothing else, and only for whoever's at the screen.
+  It also means no restart after setup. If you're already set up,
+  Preferences, Advanced, Typing Setup has Switch to Hotkey Helper: one
+  password, it takes you out of the group, and your hotkeys keep working. On
+  a system without systemd it still uses the group, and setup now says so and
+  why. It's been through three security reviews, with the attacks tried for
+  real on a test machine. Thanks to guelz for pushing on this and for the
+  third review (Discussion #12).
+- New in Labs: Type at pause, from guelz (PR #13). It types each phrase when
+  you pause instead of waiting until you're done. Put it together with
+  hands-free (double-tap F9) and you can say a message, watch it come in, say
+  "edit that, make it friendlier" if you want it changed, and say "press
+  enter" to send it, without touching the keyboard.
+- New: say "press enter" at the end of a dictation and TuxTalk types it and
+  then presses a real Enter, so a chat message goes out or a terminal command
+  runs. Saying only "press enter" just presses Enter. There's also a setting
+  to press Enter after every dictation (off).
+- New: with voice editing on (Labs), start a dictation with "edit that" right
+  after dictating something, like "edit that, make it shorter", and it
+  rewrites what you just said. No Shift needed. "Edit that file tonight" is
+  still typed as words.
+- New: Your Words now work with Parakeet too, on the processor and on the
+  graphics card, so names come out spelled your way more often. On the
+  graphics card this comes with a new engine (whisper.cpp 1.9.5), a one-time
+  22 MB download after you update.
+- New: a Words tab in Preferences, where Snippets used to be. Your Words is
+  the top list now, each name with what TuxTalk hears instead ("bamboo
+  studio" for BambuStudio), so the fixes you make with Fix a Word sit with
+  their word and not mixed in with your snippets. The first time you open it
+  your old word fixes move up there by themselves, and a copy of your old
+  list is kept.
+- New: Turn other sounds down while dictating (Preferences, Audio, off). It's
+  for what pausing can't reach, like a Discord call or a game. It only
+  changes what you hear, so a call still hears your microphone.
+- New: if the microphone sends nothing but silence (muted, unplugged, wrong
+  input), TuxTalk tells you instead of typing nothing.
+- New: on a desktop with no system tray, like plain GNOME without the
+  extension, opening TuxTalk from your apps shows its menu in a small window.
+- Changed: the timeout that turns dictation off after a few idle minutes is
+  in Preferences, General now, under Power Saving, and it says plainly that
+  F8 stops working until you turn dictation back on. It's on by default only
+  on laptops. When it does turn dictation off you get a notice, even with
+  notifications off.
+- Changed: the AppImage no longer carries NVIDIA's cuDNN (CTranslate2 4.8.3).
+  CUDA still downloads what it needs when you pick it.
+- Fixed: "delete last sentence" left the next dictation stuck to the period
+  before it.
+- Fixed: in Fix a Word some clicks didn't pick the word, and the highlight
+  took in the punctuation next to it.
+- TuxTalk has its own website now, tuxtalk.app. The About window links to it,
+  and so do software centers and the .deb and .rpm packages.
+
 ## [0.15.1] - 2026-10-15
 
 - New: `tuxtalk --toggle`, plus `--start` and `--stop`, for your own desktop

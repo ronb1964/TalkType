@@ -93,6 +93,7 @@ First run (since 0.14.2 it recommends one setup; CUDA is not offered here):
 - [ ] Your Words for Parakeet: with TuxTalk in Preferences → Words, on Parakeet say "I dictate everything with TuxTalk": log "Your Words for Parakeet on the graphics chip: N spellings" (Vulkan) or "Your Words for Parakeet: N spellings" (processor), and "Your Words: Parakeet wrote 'TuxTalk'" when it had to steer. Ordinary sentences ("tax talks went on", "the cat clawed the couch") come out unchanged
 - [ ] Silent microphone: mute the mic (or pick a dead input) and hold F8 for two seconds: cancel beep and "TuxTalk heard only silence from the microphone..." (always, even with notifications off). A quiet room with a working mic does not say this
 - [ ] Turn other sounds down: Preferences → Audio → "Turn other sounds down while dictating" (off). With a YouTube video or a Discord call playing, hold F8: the sound drops to a quarter and comes back after (log: "Turned 1 other sound(s) down", "Put 1 sound(s) back"). Change that app's volume during a dictation: it keeps your change
+- [ ] Turn other sounds down with a video already paused: pause a YouTube video in Brave, turn the setting on, hold F8, then play the video: its sound comes back at full volume (log: "Put 1 sound(s) back" or nothing turned down)
 - [ ] Welcome and You're All Set on a short screen: the scrollbar shows, the text fades at the bottom and "More below" sits above the button until the end
 
 Preferences and the rest:
