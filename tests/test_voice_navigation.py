@@ -58,11 +58,23 @@ def test_select_the_last_sentence():
 
 
 @pytest.mark.parametrize("said, n", [
-    ("select the last word", 6), ("select last word", 6),
-    ("select the last two words", 15), ("select the last 2 words", 15),
+    ("select the last word", 5), ("select last word", 5),
+    ("select the last two words", 14), ("select the last 2 words", 14),
 ])
 def test_select_the_last_words(said, n):
-    assert keys(said, "We finished early.") == [((S,), "LEFT")] * n
+    """The period after the last word is stepped over, not selected (Ron,
+    2026-10-18): the word is what gets replaced or fixed."""
+    assert keys(said, "We finished early.") == [((), "LEFT")] + [((S,), "LEFT")] * n
+
+
+def test_a_word_with_a_quote_and_question_mark_after_it():
+    assert keys("select the last word", 'Did she say \u201cyes?\u201d ') == \
+        [((), "LEFT")] * 3 + [((S,), "LEFT")] * 4
+
+
+def test_a_last_word_with_no_mark_is_selected_whole():
+    assert keys("select the last word", "We finished early ") == \
+        [((), "LEFT")] + [((S,), "LEFT")] * 5
 
 
 def test_what_i_said_needs_something_said():
@@ -155,7 +167,7 @@ def dictation(monkeypatch):
 def test_a_command_presses_its_keys_and_clears_undo(dictation):
     app = dictation["app"]
     assert app._handle_navigation("select the last word", False) is True
-    assert dictation["pressed"] == [[((S,), "LEFT")] * 6]
+    assert dictation["pressed"] == [[((), "LEFT")] + [((S,), "LEFT")] * 5]
     assert app.state.last_inserted_text == ""      # undo can't trust its count now
     assert dictation["beeps"] == 1 and dictation["problems"] == []
 
@@ -228,7 +240,7 @@ def test_the_same_window_is_trusted(dictation, monkeypatch):
     app = dictation["app"]
     monkeypatch.setattr(app.state, "last_inserted_window", "org.kde.kwrite")
     app._handle_navigation("select the last word", False)
-    assert dictation["pressed"] == [[((S,), "LEFT")] * 6]
+    assert dictation["pressed"] == [[((), "LEFT")] + [((S,), "LEFT")] * 5]
 
 
 def test_the_setting_is_off_by_default_and_live():

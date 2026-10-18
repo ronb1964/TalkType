@@ -178,6 +178,10 @@ def plan(command: Command, left=None, right: str = ""):
     return Plan(list(command.first) + list(command.keys) * command.count)
 
 
+# Marks that end a word in a sentence but aren't part of it.
+_WORD_END_MARKS = ".,;:!?\u2026\"'\u201d\u2019)]"
+
+
 def chords(command: Command, last_text: str):
     """The keys to press, in order, as [(modifiers, key)]; None when the
     command needs the last dictation and there is none."""
@@ -192,6 +196,14 @@ def chords(command: Command, last_text: str):
     # The cursor sits after the span: step over its trailing spaces without
     # selecting them, then select back over the words. Its leading space (auto-
     # space before a dictation) stays out of the selection.
-    trailing = len(span) - len(span.rstrip())
-    words = len(span.strip())
+    core = span.rstrip()
+    if command.said_unit == "word":
+        # A word without the sentence's mark after it: "select the last word"
+        # is for replacing or fixing the word, and the period stays (Ron,
+        # 2026-10-18). A sentence keeps its mark, it's part of the sentence.
+        core = core.rstrip(_WORD_END_MARKS)
+    trailing = len(span) - len(core)
+    words = len(core.strip())
+    if not words:
+        return None
     return [((), "LEFT")] * trailing + [((S,), "LEFT")] * words
