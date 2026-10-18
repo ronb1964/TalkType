@@ -832,3 +832,10 @@ def test_a_letter_and_number_are_written_together(said, typed):
 ])
 def test_words_next_to_a_number_are_left_alone(said, typed):
     assert normalize_text(said) == typed
+
+
+def test_a_carriage_return_talked_about_stays_words():
+    """Ron, 2026-10-18: "it inserted a carriage return" typed "Inserted a
+    carriage" and a line break."""
+    assert normalize_text("it inserted a carriage return") == "It inserted a carriage return."
+    assert normalize_text("thank you return") != "Thank you return."   # the command still works

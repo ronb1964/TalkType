@@ -1994,7 +1994,8 @@ class PreferencesWindow:
         key = self.config.get("hotkey") or "the hotkey"
         check.set_tooltip_text(
             "After each dictation TuxTalk presses Enter for you: a chat message is sent,\n"
-            "a terminal command runs. Handy for chat and AI prompts, risky in documents.\n\n"
+            "a terminal command runs. Not in text editors and word processors, where\n"
+            "Enter would only start a new line.\n\n"
             f"During the wait, tap {key} to hold the send: the text stays in the box, so you\n"
             f"can fix it or add a screenshot, then press Enter yourself. Hold {key} instead\n"
             "to keep talking; that message is sent when you're done. A sent dictation\n"

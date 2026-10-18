@@ -2270,6 +2270,28 @@ _CODE_EDITOR_CLASSES_LOWER = frozenset({
 })
 
 
+# Text editors, word processors and note apps, where Enter only starts a new
+# line: "Send each dictation automatically" leaves them alone, as it does code
+# editors (Ron, 2026-10-18: KWrite got a new line after every dictation).
+# Saying "press enter" still presses it.
+_DOCUMENT_CLASSES_LOWER = frozenset({
+    "org.kde.kwrite", "kwrite", "org.kde.kate", "kate",
+    "org.gnome.texteditor", "gnome-text-editor", "org.gnome.gedit", "gedit",
+    "org.xfce.mousepad", "mousepad", "xed", "pluma", "featherpad", "notepadqq",
+    "libreoffice-writer", "libreoffice-calc", "libreoffice-impress", "soffice",
+    "abiword", "org.kde.calligrawords", "calligrawords", "org.kde.ghostwriter",
+    "ghostwriter", "org.gnome.gitlab.somas.apostrophe", "obsidian", "joplin",
+    "typora", "marktext", "desktopeditors", "wps", "wpp", "et",
+})
+
+
+def is_document_window(wm_class: str | None) -> bool:
+    """Whether Enter in the focused window only starts a new line."""
+    if not wm_class:
+        return False
+    return wm_class.lower() in _DOCUMENT_CLASSES_LOWER or app_kind(wm_class) == "code"
+
+
 def app_kind(wm_class: str | None) -> str:
     """"terminal", "code" or "" for the focused window, for plain_for_app."""
     if not wm_class:
@@ -3763,7 +3785,8 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                 if auto_period and cue[-1] not in ".?!":
                     cue += "."
                 _inject_text(cue + (" " if auto_space else ""), injection_mode, time.time())
-            if _press_enter_after and state.chunk_typed:
+            if (_press_enter_after and state.chunk_typed
+                    and not is_document_window(_query_focused_window_class())):
                 # The recording ended in a pause; its phrases are typed, so
                 # "Send each dictation automatically" sends them now.
                 _flush_boundary(auto_period, False, injection_mode)
@@ -3864,6 +3887,9 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         # recording, not each phrase of Type at pause.
         press_enter = said_enter or (_press_enter_after and chunk_role != "middle")
         cut_off = ""
+        if press_enter and not said_enter and is_document_window(_query_focused_window_class()):
+            logger.info("Not sending: Enter only starts a new line in this app")
+            press_enter = False
         if press_enter and not said_enter:
             cut_off = ends_unfinished(raw)
             if cut_off:

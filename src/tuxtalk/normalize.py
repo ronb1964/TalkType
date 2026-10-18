@@ -78,7 +78,7 @@ _CONTEXT_PROTECT_PATTERNS = [
     (re.compile(
         r"\b(in|on|at|the|a|an|my|his|her|its|our|their|your|tax|safe|"
         r"swift|prompt|early|late|partial|full|complete|annual|monthly|"
-        r"yearly|first|second|third|grand|major|sudden|big|home|no|any|"
+        r"yearly|first|second|third|grand|major|sudden|big|home|no|any|carriage|"
         r"every|each|some|triumphant|long-awaited|"
         r"to|will|would|can|could|shall|should|may|might|must|never|not|"
         r"ll|just|please)\s+return\b",

@@ -29,7 +29,7 @@ def test_split_press_enter(raw, expected):
     assert split_press_enter(raw) == expected
 
 
-def _dictate(monkeypatch, raw, prepared=None, outcome="ok"):
+def _dictate(monkeypatch, raw, prepared=None, outcome="ok", window="brave-browser"):
     """Run one dictation through _transcribe_and_inject; what was typed and
     whether Enter was pressed, in order."""
     events = []
@@ -40,7 +40,7 @@ def _dictate(monkeypatch, raw, prepared=None, outcome="ok"):
     monkeypatch.setattr(app, "_handle_undo", lambda *a, **k: False)
     monkeypatch.setattr(app, "_handle_navigation", lambda *a, **k: False)
     monkeypatch.setattr(app, "_handle_fix_word", lambda *a, **k: False)
-    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "kwrite")
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: window)
     monkeypatch.setattr(app, "_report_undelivered", lambda *a, **k: events.append("not delivered"))
 
     def inject(text, mode, t0):
@@ -434,3 +434,28 @@ def test_switching_in_the_last_second_says_not_sent(countdown, monkeypatch):
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "konsole")
     sends()[0].fire()
     assert pressed == [] and labels[-1] == app.SWITCHED_WINDOW_NOTICE
+
+
+def test_no_automatic_send_in_a_text_editor(monkeypatch):
+    """Ron, 2026-10-18: in KWrite every dictation ended with a new line."""
+    monkeypatch.setattr(app, "_press_enter_after", True)
+    events = _dictate(monkeypatch, "Hello there", prepared=lambda r: r + ". ",
+                      window="org.kde.kwrite")
+    assert events == [("typed", "Hello there. ")]     # its space kept, no Enter
+
+
+def test_saying_press_enter_still_works_in_a_text_editor(monkeypatch):
+    monkeypatch.setattr(app, "_press_enter_after", True)
+    events = _dictate(monkeypatch, "See you at noon, press enter",
+                      prepared=lambda r: r + ". ", window="org.kde.kwrite")
+    assert events[-1] == ("enter", 'said "press enter"')
+
+
+@pytest.mark.parametrize("window, document", [
+    ("org.kde.kwrite", True), ("libreoffice-writer", True), ("obsidian", True),
+    ("code", True), ("Gedit", True),
+    ("brave-browser", False), ("com.anthropic.Claude", False),
+    ("org.kde.konsole", False), (None, False),
+])
+def test_which_windows_are_documents(window, document):
+    assert app.is_document_window(window) is document
