@@ -1940,13 +1940,34 @@ def _send_label(seconds_left: float) -> str:
     return f"Sending in {seconds_left:g} s. Tap {_hold_key_name} to hold it."
 
 
+SWITCHED_WINDOW_NOTICE = "Not sent: you switched windows."
+
+
 def _count_down(pending: dict, seconds_left: int) -> None:
-    """One second less on the "Sending in" label, unless that send is over."""
+    """One second less on the "Sending in" label, unless that send is over.
+    Switching windows ends it here, so the label doesn't count down to a send
+    that won't happen (Ron, 2026-10-18)."""
     with _send_lock:
         if state.pending_send is not pending:
             return
     from . import screen_message
+    if _focus_left(pending):
+        with _send_lock:
+            if state.pending_send is not pending:
+                return
+            state.pending_send = None
+        _cancel_timers(pending)
+        logger.info("Not sent: another window has the focus now")
+        screen_message.relabel(SEND_LABEL_TAG, SWITCHED_WINDOW_NOTICE)
+        return
     screen_message.relabel(SEND_LABEL_TAG, _send_label(seconds_left))
+
+
+def _focus_left(pending: dict) -> bool:
+    """Whether another window than the one the text went to has the focus."""
+    focused = _query_focused_window_class()
+    return (focused is not None and pending["window"] is not None
+            and focused != pending["window"])
 
 
 def _cancel_timers(pending: dict) -> None:
@@ -1962,10 +1983,11 @@ def _send_when_due(pending: dict) -> None:
         if state.pending_send is not pending:
             return
         state.pending_send = None
-    focused = _query_focused_window_class()
-    if (focused is not None and pending["window"] is not None
-            and focused != pending["window"]):
+    if _focus_left(pending):
         logger.info("Not sent: another window has the focus now")
+        from . import screen_message
+        screen_message.show_over_active_window(SWITCHED_WINDOW_NOTICE, warning=False,
+                                               tag=SEND_LABEL_TAG, low=True)
         return
     _press_enter_key(pending["why"])
 
@@ -1996,9 +2018,7 @@ def _type_space_left_off(pending: dict) -> None:
     space = pending.get("space")
     if not space:
         return
-    focused = _query_focused_window_class()
-    if (focused is not None and pending["window"] is not None
-            and focused != pending["window"]):
+    if _focus_left(pending):
         return
     typed = state.last_inserted_text
     if _inject_text(space, pending["mode"], time.time()) == "ok":

@@ -373,3 +373,30 @@ def test_the_dictation_hands_its_left_off_space_to_the_send(monkeypatch):
 def test_the_wait_goes_up_to_four_seconds():
     assert not any(k == "press_enter_delay" for k, _ in config._validation_problems(config.Settings(press_enter_delay=4.0)))
     assert any(k == "press_enter_delay" for k, _ in config._validation_problems(config.Settings(press_enter_delay=5.0)))
+
+
+def test_switching_windows_stops_the_countdown_at_once(countdown, monkeypatch):
+    """Ron, 2026-10-18: clicked another window; nothing was sent, but the
+    label kept counting down to a send that wasn't going to happen."""
+    pressed, _ = countdown
+    from tuxtalk import screen_message
+    relabels = []
+    monkeypatch.setattr(screen_message, "relabel", lambda tag, text: relabels.append(text))
+    monkeypatch.setattr(app, "_press_enter_delay", 4.0)
+    app._send_automatically("test")
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "konsole")
+    ticks = [t for t in FakeTimer.made if t.fn is app._count_down]
+    ticks[0].fire()
+    assert relabels == [app.SWITCHED_WINDOW_NOTICE]
+    assert app.state.pending_send is None
+    assert all(t.cancelled for t in FakeTimer.made)
+    sends()[0].fire()
+    assert pressed == []
+
+
+def test_switching_in_the_last_second_says_not_sent(countdown, monkeypatch):
+    pressed, labels = countdown
+    app._send_automatically("test")
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "konsole")
+    sends()[0].fire()
+    assert pressed == [] and labels[-1] == app.SWITCHED_WINDOW_NOTICE
