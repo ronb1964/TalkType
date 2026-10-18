@@ -1997,7 +1997,8 @@ class PreferencesWindow:
             "a terminal command runs. Handy for chat and AI prompts, risky in documents.\n\n"
             f"During the wait, tap {key} to hold the send: the text stays in the box, so you\n"
             f"can fix it or add a screenshot, then press Enter yourself. Hold {key} instead\n"
-            "to keep talking; that message is sent when you're done.\n\n"
+            "to keep talking; that message is sent when you're done. A sent dictation\n"
+            f"can't be changed with \u201cedit that\u201d, so tap {key} first if you want to.\n\n"
             "If what you said ends on a word like \u201cand\u201d or \u201cthe\u201d, it was probably\n"
             "cut off, so it isn't sent.\n\n"
             "With this off, end any dictation with \u201cpress enter\u201d to send just that one.")

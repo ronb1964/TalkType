@@ -61,6 +61,7 @@ def editing(monkeypatch):
     monkeypatch.setattr(app.state, "pending_boundary", None)
     monkeypatch.setattr(app.state, "chunk_typed", False)
     monkeypatch.setattr(app.state, "held_cue", "")
+    monkeypatch.setattr(app.state, "sent", None)
     return pressed, edits, problems
 
 
@@ -151,3 +152,46 @@ def test_it_is_never_typed_as_text(editing, monkeypatch):
     assert typed == []
     _pressed, edits, _ = editing
     assert edits and edits[0][0] == "make it shorter."
+
+
+def test_edit_that_right_after_an_automatic_send_says_why(editing, monkeypatch):
+    """Ron, 2026-10-18: the countdown sent the sentence (in KWrite, a new
+    line), then "edit that, make it more formal" was typed as words."""
+    _pressed, edits, problems = editing
+    monkeypatch.setattr(app.state, "last_inserted_text", "")
+    monkeypatch.setattr(app.state, "sent", {"at": app.time.time(), "automatic": True})
+    assert app._handle_spoken_edit("Edit that, make it more formal.", None, True, "type")
+    assert problems == ["already_sent_auto"] and edits == []
+
+
+def test_edit_that_after_saying_press_enter_says_it_was_sent(editing, monkeypatch):
+    _pressed, _edits, problems = editing
+    monkeypatch.setattr(app.state, "last_inserted_text", "")
+    monkeypatch.setattr(app.state, "sent", {"at": app.time.time(), "automatic": False})
+    assert app._handle_spoken_edit("Edit that, make it shorter.", None, True, "type")
+    assert problems == ["already_sent"]
+
+
+def test_long_after_a_send_edit_that_is_words_again(editing, monkeypatch):
+    _pressed, _edits, problems = editing
+    monkeypatch.setattr(app.state, "last_inserted_text", "")
+    monkeypatch.setattr(app.state, "sent", {"at": app.time.time() - 3600, "automatic": True})
+    assert not app._handle_spoken_edit("Edit that, make it shorter.", None, True, "type")
+    assert problems == []
+
+
+def test_every_notice_has_a_short_label():
+    assert set(app._EDIT_NOTICES) == set(app._EDIT_LABELS)
+
+
+def test_pressing_enter_remembers_the_send(monkeypatch):
+    class Backend:
+        def press_keys(self, chords):
+            return True
+    monkeypatch.setattr(app, "_output_backend", lambda: Backend())
+    monkeypatch.setattr(app.time, "sleep", lambda s: None)
+    monkeypatch.setattr(app.state, "sent", None)
+    app._press_enter_key("Send each dictation automatically is on")
+    assert app.state.sent["automatic"] is True
+    app._press_enter_key('said "press enter"')
+    assert app.state.sent["automatic"] is False

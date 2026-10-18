@@ -324,6 +324,9 @@ class RecordingState:
     # come up (_type_owed_space), or None. Typed while the key is down, GNOME
     # without the extension sees the key too and the space is lost.
     owed_space: object = None
+    # The last Enter TuxTalk pressed: {"at", "automatic"}, or None
+    # (_press_enter_key). "edit that" just after it explains itself.
+    sent: object = None
     # A phrase of this recording has been typed, so a correction said after the
     # next pause ("no wait, four") may change it (app._correct_across_pause).
     chunk_typed: bool = False
@@ -1894,6 +1897,8 @@ def _press_enter_key(why: str) -> bool:
     time.sleep(0.05)   # let the app take in the typed text first
     ok = _output_backend().press_keys([((), "ENTER")])
     state.last_inserted_text = ""
+    # "edit that" right after this says why there's nothing to edit.
+    state.sent = {"at": time.time(), "automatic": why.startswith("Send each")}
     if ok:
         logger.info(f"Pressed Enter ({why})")
     else:
@@ -4061,6 +4066,11 @@ _EDIT_NOTICES = {
                          "you dictate it. Use Ctrl+Z in this app instead.",
     "edit_that_what": "Say what to change after \u201cedit that\u201d, for example "
                       "\u201cedit that, make it shorter\u201d.",
+    "already_sent": "That dictation was already sent, so there's nothing to edit.",
+    "already_sent_auto": "That dictation was already sent, so there's nothing to edit. "
+                         "With Send each dictation automatically on, tap the dictation "
+                         "hotkey during the countdown to keep it, then say \u201cedit "
+                         "that\u201d.",
 }
 
 
@@ -4087,6 +4097,8 @@ _EDIT_LABELS = {
     "nav_terminal": "Can't select or move in a terminal",
     "undo_other_window": "Works only right after dictating",
     "edit_that_what": "Say what to change",
+    "already_sent": "Already sent, nothing to edit",
+    "already_sent_auto": "Already sent. Tap the hotkey sooner",
 }
 
 
@@ -4276,6 +4288,10 @@ def _spoken_edit_target():
     return typed
 
 
+# "edit that" this soon after TuxTalk pressed Enter meant the sent dictation.
+EDIT_AFTER_SEND_S = 60
+
+
 def _handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: str) -> bool:
     """Voice editing by voice alone (TuxTalk Labs): a dictation that starts
     with "edit that" selects what TuxTalk just typed and changes it as the
@@ -4295,6 +4311,13 @@ def _handle_spoken_edit(raw: str, chunk_role, beeps_on: bool, injection_mode: st
             return False
         target = _spoken_edit_target()
         if not target:
+            sent = state.sent
+            if sent is not None and time.time() - sent["at"] < EDIT_AFTER_SEND_S:
+                # Sent a moment ago: typing "Edit that, make it formal" into
+                # the box would only add to the confusion (Ron, 2026-10-18).
+                _edit_problem("already_sent_auto" if sent["automatic"] else "already_sent",
+                              beeps_on)
+                return True
             return False
     logger.info(f"Voice command: edit that ({len(target)} characters)")
     if not _is_wayland_session():

@@ -74,6 +74,7 @@ def _no_real_send_countdown(monkeypatch, request):
     monkeypatch.setattr(app.state, "pending_send", None)
     monkeypatch.setattr(app.state, "held_send", False)
     monkeypatch.setattr(app.state, "owed_space", None)
+    monkeypatch.setattr(app.state, "sent", None)
 
 
 @pytest.fixture(autouse=True)
