@@ -2063,13 +2063,16 @@ class PreferencesWindow:
 
         # A real Enter after each dictation (app._press_enter_key). Saying
         # "press enter" at the end does the same for one dictation.
-        enter_check = Gtk.CheckButton(label="Press Enter after each dictation")
+        enter_check = Gtk.CheckButton(label="Send each dictation right away (press Enter)")
         enter_check.set_active(bool(self.config.get("press_enter_after", False)))
         enter_check.connect("toggled", lambda x: self.update_config("press_enter_after", x.get_active()))
         enter_check.set_tooltip_text(
-            "After typing, press Enter: a chat message is sent, a terminal command runs,\n"
-            "a search starts. Handy for chat and AI prompts, risky in documents.\n\n"
-            "With this off you can still end any dictation with \u201cpress enter\u201d.")
+            "As soon as a dictation is typed, TuxTalk presses Enter: a chat message is\n"
+            "sent, a terminal command runs. There's no moment to fix a mistake first, so\n"
+            "it suits chat and AI prompts and is risky in documents.\n\n"
+            "If what you said ends on a word like \u201cand\u201d or \u201cthe\u201d, it was probably\n"
+            "cut off, so TuxTalk types it but waits for you to finish.\n\n"
+            "With this off, end any dictation with \u201cpress enter\u201d to send just that one.")
         grid.attach(enter_check, 0, row, 2, 1)
         row += 1
         

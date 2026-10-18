@@ -3520,9 +3520,9 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                 _inject_text(cue + (" " if auto_space else ""), injection_mode, time.time())
             if _press_enter_after and state.chunk_typed:
                 # The recording ended in a pause; its phrases are typed, so
-                # "Press Enter after each dictation" sends them now.
+                # "Send each dictation right away" sends them now.
                 _flush_boundary(auto_period, False, injection_mode)
-                _press_enter_key("Press Enter after each dictation is on")
+                _press_enter_key("Send each dictation right away is on")
                 _chunk_message_sent()
             else:
                 _flush_boundary(auto_period, auto_space, injection_mode)
@@ -3611,12 +3611,19 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
 
         # "... press enter": type the words, then a real Enter that sends the
         # message or runs the command (enter_command.py). Or every time, when
-        # "Press Enter after each dictation" is on.
-        from .enter_command import split_press_enter
+        # "Send each dictation right away" is on.
+        from .enter_command import split_press_enter, ends_unfinished
         raw, said_enter = split_press_enter(raw)
-        # "Press Enter after each dictation" waits for the end of the
+        # "Send each dictation right away" waits for the end of the
         # recording, not each phrase of Type at pause.
         press_enter = said_enter or (_press_enter_after and chunk_role != "middle")
+        if press_enter and not said_enter:
+            cut_off = ends_unfinished(raw)
+            if cut_off:
+                # The key came up mid-sentence: type it, but don't send half
+                # a message. Saying "press enter" always sends.
+                logger.info(f'Held back the Enter: the dictation ended on "{cut_off}"')
+                press_enter = False
         if said_enter and not raw.strip():
             # Only "press enter" was said.
             if chunk_role != "middle":
@@ -3680,7 +3687,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                 _report_undelivered(outcome, beeps_on)
             elif press_enter:
                 _press_enter_key("said \"press enter\"" if said_enter
-                                 else "Press Enter after each dictation is on")
+                                 else "Send each dictation right away is on")
                 if chunk_role is not None:
                     _chunk_message_sent()
             if chunk_role == "middle" and not _chunk_context_marks and outcome == "ok" \

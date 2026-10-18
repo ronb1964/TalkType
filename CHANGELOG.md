@@ -25,8 +25,10 @@ before 0.15.0, so older entries use that name.
   enter" to send it, without touching the keyboard.
 - New: say "press enter" at the end of a dictation and TuxTalk types it and
   then presses a real Enter, so a chat message goes out or a terminal command
-  runs. Saying only "press enter" just presses Enter. There's also a setting
-  to press Enter after every dictation (off).
+  runs. Saying only "press enter" just presses Enter. There's also Send each
+  dictation right away (off), which presses Enter after every dictation. It
+  holds back when you stopped on a word like "and" or "the", since that
+  sentence was probably cut off.
 - New: with voice editing on (Labs), start a dictation with "edit that" right
   after dictating something, like "edit that, make it shorter", and it
   rewrites what you just said. No Shift needed. "Edit that file tonight" is

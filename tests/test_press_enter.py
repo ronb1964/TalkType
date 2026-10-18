@@ -6,7 +6,7 @@ A spoken "new line" stays Shift+Enter, which never sends a chat message.
 import numpy as np
 import pytest
 
-from tuxtalk import app, config
+from tuxtalk import app, config, enter_command
 from tuxtalk.enter_command import split_press_enter
 
 
@@ -78,7 +78,41 @@ def test_press_enter_after_each_dictation(monkeypatch):
     monkeypatch.setattr(app, "_press_enter_after", True)
     events = _dictate(monkeypatch, "Hello there", prepared=lambda r: r + ". ")
     assert events == [("typed", "Hello there."),
-                      ("enter", "Press Enter after each dictation is on")]
+                      ("enter", "Send each dictation right away is on")]
+
+
+def test_a_cut_off_dictation_is_typed_but_not_sent(monkeypatch):
+    """Letting go of the key after "and" means the sentence wasn't finished;
+    sending half a message can't be taken back."""
+    monkeypatch.setattr(app, "_press_enter_after", True)
+    events = _dictate(monkeypatch, "You can go ahead and add that. And",
+                      prepared=lambda r: r + ". ")
+    assert events == [("typed", "You can go ahead and add that. And. ")]
+
+
+def test_saying_press_enter_sends_even_after_and(monkeypatch):
+    monkeypatch.setattr(app, "_press_enter_after", True)
+    events = _dictate(monkeypatch, "Bring chips and, press enter",
+                      prepared=lambda r: r + ".")
+    assert ("enter", 'said "press enter"') in events
+
+
+@pytest.mark.parametrize("text, word", [
+    ("You can add that. And.", "and"),
+    ("Grab the", "the"),
+    ("Meet me with, um", "um"),
+    ("\u201cI said and\u201d", "and"),
+])
+def test_cut_off_endings(text, word):
+    assert enter_command.ends_unfinished(text) == word
+
+
+@pytest.mark.parametrize("text", [
+    "I think so.", "I'd love to.", "I like that.", "See you then.",
+    "Sounds good!", "", "Command and conquer is a game.",
+])
+def test_whole_sentences_are_not_cut_off(text):
+    assert enter_command.ends_unfinished(text) == ""
 
 
 def test_no_enter_when_the_text_did_not_arrive(monkeypatch):
