@@ -48,9 +48,11 @@ Claude, Anthropic's AI, writes the code. I test it and use it every day, and I h
 
 **No more `input` group.** TuxTalk used to put you in the input group so it could hear F8, and that group lets any program you run read every key you press. Now a small helper service is the only thing that reads the keyboard, and it only passes on TuxTalk's own hotkeys. Setup is one password and no restart. Already using TuxTalk? Preferences, Advanced, Typing Setup, Switch to Hotkey Helper.
 
-**Talk, look it over, send it.** Say "press enter" at the end and your message goes. Turn on Type at pause in Labs and each phrase shows up when you pause, and with hands-free on F9 you can say "edit that, make it more formal" before you send it. No keyboard at all.
+**Talk, look it over, send it.** Say "press enter" at the end and your message goes. Or turn on Send each dictation automatically and every dictation goes out after a short countdown. Tap F8 during it and nothing is sent, so you can fix a word or add a screenshot first. It leaves text editors and word processors alone, where Enter would only start a new line. Turn on Type at pause in Labs and each phrase shows up when you pause, and with hands-free on F9 you can say "edit that, make it more formal" before you send it. No keyboard at all.
 
 **Your Words for Parakeet.** Names you add in the new Words tab now steer Parakeet too, and the words TuxTalk mishears sit right under the name they belong to.
+
+**Fixes worth knowing about.** On KDE Plasma 6.7, TuxTalk could lose the start of a dictation it pasted, and on Fedora and similar systems its notices never showed up at all. Both are fixed. Switching microphones in your desktop's sound menu now works without restarting TuxTalk.
 
 There's also a setting to turn other sounds down while you talk, a warning when your mic sends only silence, and power saving that's on for laptops and off for desktops. The [changelog](CHANGELOG.md) has the rest.
 
