@@ -18,6 +18,7 @@ apt-get install -y -qq \
     cmake \
     build-essential \
     wget \
+    xz-utils \
     rsync \
     libgirepository1.0-dev \
     gobject-introspection \
@@ -243,15 +244,39 @@ cd /build
 # Ubuntu 22.04 ships 2.0.0, and paste needs 2.3.0's wl-copy --sensitive: it
 # keeps dictations out of clipboard managers' history (KDE's Klipper saved
 # every one to disk, issue #7). Pinned to a release tag.
+#
+# It also needs wayland-protocols 1.39 or newer to speak ext-data-control,
+# the only quiet clipboard protocol KDE Plasma 6.7 still offers; Ubuntu 22.04
+# has 1.25. Without it wl-copy falls back to a window of its own, which can
+# take the keyboard focus, and the Ctrl+V right after lands in that window:
+# dictations lost on KDE (Ron, 2026-10-18). Pinned tarball, checked by SHA256,
+# installed only for this build.
+WAYLAND_PROTOCOLS_VERSION=1.45
+WAYLAND_PROTOCOLS_SHA256=4d2b2a9e3e099d017dc8107bf1c334d27bb87d9e4aff19a0c8d856d17cd41ef0
+echo "📋 Getting wayland-protocols $WAYLAND_PROTOCOLS_VERSION for wl-clipboard..."
+rm -rf /tmp/wayland-protocols-* /tmp/wayland-protocols-prefix
+wget -q -O /tmp/wayland-protocols.tar.xz \
+    "https://gitlab.freedesktop.org/wayland/wayland-protocols/-/releases/${WAYLAND_PROTOCOLS_VERSION}/downloads/wayland-protocols-${WAYLAND_PROTOCOLS_VERSION}.tar.xz"
+echo "${WAYLAND_PROTOCOLS_SHA256}  /tmp/wayland-protocols.tar.xz" | sha256sum -c --quiet \
+    || { echo "❌ wayland-protocols download doesn't match its pinned SHA256"; exit 1; }
+tar -xJf /tmp/wayland-protocols.tar.xz -C /tmp
+meson setup "/tmp/wayland-protocols-${WAYLAND_PROTOCOLS_VERSION}/build" \
+    "/tmp/wayland-protocols-${WAYLAND_PROTOCOLS_VERSION}" \
+    --prefix=/tmp/wayland-protocols-prefix -Dtests=false > /dev/null
+ninja -C "/tmp/wayland-protocols-${WAYLAND_PROTOCOLS_VERSION}/build" install > /dev/null
+
 WL_CLIPBOARD_VERSION=v2.3.0
 echo "📋 Building wl-clipboard $WL_CLIPBOARD_VERSION..."
 rm -rf /tmp/wl-clipboard
 git clone -q --depth 1 --branch "$WL_CLIPBOARD_VERSION" https://github.com/bugaevc/wl-clipboard /tmp/wl-clipboard
-meson setup /tmp/wl-clipboard/build /tmp/wl-clipboard --buildtype=release > /dev/null
+PKG_CONFIG_PATH="/tmp/wayland-protocols-prefix/share/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}" \
+    meson setup /tmp/wl-clipboard/build /tmp/wl-clipboard --buildtype=release > /dev/null
 ninja -C /tmp/wl-clipboard/build > /dev/null
 cp /tmp/wl-clipboard/build/src/wl-copy /tmp/wl-clipboard/build/src/wl-paste /build/AppDir/usr/bin/
 /build/AppDir/usr/bin/wl-copy --help | grep -q -- --sensitive \
     || { echo "❌ bundled wl-copy has no --sensitive"; exit 1; }
+grep -q -a ext_data_control_manager_v1 /build/AppDir/usr/bin/wl-copy \
+    || { echo "❌ bundled wl-copy has no ext-data-control: pastes would be lost on KDE"; exit 1; }
 
 # Bundle GTK3 and GObject Introspection
 echo "   Bundling GTK3 libraries..."
