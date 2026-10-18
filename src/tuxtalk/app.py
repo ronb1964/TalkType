@@ -305,6 +305,10 @@ class RecordingState:
     # {"mark", "audio", "raw", "typed"} until the next chunk decides it, else
     # None. Belongs to its recording only (cleared by _arm_chunker).
     pending_boundary: object = None
+    # The "?" held back at the last pause was heard as mid-sentence: the
+    # question goes on, so this phrase ends with it, not a period
+    # (_carry_question). Belongs to its recording only.
+    question_open: bool = False
     # A phrase of this recording has been typed, so a correction said after the
     # next pause ("no wait, four") may change it (app._correct_across_pause).
     chunk_typed: bool = False
@@ -978,6 +982,7 @@ def _arm_chunker(rec_sr, edit_mode=False):
         state.recording_serial += 1
         state.chunks_submitted = 0
         state.pending_boundary = None
+        state.question_open = False
         state.chunk_typed = False
         state.held_cue = ""
         state.edit_waiting = None
@@ -3459,7 +3464,22 @@ def _resolve_boundary(audio_f32, language, injection_mode, raw="", auto_period=T
     _type_boundary(pending, (mark + " ") if mark else " ", injection_mode)
     # Lowercase on after a comma or no mark; a sentence end starts afresh.
     state.continue_mid_sentence = mark not in _SENTENCE_ENDS
+    # "do you think ... feature" (pause) "to make it work better": the engine
+    # heard a question before the pause and a sentence going on across it,
+    # so the question ends where this phrase does.
+    state.question_open = pending["mark"] == "?" and mark not in _SENTENCE_ENDS
     return raw
+
+
+def _carry_question(text: str) -> str:
+    """End a phrase that finishes an open question with "?" instead of the
+    period. Only a phrase holding one sentence: with a second one in it, the
+    question has already ended somewhere the engine couldn't mark."""
+    m = re.fullmatch(r"([^.?!]*\w)\.(\s*)", text)
+    if not m:
+        return text
+    logger.info("The question goes on across the pause: it ends with ?")
+    return m.group(1) + "?" + m.group(2)
 
 
 def _flush_boundary(auto_period: bool, auto_space: bool, injection_mode: str) -> None:
@@ -3483,6 +3503,7 @@ def _chunk_message_sent() -> None:
     back across it: no held-back mark, no correction, no lowercase start,
     and the screen copy starts again."""
     state.pending_boundary = None
+    state.question_open = False
     state.chunk_typed = False
     state.held_cue = ""
     state.continue_mid_sentence = False
@@ -3655,6 +3676,9 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                 logger.info("Chunk is only a correction cue; waiting for the next phrase")
                 return
             text, taken_back = _correct_across_pause(text)
+        if state.question_open and chunk_role is not None:
+            state.question_open = False
+            text = _carry_question(text)
         held_mark = None
         if chunk_role == "middle" and _chunk_context_marks and not said_enter:
             text, held_mark = _hold_back_boundary(text, raw)

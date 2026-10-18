@@ -1205,3 +1205,38 @@ def test_a_held_mark_stays_in_the_window_its_phrase_went_to(pipeline, monkeypatc
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     assert typed == ["What's next", "What's next"]
     assert texts == []                                # no context pass across windows
+
+
+def test_a_question_goes_on_across_a_pause(pipeline):
+    """Ron, 2026-10-18: "do you think ... feature" (pause) "to make it work
+    better" came out ending in a period. The engine heard a question before
+    the pause and a sentence going on across it, so the question ends at the
+    end of the next phrase."""
+    from tuxtalk import app
+    texts, typed, _ = pipeline
+    texts.extend(["do you think we need a setting?", "to make it work better.",
+                  "do you think we need a setting to make it work better."])
+    call(frames_of(speech(1.0)), "middle")
+    call(frames_of(speech(1.0)), "last", auto_period=True)
+    assert typed[:2] == ["Do you think we need a setting", " "]
+    assert typed[2].rstrip() == "to make it work better?"
+    assert app.state.question_open is False
+
+
+def test_a_question_that_ended_at_the_pause_is_not_carried(pipeline):
+    texts, typed, _ = pipeline
+    texts.extend(["is it ready?", "yes it is.", "is it ready? Yes it is."])
+    call(frames_of(speech(1.0)), "middle")
+    call(frames_of(speech(1.0)), "last", auto_period=True)
+    assert typed[1] == "? "
+    assert typed[2].rstrip() == "Yes it is."
+
+
+def test_a_carried_question_skips_a_phrase_with_two_sentences(pipeline):
+    """The question ended somewhere in there; guessing where would be worse."""
+    texts, typed, _ = pipeline
+    texts.extend(["do you think we should", "go now. I do.",
+                  "do you think we should go now. I do."])
+    call(frames_of(speech(1.0)), "middle")
+    call(frames_of(speech(1.0)), "last", auto_period=True)
+    assert typed[-1].rstrip() == "go now. I do."

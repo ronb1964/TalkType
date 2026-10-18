@@ -61,6 +61,10 @@ before 0.15.0, so older entries use that name.
   before it.
 - Fixed: in Fix a Word some clicks didn't pick the word, and the highlight
   took in the punctuation next to it.
+- Fixed: talking about a mark, like "it should end with a question mark",
+  typed "a?". With "a" or "the" in front, the words stay words.
+- Fixed: in Type at pause, a question you paused in the middle of ended with
+  a period.
 - TuxTalk has its own website now, tuxtalk.app. The About window links to it,
   and so do software centers and the .deb and .rpm packages.
 

@@ -131,6 +131,18 @@ _CONTEXT_PROTECT_PATTERNS = [
         re.IGNORECASE,
     ), r"\1 __LIT_QUOTE__"),
 
+    # "ended with a question mark", "add a comma": with an article the mark
+    # is being talked about, not dictated. Nobody dictates "a question mark"
+    # to end a sentence (Ron, 2026-10-18: typed "ended with a?").
+    (re.compile(r"\b(a|an|the|this|that|another|no|one)\s+question\s+mark\b",
+                re.IGNORECASE), r"\1 __LIT_QMARK__"),
+    (re.compile(r"\b(a|an|the|this|that|another|no|one)\s+exclamation\s+point\b",
+                re.IGNORECASE), r"\1 __LIT_EPOINT__"),
+    (re.compile(r"\b(a|an|the|this|that|another|no|one)\s+exclamation\s+mark\b",
+                re.IGNORECASE), r"\1 __LIT_EPOINT2__"),
+    (re.compile(r"\b(a|an|the|this|that|another|no|one)\s+comma\b",
+                re.IGNORECASE), r"\1 __LIT_COMMA__"),
+
     # "comma operator/splice/key" — programming / writing terminology
     (re.compile(r"\bcomma\s+(operator|splice|key)\b", re.IGNORECASE),
      r"__LIT_COMMA__ \1"),

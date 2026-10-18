@@ -785,3 +785,23 @@ def test_a_spoken_mark_replaces_the_engines_period(said, typed):
 def test_an_abbreviation_keeps_its_period_before_a_spoken_mark():
     from tuxtalk.normalize import normalize_text
     assert normalize_text("Is it the U.S. question mark").startswith("Is it the U.S.")
+
+
+# "ended with a question mark": with an article the mark is talked about,
+# not dictated (Ron, 2026-10-18: typed "ended with a?").
+@pytest.mark.parametrize("said, typed", [
+    ("should it have ended with a question mark", "Should it have ended with a question mark."),
+    ("end it with an exclamation point", "End it with an exclamation point."),
+    ("add a comma after hello", "Add a comma after hello."),
+])
+def test_a_mark_talked_about_stays_words(said, typed):
+    assert normalize_text(said) == typed
+
+
+@pytest.mark.parametrize("said, typed", [
+    ("is that right question mark", "Is that right?"),
+    ("that was great exclamation point", "That was great!"),
+    ("hello comma world", "Hello, world."),
+])
+def test_a_dictated_mark_is_still_typed(said, typed):
+    assert normalize_text(said) == typed
