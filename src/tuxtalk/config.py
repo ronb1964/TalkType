@@ -162,7 +162,7 @@ class Settings:
     adapt_to_app: bool = True
     # Press Enter after every dictation, as if each ended with "press enter"
     press_enter_after: bool = False
-    # ...after this many seconds, so a tap of the hotkey can hold it (0-3)
+    # ...after this many seconds, so a tap of the hotkey can hold it (0-4)
     press_enter_delay: float = 2.0
     mode: str = "hold"          # "hold" or "toggle"
     toggle_hotkey: str = ""     # used only when mode="toggle" (empty until user picks during onboarding)
@@ -281,8 +281,8 @@ def _validation_problems(s: Settings) -> list[tuple[str, str]]:
     if s.indicator_backing.lower() not in VALID_BACKINGS:
         problems.append(("indicator_backing", f"Invalid indicator_backing '{s.indicator_backing}'. Valid options: {', '.join(sorted(VALID_BACKINGS))}"))
 
-    if not (0.0 <= s.press_enter_delay <= 3.0):
-        problems.append(("press_enter_delay", f"Invalid press_enter_delay '{s.press_enter_delay}'. Must be between 0 and 3"))
+    if not (0.0 <= s.press_enter_delay <= 4.0):
+        problems.append(("press_enter_delay", f"Invalid press_enter_delay '{s.press_enter_delay}'. Must be between 0 and 4"))
     if not (0.5 <= s.auto_stop_seconds <= 10.0):
         problems.append(("auto_stop_seconds", f"Invalid auto_stop_seconds '{s.auto_stop_seconds}'. Must be between 0.5 and 10"))
     if not (0.3 <= s.chunk_pause_seconds <= 3.0):

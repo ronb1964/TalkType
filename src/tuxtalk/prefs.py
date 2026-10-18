@@ -2004,10 +2004,11 @@ class PreferencesWindow:
 
         waits = Gtk.ComboBoxText()
         for seconds, label in (("0", "Right away"), ("1", "After 1 second"),
-                               ("2", "After 2 seconds"), ("3", "After 3 seconds")):
+                               ("2", "After 2 seconds"), ("3", "After 3 seconds"),
+                               ("4", "After 4 seconds")):
             waits.append(seconds, label)
         current = int(round(float(self.config.get("press_enter_delay", 2.0))))
-        waits.set_active_id(str(min(3, max(0, current))))
+        waits.set_active_id(str(min(4, max(0, current))))
         waits.connect("changed", lambda c: self.update_config(
             "press_enter_delay", float(c.get_active_id())) if c.get_active_id() else None)
         waits.connect("scroll-event", lambda *a: True)  # no accidental scroll changes

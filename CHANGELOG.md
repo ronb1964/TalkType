@@ -27,7 +27,7 @@ before 0.15.0, so older entries use that name.
   then presses a real Enter, so a chat message goes out or a terminal command
   runs. Saying only "press enter" just presses Enter. There's also Send each
   dictation automatically (off), which presses Enter after every dictation.
-  It waits two seconds first (you can pick none to three) and says so on
+  It waits two seconds first (you can pick none to four) and says so on
   screen: tap F8 in that time and it isn't sent, so you can fix it or add a
   screenshot, or hold F8 to keep talking. It also doesn't send when you
   stopped on a word like "and" or "the", since that sentence was probably

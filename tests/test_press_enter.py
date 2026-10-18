@@ -331,3 +331,8 @@ def test_the_dictation_hands_its_left_off_space_to_the_send(monkeypatch):
     events = _dictate(monkeypatch, "Hello there", prepared=lambda r: r + ". ")
     assert ("typed", "Hello there.") in events
     assert sends == [" "]
+
+
+def test_the_wait_goes_up_to_four_seconds():
+    assert not any(k == "press_enter_delay" for k, _ in config._validation_problems(config.Settings(press_enter_delay=4.0)))
+    assert any(k == "press_enter_delay" for k, _ in config._validation_problems(config.Settings(press_enter_delay=5.0)))
