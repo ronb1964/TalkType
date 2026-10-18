@@ -340,3 +340,52 @@ Explain what code does in plain language. Always:
 - Provide exact copy/paste commands (include `cd` commands)
 - Be direct and honest
 - Never assume the reader will debug code themselves
+
+---
+
+## CODE A HUMAN REVIEWER WOULD RESPECT — EVERY CHANGE
+
+TuxTalk is written by Claude and says so publicly. Ron's standard (2026-10-18):
+an experienced developer who opens any file should be impressed, not shaking
+their head at "more AI slop". Working code is not enough. Before every commit,
+check the change against this list:
+
+- **No dead code.** Delete unused functions, imports, branches, settings and
+  files in the same change that made them unused. Never leave code commented
+  out "just in case"; git keeps history.
+- **No duplicates.** Search for an existing helper before writing one. Two
+  functions doing the same job is the clearest sign nobody read the codebase.
+- **Comments say why, not what.** No comment that restates the next line. Do
+  explain the non-obvious: the desktop quirk, the bug it prevents, the issue
+  number. Keep comments true when the code changes.
+- **No speculative structure.** No classes, options, layers or parameters for
+  a future that isn't here. The simplest code that handles the real cases.
+- **Fit the file.** Match the surrounding names, style and idioms. A change
+  should look like the rest of the file was written by the same person.
+- **Tests that test something.** Each test pins a behaviour a user would
+  notice, named in plain words. No tests that only re-run the code's own
+  logic, and no mocking so heavy the test can't fail.
+- **No AI tells in code or commits.** No emoji in comments, log messages or
+  commit messages (icons in the app's own screens are a design choice), no
+  "This function does X" docstrings that add nothing, no "Enhanced"/"Robust"/
+  "Comprehensive" wording, no apologetic or chatty comments.
+- **Errors handled where they can happen, not everywhere.** No blanket
+  try/except that hides bugs; a caught error is logged with what went wrong.
+- **Small, focused commits** with a message that says what changed for the
+  user and why.
+
+If a change can't meet this (a rushed hotfix, say), say so to Ron and fix it in
+the next commit.
+
+## SAYING HOW TUXTALK IS MADE — EVERY PUBLIC POST
+
+Ron can't code; Claude writes TuxTalk and Ron designs, tests and uses it
+daily. **Every** post, pitch, forum thread or listing says so up front, in
+plain words, never buried and never left for someone to discover in the
+commit history (the Lemmy thread on 2026-10-16 went bad for exactly that).
+Pair it with the proof that a person is responsible: thousands of automated
+tests and CI, testing on several distros in VMs, the hotkey helper's review by
+an outside developer (guelz), his PR merged, Ron dictating nearly everything he writes with it.
+Never apologise for it and never call it "vibe coded". Draft in Ron's voice
+(ron-voice skill). Don't post where AI-written code is banned (Flathub,
+extensions.gnome.org, GNOME Circle, Gentoo).
