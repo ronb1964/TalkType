@@ -56,6 +56,16 @@ def _no_remembered_dictation_window(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_followed_default_mic(monkeypatch):
+    """Start each test without a tracked System Default mic. A test that runs
+    the real _pick_input_device("") records the user's PipeWire default, and
+    start_recording would then record from that instead of the device the
+    next test passes in."""
+    from tuxtalk import app
+    monkeypatch.setattr(app, "_system_default_mic", None)
+
+
+@pytest.fixture(autouse=True)
 def _no_real_explanation_windows(monkeypatch, tmp_path):
     """Never open an explanation window on the user's desktop, and never read
     or write their "don't explain again" choices. Tests that want the window

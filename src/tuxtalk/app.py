@@ -1081,8 +1081,44 @@ def _pick_input_device(mic_substring: str | None):
     broken ALSA "default" virtual device that returns garbage audio
     on PipeWire systems.
     """
+    global _system_default_mic
     from .config import find_input_device
-    return find_input_device(mic_substring)
+    if mic_substring:
+        _system_default_mic = None      # a mic chosen by name stays put
+        return find_input_device(mic_substring)
+    source = config_module.default_source_name()
+    idx = find_input_device(mic_substring)
+    _system_default_mic = (source, idx)
+    return idx
+
+
+# (PipeWire default source name, device index) while the mic is on System
+# Default; None when a mic was chosen by name. See _follow_system_default.
+_system_default_mic = None
+
+
+def _follow_system_default(input_device_idx):
+    """The device to record from, following a switched desktop default.
+
+    The default mic is turned into a device number when it's resolved, so
+    switching inputs in GNOME's Quick Settings or KDE's applet used to need a
+    restart (issue #14). Asking PipeWire costs about a millisecond, so it's
+    done on every recording, and devices are re-resolved only on a change.
+    Anything that goes wrong keeps the device already in use.
+    """
+    tracked = _system_default_mic
+    if tracked is None:
+        return input_device_idx
+    source = config_module.default_source_name()
+    if source is None or source == tracked[0]:
+        return tracked[1]
+    try:
+        idx = _pick_input_device("")
+    except Exception as e:
+        logger.warning(f"Could not follow the new default microphone {source!r}: {e}")
+        return tracked[1]
+    logger.info(f"The system's default microphone changed to {source!r} (device {idx})")
+    return idx
 
 def _get_device_samplerate(device_idx):
     """Get the native sample rate for a device, falling back to SAMPLE_RATE.
@@ -1633,6 +1669,7 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
     state.edit_mode = edit_mode
     # Set before the stream starts — _sd_callback drops frames unless it's set.
     state.is_recording = True
+    input_device_idx = _follow_system_default(input_device_idx)
     try:
         _open_input_stream(input_device_idx)
     except Exception as first_error:

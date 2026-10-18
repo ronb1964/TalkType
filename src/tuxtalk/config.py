@@ -847,6 +847,27 @@ def get_data_dir():
 # Audio device detection
 # ---------------------------------------------------------------------------
 
+def default_source_name() -> str | None:
+    """PipeWire's default microphone, by its unique node name, or None.
+
+    Used to notice the desktop switching its default input (GNOME Quick
+    Settings, KDE's volume applet). None when wpctl is missing or fails, so a
+    system without PipeWire never looks like a switch.
+    """
+    try:
+        result = subprocess.run(["wpctl", "inspect", "@DEFAULT_SOURCE@"],
+                                capture_output=True, text=True, timeout=2)
+    except Exception:
+        return None
+    if result.returncode != 0:
+        return None
+    for line in result.stdout.splitlines():
+        key, sep, value = line.strip().lstrip("*").partition("=")
+        if sep and key.strip() == "node.name":
+            return value.strip().strip('"') or None
+    return None
+
+
 def find_input_device(mic_substring: str | None) -> int | None:
     """Find the best input device index for recording.
 
