@@ -386,7 +386,7 @@ plain words, never buried and never left for someone to discover in the
 commit history (the Lemmy thread on 2026-10-16 went bad for exactly that).
 Pair it with the proof that a person is responsible: thousands of automated
 tests and CI, testing on several distros in VMs, the hotkey helper's review by
-an outside developer (guelz), his PR merged, Ron dictating nearly everything he writes with it.
+an outside developer (guelz), guelz's PR merged, Ron dictating nearly everything he writes with it.
 Never apologise for it and never call it "vibe coded". Draft in Ron's voice
 (ron-voice skill). Don't post where AI-written code is banned (Flathub,
 extensions.gnome.org, GNOME Circle, Gentoo).
