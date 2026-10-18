@@ -1878,18 +1878,22 @@ SEND_LABEL_TAG = "send-countdown"
 HELD_SEND_NOTICE = "Not sent. Press Enter when you're ready."
 
 
-def _send_automatically(why: str) -> None:
+def _send_automatically(why: str, space: str = "", injection_mode: str = "type") -> None:
     """Enter for "Send each dictation automatically", after its wait.
 
     Sending can't be taken back, so the wait gives a moment to stop it: a tap
     of the hold key (or the toggle key) holds the send and the text stays in
     the box, to fix or add a screenshot to first; holding the key dictates
-    more onto it (_hold_pending_send). Asked for by Ron, 2026-10-18."""
+    more onto it (_hold_pending_send). Asked for by Ron, 2026-10-18.
+
+    *space* is the auto-space left off so it wouldn't be sent; a held send
+    types it, or what's said next sticks to the last word ("delay.All")."""
     delay = _press_enter_delay
     if delay <= 0:
         _press_enter_key(why)
         return
-    pending = {"window": state.last_inserted_window, "why": why}
+    pending = {"window": state.last_inserted_window, "why": why,
+               "space": space, "mode": injection_mode}
     pending["timer"] = threading.Timer(delay, _send_when_due, args=(pending,))
     pending["timer"].daemon = True
     with _send_lock:
@@ -1930,6 +1934,7 @@ def _hold_pending_send(announce: bool) -> bool:
         return False
     pending["timer"].cancel()
     logger.info("Held the send: the dictation stays unsent")
+    _type_space_left_off(pending)
     from . import screen_message
     if announce:
         screen_message.show_over_active_window(HELD_SEND_NOTICE, warning=False,
@@ -1937,6 +1942,21 @@ def _hold_pending_send(announce: bool) -> bool:
     else:
         screen_message.hide(SEND_LABEL_TAG)
     return True
+
+
+def _type_space_left_off(pending: dict) -> None:
+    """Type the space a held send left off, in the window its text went to,
+    keeping undo's record of the dictation whole."""
+    space = pending.get("space")
+    if not space:
+        return
+    focused = _query_focused_window_class()
+    if (focused is not None and pending["window"] is not None
+            and focused != pending["window"]):
+        return
+    typed = state.last_inserted_text
+    if _inject_text(space, pending["mode"], time.time()) == "ok":
+        state.last_inserted_text = typed + space
 
 
 def _send_shift_enter():
@@ -3629,7 +3649,8 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                 # The recording ended in a pause; its phrases are typed, so
                 # "Send each dictation automatically" sends them now.
                 _flush_boundary(auto_period, False, injection_mode)
-                _send_automatically("Send each dictation automatically is on")
+                _send_automatically("Send each dictation automatically is on",
+                                    " " if auto_space else "", injection_mode)
                 _chunk_message_sent()
             else:
                 _flush_boundary(auto_period, auto_space, injection_mode)
@@ -3768,9 +3789,12 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         held_mark = None
         if chunk_role == "middle" and _chunk_context_marks and not said_enter:
             text, held_mark = _hold_back_boundary(text, raw)
+        space_left_off = ""
         if press_enter:
             # No auto-space before Enter: it would end up in the sent message.
-            text = text.rstrip(" ")
+            # Kept for a send that's held, which types it after all.
+            core = text.rstrip(" ")
+            space_left_off, text = text[len(core):], core
 
         # Beep to confirm transcription is done
         if chunk_role != "middle":
@@ -3799,7 +3823,8 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                 if said_enter:
                     _press_enter_key("said \"press enter\"")
                 else:
-                    _send_automatically("Send each dictation automatically is on")
+                    _send_automatically("Send each dictation automatically is on",
+                                        space_left_off, injection_mode)
                 if chunk_role is not None:
                     _chunk_message_sent()
             if chunk_role == "middle" and not _chunk_context_marks and outcome == "ok" \

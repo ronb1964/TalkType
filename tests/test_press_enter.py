@@ -179,6 +179,9 @@ class FakeTimer:
             self.fn(*self.args)
 
 
+TYPED = []   # what the countdown fixture's _inject_text was given
+
+
 @pytest.fixture
 def countdown(monkeypatch):
     FakeTimer.made = []
@@ -191,6 +194,8 @@ def countdown(monkeypatch):
                         lambda text, **kw: labels.append(text))
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "brave-browser")
     monkeypatch.setattr(app.state, "last_inserted_window", "brave-browser")
+    TYPED.clear()
+    monkeypatch.setattr(app, "_inject_text", lambda text, mode, t0: TYPED.append(text) or "ok")
     return pressed, labels
 
 
@@ -292,3 +297,37 @@ def test_the_wait_is_a_setting_applied_live():
         assert app._press_enter_delay == 3.0 and app._hold_key_name == "F7"
     finally:
         app._apply_cleanup_settings(config.Settings())
+
+
+def test_a_held_send_types_the_space_it_left_off(countdown, monkeypatch):
+    """Ron, 2026-10-18: held a send, kept talking, got "delay.All right"."""
+    monkeypatch.setattr(app.state, "last_inserted_text", "Testing the delay.")
+    app._send_automatically("test", " ", "type")
+    app._hold_pending_send(announce=True)
+    assert TYPED == [" "]
+    # Undo still sees the whole dictation, space included.
+    assert app.state.last_inserted_text == "Testing the delay. "
+
+
+def test_a_sent_message_never_gets_the_space(countdown):
+    pressed, _ = countdown
+    app._send_automatically("test", " ", "type")
+    FakeTimer.made[0].fire()
+    assert pressed == ["test"] and TYPED == []
+
+
+def test_no_space_into_another_window(countdown, monkeypatch):
+    app._send_automatically("test", " ", "type")
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "konsole")
+    app._hold_pending_send(announce=True)
+    assert TYPED == []
+
+
+def test_the_dictation_hands_its_left_off_space_to_the_send(monkeypatch):
+    monkeypatch.setattr(app, "_press_enter_after", True)
+    sends = []
+    monkeypatch.setattr(app, "_send_automatically",
+                        lambda why, space="", mode="type": sends.append(space))
+    events = _dictate(monkeypatch, "Hello there", prepared=lambda r: r + ". ")
+    assert ("typed", "Hello there.") in events
+    assert sends == [" "]
