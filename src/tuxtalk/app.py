@@ -1901,7 +1901,7 @@ def _send_automatically(why: str) -> None:
     from . import screen_message
     screen_message.show_over_active_window(
         f"Sending in {delay:g} s. Tap {_hold_key_name} to hold it.",
-        seconds=delay, warning=False, tag=SEND_LABEL_TAG)
+        seconds=delay, warning=False, tag=SEND_LABEL_TAG, low=True)
 
 
 def _send_when_due(pending: dict) -> None:
@@ -1933,7 +1933,7 @@ def _hold_pending_send(announce: bool) -> bool:
     from . import screen_message
     if announce:
         screen_message.show_over_active_window(HELD_SEND_NOTICE, warning=False,
-                                               tag=SEND_LABEL_TAG)
+                                               tag=SEND_LABEL_TAG, low=True)
     else:
         screen_message.hide(SEND_LABEL_TAG)
     return True
@@ -3252,7 +3252,7 @@ def _finish_capture(beeps_on: bool, notify_on: bool):
             cancel_recording(beeps_on, notify_on, HELD_SEND_NOTICE)
             from . import screen_message
             screen_message.show_over_active_window(HELD_SEND_NOTICE, warning=False,
-                                                   tag=SEND_LABEL_TAG)
+                                                   tag=SEND_LABEL_TAG, low=True)
         else:
             cancel_recording(beeps_on, notify_on, f"Cancelled (held {held_ms} ms)")
         return None

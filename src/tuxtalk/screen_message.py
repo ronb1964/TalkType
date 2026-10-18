@@ -23,6 +23,19 @@ _current = None          # the label on screen, replaced by the next one
 _current_tag = None      # what the caller called it, so hide() takes only its own
 
 
+# low=True puts the label this far above the window's bottom edge: over the
+# lower part of a chat window, just above where its message box usually is,
+# not on top of the text being sent. A short window gets a quarter of its
+# height instead.
+LOW_ABOVE_BOTTOM = 200
+
+
+def low_center(rect):
+    """Where a low label is centred in the window *rect* (window_geometry.Rect)."""
+    above = min(LOW_ABOVE_BOTTOM, rect.h // 4)
+    return (round(rect.x + rect.w / 2), rect.y + rect.h - above)
+
+
 def reading_seconds(text):
     """How long *text* stays on screen."""
     seconds = 2.0 + SECONDS_PER_WORD * len(text.split())
@@ -49,17 +62,18 @@ def show(text, center=None):
         logger.debug(f"Could not show the message: {e}")
 
 
-def show_over_active_window(text, seconds=None, warning=True, tag=None):
-    """Show *text* over the middle of the active window, for *seconds* (None:
-    reading_seconds). *warning* False drops the warning sign and the amber
-    edge, for news rather than a problem. Safe from any thread: the lookups
+def show_over_active_window(text, seconds=None, warning=True, tag=None, low=False):
+    """Show *text* over the middle of the active window, or its lower part
+    with *low* (low_center), for *seconds* (None: reading_seconds). *warning*
+    False drops the warning sign and the amber edge, for news rather than a
+    problem. Safe from any thread: the lookups
     that need no GDK run here, the GDK ones on the GTK thread, since GDK may
     only be used from the thread that runs Gtk.main()."""
     try:
         from gi.repository import GLib
         from . import window_geometry
         GLib.idle_add(_show_over_window_now, text, window_geometry.active_window_report(),
-                      seconds, warning, tag)
+                      seconds, warning, tag, low)
     except Exception as e:
         logger.debug(f"Could not show the message: {e}")
 
@@ -81,11 +95,15 @@ def _hide_now(tag):
     return False
 
 
-def _show_over_window_now(text, report, seconds=None, warning=True, tag=None):
+def _show_over_window_now(text, report, seconds=None, warning=True, tag=None, low=False):
     """GTK-thread half of show_over_active_window."""
     try:
         from . import window_geometry
-        center = window_geometry.active_window_center(report)
+        if low:
+            rect = window_geometry.active_window_rect(report)
+            center = low_center(rect) if rect else None
+        else:
+            center = window_geometry.active_window_center(report)
     except Exception as e:
         logger.debug(f"Could not find the active window: {e}")
         center = None

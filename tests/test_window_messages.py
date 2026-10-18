@@ -258,3 +258,13 @@ def test_the_tray_is_asked_when_it_holds_the_name(monkeypatch):
     bus = _FakeBus(":1.2", ":1.5")
     monkeypatch.setitem(sys.modules, "dbus", types.SimpleNamespace(SessionBus=lambda: bus))
     assert wg._reported() is None and len(bus.asked) == 1
+
+
+def test_a_low_label_sits_above_a_chat_windows_message_box():
+    """The send countdown goes over the lower part of the window, near where a
+    chat app's message box is, not in the middle (Ron, 2026-10-18)."""
+    from tuxtalk import screen_message
+    from tuxtalk.window_geometry import Rect
+    assert screen_message.low_center(Rect(100, 50, 1000, 1200)) == (600, 1050)
+    # A short window: a quarter of its height above the bottom.
+    assert screen_message.low_center(Rect(0, 0, 400, 400)) == (200, 300)
