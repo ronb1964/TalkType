@@ -141,7 +141,9 @@ I'm Ron, and I don't write code. TuxTalk is written by Claude, Anthropic's AI, a
 
 I know what a lot of people think of AI-written apps, and plenty of the time they've earned it. Thing is, I don't want TuxTalk to be one of those. Keeping the code clean matters to me as much as the app working. That means nothing left lying around that isn't used, no two pieces of code doing the same job, comments that explain why something is there, and a [written checklist](CLAUDE.md#code-a-human-reviewer-would-respect--every-change) every change has to meet before it goes in. The goal is that an experienced developer can open any file and think it's well put together, not just that it happens to work.
 
-And it's not only my word. Over 3,400 automated tests run on every change. Before a release it gets tested on Ubuntu, Mint and Fedora Silverblue in virtual machines, plus Nobara, which I use it on every day. The hotkey helper had a security review from another developer, who then contributed a feature of his own. If you read the code and something looks off, open an issue. I'd rather hear it.
+And it's not only my word. Over 3,400 automated tests run on every change. Before a release it gets tested on Ubuntu, Mint and Fedora Silverblue in virtual machines, plus Nobara, which I use it on every day. The hotkey helper had a security review from another developer, guelz, who went on to contribute a feature too. If you read the code and something looks off, open an issue. I'd rather hear it.
+
+There's more about who's behind TuxTalk on the [About page](https://tuxtalk.app/about.html).
 
 ---
 

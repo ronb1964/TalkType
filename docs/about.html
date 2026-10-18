@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>About TuxTalk</title>
+<meta name="description" content="Who makes TuxTalk, how it's made with Claude, and why clean code matters as much as the app working.">
+<link rel="canonical" href="https://tuxtalk.app/about.html">
+<meta name="theme-color" content="#3aa8ff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f2c49" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="img/icon-64.png" type="image/png" sizes="64x64">
+<link rel="stylesheet" href="style.css">
+<script>
+  try { var t = localStorage.getItem("tuxtalk-theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}
+</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to the content</a>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="index.html" aria-label="TuxTalk home">
+      <img src="img/icon-64.png" alt="" width="32" height="32">
+      TuxTalk
+    </a>
+    <nav aria-label="Main">
+      <a class="nav-hide" href="index.html#features">Features</a>
+      <a class="nav-hide" href="index.html#videos">Videos</a>
+      <a class="nav-hide" href="about.html" aria-current="page">About</a>
+      <a class="nav-hide" href="privacy.html">Privacy</a>
+      <a class="nav-hide" href="https://github.com/ronb1964/TuxTalk" target="_blank" rel="noopener">GitHub</a>
+      <a class="nav-dl" href="index.html#download">Download</a>
+      <button class="theme-btn" type="button" id="theme-btn" aria-label="Switch between light and dark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/></svg>
+      </button>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+  <div class="page-head">
+    <div class="wrap">
+      <h1>About TuxTalk</h1>
+      <p>Who makes it, how it's made, and why the code matters to me as much as the app does.</p>
+    </div>
+  </div>
+
+  <div class="doc-page">
+    <div class="wrap">
+
+      <div class="prose">
+        <h2>Who I am</h2>
+        <p>I'm Ron Brand. I build custom camper vans for a living, and before that I spent 30 years as a fiber optic splicing technician. I'm not a programmer, and I can't read code.</p>
+        <p>I wanted to talk to my computer instead of typing, on Linux, without my voice going off to somebody's server. TuxTalk is what came out of that. These days I dictate almost everything I write with it, including the messages I send while I'm working on TuxTalk.</p>
+      </div>
+
+      <div class="prose">
+        <h2>How it's made</h2>
+        <p>TuxTalk is written by Claude, Anthropic's AI, and <a href="https://github.com/ronb1964/TuxTalk/commits/main" target="_blank" rel="noopener">every commit says so</a>. My part is deciding what it should do, testing every change on real machines, and living with the result every day. When something's off, I'm usually the first one to trip over it.</p>
+      </div>
+
+      <div class="prose">
+        <h2>Keeping the code clean</h2>
+        <p>I know what a lot of people think of AI-written apps, and plenty of the time they've earned it. I don't want TuxTalk to be one of those. Keeping the code clean matters to me as much as the app working, so there's a <a href="https://github.com/ronb1964/TuxTalk/blob/main/CLAUDE.md#code-a-human-reviewer-would-respect--every-change" target="_blank" rel="noopener">written checklist</a> every change has to meet before it goes in. Nothing left lying around that isn't used. No two pieces of code doing the same job. Comments that explain why something is there, and tests that check what a user would actually notice.</p>
+        <p>The goal is that an experienced developer can open any file and think it's well put together, not just that it happens to work. If you look and it isn't, I want to know.</p>
+      </div>
+
+      <div class="prose">
+        <h2>Don't just take my word for it</h2>
+        <ul>
+          <li>Over 3,500 automated tests <a href="https://github.com/ronb1964/TuxTalk/actions/workflows/tests.yml" target="_blank" rel="noopener">run on GitHub</a> every time the code changes.</li>
+          <li>Before a release I test it on Ubuntu, Linux Mint and Fedora Silverblue in virtual machines, plus Nobara, which I use every day.</li>
+          <li>The hotkey helper, the one part that reads the keyboard, went through three security reviews. The last one was by guelz, another developer, <a href="https://github.com/ronb1964/TuxTalk/discussions/12" target="_blank" rel="noopener">in the open</a>, and guelz went on to contribute <a href="https://github.com/ronb1964/TuxTalk/pull/13" target="_blank" rel="noopener">Type at pause</a>.</li>
+          <li>Everything is public: every change, every bug report, and how it got fixed.</li>
+        </ul>
+      </div>
+
+      <div class="prose">
+        <h2>Get in touch</h2>
+        <p>Found a bug, or have an idea? <a href="https://github.com/ronb1964/TuxTalk/issues" target="_blank" rel="noopener">Open an issue</a> or <a href="https://github.com/ronb1964/TuxTalk/discussions" target="_blank" rel="noopener">start a discussion</a> on GitHub. I'm on Mastodon too, as <a href="https://mastodon.social/@ronb1964" target="_blank" rel="noopener me">@ronb1964@mastodon.social</a>. I read everything.</p>
+      </div>
+
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="made">
+      <a class="brand" href="index.html"><img src="img/icon-64.png" alt="" width="32" height="32">TuxTalk</a>
+      <p>Made by Ron Brand. Free and open source under the MIT license.</p>
+    </div>
+    <ul class="links">
+      <li><a href="index.html">Home</a></li>
+      <li><a href="index.html#download">Download</a></li>
+      <li><a href="https://github.com/ronb1964/TuxTalk" target="_blank" rel="noopener">GitHub</a></li>
+      <li><a href="https://github.com/ronb1964/TuxTalk/discussions" target="_blank" rel="noopener">Discussions</a></li>
+    </ul>
+  </div>
+</footer>
+
+<script src="site.js"></script>
+</body>
+</html>
