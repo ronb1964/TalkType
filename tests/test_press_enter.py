@@ -87,7 +87,11 @@ def test_a_cut_off_dictation_is_typed_but_not_sent(monkeypatch):
     monkeypatch.setattr(app, "_press_enter_after", True)
     events = _dictate(monkeypatch, "You can go ahead and add that. And",
                       prepared=lambda r: r + ". ")
-    assert events == [("typed", "You can go ahead and add that. And. ")]
+    # No period after "And" either: the sentence isn't over, and what's said
+    # next carries it on in lowercase.
+    assert events == [("typed", "You can go ahead and add that. And ")]
+    assert app.state.continue_mid_sentence is True
+    app.state.continue_mid_sentence = False
 
 
 def test_saying_press_enter_sends_even_after_and(monkeypatch):

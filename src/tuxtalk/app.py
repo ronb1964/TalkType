@@ -3833,6 +3833,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         # "Send each dictation automatically" waits for the end of the
         # recording, not each phrase of Type at pause.
         press_enter = said_enter or (_press_enter_after and chunk_role != "middle")
+        cut_off = ""
         if press_enter and not said_enter:
             cut_off = ends_unfinished(raw)
             if cut_off:
@@ -3856,12 +3857,18 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         # A pause is not a sentence end, so a middle chunk gets no auto-period
         # of its own; the last chunk (or _flush_boundary) ends the sentence.
         # "press enter" at the end of one does end it: the message is sent.
-        chunk_period = auto_period and (chunk_role != "middle" or said_enter)
+        # Cut off on "and": the sentence isn't over either, so no period, and
+        # what's said next carries it on in lowercase.
+        chunk_period = auto_period and (chunk_role != "middle" or said_enter) and not cut_off
         # A correction said after a pause ("meet at three" ... "no wait,
         # four") goes to the AI together with the phrase it corrects.
         across = _corrects_across_pause(raw, chunk_role)
         text = _prepare_text(raw, smart_quotes, chunk_period, auto_space, app_kind=kind,
                              ai=not across)
+        if cut_off:
+            # The engine may have put its own period after the "and".
+            text = re.sub(r"\.(\s*)$", r"\1", text)
+            state.continue_mid_sentence = True
         taken_back = ""
         if across:
             from . import ai_cleanup
