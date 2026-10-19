@@ -460,6 +460,94 @@ def maybe_show_recommend_notice():
     return False
 
 
+def parakeet_update_needed(cfg):
+    """Where ("vulkan" or "cpu") the user dictates with the original Parakeet
+    v3 an earlier TuxTalk downloaded, now that Parakeet Ultra is out; None
+    when they don't use Parakeet or already have Ultra there."""
+    from . import parakeet_ultra, whisper_vulkan
+    from .parakeet_engine import cached_model_dir, effective_device, is_parakeet
+    if not is_parakeet(cfg.model):
+        return None
+    device = effective_device(cfg.model, cfg.device)
+    if not parakeet_ultra.missing(device):
+        return None
+    on_disk = whisper_vulkan.model_path(cfg.model) if device == "vulkan" else cached_model_dir()
+    return device if on_disk else None
+
+
+def _offer_parakeet_update(device):
+    """Ask, then download. True when Parakeet Ultra arrived, False when the
+    user said no or cancelled, None when the download failed (ask again on
+    the next start)."""
+    from . import parakeet_ultra
+    from .download_progress_dialog import DownloadTask, UnifiedDownloadDialog
+    from .ui_style import message_dialog
+    size = sum(parakeet_ultra.FILES[name][0] for name in parakeet_ultra.missing(device))
+    size_text = f"{size / 1e6:.0f} MB"
+    dialog = message_dialog(message_type=Gtk.MessageType.QUESTION, buttons=Gtk.ButtonsType.NONE,
+                            text="Parakeet got more accurate")
+    dialog.format_secondary_text(
+        "TuxTalk now uses Parakeet Ultra, a retrained Parakeet that makes fewer mistakes "
+        f"at the same speed. It's a one-time {size_text} download, and your Parakeet "
+        "keeps working while it downloads.")
+    dialog.add_button("Not Now", Gtk.ResponseType.CANCEL)
+    dialog.add_button(f"Download ({size_text})", Gtk.ResponseType.OK)
+    dialog.set_default_response(Gtk.ResponseType.OK)
+    dialog.set_keep_above(True)
+    answer = dialog.run()
+    dialog.destroy()
+    if answer != Gtk.ResponseType.OK:
+        logger.info("Parakeet Ultra offer: not now")
+        return False
+    download = UnifiedDownloadDialog(parent=None, title="Updating Parakeet",
+                                     description="One-time download. Everything runs on this computer.")
+    download.add_task(DownloadTask("Parakeet Ultra", size_text,
+                                   parakeet_ultra.make_download_func(device)))
+    results = download.run()
+    if all(r.get("success") for r in results.values()) and not parakeet_ultra.missing(device):
+        return True
+    if any(r.get("cancelled") for r in results.values()):
+        return False
+    from .notify import notify
+    notify("TuxTalk", "The Parakeet update didn't finish downloading. "
+                      "TuxTalk will offer it again next time it starts.")
+    return None
+
+
+def maybe_offer_parakeet_update(restart):
+    """Once, on the first start after updating: offer someone still on the
+    original Parakeet v3 the download of Parakeet Ultra (parakeet_ultra.py),
+    then *restart* dictation onto it. Their Parakeet works either way. A
+    GLib timeout like maybe_show_recommend_notice: True (ask again) until
+    the dictation service is up, then False."""
+    try:
+        from .config import load_config, save_config
+        from .cuda_helper import is_first_run
+        if is_first_run():
+            return False
+        from .service_launcher import find_service_pids
+        if not find_service_pids():
+            return True        # the service isn't up yet: ask again next tick
+        cfg = load_config()
+        if cfg.parakeet_update_offered:
+            return False
+        device = parakeet_update_needed(cfg)
+        if device is None:
+            return False
+        updated = _offer_parakeet_update(device)
+        if updated is None:
+            return False
+        cfg = load_config()     # the download took minutes; settings may have changed
+        cfg.parakeet_update_offered = True
+        save_config(cfg)
+        if updated:
+            logger.info(f"Parakeet Ultra downloaded ({device}); restarting dictation onto it")
+            restart(None)
+    except Exception as e:
+        logger.warning(f"Parakeet update offer skipped: {e}")
+    return False
+
+
 class DictationTray:
     def __init__(self):
         # TuxTalk is a dark-themed app. This is a global Gtk setting, so setting
@@ -525,8 +613,10 @@ class DictationTray:
         # Check service status every second to keep the icon and menu current
         GLib.timeout_add_seconds(1, self.update_status_and_menu)
 
-        # Once after updating: point existing users at the recommended setup.
+        # Once after updating: point existing users at the recommended setup,
+        # and offer Parakeet Ultra to those on the original Parakeet.
         GLib.timeout_add_seconds(15, maybe_show_recommend_notice)
+        GLib.timeout_add_seconds(20, maybe_offer_parakeet_update, self.restart_service)
 
         # Auto-start will be triggered after welcome dialog on first run
         # or immediately if not first run (handled in main())

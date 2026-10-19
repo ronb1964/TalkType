@@ -57,9 +57,12 @@ class ParakeetGpuModel:
         from . import whisper_vulkan as wv
         self.device_index = device_index
         threads = threads or max(1, (os.cpu_count() or 2) // 2)
-        self._command = command or [
-            sys.executable, "-m", "tuxtalk.parakeet_gpu_worker",
-            wv._engine_dir(), wv.model_path(PARAKEET_MODEL), str(device_index), str(threads)]
+        if command is None:
+            model = wv.model_path(PARAKEET_MODEL)
+            logger.info(f"Parakeet on the graphics card from {os.path.basename(model)}")
+            command = [sys.executable, "-m", "tuxtalk.parakeet_gpu_worker",
+                       wv._engine_dir(), model, str(device_index), str(threads)]
+        self._command = command
         self._proc = None
         self._stderr = None
         self._cpu = None

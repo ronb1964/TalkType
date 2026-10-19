@@ -12,8 +12,7 @@ from gi.repository import Gtk, GLib
 from .ui_style import message_dialog
 from .logger import setup_logger
 from .parakeet_engine import (
-    PARAKEET_FILES, PARAKEET_MODEL, PARAKEET_REPO,
-    cached_model_dir as _parakeet_cached_dir,
+    PARAKEET_MODEL, cached_model_dir as _parakeet_cached_dir,
     is_parakeet, load_parakeet_model,
 )
 
@@ -28,37 +27,23 @@ ESSENTIAL_MODEL_FILES = ("model.bin", "config.json", "tokenizer.json")
 VOCABULARY_FILES = ("vocabulary.txt", "vocabulary.json")
 
 
-def _essential_files(model_name):
-    """The files a model cannot load without."""
-    if is_parakeet(model_name):
-        return PARAKEET_FILES
-    return ESSENTIAL_MODEL_FILES + VOCABULARY_FILES
-
-
-def _download_is_usable(failed_files, model_name=None) -> bool:
-    """True if the model can still be loaded despite *failed_files*.
+def _download_is_usable(failed_files) -> bool:
+    """True if a Whisper model can still be loaded despite *failed_files*.
 
     Paths may be nested (list_repo_tree is recursive), so match on the file
     name rather than the whole path.
     """
     failed_names = {os.path.basename(p) for p in failed_files}
-    return not (failed_names & set(_essential_files(model_name)))
+    return not (failed_names & set(ESSENTIAL_MODEL_FILES + VOCABULARY_FILES))
 
 
 def _files_to_download(model_name, repo_id):
-    """(path, size) pairs to fetch for *model_name*.
-
-    Whisper repos are fetched whole. For Parakeet only the int8 files are
-    wanted: its repo also holds a 2.4 GB full-precision copy we never load.
-    Raises if the file list cannot be fetched (callers fall back).
-    """
+    """(path, size) pairs to fetch for *model_name*: the whole repo.
+    Raises if the file list cannot be fetched (callers fall back)."""
     from huggingface_hub import list_repo_tree
     files_info = list(list_repo_tree(repo_id, recursive=True))
-    files = [(f.path, f.size) for f in files_info
-             if getattr(f, 'size', None) is not None]
-    if is_parakeet(model_name):
-        files = [(path, size) for path, size in files if path in PARAKEET_FILES]
-    return files
+    return [(f.path, f.size) for f in files_info
+            if getattr(f, 'size', None) is not None]
 
 
 def load_model(model_name, device="cpu", compute_type="int8"):
@@ -85,19 +70,19 @@ def model_display_name(model_name):
     return model_name.title()
 
 
-# Hugging Face repository for each model.
+# Hugging Face repository for each Whisper model. Parakeet comes from
+# TuxTalk's own release instead (parakeet_ultra.py).
 MODEL_REPOS = {
     "tiny": "Systran/faster-whisper-tiny",
     "base": "Systran/faster-whisper-base",
     "small": "Systran/faster-whisper-small",
     "medium": "Systran/faster-whisper-medium",
     "large-v3": "Systran/faster-whisper-large-v3",
-    PARAKEET_MODEL: PARAKEET_REPO,
 }
 
 # The models offered in the UI, smallest first. Every screen with a model picker
 # builds from this so their lists can't drift apart. A model is only offerable
-# if MODEL_REPOS can fetch it (tests/test_model_choices.py).
+# if it can be downloaded (tests/test_model_choices.py).
 #
 # Parakeet comes last: it is not part of Whisper's size ladder, it is a
 # different engine (see parakeet_engine.py).
@@ -167,6 +152,10 @@ def make_model_download_func(model_name, repo_id=None, only_files=None):
         Callable: Function with signature (progress_callback, cancel_event) -> bool
                   progress_callback takes (message: str, percent: int)
     """
+    if is_parakeet(model_name) and repo_id is None:
+        from . import parakeet_ultra
+        return parakeet_ultra.make_download_func("cpu")
+
     def download_func(progress_callback, cancel_event):
         """Download model files to HF cache only. Returns True on success."""
         try:
@@ -197,9 +186,9 @@ def make_model_download_func(model_name, repo_id=None, only_files=None):
                 files_with_sizes = []
                 total_bytes = 0
 
-            if not files_with_sizes and (only_files or is_parakeet(model_name)):
+            if not files_with_sizes and only_files:
                 # No file list: fetch the known files without byte progress.
-                files_with_sizes = [(name, 0) for name in (only_files or PARAKEET_FILES)]
+                files_with_sizes = [(name, 0) for name in only_files]
 
             if not files_with_sizes:
                 # Without a file list, let WhisperModel download it (no byte progress).
@@ -283,7 +272,7 @@ def make_model_download_func(model_name, repo_id=None, only_files=None):
                     downloaded_bytes[0] += file_size
 
             # Files asked for by name are all needed.
-            if failed_files and (only_files or not _download_is_usable(failed_files, model_name)):
+            if failed_files and (only_files or not _download_is_usable(failed_files)):
                 logger.error(
                     f"Model {model_name} download incomplete: "
                     f"{len(failed_files)} file(s) failed: {failed_files[:3]}"
@@ -437,7 +426,7 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
     content.pack_start(title_label, False, False, 0)
 
     status_label = Gtk.Label()
-    status_label.set_markup(f'<span>Downloading from Hugging Face... ({size_str})</span>')
+    status_label.set_markup(f'<span>Downloading... ({size_str})</span>')
     status_label.set_line_wrap(True)
     content.pack_start(status_label, False, False, 0)
 
@@ -498,6 +487,20 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
             if cancel_event.is_set():
                 return
 
+            if is_parakeet(model_name):
+                from . import parakeet_ultra
+                if not parakeet_ultra.make_download_func("cpu")(
+                        lambda text, percent: update_ui_progress(percent * 0.95, text),
+                        cancel_event):
+                    if not cancel_event.is_set():
+                        download_error[0] = RuntimeError("the files could not be downloaded")
+                    return
+                update_ui_progress(95, "Loading model...")
+                model = load_model(model_name)
+                if not cancel_event.is_set():
+                    download_result[0] = model
+                return
+
             logger.info(f"Downloading model {model_name} using huggingface_hub")
 
             from huggingface_hub import hf_hub_download
@@ -519,10 +522,6 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
                 logger.warning(f"Could not get file sizes: {e}")
                 files_with_sizes = []
                 total_bytes = 0
-
-            if not files_with_sizes and is_parakeet(model_name):
-                # No file list: fetch the known files without byte progress.
-                files_with_sizes = [(name, 0) for name in PARAKEET_FILES]
 
             if not files_with_sizes:
                 # Without a file list, let WhisperModel download it (no byte progress).

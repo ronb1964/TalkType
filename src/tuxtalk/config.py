@@ -210,6 +210,7 @@ class Settings:
     typing_wpm: int = 40                 # the user's typing speed, for "time saved" on the Stats tab (10-200)
     dictation_language: str = ""         # language picked at first run (recommend.py); "" = system locale
     recommend_notice_shown: bool = False  # the one-time "better setup" notice was shown (or not needed)
+    parakeet_update_offered: bool = False  # the one-time Parakeet Ultra offer was answered (tray.py)
     vulkan_slower: bool = False          # the speed check found the processor faster than the graphics chip
     pause_media: bool = True             # pause playing music/videos while dictating, resume after (media_pause.py)
     duck_audio: bool = False             # turn other apps' sound down while dictating, back after (audio_duck.py)
@@ -805,6 +806,7 @@ LIVE_APPLIED_KEYS = {
     # Read by the tray and first run (recommend.py), never by the service.
     "dictation_language",
     "recommend_notice_shown",
+    "parakeet_update_offered",
     "vulkan_slower",
 }
 

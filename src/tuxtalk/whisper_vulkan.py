@@ -85,8 +85,8 @@ MODEL_FILES = {
     "small": ("ggml-small-q8_0.bin", "264 MB"),
     "medium": ("ggml-medium-q5_0.bin", "539 MB"),
     "large-v3": ("ggml-large-v3-q5_0.bin", "1.1 GB"),
-    # q8_0, the same size as the processor's int8 download, and slightly
-    # more accurate: 3.65% word errors vs 4.35% on LibriSpeech.
+    # The original v3, which earlier TuxTalks downloaded: still used where
+    # it's on disk and Parakeet Ultra isn't (parakeet_ultra.py, same size).
     PARAKEET_MODEL: ("ggml-parakeet-tdt-0.6b-v3-q8_0.bin", "669 MB"),
 }
 # Models not hosted in whisper.cpp's own repo.
@@ -163,9 +163,15 @@ def is_engine_installed(model_name=None) -> bool:
 
 
 def model_path(model_name):
-    """Local path of the whisper.cpp model for *model_name*, or None."""
+    """Local path of the whisper.cpp model for *model_name*, or None. For
+    Parakeet, Parakeet Ultra once it's downloaded, else the original v3."""
     if not supports_model(model_name):
         return None
+    if is_parakeet(model_name):
+        from . import parakeet_ultra
+        ultra = parakeet_ultra.gpu_file()
+        if ultra is not None:
+            return ultra
     try:
         from huggingface_hub import hf_hub_download
         return hf_hub_download(model_repo(model_name), MODEL_FILES[model_name][0],
@@ -225,6 +231,9 @@ def make_engine_download_func(model_name=None):
 
 def make_model_download_func(model_name):
     """DownloadTask function: fetch *model_name*'s whisper.cpp file."""
+    if is_parakeet(model_name):
+        from . import parakeet_ultra
+        return parakeet_ultra.make_download_func("vulkan")
     from .model_helper import make_model_download_func as _hf_download
     return _hf_download(f"whisper-vulkan-{model_name}", repo_id=model_repo(model_name),
                         only_files=(MODEL_FILES[model_name][0],))

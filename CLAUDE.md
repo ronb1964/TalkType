@@ -82,10 +82,11 @@ First run (since 0.14.2 it recommends one setup; CUDA is not offered here):
 - [ ] Welcome screen appears, and its card names the graphics card and language ("Parakeet on your NVIDIA ..., For English")
 - [ ] Other options: changing the language, model or graphics-card tickbox updates the card and its download size. The language list reads "Spanish (Español)", "Japanese (日本語)" and so on, with no flags; Preferences → General → Change model, device or language → Language shows the same list
 - [ ] Welcome screen's "How It Works" reads 1. Hold F8, 2. Talk, 3. Let go. Hotkey test, then straight to the downloads: no "You're All Set!" screen before them
-- [ ] Downloads show progress bars: the Vulkan engine and Parakeet for the graphics card. The log must show a real download, not "cached"
+- [ ] Downloads show progress bars: the Vulkan engine and Parakeet for the graphics card. The log must show a real download, not "cached": "Parakeet Ultra downloaded for vulkan"
 - [ ] The speed check runs, and the log shows its result (`Speed check (parakeet-v3): graphics …s, processor …s`)
 - [ ] Default settings are correct (model=parakeet-v3, device=vulkan when the card won, auto_period=True, auto_timeout 5 min, language_mode=auto)
-- [ ] Dictation works on the graphics card (log: `Parakeet on GPU`)
+- [ ] Dictation works on the graphics card (log: `Parakeet on GPU`, and "Parakeet on the graphics card from ggml-parakeet-ultra-q8_0.bin")
+- [ ] Parakeet Ultra offer (a VM with the original Parakeet from 0.16, updated to this version without fresh-start): about 20 s after start, "Parakeet got more accurate" with Not Now and Download (669 MB, or 670 MB on the processor). Download shows a progress bar, dictation restarts by itself (log: "Parakeet Ultra downloaded", "Parakeet on the graphics card from ggml-parakeet-ultra-q8_0.bin") and dictates. Restart TuxTalk: no second offer. On another VM, Not Now: dictation keeps working on the original Parakeet and the offer never comes back. About TuxTalk credits Moondream, NVIDIA and Olicorne
 - [ ] Hotkey helper (default since 0.16): first-run's Fix Typing asks for the password once, says no restart is needed, and F8 works straight away without the user joining the input group (`systemctl is-active tuxtalk-hotkeys`, `getent group input`; log: "Hotkeys come from the TuxTalk hotkey helper"). After a reboot it starts by itself. In a VM, also once on an immutable distro (Bazzite or Silverblue) and once without systemd, where it falls back to the input group (log: "Hotkey helper not used") and the setup screen and Preferences say why, with the 🔒 line about programs reading the keyboard
 
 - [ ] No system tray (Silverblue VM, plain GNOME): the welcome screen's "Install GNOME Extension" is ticked, with the amber "this desktop has no system tray" line. Untick it and finish setup: TuxTalk's menu window appears (log: "No system tray and no extension running"). Opening TuxTalk from the apps again brings it back (log: "Opened the menu window (no system tray here)"); its buttons work, and the switch turns dictation off and on. Right-click TuxTalk in the dash: Preferences, Transcribe a File, Help, Quit TuxTalk. On KDE, opening TuxTalk again shows the same window without the no-tray note
@@ -209,6 +210,20 @@ Using TuxTalk on Arch? A [vote on the AUR page](https://aur.archlinux.org/packag
 
 AUR votes only move when asked for — the package sat at zero from December
 2025 to at least August 2026 while still being installed regularly.
+
+---
+
+## PARAKEET ULTRA — HOSTED AS ITS OWN PRE-RELEASE
+
+Parakeet's files (`src/tuxtalk/parakeet_ultra.py`) come from the GitHub
+pre-release `parakeet-ultra-1`: the processor's int8 ONNX files (Olicorne's
+export, unchanged) and the graphics card's q8_0 file (converted with
+whisper.cpp's own script). Released versions check every file's SHA256, so a
+published file is never replaced: a new conversion gets a new tag and new
+hashes in `parakeet_ultra.py`. Upload with `gh release create ... --prerelease`
+(a normal release would become "latest" for the updater), and only with Ron's OK:
+it is public. How the files were made and checked: the release's README and
+Obsidian "TalkType/2026-10-19 - Parakeet-ultra bake-off".
 
 ---
 

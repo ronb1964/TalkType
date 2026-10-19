@@ -72,6 +72,16 @@ before 0.15.0, so older entries use that name.
   "It's a little bit more than a little bit." TuxTalk already hears each
   phrase again with the one before it to place the punctuation; for a phrase
   that short it now types the words it heard there when they're fewer.
+- Parakeet is more accurate. TuxTalk now downloads Parakeet Ultra,
+  Moondream's retrained version of NVIDIA's Parakeet: the same size and
+  speed, with fewer mistakes. In our tests on 2,400 recordings in English,
+  German, Spanish and Italian it made 8 to 21% fewer mistakes on the
+  graphics card, and 20 to 30% fewer on the processor, where TuxTalk's old
+  copy had lost some accuracy to compression. On clips of silence and noise
+  it typed nothing, where the old one now and then typed "Thank you.", and
+  it writes numbers as digits more often ("8:30", "12 feet"). If you already use Parakeet, TuxTalk offers the
+  update once (a 670 MB download); your Parakeet keeps working until then,
+  and if you say Not Now.
 
 ## [0.16.0] - 2026-10-18
 

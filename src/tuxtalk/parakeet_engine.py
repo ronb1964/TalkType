@@ -9,10 +9,11 @@ language by itself.
 
 It runs on onnxruntime, which the AppImage already ships because faster-whisper
 depends on it, so supporting it costs only the small `onnx-asr` package. The
-model itself (~670 MB) is downloaded at runtime like the Whisper models.
+model itself (~670 MB) is downloaded at runtime: Parakeet Ultra, a more
+accurate post-training of the same model (parakeet_ultra.py).
 
-The model is published by NVIDIA under CC-BY-4.0, which requires attribution;
-see PARAKEET_ATTRIBUTION, shown in the About dialog.
+The models are published under CC-BY-4.0, which requires attribution; see
+PARAKEET_ATTRIBUTION, shown in the About dialog.
 
 The rest of TuxTalk treats "parakeet-v3" as just another model name, so the
 model pickers, config validation and download dialogs all work unchanged.
@@ -38,14 +39,11 @@ logger = setup_logger(__name__)
 # The name stored in config.toml and shown in the model pickers.
 PARAKEET_MODEL = "parakeet-v3"
 
-# Hugging Face repo with the ONNX export of the model (istupakov is the author
-# of onnx-asr, and this is the export that library is built and tested against).
-PARAKEET_REPO = "istupakov/parakeet-tdt-0.6b-v3-onnx"
-
-# Only the int8 files. The repo also holds full-precision weights (a 2.4 GB
-# encoder-model.onnx.data), which must NOT be downloaded: int8 is what we load,
-# and it is the version measured to run fast on a CPU.
-PARAKEET_FILES = (
+# The original v3 that TuxTalk downloaded before Parakeet Ultra: istupakov's
+# int8 export (the author of onnx-asr). Still used where it's on disk and Ultra
+# isn't, until the user takes the update; nothing downloads it any more.
+V3_REPO = "istupakov/parakeet-tdt-0.6b-v3-onnx"
+V3_FILES = (
     "config.json",
     "vocab.txt",
     "nemo128.onnx",                    # audio preprocessor
@@ -57,7 +55,8 @@ PARAKEET_FILES = (
 _ONNX_ASR_MODEL = "nemo-parakeet-tdt-0.6b-v3"
 
 PARAKEET_ATTRIBUTION = (
-    "Parakeet TDT 0.6B v3 speech model by NVIDIA, licensed under CC-BY-4.0."
+    "Parakeet Ultra speech model by Moondream, post-trained from Parakeet TDT 0.6B v3 "
+    "by NVIDIA; ONNX export by Olicorne. All licensed under CC-BY-4.0."
 )
 
 
@@ -81,17 +80,22 @@ def effective_device(model_name, device) -> str:
 
 
 def cached_model_dir():
-    """Folder holding a complete Parakeet download, or None if anything is missing.
+    """Folder holding a complete Parakeet for the processor, or None: Parakeet
+    Ultra once it's downloaded, else the original v3 an earlier TuxTalk did.
 
     Checks file presence only, so it is cheap enough for the GTK main thread.
-    hf_hub_download(local_files_only=True) returns a file only once its
-    download has fully finished, so a cancelled download reports None.
+    Both downloads put a file in place only once it has fully arrived, so a
+    cancelled download reports None.
     """
+    from . import parakeet_ultra
+    ultra = parakeet_ultra.cpu_dir()
+    if ultra is not None:
+        return ultra
     try:
         from huggingface_hub import hf_hub_download
         paths = [
-            hf_hub_download(PARAKEET_REPO, name, local_files_only=True)
-            for name in PARAKEET_FILES
+            hf_hub_download(V3_REPO, name, local_files_only=True)
+            for name in V3_FILES
         ]
     except Exception:
         return None

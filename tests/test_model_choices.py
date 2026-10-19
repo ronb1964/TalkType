@@ -1,9 +1,9 @@
 """Model pickers offer exactly the models that can be downloaded.
 
-MODEL_REPOS is the real source of truth: a model can only be offered if there is
-a repository to download it from. OFFERED_MODELS fixes the display order and is
-what every model picker must build from, so a separate hardcoded list can't
-drift and hide a model.
+A model can only be offered if there is somewhere to download it from: a
+Whisper repository in MODEL_REPOS, or TuxTalk's own release for Parakeet.
+OFFERED_MODELS fixes the display order and is what every model picker must
+build from, so a separate hardcoded list can't drift and hide a model.
 """
 
 import pathlib
@@ -19,10 +19,12 @@ SCREENS_WITH_MODEL_PICKERS = [
 
 def test_offered_models_matches_what_can_actually_be_downloaded():
     from tuxtalk.model_helper import MODEL_REPOS, OFFERED_MODELS
+    from tuxtalk.parakeet_engine import PARAKEET_MODEL
 
-    assert set(OFFERED_MODELS) == set(MODEL_REPOS), (
+    downloadable = set(MODEL_REPOS) | {PARAKEET_MODEL}
+    assert set(OFFERED_MODELS) == downloadable, (
         f"OFFERED_MODELS {sorted(OFFERED_MODELS)} does not match the models that "
-        f"can be downloaded {sorted(MODEL_REPOS)}. Offering a model with no repo "
+        f"can be downloaded {sorted(downloadable)}. Offering a model with no repo "
         f"gives the user a choice that fails at download time; omitting one hides "
         f"a model that works."
     )
