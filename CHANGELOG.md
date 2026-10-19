@@ -13,6 +13,13 @@ before 0.15.0, so older entries use that name.
   languages (that one is for the Whisper models). It used to be three
   controls. The cheat sheet and Paste Last Dictation shortcuts moved into
   More shortcuts. Your settings carry over as they were.
+- Simpler Audio tab. "Pause music and videos" and "Turn other sounds down"
+  are one question now, Other sound while you dictate, with four answers.
+  The recording indicator is a tickbox and a Customize button; its style,
+  size, color and position are in their own window. "Sensitivity" is called
+  Animation response there, because it never changed what the microphone
+  hears. The backing setting is gone (the default Orb never used it); a
+  backing you already picked stays.
 
 ## [0.16.0] - 2026-10-18
 

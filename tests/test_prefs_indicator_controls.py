@@ -7,8 +7,16 @@ PREFS = pathlib.Path(__file__).resolve().parent.parent / "src/tuxtalk/prefs.py"
 def test_controls_write_the_new_config_keys():
     text = PREFS.read_text()
     for key in ("indicator_style", "indicator_color_mode", "indicator_color",
-                "indicator_backing", "indicator_sensitivity"):
+                "indicator_sensitivity"):
         assert key in text, f"Preferences never writes {key}"
+
+
+def test_backing_has_no_control_but_keeps_its_value():
+    """The backing row went in the 0.16 simplicity review: it was greyed out for
+    the default Orb. A backing someone already set still draws (config default
+    "medium"), so Preferences neither shows nor rewrites it."""
+    text = PREFS.read_text()
+    assert "indicator_backing" not in text
 
 
 def test_no_redundant_orb_checkbox():
@@ -76,20 +84,6 @@ def test_backing_options_present():
         assert level in text
 
 
-def test_backing_tooltip_notes_the_orb_ignores_it():
-    """The backing only draws for waveform/bars/radial; the orb has its own pill
-    background and never uses it. The tooltip must say so, so nobody expects a
-    backing setting to change the orb."""
-    text = PREFS.read_text()
-    assert "Doesn't apply to the Orb" in text
-
-
-def test_backing_control_greys_out_for_the_orb():
-    """Beyond the tooltip, the backing control is disabled while the style is
-    Orb (which ignores it) and re-enabled for the reactive styles, so the
-    irrelevance is visible at a glance without hovering."""
-    text = PREFS.read_text()
-    assert "_sync_backing_sensitivity" in text
 
 
 def test_offset_boxes_show_up_and_right_as_positive():

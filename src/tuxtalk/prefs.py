@@ -351,6 +351,22 @@ class PauseMeter(SegmentedVUMeter):
             cr.stroke()
 
 
+# Other sound while dictating: (label, pause_media, duck_audio). Both on
+# pauses players and turns the rest down, which some people use for calls.
+SOUND_CHOICES = {
+    "pause": ("Pause music and videos", True, False),
+    "pause-duck": ("Pause music and videos, turn the rest down", True, True),
+    "duck": ("Turn everything down", False, True),
+    "leave": ("Leave it alone", False, False),
+}
+
+
+def sound_choice(config):
+    """The SOUND_CHOICES entry for pause_media and duck_audio."""
+    wanted = (bool(config.get("pause_media", True)), bool(config.get("duck_audio", False)))
+    return next(sid for sid, (_label, *flags) in SOUND_CHOICES.items() if tuple(flags) == wanted)
+
+
 # The Language dropdown's entry for auto-detect held to a list of languages.
 SEVERAL_LANGUAGES = "several"
 
@@ -1638,25 +1654,34 @@ class PreferencesWindow:
         grid.attach(beeps_check, 0, row, 2, 1)
         row += 1
 
-        # Pause music and videos while dictating (media_pause.py)
-        pause_media_check = Gtk.CheckButton(label="Pause music and videos while dictating")
-        pause_media_check.set_active(self.config.get("pause_media", True))
-        pause_media_check.connect("toggled", lambda x: self.update_config("pause_media", x.get_active()))
-        pause_media_check.set_tooltip_text("Pauses YouTube, Spotify and other players while you talk, so the microphone hears only you.\nOnly what TuxTalk paused starts again when you finish.")
-        grid.attach(pause_media_check, 0, row, 2, 1)
-        row += 1
-
-        # Covers what pausing can't reach: calls, games, apps without media keys.
-        duck_check = Gtk.CheckButton(label="Turn other sounds down while dictating")
-        duck_check.set_active(bool(self.config.get("duck_audio", False)))
-        duck_check.connect("toggled", lambda x: self.update_config("duck_audio", x.get_active()))
-        duck_check.set_tooltip_text(
-            "Turns every other app's sound way down while you talk (to 25% on its volume\n"
-            "slider, which sounds much quieter than a quarter) and puts it back when you\n"
-            "finish: Discord calls, games and anything pausing can't reach.\n"
-            "Only what you hear: a call still hears your microphone, so mute yourself there.\n"
+        # What happens to other sound while you talk: one question, one
+        # dropdown over the two settings (sound_choice), which keep their meaning.
+        sound_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        sound_label = Gtk.Label(label="Other sound while you dictate 💡:", xalign=0)
+        sound_label.set_tooltip_text(
+            "Pause: YouTube, Spotify and other players pause while you talk, so the\n"
+            "microphone hears only you. Only what TuxTalk paused starts again.\n\n"
+            "Turn down: every other app's sound goes way down while you talk (to 25% on\n"
+            "its volume slider) and comes back after: Discord calls, games and anything\n"
+            "pausing can't reach. A call still hears your microphone, so mute yourself there.\n"
             "A volume you change yourself in the meantime is left as you set it.")
-        grid.attach(duck_check, 0, row, 2, 1)
+        sound_combo = Gtk.ComboBoxText()
+        sound_combo.connect("button-press-event", self._on_combo_button_press)
+        self._block_combo_scroll(sound_combo)
+        for sid, (slabel, _pause, _duck) in SOUND_CHOICES.items():
+            sound_combo.append(sid, slabel)
+        sound_combo.set_active_id(sound_choice(self.config))
+
+        def _on_sound_changed(combo):
+            choice = combo.get_active_id()
+            if choice is not None:
+                _label, pause, duck = SOUND_CHOICES[choice]
+                self.update_config("pause_media", pause)
+                self.update_config("duck_audio", duck)
+        sound_combo.connect("changed", _on_sound_changed)
+        sound_row.pack_start(sound_label, False, False, 0)
+        sound_row.pack_start(sound_combo, False, False, 0)
+        grid.attach(sound_row, 0, row, 2, 1)
         row += 1
         
         # Notifications
@@ -1667,18 +1692,36 @@ class PreferencesWindow:
         grid.attach(notify_check, 0, row, 2, 1)
         row += 1
 
-        # Recording indicator
-        indicator_check = Gtk.CheckButton(label="Show visual recording indicator")
+        # Recording indicator: on or off here; how it looks in its own window.
+        indicator_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        indicator_check = Gtk.CheckButton(label="Show recording indicator")
         indicator_check.set_active(self.config.get("recording_indicator", True))
-        indicator_check.connect("toggled", lambda x: self.update_config("recording_indicator", x.get_active()))
         indicator_check.set_tooltip_text("Show an animated visual indicator while recording.\nHelps you see that dictation is active and responding to your voice.")
-        grid.attach(indicator_check, 0, row, 2, 1)
+        customize_btn = Gtk.Button(label="Customize\u2026")
+        customize_btn.set_tooltip_text("Its style, size, color and where it appears")
+        customize_btn.set_sensitive(indicator_check.get_active())
+        customize_btn.connect("clicked", lambda _b: self._show_indicator_window())
+        indicator_check.connect("toggled", lambda x: (
+            self.update_config("recording_indicator", x.get_active()),
+            customize_btn.set_sensitive(x.get_active())))
+        indicator_row.pack_start(indicator_check, False, False, 0)
+        indicator_row.pack_start(customize_btn, False, False, 0)
+        grid.attach(indicator_row, 0, row, 2, 1)
         row += 1
 
+        # Built now, shown by Customize…: its controls write self.config like
+        # every other, so Apply, OK and Cancel treat them the same.
+        ind = self.indicator_grid = Gtk.Grid()
+        ind.set_column_spacing(10)
+        ind.set_row_spacing(10)
+        for side in ("start", "end", "top", "bottom"):
+            getattr(ind, f"set_margin_{side}")(20)
+        row = 0
+
         # Indicator size
-        size_label = Gtk.Label(label="  Indicator size 💡:", xalign=0)
+        size_label = Gtk.Label(label="Size 💡:", xalign=0)
         size_label.set_tooltip_text("Choose the size of the recording indicator.\nMedium is the default size.")
-        grid.attach(size_label, 0, row, 1, 1)
+        ind.attach(size_label, 0, row, 1, 1)
 
         size_combo = Gtk.ComboBoxText()
         size_combo.connect("button-press-event", self._on_combo_button_press)
@@ -1691,13 +1734,13 @@ class PreferencesWindow:
         size_combo.set_active_id(current_size)
         size_combo.connect("changed", lambda x: self.update_config("indicator_size", x.get_active_id()))
         # The tooltip is on the label: on the combo it gets in the way of the popup
-        grid.attach(size_combo, 1, row, 1, 1)
+        ind.attach(size_combo, 1, row, 1, 1)
         row += 1
 
         # Indicator style
-        style_label = Gtk.Label(label="  Indicator style 💡:", xalign=0)
+        style_label = Gtk.Label(label="Style 💡:", xalign=0)
         style_label.set_tooltip_text("Choose how the recording indicator looks.\nOrb is the default.")
-        grid.attach(style_label, 0, row, 1, 1)
+        ind.attach(style_label, 0, row, 1, 1)
         style_combo = Gtk.ComboBoxText()
         style_combo.connect("button-press-event", self._on_combo_button_press)
         self._block_combo_scroll(style_combo)
@@ -1708,18 +1751,15 @@ class PreferencesWindow:
 
         def _on_style_changed(combo):
             self.update_config("indicator_style", combo.get_active_id())
-            # The Orb ignores the backing; grey it out so that's visible at a
-            # glance, and re-enable it for the reactive styles.
-            self._sync_backing_sensitivity()
         style_combo.connect("changed", _on_style_changed)
         self._style_combo = style_combo
-        grid.attach(style_combo, 1, row, 1, 1)
+        ind.attach(style_combo, 1, row, 1, 1)
         row += 1
 
         # Color mode — two choices: match the desktop accent, or pick a color.
         # The classic cyan is the first preset swatch in the picker below.
-        color_mode_label = Gtk.Label(label="  Indicator color:", xalign=0)
-        grid.attach(color_mode_label, 0, row, 1, 1)
+        color_mode_label = Gtk.Label(label="Color:", xalign=0)
+        ind.attach(color_mode_label, 0, row, 1, 1)
         color_mode_combo = Gtk.ComboBoxText()
         color_mode_combo.connect("button-press-event", self._on_combo_button_press)
         self._block_combo_scroll(color_mode_combo)
@@ -1729,15 +1769,15 @@ class PreferencesWindow:
         _mode = self.config.get("indicator_color_mode", "custom")
         color_mode_combo.set_active_id(_mode if _mode in ("system", "custom") else "custom")
         self._color_mode_combo = color_mode_combo
-        grid.attach(color_mode_combo, 1, row, 1, 1)
+        ind.attach(color_mode_combo, 1, row, 1, 1)
         row += 1
 
         # Color swatch — always visible. In Custom mode it shows your chosen
         # color; in System mode it mirrors the live desktop accent (a continuity
         # cue). Clicking it always opens the picker and adopts the result as a
         # custom color, so changing color is one click without the dropdown.
-        color_pick_label = Gtk.Label(label="  Custom color:", xalign=0)
-        grid.attach(color_pick_label, 0, row, 1, 1)
+        color_pick_label = Gtk.Label(label="Custom color:", xalign=0)
+        ind.attach(color_pick_label, 0, row, 1, 1)
         color_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         color_btn = Gtk.ColorButton()
         color_btn.set_halign(Gtk.Align.START)
@@ -1780,7 +1820,7 @@ class PreferencesWindow:
         reset_btn.connect("clicked", self._reset_color_to_classic)
         color_box.pack_start(reset_btn, False, False, 0)
 
-        grid.attach(color_box, 1, row, 1, 1)
+        ind.attach(color_box, 1, row, 1, 1)
         row += 1
 
         # Wire the dropdown now that the swatch exists. Choosing "Custom color"
@@ -1798,39 +1838,21 @@ class PreferencesWindow:
         color_mode_combo.connect("changed", _on_color_mode_changed)
         self._sync_color_swatch()
 
-        # Backing (soft dark background)
-        backing_label = Gtk.Label(label="  Indicator backing 💡:", xalign=0)
-        backing_label.set_tooltip_text("A soft dark backing keeps the indicator visible over any wallpaper.\nOff makes it fully transparent.\nDoesn't apply to the Orb, which has its own background.")
-        grid.attach(backing_label, 0, row, 1, 1)
-        backing_combo = Gtk.ComboBoxText()
-        backing_combo.connect("button-press-event", self._on_combo_button_press)
-        self._block_combo_scroll(backing_combo)
-        for bid, blabel in (("off", "Off (transparent)"), ("soft", "Soft"),
-                           ("medium", "Medium"), ("strong", "Strong")):
-            backing_combo.append(bid, blabel)
-        backing_combo.set_active_id(self.config.get("indicator_backing", "medium"))
-        backing_combo.connect("changed", lambda x: self.update_config("indicator_backing", x.get_active_id()))
-        grid.attach(backing_combo, 1, row, 1, 1)
-        self._backing_combo = backing_combo
-        self._backing_label = backing_label
-        # Reflect the current style now that both controls exist.
-        self._sync_backing_sensitivity()
-        row += 1
-
         # Sensitivity slider
-        sens_label = Gtk.Label(label="  Sensitivity:", xalign=0)
-        sens_label.set_tooltip_text("How strongly the indicator reacts to your voice.")
-        grid.attach(sens_label, 0, row, 1, 1)
+        sens_label = Gtk.Label(label="Animation response:", xalign=0)
+        sens_label.set_tooltip_text("How strongly the indicator's animation moves with your voice.\n"
+                                    "It doesn't change what the microphone hears.")
+        ind.attach(sens_label, 0, row, 1, 1)
         sens_scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0.5, 2.0, 0.1)
         sens_scale.set_value(self.config.get("indicator_sensitivity", 1.0))
         sens_scale.set_hexpand(True)
         sens_scale.connect("value-changed", lambda x: self.update_config("indicator_sensitivity", round(x.get_value(), 2)))
-        grid.attach(sens_scale, 1, row, 1, 1)
+        ind.attach(sens_scale, 1, row, 1, 1)
         row += 1
 
         # Indicator position
-        pos_label = Gtk.Label(label="  Indicator position:", xalign=0)
-        grid.attach(pos_label, 0, row, 1, 1)
+        pos_label = Gtk.Label(label="Position:", xalign=0)
+        ind.attach(pos_label, 0, row, 1, 1)
 
 
         positions = [
@@ -1870,18 +1892,23 @@ class PreferencesWindow:
             )
             position_combo.set_sensitive(False)
 
-        grid.attach(position_combo, 1, row, 1, 1)
+        ind.attach(position_combo, 1, row, 1, 1)
         row += 1
 
         # Warn only when positioning genuinely cannot work.
         if not positioning_available():
-            warning_label = Gtk.Label(label="  ⚠️ XWayland is not available, so the indicator always appears centred", xalign=0)
+            warning_label = Gtk.Label(label="⚠️ XWayland is not available, so the indicator always appears centred", xalign=0)
             warning_label.set_line_wrap(True)
             warning_label.set_max_width_chars(60)
             warning_style = warning_label.get_style_context()
             warning_style.add_class("dim-label")
-            grid.attach(warning_label, 0, row, 2, 1)
+            ind.attach(warning_label, 0, row, 2, 1)
             row += 1
+
+        # The offsets nudge the indicator from its position, so rarely wanted
+        # that they're folded away.
+        fine = self._fold(ind, row, "Fine position")
+        row += 1
 
         # Offsets. Which way each box moves the indicator is written right
         # under it, where people look, rather than in a tooltip. Up shows as
@@ -1892,7 +1919,7 @@ class PreferencesWindow:
             # Line the label up with the box, not with the box-plus-hint.
             name = Gtk.Label(label=label, xalign=0, valign=Gtk.Align.START)
             name.set_margin_top(6)
-            grid.attach(name, 0, row, 1, 1)
+            fine.attach(name, 0, row, 1, 1)
             sign = OFFSET_DISPLAY_SIGN[key]
             value = sign * int(self.config.get(key, 0))
             spin = Gtk.SpinButton(adjustment=Gtk.Adjustment(
@@ -1908,15 +1935,13 @@ class PreferencesWindow:
             box.pack_start(spin, False, False, 0)
             box.pack_start(hint_label, False, False, 0)
             box.set_halign(Gtk.Align.START)
-            grid.attach(box, 1, row, 1, 1)
+            fine.attach(box, 1, row, 1, 1)
             return spin
 
-        offset_x_spin = _offset_row(row, "  Horizontal offset (pixels):",
+        offset_x_spin = _offset_row(0, "Horizontal offset (pixels):",
                                     "indicator_offset_x", "+ moves it right, − moves it left")
-        row += 1
-        offset_y_spin = _offset_row(row, "  Vertical offset (pixels):",
+        offset_y_spin = _offset_row(1, "Vertical offset (pixels):",
                                     "indicator_offset_y", "+ moves it up, − moves it down")
-        row += 1
 
         # Setting both spins fires their value-changed handlers, which save.
         reset_button = Gtk.Button(label="Reset to 0")
@@ -1925,11 +1950,24 @@ class PreferencesWindow:
         reset_button.set_sensitive(can_move)
         reset_button.connect("clicked", lambda _b: (offset_x_spin.set_value(0),
                                                     offset_y_spin.set_value(0)))
-        grid.attach(reset_button, 1, row, 1, 1)
-        row += 1
+        fine.attach(reset_button, 1, 2, 1, 1)
 
         return grid
-    
+
+    def _show_indicator_window(self):
+        """The recording indicator's look and place, in a window of its own."""
+        win = getattr(self, "_indicator_window", None)
+        if win is None:
+            win = self._indicator_window = Gtk.Dialog(
+                title="Recording Indicator", transient_for=self.window, modal=True)
+            win.add_button("Done", Gtk.ResponseType.CLOSE)
+            win.get_content_area().pack_start(self.indicator_grid, True, True, 0)
+            # Closing only hides it: its controls stay part of this window.
+            win.connect("response", lambda w, _r: w.hide())
+            win.connect("delete-event", lambda w, _e: w.hide_on_delete())
+        win.show_all()
+        win.present()
+
     def _swiss_spelling_check(self):
         """The "Swiss German spelling" checkbox, bound to swiss_spelling."""
         check = Gtk.CheckButton(label="Swiss German spelling (ß → ss)")
@@ -4072,22 +4110,6 @@ class PreferencesWindow:
             self._color_mode_combo.set_active_id(mode)
         finally:
             self._suppress_color_popup = False
-
-    def _sync_backing_sensitivity(self):
-        """Enable the backing control only for styles that actually use it.
-
-        The Orb has its own pill background and ignores the backing entirely, so
-        greying the control out on Orb makes that plain without a hover; the
-        reactive styles (waveform/bars/radial) re-enable it.
-        """
-        combo = getattr(self, "_backing_combo", None)
-        if combo is None:
-            return
-        applies = self._style_combo.get_active_id() != "orb"
-        combo.set_sensitive(applies)
-        label = getattr(self, "_backing_label", None)
-        if label is not None:
-            label.set_sensitive(applies)
 
     def _reset_color_to_classic(self, _button=None):
         """Return the indicator color to TuxTalk's classic cyan.
