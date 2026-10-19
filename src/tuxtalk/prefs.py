@@ -351,10 +351,49 @@ class PauseMeter(SegmentedVUMeter):
             cr.stroke()
 
 
-def _auto_langs_label(setting):
-    """The Only these languages button: "English, Spanish · Change…"."""
+# The Language dropdown's entry for auto-detect held to a list of languages.
+SEVERAL_LANGUAGES = "several"
+
+
+def language_choice(config):
+    """The Language dropdown's entry for these settings: "auto", a language
+    code, or SEVERAL_LANGUAGES. One dropdown stands for three settings
+    (language_mode, language, auto_languages), which keep their meaning, so
+    older configs and backups read the same."""
+    if config.get("language_mode", "auto") == "manual":
+        return config.get("language") or "en"
+    return SEVERAL_LANGUAGES if config.get("auto_languages") else "auto"
+
+
+def apply_language_choice(config, choice):
+    """Write a Language dropdown entry (not SEVERAL_LANGUAGES, which needs the
+    list) into *config*."""
+    if choice == "auto":
+        config["language_mode"] = "auto"
+        config["auto_languages"] = ""
+    else:
+        config["language_mode"] = "manual"
+        config["language"] = choice
+
+
+def several_languages_label(setting):
+    """"Several: English, Spanish…", or "Several languages…" before any are picked."""
     from . import language_limit
-    return f"{language_limit.describe(language_limit.parse(setting))} \u00b7 Change\u2026"
+    codes = language_limit.parse(setting)
+    return f"Several: {language_limit.describe(codes)}\u2026" if codes else "Several languages\u2026"
+
+
+def language_summary(config):
+    """The language part of the setup line: "English", "English, Spanish",
+    or "detects the language"."""
+    from . import language_limit
+    from .recommend import language_name
+    choice = language_choice(config)
+    if choice == "auto":
+        return "detects the language"
+    if choice == SEVERAL_LANGUAGES:
+        return language_limit.describe(language_limit.parse(config.get("auto_languages", "")))
+    return language_name(choice)
 
 
 def _on_gnome():
@@ -556,7 +595,6 @@ class PreferencesWindow:
         # were built come back. Hide them again here, before the main loop
         # draws anything, so they never flash on screen.
         self._update_timeout_ui_state()
-        self._update_language_ui_state()
         self.ok_btn.grab_default()  # Now safe to grab default after window is shown
         self.window.present()  # Bring window to front
         # Note: Don't use set_keep_above - it interferes with combo box popups
@@ -713,15 +751,11 @@ class PreferencesWindow:
         window was open (model switch, performance preset, …) survive
         Apply/OK instead of being silently reverted.
         """
-        # Keep `language` consistent with the Language Mode dropdown — the
-        # service reads only `language` (empty string = auto-detect).
+        # The service reads only `language` (empty string = auto-detect).
         if self.config.get("language_mode", "auto") == "auto":
             self.config["language"] = ""
-        elif hasattr(self, "lang_combo"):
-            # Combo id can be None for a hand-edited language code that isn't
-            # in the dropdown list — keep the existing value in that case.
-            self.config["language"] = (self.lang_combo.get_active_id()
-                                       or self.config.get("language") or "en")
+        else:
+            self.config["language"] = self.config.get("language") or "en"
 
         try:
             on_disk = {}
@@ -959,233 +993,10 @@ class PreferencesWindow:
 
         row = 0
 
-        # ===== AI MODEL SECTION =====
-        model_header = Gtk.Label()
-        model_header.set_markup('<b>AI Model Configuration</b>')
-        model_header.set_xalign(0)
-        header_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        header_row.set_margin_bottom(10)
-        header_row.pack_start(model_header, True, True, 0)
-        # Which models run on which device: too many combinations to remember.
-        compat_btn = Gtk.Button(label="What works with what?")
-        compat_btn.connect("clicked", self._show_compatibility)
-        header_row.pack_end(compat_btn, False, False, 0)
-        grid.attach(header_row, 0, row, 2, 1)
-        row += 1
-
-        # Model selection
-        model_label = Gtk.Label(label="Model 💡:", xalign=0)
-        model_label.set_tooltip_text(
-            "Speech model - choose based on your needs:\n\n"
-            "• Parakeet (670 MB): recommended. The most accurate for English\n"
-            "  and 24 European languages, and fast even on the processor.\n"
-            "  On a graphics card, set Device to Vulkan.\n\n"
-            "Whisper models, for the other 75 or so languages:\n"
-            "• tiny (78 MB): Fastest, basic accuracy - quick notes\n"
-            "• base (148 MB): Fast, good accuracy - casual use\n"
-            "• small (486 MB): Balanced - a good start on the processor\n"
-            "• medium (1.5 GB): Slower, very accurate - professional use\n"
-            "• large-v3 (3.1 GB): Whisper's best - needs a graphics card\n"
-            "  (Sizes are for the processor; the Vulkan copies are about half.)\n"
-            "  ⚠️ Takes 30-60 seconds to load initially\n\n"
-            "Larger Whisper models provide:\n"
-            "• Better word recognition (technical terms, proper nouns)\n"
-            "• Improved punctuation and context awareness\n"
-            "• Better handling of accents and background noise"
-        )
-        grid.attach(model_label, 0, row, 1, 1)
-        # CUDA/GPU availability decides what the large-v3 row says
-        try:
-            from . import cuda_helper as _ch
-            _has_nvidia = self._has_nvidia()
-            # has_cuda_libraries() also accepts a system-wide CUDA install —
-            # same check the Device dropdown uses. (has_talktype_cuda_libraries
-            # is only for download-status display, per its own docstring.)
-            _has_cuda   = _ch.has_cuda_libraries()
-        except Exception:
-            _has_nvidia = False
-            _has_cuda   = False
-
-        # Model store columns: [model_id, display_text, is_sensitive]
-        _MODEL_DISPLAY = {
-            "tiny":     "tiny — fastest, lowest accuracy",
-            "base":     "base — fast, basic accuracy",
-            "small":    "small — good balance, 99 languages",
-            "medium":   "medium — better accuracy",
-            "large-v3": "large-v3 — best accuracy",
-            "parakeet-v3": "Parakeet — recommended: most accurate, English + 24 European languages",
-        }
-        from .model_helper import OFFERED_MODELS
-
-        self.model_store = Gtk.ListStore(str, str, bool)
-        for _mid in OFFERED_MODELS:
-            if _mid == "large-v3":
-                if _has_cuda:
-                    self.model_store.append([_mid, _MODEL_DISPLAY[_mid], True])
-                elif _has_nvidia:
-                    # Selectable — clicking it will offer CUDA download
-                    self.model_store.append([_mid,
-                        "large-v3 — click to download required CUDA libraries", True])
-                else:
-                    # Selectable. On AMD/Intel, clicking it offers Vulkan.
-                    try:
-                        from . import whisper_vulkan as _wv
-                        _vk = _wv.is_offered()
-                    except Exception:
-                        _vk = False
-                    self.model_store.append([_mid,
-                        "large-v3 — Whisper's best, on your graphics card (Vulkan)" if _vk
-                        else "large-v3 — needs a graphics card (none found)", True])
-            else:
-                self.model_store.append([_mid, _MODEL_DISPLAY[_mid], True])
-
-        model_combo = Gtk.ComboBox.new_with_model(self.model_store)
-        # Column 0 holds the model id — without this, set_active_id() is a
-        # silent no-op (plain ComboBox has no id column by default).
-        model_combo.set_id_column(0)
-        model_combo.set_can_focus(True)
-        self._block_combo_scroll(model_combo)
-        _renderer = Gtk.CellRendererText()
-        model_combo.pack_start(_renderer, True)
-        model_combo.add_attribute(_renderer, "text", 1)
-        model_combo.add_attribute(_renderer, "sensitive", 2)
-
-        # Set active row to match current config model
-        _current = self.config.get("model", Settings.model)
-        for _i, _row in enumerate(self.model_store):
-            if _row[0] == _current:
-                model_combo.set_active(_i)
-                break
-        else:
-            model_combo.set_active(OFFERED_MODELS.index(Settings.model))  # the default
-
-        self.model_combo = model_combo  # Store reference for later use
-        model_combo.connect("changed", self._on_model_changed)
-        grid.attach(model_combo, 1, row, 1, 1)
-        row += 1
-        
-        # Device selection
-        grid.attach(Gtk.Label(label="Device:", xalign=0), 0, row, 1, 1)
-        device_combo = Gtk.ComboBoxText()
-        device_combo.set_can_focus(True)
-        device_combo.connect("button-press-event", self._on_combo_button_press)
-        self._block_combo_scroll(device_combo)
-
-        # Store device combo for later refresh
-        self.device_combo = device_combo
-        
-        # Populate device options
-        self._refresh_device_options()
-        
-        self._device_before = self.config.get("device", "cpu")
-        device_combo.connect("changed", self._on_device_changed)
-        grid.attach(device_combo, 1, row, 1, 1)
-        row += 1
-        
-        # Language Mode (first)
-        lang_mode_label = Gtk.Label(label="Language Mode 💡:", xalign=0)
-        lang_mode_label.set_tooltip_text("Auto-detect: automatically detect language from speech\nManual Selection (Faster): select a specific language for faster processing")
-        grid.attach(lang_mode_label, 0, row, 1, 1)
-        self.lang_mode_combo = Gtk.ComboBoxText()
-        self.lang_mode_combo.set_can_focus(True)
-        self.lang_mode_combo.connect("button-press-event", self._on_combo_button_press)
-        self._block_combo_scroll(self.lang_mode_combo)
-        self.lang_mode_combo.append("auto", "Auto-detect")
-        self.lang_mode_combo.append("manual", "Manual Selection (Faster)")
-        self.lang_mode_combo.set_active_id(self.config.get("language_mode", "auto"))
-        self.lang_mode_combo.connect("changed", lambda x: self.update_config("language_mode", x.get_active_id()))
-        self.lang_mode_combo.connect("changed", self._on_language_mode_changed)
-        grid.attach(self.lang_mode_combo, 1, row, 1, 1)
-        row += 1
-
-        # Auto-detect held to the user's languages (language_limit.py). Shown
-        # with Auto-detect only; Manual already names the one language.
-        self.auto_langs_label = Gtk.Label(label="Only these languages 💡:", xalign=0)
-        self.auto_langs_label.set_tooltip_text(
-            "Auto-detect picks only from the languages you tick.\n"
-            "Handy when it sometimes takes your language for another one.\n"
-            "Used with the Whisper models; Parakeet picks by itself.")
-        grid.attach(self.auto_langs_label, 0, row, 1, 1)
-        # The button shows the choice and says it opens the list ("Any
-        # language" alone didn't look like something to click).
-        self.auto_langs_button = Gtk.Button(
-            label=_auto_langs_label(self.config.get("auto_languages", "")))
-        self.auto_langs_button.set_halign(Gtk.Align.START)
-        self.auto_langs_button.connect("clicked", self._on_auto_languages_clicked)
-        grid.attach(self.auto_langs_button, 1, row, 1, 1)
-        row += 1
-
-        # Language Selection (second)
-        self.lang_label = Gtk.Label(label="Language 💡:", xalign=0)
-        self.lang_label.set_tooltip_text("Select the language for speech recognition.\nOnly used when Language Mode is set to 'Manual'.")
-        grid.attach(self.lang_label, 0, row, 1, 1)
-        self.lang_combo = Gtk.ComboBoxText()
-        self.lang_combo.set_can_focus(True)
-        self.lang_combo.connect("button-press-event", self._on_combo_button_press)
-        self._block_combo_scroll(self.lang_combo)
-
-        # The same languages first run offers, each with its own name for
-        # itself ("Spanish (Español)"; no flags, see recommend._NATIVE).
-        # Auto-detect is NOT listed here: the Language Mode dropdown above
-        # handles it, and this list shows only with "Manual selection".
-        from . import recommend
-        for code, _name in recommend.LANGUAGES:
-            self.lang_combo.append(code, recommend.language_label(code))
-        
-        # Set current selection — English when unset or empty (empty means
-        # auto-detect, which this list doesn't offer)
-        current_lang = self.config.get("language", "") or "en"
-        self.lang_combo.set_active_id(current_lang)
-        if self.lang_combo.get_active_id() is None:
-            self.lang_combo.set_active_id("en")  # Safe fallback
-
-        self.lang_combo.connect("changed", lambda x: self.update_config("language", x.get_active_id()))
-        # The tooltip is on the label: on the combo it gets in the way of the popup
-        grid.attach(self.lang_combo, 1, row, 1, 1)
-        row += 1
-
-        # Initial visibility is set by _show_window
-
-        # A warning for model/device/language combinations that don't do what
-        # they say: Parakeet with CUDA runs on the processor, and Parakeet
-        # ignores a language it doesn't know. Hidden while there's nothing to say.
-        self.model_combo_hint = Gtk.Label(xalign=0)
-        self.model_combo_hint.set_line_wrap(True)
-        self.model_combo_hint.set_max_width_chars(60)
-        self.model_combo_hint.set_margin_top(4)
-        self.model_combo_hint.set_no_show_all(True)
-        grid.attach(self.model_combo_hint, 0, row, 2, 1)
-        row += 1
-
-        # The setup first run recommends, one click away (Tray → Performance →
-        # Recommended does the same), so trying other settings has an easy way back.
-        rec_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        rec_row.set_margin_top(8)
-        self.recommended_label = Gtk.Label(xalign=0)
-        self.recommended_label.set_line_wrap(True)
-        rec_row.pack_start(self.recommended_label, True, True, 0)
-        self.use_recommended_btn = Gtk.Button(label="Use Recommended")
-        self.use_recommended_btn.connect("clicked", self._on_use_recommended_clicked)
-        # Shown or hidden by _update_recommended_row; the window's show_all()
-        # would otherwise bring it back next to the tick.
-        self.use_recommended_btn.set_no_show_all(True)
-        rec_row.pack_end(self.use_recommended_btn, False, False, 0)
-        grid.attach(rec_row, 0, row, 2, 1)
-        row += 1
-
-        for _combo in (self.model_combo, self.device_combo, self.lang_mode_combo, self.lang_combo):
-            _combo.connect("changed", lambda *_: self._update_model_combo_hint())
-        self._update_model_combo_hint()
-
-        # ===== HOTKEY CONFIGURATION SECTION =====
-        separator1 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
-        separator1.set_margin_top(20)
-        separator1.set_margin_bottom(15)
-        grid.attach(separator1, 0, row, 2, 1)
-        row += 1
-
+        # ===== DICTATION KEYS SECTION =====
+        # First on the first tab: the keys are the one thing most people change.
         hotkey_header = Gtk.Label()
-        hotkey_header.set_markup('<b>Hotkey Configuration</b>')
+        hotkey_header.set_markup('<b>Dictation Keys</b>')
         hotkey_header.set_xalign(0)
         hotkey_header.set_margin_bottom(10)
         grid.attach(hotkey_header, 0, row, 2, 1)
@@ -1332,14 +1143,19 @@ class PreferencesWindow:
                 grid.attach(notif_btn, 0, row, 2, 1)
                 row += 1
 
+        # The two extra shortcuts work out of the box; folded so the section
+        # shows only the keys people dictate with.
+        shortcuts = self._fold(grid, row, "More shortcuts")
+        row += 1
+
         # Voice Commands hotkey (optional combo shortcut to open quick reference)
-        vc_label = Gtk.Label(label="Voice Commands Hotkey:", xalign=0)
+        vc_label = Gtk.Label(label="Commands cheat sheet:", xalign=0)
         vc_label.set_tooltip_text(
             "Press this key combo to pop up a quick reference of all voice commands.\n"
             "Leave set to 'None' to disable the shortcut.\n"
             "The reference is also available from the tray menu."
         )
-        grid.attach(vc_label, 0, row, 1, 1)
+        shortcuts.attach(vc_label, 0, 0, 1, 1)
 
         self.vc_hotkey_combo = Gtk.ComboBoxText()
         self.vc_hotkey_combo.set_can_focus(True)
@@ -1370,8 +1186,7 @@ class PreferencesWindow:
             "voice_commands_hotkey", x.get_active_id() or ""
         ))
 
-        grid.attach(self.vc_hotkey_combo, 1, row, 1, 1)
-        row += 1
+        shortcuts.attach(self.vc_hotkey_combo, 1, 0, 1, 1)
 
         # Paste Last Dictation hotkey: types the last dictation again, for when
         # it went to the wrong window (app._paste_last_dictation).
@@ -1380,7 +1195,7 @@ class PreferencesWindow:
             "Press this key combo to type your last dictation again where the cursor is,\n"
             "for when it went to the wrong window. It types once you let go of the keys.\n"
             "Leave set to 'None' to turn it off.")
-        grid.attach(pl_label, 0, row, 1, 1)
+        shortcuts.attach(pl_label, 0, 1, 1, 1)
 
         self.pl_hotkey_combo = Gtk.ComboBoxText()
         self.pl_hotkey_combo.set_can_focus(True)
@@ -1399,22 +1214,197 @@ class PreferencesWindow:
         self.pl_hotkey_combo.connect("changed", lambda x: self.update_config(
             "paste_last_hotkey", x.get_active_id() or ""
         ))
-        grid.attach(self.pl_hotkey_combo, 1, row, 1, 1)
+        shortcuts.attach(self.pl_hotkey_combo, 1, 1, 1, 1)
+
+        # ===== SPEECH RECOGNITION SECTION =====
+        # One line for the setup first run picked; the dropdowns behind it are
+        # for the few who want something else.
+        row = self._section_header(grid, row, "Speech Recognition")
+
+        self.setup_summary = Gtk.Label(xalign=0)
+        self.setup_summary.set_line_wrap(True)
+        grid.attach(self.setup_summary, 0, row, 2, 1)
         row += 1
+
+        # The setup first run recommends, one click away (Tray → Performance →
+        # Recommended does the same), so trying other settings has an easy way back.
+        rec_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        self.recommended_label = Gtk.Label(xalign=0)
+        self.recommended_label.set_line_wrap(True)
+        rec_row.pack_start(self.recommended_label, True, True, 0)
+        self.use_recommended_btn = Gtk.Button(label="Use Recommended")
+        self.use_recommended_btn.connect("clicked", self._on_use_recommended_clicked)
+        # Shown or hidden by _update_recommended_row; the window's show_all()
+        # would otherwise bring it back next to the tick.
+        self.use_recommended_btn.set_no_show_all(True)
+        rec_row.pack_end(self.use_recommended_btn, False, False, 0)
+        grid.attach(rec_row, 0, row, 2, 1)
+        row += 1
+
+        # A warning for model/device/language combinations that don't do what
+        # they say: Parakeet with CUDA runs on the processor, and Parakeet
+        # ignores a language it doesn't know. Outside the fold, so a closed
+        # fold can't hide it. Hidden while there's nothing to say.
+        self.model_combo_hint = Gtk.Label(xalign=0)
+        self.model_combo_hint.set_line_wrap(True)
+        self.model_combo_hint.set_max_width_chars(60)
+        self.model_combo_hint.set_no_show_all(True)
+        grid.attach(self.model_combo_hint, 0, row, 2, 1)
+        row += 1
+
+        setup = self._fold(grid, row, "Change model, device or language")
+        row += 1
+        srow = 0
+
+        # Which models run on which device: too many combinations to remember.
+        compat_btn = Gtk.Button(label="What works with what?")
+        compat_btn.set_halign(Gtk.Align.START)
+        compat_btn.connect("clicked", self._show_compatibility)
+        setup.attach(compat_btn, 0, srow, 2, 1)
+        srow += 1
+
+        # Model selection
+        model_label = Gtk.Label(label="Model 💡:", xalign=0)
+        model_label.set_tooltip_text(
+            "Speech model - choose based on your needs:\n\n"
+            "• Parakeet (670 MB): recommended. The most accurate for English\n"
+            "  and 24 European languages, and fast even on the processor.\n"
+            "  On a graphics card, set Device to Vulkan.\n\n"
+            "Whisper models, for the other 75 or so languages:\n"
+            "• tiny (78 MB): Fastest, basic accuracy - quick notes\n"
+            "• base (148 MB): Fast, good accuracy - casual use\n"
+            "• small (486 MB): Balanced - a good start on the processor\n"
+            "• medium (1.5 GB): Slower, very accurate - professional use\n"
+            "• large-v3 (3.1 GB): Whisper's best - needs a graphics card\n"
+            "  (Sizes are for the processor; the Vulkan copies are about half.)\n"
+            "  ⚠️ Takes 30-60 seconds to load initially\n\n"
+            "Larger Whisper models provide:\n"
+            "• Better word recognition (technical terms, proper nouns)\n"
+            "• Improved punctuation and context awareness\n"
+            "• Better handling of accents and background noise"
+        )
+        setup.attach(model_label, 0, srow, 1, 1)
+        # CUDA/GPU availability decides what the large-v3 row says
+        try:
+            from . import cuda_helper as _ch
+            _has_nvidia = self._has_nvidia()
+            # has_cuda_libraries() also accepts a system-wide CUDA install —
+            # same check the Device dropdown uses. (has_talktype_cuda_libraries
+            # is only for download-status display, per its own docstring.)
+            _has_cuda   = _ch.has_cuda_libraries()
+        except Exception:
+            _has_nvidia = False
+            _has_cuda   = False
+
+        # Model store columns: [model_id, display_text, is_sensitive]
+        _MODEL_DISPLAY = {
+            "tiny":     "tiny — fastest, lowest accuracy",
+            "base":     "base — fast, basic accuracy",
+            "small":    "small — good balance, 99 languages",
+            "medium":   "medium — better accuracy",
+            "large-v3": "large-v3 — best accuracy",
+            "parakeet-v3": "Parakeet — recommended: most accurate, English + 24 European languages",
+        }
+        from .model_helper import OFFERED_MODELS
+
+        self.model_store = Gtk.ListStore(str, str, bool)
+        for _mid in OFFERED_MODELS:
+            if _mid == "large-v3":
+                if _has_cuda:
+                    self.model_store.append([_mid, _MODEL_DISPLAY[_mid], True])
+                elif _has_nvidia:
+                    # Selectable — clicking it will offer CUDA download
+                    self.model_store.append([_mid,
+                        "large-v3 — click to download required CUDA libraries", True])
+                else:
+                    # Selectable. On AMD/Intel, clicking it offers Vulkan.
+                    try:
+                        from . import whisper_vulkan as _wv
+                        _vk = _wv.is_offered()
+                    except Exception:
+                        _vk = False
+                    self.model_store.append([_mid,
+                        "large-v3 — Whisper's best, on your graphics card (Vulkan)" if _vk
+                        else "large-v3 — needs a graphics card (none found)", True])
+            else:
+                self.model_store.append([_mid, _MODEL_DISPLAY[_mid], True])
+
+        model_combo = Gtk.ComboBox.new_with_model(self.model_store)
+        # Column 0 holds the model id — without this, set_active_id() is a
+        # silent no-op (plain ComboBox has no id column by default).
+        model_combo.set_id_column(0)
+        model_combo.set_can_focus(True)
+        self._block_combo_scroll(model_combo)
+        _renderer = Gtk.CellRendererText()
+        model_combo.pack_start(_renderer, True)
+        model_combo.add_attribute(_renderer, "text", 1)
+        model_combo.add_attribute(_renderer, "sensitive", 2)
+
+        # Set active row to match current config model
+        _current = self.config.get("model", Settings.model)
+        for _i, _row in enumerate(self.model_store):
+            if _row[0] == _current:
+                model_combo.set_active(_i)
+                break
+        else:
+            model_combo.set_active(OFFERED_MODELS.index(Settings.model))  # the default
+
+        self.model_combo = model_combo  # Store reference for later use
+        model_combo.connect("changed", self._on_model_changed)
+        setup.attach(model_combo, 1, srow, 1, 1)
+        srow += 1
+        
+        # Device selection
+        setup.attach(Gtk.Label(label="Device:", xalign=0), 0, srow, 1, 1)
+        device_combo = Gtk.ComboBoxText()
+        device_combo.set_can_focus(True)
+        device_combo.connect("button-press-event", self._on_combo_button_press)
+        self._block_combo_scroll(device_combo)
+
+        # Store device combo for later refresh
+        self.device_combo = device_combo
+        
+        # Populate device options
+        self._refresh_device_options()
+        
+        self._device_before = self.config.get("device", "cpu")
+        device_combo.connect("changed", self._on_device_changed)
+        setup.attach(device_combo, 1, srow, 1, 1)
+        srow += 1
+
+        # Language: one dropdown for what used to be Language Mode, Language
+        # and Only these languages (language_choice maps the three settings).
+        lang_label = Gtk.Label(label="Language 💡:", xalign=0)
+        lang_label.set_tooltip_text(
+            "The language you speak.\n"
+            "Detect automatically works for most people. Picking your language\n"
+            "makes it a little faster, and it never takes you for another one.\n"
+            "Several languages: it picks only from the ones you tick (Whisper models).")
+        setup.attach(lang_label, 0, srow, 1, 1)
+        self.lang_combo = Gtk.ComboBoxText()
+        self.lang_combo.set_can_focus(True)
+        self.lang_combo.connect("button-press-event", self._on_combo_button_press)
+        self._block_combo_scroll(self.lang_combo)
+        self._lang_choice = language_choice(self.config)
+        self._fill_language_choices(_current)
+        self.lang_combo.connect("changed", self._on_language_choice_changed)
+        # The tooltip is on the label: on the combo it gets in the way of the popup
+        # Picking the entry already selected does nothing, so the list of
+        # several languages gets its own button, shown only with that entry.
+        self.several_button = Gtk.Button(label="Change list\u2026")
+        self.several_button.set_no_show_all(True)
+        self.several_button.connect("clicked", lambda _b: self._pick_several_languages())
+        lang_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        lang_row.pack_start(self.lang_combo, True, True, 0)
+        lang_row.pack_start(self.several_button, False, False, 0)
+        setup.attach(lang_row, 1, srow, 1, 1)
+
+        for _combo in (self.model_combo, self.device_combo, self.lang_combo):
+            _combo.connect("changed", lambda *_: self._update_model_combo_hint())
+        self._update_model_combo_hint()
 
         # ===== STARTUP OPTIONS SECTION =====
-        separator2 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
-        separator2.set_margin_top(20)
-        separator2.set_margin_bottom(15)
-        grid.attach(separator2, 0, row, 2, 1)
-        row += 1
-
-        startup_header = Gtk.Label()
-        startup_header.set_markup('<b>Startup Options</b>')
-        startup_header.set_xalign(0)
-        startup_header.set_margin_bottom(10)
-        grid.attach(startup_header, 0, row, 2, 1)
-        row += 1
+        row = self._section_header(grid, row, "Startup Options")
 
         # Launch at login checkbox
         self.launch_at_login_check = Gtk.CheckButton(label="Launch TuxTalk at login")
@@ -2030,6 +2020,20 @@ class PreferencesWindow:
         box.pack_start(check, False, False, 0)
         box.pack_start(choice, False, False, 0)
         return box
+
+    def _fold(self, grid, row, title):
+        """A closed section titled *title* across *grid* at *row*, for
+        settings most people never need; returns the grid inside it to fill."""
+        expander = Gtk.Expander(label=title)
+        expander.set_margin_top(6)
+        inner = Gtk.Grid(column_spacing=10, row_spacing=10)
+        inner.set_margin_top(10)
+        inner.set_margin_start(20)
+        expander.add(inner)
+        expander.connect("notify::expanded", lambda e, _p: e.get_expanded()
+                         and self._scroll_into_view(inner, delay_ms=120))
+        grid.attach(expander, 0, row, 2, 1)
+        return inner
 
     def _section_header(self, grid, row, title):
         """A divider line and a bold section title across the grid; returns the
@@ -4137,13 +4141,16 @@ class PreferencesWindow:
         it = self.model_combo.get_active_iter()
         model = self.model_store.get_value(it, 0) if it is not None else ""
         self._relabel_cuda_option(model)
+        if (model == "parakeet-v3") != (self._languages_for_model == "parakeet-v3"):
+            self._fill_language_choices(model)
+        self.several_button.set_visible(self._lang_choice == SEVERAL_LANGUAGES)
         self._update_recommended_row(model)
         from .recommend import language_name
         from . import language_limit
-        code = self.lang_combo.get_active_id() or ""
+        code = self.config.get("language", "")
+        mode = self.config.get("language_mode", "auto")
         message = model_setting_warning(
-            model, self.device_combo.get_active_id() or "",
-            self.lang_mode_combo.get_active_id() or "auto",
+            model, self.device_combo.get_active_id() or "", mode,
             code, language_name(code),
             language_limit.parse(self.config.get("auto_languages", "")))
         if message:
@@ -4170,13 +4177,18 @@ class PreferencesWindow:
         label = getattr(self, "recommended_label", None)
         if label is None:
             return
+        from . import recommend
         try:
-            _hw, rec = self._recommendation()
+            hw, rec = self._recommendation()
         except Exception as e:
             print(f"Could not work out the recommended setup: {e}")
             label.get_parent().set_no_show_all(True)
             label.get_parent().hide()
             return
+        self.setup_summary.set_markup("<b>{}</b> \u00b7 {}".format(
+            GLib.markup_escape_text(recommend.setup_title(
+                model, self.device_combo.get_active_id() or "cpu", hw)),
+            GLib.markup_escape_text(language_summary(self.config))))
         if model == rec.model and self.device_combo.get_active_id() == rec.device:
             label.set_markup('<span color="#6db896">✓ You\'re on the recommended setup '
                              f'({GLib.markup_escape_text(rec.title)})</span>')
@@ -4212,8 +4224,8 @@ class PreferencesWindow:
     def _shown_language(self):
         """The language settings as this window shows them, for recommend.py."""
         from types import SimpleNamespace
-        return SimpleNamespace(language_mode=self.lang_mode_combo.get_active_id() or "auto",
-                               language=self.lang_combo.get_active_id() or "",
+        return SimpleNamespace(language_mode=self.config.get("language_mode", "auto"),
+                               language=self.config.get("language", ""),
                                dictation_language=self.config.get("dictation_language", ""),
                                vulkan_slower=(self.config.get("vulkan_slower", False)
                                               or getattr(self, "_vulkan_slower_now", False)))
@@ -4810,20 +4822,59 @@ class PreferencesWindow:
             finally:
                 self.volume_scale.handler_unblock_by_func(self.on_volume_changed)
     
-    def _on_language_mode_changed(self, widget):
-        """Handle language mode change to show/hide language selection."""
-        self._show_language_rows(widget.get_active_id() or "auto")
+    def _fill_language_choices(self, model):
+        """(Re)build the Language dropdown and select the current choice.
 
-    def _show_language_rows(self, mode):
-        """Auto-detect shows its language list; Manual shows the one language."""
-        auto = mode == "auto"
-        self.lang_label.set_visible(not auto)
-        self.lang_combo.set_visible(not auto)
-        self.auto_langs_label.set_visible(auto)
-        self.auto_langs_button.set_visible(auto)
+        "Several languages" is for the Whisper models: Parakeet always picks
+        the language itself, so with Parakeet the entry is left out, unless it
+        is the current choice (its warning then says it does nothing)."""
+        from . import recommend
+        self._filling_languages = True
+        try:
+            combo = self.lang_combo
+            combo.remove_all()
+            combo.append("auto", "Detect automatically")
+            for code, _name in recommend.LANGUAGES:
+                combo.append(code, recommend.language_label(code))
+            if model != recommend.PARAKEET or self._lang_choice == SEVERAL_LANGUAGES:
+                combo.append(SEVERAL_LANGUAGES,
+                             several_languages_label(self.config.get("auto_languages", "")))
+            if not combo.set_active_id(self._lang_choice):
+                # A hand-edited code the list doesn't have: show it rather than
+                # pretend it's another language.
+                combo.append(self._lang_choice, recommend.language_label(self._lang_choice))
+                combo.set_active_id(self._lang_choice)
+            self._languages_for_model = model
+        finally:
+            self._filling_languages = False
 
-    def _on_auto_languages_clicked(self, _button):
-        """Pick the languages auto-detect may choose from."""
+    def _select_language_choice(self, choice):
+        """Show *choice* in the Language dropdown without acting on it."""
+        self._filling_languages = True
+        try:
+            self.lang_combo.set_active_id(choice)
+        finally:
+            self._filling_languages = False
+        self._lang_choice = choice
+
+    def _on_language_choice_changed(self, combo):
+        if self._filling_languages:
+            return
+        choice = combo.get_active_id()
+        if choice is None:
+            return
+        if choice == SEVERAL_LANGUAGES:
+            if not self._pick_several_languages():
+                self._select_language_choice(self._lang_choice)   # cancelled
+            return
+        apply_language_choice(self.config, choice)
+        self._lang_choice = choice
+
+    def _pick_several_languages(self):
+        """Pick the languages auto-detect may choose from. True once the
+        choice is made (OK), False when cancelled. One language ticked is the
+        same as choosing it, and none is Detect automatically, so the dropdown
+        then shows that instead."""
         from . import language_limit, recommend
         chosen = set(language_limit.parse(self.config.get("auto_languages", "")))
         dialog = Gtk.Dialog(title="Only these languages", transient_for=self.window, modal=True)
@@ -4884,18 +4935,25 @@ class PreferencesWindow:
 
         dialog.show_all()
         try:
-            if dialog.run() == Gtk.ResponseType.OK:
-                setting = language_limit.to_setting(c for c, chk in checks.items() if chk.get_active())
-                self.update_config("auto_languages", setting)
-                self.auto_langs_button.set_label(_auto_langs_label(setting))
-                self._update_model_combo_hint()
+            if dialog.run() != Gtk.ResponseType.OK:
+                return False
+            codes = language_limit.parse(language_limit.to_setting(
+                c for c, chk in checks.items() if chk.get_active()))
         finally:
             dialog.destroy()
-    
-    
-    def _update_language_ui_state(self):
-        """Update language UI state based on current config."""
-        self._show_language_rows(self.config.get("language_mode", "auto"))
+        if len(codes) < 2:
+            choice = codes[0] if codes else "auto"
+            apply_language_choice(self.config, choice)
+        else:
+            choice = SEVERAL_LANGUAGES
+            self.update_config("language_mode", "auto")
+            self.update_config("auto_languages", language_limit.to_setting(codes))
+            for entry in self.lang_combo.get_model():
+                if entry[1] == SEVERAL_LANGUAGES:   # ComboBoxText rows are (text, id)
+                    entry[0] = several_languages_label(self.config["auto_languages"])
+        self._select_language_choice(choice)
+        self._update_model_combo_hint()
+        return True
 
     def _on_auto_timeout_toggled(self, checkbox):
         """Handle auto-timeout checkbox toggle."""
@@ -6281,8 +6339,7 @@ class PreferencesWindow:
 
     def _has_unapplied_changes(self):
         """True when closing now would lose something: a setting changed since
-        the last Apply, an edited Voice Commands list, or a new language pick
-        (written to the config only at save time, see save_config)."""
+        the last Apply, or an edited Voice Commands list."""
         if self._changed_since_open():
             return True
         try:
@@ -6291,9 +6348,6 @@ class PreferencesWindow:
                 return True
         except Exception:
             pass
-        if (hasattr(self, "lang_combo") and self.config.get("language_mode", "auto") != "auto"
-                and self.lang_combo.get_active_id() not in (None, self._config_at_open.get("language"))):
-            return True
         return False
 
     def _ask_apply_before_closing(self):

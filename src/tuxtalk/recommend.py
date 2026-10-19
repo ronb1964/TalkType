@@ -46,7 +46,7 @@ _NATIVE = {
 }
 
 _TITLES = {PARAKEET: "Parakeet", "small": "Whisper Small", "large-v3": "Whisper Large-v3",
-           "base": "Whisper Base", "tiny": "Whisper Tiny"}
+           "medium": "Whisper Medium", "base": "Whisper Base", "tiny": "Whisper Tiny"}
 
 _BENEFIT = {
     (PARAKEET, "vulkan"): "Very accurate and nearly instant.",
@@ -207,14 +207,26 @@ def recommend(language, hw, model=None, use_gpu=None):
                 "on the processor. ")
         model = "small"
     device = "vulkan" if gpu else "cpu"
-    where = f"your {hw.gpu_name}" if gpu else "this computer's processor"
     return Setup(
         model=model,
         device=device,
-        title=f"{_TITLES[model]} on {where}",
+        title=setup_title(model, device, hw),
         explanation=note + _BENEFIT[(model, device)],
         download_text=_DOWNLOAD[(model, device)] + ", downloaded once.",
     )
+
+
+def setup_title(model, device, hw):
+    """"Parakeet on your NVIDIA GeForce RTX 4070", "Whisper Small on this
+    computer's processor": a model and device in words. Parakeet on CUDA runs
+    on the processor (parakeet_engine), so it says so."""
+    name = _TITLES.get(model, f"Whisper {model.capitalize()}")
+    if device == "cpu" or (device == "cuda" and model == PARAKEET):
+        return f"{name} on this computer's processor"
+    card = hw.gpu_name or "graphics card"
+    if device == "cuda":
+        return f"{name} on your {card} (CUDA)"
+    return f"{name} on your {card}"
 
 
 @dataclass(frozen=True)

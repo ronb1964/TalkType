@@ -52,13 +52,12 @@ def test_keep_editing_leaves_the_window_open():
     assert calls == ["asked"]
 
 
-def _changes(config_at_open, config, language_mode="auto", combo_id=None, commands_same=True):
+def _changes(config_at_open, config, commands_same=True):
     w = SimpleNamespace(
-        _config_at_open=config_at_open, config=dict(config, language_mode=language_mode),
+        _config_at_open=config_at_open, config=config,
         commands_store=object(),
         _commands_from_store=lambda: "same" if commands_same else "edited",
         _commands_loaded="same",
-        lang_combo=SimpleNamespace(get_active_id=lambda: combo_id),
     )
     w._changed_since_open = lambda: prefs.PreferencesWindow._changed_since_open(w)
     return prefs.PreferencesWindow._has_unapplied_changes(w)
@@ -66,11 +65,8 @@ def _changes(config_at_open, config, language_mode="auto", combo_id=None, comman
 
 def test_unapplied_changes_are_settings_commands_and_a_language_pick():
     opened = {"auto_period": True, "language": "en", "language_mode": "auto"}
-    assert not _changes(opened, {"auto_period": True, "language": "en"})
-    assert _changes(opened, {"auto_period": False, "language": "en"})
-    assert _changes(opened, {"auto_period": True, "language": "en"}, commands_same=False)
-    opened_fixed = dict(opened, language_mode="fixed")
-    assert _changes(opened_fixed, {"auto_period": True, "language": "en"},
-                    language_mode="fixed", combo_id="de")
-    assert not _changes(opened_fixed, {"auto_period": True, "language": "en"},
-                        language_mode="fixed", combo_id="en")
+    assert not _changes(opened, dict(opened))
+    assert _changes(opened, dict(opened, auto_period=False))
+    assert _changes(opened, dict(opened), commands_same=False)
+    # The Language dropdown writes its pick into the settings straight away.
+    assert _changes(opened, dict(opened, language_mode="manual", language="de"))

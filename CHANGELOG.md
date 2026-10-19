@@ -3,6 +3,17 @@
 All notable changes to TuxTalk are documented here. It was called TalkType
 before 0.15.0, so older entries use that name.
 
+## [Unreleased]
+
+- Simpler Preferences, General tab. It now starts with your dictation keys.
+  The model, device and language sit behind one line that says what you're
+  running, like "Parakeet on your graphics card · detects the language", with
+  Change model, device or language under it for anyone who wants to. Language
+  is one dropdown now: Detect automatically, one language, or Several
+  languages (that one is for the Whisper models). It used to be three
+  controls. The cheat sheet and Paste Last Dictation shortcuts moved into
+  More shortcuts. Your settings carry over as they were.
+
 ## [0.16.0] - 2026-10-18
 
 - New: TuxTalk no longer puts you in the `input` group. That group lets every

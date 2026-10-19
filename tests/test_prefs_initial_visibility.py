@@ -34,50 +34,37 @@ class FakeWindow:
 
 def _stub(config):
     rows = {name: FakeWidget() for name in
-            ("timeout_label", "timeout_spin", "timeout_minutes_label", "timeout_note",
-             "lang_label", "lang_combo",
-             "auto_langs_label", "auto_langs_button")}
+            ("timeout_label", "timeout_spin", "timeout_minutes_label", "timeout_note")}
     stub = SimpleNamespace(config=config, window=FakeWindow(list(rows.values())),
                            ok_btn=SimpleNamespace(grab_default=lambda: None), **rows)
-    for name in ("_update_timeout_ui_state", "_update_language_ui_state", "_show_language_rows"):
+    for name in ("_update_timeout_ui_state",):
         setattr(stub, name, getattr(PreferencesWindow, name).__get__(stub))
     return stub
 
 
 def test_rows_for_settings_that_are_off_stay_hidden_after_show_all():
-    stub = _stub({"auto_timeout_enabled": False, "language_mode": "auto"})
+    stub = _stub({"auto_timeout_enabled": False})
 
     PreferencesWindow._show_window(stub)
 
     assert stub.window.presented
     assert not stub.timeout_label.visible and not stub.timeout_spin.visible
     assert not stub.timeout_note.visible and not stub.timeout_minutes_label.visible
-    assert not stub.lang_label.visible and not stub.lang_combo.visible
-    # Auto-detect shows its language list instead.
-    assert stub.auto_langs_label.visible and stub.auto_langs_button.visible
 
 
 def test_rows_for_settings_that_are_on_are_shown():
-    stub = _stub({"auto_timeout_enabled": True, "language_mode": "manual"})
+    stub = _stub({"auto_timeout_enabled": True})
 
     PreferencesWindow._show_window(stub)
 
     assert stub.timeout_label.visible and stub.timeout_spin.visible
-    assert stub.lang_label.visible and stub.lang_combo.visible
-    assert not stub.auto_langs_label.visible and not stub.auto_langs_button.visible
-
-
-def test_the_language_button_says_it_changes_the_list():
-    from tuxtalk.prefs import _auto_langs_label
-    assert _auto_langs_label("") == "Any language · Change…"
-    assert _auto_langs_label("en,es").startswith("English, Spanish")
 
 
 def test_turning_power_saving_on_scrolls_its_settings_into_view():
     """It's the last thing on the General tab: the minutes and the note it
     shows were below the window's edge (Ron, 2026-10-17)."""
     shown = []
-    stub = _stub({"auto_timeout_enabled": True, "language_mode": "auto"})
+    stub = _stub({"auto_timeout_enabled": True})
     stub._scroll_into_view = lambda widget, delay_ms=60: shown.append(widget)
     on = SimpleNamespace(get_active=lambda: True)
     off = SimpleNamespace(get_active=lambda: False)

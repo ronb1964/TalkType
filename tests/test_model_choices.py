@@ -48,3 +48,13 @@ def test_every_model_picker_builds_from_the_shared_list():
         f"hardcoded lists drift — that is exactly how 'base' went missing from "
         f"the first-run setup screen."
     )
+
+
+def test_the_setup_line_names_the_model_and_where_it_runs():
+    from tuxtalk.recommend import Hardware, setup_title
+    card = Hardware("NVIDIA GeForce RTX 4070", True)
+    assert setup_title("parakeet-v3", "vulkan", card) == "Parakeet on your NVIDIA GeForce RTX 4070"
+    assert setup_title("small", "cpu", card) == "Whisper Small on this computer's processor"
+    assert setup_title("medium", "cuda", card) == "Whisper Medium on your NVIDIA GeForce RTX 4070 (CUDA)"
+    # Parakeet can't use CUDA: it runs on the processor, and the line says so.
+    assert setup_title("parakeet-v3", "cuda", card) == "Parakeet on this computer's processor"
