@@ -383,6 +383,28 @@ check the change against this list:
 If a change can't meet this (a rushed hotfix, say), say so to Ron and fix it in
 the next commit.
 
+## KEEP IT SIMPLE — EVERY NEW FEATURE
+
+Ron's worry (2026-10-18): features piling up into a steep learning curve. The
+default experience is three steps, hold F8, talk, let go, and nothing a new
+user sees may make it look harder. The 0.16 simplicity review cut what
+Preferences shows from 51 settings to about 26; keep it there:
+
+- **No visible setting unless the feature can't work without one.** Prefer
+  behaviour that adapts by itself: no automatic Enter in text editors, plain
+  text in terminals, Power Saving on only with a battery.
+- **A niche setting goes in a closed fold** (Preferences → Advanced →
+  Fine-tuning, General → More shortcuts), never in the main flow.
+- **An experiment goes in TuxTalk Labs**, off, until it's earned a place.
+- **Several controls that answer one question become one dropdown** over the
+  existing settings (the language, other sound and numbers dropdowns), so old
+  configs and backups keep their meaning.
+- **Status shows only when it needs action** (System check opens itself on a
+  problem).
+- **Help is by situation** (Start Here, Chatting, Writing, Terminals,
+  Hands-free, Mistakes, Problems): a new feature goes where people would
+  use it, and Help names keys from the settings, never hard-coded F8.
+
 ## SAYING HOW TUXTALK IS MADE — EVERY PUBLIC POST
 
 Ron can't code; Claude writes TuxTalk and Ron designs, tests and uses it
