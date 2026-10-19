@@ -24,6 +24,7 @@ init_cuda_for_pytorch()
 import gi
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
+gi.require_version("Pango", "1.0")
 from gi.repository import Gdk, GLib, Gtk, Pango  # noqa: E402
 
 from . import file_transcribe as ft  # noqa: E402

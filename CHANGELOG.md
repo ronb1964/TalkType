@@ -31,6 +31,9 @@ before 0.15.0, so older entries use that name.
   when something needs fixing. Swiss German spelling only shows up when
   German is your computer's language or one you dictate in (or you already
   ticked it).
+- No more Backup folder to set up. The folder you save a backup into is
+  where the next Save Backup and Load Backup open, and where Earlier
+  settings looks for your backups.
 
 ## [0.16.0] - 2026-10-18
 

@@ -447,3 +447,22 @@ def test_preferences_shows_a_refused_restore_as_a_message():
     body = text[text.index("def _restore_backup"):]
     body = body[:body.index("\n    def ")]
     assert "settings_backup.BackupError" in body
+
+
+def test_saving_a_backup_makes_its_folder_the_backup_folder(home):
+    """There is no Backup folder row to fill in (0.16 simplicity review): the
+    folder a backup is saved to is where the next one goes, and where Earlier
+    settings looks."""
+    from types import SimpleNamespace
+    from tuxtalk.prefs import PreferencesWindow
+    folder = home / "USB stick"
+    folder.mkdir()
+    shown = []
+    window = SimpleNamespace(
+        _pick_file=lambda title, save_name=None: str(folder / "tuxtalk-backup"),
+        _message=lambda *a, **k: shown.append(a[1]),
+        _show_last_backup=lambda: None, _fill_restore_list=lambda: None)
+    PreferencesWindow._on_save_backup_clicked(window, None)
+    assert shown == ["Backup saved"]
+    assert sb.backup_folder() == str(folder)
+    assert [p.kind for p in sb.restore_points()] == ["file"]
