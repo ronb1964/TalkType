@@ -4,7 +4,7 @@ Whisper's auto-detect picks from 99 languages, and on a short or accented
 dictation it can pick the wrong one: Spanish heard as French, a one-word
 English "Okay" heard as Welsh, and the words then come out in that language.
 Someone who only ever speaks English and Spanish can tick those two
-(Preferences → General → Only these languages), and the detection is then
+(Preferences → General → Language → Several languages), and the detection is then
 held to them.
 
 Whisper scores every language before it writes a word, so the limit costs
