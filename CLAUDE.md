@@ -395,6 +395,13 @@ Preferences shows from 51 settings to about 26; keep it there:
   text in terminals, Power Saving on only with a battery.
 - **A niche setting goes in a closed fold** (Preferences → Advanced →
   Fine-tuning, General → More shortcuts), never in the main flow.
+- **Every fold is a button, never GTK's small expander arrow** (Ron,
+  2026-10-18: the arrow is too easy to miss). A real button that names what
+  it opens ("Show more shortcuts", "Adjust Settings"), turning into "Hide …"
+  when open, with a short dim summary beside it of what's inside or how it's
+  set, and the settings sliding open right below. Type at pause's Adjust
+  Settings is the model. This holds for every new fold, in Preferences and in
+  any other window.
 - **An experiment goes in TuxTalk Labs**, off, until it's earned a place.
 - **Several controls that answer one question become one dropdown** over the
   existing settings (the language, other sound and numbers dropdowns), so old
