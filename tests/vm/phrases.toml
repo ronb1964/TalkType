@@ -1,0 +1,76 @@
+# What the pretend microphone says in the VM release tests.
+#
+# Each phrase is played into the VM as a WAV. Until a person has recorded
+# them (record_phrases.py), a computer voice reads the "say" text: piper when
+# it's set up (see README), otherwise espeak-ng. Recordings and generated
+# audio live outside the repo, in ~/.local/share/talktype-vm-tools/phrases/.
+#
+# "say" is written the way it should be spoken: commas are pauses, and
+# commands such as "press enter" are just the words. People read "say".
+# "tts" is the same sentence spelled so the computer voice says it the way a
+# person would (Parakeet heard piper's "git status" as "Get status").
+#
+# What TuxTalk should type for each phrase is in the checks
+# (checks_dictation.py), because it depends on the settings each turns on.
+
+[basic]
+say = "This is a test of the dictation system."
+
+[git_status]
+say = "git status"
+tts = "Git, status."
+
+[noon_press_enter]
+say = "See you at noon, press enter."
+
+[press_enter_alone]
+say = "press enter"
+
+[press_enter_words]
+say = "Press enter to continue when the screen turns green."
+
+[numbers]
+say = "I have three cats and twenty five chickens, meet me at seven thirty on October fifteenth."
+tts = "I have three cats and twenty five chickens, meet me at seven thirty, on October fifteenth."
+
+[letters]
+say = "Let go of F eight, then go to B five A seven, a five minute walk."
+tts = "Let go of F. eight, then go to B. five. A. seven, a five minute walk."
+
+[vitamin]
+say = "Take vitamin B twelve and sit in row E nine."
+
+[qmark_words]
+say = "That sentence should end with a question mark."
+
+[qmark_said]
+say = "Is that right question mark"
+
+[german]
+say = "Die Straße ist groß."
+lang = "de"
+
+[your_words]
+say = "I dictate everything with TuxTalk."
+
+[cat_couch]
+say = "The cat clawed the couch."
+
+[send_plain]
+say = "Testing the send countdown."
+
+[send_hold]
+say = "This one should not send."
+
+[first_part]
+say = "First part."
+
+[added_part]
+say = "And this part was added."
+
+[noon_and]
+say = "Meet me at noon and"
+tts = "Meet me at noon, and"
+
+[paste_last]
+say = "Paste this into the other window."
