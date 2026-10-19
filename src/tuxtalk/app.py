@@ -395,6 +395,10 @@ _cmd_stop_recording = threading.Event()
 # menu) started it, so a quick second press can switch it to hands-free.
 _cmd_start_from_toggle_key = threading.Event()
 _inject_lock = threading.Lock()  # serialise Backend B transcribe/inject workers
+# The loaded speech model, built by main(). None until then, and while Power
+# Saving rests it (_rest_model) until the next dictation loads it (_wake_model).
+model = None
+_model_lock = threading.Lock()
 
 # Chunked dictation (chunking.py). The audio callback cuts chunks and the stop
 # path takes the rest; this lock keeps the two from both taking the same frames.
@@ -1695,6 +1699,9 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
     state.edit_mode = edit_mode
     # Set before the stream starts — _sd_callback drops frames unless it's set.
     state.is_recording = True
+    if model is None:
+        # Power Saving let the model go: load it while the user talks.
+        threading.Thread(target=_wake_model, daemon=True, name="tt-wake-model").start()
     input_device_idx = _follow_system_default(input_device_idx)
     try:
         _open_input_stream(input_device_idx)
@@ -2700,6 +2707,9 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
     Returns the raw transcribed text, or None if no speech was detected.
     """
     transcribe_start = time.time()
+    engine = _wake_model()
+    if engine is None:
+        return None
 
     from .whisper_vulkan import VulkanWhisperModel
     from . import custom_words, language_limit
@@ -2710,7 +2720,7 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
     if not language:
         language = language_limit.forced_language(_auto_languages)
     limit_to = () if language else _auto_languages
-    if isinstance(model, VulkanWhisperModel):
+    if isinstance(engine, VulkanWhisperModel):
         # Only pass a prompt or a language list when there is one, so nothing
         # changes without them.
         extra = {}
@@ -2718,7 +2728,7 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
             extra["prompt"] = words_prompt
         if limit_to:
             extra["limit_to"] = limit_to
-        raw, _no_speech = model.transcribe(audio_f32, language, **extra)
+        raw, _no_speech = engine.transcribe(audio_f32, language, **extra)
         logger.info(f"TIMING: Transcription completed in {time.time() - transcribe_start:.2f}s (Vulkan GPU)")
         print(f"Raw (graphics): {_loggable(raw)}")
         logger.info(f"Raw transcription (Vulkan GPU): {_loggable(raw)}")
@@ -2735,7 +2745,7 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
 
     from .parakeet_engine import ParakeetModel
     from .parakeet_gpu import ParakeetGpuModel
-    if isinstance(model, (ParakeetModel, ParakeetGpuModel)):
+    if isinstance(engine, (ParakeetModel, ParakeetGpuModel)):
         # Parakeet detects the language itself and has no Whisper-style
         # decoding options. It has no no-speech score either, yet it does
         # invent a word in silence: an F9 tap with nothing said typed
@@ -2743,9 +2753,9 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
         # talking counts as no speech, and a filler alone is dropped.
         # Your Words steer Parakeet's decoder (parakeet_bias.py).
         from .parakeet_gpu import _steer
-        _steer(model, _custom_words)
-        raw = model.recognize(audio_f32)
-        where = " on GPU" if isinstance(model, ParakeetGpuModel) else ""
+        _steer(engine, _custom_words)
+        raw = engine.recognize(audio_f32)
+        where = " on GPU" if isinstance(engine, ParakeetGpuModel) else ""
         logger.info(f"TIMING: Transcription completed in {time.time() - transcribe_start:.2f}s (Parakeet{where})")
         print(f"Raw (Parakeet): {_loggable(raw)}")
         logger.info(f"Raw transcription (Parakeet): {_loggable(raw)}")
@@ -2779,7 +2789,7 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
         # it drops real speech after natural 2+ second pauses. Trailing
         # hallucination phrases are handled by _strip_hallucinations().
     )
-    segments, info = model.transcribe(audio_f32, language=(language or None), **whisper_options)
+    segments, info = engine.transcribe(audio_f32, language=(language or None), **whisper_options)
     # faster-whisper detects the language before it decodes a word (segments
     # is a generator), so starting again in another language costs only that
     # detection, and only when its pick is off the user's list.
@@ -2787,7 +2797,7 @@ def _transcribe_audio(audio_f32, language: str | None) -> str | None:
               if limit_to else None)
     if better:
         logger.info(f"Language: Whisper heard {info.language}, which isn't on your list; using {better}")
-        segments, info = model.transcribe(audio_f32, language=better, **whisper_options)
+        segments, info = engine.transcribe(audio_f32, language=better, **whisper_options)
     transcribe_time = time.time() - transcribe_start
     logger.info(f"TIMING: Transcription completed in {transcribe_time:.2f}s")
     if transcribe_time > 2.0:
@@ -4743,6 +4753,47 @@ def _handle_key_event(event, mode, hold_key, toggle_key,
         _release_all_grabs()
 
 
+def _rest_model(minutes):
+    """Power Saving: let go of the speech model, and the processor and
+    graphics card time it holds, after *minutes* without dictation. The
+    hotkeys keep working; the next dictation loads it again (_wake_model).
+    It used to end the service, and F8 then did nothing until dictation was
+    turned back on from the menu, which looked like TuxTalk had broken."""
+    global model
+    with _model_lock:
+        resting, model = model, None
+    # The Vulkan engine and Parakeet on the graphics card run a helper process.
+    close = getattr(resting, "close", None)
+    if close is not None:
+        close()
+    del resting
+    import gc
+    gc.collect()
+    logger.info(f"Power saving: no dictation for {minutes} minute{'s' if minutes != 1 else ''}; "
+                "let go of the speech model until the next dictation")
+
+
+def _wake_model():
+    """The speech model, loaded again first if Power Saving let it go, or
+    None if it won't load. Called when a recording starts and before every
+    transcription."""
+    global model
+    with _model_lock:
+        if model is None:
+            logger.info("Power saving: loading the speech model again for this dictation")
+            try:
+                model = _build_model_or_exit(load_config())
+            except SystemExit:
+                # Its "nothing will load" exit, raised in a dictation's thread,
+                # would end only that thread. Say so; the next dictation tries again.
+                logger.error("Power saving: the speech model wouldn't load again")
+                _notify("TuxTalk", "The speech model wouldn't load. Choose Restart "
+                        "Service in the TuxTalk menu, or pick a model in Preferences.")
+                return None
+            _notify_tray_running_engine()
+        return model
+
+
 class _ServiceState:
     """Backend-agnostic per-service state (auto-timeout tracking), shared by the
     evdev loop (Backend A) and the portal loop (Backend B) via _service_tick."""
@@ -4857,19 +4908,9 @@ def _service_tick(cfg, svc: "_ServiceState") -> "LiveSettings | None":
                 stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
                                cfg.auto_space, cfg.auto_period, cfg.injection_mode)
             svc.last_activity = now
-    if svc.timeout_enabled and not state.is_recording:
+    if svc.timeout_enabled and not state.is_recording and model is not None:
         if now - svc.last_activity > svc.timeout_seconds:
-            print(f"Auto-timeout: No activity for {svc.timeout_minutes} "
-                  f"minutes, shutting down...")
-            logger.info(f"Power saving: no dictation for {svc.timeout_minutes} minutes; "
-                        "turning dictation off")
-            # Always, even with notifications off: the hotkeys stop working
-            # now, and without a word that looks like TuxTalk broke.
-            _notify("TuxTalk: dictation is off",
-                    f"No dictation for {svc.timeout_minutes} minutes, so TuxTalk turned it "
-                    "off to save power. Turn it back on from the TuxTalk menu (Dictation "
-                    "on/off), or change this in Preferences → General → Power Saving.")
-            sys.exit(0)
+            _rest_model(svc.timeout_minutes)
 
     # Pick up Preferences changes without a restart — indicator style/position,
     # typing delay, etc. The evdev loop (Backend A) does this inline; Backend B
@@ -5471,7 +5512,6 @@ def main():
     # The loaded speech model. Usually built after the GTK loop starts; built
     # earlier when it must first be downloaded (see the GTK section below).
     global model, _gtk_loop_running
-    model = None
     _acquire_single_instance()
     _install_signal_handlers()
 

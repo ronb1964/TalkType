@@ -81,6 +81,16 @@ class TestChangeSignalHasOneOwner:
         assert live.hold_key == app._keycode_from_name("F9")
 
 
+class _Engine:
+    """A loaded speech model whose helper process can be stopped."""
+
+    def __init__(self):
+        self.closed = False
+
+    def close(self):
+        self.closed = True
+
+
 class TestAutoTimeoutIsLive:
     def test_disabling_the_timeout_takes_effect_without_a_restart(self, monkeypatch):
         """Untick 'auto-timeout' and the service must stop exiting on it."""
@@ -122,8 +132,11 @@ class TestAutoTimeoutIsLive:
         svc.last_activity = 0.0  # idle since the epoch
 
         cfg.auto_timeout_enabled = False
+        engine = _Engine()
+        monkeypatch.setattr(app, "model", engine)
 
-        app._service_tick(cfg, svc)  # must not raise SystemExit
+        app._service_tick(cfg, svc)
+        assert app.model is engine          # not rested
 
     def test_switching_the_timeout_on_does_not_stop_the_service_at_once(self, monkeypatch):
         """The idle clock must not count only D-Bus commands while the option is
@@ -146,22 +159,50 @@ class TestAutoTimeoutIsLive:
         monkeypatch.setattr(svc, "refresh_input_device", lambda: None)
         app._service_tick(cfg, svc)
 
+        engine = _Engine()
+        monkeypatch.setattr(app, "model", engine)
         monkeypatch.setattr(app, "_config_file_changed", lambda: False)
-        app._service_tick(cfg, svc)   # must not raise SystemExit
+        app._service_tick(cfg, svc)
+        assert app.model is engine    # not rested on the very next pass
 
 
-def test_power_saving_says_dictation_is_off_even_with_notifications_off(monkeypatch):
-    """Mio, Lemmy 2026-10-17: dictation 'just stops after a while'. When the
-    timeout turns it off, the user is told, whatever the notifications setting."""
-    import pytest
+def test_power_saving_rests_the_model_and_keeps_the_service(monkeypatch):
+    """Mio, Lemmy 2026-10-17: dictation 'just stops after a while'. Power
+    Saving used to end the service, and F8 did nothing until dictation was
+    turned back on from the menu. Now it lets go of the model and stays."""
     _idle(monkeypatch)
     monkeypatch.setattr(app, "_config_file_changed", lambda: False)
     shown = []
     monkeypatch.setattr(app, "_notify", lambda title, body: shown.append((title, body)))
-    cfg = _cfg(auto_timeout_enabled=True, auto_timeout_minutes=5, notify=False)
+    engine = _Engine()
+    monkeypatch.setattr(app, "model", engine)
+    cfg = _cfg(auto_timeout_enabled=True, auto_timeout_minutes=5)
     svc = app._ServiceState(cfg)
     svc.last_activity = 0.0
-    with pytest.raises(SystemExit):
-        app._service_tick(cfg, svc)
-    assert shown and shown[0][0] == "TuxTalk: dictation is off"
-    assert "Dictation on/off" in shown[0][1] and "Power Saving" in shown[0][1]
+    app._service_tick(cfg, svc)           # no SystemExit: the hotkeys stay
+    assert app.model is None and engine.closed
+    assert shown == []                    # nothing to explain: F8 still works
+
+
+def test_the_next_dictation_loads_the_model_again(monkeypatch):
+    built = []
+    monkeypatch.setattr(app, "model", None)
+    monkeypatch.setattr(app, "load_config", lambda: "settings")
+    monkeypatch.setattr(app, "_build_model_or_exit",
+                        lambda settings: built.append(settings) or _Engine())
+    monkeypatch.setattr(app, "_notify_tray_running_engine", lambda: None)
+    first = app._wake_model()
+    assert isinstance(first, _Engine) and built == ["settings"]
+    assert app._wake_model() is first and len(built) == 1     # loaded once
+
+
+def test_a_model_that_wont_load_again_is_said_not_raised(monkeypatch):
+    """_build_model_or_exit exits when nothing loads; in a dictation's thread
+    that would end only the thread, leaving a service without a model."""
+    shown = []
+    monkeypatch.setattr(app, "model", None)
+    monkeypatch.setattr(app, "load_config", lambda: "settings")
+    monkeypatch.setattr(app, "_build_model_or_exit", lambda s: (_ for _ in ()).throw(SystemExit(1)))
+    monkeypatch.setattr(app, "_notify", lambda title, body: shown.append(body))
+    assert app._wake_model() is None
+    assert shown and "Restart Service" in shown[0]

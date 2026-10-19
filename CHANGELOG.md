@@ -5,6 +5,12 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- Power Saving no longer turns dictation off. After the idle time TuxTalk
+  lets go of the speech model, which frees the processor and graphics card
+  as before, but F8 keeps working: the next dictation loads the model again,
+  a few seconds slower than usual. Before, F8 did nothing until you turned
+  dictation back on from the menu, which looked like TuxTalk had stopped
+  working. It's on by default on laptops.
 - Simpler Preferences, General tab. It now starts with your dictation keys.
   The model, device and language sit behind one line that says what you're
   running, like "Parakeet on your graphics card · detects the language", with

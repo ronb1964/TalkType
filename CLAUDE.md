@@ -103,6 +103,7 @@ Preferences and the rest:
 - [ ] Dictation works on CUDA with a Whisper model (e.g. small)
 - [ ] AI self-corrections: turning it on downloads the model; "meet at three, no wait, four" types "meet at four"
 - [ ] Auto-punctuation works consistently
+- [ ] Power Saving: Preferences → General → "Save power when dictation isn't used for a while", ticked, After 1 minute, OK. Wait a minute without dictating (log: "Power saving: no dictation for 1 minute; let go of the speech model"); the tray still shows dictation on. Hold F8 and talk: it types, a few seconds later than usual (log: "loading the speech model again for this dictation"). With Vulkan, `pgrep -f whisper-server` finds nothing while it rests. Untick it afterwards
 - [ ] Hands-free: double-tap F9 and say nothing. It stops by itself after 10 seconds with the cancel beep and types nothing (log: "Auto-stop: nothing said"). With the bars indicator, the bars stay low while it's quiet
 - [ ] Start/stop beeps play
 - [ ] With a YouTube video playing, dictating pauses it and it plays again after (log: "Paused … while dictating", "Resumed …"). A video that was already paused stays paused. Preferences → Audio → "Other sound while you dictate": "Leave it alone": nothing pauses

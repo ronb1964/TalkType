@@ -2231,17 +2231,6 @@ def show_tips_and_features_dialog(extension_installed=False):
         tips.append(("📋 <b>Wrong Window?</b>",
                      f"Dictation went to the wrong window? Press <b>{paste_key}</b> "
                      "to type it again"))
-    # Power saving is on by default on a laptop. Said here, so dictation
-    # turning itself off later isn't a surprise (it looked broken to a user).
-    cfg = load_config()
-    if getattr(cfg, "auto_timeout_enabled", False):
-        keys = " and ".join(k for k in (getattr(cfg, "hotkey", ""),
-                                        getattr(cfg, "toggle_hotkey", "")) if k) or "your hotkeys"
-        tips.append(("🔋 <b>Saving Battery</b>",
-                     f"After {getattr(cfg, 'auto_timeout_minutes', 5)} minutes without dictating, "
-                     f"TuxTalk turns dictation off to save battery, and {keys} do nothing "
-                     "until you turn it back on: TuxTalk menu → <b>Dictation on/off</b>. "
-                     "To keep it on, untick it in Preferences → General → Power Saving."))
     tips += [
         ("📖 <b>Learn More</b>", "Click \"Help\" in the TuxTalk menu for full documentation and voice command list"),
         ("🚀 <b>Quick Start</b>", "Press your hotkey and start talking - TuxTalk does the rest!")

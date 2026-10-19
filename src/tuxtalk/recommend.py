@@ -286,7 +286,7 @@ def presets(language, hw):
                "Whisper Base on the processor: the smallest download and the least work",
                "base", "cpu"),
         Preset("battery", "Battery saver",
-               "Whisper Tiny on the processor, stops after 2 idle minutes",
+               "Whisper Tiny on the processor, rests after 2 idle minutes",
                "tiny", "cpu",
                (("auto_timeout_enabled", True), ("auto_timeout_minutes", 2))),
     ]

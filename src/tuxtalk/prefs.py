@@ -1460,8 +1460,6 @@ class PreferencesWindow:
         row += 1
 
         # ===== POWER SAVING SECTION =====
-        # In General, not Advanced: when it kicks in the hotkeys stop working,
-        # which looks like TuxTalk broke to anyone who doesn't know it's there.
         power_sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
         power_sep.set_margin_top(20)
         power_sep.set_margin_bottom(15)
@@ -1476,13 +1474,14 @@ class PreferencesWindow:
         row += 1
 
         self.auto_timeout_check = Gtk.CheckButton(
-            label="Turn dictation off when it isn't used for a while")
+            label="Save power when dictation isn't used for a while")
         self.auto_timeout_check.set_active(self.config.get("auto_timeout_enabled", False))
         self.auto_timeout_check.connect("toggled", lambda x: self.update_config("auto_timeout_enabled", x.get_active()))
         self.auto_timeout_check.connect("toggled", self._on_auto_timeout_toggled)
         self.auto_timeout_check.set_tooltip_text(
-            "Saves battery on a laptop: while dictation is off, the speech model lets go\n"
-            "of the processor and the graphics card.\n\n"
+            "Saves battery on a laptop: after the minutes below without dictating, the\n"
+            "speech model lets go of the processor and the graphics card. Your keys keep\n"
+            "working, and the next dictation loads it again.\n\n"
             "On by default on laptops, off on desktop computers.")
         grid.attach(self.auto_timeout_check, 0, row, 2, 1)
         row += 1
@@ -1496,7 +1495,7 @@ class PreferencesWindow:
         self.timeout_spin.set_value(self.config.get("auto_timeout_minutes", 5))
         self.timeout_spin.connect("value-changed", lambda x: self.update_config("auto_timeout_minutes", int(x.get_value())))
         self.timeout_spin.connect("scroll-event", lambda *a: True)  # Disable scroll wheel to prevent accidental changes
-        self.timeout_spin.set_tooltip_text("Minutes without dictating before dictation turns off.")
+        self.timeout_spin.set_tooltip_text("Minutes without dictating before the speech model rests.")
         timeout_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         timeout_row.set_margin_start(28)
         timeout_row.pack_start(self.timeout_label, False, False, 0)
@@ -1506,12 +1505,10 @@ class PreferencesWindow:
         grid.attach(timeout_row, 0, row, 2, 1)
         row += 1
 
-        keys = " and ".join(k for k in (self.config.get("hotkey"), self.config.get("toggle_hotkey"))
-                            if k) or "your dictation keys"
         self.timeout_note = Gtk.Label(xalign=0)
         self.timeout_note.set_text(
-            f"Then {keys} do nothing until you turn dictation back on: "
-            "TuxTalk's menu \u2192 Dictation on/off.")
+            "Your keys keep working. The first dictation after a rest takes a few "
+            "seconds longer while the speech model loads again.")
         self.timeout_note.set_line_wrap(True)
         self.timeout_note.set_max_width_chars(70)
         self.timeout_note.set_opacity(0.7)
