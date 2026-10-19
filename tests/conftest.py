@@ -51,6 +51,17 @@ def _no_remembered_dictation_window(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_real_speech_model(monkeypatch):
+    """Start each test with a stand-in speech model. Starting a recording
+    loads the real one when none is in memory (Power Saving, _wake_model):
+    seconds on a computer that has it, a 670 MB download in CI, where the
+    suite ran into its 20-minute limit (2026-10-18). Tests of the loading
+    itself set app.model to None."""
+    from tuxtalk import app
+    monkeypatch.setattr(app, "model", object())
+
+
+@pytest.fixture(autouse=True)
 def _no_followed_default_mic(monkeypatch):
     """Start each test without a tracked System Default mic. A test that runs
     the real _pick_input_device("") records the user's PipeWire default, and
