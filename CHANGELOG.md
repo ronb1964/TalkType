@@ -67,6 +67,11 @@ before 0.15.0, so older entries use that name.
   inside or how it's set ("✓ everything is set up", "not moved"). The small
   arrow they had was easy to miss. The welcome screen's "Change language,
   model or graphics card" works the same way.
+- Type at pause no longer makes up a sentence for a very short phrase.
+  Alone, under two seconds of audio, Parakeet could turn a single "it" into
+  "It's a little bit more than a little bit." TuxTalk already hears each
+  phrase again with the one before it to place the punctuation; for a phrase
+  that short it now types the words it heard there when they're fewer.
 
 ## [0.16.0] - 2026-10-18
 

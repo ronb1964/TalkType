@@ -3676,12 +3676,21 @@ def _type_boundary(pending: dict, tail: str, injection_mode: str) -> None:
 # as "press enter": alone it's barely a second of audio, and Parakeet heard
 # "Press center." where both together read "... to say. Press enter."
 ENTER_IN_CONTEXT_MAX_WORDS = 3
+# A phrase this short (seconds) is typed as the context pass heard it when
+# that pass heard fewer words: alone, the engine can make a sentence up
+# around a word or two (chunking.words_in_context).
+SHORT_CHUNK_S = 2.0
+
+
+def _word_count(text: str) -> int:
+    return len(re.findall(r"\w+", text))
 
 
 def _resolve_boundary(audio_f32, language, injection_mode, raw="", auto_period=True) -> str:
     """The next chunk has arrived: decide the mark held back after the last
     one, from the engine hearing both chunks together, and type it. Returns
-    the chunk's text, "press enter" when only the context pass heard that."""
+    the chunk's text: "press enter" when only the context pass heard that,
+    and for a very short chunk the words the context pass heard."""
     pending, state.pending_boundary = state.pending_boundary, None
     focused = _query_focused_window_class()
     if (focused is not None and pending.get("window") is not None
@@ -3717,6 +3726,15 @@ def _resolve_boundary(audio_f32, language, injection_mode, raw="", auto_period=T
         _type_boundary(pending, mark, injection_mode)
         state.continue_mid_sentence = False
         return raw
+    if joint and len(audio_f32) <= SHORT_CHUNK_S * SAMPLE_RATE:
+        from .chunking import words_in_context
+        heard = words_in_context(pending["raw"], joint) or ""
+        # Whether to press Enter stays the rule above's call.
+        if (0 < _word_count(heard) < _word_count(raw)
+                and split_press_enter(heard)[1] == split_press_enter(raw)[1]):
+            logger.info(f"Short phrase: {_loggable(raw)} alone, {_loggable(heard)} "
+                        "in context; typing what the context heard")
+            raw = heard
     _type_boundary(pending, (mark + " ") if mark else " ", injection_mode)
     # Lowercase on after a comma or no mark; a sentence end starts afresh.
     state.continue_mid_sentence = mark not in _SENTENCE_ENDS

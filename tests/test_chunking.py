@@ -344,6 +344,17 @@ def test_boundary_mark(prev, joint, mark):
     assert boundary_mark(prev, joint) == mark
 
 
+@pytest.mark.parametrize("prev,joint,heard", [
+    ("then let the timer run out.", "then let the timer run out it", "it"),
+    ("Wir treffen uns morgen.", "Wir treffen uns morgen, um drei Uhr.", "um drei Uhr."),
+    ("Hallo Welt.", "Etwas ganz anderes.", None),
+    ("Wir gehen.", "Wir gehen.", None),
+])
+def test_words_in_context(prev, joint, heard):
+    from tuxtalk.chunking import words_in_context
+    assert words_in_context(prev, joint) == heard
+
+
 # --- chunk roles in the pipeline ---------------------------------------------
 
 @pytest.fixture
@@ -1168,6 +1179,38 @@ def test_a_longer_phrase_is_never_turned_into_press_enter(enter):
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     call(frames_of(speech(1.0)), "middle", auto_period=True)
     assert "<ENTER>" not in typed
+
+
+def test_a_sentence_made_up_for_a_short_phrase_gives_way_to_the_context(pipeline):
+    """Ron, 2026-10-18: he said "it" after a pause; alone, 1.7 s of audio came
+    out "It's a little bit more than a little bit.", while heard with the
+    phrase before it was "... run out it"."""
+    texts, typed, _ = pipeline
+    texts.extend(["then let the timer run out", "It's a little bit more than a little bit.",
+                  "then let the timer run out it"])
+    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    call(frames_of(speech(1.7)), "middle", auto_period=True)
+    assert "".join(typed) == "Then let the timer run out it"
+
+
+def test_a_longer_phrase_keeps_the_words_it_was_heard_with(pipeline):
+    texts, typed, _ = pipeline
+    texts.extend(["then let the timer run out", "and it inserted a carriage return.",
+                  "then let the timer run out and it inserted"])
+    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    call(frames_of(speech(3.0)), "middle", auto_period=True)
+    assert "".join(typed) == "Then let the timer run out and it inserted a carriage return"
+
+
+def test_a_short_phrase_the_context_hears_differently_keeps_its_own_words(pipeline):
+    """Only fewer words in context: a word heard differently is the engine's
+    call either way, and alone it heard this phrase on its own terms."""
+    texts, typed, _ = pipeline
+    texts.extend(["we meet at three", "at the press center.",
+                  "we meet at three at the press enter"])
+    call(frames_of(speech(1.0)), "middle", auto_period=True)
+    call(frames_of(speech(1.5)), "middle", auto_period=True)
+    assert "".join(typed) == "We meet at three at the press center"
 
 
 def test_a_phrase_being_worked_on_holds_hands_free_open(monkeypatch):

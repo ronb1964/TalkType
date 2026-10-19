@@ -234,17 +234,16 @@ class ChunkWorker:
 # instead, and once the next chunk arrives the engine hears both together:
 # with the words (and the voice) on both sides of the pause, the mark it puts
 # at the seam is a real verdict. Only that mark is taken from the joint text;
-# the words typed always come from each chunk's own transcription.
+# the words typed come from each chunk's own transcription, except for a
+# phrase too short to be heard alone (words_in_context).
 
 _WORD = re.compile(r"\w+(?:['’-]\w+)*")
 _MARKS = ".?!…,;:"
 
 
-def boundary_mark(prev_raw: str, joint_raw: str):
-    """The punctuation the engine put after the last word of *prev_raw* when it
-    transcribed that chunk together with the next one (*joint_raw*): ".", "?",
-    ",", ... or "" for none. None when the words can't be lined up, or when
-    nothing follows them (so there is no context to judge by)."""
+def _seam(prev_raw: str, joint_raw: str):
+    """(the words of *joint_raw*, the index of *prev_raw*'s last word among
+    them), or None when the words can't be lined up or nothing follows them."""
     prev = [w.casefold() for w in _WORD.findall(prev_raw)]
     joint = list(_WORD.finditer(joint_raw))
     if not prev or not joint:
@@ -260,6 +259,33 @@ def boundary_mark(prev_raw: str, joint_raw: str):
         return None
     if j == len(joint) - 1:
         return None
+    return joint, j
+
+
+def boundary_mark(prev_raw: str, joint_raw: str):
+    """The punctuation the engine put after the last word of *prev_raw* when it
+    transcribed that chunk together with the next one (*joint_raw*): ".", "?",
+    ",", ... or "" for none. None when the words can't be lined up, or when
+    nothing follows them (so there is no context to judge by)."""
+    seam = _seam(prev_raw, joint_raw)
+    if seam is None:
+        return None
+    joint, j = seam
     gap = joint_raw[joint[j].end():joint[j + 1].start()]
     marks = [c for c in gap if c in _MARKS]
     return marks[0] if marks else ""
+
+
+def words_in_context(prev_raw: str, joint_raw: str):
+    """What *joint_raw* says after the words of *prev_raw*: the next chunk as
+    the engine heard it with the one before. None when they can't be lined up.
+
+    A very short chunk alone is barely a word or two, and Parakeet sometimes
+    invents a sentence for it: "it" came out as "It's a little bit
+    more than a little bit." (Ron, 2026-10-18), while the joint pass heard
+    "... run out it"."""
+    seam = _seam(prev_raw, joint_raw)
+    if seam is None:
+        return None
+    joint, j = seam
+    return joint_raw[joint[j + 1].start():].strip()
