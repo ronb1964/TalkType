@@ -86,7 +86,7 @@ First run (since 0.14.2 it recommends one setup; CUDA is not offered here):
 - [ ] The speed check runs, and the log shows its result (`Speed check (parakeet-v3): graphics …s, processor …s`)
 - [ ] Default settings are correct (model=parakeet-v3, device=vulkan when the card won, auto_period=True, auto_timeout 5 min, language_mode=auto)
 - [ ] Dictation works on the graphics card (log: `Parakeet on GPU`, and "Parakeet on the graphics card from ggml-parakeet-ultra-q8_0.bin")
-- [ ] Parakeet Ultra offer (a VM with the original Parakeet from 0.16, updated to this version without fresh-start): about 20 s after start, "Parakeet got more accurate" with Not Now and Download (669 MB, or 670 MB on the processor). Download shows a progress bar, dictation restarts by itself (log: "Parakeet Ultra downloaded", "Parakeet on the graphics card from ggml-parakeet-ultra-q8_0.bin") and dictates. Restart TuxTalk: no second offer. On another VM, Not Now: dictation keeps working on the original Parakeet and the offer never comes back, but Preferences → General → Speech Recognition shows "A more accurate Parakeet is available." with Update Parakeet (669 MB); it downloads, dictation restarts onto Ultra, and the row is gone next time Preferences opens. About TuxTalk credits Moondream, NVIDIA and Olicorne
+- [ ] Parakeet Ultra offer (a VM with the original Parakeet from 0.16, updated to this version without fresh-start): about 20 s after start, "Parakeet got more accurate" with Not Now and Download (669 MB, or 668 MB on the processor). Download shows a progress bar, dictation restarts by itself (log: "Parakeet Ultra downloaded", "Parakeet on the graphics card from ggml-parakeet-ultra-q8_0.bin") and dictates. Restart TuxTalk: no second offer. On another VM, Not Now: dictation keeps working on the original Parakeet and the offer never comes back, but Preferences → General → Speech Recognition shows "A more accurate Parakeet is available." with Update Parakeet (669 MB, or 668 MB on the processor); it downloads, dictation restarts onto Ultra, and the row is gone next time Preferences opens. About TuxTalk credits Moondream, NVIDIA and Olicorne
 - [ ] Hotkey helper (default since 0.16): first-run's Fix Typing asks for the password once, says no restart is needed, and F8 works straight away without the user joining the input group (`systemctl is-active tuxtalk-hotkeys`, `getent group input`; log: "Hotkeys come from the TuxTalk hotkey helper"). After a reboot it starts by itself. In a VM, also once on an immutable distro (Bazzite or Silverblue) and once without systemd, where it falls back to the input group (log: "Hotkey helper not used") and the setup screen and Preferences say why, with the 🔒 line about programs reading the keyboard
 
 - [ ] No system tray (Silverblue VM, plain GNOME): the welcome screen's "Install GNOME Extension" is ticked, with the amber "this desktop has no system tray" line. Untick it and finish setup: TuxTalk's menu window appears (log: "No system tray and no extension running"). Opening TuxTalk from the apps again brings it back (log: "Opened the menu window (no system tray here)"); its buttons work, and the switch turns dictation off and on. Right-click TuxTalk in the dash: Preferences, Transcribe a File, Help, Quit TuxTalk. On KDE, opening TuxTalk again shows the same window without the no-tray note
@@ -199,6 +199,12 @@ updater downloads it to verify the AppImage before installing — without it,
 updates still work but skip the integrity check.
 
 **NEVER create a GitHub release before Ron has tested and approved.**
+
+**ALWAYS post a release announcement** in Discussions → Announcements after the
+release is up: what changed for the user in a few short paragraphs, a link to
+the release notes, the Feature Requests invite, and the line on how TuxTalk is
+made. Draft it in Ron's voice (ron-voice skill) and post only after he approves
+it. Announcements is also where "coming next" posts go (first one: #15).
 
 **ALWAYS end the release notes with the AUR vote ask.** The release page is
 where people already have installing on their mind, so it converts far better
