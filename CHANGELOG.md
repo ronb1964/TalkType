@@ -81,7 +81,8 @@ before 0.15.0, so older entries use that name.
   it typed nothing, where the old one now and then typed "Thank you.", and
   it writes numbers as digits more often ("8:30", "12 feet"). If you already use Parakeet, TuxTalk offers the
   update once (a 670 MB download); your Parakeet keeps working until then,
-  and if you say Not Now.
+  and if you say Not Now. After a Not Now, Preferences → General shows an
+  Update Parakeet button until you take it.
 
 ## [0.16.0] - 2026-10-18
 

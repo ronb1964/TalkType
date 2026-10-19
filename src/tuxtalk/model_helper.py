@@ -301,6 +301,45 @@ def make_model_download_func(model_name, repo_id=None, only_files=None):
     return download_func
 
 
+def parakeet_update_needed(cfg):
+    """Where ("vulkan" or "cpu") *cfg* dictates with the original Parakeet v3
+    an earlier TuxTalk downloaded, now that Parakeet Ultra is out; None when
+    it doesn't use Parakeet or already has Ultra there."""
+    from . import parakeet_ultra, whisper_vulkan
+    from .parakeet_engine import effective_device
+    if not is_parakeet(cfg.model):
+        return None
+    device = effective_device(cfg.model, cfg.device)
+    if not parakeet_ultra.missing(device):
+        return None
+    on_disk = whisper_vulkan.model_path(cfg.model) if device == "vulkan" else _parakeet_cached_dir()
+    return device if on_disk else None
+
+
+def parakeet_update_size(device):
+    """What updating *device* to Parakeet Ultra downloads, as "669 MB"."""
+    from . import parakeet_ultra
+    return f"{sum(parakeet_ultra.FILES[n][0] for n in parakeet_ultra.missing(device)) / 1e6:.0f} MB"
+
+
+def download_parakeet_update(device, parent=None):
+    """Download Parakeet Ultra for *device* behind a progress window, for the
+    tray's one-time offer and Preferences' Update Parakeet. True when it
+    arrived, False when cancelled, None when the download failed."""
+    from . import parakeet_ultra
+    from .download_progress_dialog import DownloadTask, UnifiedDownloadDialog
+    dialog = UnifiedDownloadDialog(parent=parent, title="Updating Parakeet",
+                                   description="One-time download. Everything runs on this computer.")
+    dialog.add_task(DownloadTask("Parakeet Ultra", parakeet_update_size(device),
+                                 parakeet_ultra.make_download_func(device)))
+    results = dialog.run()
+    if all(r.get("success") for r in results.values()) and not parakeet_ultra.missing(device):
+        return True
+    if any(r.get("cancelled") for r in results.values()):
+        return False
+    return None
+
+
 class BrokenModelFiles(Exception):
     """A downloaded model won't load, and the caller can't show the download
     dialogs to fetch it again."""

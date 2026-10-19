@@ -460,30 +460,13 @@ def maybe_show_recommend_notice():
     return False
 
 
-def parakeet_update_needed(cfg):
-    """Where ("vulkan" or "cpu") the user dictates with the original Parakeet
-    v3 an earlier TuxTalk downloaded, now that Parakeet Ultra is out; None
-    when they don't use Parakeet or already have Ultra there."""
-    from . import parakeet_ultra, whisper_vulkan
-    from .parakeet_engine import cached_model_dir, effective_device, is_parakeet
-    if not is_parakeet(cfg.model):
-        return None
-    device = effective_device(cfg.model, cfg.device)
-    if not parakeet_ultra.missing(device):
-        return None
-    on_disk = whisper_vulkan.model_path(cfg.model) if device == "vulkan" else cached_model_dir()
-    return device if on_disk else None
-
-
 def _offer_parakeet_update(device):
     """Ask, then download. True when Parakeet Ultra arrived, False when the
     user said no or cancelled, None when the download failed (ask again on
     the next start)."""
-    from . import parakeet_ultra
-    from .download_progress_dialog import DownloadTask, UnifiedDownloadDialog
+    from .model_helper import download_parakeet_update, parakeet_update_size
     from .ui_style import message_dialog
-    size = sum(parakeet_ultra.FILES[name][0] for name in parakeet_ultra.missing(device))
-    size_text = f"{size / 1e6:.0f} MB"
+    size_text = parakeet_update_size(device)
     dialog = message_dialog(message_type=Gtk.MessageType.QUESTION, buttons=Gtk.ButtonsType.NONE,
                             text="Parakeet got more accurate")
     dialog.format_secondary_text(
@@ -499,19 +482,12 @@ def _offer_parakeet_update(device):
     if answer != Gtk.ResponseType.OK:
         logger.info("Parakeet Ultra offer: not now")
         return False
-    download = UnifiedDownloadDialog(parent=None, title="Updating Parakeet",
-                                     description="One-time download. Everything runs on this computer.")
-    download.add_task(DownloadTask("Parakeet Ultra", size_text,
-                                   parakeet_ultra.make_download_func(device)))
-    results = download.run()
-    if all(r.get("success") for r in results.values()) and not parakeet_ultra.missing(device):
-        return True
-    if any(r.get("cancelled") for r in results.values()):
-        return False
-    from .notify import notify
-    notify("TuxTalk", "The Parakeet update didn't finish downloading. "
-                      "TuxTalk will offer it again next time it starts.")
-    return None
+    updated = download_parakeet_update(device)
+    if updated is None:
+        from .notify import notify
+        notify("TuxTalk", "The Parakeet update didn't finish downloading. "
+                          "TuxTalk will offer it again next time it starts.")
+    return updated
 
 
 def maybe_offer_parakeet_update(restart):
@@ -531,6 +507,7 @@ def maybe_offer_parakeet_update(restart):
         cfg = load_config()
         if cfg.parakeet_update_offered:
             return False
+        from .model_helper import parakeet_update_needed
         device = parakeet_update_needed(cfg)
         if device is None:
             return False

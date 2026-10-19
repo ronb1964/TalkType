@@ -17,7 +17,7 @@ def env(monkeypatch):
     monkeypatch.setattr("tuxtalk.config.save_config", lambda c: saved.append(c.parakeet_update_offered))
     monkeypatch.setattr("tuxtalk.cuda_helper.is_first_run", lambda: False)
     monkeypatch.setattr("tuxtalk.service_launcher.find_service_pids", lambda: [4242])
-    monkeypatch.setattr(tray, "parakeet_update_needed", lambda c: "vulkan")
+    monkeypatch.setattr("tuxtalk.model_helper.parakeet_update_needed", lambda c: "vulkan")
     answer = {"value": True}
     monkeypatch.setattr(tray, "_offer_parakeet_update",
                         lambda device: asked.append(device) or answer["value"])
@@ -61,7 +61,7 @@ def test_it_waits_for_dictation_and_never_shows_on_first_run(env, monkeypatch):
 
 def test_nothing_to_offer_asks_nothing(env, monkeypatch):
     cfg, asked, saved, restarts, _ = env
-    monkeypatch.setattr(tray, "parakeet_update_needed", lambda c: None)
+    monkeypatch.setattr("tuxtalk.model_helper.parakeet_update_needed", lambda c: None)
     _run(restarts)
     assert asked == [] and saved == []
 
@@ -84,14 +84,15 @@ def disk(tmp_path, monkeypatch):
 
 
 def test_offered_only_to_parakeet_users_on_the_original(disk):
+    from tuxtalk.model_helper import parakeet_update_needed
     cfg = types.SimpleNamespace(model="parakeet-v3", device="vulkan")
-    assert tray.parakeet_update_needed(cfg) == "vulkan"
+    assert parakeet_update_needed(cfg) == "vulkan"
     cfg.device = "cpu"
-    assert tray.parakeet_update_needed(cfg) == "cpu"
+    assert parakeet_update_needed(cfg) == "cpu"
     disk("cpu")
-    assert tray.parakeet_update_needed(cfg) is None          # already on Ultra there
+    assert parakeet_update_needed(cfg) is None          # already on Ultra there
     cfg.model, cfg.device = "small", "vulkan"
-    assert tray.parakeet_update_needed(cfg) is None          # dictates with Whisper
+    assert parakeet_update_needed(cfg) is None          # dictates with Whisper
 
 
 def test_the_offer_names_its_real_size(disk, monkeypatch):
@@ -118,3 +119,56 @@ def test_the_offer_names_its_real_size(disk, monkeypatch):
     assert tray._offer_parakeet_update("vulkan") is False
     assert shown[0] == "Parakeet got more accurate"
     assert "Download (669 MB)" in shown and "Not Now" in shown
+
+
+@pytest.fixture
+def prefs_row(monkeypatch):
+    """Preferences' Update Parakeet row with only what it needs."""
+    from tuxtalk.prefs import PreferencesWindow
+    w = PreferencesWindow.__new__(PreferencesWindow)
+    w.window = None
+    w.device_combo = tray.Gtk.ComboBoxText()
+    w.device_combo.append("vulkan", "Vulkan")
+    w.device_combo.set_active_id("vulkan")
+    w.model_combo = tray.Gtk.ComboBoxText()
+    w.model_combo.append("parakeet-v3", "Parakeet")
+    w.model_combo.set_active_id("parakeet-v3")
+    w.parakeet_update_row = tray.Gtk.Box()
+    w.parakeet_update_btn = tray.Gtk.Button()
+    need = {"device": "vulkan"}
+    monkeypatch.setattr("tuxtalk.model_helper.parakeet_update_needed", lambda cfg: need["device"])
+    monkeypatch.setattr("tuxtalk.model_helper.parakeet_update_size", lambda device: "669 MB")
+    w.restarts, w.messages = [], []
+    w.restart_service = lambda: w.restarts.append(True)
+    monkeypatch.setattr("tuxtalk.vulkan_setup_dialogs.message",
+                        lambda parent, kind, title, text: w.messages.append(title))
+    return w, need
+
+
+def test_preferences_shows_update_parakeet_only_to_those_on_the_original(prefs_row):
+    w, need = prefs_row
+    w._update_parakeet_row("parakeet-v3")
+    assert w.parakeet_update_row.get_visible()
+    assert w.parakeet_update_btn.get_label() == "Update Parakeet (669 MB)"
+    need["device"] = None
+    w._update_parakeet_row("parakeet-v3")
+    assert not w.parakeet_update_row.get_visible()
+
+
+def test_update_parakeet_downloads_then_restarts_dictation(prefs_row, monkeypatch):
+    w, need = prefs_row
+    def download(device, parent):
+        need["device"] = None           # Ultra is there now
+        return True
+    monkeypatch.setattr("tuxtalk.model_helper.download_parakeet_update", download)
+    w._on_update_parakeet_clicked(None)
+    assert w.restarts == [True] and not w.parakeet_update_row.get_visible()
+
+
+def test_a_failed_update_says_so_and_changes_nothing(prefs_row, monkeypatch):
+    w, need = prefs_row
+    monkeypatch.setattr("tuxtalk.model_helper.download_parakeet_update", lambda d, p: None)
+    w._update_parakeet_row("parakeet-v3")
+    w._on_update_parakeet_clicked(None)
+    assert w.messages == ["The download did not finish"] and w.restarts == []
+    assert w.parakeet_update_row.get_visible()

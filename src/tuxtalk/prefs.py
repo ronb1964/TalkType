@@ -1290,6 +1290,22 @@ class PreferencesWindow:
         grid.attach(rec_row, 0, row, 2, 1)
         row += 1
 
+        # Parakeet Ultra for someone still on the original Parakeet: who said
+        # Not Now to the tray's one-time offer, or came back to Parakeet later.
+        # Hidden otherwise (_update_parakeet_row).
+        update_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        update_label = Gtk.Label(label="A more accurate Parakeet is available.", xalign=0)
+        update_label.show()
+        update_row.pack_start(update_label, True, True, 0)
+        self.parakeet_update_btn = Gtk.Button()
+        self.parakeet_update_btn.connect("clicked", self._on_update_parakeet_clicked)
+        self.parakeet_update_btn.show()
+        update_row.pack_end(self.parakeet_update_btn, False, False, 0)
+        update_row.set_no_show_all(True)
+        self.parakeet_update_row = update_row
+        grid.attach(update_row, 0, row, 2, 1)
+        row += 1
+
         # A warning for model/device/language combinations that don't do what
         # they say: Parakeet with CUDA runs on the processor, and Parakeet
         # ignores a language it doesn't know. Outside the fold, so a closed
@@ -4267,6 +4283,7 @@ class PreferencesWindow:
             GLib.markup_escape_text(recommend.setup_title(
                 model, self.device_combo.get_active_id() or "cpu", hw)),
             GLib.markup_escape_text(language_summary(self.config))))
+        self._update_parakeet_row(model)
         if model == rec.model and self.device_combo.get_active_id() == rec.device:
             label.set_markup('<span color="#6db896">✓ You\'re on the recommended setup '
                              f'({GLib.markup_escape_text(rec.title)})</span>')
@@ -4275,6 +4292,39 @@ class PreferencesWindow:
             label.set_markup('<span color="#888888">Recommended for this computer:</span> '
                              f'{GLib.markup_escape_text(rec.title)}')
             self.use_recommended_btn.show()
+
+    def _parakeet_update_device(self, model):
+        """Where the setup shown here would still run the original Parakeet
+        (model_helper.parakeet_update_needed), or None."""
+        from types import SimpleNamespace
+        from .model_helper import parakeet_update_needed
+        return parakeet_update_needed(SimpleNamespace(
+            model=model, device=self.device_combo.get_active_id() or "cpu"))
+
+    def _update_parakeet_row(self, model):
+        device = self._parakeet_update_device(model)
+        if device is None:
+            self.parakeet_update_row.hide()
+            return
+        from .model_helper import parakeet_update_size
+        self.parakeet_update_btn.set_label(f"Update Parakeet ({parakeet_update_size(device)})")
+        self.parakeet_update_row.show()
+
+    def _on_update_parakeet_clicked(self, _button):
+        """Download Parakeet Ultra, then restart dictation onto it."""
+        from .model_helper import download_parakeet_update
+        from .vulkan_setup_dialogs import message
+        model = self.model_combo.get_active_id()
+        device = self._parakeet_update_device(model)
+        if device is None:
+            return
+        updated = download_parakeet_update(device, self.window)
+        if updated is None:
+            message(self.window, Gtk.MessageType.ERROR, "The download did not finish",
+                    "Check your internet connection and try again.")
+        self._update_parakeet_row(model)
+        if updated:
+            self.restart_service()
 
     def _on_use_recommended_clicked(self, _button):
         """Set the dropdowns to the recommended setup, as Tray → Performance →
