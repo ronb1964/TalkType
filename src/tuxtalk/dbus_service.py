@@ -125,8 +125,7 @@ class TuxTalkDBusService(dbus.service.Object):
 
     @dbus.service.method(DBUS_INTERFACE, out_signature='s')
     def GetDeviceType(self):
-        """Get the device the model really runs on (cpu, cuda or vulkan). This is what
-        the GNOME extension's Device line shows, so it matches the tray."""
+        """Get the device the model really runs on (cpu, cuda or vulkan)."""
         running = getattr(self, "running_engine", None)
         if running:
             return running[1]
@@ -144,13 +143,17 @@ class TuxTalkDBusService(dbus.service.Object):
             'service_running': self.IsServiceRunning(),
             'model': self.GetCurrentModel(),
             'device': self.GetDeviceType(),
-            'injection_mode': self.GetInjectionMode(),
         }
 
         # Older GNOME extensions tell the battery-saving preset apart by its
         # auto-timeout; current ones read 'preset' below. Adding keys to this
         # dict is backward-compatible: extensions ignore what they do not read.
         if hasattr(self.app, 'config'):
+            # The GNOME menu's line about what runs, word for word the tray's.
+            from .tray import engine_line
+            status['engine'] = engine_line(getattr(self.app.config, 'model', ''),
+                                           getattr(self.app.config, 'device', 'cpu'),
+                                           self.running_engine)
             status['auto_timeout_enabled'] = bool(
                 getattr(self.app.config, 'auto_timeout_enabled', False))
             status['auto_timeout_minutes'] = int(
@@ -220,18 +223,6 @@ class TuxTalkDBusService(dbus.service.Object):
     def SetModel(self, model_name: str):
         """Change the speech model"""
         self._dispatch('set_model', model_name)
-
-    @dbus.service.method(DBUS_INTERFACE, out_signature='s')
-    def GetInjectionMode(self):
-        """Get current text injection mode (auto/paste/type)"""
-        if hasattr(self.app, 'config'):
-            return str(getattr(self.app.config, 'injection_mode', 'auto'))
-        return 'auto'
-
-    @dbus.service.method(DBUS_INTERFACE, in_signature='s')
-    def SetInjectionMode(self, mode: str):
-        """Change the text injection mode"""
-        self._dispatch('set_injection_mode', mode)
 
     @dbus.service.method(DBUS_INTERFACE, in_signature='s')
     def SetFocusedWindowClass(self, wm_class: str):
@@ -500,11 +491,6 @@ class TuxTalkDBusService(dbus.service.Object):
         """Emitted when the model is changed"""
         pass
 
-    @dbus.service.signal(DBUS_INTERFACE, signature='s')
-    def InjectionModeChanged(self, mode: str):
-        """Emitted when injection mode changes (auto/paste/type)"""
-        pass
-
     @dbus.service.signal(DBUS_INTERFACE, signature='as')
     def HotkeysChanged(self, accelerators):
         """The hotkeys the GNOME extension should hold back (empty: none)."""
@@ -547,6 +533,3 @@ class TuxTalkDBusService(dbus.service.Object):
         """Emit model changed signal"""
         self.ModelChanged(model_name)
 
-    def emit_injection_mode_changed(self, mode: str):
-        """Emit injection mode changed signal"""
-        self.InjectionModeChanged(mode)

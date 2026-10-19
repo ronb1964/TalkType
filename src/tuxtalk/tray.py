@@ -369,7 +369,7 @@ class _IconToggleItem(Gtk.ImageMenuItem):
 
 
 def engine_status(cfg_model, cfg_device, running=None):
-    """(model id, device text) for the tray's "Active Model" and "Device" lines.
+    """(model id, device text) for what the menus say runs: "GPU (Vulkan)", "CPU".
 
     *running* is (model, device) as reported by the dictation service, or None
     when it hasn't reported (stopped, starting, or an older service). The lines
@@ -394,6 +394,22 @@ def engine_status(cfg_model, cfg_device, running=None):
     return model, text
 
 
+def where_it_runs(device_text):
+    """engine_status's device text in words, keeping any reason: "the
+    processor", "the graphics card (Vulkan)", "the processor (Vulkan didn't start)"."""
+    if device_text.startswith("CPU"):
+        return "the processor" + device_text[len("CPU"):]
+    return "the graphics card" + device_text[len("GPU"):]
+
+
+def engine_line(cfg_model, cfg_device, running=None):
+    """The menus' one line about what runs: "Parakeet on the graphics card (Vulkan)".
+    The tray, the no-tray menu window and the GNOME extension (GetStatus) all show it."""
+    from .recommend import model_title
+    model, device_text = engine_status(cfg_model, cfg_device, running)
+    return f"{model_title(model)} on {where_it_runs(device_text)}"
+
+
 def preset_notice(label, model, device, gpu_offered):
     """The notification after choosing a Performance preset.
 
@@ -401,12 +417,9 @@ def preset_notice(label, model, device, gpu_offered):
     computer with a usable graphics chip, how to move it there.
     """
     from .model_helper import model_display_name
-    _, where = engine_status(model, device)
-    where = ("the processor" if where.startswith("CPU")
-             else "the graphics card (CUDA)" if "CUDA" in where
-             else "the graphics card (Vulkan)")
+    where = where_it_runs(engine_status(model, device)[1])
     text = f"Performance: {label}\n{model_display_name(model)} on {where}."
-    if where == "the processor" and gpu_offered:
+    if where.startswith("the processor") and gpu_offered:
         text += " To use your graphics card, set the Device to Vulkan in Preferences."
     return text + "\nRestarting service..."
 
@@ -651,10 +664,6 @@ class DictationTray:
                 def set_performance_preset(self, preset_id: str):
                     """Apply a performance preset via tray (called from GNOME extension D-Bus)."""
                     GLib.idle_add(self.tray.set_performance_preset, preset_id)
-
-                def set_injection_mode(self, mode: str):
-                    """Set text injection mode via tray (called from GNOME extension D-Bus)."""
-                    GLib.idle_add(self.tray.set_injection_mode, mode)
 
                 def set_model(self, model_name: str):
                     """Change the model via tray (called from GNOME extension D-Bus SetModel)."""
@@ -1081,48 +1090,6 @@ class DictationTray:
         except Exception as e:
             logger.error(f"SetModel failed: {e}", exc_info=True)
 
-    def set_injection_mode(self, mode: str):
-        """Set the injection mode (auto, type, or paste)."""
-        # Prevent recursive calls when we programmatically set the radio buttons
-        if hasattr(self, '_updating_injection_mode') and self._updating_injection_mode:
-            return
-
-        try:
-            from .config import load_config, needs_service_restart, save_config
-            cfg = load_config()
-            cfg.injection_mode = mode
-
-            # Save the config
-            save_config(cfg)
-
-            # Notify user
-            from .notify import notify as _notify
-            mode_names = {
-                "auto": "Auto (Smart Detection)",
-                "type": "Keyboard Typing",
-                "paste": "Clipboard Paste"
-            }
-            mode_name = mode_names.get(mode, mode)
-            logger.info(f"Switched to {mode_name} mode")
-            if getattr(cfg, "notify", False):
-                _notify("TuxTalk", f"Input mode: {mode_name}")
-
-            # Notify GNOME extension of mode change via D-Bus signal
-            if self.dbus_service:
-                try:
-                    self.dbus_service.emit_injection_mode_changed(mode)
-                except Exception as e:
-                    logger.error(f"Failed to emit injection mode change: {e}")
-
-            # The running service rereads injection_mode from config.toml within
-            # about a second. A restart would reload the model and leave
-            # dictation dead for several seconds for no gain.
-            if needs_service_restart({"injection_mode"}):
-                self.restart_service(None)
-
-        except Exception as e:
-            logger.error(f"Failed to set injection mode: {e}")
-
     def _current_presets(self):
         """The Performance presets for this computer and language (recommend.py)."""
         from . import recommend
@@ -1262,47 +1229,22 @@ class DictationTray:
             self.service_toggle.set_active(is_running)
             self._updating_toggle = False
 
-        # Update active model display
-        if hasattr(self, 'model_display_item'):
+        # What runs, in one line
+        if hasattr(self, 'engine_item'):
             try:
                 from .config import load_config
                 cfg = load_config()
-                model_names = {
-                    'tiny': 'Tiny (fastest)',
-                    'base': 'Base',
-                    'small': 'Small',
-                    'medium': 'Medium',
-                    'large-v3': 'Large (best quality)',
-                    'large': 'Large (best quality)',
-                    'parakeet-v3': 'Parakeet'
-                }
                 running = None
                 if is_running and getattr(self, "dbus_service", None):
                     running = self.dbus_service.running_engine
-                model_id, device_display = engine_status(cfg.model, cfg.device, running)
-                display_name = model_names.get(model_id, model_id)
-                self.model_display_item.set_label(f"Active Model: {display_name}")
-                self.device_display_item.set_label(f"Device: {device_display}")
-
-                # Update injection mode radio buttons
-                if hasattr(self, 'injection_mode_auto'):
-                    self._updating_injection_mode = True
-                    mode = cfg.injection_mode.lower()
-                    if mode == "auto":
-                        self.injection_mode_auto.set_active(True)
-                    elif mode == "paste":
-                        self.injection_mode_paste.set_active(True)
-                    else:  # default to "type"
-                        self.injection_mode_type.set_active(True)
-                    self._updating_injection_mode = False
+                self.engine_item.set_label(engine_line(cfg.model, cfg.device, running))
 
                 # Update performance preset radio buttons
                 if hasattr(self, 'preset_radios'):
                     self._sync_preset_radios()
             except Exception as e:
-                logger.error(f"Failed to update model/device display: {e}")
-                self.model_display_item.set_label("Active Model: Unknown")
-                self.device_display_item.set_label("Device: Unknown")
+                logger.error(f"Failed to update the model and device line: {e}")
+                self.engine_item.set_label("Speech model: unknown")
     
     def _launch_preferences(self, tab=None):
         """Launch the preferences window subprocess.
@@ -2046,35 +1988,6 @@ class DictationTray:
         # and the tray and its icon would stay until the dialog is closed.
         GLib.timeout_add(100, lambda: os._exit(0))
 
-    def _build_injection_submenu(self):
-        """Build the Text Injection Mode submenu (Auto / Keyboard Typing / Clipboard Paste).
-
-        Stores radio button references on self for later state updates.
-        Returns the parent MenuItem that contains the submenu.
-        """
-        submenu = Gtk.Menu()
-        self.injection_mode_group = None
-
-        # Each handler checks get_active(): GTK also fires "activate" on the
-        # radio being unselected, which would re-apply the old mode (and
-        # restart the service) before the new one.
-        self.injection_mode_auto = Gtk.RadioMenuItem(label="Auto (Smart Detection)")
-        self.injection_mode_auto.connect("activate", lambda w: w.get_active() and self.set_injection_mode("auto"))
-        submenu.append(self.injection_mode_auto)
-        self.injection_mode_group = self.injection_mode_auto
-
-        self.injection_mode_type = Gtk.RadioMenuItem(label="Keyboard Typing", group=self.injection_mode_group)
-        self.injection_mode_type.connect("activate", lambda w: w.get_active() and self.set_injection_mode("type"))
-        submenu.append(self.injection_mode_type)
-
-        self.injection_mode_paste = Gtk.RadioMenuItem(label="Clipboard Paste", group=self.injection_mode_group)
-        self.injection_mode_paste.connect("activate", lambda w: w.get_active() and self.set_injection_mode("paste"))
-        submenu.append(self.injection_mode_paste)
-
-        item = Gtk.MenuItem(label="Text Injection Mode")
-        item.set_submenu(submenu)
-        return item
-
     def _build_performance_submenu(self):
         """Build the Performance preset submenu (Recommended, Lightest, Battery saver + Custom).
 
@@ -2256,14 +2169,11 @@ class DictationTray:
         # checkboxes their own column beside the icon column, so a real
         # checkbox sat to the left of the Preferences gear with every label
         # pushed further right. With no checkbox the two share one column.
-        self.service_toggle = _IconToggleItem("Dictation Service", self.toggle_service)
-        self.model_display_item = Gtk.MenuItem(label="Active Model: Loading...")
-        self.model_display_item.set_sensitive(False)
-        self.device_display_item = Gtk.MenuItem(label="Device: Loading...")
-        self.device_display_item.set_sensitive(False)
+        self.service_toggle = _IconToggleItem("Dictation on/off", self.toggle_service)
+        self.engine_item = Gtk.MenuItem(label="Loading the speech model...")
+        self.engine_item.set_sensitive(False)
 
         # Submenus
-        self.injection_mode_menu_item = self._build_injection_submenu()
         self.performance_menu_item = self._build_performance_submenu()
         history_menu_item = self._build_history_submenu()
         # Top level, right under Recent Dictations, so it is easy to find.
@@ -2272,7 +2182,7 @@ class DictationTray:
         transcribe_item = Gtk.MenuItem(label="Transcribe a File...")
         transcribe_item.connect("activate", self.open_transcribe_window)
 
-        # Service management items
+        # For when something's wrong, so it sits with Help, not at the top.
         restart_item = Gtk.MenuItem(label="Restart Service")
         restart_item.connect("activate", self.restart_service)
 
@@ -2295,17 +2205,15 @@ class DictationTray:
         # Assemble in exact same order as GNOME extension
         for item in [
             self.service_toggle,
-            restart_item,
             history_menu_item,
             fix_word_item,
             transcribe_item,
             Gtk.SeparatorMenuItem(),
-            self.model_display_item,
-            self.device_display_item,
+            self.engine_item,
             self.performance_menu_item,
-            self.injection_mode_menu_item,
             Gtk.SeparatorMenuItem(),
             prefs_item, voice_cmds_item, stats_item, help_item, about_item, updates_item,
+            restart_item,
             Gtk.SeparatorMenuItem(),
             quit_item,
         ]:

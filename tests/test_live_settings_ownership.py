@@ -164,4 +164,4 @@ def test_power_saving_says_dictation_is_off_even_with_notifications_off(monkeypa
     with pytest.raises(SystemExit):
         app._service_tick(cfg, svc)
     assert shown and shown[0][0] == "TuxTalk: dictation is off"
-    assert "Dictation Service" in shown[0][1] and "Power Saving" in shown[0][1]
+    assert "Dictation on/off" in shown[0][1] and "Power Saving" in shown[0][1]

@@ -71,3 +71,21 @@ def test_the_service_records_every_load_path():
     src = (pathlib.Path(__file__).resolve().parent.parent / "src" / "tuxtalk" / "app.py").read_text()
     assert src.count("_record_engine(") >= 5        # def + 4 load points
     assert "_notify_tray_running_engine()" in src
+
+
+@pytest.mark.parametrize("cfg_model,cfg_device,running,expected", [
+    ("parakeet-v3", "vulkan", ("parakeet-v3", "vulkan"), "Parakeet on the graphics card (Vulkan)"),
+    ("parakeet-v3", "vulkan", ("parakeet-v3", "cpu"), "Parakeet on the processor (Vulkan didn't start)"),
+    ("small", "cpu", None, "Whisper Small on the processor"),
+    ("large-v3", "cuda", ("large-v3", "cuda"), "Whisper Large-v3 on the graphics card (CUDA)"),
+])
+def test_the_menus_say_what_runs_in_one_line(cfg_model, cfg_device, running, expected):
+    """"Active Model" and "Device" were two lines; one sentence says both."""
+    from tuxtalk.tray import engine_line
+    assert engine_line(cfg_model, cfg_device, running) == expected
+
+
+def test_the_gnome_menu_gets_the_trays_line(svc):
+    svc.app.current_preset = lambda: "custom"
+    svc.NotifyRunningEngine("parakeet-v3", "cpu")
+    assert svc.GetStatus()["engine"] == "Parakeet on the processor (Vulkan didn't start)"

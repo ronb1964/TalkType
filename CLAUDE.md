@@ -128,6 +128,7 @@ Preferences and the rest:
 - [ ] Your Words: Preferences → Words → Add Word, "TuxTalk", Save. On Parakeet, saying "tux talk" types TuxTalk. On a Whisper model (e.g. small) the name comes out right more often (log: "Loaded your words" / "Reloaded your words"). Saying nothing with a Whisper model types nothing
 - [ ] Several languages: Preferences → General → Change model, device or language. On a Whisper model the Language dropdown (Detect automatically, the 35 languages) ends with "Several languages…"; on Parakeet that entry isn't there. Pick it: the list of 35 opens; tick English and Spanish, OK: the dropdown reads "Several: English, Spanish…", a "Change list…" button appears beside it, and the line at the top of the section ends "· English, Spanish". Cancel leaves the dropdown as it was; one language ticked selects that language. On a Whisper model (e.g. small, CPU and Vulkan) English and Spanish dictations come out in their own language; dictating German comes out in English (log: "Language: Whisper heard de, which isn't on your list; using en"). Change list…, untick all: "Detect automatically" again
 - [ ] Transcribe a File: Tray → Transcribe a File... (and the GNOME menu, right under Fix a Word) opens the window. Choose a File… shows the desktop's file dialog with "Audio and video"; pick an MP3 or a video: a progress bar, then the text in paragraphs and "Done: … of sound in …" (log: "Transcribed a file"). Dropping a file anywhere on the window works, the big text area included; an empty window says "Drop an audio or video file here". Show times adds [m:ss]. Copy All, Save as Text… and Save as Subtitles… (.srt next to the file) work, and the .srt plays in a video player. Dictating while a long file runs still works. Stop keeps what's done. Opening it again brings the open window to the front. Close it and open it again: the newest transcript is back with every button ("Transcribed Oct … It's kept under Earlier Transcripts"), so Save as Subtitles still works. Earlier Transcripts lists the last 10, newest first; picking one shows it; a file done again replaces its copy; Clear This List… asks, then empties it. Remove ums and repeats (beside Show times) takes out um, uh and doubled words, untick shows it as heard, and Copy, Save as Text and Save as Subtitles use what's shown. Closing with text not saved to a file asks Save as Text… / Don't Save / Cancel (after Copy All too). Closing while a file runs asks Keep Going / Stop and Close
+- [ ] Tray menu (and the GNOME extension's, identical): Dictation on/off, Recent Dictations, Fix a Word, Transcribe a File; one greyed line "Parakeet on the graphics card (Vulkan)" (or "… on the processor"), Performance; Preferences … Check for Updates, Restart Service; Quit. No Text Injection Mode. Switch Device to CPU in Preferences: the line reads "Parakeet on the processor" in both menus
 - [ ] Tray → Performance shows Recommended / Lightest / Battery saver, with the dot on the active one
 - [ ] Preferences → General opens on Dictation Keys (Hold, Toggle, hands-free, Test Hotkeys, a closed "More shortcuts" with Commands cheat sheet and Paste Last Dictation), then Speech Recognition: one bold line "Parakeet on your … · detects the language" and a closed "Change model, device or language". Changing the model, device or language there updates the bold line. Off the recommended setup, the row says "Recommended for this computer: …" with Use Recommended, which sets Model and Device (Vulkan: download and speed check first) and turns into "✓ You're on the recommended setup". "What works with what?" shows the models-by-device grid and a line about this computer
 - [ ] Backup: Preferences → Updates & Backup fits without scrolling. Save Backup opens the desktop's file dialog, writes the .zip, and "Last saved" turns from amber "never" to the date. Change the hotkey, then Load Backup puts it back, restarts dictation (log) and closes Preferences. Earlier settings lists both "— your backup" files from the folder the backup was saved to and "— automatic" copies, newest first, and Restore undoes the load. A second backup the same day gets its own name (the time is in it). A non-backup file is turned away with a message. There is no "Backup folder" row: save a backup into another folder and the next Save Backup and Load Backup open there, and Earlier settings lists the backups in it. Tray → Check for Updates still opens this tab
@@ -315,16 +316,13 @@ TuxTalk has TWO user interfaces that must stay synchronized:
 
 **Menu order (must match in both):**
 ```
-Dictation Service (toggle)
-Restart Service
+Dictation on/off (toggle)
 Recent Dictations ▸
 Fix a Word...
 Transcribe a File...
 ─────────────────────
-Active Model: [model]
-Device: [device]
+[model] on [where it runs]   (one read-only line)
 Performance ▸
-Text Injection Mode ▸
 ─────────────────────
 Preferences...
 Voice Commands...
@@ -332,6 +330,7 @@ Your Stats...
 Help...
 About TuxTalk...
 Check for Updates...
+Restart Service
 ─────────────────────
 Quit TuxTalk
 ```

@@ -104,21 +104,26 @@ def test_dictation_is_recorded_before_it_is_typed(monkeypatch):
     assert order == [("typed", ["Hello there."])]
 
 
-def test_tray_and_gnome_extension_place_recent_dictations_after_restart():
-    """CLAUDE.md menu order: Restart Service, Recent Dictations, Fix a Word,
-    Transcribe a File, in both."""
+def test_tray_and_gnome_extension_place_recent_dictations_first():
+    """CLAUDE.md menu order: the on/off switch, then Recent Dictations, Fix a
+    Word, Transcribe a File, in both. Restart Service sits at the end, with
+    Help and Check for Updates (0.16 simplicity review)."""
     tray = (ROOT / "src/tuxtalk/tray.py").read_text()
     assert re.search(
-        r"restart_item,\s*history_menu_item,\s*fix_word_item,\s*transcribe_item,\s*"
+        r"self\.service_toggle,\s*history_menu_item,\s*fix_word_item,\s*transcribe_item,\s*"
         r"Gtk\.SeparatorMenuItem\(\)", tray)
+    assert re.search(r"updates_item,\s*restart_item,\s*Gtk\.SeparatorMenuItem\(\),\s*quit_item", tray)
 
     js = (ROOT / "gnome-extension/talktype@ronb1964.github.io/extension.js").read_text()
-    restart = js.index("new PopupMenu.PopupMenuItem('Restart Service')")
+    switch = js.index("new PopupMenu.PopupSwitchMenuItem('Dictation on/off'")
     recent = js.index("new PopupMenu.PopupSubMenuMenuItem('Recent Dictations')")
     fix_word = js.index("new PopupMenu.PopupMenuItem('Fix a Word...')")
     transcribe = js.index("new PopupMenu.PopupMenuItem('Transcribe a File...')")
     separator = js.index("new PopupMenu.PopupSeparatorMenuItem()", recent)
-    assert restart < recent < fix_word < transcribe < separator
+    updates = js.index("new PopupMenu.PopupMenuItem('Check for Updates...')")
+    restart = js.index("new PopupMenu.PopupMenuItem('Restart Service')")
+    quit_item = js.index("new PopupMenu.PopupMenuItem('Quit TuxTalk')")
+    assert switch < recent < fix_word < transcribe < separator < updates < restart < quit_item
 
 
 def test_full_text_lines_wraps_keeps_breaks_and_caps():

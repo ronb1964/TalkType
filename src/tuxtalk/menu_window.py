@@ -22,10 +22,6 @@ logger = logging.getLogger(__name__)
 
 WINDOW_TITLE = "TuxTalk"
 
-INJECTION_MODES = (("auto", "Auto (Smart Detection)"),
-                   ("type", "Keyboard Typing"),
-                   ("paste", "Clipboard Paste"))
-
 
 def no_tray_note(extension_installed):
     """The note at the bottom when the desktop shows no tray icons."""
@@ -77,13 +73,11 @@ class MenuWindow:
 
         t = tray
         for item in [
-            ("Restart Service", t.restart_service),
             ("Recent Dictations", self._popup_history),
             ("Fix a Word...", lambda _b: t.show_fix_word_dialog(0)),
             ("Transcribe a File...", t.open_transcribe_window),
             None,
             ("Performance", self._popup_performance),
-            ("Text Injection Mode", self._popup_injection),
             None,
             ("Preferences...", t.open_preferences),
             ("Voice Commands...", t.show_voice_commands),
@@ -91,6 +85,7 @@ class MenuWindow:
             ("Help...", t.show_help),
             ("About TuxTalk...", t.show_about_dialog),
             ("Check for Updates...", t.check_for_updates_clicked),
+            ("Restart Service", t.restart_service),
             None,
             ("Quit TuxTalk", t.quit_app),
         ]:
@@ -132,8 +127,7 @@ class MenuWindow:
     def _button(self, label, action):
         """A flat, left-aligned row like a menu item. Items that open a
         submenu get a ▸ and show it beside the button."""
-        submenu = action in (self._popup_history, self._popup_performance,
-                             self._popup_injection)
+        submenu = action in (self._popup_history, self._popup_performance)
         button = Gtk.Button(label=f"{label}  ▸" if submenu else label)
         button.set_relief(Gtk.ReliefStyle.NONE)
         # Like a menu item, a click doesn't take keyboard focus: with focus,
@@ -183,22 +177,6 @@ class MenuWindow:
         menu.append(custom)
         self._show_popup(button, menu)
 
-    def _popup_injection(self, button):
-        from .config import load_config
-        mode = (getattr(load_config(), "injection_mode", "auto") or "auto").lower()
-        if mode not in dict(INJECTION_MODES):
-            mode = "type"       # as the tray menu shows it
-        menu = Gtk.Menu()
-        group = None
-        for key, label in INJECTION_MODES:
-            radio = Gtk.RadioMenuItem(label=label, group=group)
-            group = group or radio
-            radio.set_active(key == mode)
-            radio.connect("activate", lambda w, k=key:
-                          w.get_active() and k != mode and self.tray.set_injection_mode(k))
-            menu.append(radio)
-        self._show_popup(button, menu)
-
     # ----- keeping it current -----
 
     def refresh(self):
@@ -210,10 +188,9 @@ class MenuWindow:
             self._updating = False
             self.status_label.set_markup(
                 "<b>Dictation is on</b>" if running else "<b>Dictation is off</b>")
-            model = getattr(self.tray, "model_display_item", None)
-            device = getattr(self.tray, "device_display_item", None)
-            if model is not None and device is not None:
-                self.engine_label.set_text(f"{model.get_label()}\n{device.get_label()}")
+            engine = getattr(self.tray, "engine_item", None)
+            if engine is not None:
+                self.engine_label.set_text(engine.get_label())
         except Exception as e:
             self._updating = False
             logger.debug(f"Menu window refresh failed: {e}")

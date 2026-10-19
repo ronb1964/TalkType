@@ -227,11 +227,11 @@ gi = pytest.importorskip("gi")
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk  # noqa: E402
 
-# The tray menu's order (CLAUDE.md), less the two display-only lines.
-MENU_ORDER = ["Restart Service", "Recent Dictations  ▸", "Fix a Word...",
-              "Transcribe a File...", "Performance  ▸", "Text Injection Mode  ▸",
+# The tray menu's order (CLAUDE.md), less the on/off switch and the model line.
+MENU_ORDER = ["Recent Dictations  ▸", "Fix a Word...",
+              "Transcribe a File...", "Performance  ▸",
               "Preferences...", "Voice Commands...", "Your Stats...", "Help...",
-              "About TuxTalk...", "Check for Updates...", "Quit TuxTalk"]
+              "About TuxTalk...", "Check for Updates...", "Restart Service", "Quit TuxTalk"]
 
 
 def _fake_tray(running=True):
@@ -249,8 +249,7 @@ def _fake_tray(running=True):
         show_help=rec("help"), show_about_dialog=rec("about"),
         check_for_updates_clicked=rec("updates"), quit_app=rec("quit"),
         _launch_preferences=lambda tab=None: calls.append(f"prefs:{tab}"),
-        model_display_item=Gtk.MenuItem(label="Active Model: Parakeet"),
-        device_display_item=Gtk.MenuItem(label="Device: CPU"))
+        engine_item=Gtk.MenuItem(label="Parakeet on the processor"))
     return tray
 
 

@@ -34,6 +34,12 @@ before 0.15.0, so older entries use that name.
 - No more Backup folder to set up. The folder you save a backup into is
   where the next Save Backup and Load Backup open, and where Earlier
   settings looks for your backups.
+- Shorter TuxTalk menu, the same in the tray and the GNOME panel. "Dictation
+  Service" is now Dictation on/off. The model and device are one line, like
+  "Parakeet on the graphics card (Vulkan)". Text Injection Mode left the
+  menu (it's still in Preferences, Advanced, Fine-tuning), and Restart
+  Service moved down next to Help, since it's for when something's wrong.
+  GNOME extension version 25.
 
 ## [0.16.0] - 2026-10-18
 

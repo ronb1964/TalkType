@@ -34,9 +34,6 @@ const TuxTalkIface = `
     <method name="GetDeviceType">
       <arg type="s" direction="out" name="device"/>
     </method>
-    <method name="GetInjectionMode">
-      <arg type="s" direction="out" name="mode"/>
-    </method>
     <method name="GetStatus">
       <arg type="a{sv}" direction="out" name="status"/>
     </method>
@@ -53,9 +50,6 @@ const TuxTalkIface = `
     <method name="RestartService"/>
     <method name="SetModel">
       <arg type="s" direction="in" name="model"/>
-    </method>
-    <method name="SetInjectionMode">
-      <arg type="s" direction="in" name="mode"/>
     </method>
     <method name="SetFocusedWindowClass">
       <arg type="s" direction="in" name="wm_class"/>
@@ -97,9 +91,6 @@ const TuxTalkIface = `
     <signal name="ModelChanged">
       <arg type="s" name="model_name"/>
     </signal>
-    <signal name="InjectionModeChanged">
-      <arg type="s" name="mode"/>
-    </signal>
     <signal name="UpdateCheckComplete">
       <arg type="b" name="success"/>
       <arg type="s" name="current_version"/>
@@ -132,11 +123,10 @@ class TuxTalkIndicator extends PanelMenu.Button {
         // State
         this._isRecording = false;
         this._isServiceRunning = false;
-        this._currentModel = 'unknown';
-        this._currentDevice = 'unknown';
         // Id of the active preset, worked out by the tray (recommend.match_preset).
         this._currentPreset = 'custom';
-        this._currentInjectionMode = 'auto';
+        // What runs, in the tray's words (GetStatus 'engine').
+        this._engineText = '';
         // Only watch_name sets this: true while TuxTalk owns its bus name.
         this._dbusAvailable = false;
         this._proxy = null;
@@ -225,16 +215,10 @@ class TuxTalkIndicator extends PanelMenu.Button {
                 this._syncHotkeyGrabs();
             }));
 
-            this._signalIds.push(this._proxy.connectSignal('ModelChanged', (proxy, sender, [modelName]) => {
-                // Re-query rather than patching the model alone: a preset also
-                // changes the device, and the preset dot is matched on both.
-                this._currentModel = modelName;
+            this._signalIds.push(this._proxy.connectSignal('ModelChanged', () => {
+                // Re-query: a preset also changes the device, the model line
+                // names both, and the preset dot is matched on both.
                 this._updateStatus();
-            }));
-
-            this._signalIds.push(this._proxy.connectSignal('InjectionModeChanged', (proxy, sender, [mode]) => {
-                this._currentInjectionMode = mode;
-                this._updateInjectionSelection(mode);
             }));
 
             this._signalIds.push(this._proxy.connectSignal('UpdateCheckComplete', (proxy, sender, params) => {
@@ -356,7 +340,7 @@ class TuxTalkIndicator extends PanelMenu.Button {
 
     _buildMenu() {
         // Service start/stop
-        this._serviceItem = new PopupMenu.PopupSwitchMenuItem('Dictation Service', false);
+        this._serviceItem = new PopupMenu.PopupSwitchMenuItem('Dictation on/off', false);
         this._updatingToggle = false;  // Flag to prevent recursive updates
         this._serviceItem.connect('toggled', (item) => {
             // Only respond to user clicks, not programmatic changes
@@ -370,13 +354,6 @@ class TuxTalkIndicator extends PanelMenu.Button {
             }
         });
         this.menu.addMenuItem(this._serviceItem);
-
-        // Restart service
-        let restartItem = new PopupMenu.PopupMenuItem('Restart Service');
-        restartItem.connect('activate', () => {
-            this._proxy?.RestartServiceRemote();
-        });
-        this.menu.addMenuItem(restartItem);
 
         // Recent dictations. Refilled each time the panel menu opens, since
         // the list changes after every dictation. Mirrors the tray submenu.
@@ -402,47 +379,16 @@ class TuxTalkIndicator extends PanelMenu.Button {
 
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
-        // Active model display (read-only)
-        this._modelDisplayItem = new PopupMenu.PopupMenuItem('Active Model: Loading...', {reactive: false});
-        this._modelDisplayItem.label.style = 'font-weight: bold;';
-        this.menu.addMenuItem(this._modelDisplayItem);
-
-        // Device mode display (read-only)
-        this._deviceDisplayItem = new PopupMenu.PopupMenuItem('Device: Loading...', {reactive: false});
-        this._deviceDisplayItem.label.style = 'font-weight: bold;';
-        this.menu.addMenuItem(this._deviceDisplayItem);
-
-        // (No separator here — Model/Device/Performance/Injection are one
-        // contiguous block, matching the GTK tray's menu.)
+        // What runs, one read-only line ("Parakeet on the graphics card (Vulkan)")
+        this._engineItem = new PopupMenu.PopupMenuItem('Loading the speech model...', {reactive: false});
+        this._engineItem.label.style = 'font-weight: bold;';
+        this.menu.addMenuItem(this._engineItem);
 
         // Performance submenu
         this._performanceSubMenu = new PopupMenu.PopupSubMenuMenuItem('Performance');
         // Filled from the tray's GetPresets each time the menu opens.
         this._presetItems = {};
         this.menu.addMenuItem(this._performanceSubMenu);
-
-        // Text Injection Mode submenu
-        this._injectionSubMenu = new PopupMenu.PopupSubMenuMenuItem('Text Injection Mode');
-        this._injectionItems = {};
-        // Order and labels must match the GTK tray exactly (tray.py):
-        // anyone following instructions like "the second item under Text
-        // Injection Mode" has to land on the same option in both menus.
-        const injectionModes = {
-            'auto': {label: 'Auto', description: 'Smart Detection'},
-            'type': {label: 'Keyboard Typing', description: 'Simulate keystrokes'},
-            'paste': {label: 'Clipboard Paste', description: 'Copy and paste'}
-        };
-        for (let [key, mode] of Object.entries(injectionModes)) {
-            let item = new PopupMenu.PopupMenuItem(`${mode.label} (${mode.description})`);
-            item._modeKey = key;
-            item.connect('activate', () => {
-                this._proxy?.SetInjectionModeRemote(key);
-                this._updateInjectionSelection(key);
-            });
-            this._injectionItems[key] = item;
-            this._injectionSubMenu.menu.addMenuItem(item);
-        }
-        this.menu.addMenuItem(this._injectionSubMenu);
 
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
@@ -489,6 +435,13 @@ class TuxTalkIndicator extends PanelMenu.Button {
             this._checkForUpdates();
         });
         this.menu.addMenuItem(this._updatesItem);
+
+        // Restart service: for when something's wrong, so it sits with Help
+        let restartItem = new PopupMenu.PopupMenuItem('Restart Service');
+        restartItem.connect('activate', () => {
+            this._proxy?.RestartServiceRemote();
+        });
+        this.menu.addMenuItem(restartItem);
 
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
@@ -565,13 +518,6 @@ class TuxTalkIndicator extends PanelMenu.Button {
         }
     }
 
-    _updateInjectionSelection(activeMode) {
-        // Update checkmarks on injection mode menu items
-        for (let [key, item] of Object.entries(this._injectionItems)) {
-            item.setOrnament(key === activeMode ? PopupMenu.Ornament.DOT : PopupMenu.Ornament.NONE);
-        }
-    }
-
     _refreshHistoryMenu() {
         const menu = this._historySubMenu.menu;
         const request = ++this._historyRequest;
@@ -639,12 +585,10 @@ class TuxTalkIndicator extends PanelMenu.Button {
             let [status] = result;
             this._isRecording = status.recording ? status.recording.deep_unpack() : false;
             this._isServiceRunning = status.service_running ? status.service_running.deep_unpack() : false;
-            this._currentModel = status.model ? status.model.deep_unpack() : 'unknown';
-            this._currentDevice = status.device ? status.device.deep_unpack() : 'unknown';
 
             // The tray works out which preset is active (recommend.match_preset).
             this._currentPreset = status.preset ? status.preset.deep_unpack() : 'custom';
-            this._currentInjectionMode = status.injection_mode ? status.injection_mode.deep_unpack() : 'auto';
+            this._engineText = status.engine ? status.engine.deep_unpack() : '';
             // Absent from a TuxTalk older than 0.14.1, which grabs nothing.
             this._hotkeys = status.hotkeys ? status.hotkeys.deep_unpack() : [];
 
@@ -756,39 +700,12 @@ class TuxTalkIndicator extends PanelMenu.Button {
         // Disable menu items if D-Bus is unavailable
         this._serviceItem.setSensitive(this._dbusAvailable);
         this._performanceSubMenu.setSensitive(this._dbusAvailable);
-        this._injectionSubMenu.setSensitive(this._dbusAvailable);
 
-        // Update active model display
         if (!this._dbusAvailable) {
-            this._modelDisplayItem.label.text = 'TuxTalk Not Running';
-            this._deviceDisplayItem.label.text = 'Device: Unknown';
+            this._engineItem.label.text = 'TuxTalk Not Running';
         } else {
-            const modelNames = {
-                'tiny': 'Tiny (fastest)',
-                'base': 'Base',
-                'small': 'Small',
-                'medium': 'Medium',
-                'large-v3': 'Large (best quality)',
-                'large': 'Large (best quality)',
-                'parakeet-v3': 'Parakeet'
-            };
-            const displayName = modelNames[this._currentModel] || this._currentModel;
-            this._modelDisplayItem.label.text = `Active Model: ${displayName}`;
-
-            // Update device display
-            const deviceNames = {
-                'cpu': 'CPU',
-                'cuda': 'GPU (CUDA)',
-                'vulkan': 'GPU (Vulkan)'
-            };
-            const deviceDisplay = deviceNames[this._currentDevice] || this._currentDevice.toUpperCase();
-            this._deviceDisplayItem.label.text = `Device: ${deviceDisplay}`;
-
-            // Update preset selection
+            this._engineItem.label.text = this._engineText || 'Loading the speech model...';
             this._updatePresetSelection(this._currentPreset);
-
-            // Update injection mode selection
-            this._updateInjectionSelection(this._currentInjectionMode || 'auto');
         }
     }
 

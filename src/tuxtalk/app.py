@@ -4868,7 +4868,7 @@ def _service_tick(cfg, svc: "_ServiceState") -> "LiveSettings | None":
             _notify("TuxTalk: dictation is off",
                     f"No dictation for {svc.timeout_minutes} minutes, so TuxTalk turned it "
                     "off to save power. Turn it back on from the TuxTalk menu (Dictation "
-                    "Service), or change this in Preferences → General → Power Saving.")
+                    "on/off), or change this in Preferences → General → Power Saving.")
             sys.exit(0)
 
     # Pick up Preferences changes without a restart — indicator style/position,

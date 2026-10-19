@@ -2240,7 +2240,7 @@ def show_tips_and_features_dialog(extension_installed=False):
         tips.append(("🔋 <b>Saving Battery</b>",
                      f"After {getattr(cfg, 'auto_timeout_minutes', 5)} minutes without dictating, "
                      f"TuxTalk turns dictation off to save battery, and {keys} do nothing "
-                     "until you turn it back on: TuxTalk menu → <b>Dictation Service</b>. "
+                     "until you turn it back on: TuxTalk menu → <b>Dictation on/off</b>. "
                      "To keep it on, untick it in Preferences → General → Power Saving."))
     tips += [
         ("📖 <b>Learn More</b>", "Click \"Help\" in the TuxTalk menu for full documentation and voice command list"),

@@ -1511,7 +1511,7 @@ class PreferencesWindow:
         self.timeout_note = Gtk.Label(xalign=0)
         self.timeout_note.set_text(
             f"Then {keys} do nothing until you turn dictation back on: "
-            "TuxTalk's menu \u2192 Dictation Service.")
+            "TuxTalk's menu \u2192 Dictation on/off.")
         self.timeout_note.set_line_wrap(True)
         self.timeout_note.set_max_width_chars(70)
         self.timeout_note.set_opacity(0.7)

@@ -216,11 +216,16 @@ def recommend(language, hw, model=None, use_gpu=None):
     )
 
 
+def model_title(model):
+    """"Parakeet", "Whisper Small": a model's name as the menus show it."""
+    return _TITLES.get(model, f"Whisper {model.capitalize()}")
+
+
 def setup_title(model, device, hw):
     """"Parakeet on your NVIDIA GeForce RTX 4070", "Whisper Small on this
     computer's processor": a model and device in words. Parakeet on CUDA runs
     on the processor (parakeet_engine), so it says so."""
-    name = _TITLES.get(model, f"Whisper {model.capitalize()}")
+    name = model_title(model)
     if device == "cpu" or (device == "cuda" and model == PARAKEET):
         return f"{name} on this computer's processor"
     card = hw.gpu_name or "graphics card"
