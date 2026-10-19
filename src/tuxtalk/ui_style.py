@@ -1,4 +1,5 @@
-"""Shared GTK styling that must be installed screen-wide.
+"""Shared GTK styling that must be installed screen-wide, and the widgets
+built on it.
 
 Kept in one place because TuxTalk draws dropdowns from two different processes
 — the tray (welcome dialog) and Preferences — and neither inherits the other's
@@ -334,3 +335,54 @@ def message_dialog(closable=True, **kwargs):
     if not closable:
         dialog.set_deletable(False)
     return dialog
+
+
+class Fold(Gtk.Box):
+    """Settings most people never need, closed behind a button that names
+    them, with a short dim summary beside it. The button opens them right
+    below and turns into *hide_label*.
+
+    GTK's expander puts a small arrow by the title, and people missed it
+    (Ron, 2026-10-18), so every fold in TuxTalk is one of these. Put the
+    settings in .content (a Gtk.Grid). on_toggle(opening) runs after each
+    open or close, for scrolling the settings into view.
+    """
+
+    def __init__(self, show_label, hide_label, on_toggle=None):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL)
+        self._labels = (show_label, hide_label)
+        self._on_toggle = on_toggle
+        self.header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        self.button = Gtk.Button(label=show_label)
+        self.button.connect("clicked", lambda _b: self.set_open(not self.is_open()))
+        self.summary = Gtk.Label(xalign=0)
+        self.summary.set_line_wrap(True)
+        self.header.pack_start(self.button, False, False, 0)
+        self.header.pack_start(self.summary, False, False, 0)
+        # A revealer, not a hidden widget: the window's show_all() leaves it closed.
+        self.revealer = Gtk.Revealer()
+        self.revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
+        self.revealer.set_transition_duration(150)
+        self.content = Gtk.Grid(column_spacing=10, row_spacing=10)
+        self.content.set_margin_top(10)
+        self.content.set_margin_start(20)
+        self.revealer.add(self.content)
+        self.pack_start(self.header, False, False, 0)
+        self.pack_start(self.revealer, False, False, 0)
+        self.set_summary("")
+
+    def is_open(self):
+        return self.revealer.get_reveal_child()
+
+    def set_open(self, opening):
+        if opening == self.is_open():
+            return
+        self.revealer.set_reveal_child(opening)
+        self.button.set_label(self._labels[opening])
+        if self._on_toggle is not None:
+            self._on_toggle(opening)
+
+    def set_summary(self, markup, dim=True):
+        """*dim* False for a warning, which must not fade into the background."""
+        self.summary.set_markup(markup)
+        self.summary.set_opacity(0.65 if dim else 1.0)

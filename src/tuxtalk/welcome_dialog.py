@@ -20,7 +20,7 @@ gi.require_version('Gtk', '3.0')
 gi.require_version('Gdk', '3.0')
 gi.require_version('GdkPixbuf', '2.0')
 from gi.repository import Gtk, Gdk, GLib, GdkPixbuf
-from .ui_style import message_dialog, more_below_bar
+from .ui_style import Fold, message_dialog, more_below_bar
 
 from .logger import setup_logger
 from .uinput_helper import (
@@ -547,16 +547,6 @@ class WelcomeDialog:
                 color: #7fb2f0;
                 font-weight: bold;
                 font-size: 9pt;
-            }
-            /* Other options looks like a button; a plain expander is easy to miss. */
-            expander.tt-options > title {
-                border: 1px solid rgba(255, 255, 255, 0.22);
-                border-radius: 6px;
-                padding: 3px 10px;
-                background-color: rgba(255, 255, 255, 0.06);
-            }
-            expander.tt-options > title:hover {
-                background-color: rgba(255, 255, 255, 0.12);
             }
 """)
         # Apply CSS globally but with specific class names to avoid affecting other dialogs
@@ -1772,14 +1762,11 @@ class WelcomeDialog:
             card.pack_start(w, False, False, 0)
         vbox.pack_start(card, False, False, 6)
 
-        expander = self.options_expander = Gtk.Expander()
-        title = Gtk.Label(label="Change language, model or graphics card", hexpand=True)
-        expander.set_label_widget(title)
-        expander.get_style_context().add_class("tt-options")
-        expander.connect("notify::expanded", self._on_options_toggled)
+        # No summary beside the button: the card above says how it's set.
+        fold = self.options_fold = Fold("Change language, model or graphics card",
+                                        "Hide language, model and graphics card",
+                                        on_toggle=self._on_options_toggled)
         other = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        other.set_margin_start(12)
-        other.set_margin_top(10)
 
         lang_row = Gtk.Box(spacing=8)
         lang_row.pack_start(Gtk.Label(label="I dictate in", xalign=0), False, False, 0)
@@ -1832,8 +1819,8 @@ class WelcomeDialog:
         else:
             other.pack_start(Gtk.Label(label="On this computer's processor", xalign=0), False, False, 0)
 
-        expander.add(other)
-        vbox.pack_start(expander, False, False, 0)
+        fold.content.attach(other, 0, 0, 1, 1)
+        vbox.pack_start(fold, False, False, 0)
         self.lang_combo.connect("changed", lambda *_: self._refresh_recommendation())
         self._refresh_recommendation()
 
@@ -1854,24 +1841,23 @@ class WelcomeDialog:
             self._chosen_model = model
             self._refresh_recommendation()
 
-    def _on_options_toggled(self, expander, _pspec):
-        """Opening Other options adds its choices below the bottom of the
+    def _on_options_toggled(self, opening):
+        """Opening the options adds its choices below the bottom of the
         window. Scroll so they start near the top instead of leaving the user
         to find them."""
-        if not expander.get_expanded():
-            return
-        scrolled = expander.get_ancestor(Gtk.ScrolledWindow)
-        if scrolled is None:
+        fold = self.options_fold
+        scrolled = fold.get_ancestor(Gtk.ScrolledWindow)
+        if not opening or scrolled is None:
             return
 
         def scroll():
-            # After the expanded content has its size.
-            target = expander.translate_coordinates(scrolled.get_child(), 0, 0)
+            # After the slide-down, so the choices have their size.
+            target = fold.translate_coordinates(scrolled.get_child(), 0, 0)
             if target:
                 adj = scrolled.get_vadjustment()
                 adj.set_value(min(max(target[1] - 12, 0), adj.get_upper() - adj.get_page_size()))
             return False
-        GLib.timeout_add(60, scroll)
+        GLib.timeout_add(fold.revealer.get_transition_duration() + 60, scroll)
 
     def _refresh_recommendation(self):
         """Update the card and the greyed choices from recommend.py."""

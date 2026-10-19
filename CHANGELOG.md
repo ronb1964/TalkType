@@ -62,6 +62,11 @@ before 0.15.0, so older entries use that name.
   menu (it's still in Preferences, Advanced, Fine-tuning), and Restart
   Service moved down next to Help, since it's for when something's wrong.
   GNOME extension version 25.
+- Every folded part of Preferences is now a real button that says what it
+  opens, like "Show fine-tuning", with a short note beside it of what's
+  inside or how it's set ("✓ everything is set up", "not moved"). The small
+  arrow they had was easy to miss. The welcome screen's "Change language,
+  model or graphics card" works the same way.
 
 ## [0.16.0] - 2026-10-18
 

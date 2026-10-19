@@ -68,11 +68,12 @@ def test_first_run_never_mentions_cuda():
 def test_options_button_says_what_can_be_changed(dialog):
     """A plain "Other options" expander or a small "change" link on the card
     is easy to miss, so one button names the choices."""
-    title = dialog.options_expander.get_label_widget().get_label()
-    assert title == "Change language, model or graphics card"
-    assert dialog.options_expander.get_style_context().has_class("tt-options")
+    assert dialog.options_fold.button.get_label() == "Change language, model or graphics card"
     assert "<a href" not in dialog.rec_explanation.get_label()
-    assert not dialog.options_expander.get_expanded()
+    assert not dialog.options_fold.is_open()
+    dialog.options_fold.button.clicked()
+    assert dialog.options_fold.is_open()
+    assert dialog.options_fold.button.get_label() == "Hide language, model and graphics card"
 
 
 def _find_button(widget, label):

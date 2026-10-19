@@ -3,7 +3,7 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 gi.require_version("Pango", "1.0")
 from gi.repository import Gtk, Gdk, GLib, Pango
-from .ui_style import message_dialog
+from .ui_style import Fold, message_dialog
 import datetime
 import os
 import subprocess
@@ -1191,7 +1191,9 @@ class PreferencesWindow:
 
         # The two extra shortcuts work out of the box; folded so the section
         # shows only the keys people dictate with.
-        shortcuts = self._fold(grid, row, "More shortcuts")
+        self.shortcuts_fold = self._fold(grid, row, "Show more shortcuts",
+                                         "Hide more shortcuts")
+        shortcuts = self.shortcuts_fold.content
         row += 1
 
         # Voice Commands hotkey (optional combo shortcut to open quick reference)
@@ -1228,9 +1230,9 @@ class PreferencesWindow:
         else:
             self.vc_hotkey_combo.set_active_id("")  # None
 
-        self.vc_hotkey_combo.connect("changed", lambda x: self.update_config(
+        self.vc_hotkey_combo.connect("changed", lambda x: (self.update_config(
             "voice_commands_hotkey", x.get_active_id() or ""
-        ))
+        ), self._update_shortcuts_summary()))
 
         shortcuts.attach(self.vc_hotkey_combo, 1, 0, 1, 1)
 
@@ -1257,10 +1259,11 @@ class PreferencesWindow:
         current_pl = self.config.get("paste_last_hotkey", "")
         self.pl_hotkey_combo.set_active_id(
             current_pl if current_pl in [c[0] for c in pl_combos] else "")
-        self.pl_hotkey_combo.connect("changed", lambda x: self.update_config(
+        self.pl_hotkey_combo.connect("changed", lambda x: (self.update_config(
             "paste_last_hotkey", x.get_active_id() or ""
-        ))
+        ), self._update_shortcuts_summary()))
         shortcuts.attach(self.pl_hotkey_combo, 1, 1, 1, 1)
+        self._update_shortcuts_summary()
 
         # ===== SPEECH RECOGNITION SECTION =====
         # One line for the setup first run picked; the dropdowns behind it are
@@ -1298,7 +1301,9 @@ class PreferencesWindow:
         grid.attach(self.model_combo_hint, 0, row, 2, 1)
         row += 1
 
-        setup = self._fold(grid, row, "Change model, device or language")
+        # No summary: the bold line above already says how it's set.
+        setup = self._fold(grid, row, "Change model, device or language",
+                           "Hide model, device and language").content
         row += 1
         srow = 0
 
@@ -1934,7 +1939,9 @@ class PreferencesWindow:
 
         # The offsets nudge the indicator from its position, so rarely wanted
         # that they're folded away.
-        fine = self._fold(ind, row, "Fine position")
+        self.position_fold = self._fold(ind, row, "Show fine position",
+                                        "Hide fine position")
+        fine = self.position_fold.content
         row += 1
 
         # Offsets. Which way each box moves the indicator is written right
@@ -1952,8 +1959,9 @@ class PreferencesWindow:
             spin = Gtk.SpinButton(adjustment=Gtk.Adjustment(
                 value=value, lower=-1000, upper=1000, step_increment=10))
             spin.set_value(value)
-            spin.connect("value-changed",
-                         lambda w: self.update_config(key, sign * int(w.get_value())))
+            spin.connect("value-changed", lambda w: (
+                self.update_config(key, sign * int(w.get_value())),
+                self._update_position_summary()))
             spin.connect("scroll-event", lambda *a: True)  # no accidental scroll-wheel changes
             spin.set_sensitive(can_move)
             hint_label = Gtk.Label(label=hint, xalign=0)
@@ -1978,6 +1986,7 @@ class PreferencesWindow:
         reset_button.connect("clicked", lambda _b: (offset_x_spin.set_value(0),
                                                     offset_y_spin.set_value(0)))
         fine.attach(reset_button, 1, 2, 1, 1)
+        self._update_position_summary()
 
         return grid
 
@@ -2081,19 +2090,34 @@ class PreferencesWindow:
         box.pack_start(choice, False, False, 0)
         return box
 
-    def _fold(self, grid, row, title):
-        """A closed section titled *title* across *grid* at *row*, for
-        settings most people never need; returns the grid inside it to fill."""
-        expander = Gtk.Expander(label=title)
-        expander.set_margin_top(6)
-        inner = Gtk.Grid(column_spacing=10, row_spacing=10)
-        inner.set_margin_top(10)
-        inner.set_margin_start(20)
-        expander.add(inner)
-        expander.connect("notify::expanded", lambda e, _p: e.get_expanded()
-                         and self._scroll_into_view(inner, delay_ms=120))
-        grid.attach(expander, 0, row, 2, 1)
-        return inner
+    def _fold(self, grid, row, show_label, hide_label):
+        """A closed Fold across *grid* at *row*, for settings most people
+        never need; fill its .content."""
+        def toggled(opening):
+            if opening:
+                # After the slide-down, so its full height is known.
+                self._scroll_into_view(
+                    fold.revealer, fold.revealer.get_transition_duration() + 60)
+        fold = Fold(show_label, hide_label, on_toggle=toggled)
+        fold.set_margin_top(6)
+        grid.attach(fold, 0, row, 2, 1)
+        return fold
+
+    def _update_shortcuts_summary(self):
+        """The two keys beside the More shortcuts button, as they are now."""
+        def key(combo):
+            return combo.get_active_id() or "off"
+        self.shortcuts_fold.set_summary(GLib.markup_escape_text(
+            f"cheat sheet {key(self.vc_hotkey_combo)}"
+            f" \u00b7 paste last {key(self.pl_hotkey_combo)}"))
+
+    def _update_position_summary(self):
+        """How far the offsets move the indicator, beside Fine position."""
+        x = int(self.config.get("indicator_offset_x", 0))
+        y = int(self.config.get("indicator_offset_y", 0))   # screen pixels: + is down
+        moves = [f"{abs(x)} px {'right' if x > 0 else 'left'}"] if x else []
+        moves += [f"{abs(y)} px {'down' if y > 0 else 'up'}"] if y else []
+        self.position_fold.set_summary(", ".join(moves) or "not moved")
 
     def _subheading(self, text):
         """A small heading inside a section or fold."""
@@ -2103,22 +2127,22 @@ class PreferencesWindow:
         return label
 
     def _report_system_check(self, part, ok):
-        """Note whether *part* ("typing", "extension") is fine, and say in the
-        System check fold's title whether anything needs fixing. The fold
+        """Note whether *part* ("typing", "extension") is fine, and say beside
+        the System check button whether anything needs fixing. The fold
         opens by itself when a problem first shows up."""
         if part is not None:
             if ok:
                 self._system_problems.discard(part)
             elif part not in self._system_problems:
                 self._system_problems.add(part)
-                self.system_check.set_expanded(True)
+                self.system_check.set_open(True)
         if self._system_problems:
-            title = (f'<span color="{WARNING_AMBER}">⚠ System check: '
-                     'something needs your attention</span>')
+            self.system_check.set_summary(
+                f'<span color="{WARNING_AMBER}">⚠ something needs your attention</span>',
+                dim=False)
         else:
-            title = 'System check: <span color="#4CAF50">✓ everything is set up</span>'
-        self.system_check.set_label(title)
-        self.system_check.set_use_markup(True)
+            self.system_check.set_summary(
+                '<span color="#4CAF50">✓ everything is set up</span>')
 
     def _section_header(self, grid, row, title):
         """A divider line and a bold section title across the grid; returns the
@@ -2202,7 +2226,9 @@ class PreferencesWindow:
         # ===== FINE-TUNING =====
         # Each of these already does the sensible thing; they're here for the
         # day something looks off.
-        fine = self._fold(grid, row, "Fine-tuning")
+        fine_fold = self._fold(grid, row, "Show fine-tuning", "Hide fine-tuning")
+        fine_fold.set_summary("formatting, inserting text, privacy")
+        fine = fine_fold.content
         row += 1
         frow = 0
 
@@ -2323,8 +2349,9 @@ class PreferencesWindow:
         # The graphics card, typing and GNOME extension status. Closed while
         # all is well; it opens and says so when something needs fixing
         # (_report_system_check).
-        check = self._fold(grid, row, "")
-        self.system_check = check.get_parent()
+        self.system_check = self._fold(grid, row, "Show system check",
+                                       "Hide system check")
+        check = self.system_check.content
         self._system_problems = set()
         self._report_system_check(None, True)
         row += 1
@@ -6006,29 +6033,16 @@ class PreferencesWindow:
         grid.attach(self.tap_check, 0, row, 2, 1)
         row += 1
 
-        # Several settings, so they sit behind an "Adjust Settings" button with
-        # their values beside it (one setting would sit by its tickbox, like
-        # Power Saving's minutes). The button opens them right below and
-        # becomes "Hide Settings". A "Fine-tuning" fold-out was easy to miss.
-        adjust_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-        adjust_row.set_margin_start(indent)
-        self.tap_adjust_btn = Gtk.Button(label="Adjust Settings")
-        self.tap_adjust_btn.connect("clicked", self._tap_toggle_settings)
-        self.tap_summary = Gtk.Label(xalign=0)
-        self.tap_summary.set_line_wrap(True)
-        self.tap_summary.set_opacity(0.65)
-        adjust_row.pack_start(self.tap_adjust_btn, False, False, 0)
-        adjust_row.pack_start(self.tap_summary, False, False, 0)
-        self.tap_adjust_row = adjust_row
-        # A revealer: show_all() on the window leaves it closed.
-        self.tap_settings = Gtk.Revealer()
-        self.tap_settings.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
-        self.tap_settings.set_transition_duration(150)
-        self.tap_settings.set_margin_start(indent)
-        fine = Gtk.Grid(column_spacing=8, row_spacing=6)
-        fine.set_margin_start(16)
-        fine.set_margin_top(6)
-        self.tap_fine = fine
+        # Several settings, so they sit in a fold with their values beside its
+        # button (one setting would sit by its tickbox, like Power Saving's
+        # minutes).
+        self.tap_fold = self._fold(grid, row, "Adjust Settings", "Hide Settings")
+        self.tap_fold.set_margin_start(indent)
+        # Hiding the settings hides the test's meter, so the test stops.
+        self.tap_fold.button.connect(
+            "clicked", lambda _b: self.tap_fold.is_open() or self._stop_pause_test())
+        row += 1
+        fine = self.tap_fine = self.tap_fold.content
         r = 0
 
         self.tap_context_check = Gtk.CheckButton(
@@ -6093,12 +6107,6 @@ class PreferencesWindow:
         self.tap_status.set_line_wrap(True)
         self.tap_status.set_opacity(0.7)
         fine.attach(self.tap_status, 0, r, 2, 1)
-
-        self.tap_settings.add(fine)
-        grid.attach(adjust_row, 0, row, 2, 1)
-        row += 1
-        grid.attach(self.tap_settings, 0, row, 2, 1)
-        row += 1
         self._tap_update_title()
 
         self.tap_check.connect("toggled", lambda c: (
@@ -6131,27 +6139,15 @@ class PreferencesWindow:
     def _tap_update_title(self):
         """The values beside the Adjust Settings button, as they are now."""
         context = "on" if self.tap_context_check.get_active() else "off"
-        self.tap_summary.set_text(
+        self.tap_fold.set_summary(
             f"pause {self.tap_pause_spin.get_value():.1f} s"
             f" \u00b7 noise filter {self.tap_db_spin.get_value():.0f}"
             f" \u00b7 punctuation from context {context}")
 
-    def _tap_toggle_settings(self, _button=None):
-        """Open the settings below the button, or close them (and the test)."""
-        opening = not self.tap_settings.get_reveal_child()
-        self.tap_settings.set_reveal_child(opening)
-        self.tap_adjust_btn.set_label("Hide Settings" if opening else "Adjust Settings")
-        if opening:
-            # After the slide-down, so its full height is known.
-            self._scroll_into_view(self.tap_settings,
-                                   self.tap_settings.get_transition_duration() + 60)
-        else:
-            self._stop_pause_test()
-
     def _tap_sync_sensitivity(self):
         on = self.tap_check.get_active()
         self.tap_fine.set_sensitive(on)
-        self.tap_adjust_row.set_sensitive(on)
+        self.tap_fold.header.set_sensitive(on)
         if not on:
             self._stop_pause_test()
 
