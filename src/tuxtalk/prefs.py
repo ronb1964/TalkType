@@ -1,7 +1,8 @@
 import gi
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
-from gi.repository import Gtk, Gdk, GLib
+gi.require_version("Pango", "1.0")
+from gi.repository import Gtk, Gdk, GLib, Pango
 from .ui_style import message_dialog
 import datetime
 import os
@@ -2636,9 +2637,22 @@ class PreferencesWindow:
         self._show_last_backup()
         vbox.pack_start(row, False, False, 0)
 
+        # Where Save Backup and Load Backup open. Picked here, or taken from
+        # wherever a backup was last saved (Ron wanted to choose it outright).
+        row = indented(Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10))
+        row.pack_start(Gtk.Label(label="Backup folder:", xalign=0), False, False, 0)
+        self.backup_folder_label = Gtk.Label(xalign=0)
+        self.backup_folder_label.set_ellipsize(Pango.EllipsizeMode.MIDDLE)
+        row.pack_start(self.backup_folder_label, True, True, 0)
+        change_btn = Gtk.Button(label="Change…")
+        change_btn.connect("clicked", self._on_change_backup_folder_clicked)
+        row.pack_end(change_btn, False, False, 0)
+        self._show_backup_folder()
+        vbox.pack_start(row, False, False, 0)
+
         vbox.pack_start(separator(), False, False, 0)
         vbox.pack_start(header("🕘 Earlier settings"), False, False, 0)
-        vbox.pack_start(dim(f"Your backups in the folder you last saved one to, and the copies TuxTalk "
+        vbox.pack_start(dim(f"Your backups in the backup folder, and the copies TuxTalk "
                             f"saves by itself when it starts (the last "
                             f"{settings_backup.KEEP}). Go back to one if a change or an "
                             f"update went wrong."), False, False, 0)
@@ -2681,26 +2695,60 @@ class PreferencesWindow:
 
     # --- Backup (settings_backup.py) ------------------------------------------
 
-    def _pick_file(self, title, save_name=None):
+    def _pick_file(self, title, save_name=None, folder_only=False):
         """The desktop's own file dialog (a portal in the Flatpak), starting
-        in the folder the last backup was saved to. Saves when *save_name* is
-        given, opens a file otherwise. The chosen path, or None."""
+        in the backup folder. Saves when *save_name* is given, picks a folder
+        with *folder_only*, opens a file otherwise. The chosen path, or None."""
         from .settings_backup import backup_folder
-        action = Gtk.FileChooserAction.SAVE if save_name else Gtk.FileChooserAction.OPEN
+        if folder_only:
+            action = Gtk.FileChooserAction.SELECT_FOLDER
+        else:
+            action = Gtk.FileChooserAction.SAVE if save_name else Gtk.FileChooserAction.OPEN
         chooser = Gtk.FileChooserNative.new(title, self.window, action, None, None)
         folder = backup_folder()
         if folder:
             chooser.set_current_folder(folder)
-        zips = Gtk.FileFilter()
-        zips.set_name("TuxTalk backups (*.zip)")
-        zips.add_pattern("*.zip")
-        chooser.add_filter(zips)
+        if not folder_only:
+            zips = Gtk.FileFilter()
+            zips.set_name("TuxTalk backups (*.zip)")
+            zips.add_pattern("*.zip")
+            chooser.add_filter(zips)
         if save_name:
             chooser.set_current_name(save_name)
             chooser.set_do_overwrite_confirmation(True)
         path = chooser.get_filename() if chooser.run() == Gtk.ResponseType.ACCEPT else None
         chooser.destroy()
         return path
+
+    def _show_backup_folder(self):
+        """Show the backup folder (home shortened to ~), or what happens
+        while there isn't one yet."""
+        from .settings_backup import backup_folder
+        folder = backup_folder()
+        if folder:
+            home = os.path.expanduser("~")
+            shown = "~" + folder[len(home):] if folder.startswith(home + os.sep) else folder
+            self.backup_folder_label.set_text(shown)
+            self.backup_folder_label.set_tooltip_text(folder)
+        else:
+            self.backup_folder_label.set_markup(
+                '<span color="#888888">the folder you save your first backup to</span>')
+            self.backup_folder_label.set_tooltip_text(
+                "Pick one now with Change…, or save a backup and its folder is used")
+
+    def _on_change_backup_folder_clicked(self, _button):
+        """Browse to a folder; saved straight away, like Save Backup itself."""
+        from .settings_backup import set_backup_folder
+        folder = self._pick_file("Choose the Folder for TuxTalk Backups", folder_only=True)
+        if not folder:
+            return
+        try:
+            set_backup_folder(folder)
+        except OSError as e:
+            self._message(Gtk.MessageType.ERROR, "The folder wasn't saved", str(e))
+            return
+        self._show_backup_folder()
+        self._fill_restore_list()       # the backups already in that folder
 
     def _on_save_backup_clicked(self, _button):
         from . import settings_backup
@@ -2721,12 +2769,13 @@ class PreferencesWindow:
         except (settings_backup.BackupError, OSError) as e:
             self._message(Gtk.MessageType.ERROR, "The backup wasn't saved", str(e))
             return
-        # Where you save a backup is where the next one goes, and where
-        # Earlier settings finds them: no folder to set up separately.
+        # Saving somewhere else makes that the backup folder too, so the next
+        # Save Backup and Load Backup open where this one went.
         try:
             settings_backup.set_backup_folder(os.path.dirname(path))
         except OSError as e:
             print(f"Could not remember the backup folder: {e}")
+        self._show_backup_folder()
         self._show_last_backup()
         self._fill_restore_list()       # saved into the backup folder: listed now
         self._message(Gtk.MessageType.INFO, "Backup saved",

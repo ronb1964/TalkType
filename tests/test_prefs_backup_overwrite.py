@@ -21,7 +21,8 @@ def _window(typed, answer):
     d = SimpleNamespace(
         _pick_file=lambda title, save_name=None: typed,
         _message=lambda kind, title, text, buttons=None: asked.append(title) or answer,
-        _show_last_backup=lambda: None, _fill_restore_list=lambda: None)
+        _show_last_backup=lambda: None, _fill_restore_list=lambda: None,
+        _show_backup_folder=lambda: None)
     return d, asked
 
 

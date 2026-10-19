@@ -450,9 +450,9 @@ def test_preferences_shows_a_refused_restore_as_a_message():
 
 
 def test_saving_a_backup_makes_its_folder_the_backup_folder(home):
-    """There is no Backup folder row to fill in (0.16 simplicity review): the
-    folder a backup is saved to is where the next one goes, and where Earlier
-    settings looks."""
+    """The folder a backup is saved to becomes the backup folder, where the
+    next one goes and where Earlier settings looks; the Backup folder row can
+    still set it outright."""
     from types import SimpleNamespace
     from tuxtalk.prefs import PreferencesWindow
     folder = home / "USB stick"
@@ -461,8 +461,27 @@ def test_saving_a_backup_makes_its_folder_the_backup_folder(home):
     window = SimpleNamespace(
         _pick_file=lambda title, save_name=None: str(folder / "tuxtalk-backup"),
         _message=lambda *a, **k: shown.append(a[1]),
-        _show_last_backup=lambda: None, _fill_restore_list=lambda: None)
+        _show_last_backup=lambda: None, _fill_restore_list=lambda: None,
+        _show_backup_folder=lambda: None)
     PreferencesWindow._on_save_backup_clicked(window, None)
     assert shown == ["Backup saved"]
     assert sb.backup_folder() == str(folder)
     assert [p.kind for p in sb.restore_points()] == ["file"]
+
+
+def test_the_backup_folder_can_be_chosen_outright(home):
+    """Ron, 2026-10-18: removing the Backup folder row left no way to pick
+    the location except by saving a backup there."""
+    from types import SimpleNamespace
+    from tuxtalk.prefs import PreferencesWindow
+    folder = home / "Backups"
+    folder.mkdir()
+    refreshed = []
+    window = SimpleNamespace(
+        _pick_file=lambda title, save_name=None, folder_only=False: str(folder) if folder_only else None,
+        _message=lambda *a, **k: None,
+        _show_backup_folder=lambda: refreshed.append("folder"),
+        _fill_restore_list=lambda: refreshed.append("list"))
+    PreferencesWindow._on_change_backup_folder_clicked(window, None)
+    assert sb.backup_folder() == str(folder)
+    assert refreshed == ["folder", "list"]
