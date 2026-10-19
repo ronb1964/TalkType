@@ -1,6 +1,11 @@
 """
 TuxTalk Help Dialog - Shared help window for tray and preferences.
 
+Help is sorted by what you're doing (chatting, writing, in a terminal,
+hands-free, fixing mistakes, something wrong), not by feature, so it can be
+opened with a situation in mind. Labs features are explained where they're
+used, marked as Labs.
+
 The content is format-aware: TuxTalk ships as a Flatpak, an AppImage, and
 .deb/.rpm/AUR packages, and some instructions differ (hotkeys, typing method,
 file paths, updates, troubleshooting). Rather than maintain separate help files,
@@ -12,7 +17,7 @@ import os
 
 import gi
 gi.require_version('Gtk', '3.0')
-from gi.repository import Gtk
+from gi.repository import GLib, Gtk
 
 # Where the Help window's feedback link goes; the Setup Complete screen
 # points to the same page.
@@ -39,79 +44,78 @@ def _install_facts():
     }
 
 
+def _keys(is_flatpak):
+    """(hold, toggle, paste) as Help names them: the keys in the settings, so
+    Help never says F8 to someone who picked F6. On the Flatpak the desktop
+    assigns the two dictation keys and there is no Paste Last shortcut."""
+    if is_flatpak:
+        return "your Hold-to-talk key", "your Toggle key", ""
+    from .config import load_config
+    cfg = load_config()
+    return (cfg.hotkey or "F8", cfg.toggle_hotkey or "F9",
+            getattr(cfg, "paste_last_hotkey", ""))
+
+
 def show_help_dialog(tab=None):
     """Show help dialog with TuxTalk features and instructions. *tab* opens
-    it on the tab whose title contains that word ("labs" from Preferences'
+    it on the tab whose title contains that word ("writing" from Preferences'
     TuxTalk Labs section). Returns the dialog."""
     from gi.repository import Gdk
 
     f = _install_facts()
     is_flatpak = f["is_flatpak"]
+    hold, toggle, paste_key = (GLib.markup_escape_text(k) for k in _keys(is_flatpak))
 
     # --- format-aware phrasing --------------------------------------------------
-    if is_flatpak:
-        keys_line = ("the two keys you assigned during setup — one to "
-                     "<b>Hold to talk</b>, one to <b>Toggle dictation</b>")
-        keys_where = ("your desktop's <b>System Settings → Keyboard → Shortcuts</b> "
-                      "(find <b>TuxTalk</b> under Applications)")
-        hotkey_hold = "your <b>Hold-to-talk</b> key"
-        hotkey_toggle = "your <b>Toggle-dictation</b> key"
-    else:
-        keys_line = "<b>F8</b> to hold-to-talk and <b>F9</b> to tap-to-toggle"
-        keys_where = "<b>Preferences → General</b>"
-        hotkey_hold = "<b>F8</b>"
-        hotkey_toggle = "<b>F9</b>"
+    keys_where = ("your desktop's <b>System Settings → Keyboard → Shortcuts</b> "
+                  "(find <b>TuxTalk</b> under Applications)" if is_flatpak
+                  else "<b>Preferences → General</b>")
 
     # A desktop shortcut or script can run the toggle itself (control.py).
     shortcut_line = ""
     if not is_flatpak:
         from .control import shortcut_command
-        from gi.repository import GLib
         shortcut_line = (
-            "\n• <b>Your own shortcut:</b> a desktop shortcut or script can run "
-            f"<tt>{GLib.markup_escape_text(shortcut_command())}</tt>\n  (or --start, --stop). "
-            "It starts TuxTalk if needed and waits until the speech model is loaded")
+            "\n\n<b>Your own shortcut</b>\nA desktop shortcut or script can run "
+            f"<tt>{GLib.markup_escape_text(shortcut_command())}</tt> (or --start, --stop). "
+            "It starts TuxTalk if needed and waits until the speech model is loaded.")
 
     if is_flatpak:
         typing_para = (
             "TuxTalk types straight into the focused app through your desktop's "
-            "secure input portal (libei) — there's no typing setup to configure, "
+            "secure input portal (libei): there's no typing setup to configure, "
             "and clipboard paste isn't used.")
     else:
         typing_para = (
-            "• <b>Auto (default):</b> picks for you: usually Clipboard Paste, and "
-            "typing where paste doesn't work.\n"
-            "• <b>Keyboard Typing:</b> types text using ydotool/wtype.\n"
-            "• <b>Clipboard Paste:</b> copies to the clipboard then simulates "
-            "Ctrl+V — use it if typing doesn't work in a particular app.")
+            "Still nothing in one particular app? <b>Preferences → Advanced → Fine-tuning → "
+            "Text Injection</b>: Auto picks paste or typing for each app; try "
+            "<b>Keystroke Typing</b> or <b>Clipboard Paste</b> there.")
 
-    # "no hotkey works" troubleshooting differs completely by format.
+    # "no key works" troubleshooting differs completely by format.
     if is_flatpak:
         no_hotkey_block = (
-            "<b>No hotkey works at all (dictation never starts):</b>\n"
             "• On the Flatpak your keys are assigned by the desktop, not by TuxTalk.\n"
             f"• Open {keys_where} and make sure a key is set for both "
             "<b>Hold to talk</b> and <b>Toggle dictation</b>.\n"
-            "• If the assign prompt never appeared on first run, restart TuxTalk "
-            "(tray → Restart Service) and it will ask again.")
+            "• If the assign prompt never appeared on first run, choose Restart Service "
+            "in the TuxTalk menu and it will ask again.")
     else:
         no_hotkey_block = (
-            "<b>No hotkey works at all (dictation never starts):</b>\n"
-            "• TuxTalk reads your keyboard directly, which requires your user "
-            "account to be in the system's \"input\" group. Without it, no key can "
-            "be detected.\n"
-            "• Go to <b>Preferences → Advanced → Typing Setup</b> and click "
-            "<b>\"Fix Typing Permissions\"</b>. You'll be asked for your admin password.\n"
-            "• <b>Then restart your computer.</b> Logging out and back in is often "
-            "not enough — a background session keeps the old permissions alive.\n"
-            "• Most common on Fedora, where the setting that lets TuxTalk type is "
-            "granted separately from the one that lets it read your keys.")
+            "• Open <b>Preferences → Advanced → System check</b>. If Typing setup says "
+            "something needs fixing, click its button. You'll be asked for your password "
+            "once. TuxTalk's hotkey helper then reads the dictation keys, and nothing else, "
+            "with no restart needed.\n"
+            "• On a system without systemd the helper can't be used, and TuxTalk joins you "
+            "to the \"input\" group instead. Then the computer needs a restart: logging out "
+            "is often not enough. Typing setup says when this applies.\n"
+            "• Another app may use the same key: pick another in Preferences → General and "
+            "try it with Test Hotkeys.")
 
     # KDE-on-Flatpak: the per-dictation "remote control" popup.
     kde_notice = ""
     if is_flatpak and "KDE" in os.environ.get("XDG_CURRENT_DESKTOP", ""):
         kde_notice = (
-            "\n\n<b>Turning off KDE's per-dictation popup:</b>\n"
+            "\n\n<b>Turning off KDE's per-dictation popup</b>\n"
             "KDE shows a \"Remote control session started\" popup each time TuxTalk "
             "types. To stop it, use the <b>🔔</b> button in <b>Preferences → General</b>, "
             "or: click the sliders icon on that popup → under <b>Started Remote "
@@ -121,25 +125,24 @@ def show_help_dialog(tab=None):
     if is_flatpak:
         update_block = (
             "TuxTalk updates through Flatpak. Run <tt>flatpak update "
-            "io.github.ronb1964.TuxTalk</tt>, or use your software center — the "
+            "io.github.ronb1964.TuxTalk</tt>, or use your software center: the "
             "built-in \"Check for Updates\" points you at the same command.")
     else:
         update_block = (
             "Updating matches how you installed TuxTalk:\n"
-            "   – <b>.deb / .rpm:</b> click \"Download &amp; Install\" — it downloads "
+            "   – <b>.deb / .rpm:</b> click \"Download &amp; Install\". It downloads "
             "the new package and installs it through your system package manager "
             "(you'll be asked for your password once), then offers to restart.\n"
-            "   – <b>AppImage:</b> click \"Download &amp; Install\" — it swaps in the "
+            "   – <b>AppImage:</b> click \"Download &amp; Install\". It swaps in the "
             "new version and restarts automatically.\n"
             "   – <b>Arch (AUR):</b> update with your AUR helper, e.g. "
             "<tt>yay -S tuxtalk-appimage</tt>.")
 
-    first_run_hotkey_bullet = (
-        "" if is_flatpak
-        else "• Tests your hotkeys (F8 and F9) to ensure they work\n")
+    paste_tip = (f"Press <b>{paste_key}</b> in the right window and your last dictation is "
+                 "typed again. " if paste_key else "")
 
     dialog = Gtk.Dialog(title="TuxTalk Help")
-    dialog.set_default_size(650, 550)
+    dialog.set_default_size(760, 600)
 
     # Set minimum size but allow resizing larger
     geo = Gdk.Geometry()
@@ -161,6 +164,7 @@ def show_help_dialog(tab=None):
     # Create notebook (tabbed interface)
     notebook = Gtk.Notebook()
     notebook.set_tab_pos(Gtk.PositionType.TOP)
+    notebook.set_scrollable(True)
     content.pack_start(notebook, True, True, 0)
 
     # Helper function to create a tab with scrolled content
@@ -181,304 +185,142 @@ def show_help_dialog(tab=None):
         scrolled.add(label)
         tab_label = Gtk.Label(label=title)
         tab_label.set_halign(Gtk.Align.CENTER)  # Center text within the tab
-        tab_label.set_hexpand(True)             # Expand to fill tab width
         notebook.append_page(scrolled, tab_label)
 
-    # Tab: Getting Started (tabs appear in the order they are created)
-    create_tab("🚀 Getting Started", f'''<span size="large"><b>Quick Start Guide</b></span>
+    # Each tab starts with what to do, then what's optional, then what to try
+    # if it doesn't work. Tabs appear in the order they are created.
+    create_tab("🚀 Start Here", f'''<span size="large"><b>Dictating in Three Steps</b></span>
 
-<b>✨ TuxTalk is ready to use!</b>
-The dictation service starts automatically when you launch TuxTalk.
+1. Click where you want the text.
+2. Hold <b>{hold}</b> and talk.
+3. Let go: your words are typed where the cursor is.
 
-<b>🎉 First-Run Setup</b>
-On first launch, TuxTalk shows a welcome dialog that:
-• Recommends a setup for your computer: the speech model, and whether to use
-  your graphics card (NVIDIA, AMD or Intel), for the language you dictate in.
-  "Change language, model or graphics card" lets you change any of it,
-  with each choice explained
-{first_run_hotkey_bullet}• Offers to install the GNOME extension (if on GNOME desktop)
+Say punctuation as you go: <b>period</b>, <b>comma</b>, <b>question mark</b>,
+<b>new line</b>. The Commands list, last in Help, has them all.
 
-<b>1. Begin Dictating</b>
-Both keys work at the same time: {keys_line}.
-• <b>Recording Indicator:</b> an indicator appears on screen while you're recording
-  (choose its style and color in Preferences → Audio).
+<b>Without holding a key</b>
+Tap <b>{toggle}</b> to start, talk as long as you like, and tap it again to stop.
+The Hands-free tab has a way to make it stop by itself when you stop talking.
 
-<b>2. Configure Settings</b>
-Open the TuxTalk menu → "Preferences" to customize the AI model, language, GPU acceleration,
-beeps, and more. (Dictation keys are set in {keys_where}.)
+<b>How you know it's listening</b>
+• A beep when it starts and when it stops.
+• The recording indicator, an orb on the screen while it records. Change its
+  look and place in <b>Preferences → Audio → Customize…</b>
+• If the microphone heard nothing but silence, TuxTalk says so and types nothing.
 
-<b>3. Dictate!</b>
-Press your key and speak clearly at a normal pace.
-Text is inserted where your cursor is.
+<b>Music, videos and calls</b>
+While you talk, TuxTalk pauses music and videos and plays them again after.
+<b>Preferences → Audio → Other sound while you dictate</b> can turn other sounds
+down instead (Discord calls, games), do both, or leave them alone.
 
-<b>💡 Auto-Timeout Feature:</b>
-The service automatically pauses after 5 minutes of inactivity to save
-system resources. Adjust this in Preferences → Advanced.
+<b>Where things are</b>
+• <b>The TuxTalk menu</b>: the tray icon, TuxTalk in GNOME's top bar, or open TuxTalk
+  again from your apps. It has Preferences, Help, Recent Dictations and Fix a Word,
+  and the line under the switch says which speech model runs, and where.
+• <b>Preferences → General</b>: your keys, and the speech setup. On first run TuxTalk
+  Recommends a setup for your computer (the speech model, on your graphics card if
+  it's faster) for the language you speak. "Change model, device or language" is
+  there if you ever want something else.
 
-<b>Need more help?</b> Check the other tabs for detailed information.''')
+<span size="large">🧪 <b>Indicator Follows Your Window</b></span>
+The recording indicator shows up in the window you're dictating into, wherever
+that window is on the screen, instead of always in the same spot.
 
-    # Tab: Features
-    create_tab("✨ Features", f'''<span size="large"><b>Key Features</b></span>
+  • Turn it on in <b>Preferences → Advanced → TuxTalk Labs</b>.
+  • It's placed each time you start talking, so it goes wherever your window is.
+  • The position you pick in <b>Preferences → Audio → Customize…</b> (bottom center, top
+    right, center…) applies inside the window. The offset there is for the whole screen,
+    so it's skipped.
+  • When TuxTalk can't tell where the window is, the indicator uses its usual
+    position from <b>Preferences → Audio → Customize…</b>.
+  • Works on KDE, on GNOME with the TuxTalk extension, on Sway and Hyprland, and on
+    X11 desktops like Cinnamon and XFCE. On a scaled screen it may sit a little off.''')
 
-<b>Two Keys, Always Active</b>
-• Hold-to-talk AND tap-to-toggle work simultaneously ({keys_line})
-• Hands-free option: double-tap the toggle key and the recording stops by
-  itself when you stop talking. If you say nothing at all for 10 seconds, it
-  stops without typing anything. A single tap stays a normal on/off toggle
-  (turn it on in Preferences → General, under the Toggle Hotkey)
-• Visual recording indicator on screen during active recording
-• Audio beeps for start/stop feedback
+    create_tab("💬 Chatting", f'''<span size="large"><b>Chats and Messages</b></span>
 
-<b>Performance Mode Presets</b>
-Quick changes from the tray menu (Performance):
-• <b>Recommended for this computer:</b> the setup TuxTalk picks for your graphics card
-  and language, usually Parakeet on your graphics card
-• <b>Lightest:</b> Whisper Base on the processor, the smallest download and the least work
-• <b>Battery saver:</b> Whisper Tiny on the processor, stops after 2 idle minutes
-  (choosing another preset puts that back to 5 minutes)
-After choosing one, the tray's Device line shows where it really runs.
+<b>Sending a message</b>
+End what you say with <b>press enter</b>: "see you at noon, press enter" types
+"See you at noon." and presses Enter, which sends it. Saying only "press enter"
+just presses Enter. <b>new line</b> starts a new line and never sends anything.
 
-<b>Smart Text Processing</b>
-• Auto-punctuation for natural text flow
-• Smart quotes (\u201c \u201d instead of " ")
-• Swiss German spelling: ss instead of ß (on by itself on Swiss German systems)
-• Numbers as digits: "twenty-five" becomes 25 (Preferences → Advanced)
-• Plain text in terminals and code editors: no capital or closing period in a terminal,
-  no closing period in a code editor (on by default)
-• Auto-spacing before new text
-• Optional auto-period at end of sentences
-• Voice-activated undo (word, sentence, paragraph, or everything)
+<b>Optional: send every dictation</b>
+<b>Preferences → Advanced → Send each dictation automatically.</b> TuxTalk waits
+2 seconds (you can pick none to four) and counts down over the window, then
+presses Enter.
+  • Tap <b>{hold}</b> during the wait to hold the send. The text stays in the box,
+    to fix or to add a screenshot; press Enter yourself when you're ready.
+  • Hold <b>{hold}</b> during the wait to keep talking. It's added after a space,
+    and sent when you're done.
+  • Switch windows during the wait, and nothing is sent.
+  • In text editors, word processors and code editors it never presses Enter:
+    there, Enter only starts a new line.
+  • If what you said ends on a word like "and" or "the", it was probably cut
+    off, so it isn't sent.
 
-<b>Dictation Cleanup</b> (optional, Preferences → Advanced)
-• Remove "um", "uh" and accidentally repeated words. Instant, nothing to download
-• Fix self-corrections with AI: "meet at 3, no wait, 4" becomes "meet at 4"
-• The AI runs on your computer (one-time 1.1 GB download) and only sees
-  sentences with a correction phrase. If its answer changes anything besides
-  the correction, your words are typed exactly as you said them
+<b>Changing it before it's sent</b> 🧪 Labs
+With voice editing on, say <b>edit that, make it friendlier</b> right after you
+dictate: TuxTalk selects what it just typed and rewrites it. A message that was
+already sent can't be changed, so with the automatic send, tap <b>{hold}</b> during
+the wait first. The Writing tab has more.
 
-<b>Recent Dictations</b>
-• Tray menu → Recent Dictations: your last 20 dictations
-• Hover over one to read it, click to copy it, then paste with Ctrl+V
-• Kept in memory only, never saved to disk, gone when you log out
+<b>On a call</b>
+<b>Preferences → Audio → Other sound while you dictate → Turn everything down</b>
+lowers the call while you talk, and puts it back after. The call still hears
+your microphone, so mute yourself there.
 
-<b>Graphics cards through Vulkan</b> (Preferences → General → Device)
-• Choose "Vulkan (any GPU)" to run Whisper or Parakeet on an AMD, Intel or NVIDIA graphics chip
-• On NVIDIA it's a light alternative to CUDA: about the same speed, a 24 MB download instead of 1.4 GB
-• A one-time download, then a quick test against your processor
-• TuxTalk only uses the graphics chip if it's clearly faster, and tells you the result
-• Parakeet is already fast on the processor, and about 10 times faster again on a graphics card
-• With any other device, Parakeet runs on the processor (CUDA can't run it)
+<b>It went into the wrong window</b>
+{paste_tip}<b>Recent Dictations</b> in the TuxTalk menu keeps your last 20:
+hover over one to read it, click to copy it, then paste with Ctrl+V.''')
 
-<b>Fix a Word</b> (teach TuxTalk a word it keeps getting wrong)
-• Say <b>fix that word</b> right after a dictation: Fix a Word opens over your window
-  on what you just said
-• Or tray menu → Fix a Word..., or Preferences → Words → Fix a Word...
-• Pick a recent dictation, click the wrong word (or drag across a few),
-  type the right spelling, then click Always fix this
-• From then on it's fixed in every dictation, with any speech model
-• Your fixes are listed under the word in Preferences → Words, where you can
-  edit or remove them
-• Handy for names, brands and technical terms, like "bamboo studio" → BambuStudio
+    create_tab("📝 Writing", f'''<span size="large"><b>Documents and Email</b></span>
 
-<b>Transcribe a File</b> (tray menu → Transcribe a File...)
-• Turns a recording or a video into text: MP3, M4A, OGG, WAV, FLAC, MP4, MKV, WebM and more
-• Choose a file or drop one on the window. It uses the model and device you dictate with
-• Copy the text, save it as a text file, or save subtitles (.srt) for a video
-• "Show times" starts each paragraph with where it is in the file
-• It runs on its own, so you can keep dictating while it works. Stop keeps what's done
-• Nothing leaves your computer
+<b>Punctuation and paragraphs</b>
+Say <b>period</b>, <b>comma</b>, <b>question mark</b>, <b>new line</b>, <b>new paragraph</b>
+and so on. TuxTalk adds the capitals, and a period at the end if the speech model
+forgot one. The Commands list, last in Help, has them all.
 
-<b>Your Stats</b> (tray menu → Your Stats..., or Preferences → Stats)
-• How many words you've dictated today, this week and all time
-• How long you spent dictating, and roughly how much typing time that saved
-• A chart of the last two weeks, and how fast you talk compared to typing
-• Only the numbers are kept, on your computer. TuxTalk never saves what you said
-• Set your own typing speed there, so time saved fits you
-• Turn it off or reset it from the same tab
+<b>Numbers</b>
+<b>Preferences → Advanced → Numbers</b>: as the speech model writes them, as digits
+("twenty-five chickens" → 25 chickens), or digits from 10 up ("three cats",
+"25 chickens"). With digits, "seven thirty" after at becomes 7:30 and "october
+fifteenth" becomes october 15th; "one of them" and fractions stay words.
 
-<b>Language Support</b>
-• Auto-detect language from speech
-• Auto-detect sometimes takes your language for another? Preferences → General →
-  "Only these languages": tick the ones you speak and it picks only from those
-  (Whisper models; Parakeet always picks by itself)
-• Or choose one of 35 common languages by hand. Whisper models know 99 languages;
-  Parakeet knows English and 24 European languages and always detects which by itself
-• Great for multilingual users
+<b>Taking it back</b>
+  • <b>delete last word</b>, <b>delete last sentence</b>, <b>delete last paragraph</b>
+    remove what you just dictated.
+  • Ctrl+Z in the app works too.
+  • <b>delete everything</b> clears the whole box, text you typed yourself included.
 
-<b>Audio Control</b>
-• Microphone selection and testing
-• Audio level monitoring
-• Volume adjustment support
+<b>Optional: cleaner text</b> (Preferences → Advanced)
+  • <b>Remove "um", "uh" and accidentally repeated words.</b> Instant, nothing to download.
+  • <b>Fix self-corrections with AI.</b> "meet at 3, no wait, 4" types "meet at 4".
+    The AI runs on your computer (a one-time 1.1 GB download) and only sees
+    sentences with a correction phrase. If its answer changes anything besides the
+    correction, your words are typed exactly as you said them.
+  • Smart quotes, the closing period and spacing are under Fine-tuning.
 
-<b>System Integration</b>
-• Launch at login option
-• System tray integration (GTK or GNOME extension)
-• Notification sounds (optional)
-• Desktop notifications (optional)''')
+<b>TuxTalk Labs</b>
+Labs features are experimental: they work, but they're still being refined, may
+change, and won't always get it right. Turn them on in <b>Preferences → Advanced →
+TuxTalk Labs</b>. Voice editing and select and move are below; Type at pause is on
+the Hands-free tab, and the indicator that follows your window on Start Here. Your
+feedback decides what gets finished: <a href="{FEEDBACK_URL}">TuxTalk Discussions</a>.
 
-    # Tab: AI Models
-    create_tab("🤖 AI Models", '''<span size="large"><b>Choosing the Right AI Model</b></span>
-
-Configure in: Preferences → General → Model
-Sizes are the download for the processor. On a graphics card (Vulkan) the
-Whisper models download in a smaller format, about half the size.
-
-<b>Available Models:</b>
-
-<b>• tiny (78 MB)</b>
-  Speed: ⚡⚡⚡⚡⚡ Fastest
-  Accuracy: ⭐⭐ Basic
-  Best for: Quick notes, casual use
-
-<b>• base (148 MB)</b>
-  Speed: ⚡⚡⚡⚡ Fast
-  Accuracy: ⭐⭐⭐ Good
-  Best for: Casual dictation
-
-<b>• small (486 MB)</b>
-  Speed: ⚡⚡⚡ Balanced
-  Accuracy: ⭐⭐⭐⭐ Very good
-  Best for: General use in any of 99 languages
-
-<b>• medium (1.5 GB)</b>
-  Speed: ⚡⚡ Slower
-  Accuracy: ⭐⭐⭐⭐⭐ Excellent
-  Best for: Professional dictation
-
-<b>• large-v3 (3.1 GB)</b>
-  Speed: ⚡ Slowest
-  Accuracy: ⭐⭐⭐⭐⭐⭐ Best possible
-  Best for: Technical/professional work
-  ⚠️ Takes 30-60 seconds to load initially, 10-20 seconds after
-
-<b>• Parakeet (670 MB)</b> — a different engine from NVIDIA, not Whisper
-  Speed: ⚡⚡⚡⚡ Fast, even without a graphics card
-  Accuracy: ⭐⭐⭐⭐⭐⭐ On par with large-v3
-  Best for: English and 24 European languages on any computer
-  ⚠️ Does not support Chinese, Japanese, Korean, Arabic and other
-  non-European languages. Use a Whisper model for those.
-
-<b>Benefits of Larger Models:</b>
-• Better recognition of uncommon words and technical terms
-• More accurate with proper nouns and acronyms
-• Improved punctuation and capitalization
-• Better handling of accents and background noise
-• Superior context awareness (e.g., "their" vs "there")
-• More natural sentence structure
-
-<b>Recommendation:</b>
-The easiest way: <b>Use Recommended</b> in Preferences → General, or tray menu →
-Performance → <b>Recommended for this computer</b>. Both pick the model and
-device for your graphics card and language, the same as first run does.
-<b>What works with what?</b>, also in Preferences → General, shows which models
-run on the processor, Vulkan and CUDA, and which of those your computer has.
-Use Parakeet if you dictate in English or one of the 24 European languages
-it knows. It makes fewer mistakes than any Whisper model on English, and
-it's fast even without a graphics card. With a graphics card (NVIDIA, AMD
-or Intel), set the Device to "Vulkan (any GPU)" in Preferences for even
-faster results.
-For any other language, use Whisper: "small" on the processor, or
-"large-v3" on a graphics card for the best accuracy.''')
-
-    # Tab: Advanced
-    create_tab("⚙️ Advanced", f'''<span size="large"><b>Advanced Features</b></span>
-
-<b>🎮 GPU Acceleration</b>
-A graphics card makes transcription several times faster. Choose it in
-Preferences → General → Device:
-• <b>Vulkan (any GPU):</b> AMD, Intel or NVIDIA, a 24 MB download. It's the only
-  way to run Parakeet on the graphics card. TuxTalk checks your graphics card is
-  really faster than your processor before it switches.
-• <b>CUDA (NVIDIA):</b> NVIDIA only, for the Whisper models, a ~1.4 GB download
-  that starts when you choose it. Parakeet can't use it.
-• If the graphics card can't start, TuxTalk uses the processor instead and tells
-  you, and the tray's Device line shows it, for example "CPU (Vulkan didn't start)".
-
-<b>🔋 Power Saving</b>
-In Preferences → General, "Turn dictation off when it isn't used for a while"
-saves battery: after the minutes you pick without dictating, the speech model lets
-go of the processor and the graphics card. Then your hotkeys do nothing until you
-turn dictation back on from TuxTalk's menu (Dictation Service).
-It's on by default on laptops and off on desktop computers. If F8 stops working
-after a break, this is usually why.
-
-<b>💾 Backup</b>
-In Preferences → Updates &amp; Backup:
-• <b>Save Backup:</b> your settings, snippets, Your Words and stats in
-  one file, to keep or to load on another computer with <b>Load Backup</b>. If that
-  computer lacks the backup's graphics device, it keeps its own.
-• <b>Backup folder:</b> pick it once with <b>Change…</b>, and Save Backup and
-  Load Backup open there.
-• <b>Earlier settings:</b> one list of your backups in the backup folder and the
-  copies TuxTalk saves by itself when it starts (your last 10 settings changes),
-  so a change or an update that went wrong can be undone. Going back to an
-  automatic copy leaves your stats as they are.
-
-<b>📝 Text Injection</b>
-{typing_para}
-
-<b>🎛️ Audio Settings</b>
-Fine-tune audio in Preferences → Audio tab:
-• Select specific microphone
-• Test audio levels
-• Adjust input volume (PipeWire/PulseAudio systems)
-• Enable/disable audio beeps''')
-
-    # Tab: TuxTalk Labs (experimental features), opened directly from
-    # Preferences → Advanced → TuxTalk Labs → How these work.
-    if is_flatpak:
-        labs_text = '''<span size="large"><b>🧪 TuxTalk Labs</b></span>
-
-Labs is where new features are tried out before they're finished. They are
-<b>experimental</b>: they work, but they're still being refined, may change, and
-won't always get it right.
-
-There are no Labs features in this version of TuxTalk yet. Voice editing needs
-the regular (non-Flatpak) install, because it reads the keyboard directly.'''
-    else:
-        labs_text = f'''<span size="large"><b>🧪 TuxTalk Labs</b></span>
-
-Labs is where new features are tried out before they're finished. They are
-<b>experimental</b>: they work, but they're still being refined, may change, and
-won't always get it right. Turn them on in <b>Preferences → Advanced → TuxTalk Labs</b>.
-Your feedback decides what gets finished: <a href="{FEEDBACK_URL}">TuxTalk Discussions</a>.
-
-<span size="large"><b>Type at Pause</b></span>
-Each phrase is typed as soon as you pause, while you go on talking, instead of
-all of it when you stop. Nothing that was typed changes afterwards.
-
-<b>How it works</b>
-  • A pause of about a second ends a phrase, and it's typed right away.
-  • Whether that pause ends a sentence is decided once your next words are heard:
-    then a period goes in, or a comma, or the sentence just carries on.
-  • "delete last sentence" and the other commands work on the phrase before them.
-
-<b>Fine-tuning</b>
-  • <b>Pause length</b>: how long a silence ends a phrase.
-  • <b>Noise filter</b>: raise it in a noisy room, lower it for a soft voice or a quiet
-    microphone.
-  • <b>Punctuation from context</b>: off types each phrase as it was heard, which is
-    quicker on a slow graphics chip but puts a period at more pauses.
-  • <b>Test</b>: talk and stop now and then, and nothing is typed. The bar moves with
-    your voice, which should go past the green line, and it flashes green wherever a
-    phrase would be typed. If it never flashes when you pause, raise the noise filter.
-    If it flashes while you're still talking, lower it.
-
-<span size="large"><b>Voice Editing</b></span>
+<span size="large">🧪 <b>Voice Editing</b></span>
 Change text by saying how you want it changed.
 
 <b>How to use it</b>
 1. Select some text in any app: a sentence, a paragraph, a list.
-2. Hold <b>Shift</b> together with your dictation key (<b>Shift+F8</b>) and say what you
+2. Hold <b>Shift</b> together with your dictation key (<b>Shift+{hold}</b>) and say what you
    want. Let go of the keys when you're done talking.
-   (Or tap <b>Shift+F9</b> to start, say it, and tap <b>Shift+F9</b> again to finish.)
+   (Or tap <b>Shift+{toggle}</b> to start, say it, and tap <b>Shift+{toggle}</b> again to finish.)
 3. A moment later the selection is replaced with the rewritten text.
 4. Not what you wanted? Press <b>Ctrl+Z</b> in the app to get your original back.
 
 <b>Without the keys: "edit that"</b>
 Right after you dictate something, start your next dictation with <b>edit that</b> and say
 the change: <b>edit that, make it shorter</b>. TuxTalk selects what it just typed and
-changes it, with no Shift needed. With hands-free (double-tap F9) and Type at pause,
+changes it, with no Shift needed. With hands-free (double-tap {toggle}) and Type at pause,
 you can say a message, look it over, say <b>edit that, make it friendlier</b>, then
 <b>press enter</b> to send it, all without touching the keyboard.
 Only a dictation that starts with "edit that" and a pause, or with a change like
@@ -525,7 +367,7 @@ can't be changed by voice.
 
 <b>Good to know</b>
   • Your clipboard is put back afterwards, the way you left it.
-  • The rewrite is also saved in <b>Recent Dictations</b>, and <b>Ctrl+Alt+P</b> types it again.
+  • The rewrite is also saved in <b>Recent Dictations</b>, and Paste Last Dictation types it again.
   • It doesn't work in a terminal: there's no selection there to replace.
   • It uses the same small AI as <b>Fix self-corrections with AI</b>: one download of
     about 1.1 GB, shared. Everything runs on this computer; nothing is sent online.
@@ -536,8 +378,7 @@ can't be changed by voice.
   • <i>The AI is still starting</i>: right after turning it on or starting TuxTalk, wait a few seconds.
   • <i>The AI didn't come up with a change</i>: try saying it another way.
   • <i>You switched windows</i>: the rewrite wasn't typed; it's in Recent Dictations.
-
-<span size="large"><b>Select and Move by Voice</b></span>
+<span size="large">🧪 <b>Select and Move by Voice</b></span>
 Select text or move the cursor by saying so. When a dictation is <b>only</b> one of these
 commands, TuxTalk does it instead of typing it. Said inside a longer sentence, the words
 are typed as usual. Counts go up to 10 ("three" or "3").
@@ -559,36 +400,202 @@ are typed as usual. Counts go up to 10 ("three" or "3").
   • <b>unselect</b>
 
 <b>Good to know</b>
-  • With voice editing on, Shift+F8 understands these too, so you can do it all on one
-    key: Shift+F8 <i>"select the last sentence"</i>, then Shift+F8 <i>"make it more formal"</i>.
+  • With voice editing on, Shift+{hold} understands these too, so you can do it all on one
+    key: Shift+{hold} <i>"select the last sentence"</i>, then Shift+{hold} <i>"make it more formal"</i>.
   • The commands around the cursor press the usual keys (Home, End, Ctrl+arrows), so
     they do what those keys do in each app.
   • It doesn't work in a terminal, where those keys mean other things.
   • After a select or move, <b>delete last word</b> won't run, since the cursor is
-    somewhere else now. Use Ctrl+Z in the app instead.
+    somewhere else now. Use Ctrl+Z in the app instead.''')
 
-<span size="large"><b>Indicator Follows Your Window</b></span>
-The recording indicator shows up in the window you're dictating into, wherever
-that window is on the screen, instead of always in the same spot.
+    create_tab("💻 Terminals", f'''<span size="large"><b>Terminals and Code Editors</b></span>
 
-  • Turn it on in <b>Preferences → Advanced → TuxTalk Labs</b>.
-  • It's placed each time you start talking, so it goes wherever your window is.
-  • The position you pick in <b>Preferences → Audio</b> (bottom center, top right, center…)
-    applies inside the window. The offset there is for the whole screen, so it's skipped.
-  • When TuxTalk can't tell where the window is, the indicator uses its usual
-    position from <b>Preferences → Audio</b>.
-  • Works on KDE, on GNOME with the TuxTalk extension, on Sway and Hyprland, and on
-    X11 desktops like Cinnamon and XFCE. On a scaled screen it may sit a little off.'''
-    create_tab("🧪 TuxTalk Labs", labs_text)
+<b>Plain text, by itself</b>
+In a terminal a dictation starts without a capital and ends without a period, so
+"git status" is typed as git status. In code editors (VS Code, Zed, JetBrains
+IDEs…) no period is added at the end. Everywhere else, chat apps included,
+punctuation is as usual. (Preferences → Advanced → Fine-tuning → Plain text in
+terminals and code editors.)
 
-    # Tab: Voice Commands
-    create_tab("🗣️ Voice Commands", '''<span size="large"><b>Voice Commands Reference</b></span>
+<b>Running a command</b>
+End it with <b>press enter</b>: "git status press enter" types the command and runs
+it. Send each dictation automatically presses Enter in a terminal too.
 
-Use these spoken commands during dictation to insert punctuation and formatting.
-The commands are English words, whatever language you dictate in.
+<b>Long commands</b>
+Snippets: say a short phrase and TuxTalk types the full text. Add them in
+<b>Preferences → Words</b>. Wrap the text in "quotes" to type it exactly as written,
+without capitals or a period.
 
-<b>💡 Quick Access:</b> Set a Voice Commands hotkey in Preferences → General
-to pop up a compact cheat sheet anytime. Also available from the tray menu.
+<b>What's different in a terminal</b>
+  • <b>delete everything</b> clears the line you're typing (Ctrl+E, Ctrl+U).
+  • Select and move and voice editing don't work there: a terminal has no
+    selection to change, and those keys mean other things.
+  • Pasting uses Shift+Ctrl+V, which TuxTalk picks by itself.{shortcut_line}''')
+
+    create_tab("🙌 Hands-free", f'''<span size="large"><b>Hands-free and Long Talks</b></span>
+
+<b>Double-tap {toggle}</b>
+Turn it on in Preferences → General ("Double-tap {toggle} for hands-free"). Then
+double-tap the toggle key, talk, and when you stop talking the recording ends and
+your text is typed. A short high beep confirms the double-tap. Say nothing at all
+for 10 seconds and it stops without typing anything. A single tap stays a plain
+on/off toggle. The seconds box beside it sets how long a pause ends it.
+
+<span size="large">🧪 <b>Type at Pause</b></span>
+Each phrase is typed as soon as you pause, while you go on talking, instead of
+all of it when you stop. Nothing that was typed changes afterwards.
+
+<b>How it works</b>
+  • A pause of about a second ends a phrase, and it's typed right away.
+  • Whether that pause ends a sentence is decided once your next words are heard:
+    then a period goes in, or a comma, or the sentence just carries on.
+  • "delete last sentence" and the other commands work on the phrase before them.
+
+<b>Fine-tuning</b>
+  • <b>Pause length</b>: how long a silence ends a phrase.
+  • <b>Noise filter</b>: raise it in a noisy room, lower it for a soft voice or a quiet
+    microphone.
+  • <b>Punctuation from context</b>: off types each phrase as it was heard, which is
+    quicker on a slow graphics chip but puts a period at more pauses.
+  • <b>Test</b>: talk and stop now and then, and nothing is typed. The bar moves with
+    your voice, which should go past the green line, and it flashes green wherever a
+    phrase would be typed. If it never flashes when you pause, raise the noise filter.
+    If it flashes while you're still talking, lower it.
+<span size="large"><b>Transcribe a File</b></span> (TuxTalk menu → Transcribe a File...)
+  • Turns a recording or a video into text: MP3, M4A, OGG, WAV, FLAC, MP4, MKV, WebM
+    and more.
+  • Choose a file or drop one on the window. It uses the model and device you
+    dictate with.
+  • Copy the text, save it as a text file, or save subtitles (.srt) for a video.
+  • "Show times" starts each paragraph with where it is in the file.
+  • It runs on its own, so you can keep dictating while it works. Stop keeps
+    what's done.
+  • Nothing leaves your computer.''')
+
+    create_tab("🩹 Mistakes", f'''<span size="large"><b>Fixing Mistakes</b></span>
+
+<b>A word it keeps getting wrong</b>
+  • Say <b>fix that word</b> right after a dictation: Fix a Word opens over your
+    window on what you just said.
+  • Or TuxTalk menu → Fix a Word..., or Preferences → Words → Fix a Word...
+  • Click the wrong word (or drag across a few), type the right spelling, then
+    click Always fix this. From then on it's fixed in every dictation, with any
+    speech model. Handy for names, brands and technical terms, like
+    "bamboo studio" → BambuStudio.
+
+<b>Your Words: names and terms spelled your way</b>
+In <b>Preferences → Words</b>.
+  • Whisper models are told about them before they listen.
+  • Parakeet leans toward them while it listens, on the processor and the
+    graphics card: a name it would write as "Tuck's talk" comes out TuxTalk.
+  • Every model fixes them when they come out split up or with the wrong
+    capitals: "tux talk" → TuxTalk.
+  • Beside each word, list what TuxTalk hears instead ("clawed claw" for
+    ClaudeClaw) and it fixes that too, whatever the model.
+  • Fix a Word adds to this list: the word, and what it heard.
+
+<b>Snippets</b>
+Say a short phrase and TuxTalk types the full text: "my email" →
+user@example.com. Add your own in Preferences → Words.
+
+<b>Getting it back</b>
+<b>Recent Dictations</b> in the TuxTalk menu keeps your last 20. {paste_tip}
+
+<b>When it mishears a lot</b>
+  • Speak at a normal pace, with the microphone close and the room quiet.
+  • Check the microphone: <b>Preferences → Audio</b>, Start Recording, and talk. The
+    level should move well past the middle. Input Volume there is the same as your
+    desktop's microphone volume.
+  • Use the setup TuxTalk recommends: <b>Use Recommended</b> in Preferences → General,
+    or TuxTalk menu → Performance → Recommended for this computer.
+  • Speak more than one language and it picks the wrong one? Preferences → General
+    → Change model, device or language → Language: pick yours, or "Several
+    languages" to tick the ones you speak (Whisper models).''')
+
+    create_tab("🛠️ Problems", f'''<span size="large"><b>When Something's Wrong</b></span>
+
+<b>No key works (dictation never starts)</b>
+{no_hotkey_block}
+
+<b>"TuxTalk heard only silence"</b>
+The microphone sent nothing but silence: it's muted, turned all the way down, or
+it's the wrong one. Check its mute switch, then <b>Preferences → Audio →
+Microphone</b> and the test beside it.
+
+<b>Nothing gets typed</b>
+  • Click into a text box first, and give the app a moment to take the focus.
+  • <b>Preferences → Advanced → System check</b> opens by itself when typing needs
+    fixing; its button fixes it.
+  • {typing_para}
+
+<b>Too slow</b>
+  • Use your graphics card: TuxTalk menu → Performance → Recommended for this
+    computer, or Use Recommended in Preferences → General.
+  • <b>Vulkan (any GPU)</b>: AMD, Intel or NVIDIA, a 24 MB download. It's the only way to
+    run Parakeet on the graphics card. TuxTalk checks your graphics card is really
+    faster than your processor before it switches.
+  • <b>CUDA (NVIDIA)</b>: NVIDIA only, for the Whisper models, a ~1.4 GB download.
+    Parakeet can't use it.
+  • If the graphics card can't start, TuxTalk uses the processor instead, and the
+    menu's line says so, for example "Parakeet on the processor (Vulkan didn't start)".
+  • <b>Power Saving</b> (on by default on laptops): after 5 minutes without dictating,
+    TuxTalk lets the speech model rest. Your keys keep working; the first dictation
+    after a break takes a few seconds longer. Preferences → General → Power Saving.
+
+<b>Performance presets</b> (TuxTalk menu → Performance)
+  • <b>Recommended for this computer:</b> the setup TuxTalk picks for your graphics
+    card and language, usually Parakeet on your graphics card.
+  • <b>Lightest:</b> Whisper Base on the processor, a small download and little work.
+  • <b>Battery saver:</b> Whisper Tiny on the processor, and the speech model rests
+    after 2 idle minutes (choosing another preset puts that back).
+
+<b>Speech models</b> (Preferences → General → Change model, device or language)
+Sizes are the download for the processor; on a graphics card (Vulkan) the Whisper
+models are about half that.
+  • <b>Parakeet (670 MB)</b>: NVIDIA's engine. Very accurate for English and 24 European
+    languages, and fast even without a graphics card. Not for Chinese, Japanese,
+    Korean, Arabic and other non-European languages.
+  • <b>Whisper tiny (78 MB)</b>, <b>base (148 MB)</b>, <b>small (486 MB)</b>: 99 languages,
+    faster and less accurate as they get smaller. Small is a good start on the processor.
+  • <b>Whisper medium (1.5 GB)</b> and <b>large-v3 (3.1 GB)</b>: more accurate and slower;
+    large-v3 wants a graphics card.
+<b>What works with what?</b>, in the same place, shows which models run on the
+processor, Vulkan and CUDA, and which of those your computer has.
+
+<b>Dictation stopped working</b>
+Choose <b>Restart Service</b> in the TuxTalk menu, or turn Dictation on/off off and
+on. The log is {f["log_path"]}.{kde_notice}
+
+<b>A settings change went wrong</b>
+<b>Preferences → Updates &amp; Backup → Earlier settings</b> lists the copies TuxTalk
+saves by itself when it starts (your last 10 settings changes) and your own
+backups. Restore goes back to one. <b>Save Backup</b> puts your settings, snippets,
+Your Words and stats in one file, to keep or to load on another computer with
+<b>Load Backup</b>; the next backup goes to the same folder.
+
+<b>Updates</b>
+  • Check for updates: the TuxTalk menu, or Preferences → Updates &amp; Backup.
+  • {update_block}
+  • <b>Config files:</b> {f["cfg_dir"]}
+  • <b>AI models:</b> {f["cache_dir"]}
+
+<b>Privacy</b>
+Everything runs on your computer; nothing you say is sent anywhere. Your Stats keeps
+only numbers (words, dictations, time), never the text. Recent Dictations keeps
+your last 20 in memory, gone when you log out. The log has your words only if you
+turn on "Log transcribed text" (Preferences → Advanced → Fine-tuning), for a bug report.
+
+<b>Bug reports and feedback</b>
+  • <b>Report bugs:</b> <a href="{ISSUES_URL}">TuxTalk issues on GitHub</a>
+  • <b>Questions, ideas, or just how it's working for you:</b> <a href="{FEEDBACK_URL}">TuxTalk Discussions</a>
+  • <b>Include:</b> your Linux distro, desktop environment, and TuxTalk version
+  • <b>Log file:</b> {f["log_path"]}''')
+
+    # Plain string, not an f-string: the brace commands below contain { and }.
+    create_tab("🗣️ Commands", '''<span size="large"><b>Voice Commands Reference</b></span>
+
+Say these as you dictate. The commands are English words, whatever language you
+dictate in. A shorter list is in the TuxTalk menu → Voice Commands....
 
 <b>Punctuation:</b>
 • Say <b>comma</b> for ,
@@ -599,8 +606,8 @@ to pop up a compact cheat sheet anytime. Also available from the tray menu.
 • Say <b>colon</b> for :
 • Say <b>apostrophe</b> for '
 • Say <b>quote</b> for regular "
-• Say <b>open quote</b> or <b>open quotes</b> for \u201c
-• Say <b>close quote</b> or <b>close quotes</b> for \u201d
+• Say <b>open quote</b> or <b>open quotes</b> for “
+• Say <b>close quote</b> or <b>close quotes</b> for ”
 • Say <b>hyphen</b> or <b>dash</b> for -
 • Say <b>em dash</b> for —
 • Say <b>dot dot dot</b> or <b>ellipsis</b> for …
@@ -618,7 +625,9 @@ to pop up a compact cheat sheet anytime. Also available from the tray menu.
 • Say <b>new paragraph</b> or <b>paragraph break</b> for a double line break
 • Say <b>tab</b> for a tab character (indent)
 • Say <b>soft break</b> or <b>soft line</b> for three spaces
-• End with <b>press enter</b> or <b>hit enter</b> to type the dictation and then press Enter, which sends a chat message or runs a terminal command. A line break (<b>new line</b>) never sends anything. Say <b>literal press enter</b> to type the words. To send every dictation, tick <b>Send each dictation automatically</b> in Preferences → Advanced. It waits a moment first: tap your hotkey to hold the send (to fix it, add a screenshot or say <b>edit that</b>), or hold the key to keep talking. A dictation that was already sent can't be edited
+• End with <b>press enter</b> or <b>hit enter</b> to type the dictation and then press
+  Enter, which sends a chat message or runs a terminal command (the Chatting tab
+  has more). Say <b>literal press enter</b> to type the words.
 
 <b>Literal Words:</b>
 To output the word instead of executing the command, say <b>literal</b> or <b>the word</b> before it:
@@ -640,108 +649,31 @@ Say: <i>First sentence period new line Second sentence exclamation point</i>
 Result: First sentence.
 Second sentence!
 
-<b>Snippets:</b>
-Say a short phrase and TuxTalk types the full text. Add your own in Preferences → Words.
-
-Examples:
-• "my email" → "user@example.com"
-• "my address" → "123 Main Street, City, ST 12345"
-
-To type a snippet exactly as written — bypassing auto-capitalization
-and punctuation — wrap its text in double quotes.
-
-<b>Your Words:</b>
-Names and terms TuxTalk should spell your way, in Preferences → Words.
-• Whisper models are told about them before they listen
-• Parakeet on the processor leans toward them while it listens: a name it
-  would write as "Tuck's talk" comes out TuxTalk. Parakeet on the graphics
-  card can't do this yet
-• Every model fixes them when they come out split up or with the wrong
-  capitals: "tux talk" → TuxTalk
-• Beside each word, list what TuxTalk hears instead ("clawed claw" for
-  ClaudeClaw) and it fixes that too, whatever the model
-• Fix a Word adds to this list: the word, and what it heard
-
 <b>Undo Commands:</b>
 • Say <b>undo last word</b> to delete the last word you dictated
 • Say <b>undo last sentence</b> to delete back to the previous sentence
 • Say <b>undo last paragraph</b> to delete back to the last line break
-• Say <b>undo everything</b> or <b>delete everything</b> to clear the field
-• Also works: <b>delete last word</b>, <b>remove last word</b>, <b>clear all</b>, etc.
+• Also works: <b>delete last word</b>, <b>remove last word</b>, <b>delete last 3 words</b>
 
-<b>Voice Editing</b> (experimental): select text, hold Shift+F8 and say how to change it.
-See the <b>TuxTalk Labs</b> tab.
+<b>Clearing the Whole Box:</b>
+• Say <b>delete everything</b>, <b>delete all</b>, <b>clear everything</b>, <b>clear all</b>,
+  <b>undo everything</b> or <b>undo all</b>
+• It empties the whole box, including text TuxTalk didn't type. In a terminal it
+  clears the line you're typing
+
+<b>Fixing a Word:</b>
+• Say <b>fix that word</b> right after a dictation to open Fix a Word on it
+
+<b>Editing by Voice</b> (🧪 Labs, see the Writing tab):
+• Select text, hold Shift with your dictation key, and say the change:
+  <b>make this more formal</b>, <b>fix the grammar</b>, <b>make this all caps</b>
+• Right after dictating: <b>edit that, make it shorter</b>
+• With Select and move on: <b>select the last sentence</b>, <b>go to the end</b>, <b>unselect</b>
 
 <b>Changing Your Mind:</b>
 • Say <b>no wait</b>, <b>I mean</b>, <b>make that</b>, <b>scratch that</b> or <b>or rather</b>
   to correct yourself: "meet at 3, no wait, 4" → "meet at 4"
-• Needs <b>Fix self-corrections with AI</b> in Preferences → Advanced
-
-<b>Smart Features:</b>
-• Auto-capitalization after sentences
-• Auto-period added if a sentence has no punctuation
-• Smart quote placement and spacing''')
-
-    # Tab: Tips
-    create_tab("💡 Tips", f'''<span size="large"><b>Tips &amp; Troubleshooting</b></span>
-
-<b>Keyboard Shortcuts:</b>
-• {hotkey_hold}: push-to-talk (hold to record, release to stop)
-• {hotkey_toggle}: toggle recording (press once to start, again to stop)
-• <b>Voice Commands shortcut:</b> set in Preferences → General to pop up the cheat sheet
-• <b>Paste Last Dictation</b> (Ctrl+Alt+P): types your last dictation again where the cursor
-  is, for when it went to the wrong window. Change or turn it off in Preferences → General{shortcut_line}
-• Keys work globally in any application
-• Change your dictation keys in {keys_where}
-
-<b>Getting Best Results:</b>
-• Speak clearly at a normal pace
-• Use a quality microphone for better accuracy
-• Minimize background noise
-• Pause briefly at sentence ends for better punctuation
-
-<b>Status Indicators:</b>
-• Tray icon shows service status (a muted microphone means it's stopped)
-• A recording indicator appears on screen during dictation (Preferences → Audio)
-• Audio beeps indicate recording start/stop (can be disabled)
-
-<b>Installation &amp; Updates:</b>
-• <b>Check for updates:</b> the tray/panel menu, or Preferences → Updates &amp; Backup.
-• {update_block}
-• <b>Config files:</b> {f["cfg_dir"]}
-• <b>AI models:</b> {f["cache_dir"]}
-
-<b>Common Issues:</b>
-
-<b>Hotkey not working:</b>
-• Check if another app is using the same key
-• Re-assign it in {keys_where}
-• Ensure the service is running
-
-{no_hotkey_block}
-
-<b>Text not inserting:</b>
-• Make sure the cursor is in a text field
-• Give the target app a moment to focus before speaking
-
-<b>Transcription too slow:</b>
-• Use your graphics card: Preferences → General → Device (NVIDIA, AMD or Intel)
-• Try Parakeet, or a smaller Whisper model (tiny/base/small)
-• Tray menu → Performance → Recommended for this computer
-
-<b>Service won't start:</b>
-• Check logs: {f["log_path"]}
-• Use Restart Service in the tray menu, or turn Dictation Service off and on{kde_notice}
-
-<b>Bug Reports &amp; Feedback:</b>
-Found a bug or have a feature request? We'd love to hear from you!
-
-• <b>Report bugs:</b> <a href="{ISSUES_URL}">TuxTalk issues on GitHub</a>
-• <b>Questions, ideas, or just how it's working for you:</b> <a href="{FEEDBACK_URL}">TuxTalk Discussions</a>
-• <b>Include:</b> your Linux distro, desktop environment, and TuxTalk version
-• <b>Log file:</b> {f["log_path"]}
-
-Your feedback helps make TuxTalk better for everyone!''')
+• Needs <b>Fix self-corrections with AI</b> in Preferences → Advanced''')
 
     # A passive feedback link under the tabs, so it's there whichever tab is
     # open. Help never asks for feedback on its own; this is only for people

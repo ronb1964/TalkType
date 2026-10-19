@@ -283,7 +283,7 @@ def presets(language, hw):
     return [
         Preset("recommended", "Recommended for this computer", rec.title, rec.model, rec.device),
         Preset("lightest", "Lightest",
-               "Whisper Base on the processor: the smallest download and the least work",
+               "Whisper Base on the processor: a small download and little work",
                "base", "cpu"),
         Preset("battery", "Battery saver",
                "Whisper Tiny on the processor, rests after 2 idle minutes",

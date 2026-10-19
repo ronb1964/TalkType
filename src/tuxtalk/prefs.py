@@ -2231,7 +2231,7 @@ class PreferencesWindow:
         period_check = Gtk.CheckButton(label="Ensure period at end of sentences")
         period_check.set_active(bool(self.config.get("auto_period", True)))  # Ensure boolean, default True
         period_check.connect("toggled", lambda x: self.update_config("auto_period", x.get_active()))
-        period_check.set_tooltip_text("Ensure every sentence ends with punctuation.\n\nThe speech model usually adds periods by itself, but sometimes misses one.\nThis option adds the period when it does, so punctuation stays consistent.\n\nUnchecked: you get exactly what the speech model wrote\nChecked: every sentence ends with punctuation")
+        period_check.set_tooltip_text("Ensure every sentence ends with punctuation.\n\nThe speech model usually adds periods by itself, but sometimes misses one.\nThis option adds the period when it does, so punctuation stays consistent.\n\nUnchecked: no period is added at the end; spoken commands and capitals still apply\nChecked: every sentence ends with punctuation")
         fine.attach(period_check, 0, frow, 2, 1)
         frow += 1
 
@@ -2440,7 +2440,7 @@ class PreferencesWindow:
         self.install_extension_button.get_child().set_xalign(0.5)
         self.install_extension_button.set_tooltip_text(
             "Download and install the GNOME Shell extension\n"
-            "Adds panel indicator, service controls, and enables recording indicator positioning on Wayland"
+            "Adds TuxTalk's menu to the top bar, and keeps the dictation keys from reaching other apps"
         )
         self.install_extension_button.set_sensitive(False)
         ext_button_box.pack_start(self.install_extension_button, False, False, 0)
@@ -2596,8 +2596,8 @@ class PreferencesWindow:
             labs_links = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
             labs_links.set_margin_top(12)
             labs_help = Gtk.Button(label="How these work")
-            labs_help.set_tooltip_text("Open Help on the TuxTalk Labs page")
-            labs_help.connect("clicked", lambda _b: show_help_dialog(tab="labs"))
+            labs_help.set_tooltip_text("Open Help on the Writing tab, where Labs starts")
+            labs_help.connect("clicked", lambda _b: show_help_dialog(tab="writing"))
             labs_links.pack_start(labs_help, False, False, 0)
             labs_feedback = Gtk.LinkButton.new_with_label(FEEDBACK_URL, "Send feedback")
             labs_feedback.set_tooltip_text("Tell us how the Labs features work for you "

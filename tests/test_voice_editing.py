@@ -694,16 +694,18 @@ import pathlib
 SRC = pathlib.Path(app.__file__).parent
 
 
-def test_help_has_a_labs_tab_and_can_open_on_it():
+def test_help_explains_labs_and_voice_editing_on_the_writing_tab():
+    """Help is sorted by situation since the 0.16 simplicity review: voice
+    editing is explained where people write, marked as Labs."""
     import gi
     gi.require_version("Gtk", "3.0")
     from gi.repository import Gtk
     from tuxtalk import help_dialog
-    dialog = help_dialog.show_help_dialog(tab="labs")
+    dialog = help_dialog.show_help_dialog(tab="writing")
     try:
         notebook = next(w for w in _walk(dialog) if isinstance(w, Gtk.Notebook))
         page = notebook.get_nth_page(notebook.get_current_page())
-        assert "Labs" in notebook.get_tab_label_text(page)
+        assert "Writing" in notebook.get_tab_label_text(page)
         text = " ".join(w.get_text() for w in _walk(page) if isinstance(w, Gtk.Label))
         for must in ("experimental", "Shift", "Ctrl+Z", "make this more formal", "terminal"):
             assert must in text, must
@@ -725,7 +727,7 @@ def test_preferences_has_a_labs_section_with_both_links():
     labs = labs[:labs.index("return grid")]
     assert "TuxTalk Labs" in labs and "experimental" in labs.lower()
     assert "self.voice_editing_check" in labs
-    assert 'show_help_dialog(tab="labs")' in labs
+    assert 'show_help_dialog(tab="writing")' in labs
     assert "FEEDBACK_URL" in labs
     assert 'os.environ.get("FLATPAK_ID")' in labs
 

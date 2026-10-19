@@ -97,7 +97,7 @@ def test_the_labs_help_page_explains_it():
     gi.require_version("Gtk", "3.0")
     from gi.repository import Gtk
     from tuxtalk import help_dialog
-    dialog = help_dialog.show_help_dialog(tab="labs")
+    dialog = help_dialog.show_help_dialog(tab="start")
     try:
         def walk(w):
             yield w

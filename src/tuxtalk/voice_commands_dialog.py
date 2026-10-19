@@ -139,13 +139,20 @@ The commands are English words, whatever language you dictate in.
   <b>delete last sentence</b> → delete back to previous sentence
   <b>delete last paragraph</b> → delete back to last line break
   <b>delete last 3 words</b> / <b>undo last two sentences</b> → counted undo (1–10 or digits)
+
+<b>Clear the Whole Box</b>
   <b>delete everything</b> / <b>delete all</b> / <b>clear everything</b> / <b>clear all</b> /
-  <b>undo everything</b> / <b>undo all</b> → wipe the entire input field (Ctrl+A, Backspace);
-  in a terminal, the line you're typing (Ctrl+E, Ctrl+U)
+  <b>undo everything</b> / <b>undo all</b> → empties the whole box, including text TuxTalk
+  didn't type (Ctrl+A, Backspace); in a terminal, the line you're typing (Ctrl+E, Ctrl+U)
 
 <b>Fixing a Word</b>
   <b>fix that word</b> / <b>fix that</b> → open Fix a Word on what you just said, to teach TuxTalk
   the right spelling for next time
+
+<b>Editing by Voice</b> (TuxTalk Labs: turn on in Preferences → Advanced)
+  Select text, hold <b>Shift</b> with your dictation key, and say the change:
+  <b>make this more formal</b> / <b>fix the grammar</b> / <b>make this all caps</b> / <b>remove the commas</b>
+  Right after dictating, no keys: <b>edit that, make it shorter</b>
 
 <b>Select and Move</b> (TuxTalk Labs: turn on in Preferences → Advanced)
   <b>select that</b> / <b>select the last sentence</b> / <b>select the last 3 words</b> → select what you just said

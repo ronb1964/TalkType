@@ -11,6 +11,16 @@ before 0.15.0, so older entries use that name.
   a few seconds slower than usual. Before, F8 did nothing until you turned
   dictation back on from the menu, which looked like TuxTalk had stopped
   working. It's on by default on laptops.
+- Help is sorted by what you're doing: Start Here, Chatting, Writing,
+  Terminals, Hands-free, Mistakes, Problems, and the Commands list. Labs
+  features are explained where you'd use them. It uses your own keys, so it
+  never says F8 to someone who picked F6. Fixed what it got wrong: it said
+  dictation always turns off after 5 minutes (from the Power Saving change
+  above, it never does), and that fixing the keys needs a restart (with the
+  hotkey helper it doesn't). It now covers turning other sounds down, the
+  silent-microphone warning and the hotkey helper. The Voice Commands list
+  keeps "delete everything" apart from the undo commands, since it clears
+  text you typed yourself too, and adds the voice-editing commands.
 - Shorter first run. The welcome screen says it all in three steps: hold
   F8, talk, let go. The "You're All Set!" screen is gone; it came before the
   speech model had downloaded, so it said ready when it wasn't. Its useful

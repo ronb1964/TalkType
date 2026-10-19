@@ -1681,7 +1681,7 @@ class WelcomeDialog:
         self.extension_check.add(ext_label)
         self.extension_check.set_tooltip_text(
             "Install native GNOME Shell extension for enhanced integration.\n"
-            "Adds panel indicator, service controls, and enables custom recording indicator positioning on Wayland.\n"
+            "Adds TuxTalk's menu to the top bar, and keeps the dictation keys from reaching other apps.\n"
             "Lightweight (~10KB) and requires logging out/in after installation."
         )
         ext_box.pack_start(self.extension_check, False, False, 0)
