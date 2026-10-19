@@ -11,6 +11,12 @@ before 0.15.0, so older entries use that name.
   a few seconds slower than usual. Before, F8 did nothing until you turned
   dictation back on from the menu, which looked like TuxTalk had stopped
   working. It's on by default on laptops.
+- Shorter first run. The welcome screen says it all in three steps: hold
+  F8, talk, let go. The "You're All Set!" screen is gone; it came before the
+  speech model had downloaded, so it said ready when it wasn't. Its useful
+  tips (tap F9, Ctrl+Alt+P for the wrong window, log out for the GNOME
+  extension) are on the Setup Complete screen at the end, and its restart
+  button now says "Restart computer now".
 - Simpler Preferences, General tab. It now starts with your dictation keys.
   The model, device and language sit behind one line that says what you're
   running, like "Parakeet on your graphics card · detects the language", with

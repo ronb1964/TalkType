@@ -71,6 +71,6 @@ def test_clicking_the_bar_scrolls_down_without_passing_the_end():
 
 
 @pytest.mark.parametrize("screen", [welcome_dialog.WelcomeDialog._build_dialog,
-                                    welcome_dialog.show_tips_and_features_dialog])
+                                    welcome_dialog.show_setup_complete_dialog])
 def test_onboarding_screens_that_scroll_use_it(screen):
     assert "more_below_bar(" in inspect.getsource(screen)

@@ -3,14 +3,12 @@
 Onboarding order (show_welcome_and_install):
 
     welcome (chooses the setup) → optional downloads → hotkey test
-        → show_tips_and_features_dialog   ("You're All Set!", tips)
         → the model actually downloads
         → show_setup_complete_dialog      ("Ready!", the last thing shown)
 
-On the tips screen the model has not been downloaded yet, so sending the user
-into Preferences there interrupts setup halfway. The last screen is where they
-are done and genuinely choosing what to do next — start dictating, or go and
-adjust settings.
+Before the model is downloaded, sending the user into Preferences would
+interrupt setup halfway. The last screen is where they are done and genuinely
+choosing what to do next — start dictating, or go and adjust settings.
 """
 
 import pathlib
@@ -39,13 +37,14 @@ def test_final_screen_offers_preferences():
     )
 
 
-def test_mid_onboarding_screen_does_not_offer_preferences():
-    body = _function_source("show_tips_and_features_dialog")
-    assert "Open Preferences" not in body, (
-        "The model-picker screen offers Open Preferences. Setup is not finished "
-        "there — the model has not been chosen or downloaded yet, so this sends "
-        "the user away mid-flow."
-    )
+def test_nothing_says_ready_before_the_model_is_downloaded():
+    """"You're All Set!" came before the download, so the first dictation
+    couldn't work yet (Codex, 0.16 simplicity review). Setup Complete, after
+    the download, is the one finish screen."""
+    text = WELCOME.read_text()
+    assert "show_tips_and_features_dialog" not in text
+    flow = _function_source("show_welcome_and_install")
+    assert flow.index("_apply_first_run_setup(result)") < flow.index("show_setup_complete_dialog(")
 
 
 def test_preferences_launcher_is_the_shared_one():

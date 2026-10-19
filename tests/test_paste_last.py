@@ -239,7 +239,7 @@ def test_the_setup_tip_really_appears(monkeypatch):
         seen.extend(_labels(dialog))
         return Gtk.ResponseType.OK
     monkeypatch.setattr(Gtk.Dialog, "run", fake_run)
-    welcome_dialog.show_tips_and_features_dialog()
+    welcome_dialog.show_setup_complete_dialog()
     assert any("Press Ctrl+Alt+P to type it again" in text for text in seen)
 
 

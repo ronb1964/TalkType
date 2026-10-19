@@ -81,7 +81,7 @@ Claude checks every item against the log too
 First run (since 0.14.2 it recommends one setup; CUDA is not offered here):
 - [ ] Welcome screen appears, and its card names the graphics card and language ("Parakeet on your NVIDIA ..., For English")
 - [ ] Other options: changing the language, model or graphics-card tickbox updates the card and its download size. The language list reads "Spanish (Español)", "Japanese (日本語)" and so on, with no flags; Preferences → General → Change model, device or language → Language shows the same list
-- [ ] Hotkey test, then the tips screen (no model picker)
+- [ ] Welcome screen's "How It Works" reads 1. Hold F8, 2. Talk, 3. Let go. Hotkey test, then straight to the downloads: no "You're All Set!" screen before them
 - [ ] Downloads show progress bars: the Vulkan engine and Parakeet for the graphics card. The log must show a real download, not "cached"
 - [ ] The speed check runs, and the log shows its result (`Speed check (parakeet-v3): graphics …s, processor …s`)
 - [ ] Default settings are correct (model=parakeet-v3, device=vulkan when the card won, auto_period=True, auto_timeout 5 min, language_mode=auto)
@@ -94,7 +94,8 @@ First run (since 0.14.2 it recommends one setup; CUDA is not offered here):
 - [ ] Silent microphone: mute the mic (or pick a dead input) and hold F8 for two seconds: cancel beep and "TuxTalk heard only silence from the microphone..." (always, even with notifications off). A quiet room with a working mic does not say this
 - [ ] Turn other sounds down: Preferences → Audio → "Other sound while you dictate" reads "Pause music and videos"; its other choices are "Pause music and videos, turn the rest down", "Turn everything down" and "Leave it alone". Pick "Turn everything down". With a YouTube video or a Discord call playing, hold F8: the sound drops to a quarter and comes back after (log: "Turned 1 other sound(s) down", "Put 1 sound(s) back"). Change that app's volume during a dictation: it keeps your change
 - [ ] Turn other sounds down with a video already paused: pause a YouTube video in Brave, pick "Turn everything down", hold F8, then play the video: its sound comes back at full volume (log: "Put 1 sound(s) back" or nothing turned down)
-- [ ] Welcome and You're All Set on a short screen: the scrollbar shows, the text fades at the bottom and "More below" sits above the button until the end
+- [ ] Setup Complete (after the downloads) shows the three steps, the F9 and Ctrl+Alt+P tips, and with the extension installed an amber "Log out and back in" line; with a restart owed its button reads "Restart computer now"
+- [ ] Welcome and Setup Complete on a short screen: the scrollbar shows, the text fades at the bottom and "More below" sits above the button until the end
 
 Preferences and the rest:
 - [ ] Dictation works in CPU mode (Device → CPU downloads the processor copy of Parakeet with a progress bar)
