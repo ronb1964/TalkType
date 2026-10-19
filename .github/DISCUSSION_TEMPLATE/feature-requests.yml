@@ -1,0 +1,37 @@
+title: "[Feature]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea. Tell me what you're trying to do and I'll see what I can come up with.
+
+        If someone already asked for the same thing, give theirs an upvote (the arrow beside the title) instead. That's how I see what people want most.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The moment you wished TuxTalk did something it doesn't.
+      placeholder: "I find it difficult to..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: How would you like it to work?
+      placeholder: "It would be great if TuxTalk could..."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: desktop
+    attributes:
+      label: Desktop (if it matters)
+      options:
+        - All desktops
+        - GNOME
+        - KDE Plasma
+        - Cinnamon
+        - XFCE
+        - Other
