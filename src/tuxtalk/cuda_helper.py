@@ -494,7 +494,7 @@ def show_cuda_download_dialog(parent=None, on_success_callback=None):
 
         msg.format_secondary_text(
             "Could not download CUDA libraries.\n\n"
-            "You can try again later: choose CUDA under Preferences → General → Device."
+            "You can try again later: choose CUDA under Preferences → General → Change model, device or language → Device."
         )
         msg.run()
         msg.destroy()

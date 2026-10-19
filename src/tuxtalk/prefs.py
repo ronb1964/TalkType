@@ -367,6 +367,36 @@ def sound_choice(config):
     return next(sid for sid, (_label, *flags) in SOUND_CHOICES.items() if tuple(flags) == wanted)
 
 
+# The Numbers dropdown: (label, numbers_as_digits, numbers_small_as_words).
+# "As written" leaves the one-to-nine choice as it was (None), for next time.
+NUMBER_CHOICES = {
+    "written": ("As the speech model writes them", False, None),
+    "digits": ("As digits (3 cats, 25 chickens)", True, False),
+    "from-ten": ("Digits from 10 up (three cats, 25 chickens)", True, True),
+}
+
+
+def number_choice(config):
+    """The NUMBER_CHOICES entry for numbers_as_digits and numbers_small_as_words."""
+    if not config.get("numbers_as_digits", False):
+        return "written"
+    return "from-ten" if config.get("numbers_small_as_words", False) else "digits"
+
+
+def swiss_spelling_offered(config, env=None):
+    """Whether Swiss German spelling belongs in Preferences: German is the
+    computer's language or one the user dictates in, or it's already on."""
+    from . import language_limit
+    from .recommend import system_language
+    if config.get("swiss_spelling", False):
+        return True
+    languages = {system_language(env), config.get("dictation_language", "")}
+    if config.get("language_mode", "auto") == "manual":
+        languages.add(config.get("language", ""))
+    languages.update(language_limit.parse(config.get("auto_languages", "")))
+    return "de" in languages
+
+
 # The Language dropdown's entry for auto-detect held to a list of languages.
 SEVERAL_LANGUAGES = "several"
 
@@ -1978,39 +2008,34 @@ class PreferencesWindow:
         return check
 
     def _numbers_option(self):
-        """The "Write numbers as digits" tickbox with its two choices indented
-        beneath it, greyed while the tickbox is off: all numbers, or one to
-        nine spelled out. Returned as one box: the tickbox, then the choices."""
-        check = Gtk.CheckButton(label="Write numbers as digits")
-        check.set_active(bool(self.config.get("numbers_as_digits", False)))
-        check.set_tooltip_text("Type spoken numbers as digits: \"twenty-five chickens\" becomes \"25 chickens\",\n"
-                               "\"october fifteenth\" becomes \"october 15th\" and \"seven thirty\" after at becomes \"7:30\".\n"
+        """The Numbers dropdown: as the speech model writes them, as digits,
+        or digits from 10 up. Three entries over the two settings
+        numbers_as_digits and numbers_small_as_words (NUMBER_CHOICES)."""
+        combo = Gtk.ComboBoxText()
+        for nid, (nlabel, _digits, _small) in NUMBER_CHOICES.items():
+            combo.append(nid, nlabel)
+        combo.set_active_id(number_choice(self.config))
+        combo.connect("scroll-event", lambda *a: True)  # no accidental scroll changes
+
+        def changed(c):
+            choice = c.get_active_id()
+            if choice is None:
+                return
+            _label, digits, small = NUMBER_CHOICES[choice]
+            self.update_config("numbers_as_digits", digits)
+            if small is not None:
+                self.update_config("numbers_small_as_words", small)
+        combo.connect("changed", changed)
+
+        label = Gtk.Label(label="Numbers 💡:", xalign=0)
+        label.set_tooltip_text("Digits: \"twenty-five chickens\" becomes \"25 chickens\", \"october fifteenth\"\n"
+                               "becomes \"october 15th\" and \"seven thirty\" after at becomes \"7:30\".\n"
                                "\"One\" and \"two\" on their own stay words (\"one of them\"), and so do fractions.\n"
+                               "Many writing styles spell out one to nine and use digits from 10 up.\n"
                                "Works in English, German, Spanish, French, Italian, Portuguese, Dutch and Danish.")
-        every = Gtk.RadioButton.new_with_label(None, "All numbers (3 cats, 25 chickens)")
-        small = Gtk.RadioButton.new_with_label_from_widget(
-            every, "Spell out one to nine (three cats, 25 chickens)")
-        small.set_tooltip_text("Many writing styles spell out one to nine and use digits from 10 up.\n"
-                               "Digits read out one at a time, like a zip code, are joined into one number either way.")
-        (small if self.config.get("numbers_small_as_words", False) else every).set_active(True)
-
-        choices = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        choices.set_margin_start(28)   # under the tickbox's label, not its box
-        choices.pack_start(every, False, False, 0)
-        choices.pack_start(small, False, False, 0)
-        choices.set_sensitive(check.get_active())
-
-        def toggled(button):
-            self.update_config("numbers_as_digits", button.get_active())
-            choices.set_sensitive(button.get_active())
-
-        check.connect("toggled", toggled)
-        # Both buttons fire "toggled" on a change; one handler is enough.
-        small.connect("toggled", lambda b: self.update_config("numbers_small_as_words", b.get_active()))
-
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        box.pack_start(check, False, False, 0)
-        box.pack_start(choices, False, False, 0)
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        box.pack_start(label, False, False, 0)
+        box.pack_start(combo, False, False, 0)
         return box
 
     def _send_automatically_option(self):
@@ -2073,6 +2098,31 @@ class PreferencesWindow:
         grid.attach(expander, 0, row, 2, 1)
         return inner
 
+    def _subheading(self, text):
+        """A small heading inside a section or fold."""
+        label = Gtk.Label(xalign=0)
+        label.set_markup(f'<span weight="600">{GLib.markup_escape_text(text)}</span>')
+        label.set_margin_top(6)
+        return label
+
+    def _report_system_check(self, part, ok):
+        """Note whether *part* ("typing", "extension") is fine, and say in the
+        System check fold's title whether anything needs fixing. The fold
+        opens by itself when a problem first shows up."""
+        if part is not None:
+            if ok:
+                self._system_problems.discard(part)
+            elif part not in self._system_problems:
+                self._system_problems.add(part)
+                self.system_check.set_expanded(True)
+        if self._system_problems:
+            title = (f'<span color="{WARNING_AMBER}">⚠ System check: '
+                     'something needs your attention</span>')
+        else:
+            title = 'System check: <span color="#4CAF50">✓ everything is set up</span>'
+        self.system_check.set_label(title)
+        self.system_check.set_use_markup(True)
+
     def _section_header(self, grid, row, title):
         """A divider line and a bold section title across the grid; returns the
         next free row."""
@@ -2098,104 +2148,21 @@ class PreferencesWindow:
 
         row = 0
 
-        # ===== TEXT FORMATTING SECTION =====
-        formatting_header = Gtk.Label()
-        formatting_header.set_markup('<b>Text Formatting</b>')
-        formatting_header.set_xalign(0)
-        formatting_header.set_margin_bottom(10)
-        grid.attach(formatting_header, 0, row, 2, 1)
-        row += 1
-
-        # Smart quotes
-        quotes_check = Gtk.CheckButton(label="Use smart quotes (\u201c \u201d)")
-        quotes_check.set_active(self.config["smart_quotes"])
-        quotes_check.connect("toggled", lambda x: self.update_config("smart_quotes", x.get_active()))
-        quotes_check.set_tooltip_text("Convert spoken quotes to curved 'smart quotes' instead of straight \"quotes\".\nSay 'open quote' and 'close quote' when dictating.")
-        grid.attach(quotes_check, 0, row, 2, 1)
-        row += 1
-        
-        grid.attach(self._swiss_spelling_check(), 0, row, 2, 1)
-        row += 1
-
-        grid.attach(self._numbers_option(), 0, row, 2, 1)
-        row += 1
-
-        # Auto space
-        space_check = Gtk.CheckButton(label="Auto-space between utterances")
-        space_check.set_active(self.config["auto_space"])
-        space_check.connect("toggled", lambda x: self.update_config("auto_space", x.get_active()))
-        space_check.set_tooltip_text("Automatically add a space before each new dictation.\nTurn off if you want to control spacing manually.")
-        grid.attach(space_check, 0, row, 2, 1)
-        row += 1
-        
-        # Auto period
-        period_check = Gtk.CheckButton(label="Ensure period at end of sentences")
-        period_check.set_active(bool(self.config.get("auto_period", True)))  # Ensure boolean, default True
-        period_check.connect("toggled", lambda x: self.update_config("auto_period", x.get_active()))
-        period_check.set_tooltip_text("Ensure every sentence ends with punctuation.\n\nThe speech model usually adds periods by itself, but sometimes misses one.\nThis option adds the period when it does, so punctuation stays consistent.\n\nUnchecked: you get exactly what the speech model wrote\nChecked: every sentence ends with punctuation")
-        grid.attach(period_check, 0, row, 2, 1)
-        row += 1
-
-        # No closing period in terminals and code editors, no starting capital
-        # in terminals (app.app_kind, normalize.plain_for_app).
-        plain_check = Gtk.CheckButton(label="Plain text in terminals and code editors")
-        plain_check.set_active(bool(self.config.get("adapt_to_app", True)))
-        plain_check.connect("toggled", lambda x: self.update_config("adapt_to_app", x.get_active()))
-        plain_check.set_tooltip_text(
-            "In a terminal, a dictation starts without a capital and ends without a period,\n"
-            "so \u201cgit status\u201d is typed as git status, not Git status.\n"
-            "In code editors (VS Code, Zed, JetBrains IDEs...) no period is added at the end.\n\n"
-            "Everywhere else, including chat apps, punctuation is as usual.")
-        grid.attach(plain_check, 0, row, 2, 1)
+        # ===== TEXT SECTION =====
+        # The text options people turn on. The ones that already do the right
+        # thing by themselves are folded into Fine-tuning below.
+        text_header = Gtk.Label()
+        text_header.set_markup('<b>Text</b>')
+        text_header.set_xalign(0)
+        text_header.set_margin_bottom(10)
+        grid.attach(text_header, 0, row, 2, 1)
         row += 1
 
         grid.attach(self._send_automatically_option(), 0, row, 2, 1)
         row += 1
-        
-        # Injection mode
-        inject_label = Gtk.Label(label="Text Injection 💡:", xalign=0)
-        inject_label.set_tooltip_text("How to insert transcribed text:\n• Auto (Smart Detection): chooses paste or typing based on the focused app\n• Keystroke Typing: simulates typing character-by-character (most reliable)\n• Clipboard Paste: uses clipboard + Ctrl+V / Shift+Ctrl+V (much faster for long text)\n\nAuto mode uses paste for terminals and normal text fields, and falls back to\ntyping where paste is unreliable.\n\nNote: TuxTalk types wherever your cursor is — it cannot detect password fields\n(no Linux app reliably can on Wayland), so avoid dictating into them.\n\nClipboard Paste works in most applications:\n✓ Text editors, word processors, terminals\n✓ Web browsers, email clients\n✓ Most standard text input fields\n\nUse Keystroke Typing if paste doesn't work in specialized applications.")
-        inject_combo = Gtk.ComboBoxText()
-        inject_combo.set_can_focus(True)
-        inject_combo.connect("button-press-event", self._on_combo_button_press)
-        self._block_combo_scroll(inject_combo)
 
-        inject_combo.append("auto", "Auto (Smart Detection)")
-        inject_combo.append("type", "Keystroke Typing")
-        inject_combo.append("paste", "Clipboard Paste")
-        inject_combo.set_active_id(self.config["injection_mode"])
-        inject_combo.connect("changed", lambda x: self.update_config("injection_mode", x.get_active_id()))
-        # The tooltip is on the label: on the combo it gets in the way of the popup
-        # Host only: the Flatpak always types through the libei portal, so
-        # Auto/Type/Paste don't apply — don't show the selector there.
-        if not os.environ.get("FLATPAK_ID"):
-            # How the text gets typed is its own section, not formatting.
-            row = self._section_header(grid, row, "Inserting Text")
-            # The dropdown sits right beside its label at its own width, so
-            # the two read as one setting.
-            inject_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-            inject_row.pack_start(inject_label, False, False, 0)
-            inject_row.pack_start(inject_combo, False, False, 0)
-            grid.attach(inject_row, 0, row, 2, 1)
-            row += 1
-
-            # Paste puts the dictation on the clipboard, replacing whatever was
-            # copied (issue #7). Off by default: a dictation left there can be
-            # re-pasted if it went into the wrong window.
-            restore_check = Gtk.CheckButton(label="Put back what I'd copied after pasting a dictation")
-            restore_check.set_active(bool(self.config.get("restore_clipboard", False)))
-            restore_check.connect("toggled", lambda x: self.update_config("restore_clipboard", x.get_active()))
-            restore_check.set_tooltip_text(
-                "Pasting a dictation puts it on the clipboard, replacing whatever you'd copied.\n"
-                "With this on, TuxTalk puts your copied item back half a second after pasting.\n\n"
-                "Leave it off if you like to re-paste a dictation that went into the wrong window.\n"
-                "Recent Dictations in the tray menu keeps your last 20 either way.\n\n"
-                "Dictations are always kept out of clipboard history (like KDE's Klipper).")
-            grid.attach(restore_check, 0, row, 2, 1)
-            row += 1
-
-        # ===== DICTATION CLEANUP SECTION =====
-        row = self._section_header(grid, row, "Dictation Cleanup")
+        grid.attach(self._numbers_option(), 0, row, 2, 1)
+        row += 1
 
         fillers_check = Gtk.CheckButton(label="Remove \u201cum\u201d, \u201cuh\u201d and accidentally repeated words")
         fillers_check.set_active(bool(self.config.get("remove_fillers", False)))
@@ -2235,21 +2202,101 @@ class PreferencesWindow:
         grid.attach(ai_note, 0, row, 2, 1)
         row += 1
 
-
-        # ===== PRIVACY SECTION =====
-        privacy_sep = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
-        privacy_sep.set_margin_top(20)
-        privacy_sep.set_margin_bottom(15)
-        grid.attach(privacy_sep, 0, row, 2, 1)
+        # ===== FINE-TUNING =====
+        # Each of these already does the sensible thing; they're here for the
+        # day something looks off.
+        fine = self._fold(grid, row, "Fine-tuning")
         row += 1
+        frow = 0
 
-        privacy_header = Gtk.Label()
-        privacy_header.set_markup('<b>Privacy</b>')
-        privacy_header.set_xalign(0)
-        privacy_header.set_margin_bottom(10)
-        grid.attach(privacy_header, 0, row, 2, 1)
-        row += 1
+        fine.attach(self._subheading("Formatting"), 0, frow, 2, 1)
+        frow += 1
+        # Smart quotes
+        quotes_check = Gtk.CheckButton(label="Use smart quotes (\u201c \u201d)")
+        quotes_check.set_active(self.config["smart_quotes"])
+        quotes_check.connect("toggled", lambda x: self.update_config("smart_quotes", x.get_active()))
+        quotes_check.set_tooltip_text("Convert spoken quotes to curved 'smart quotes' instead of straight \"quotes\".\nSay 'open quote' and 'close quote' when dictating.")
+        fine.attach(quotes_check, 0, frow, 2, 1)
+        frow += 1
+        
+        if swiss_spelling_offered(self.config):
+            fine.attach(self._swiss_spelling_check(), 0, frow, 2, 1)
+            frow += 1
 
+        # Auto space
+        space_check = Gtk.CheckButton(label="Auto-space between utterances")
+        space_check.set_active(self.config["auto_space"])
+        space_check.connect("toggled", lambda x: self.update_config("auto_space", x.get_active()))
+        space_check.set_tooltip_text("Automatically add a space before each new dictation.\nTurn off if you want to control spacing manually.")
+        fine.attach(space_check, 0, frow, 2, 1)
+        frow += 1
+        
+        # Auto period
+        period_check = Gtk.CheckButton(label="Ensure period at end of sentences")
+        period_check.set_active(bool(self.config.get("auto_period", True)))  # Ensure boolean, default True
+        period_check.connect("toggled", lambda x: self.update_config("auto_period", x.get_active()))
+        period_check.set_tooltip_text("Ensure every sentence ends with punctuation.\n\nThe speech model usually adds periods by itself, but sometimes misses one.\nThis option adds the period when it does, so punctuation stays consistent.\n\nUnchecked: you get exactly what the speech model wrote\nChecked: every sentence ends with punctuation")
+        fine.attach(period_check, 0, frow, 2, 1)
+        frow += 1
+
+        # No closing period in terminals and code editors, no starting capital
+        # in terminals (app.app_kind, normalize.plain_for_app).
+        plain_check = Gtk.CheckButton(label="Plain text in terminals and code editors")
+        plain_check.set_active(bool(self.config.get("adapt_to_app", True)))
+        plain_check.connect("toggled", lambda x: self.update_config("adapt_to_app", x.get_active()))
+        plain_check.set_tooltip_text(
+            "In a terminal, a dictation starts without a capital and ends without a period,\n"
+            "so \u201cgit status\u201d is typed as git status, not Git status.\n"
+            "In code editors (VS Code, Zed, JetBrains IDEs...) no period is added at the end.\n\n"
+            "Everywhere else, including chat apps, punctuation is as usual.")
+        fine.attach(plain_check, 0, frow, 2, 1)
+        frow += 1
+
+        # Injection mode
+        inject_label = Gtk.Label(label="Text Injection 💡:", xalign=0)
+        inject_label.set_tooltip_text("How to insert transcribed text:\n• Auto (Smart Detection): chooses paste or typing based on the focused app\n• Keystroke Typing: simulates typing character-by-character (most reliable)\n• Clipboard Paste: uses clipboard + Ctrl+V / Shift+Ctrl+V (much faster for long text)\n\nAuto mode uses paste for terminals and normal text fields, and falls back to\ntyping where paste is unreliable.\n\nNote: TuxTalk types wherever your cursor is — it cannot detect password fields\n(no Linux app reliably can on Wayland), so avoid dictating into them.\n\nClipboard Paste works in most applications:\n✓ Text editors, word processors, terminals\n✓ Web browsers, email clients\n✓ Most standard text input fields\n\nUse Keystroke Typing if paste doesn't work in specialized applications.")
+        inject_combo = Gtk.ComboBoxText()
+        inject_combo.set_can_focus(True)
+        inject_combo.connect("button-press-event", self._on_combo_button_press)
+        self._block_combo_scroll(inject_combo)
+
+        inject_combo.append("auto", "Auto (Smart Detection)")
+        inject_combo.append("type", "Keystroke Typing")
+        inject_combo.append("paste", "Clipboard Paste")
+        inject_combo.set_active_id(self.config["injection_mode"])
+        inject_combo.connect("changed", lambda x: self.update_config("injection_mode", x.get_active_id()))
+        # The tooltip is on the label: on the combo it gets in the way of the popup
+        # Host only: the Flatpak always types through the libei portal, so
+        # Auto/Type/Paste don't apply — don't show the selector there.
+        if not os.environ.get("FLATPAK_ID"):
+            fine.attach(self._subheading("Inserting text"), 0, frow, 2, 1)
+            frow += 1
+            # The dropdown sits right beside its label at its own width, so
+            # the two read as one setting.
+            inject_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+            inject_row.pack_start(inject_label, False, False, 0)
+            inject_row.pack_start(inject_combo, False, False, 0)
+            fine.attach(inject_row, 0, frow, 2, 1)
+            frow += 1
+
+            # Paste puts the dictation on the clipboard, replacing whatever was
+            # copied (issue #7). Off by default: a dictation left there can be
+            # re-pasted if it went into the wrong window.
+            restore_check = Gtk.CheckButton(label="Put back what I'd copied after pasting a dictation")
+            restore_check.set_active(bool(self.config.get("restore_clipboard", False)))
+            restore_check.connect("toggled", lambda x: self.update_config("restore_clipboard", x.get_active()))
+            restore_check.set_tooltip_text(
+                "Pasting a dictation puts it on the clipboard, replacing whatever you'd copied.\n"
+                "With this on, TuxTalk puts your copied item back half a second after pasting.\n\n"
+                "Leave it off if you like to re-paste a dictation that went into the wrong window.\n"
+                "Recent Dictations in the tray menu keeps your last 20 either way.\n\n"
+                "Dictations are always kept out of clipboard history (like KDE's Klipper).")
+            fine.attach(restore_check, 0, frow, 2, 1)
+            frow += 1
+
+
+        fine.attach(self._subheading("Privacy"), 0, frow, 2, 1)
+        frow += 1
         # Transcript logging is OFF by default so nothing you dictate is written
         # to disk. Enabling it is gated by a warning (see _on_log_transcripts_toggled).
         self.log_transcripts_check = Gtk.CheckButton(label="Log transcribed text (for troubleshooting)")
@@ -2260,8 +2307,8 @@ class PreferencesWindow:
             "everything you dictate to TuxTalk's log file on disk, in plain text, until you turn it off."
         )
         self.log_transcripts_check.connect("toggled", self._on_log_transcripts_toggled)
-        grid.attach(self.log_transcripts_check, 0, row, 2, 1)
-        row += 1
+        fine.attach(self.log_transcripts_check, 0, frow, 2, 1)
+        frow += 1
 
         # Clear whatever is already on disk — the log holds past transcriptions
         # until it rolls over, so give the user a one-click wipe.
@@ -2271,29 +2318,28 @@ class PreferencesWindow:
         clear_log_btn.set_tooltip_text("Erase the current TuxTalk log file (and its backup) from disk.")
         clear_log_btn.connect("clicked", self._on_clear_log_clicked)
         clear_log_box.pack_start(clear_log_btn, False, False, 0)
-        grid.attach(clear_log_box, 0, row, 2, 1)
-        row += 1
+        fine.attach(clear_log_box, 0, frow, 2, 1)
+        frow += 1
 
-        # Add horizontal separator before GPU section
-        separator2 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
-        separator2.set_margin_top(20)
-        separator2.set_margin_bottom(10)
-        grid.attach(separator2, 0, row, 2, 1)
-        row += 1
 
-        # GPU Detection Section Header
-        gpu_header = Gtk.Label()
-        gpu_header.set_markup('<b>🎮 GPU Detection</b>')
-        gpu_header.set_xalign(0)
-        gpu_header.set_margin_bottom(5)
-        grid.attach(gpu_header, 0, row, 2, 1)
+        # ===== SYSTEM CHECK =====
+        # The graphics card, typing and GNOME extension status. Closed while
+        # all is well; it opens and says so when something needs fixing
+        # (_report_system_check).
+        check = self._fold(grid, row, "")
+        self.system_check = check.get_parent()
+        self._system_problems = set()
+        self._report_system_check(None, True)
         row += 1
+        crow = 0
 
+        check.attach(self._subheading("Graphics card"), 0, crow, 2, 1)
+        crow += 1
         # GPU Status Label
         self.gpu_status_label = Gtk.Label(label="Checking...", xalign=0)
         self.gpu_status_label.set_margin_start(10)
-        grid.attach(self.gpu_status_label, 0, row, 2, 1)
-        row += 1
+        check.attach(self.gpu_status_label, 0, crow, 2, 1)
+        crow += 1
 
         # CUDA Status Label. There is no download button here: CUDA is chosen
         # like Vulkan, in General → Device, which offers the download.
@@ -2301,8 +2347,8 @@ class PreferencesWindow:
         self.cuda_status_label.set_line_wrap(True)
         self.cuda_status_label.set_margin_start(10)
         self.cuda_status_label.set_margin_bottom(10)
-        grid.attach(self.cuda_status_label, 0, row, 2, 1)
-        row += 1
+        check.attach(self.cuda_status_label, 0, crow, 2, 1)
+        crow += 1
 
         # The light alternative to CUDA (and the only GPU route on AMD / Intel).
         if self._vulkan_offered():
@@ -2311,31 +2357,18 @@ class PreferencesWindow:
             vulkan_hint.set_margin_start(10)
             vulkan_hint.set_margin_top(4)
             vulkan_hint.set_text(
-                "Lighter option: choose Vulkan (any GPU) as the Device on the General tab. "
+                "Lighter option: choose Vulkan (any GPU) as the Device in General → Change model, device or language. "
                 "It's a 24 MB download instead of 1.4 GB, works on AMD, Intel and NVIDIA, "
                 "and was about as fast as CUDA in our tests.")
             vulkan_hint.get_style_context().add_class("dim-label")
-            grid.attach(vulkan_hint, 0, row, 2, 1)
-            row += 1
+            check.attach(vulkan_hint, 0, crow, 2, 1)
+            crow += 1
 
         # Initial GPU check
         GLib.timeout_add(500, self._initial_gpu_check)
 
-        # Add horizontal separator before Typing Setup section
-        separator_typing = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
-        separator_typing.set_margin_top(20)
-        separator_typing.set_margin_bottom(10)
-        grid.attach(separator_typing, 0, row, 2, 1)
-        row += 1
-
-        # Typing Setup Section Header
-        typing_header = Gtk.Label()
-        typing_header.set_markup('<b>⌨️ Typing Setup</b>')
-        typing_header.set_xalign(0)
-        typing_header.set_margin_bottom(5)
-        grid.attach(typing_header, 0, row, 2, 1)
-        row += 1
-
+        check.attach(self._subheading("Typing setup"), 0, crow, 2, 1)
+        crow += 1
         # The Typing Setup body is host-only — it configures
         # /dev/uinput permissions for ydotool. The Flatpak types through the
         # libei portal (nothing to configure), so show a one-line note instead of
@@ -2349,8 +2382,8 @@ class PreferencesWindow:
             typing_note.set_line_wrap(True)
             typing_note.set_margin_start(10)
             typing_note.set_margin_bottom(10)
-            grid.attach(typing_note, 0, row, 2, 1)
-            row += 1
+            check.attach(typing_note, 0, crow, 2, 1)
+            crow += 1
         else:
             # Typing Status Label
             self.typing_status_label = Gtk.Label(label="Checking...", xalign=0)
@@ -2359,8 +2392,8 @@ class PreferencesWindow:
             self.typing_status_label.set_max_width_chars(70)
             self.typing_status_label.set_margin_start(10)
             self.typing_status_label.set_margin_bottom(10)
-            grid.attach(self.typing_status_label, 0, row, 2, 1)
-            row += 1
+            check.attach(self.typing_status_label, 0, crow, 2, 1)
+            crow += 1
 
             # Button box for Typing actions
             typing_button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
@@ -2379,8 +2412,8 @@ class PreferencesWindow:
             typing_button_box.pack_start(self.fix_typing_button, False, False, 0)
 
 
-            grid.attach(typing_button_box, 0, row, 2, 1)
-            row += 1
+            check.attach(typing_button_box, 0, crow, 2, 1)
+            crow += 1
 
             # Initial typing check
             GLib.timeout_add(600, self._initial_typing_check)
@@ -2390,27 +2423,16 @@ class PreferencesWindow:
         # greyed-out buttons, so it is hidden there (see end of method).
         # Hidden rather than skipped: install/uninstall code still updates
         # these widgets, and must not trip over missing attributes.
-        # Add horizontal separator before Extensions section
-        separator3 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
-        separator3.set_margin_top(20)
-        separator3.set_margin_bottom(10)
-        grid.attach(separator3, 0, row, 2, 1)
-        row += 1
-
-        # Extensions Section Header
-        extension_header = Gtk.Label()
-        extension_header.set_markup('<b>🎨 GNOME Extension</b>')
-        extension_header.set_xalign(0)
-        extension_header.set_margin_bottom(5)
-        grid.attach(extension_header, 0, row, 2, 1)
-        row += 1
+        extension_header = self._subheading("GNOME extension")
+        check.attach(extension_header, 0, crow, 2, 1)
+        crow += 1
 
         # Extension Status Label
         self.extension_status_label = Gtk.Label(label="Checking...", xalign=0)
         self.extension_status_label.set_margin_start(10)
         self.extension_status_label.set_margin_bottom(10)
-        grid.attach(self.extension_status_label, 0, row, 2, 1)
-        row += 1
+        check.attach(self.extension_status_label, 0, crow, 2, 1)
+        crow += 1
 
         # Button box for Extension actions
         ext_button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
@@ -2442,8 +2464,9 @@ class PreferencesWindow:
         self.restart_info_button.set_tooltip_text("How to restart GNOME Shell to activate extension")
         ext_button_box.pack_start(self.restart_info_button, False, False, 0)
 
-        grid.attach(ext_button_box, 0, row, 2, 1)
-        row += 1
+        check.attach(ext_button_box, 0, crow, 2, 1)
+        crow += 1
+
 
         # ===== TUXTALK LABS =====
         # Experimental features: they work but are still being
@@ -2591,7 +2614,7 @@ class PreferencesWindow:
             # Initial extension check
             GLib.timeout_add(500, self._initial_extension_check)
         else:
-            _hide_widgets(separator3, extension_header,
+            _hide_widgets(extension_header,
                           self.extension_status_label, ext_button_box)
 
         return grid
@@ -5310,7 +5333,7 @@ class PreferencesWindow:
                 else:
                     self.cuda_status_label.set_markup(
                         '<span color="#FF9800">CUDA libraries not installed. To download them '
-                        '(1.4 GB), choose CUDA as the Device on the General tab.</span>')
+                        '(1.4 GB), choose CUDA as the Device in General → Change model, device or language.</span>')
             else:
                 self.gpu_status_label.set_markup('<span color="#9E9E9E">⊘ No NVIDIA GPU detected</span>')
                 self.cuda_status_label.set_text("CUDA needs an NVIDIA graphics card.")
@@ -5368,7 +5391,11 @@ class PreferencesWindow:
         return False  # Don't repeat
 
     def _check_typing_status(self):
-        """Check typing permission status and update UI."""
+        """Show the typing status, and in the System check line whether it needs fixing."""
+        self._report_system_check("typing", self._show_typing_status())
+
+    def _show_typing_status(self):
+        """Show the typing permission status; True when nothing needs fixing."""
         try:
             from . import uinput_helper
             
@@ -5389,6 +5416,7 @@ class PreferencesWindow:
                 )
                 self.fix_typing_button.set_label(UPDATE_HELPER_LABEL)
                 self.fix_typing_button.set_sensitive(True)
+                return False
             elif running is not None and uinput_helper.check_user_in_input_group():
                 self.typing_status_label.set_markup(
                     f'<span color="{WARNING_AMBER}">⚠ TuxTalk uses its hotkey helper, but you\'re '
@@ -5397,15 +5425,17 @@ class PreferencesWindow:
                 )
                 self.fix_typing_button.set_label(LEAVE_GROUP_LABEL)
                 self.fix_typing_button.set_sensitive(True)
+                return False
             elif running is not None and self._shortcuts_the_helper_refuses():
                 bad = ", ".join(self._shortcuts_the_helper_refuses())
                 self.typing_status_label.set_markup(
                     f'<span color="{WARNING_AMBER}">⚠ {GLib.markup_escape_text(bad)} won\'t work: '
                     'with the hotkey helper a shortcut needs two of Ctrl, Alt and Super. '
-                    'Pick one from the list on the General tab</span>'
+                    'Pick one from the list in General → More shortcuts</span>'
                 )
                 self.fix_typing_button.set_label("✓ Ready")
                 self.fix_typing_button.set_sensitive(False)
+                return False
             elif running is not None:
                 self.typing_status_label.set_markup(
                     '<span color="#4CAF50">✓ Ready. Only TuxTalk\'s hotkey helper reads the '
@@ -5413,6 +5443,7 @@ class PreferencesWindow:
                 )
                 self.fix_typing_button.set_label("✓ Ready")
                 self.fix_typing_button.set_sensitive(False)
+                return True
             elif has_access and secure_input.can_install()[0]:
                 # Working through the "input" group, which lets every program
                 # read the keyboard. Offer the helper; nothing changes until asked.
@@ -5423,12 +5454,14 @@ class PreferencesWindow:
                 )
                 self.fix_typing_button.set_label(SWITCH_TO_HELPER_LABEL)
                 self.fix_typing_button.set_sensitive(True)
+                return True     # working; the helper is an offer, not a fix
             elif has_access:
                 self.typing_status_label.set_markup(
                     '<span color="#4CAF50">✓ Typing permissions configured correctly</span>'
                 )
                 self.fix_typing_button.set_label("✓ Ready")
                 self.fix_typing_button.set_sensitive(False)
+                return True
             else:
                 # Access is missing. "Configured, just needs a restart" is only
                 # true when BOTH halves of setup have been performed: the udev
@@ -5445,6 +5478,7 @@ class PreferencesWindow:
                     )
                     self.fix_typing_button.set_label("✓ Configured")
                     self.fix_typing_button.set_sensitive(False)
+                    return False
                 else:
                     # Without /dev/input the hotkey is never seen, so no mode
                     # of output can help; say so rather than offer a fallback.
@@ -5456,15 +5490,18 @@ class PreferencesWindow:
                     )
                     self.fix_typing_button.set_label(FIX_TYPING_LABEL)
                     self.fix_typing_button.set_sensitive(True)
-                    
+                    return False
+
         except ImportError:
             self.typing_status_label.set_markup(
                 '<span color="#9E9E9E">⊘ Typing check not available</span>'
             )
             self.fix_typing_button.set_sensitive(False)
+            return True
         except Exception as e:
             self.typing_status_label.set_text(f"Error checking typing: {e}")
             print(f"Typing check error: {e}")
+            return False
 
     def _on_fix_typing_clicked(self, button):
         """Handle Fix Typing button click."""
@@ -5667,7 +5704,12 @@ class PreferencesWindow:
         return False  # Don't repeat
 
     def _check_extension_status(self):
-        """Check extension status and update UI."""
+        """Show the extension status, and in the System check line whether it needs fixing."""
+        self._report_system_check("extension", self._show_extension_status())
+
+    def _show_extension_status(self):
+        """Show the GNOME extension's status; True unless it needs fixing.
+        Not installed is a choice (the tray works without it), not a problem."""
         try:
             # Import extension_helper
             try:
@@ -5678,7 +5720,7 @@ class PreferencesWindow:
                 self.uninstall_extension_button.set_sensitive(False)
                 # Restart Info only ever explains how to restart GNOME Shell.
                 self._set_restart_info_sensitive(False)
-                return
+                return True
 
             # Get extension status
             status = extension_helper.get_extension_status()
@@ -5691,7 +5733,8 @@ class PreferencesWindow:
                 # is meaningless off GNOME — on KDE or any other desktop it is
                 # advice for software that isn't running.
                 self._set_restart_info_sensitive(False)
-            elif status['installed']:
+                return True
+            if status['installed']:
                 if status['enabled']:
                     self.extension_status_label.set_markup('<span color="#4CAF50">✓ Extension installed and enabled</span>')
                 else:
@@ -5700,17 +5743,20 @@ class PreferencesWindow:
                 self.install_extension_button.set_sensitive(False)
                 self.uninstall_extension_button.set_sensitive(True)
                 self._set_restart_info_sensitive(True)
-            else:
-                self.extension_status_label.set_markup('<span color="#FF9800">⊘ Extension not installed</span>')
-                # It said "✓ Installed" until an uninstall in this window.
-                self.install_extension_button.set_label("Install Extension")
-                self.install_extension_button.set_sensitive(True)
-                self.uninstall_extension_button.set_sensitive(False)
-                self._set_restart_info_sensitive(True)
+                return status['enabled']
+
+            self.extension_status_label.set_markup('<span color="#FF9800">⊘ Extension not installed</span>')
+            # It said "✓ Installed" until an uninstall in this window.
+            self.install_extension_button.set_label("Install Extension")
+            self.install_extension_button.set_sensitive(True)
+            self.uninstall_extension_button.set_sensitive(False)
+            self._set_restart_info_sensitive(True)
+            return True
 
         except Exception as e:
             self.extension_status_label.set_text(f"Error checking extension: {e}")
             print(f"Extension check error: {e}")
+            return False
 
     def _set_restart_info_sensitive(self, sensitive):
         """Enable/disable the Restart Info button.

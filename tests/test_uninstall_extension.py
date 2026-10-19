@@ -32,6 +32,6 @@ def test_the_install_button_says_install_again_after_an_uninstall(monkeypatch):
         _set_restart_info_sensitive=lambda s: None)
     monkeypatch.setattr(eh, "get_extension_status",
                         lambda: {"available": True, "installed": False, "enabled": False})
-    PreferencesWindow._check_extension_status(win)
+    PreferencesWindow._show_extension_status(win)
     assert win.install_extension_button.get_label() == "Install Extension"
     assert win.install_extension_button.get_sensitive()

@@ -138,13 +138,13 @@ def test_preferences_offers_the_helper_to_input_group_users(monkeypatch):
     monkeypatch.setattr(si, "can_install", lambda: (True, ""))
     prefs = P.PreferencesWindow.__new__(P.PreferencesWindow)
     prefs.typing_status_label, prefs.fix_typing_button = Label(), Button()
-    prefs._check_typing_status()
+    prefs._show_typing_status()
     assert prefs.fix_typing_button.label == P.SWITCH_TO_HELPER_LABEL
     assert prefs.fix_typing_button.sensitive
     assert "'input' group" in prefs.typing_status_label.markup
 
     monkeypatch.setattr(si, "running_version", lambda: hotkey_helper.VERSION)
-    prefs._check_typing_status()
+    prefs._show_typing_status()
     assert prefs.fix_typing_button.label == "✓ Ready" and not prefs.fix_typing_button.sensitive
 
 
@@ -173,7 +173,7 @@ def _typing_prefs(monkeypatch, *, running, installed=True, in_group=False):
     monkeypatch.setattr(si, "is_installed", lambda: installed)
     prefs = P.PreferencesWindow.__new__(P.PreferencesWindow)
     prefs.typing_status_label, prefs.fix_typing_button = Widget(), Widget()
-    prefs._check_typing_status()
+    prefs._show_typing_status()
     return P, prefs
 
 
@@ -258,7 +258,7 @@ def test_a_hand_edited_shortcut_that_cant_work_is_warned_about(monkeypatch):
     prefs = P.PreferencesWindow.__new__(P.PreferencesWindow)
     prefs.typing_status_label, prefs.fix_typing_button = Widget(), Widget()
     prefs.config = {"voice_commands_hotkey": "Ctrl+Shift+H", "paste_last_hotkey": "Ctrl+Alt+P"}
-    prefs._check_typing_status()
+    prefs._show_typing_status()
     assert "Ctrl+Shift+H won't work" in prefs.typing_status_label.markup
     assert "Ctrl+Alt+P" not in prefs.typing_status_label.markup
 

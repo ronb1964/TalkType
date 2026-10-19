@@ -60,7 +60,7 @@ def _prefs_with_perms(monkeypatch, *, all_ok, udev, in_group, hotkey_ok=False):
 def test_fedora_bug_fix_button_stays_enabled_when_group_missing(monkeypatch):
     # udev rule present, but NOT in the input group, access still failing.
     prefs = _prefs_with_perms(monkeypatch, all_ok=False, udev=True, in_group=False)
-    prefs._check_typing_status()
+    prefs._show_typing_status()
     assert prefs.fix_typing_button.sensitive is True, (
         "must let the user run setup — they were never added to 'input'"
     )
@@ -70,21 +70,21 @@ def test_fedora_bug_fix_button_stays_enabled_when_group_missing(monkeypatch):
 def test_both_configured_but_stale_says_restart_and_disables(monkeypatch):
     # Rule present AND in group (system db), but this session is stale.
     prefs = _prefs_with_perms(monkeypatch, all_ok=False, udev=True, in_group=True)
-    prefs._check_typing_status()
+    prefs._show_typing_status()
     assert prefs.fix_typing_button.sensitive is False
     assert "restart" in prefs.typing_status_label.markup.lower()
 
 
 def test_full_access_reports_ready(monkeypatch):
     prefs = _prefs_with_perms(monkeypatch, all_ok=True, udev=True, in_group=True)
-    prefs._check_typing_status()
+    assert prefs._show_typing_status() is True      # System check: all set
     assert prefs.fix_typing_button.sensitive is False
     assert "✓" in prefs.typing_status_label.markup
 
 
 def test_nothing_configured_enables_fix(monkeypatch):
     prefs = _prefs_with_perms(monkeypatch, all_ok=False, udev=False, in_group=False)
-    prefs._check_typing_status()
+    assert prefs._show_typing_status() is False     # System check opens on it
     assert prefs.fix_typing_button.sensitive is True
 
 
@@ -92,7 +92,7 @@ def test_unreadable_keyboard_says_the_dictation_key_wont_work(monkeypatch):
     # Without /dev/input no hotkey is seen; offering a clipboard fallback
     # would promise something that can't happen.
     prefs = _prefs_with_perms(monkeypatch, all_ok=False, udev=False, in_group=False)
-    prefs._check_typing_status()
+    prefs._show_typing_status()
     markup = prefs.typing_status_label.markup
     assert "dictation key won't work" in markup
     assert "restart" in markup
@@ -102,7 +102,7 @@ def test_unreadable_keyboard_says_the_dictation_key_wont_work(monkeypatch):
 def test_readable_keyboard_without_uinput_says_it_cant_type(monkeypatch):
     prefs = _prefs_with_perms(monkeypatch, all_ok=False, udev=False, in_group=True,
                               hotkey_ok=True)
-    prefs._check_typing_status()
+    prefs._show_typing_status()
     markup = prefs.typing_status_label.markup
     assert "can't type" in markup and "restart" in markup
     assert "clipboard" not in markup.lower()

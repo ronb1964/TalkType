@@ -89,3 +89,19 @@ def test_preferences_has_the_checkbox_bound_to_the_setting():
     assert check.get_active() is True and "ß" in check.get_label()
     check.set_active(False)
     assert changes == [("swiss_spelling", False)]
+
+
+def test_preferences_offers_it_only_when_german_is_in_play():
+    """Swiss German spelling sat second in Text Formatting for everyone; now
+    it shows only where it can matter (0.16 simplicity review)."""
+    from tuxtalk.prefs import swiss_spelling_offered
+    english = {"LANG": "en_US.UTF-8"}
+    assert not swiss_spelling_offered({}, env=english)
+    assert swiss_spelling_offered({}, env={"LANG": "de_DE.UTF-8"})
+    assert swiss_spelling_offered({"dictation_language": "de"}, env=english)
+    assert swiss_spelling_offered({"language_mode": "manual", "language": "de"}, env=english)
+    assert swiss_spelling_offered({"auto_languages": "en,de"}, env=english)
+    # A language picked by hand that isn't in use any more doesn't count...
+    assert not swiss_spelling_offered({"language_mode": "auto", "language": "de"}, env=english)
+    # ...but a box someone ticked is never hidden from them.
+    assert swiss_spelling_offered({"swiss_spelling": True}, env=english)

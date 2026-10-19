@@ -139,8 +139,17 @@ def test_settings_pick_the_mode_and_language(monkeypatch):
     assert app._numbers_mode is None
 
 
-def test_preferences_has_the_tickbox_with_its_choices_beneath():
-    from tuxtalk.prefs import PreferencesWindow
+def test_preferences_has_one_numbers_dropdown_over_both_settings():
+    """The tickbox with two choices under it became one dropdown (0.16
+    simplicity review); the two settings keep their meaning."""
+    from tuxtalk.prefs import NUMBER_CHOICES, PreferencesWindow, number_choice
+    assert number_choice({}) == "written"
+    assert number_choice({"numbers_as_digits": True}) == "digits"
+    assert number_choice({"numbers_as_digits": True, "numbers_small_as_words": True}) == "from-ten"
+    # Off with one-to-nine remembered: shown as off, and the choice is kept for later.
+    assert number_choice({"numbers_as_digits": False, "numbers_small_as_words": True}) == "written"
+    assert NUMBER_CHOICES["written"][2] is None
+
     changes = []
 
     class Stub:
@@ -150,13 +159,10 @@ def test_preferences_has_the_tickbox_with_its_choices_beneath():
             changes.append((key, value))
 
     box = PreferencesWindow._numbers_option(Stub())
-    check, choices = box.get_children()
-    every, small = choices.get_children()
-    assert "digits" in check.get_label() and check.get_active() is False
-    assert small.get_active() is True and every.get_active() is False
-    assert choices.get_margin_start() > 0          # indented under the tickbox
-    assert choices.get_sensitive() is False        # greyed while the tickbox is off
-    check.set_active(True)
-    assert choices.get_sensitive() is True
-    every.set_active(True)
+    label, combo = box.get_children()
+    assert combo.get_active_id() == "written"
+    combo.set_active_id("digits")
     assert changes == [("numbers_as_digits", True), ("numbers_small_as_words", False)]
+    changes.clear()
+    combo.set_active_id("written")
+    assert changes == [("numbers_as_digits", False)]

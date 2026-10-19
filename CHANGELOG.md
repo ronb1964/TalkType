@@ -20,6 +20,17 @@ before 0.15.0, so older entries use that name.
   Animation response there, because it never changed what the microphone
   hears. The backing setting is gone (the default Orb never used it); a
   backing you already picked stays.
+- Simpler Advanced tab. On top is what people actually turn on: Send each
+  dictation automatically, Numbers (one dropdown now: as the speech model
+  writes them, as digits, or digits from 10 up), removing "um" and the AI
+  self-corrections. The options that already do the right thing by
+  themselves, like smart quotes, the closing period, plain text in
+  terminals, how text gets typed and the transcript log, are folded into
+  Fine-tuning. The graphics card, typing setup and GNOME extension panels
+  are one line, "System check: everything is set up", that opens by itself
+  when something needs fixing. Swiss German spelling only shows up when
+  German is your computer's language or one you dictate in (or you already
+  ticked it).
 
 ## [0.16.0] - 2026-10-18
 

@@ -2,7 +2,7 @@
 
 Parakeet writes small numbers, dates and ordinals as words ("three cats",
 "october fifteenth"), while Whisper mostly writes digits, so the option
-(Preferences → Advanced → Text Formatting) runs on the finished text and
+(Preferences → Advanced → Numbers) runs on the finished text and
 works the same with every engine (GitHub Discussion #11).
 
 The conversion itself is text2num's alpha2digit, which knows eight languages

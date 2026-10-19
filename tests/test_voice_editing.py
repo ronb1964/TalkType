@@ -730,10 +730,10 @@ def test_preferences_has_a_labs_section_with_both_links():
     assert 'os.environ.get("FLATPAK_ID")' in labs
 
 
-def test_voice_editing_is_no_longer_in_dictation_cleanup():
+def test_voice_editing_is_in_labs_not_with_the_cleanup_options():
     prefs = (SRC / "prefs.py").read_text()
-    cleanup = prefs[prefs.index("Dictation Cleanup"):prefs.index("# ===== PRIVACY SECTION =====")]
-    assert "voice_editing_check" not in cleanup
+    regular = prefs[prefs.index("# ===== TEXT SECTION ====="):prefs.index("# ===== TUXTALK LABS =====")]
+    assert "voice_editing_check" not in regular
 
 
 # --- lines the AI must not lose ------------------------------------------------------------
