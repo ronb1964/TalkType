@@ -287,3 +287,14 @@ def test_logging_after_the_settings_folder_is_deleted_neither_fails_nor_recreate
                          env={**os.environ, "TUXTALK_LOG_DIR": str(log_dir)})
     assert ran.returncode == 0, ran.stderr
     assert not log_dir.exists()
+
+
+def test_in_the_development_version_the_button_only_explains(monkeypatch):
+    """Ron sees the button in his dev copy too; pressing it there must never
+    take away the hotkey helper and models his dev copy runs on."""
+    told = []
+    monkeypatch.setattr(uninstall.update_checker, "get_install_type", lambda: "dev")
+    monkeypatch.setattr(uninstall, "_tell", lambda *a, **k: told.append(a[1]))
+    monkeypatch.setattr(uninstall, "find", lambda *a, **k: pytest.fail("looked for things to remove"))
+    assert uninstall.run() is False
+    assert told == ["Not for this copy of TuxTalk"]

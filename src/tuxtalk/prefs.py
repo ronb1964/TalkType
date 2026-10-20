@@ -3390,9 +3390,10 @@ class PreferencesWindow:
 
         self._add_backup_section(vbox, header, dim, indented, separator)
 
-        # The development version and a Flatpak are removed another way
-        # (uninstall.run says how).
-        if install_type not in ("dev", "flatpak"):
+        # A Flatpak is removed another way. The development version shows it
+        # too, so the tab looks as users see it (Ron, 2026-10-20); there the
+        # button only says it doesn't apply (uninstall.run).
+        if install_type != "flatpak":
             vbox.pack_start(separator(), False, False, 0)
             row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
             row.pack_start(dim("Remove TuxTalk and everything it set up on this computer."),
