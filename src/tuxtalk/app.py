@@ -2238,7 +2238,9 @@ def _type_text_raw(text: str):
 # avoids a Chromium/Electron regression that mishandles synthetic Ctrl+Shift+V.
 _TERMINAL_WM_CLASSES = frozenset({
     "org.gnome.Ptyxis", "Ptyxis",
-    "org.gnome.Terminal", "Gnome-terminal",
+    # GNOME Shell reports GNOME Terminal (Ubuntu 24.04, Zorin 18, Debian) by
+    # its server process: without this one, Ctrl+V typed a raw ^V there.
+    "org.gnome.Terminal", "Gnome-terminal", "gnome-terminal-server",
     "konsole", "org.kde.konsole",
     "yakuake", "org.kde.yakuake",
     "kitty",

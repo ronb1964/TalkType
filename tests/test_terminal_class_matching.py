@@ -20,6 +20,7 @@ class TestKnownTerminalsAreRecognized:
         "org.kde.konsole",   # measured on Plasma 6.7.4 Wayland
         "kitty",             # measured on Plasma 6.7.4 Wayland
         "org.gnome.Terminal",
+        "gnome-terminal-server",   # measured on Zorin OS 18.1 (GNOME 46), from the extension
         "Alacritty",
         "foot",
     ])
