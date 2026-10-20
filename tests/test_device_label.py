@@ -31,3 +31,29 @@ def test_other_devices_keep_their_names():
     from tuxtalk.whisper_vulkan import DEVICE_LABEL
     assert device_label("cpu", "parakeet-v3", True) == "CPU"
     assert device_label("vulkan", "parakeet-v3", True) == DEVICE_LABEL
+
+
+def test_relabelling_the_cuda_entry_again_changes_nothing():
+    """Ron, 2026-10-20: CUDA selected, a Whisper model picked. Rewriting the
+    selected entry's label makes the shown dropdown fire "changed", whose
+    handler relabels it again: unless an unchanged label is left alone, that
+    never stops, and Preferences crashed (RecursionError)."""
+    gi = pytest.importorskip("gi")
+    gi.require_version("Gtk", "3.0")
+    from gi.repository import Gtk
+    if not Gtk.init_check()[0]:
+        pytest.skip("no display")
+    from tuxtalk.prefs import PreferencesWindow
+
+    class Prefs:
+        _cuda_ready = True
+        device_combo = Gtk.ComboBoxText()
+    prefs = Prefs()
+    prefs.device_combo.append("cuda", device_label("cuda", "parakeet-v3", True))
+    prefs.device_combo.set_active_id("cuda")
+    writes = []
+    prefs.device_combo.get_model().connect("row-changed", lambda *_: writes.append(1))
+    PreferencesWindow._relabel_cuda_option(prefs, "small")
+    PreferencesWindow._relabel_cuda_option(prefs, "small")
+    assert prefs.device_combo.get_active_text() == "CUDA (NVIDIA)"
+    assert len(writes) == 1

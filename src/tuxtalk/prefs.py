@@ -781,13 +781,16 @@ class PreferencesWindow:
 
     def _relabel_cuda_option(self, model):
         """Retell the CUDA entry for *model*: with Parakeet it runs on the
-        processor. Only the text changes, so no 'changed' signal fires."""
+        processor. A new label on the selected entry fires "changed", which
+        brings this back here: writing only a label that differs ends that
+        (it looped until Preferences crashed, Ron 2026-10-20)."""
         combo = getattr(self, "device_combo", None)
         if combo is None:
             return
+        label = device_label("cuda", model, getattr(self, "_cuda_ready", False))
         for row in combo.get_model():
-            if row[1] == "cuda":       # ComboBoxText rows are (text, id)
-                row[0] = device_label("cuda", model, getattr(self, "_cuda_ready", False))
+            if row[1] == "cuda" and row[0] != label:   # ComboBoxText rows are (text, id)
+                row[0] = label
 
     def save_config(self):
         """Save config to TOML file (merge-on-save).
@@ -4257,7 +4260,11 @@ class PreferencesWindow:
     def _update_model_combo_hint(self):
         """Show or hide the warning under the model settings."""
         label = getattr(self, "model_combo_hint", None)
-        if label is None:
+        # Refilling the Language dropdown fires its "changed", which lands
+        # here again before the refill is done: the call that started it
+        # finishes the job. Without this, switching between Parakeet and
+        # Whisper looped until Preferences crashed (Ron, 2026-10-20).
+        if label is None or getattr(self, "_filling_languages", False):
             return
         it = self.model_combo.get_active_iter()
         model = self.model_store.get_value(it, 0) if it is not None else ""
