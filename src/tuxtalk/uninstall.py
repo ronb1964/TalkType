@@ -143,7 +143,11 @@ def find(home, install_type, environ=os.environ, appimage=None):
                            + sorted((plan.hub / ".locks").glob(pattern)))
 
     apps = home / "AppImages"
+    # The versioned files too: started at login, TuxTalk runs from the copy
+    # setup made, and the one the user downloaded here would stay behind.
     candidates = [apps / "TuxTalk.AppImage", apps / "TalkType.AppImage",
+                  *sorted(apps.glob("TuxTalk-*.AppImage")),
+                  *sorted(apps.glob("TalkType-*.AppImage")),
                   apps / ".tuxtalk_just_updated", apps / ".talktype_just_updated",
                   *sorted(apps.glob(".TuxTalk.AppImage.*.part"))]
     if appimage and install_type == "appimage":

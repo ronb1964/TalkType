@@ -108,6 +108,19 @@ def test_the_running_appimage_goes_but_the_aur_packages_copy_is_pacmans(home, tm
     assert downloaded not in _find(home, "aur", appimage=str(downloaded)).leftovers
 
 
+def test_the_downloaded_appimage_in_appimages_goes_after_a_login_start(home):
+    """Started at login, TuxTalk runs from the copy setup made, so the file
+    the user downloaded into ~/AppImages was left behind (Zorin VM,
+    2026-10-20). Other apps' AppImages stay."""
+    apps = home / "AppImages"
+    for name in ("TuxTalk-v0.17.0-x86_64.AppImage", "TalkType-v0.14.6-x86_64.AppImage",
+                 "BambuStudio.AppImage"):
+        (apps / name).write_text("program")
+    plan = _find(home, appimage=str(apps / "TuxTalk.AppImage"))
+    uninstall.remove_files(plan, delete_personal=False)
+    assert sorted(p.name for p in apps.iterdir()) == ["BambuStudio.AppImage"]
+
+
 def test_only_tuxtalks_own_ydotoold_unit_is_removed(home):
     unit = home / ".config/systemd/user/ydotoold.service"
     unit.parent.mkdir(parents=True)
