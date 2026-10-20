@@ -18,6 +18,12 @@ before 0.15.0, so older entries use that name.
   you tick the box, and backups you saved are never touched.
 - Removing the .deb or .rpm with apt or dnf now takes the hotkey helper and
   its rules with it. Updating keeps them.
+- Fixed: with "Pause music and videos, turn the rest down", a video could
+  come back almost silent after dictating (Brave closes its sound while
+  paused and reopens it at the lowered level). It now plays at its own
+  volume again.
+- Turning other sounds down now works on Zorin OS: the .deb brings the small
+  pulseaudio-utils package it needs, which Zorin doesn't install.
 
 - Power Saving no longer turns dictation off. After the idle time TuxTalk
   lets go of the speech model, which frees the processor and graphics card
