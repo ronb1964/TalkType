@@ -286,6 +286,9 @@ forgot one. The Commands list, last in Help, has them all.
 fifteenth" becomes october 15th; "one of them" and fractions stay words.
 
 <b>Taking it back</b>
+Each of these is a dictation of its own, said right after the one it takes back.
+Hold <b>{hold}</b>, say "meet me at noon", let go: it's typed. Changed your mind?
+Hold <b>{hold}</b> again, say <b>delete last sentence</b>, let go: it's gone.
   • <b>delete last word</b>, <b>delete last sentence</b>, <b>delete last paragraph</b>
     remove what you just dictated.
   • Ctrl+Z in the app works too.
@@ -310,21 +313,23 @@ feedback decides what gets finished: <a href="{FEEDBACK_URL}">TuxTalk Discussion
 Change text by saying how you want it changed.
 
 <b>How to use it</b>
-1. Select some text in any app: a sentence, a paragraph, a list.
-2. Hold <b>Shift</b> together with your dictation key (<b>Shift+{hold}</b>) and say what you
+1. Turn it on once: <b>Preferences → Advanced → TuxTalk Labs → Voice editing</b>. The first
+   time, it downloads the AI (1.1 GB), unless self-corrections already did.
+2. Select some text in any app: a sentence, a paragraph, a list.
+3. Hold <b>Shift</b> together with your dictation key (<b>Shift+{hold}</b>) and say what you
    want. Let go of the keys when you're done talking.
    (Or tap <b>Shift+{toggle}</b> to start, say it, and tap <b>Shift+{toggle}</b> again to finish.)
-3. A moment later the selection is replaced with the rewritten text.
-4. Not what you wanted? Press <b>Ctrl+Z</b> in the app to get your original back.
+4. A moment later the selection is replaced with the rewritten text.
+5. Not what you wanted? Press <b>Ctrl+Z</b> in the app to get your original back.
 
 <b>Without the keys: "edit that"</b>
-Right after you dictate something, start your next dictation with <b>edit that</b> and say
-the change: <b>edit that, make it shorter</b>. TuxTalk selects what it just typed and
-changes it, with no Shift needed. With hands-free (double-tap {toggle}) and Type at pause,
-you can say a message, look it over, say <b>edit that, make it friendlier</b>, then
-<b>press enter</b> to send it, all without touching the keyboard.
-Only a dictation that starts with "edit that" and a pause, or with a change like
-"edit that make it shorter", counts. "Edit that file tonight" is typed as words.
+Right after a dictation, say the change as your next one, all in one go: hold <b>{hold}</b>,
+say <b>edit that, make it shorter</b>, let go. TuxTalk selects what it just typed and
+rewrites it, with no Shift needed. Saying only "edit that" gets a reminder to say what to
+change, and "edit that file tonight" is typed as words.
+With hands-free (double-tap {toggle}) and Type at pause, you can say a message, look it
+over, say <b>edit that, make it friendlier</b>, then <b>press enter</b> to send it, all
+without touching the keyboard.
 
 <b>What to say</b>
 Say it in your own words; there's no fixed list. Some that work well:
@@ -376,12 +381,14 @@ can't be changed by voice.
   • <i>Select the text to change first</i>: nothing was selected.
   • <i>I didn't catch what to change</i>: it heard no instruction. Hold the keys while you talk.
   • <i>The AI is still starting</i>: right after turning it on or starting TuxTalk, wait a few seconds.
-  • <i>The AI didn't come up with a change</i>: try saying it another way.
+  • <i>No change</i>: the text may already read that way ("make it formal" on a
+    sentence that's formal already). Try other words.
   • <i>You switched windows</i>: the rewrite wasn't typed; it's in Recent Dictations.
 <span size="large">🧪 <b>Select and Move by Voice</b></span>
 Select text or move the cursor by saying so. When a dictation is <b>only</b> one of these
-commands, TuxTalk does it instead of typing it. Said inside a longer sentence, the words
-are typed as usual. Counts go up to 10 ("three" or "3").
+commands, TuxTalk does it instead of typing it: hold <b>{hold}</b>, say only <b>select the
+last word</b>, let go. Said inside a longer sentence, the words are typed as usual.
+Counts go up to 10 ("three" or "3").
 
 <b>What you just said</b>: these work <b>right after you dictate</b>, on what you just said.
   • <b>select that</b>  •  <b>select what I said</b>
@@ -475,8 +482,8 @@ all of it when you stop. Nothing that was typed changes afterwards.
     create_tab("🩹 Mistakes", f'''<span size="large"><b>Fixing Mistakes</b></span>
 
 <b>A word it keeps getting wrong</b>
-  • Say <b>fix that word</b> right after a dictation: Fix a Word opens over your
-    window on what you just said.
+  • Right after a dictation, hold <b>{hold}</b>, say only <b>fix that word</b>, let go:
+    Fix a Word opens over your window on what you just said.
   • Or TuxTalk menu → Fix a Word..., or Preferences → Words → Fix a Word...
   • Click the wrong word (or drag across a few), type the right spelling, then
     click Always fix this. From then on it's fixed in every dictation, with any

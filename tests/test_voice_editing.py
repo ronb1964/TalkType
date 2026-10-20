@@ -365,8 +365,8 @@ def test_a_multi_line_rewrite_goes_in_as_one_block(edit_env, monkeypatch):
     (lambda env: env["selection"].update(text=None), "Select the text"),
     (lambda env: env["selection"].update(text="x" * 3001), "too much text"),
     (lambda env: setattr(env["engine"], "ready", False), "still starting"),
-    (lambda env: setattr(env["engine"], "answer", None), "didn't come up with a change"),
-    (lambda env: setattr(env["engine"], "answer", "We finished the electrical today."), "didn't come up with a change"),
+    (lambda env: setattr(env["engine"], "answer", None), "may already read that way"),
+    (lambda env: setattr(env["engine"], "answer", "We finished the electrical today."), "may already read that way"),
 ])
 def test_each_problem_says_what_to_do(edit_env, setup, words):
     setup(edit_env)
@@ -847,7 +847,7 @@ def test_an_ai_answer_that_only_changes_spacing_is_no_change(edit_env, monkeypat
     edit_env["selection"]["text"] = "Testing one. \nTesting two. "
     edit_env["engine"].answer = "Testing one.\nTesting two."
     run_edit()
-    assert edit_env["typed"] == [] and "didn't come up with a change" in edit_env["notices"][0]
+    assert edit_env["typed"] == [] and "may already read that way" in edit_env["notices"][0]
 
 
 def test_indenting_still_counts_as_a_change(edit_env, monkeypatch):

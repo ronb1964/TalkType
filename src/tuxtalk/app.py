@@ -4102,7 +4102,7 @@ _EDIT_NOTICES = {
     "too_long": "That's too much text to edit at once. Select a smaller part.",
     "no_instruction": "I didn't catch what to change. Hold Shift with your dictation key "
                       "and say it, like \u201cmake this more formal\u201d.",
-    "no_answer": "The AI didn't come up with a change. Try saying it another way.",
+    "no_answer": "No change: the text may already read that way. Try saying it another way.",
     "terminal": "Voice editing doesn't work in a terminal: there's no selection there to "
                 "replace.",
     "needs_wayland": "Voice editing works only in a Wayland session for now. This desktop "
