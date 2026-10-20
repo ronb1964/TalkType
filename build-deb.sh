@@ -17,7 +17,9 @@
 #   /usr/share/pixmaps/       <- icon
 #
 # System deps are DECLARED (not bundled): the bundle relies on the host's GTK stack.
-#   libgtk-3-0, libayatana-appindicator3-1 (tray), libportaudio2 (mic).
+#   libgtk-3-0, libayatana-appindicator3-1 (tray), libportaudio2 (mic),
+#   pulseaudio-utils (pactl, for turning other sounds down while dictating:
+#   Zorin OS ships without it, 2026-10-20; it works on PipeWire too).
 #   ydotool + wl-clipboard ARE bundled inside /opt/talktype, so they are not declared.
 #
 # Requires: fpm (gem install --user-install fpm) and ar/tar (binutils/coreutils).
@@ -139,6 +141,7 @@ fpm -s dir -t deb \
     --depends "libgtk-3-0" \
     --depends "libayatana-appindicator3-1" \
     --depends "libportaudio2" \
+    --depends "pulseaudio-utils" \
     --after-install "$POSTINST" \
     --before-remove "$PROJECT_DIR/packaging/before-remove.sh" \
     --replaces "talktype < 0.15.0" \

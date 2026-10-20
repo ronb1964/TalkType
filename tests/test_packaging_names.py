@@ -75,3 +75,9 @@ def test_aur_keeps_the_old_appimage_path_working_for_the_first_login():
     # TuxTalk rewrites it on its first start, but the first login comes before.
     s = _read("aur/PKGBUILD")
     assert 'ln -s /opt/tuxtalk/TuxTalk.AppImage "${pkgdir}/opt/talktype/TalkType.AppImage"' in s
+
+
+def test_the_deb_brings_pactl_for_turning_other_sounds_down():
+    """Zorin OS has no pactl, so "turn other sounds down" did nothing there
+    (VM test, 2026-10-20)."""
+    assert '--depends "pulseaudio-utils"' in _read("build-deb.sh")
