@@ -247,3 +247,9 @@ def test_the_extension_is_offered_only_when_it_is_not_running(monkeypatch, activ
         assert (d.extension_check is not None) is offered
     finally:
         d.destroy()
+
+
+def test_the_welcome_screen_opens_at_the_top_with_set_it_up_focused(dialog):
+    """Ron, 2026-10-20: focus on "Change language, model or graphics card"
+    scrolled the window down on open and cut its title off."""
+    assert dialog.dialog.get_focus() is dialog.continue_button

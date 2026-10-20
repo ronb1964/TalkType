@@ -600,6 +600,11 @@ class WelcomeDialog:
         content.pack_end(more_below_bar(
             scrolled, tooltip="There's more on this page, including optional features"),
             False, False, 0)
+        # Left to GTK, the focus went to the first button in the scrolling
+        # part ("Change language, model or graphics card"), and the window
+        # opened scrolled down to it with its title cut off (Ron, 2026-10-20).
+        if self.continue_button is not None:
+            self.dialog.set_focus(self.continue_button)
 
     def _build_header(self, vbox):
         """Build the header section."""
