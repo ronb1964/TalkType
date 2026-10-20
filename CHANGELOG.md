@@ -34,6 +34,9 @@ before 0.15.0, so older entries use that name.
   come back almost silent after dictating (Brave closes its sound while
   paused and reopens it at the lowered level). It now plays at its own
   volume again.
+- Turning other sounds down is gentler: they go to half their volume
+  setting while you dictate, so a call or a video stays audible. A quarter
+  of it, as before, sounded almost muted.
 - Turning other sounds down now works on Zorin OS: the .deb brings the small
   pulseaudio-utils package it needs, which Zorin doesn't install.
 - Fixed: with the GNOME extension, dictating into GNOME Terminal (Ubuntu

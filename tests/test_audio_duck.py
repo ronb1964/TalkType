@@ -63,8 +63,8 @@ def test_other_apps_go_down_and_come_back(tmp_path):
                        9: {"pid": 200, "volumes": [40000]}})
     d = _ducker(tmp_path, pactl)
     d._duck_now()
-    assert pactl.streams[7]["volumes"] == [16384, 16384]
-    assert pactl.streams[9]["volumes"] == [10000]
+    assert pactl.streams[7]["volumes"] == [32768, 32768]
+    assert pactl.streams[9]["volumes"] == [20000]
     assert (tmp_path / "ducked.json").exists()       # for a crash mid-dictation
     d._restore_now()
     assert pactl.streams[7]["volumes"] == [65536, 65536]
@@ -103,7 +103,7 @@ def test_left_over_volumes_are_put_back_at_the_next_start(tmp_path):
     pactl = FakePactl({7: {"pid": 100, "volumes": [65536]}})
     d = _ducker(tmp_path, pactl)
     d._duck_now()                                   # ...and the service dies here
-    assert pactl.streams[7]["volumes"] == [16384]
+    assert pactl.streams[7]["volumes"] == [32768]
     restored = audio_duck.restore_left_over(run=pactl, state_path=str(tmp_path / "ducked.json"), reset=_no_reset)
     assert restored == 1
     assert pactl.streams[7]["volumes"] == [65536]
@@ -169,14 +169,14 @@ def test_a_sound_that_ends_while_down_is_put_back_and_never_lowered_twice(tmp_pa
     pactl = FakePactl({5: {"pid": 77, "volumes": [65536], "app": "Beeper"}})
     d = _ducker(tmp_path, pactl)
     d._duck_now()
-    assert pactl.streams[5]["volumes"] == [16384]
+    assert pactl.streams[5]["volumes"] == [32768]
     del pactl.streams[5]                            # the beep ended
     d._restore_now()
-    assert d._owed["Beeper"] == {"original": [65536], "lowered": [16384]}
+    assert d._owed["Beeper"] == {"original": [65536], "lowered": [32768]}
     # The next beep starts where the desktop remembered it: lowered.
-    pactl.streams[6] = {"pid": 77, "volumes": [16384], "app": "Beeper"}
+    pactl.streams[6] = {"pid": 77, "volumes": [32768], "app": "Beeper"}
     d._duck_now()
-    assert pactl.streams[6]["volumes"] == [16384]   # a quarter of 65536, not of 16384
+    assert pactl.streams[6]["volumes"] == [32768]   # half of 65536, not of 32768
     d._restore_now()
     assert pactl.streams[6]["volumes"] == [65536]
     assert d._owed == {}
@@ -189,7 +189,7 @@ def test_an_owed_volume_is_put_back_when_the_app_plays_again_after_dictation(tmp
     del pactl.streams[5]
     d._restore_now()
     # A new TuxTalk start (the service restarted): read from the state file.
-    pactl.streams[8] = {"pid": 77, "volumes": [12500], "app": "Beeper"}
+    pactl.streams[8] = {"pid": 77, "volumes": [25000], "app": "Beeper"}
     d2 = _ducker(tmp_path, pactl)
     d2._duck_now()
     d2._restore_now()
@@ -219,7 +219,7 @@ def test_a_player_reopening_its_sound_after_resume_gets_its_volume_back(tmp_path
     d._duck_now()
     del pactl.streams[5]                            # paused: Brave closed its sound
     d._restore_now()
-    pactl.streams[6] = {"pid": 77, "volumes": [16384], "app": "Brave"}   # resumed
+    pactl.streams[6] = {"pid": 77, "volumes": [32768], "app": "Brave"}   # resumed
     import time
     time.sleep(0.4)
     assert d.wait_idle(2)
@@ -258,7 +258,7 @@ def test_a_player_that_reopened_its_sound_before_the_reset_gets_its_volume_back(
     d = _ducker(tmp_path, pactl, reset=lambda app, v: True)
     d._duck_now()
     del pactl.streams[5]                                                   # paused
-    pactl.streams[6] = {"pid": 77, "volumes": [16384, 16384], "app": "Brave"}   # resumed
+    pactl.streams[6] = {"pid": 77, "volumes": [32768, 32768], "app": "Brave"}   # resumed
     d._restore_now()
     assert pactl.streams[6]["volumes"] == [65536, 65536]
     assert d._owed == {}

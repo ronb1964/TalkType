@@ -3,7 +3,7 @@
 Pausing (media_pause.py) only reaches players that answer media keys. A
 Discord call, a game or a video in an app without MPRIS keeps playing into
 the microphone. So while a recording runs, every other app's sound is turned
-down to a quarter, and put back when it ends. A stream whose volume the user
+down to half its volume setting, and put back when it ends. A stream whose volume the user
 changed in the meantime is left as they set it.
 
 It talks to PipeWire or PulseAudio through pactl (pulseaudio-utils, present
@@ -39,7 +39,7 @@ from .logger import setup_logger
 
 logger = setup_logger(__name__)
 
-DUCK_TO = 0.25          # other apps play at a quarter of their volume
+DUCK_TO = 0.5           # half on the volume slider; 0.25 sounded muted (Ron, 2026-10-20)
 # After a dictation, look again this long after (seconds) for an app owed
 # its volume: a browser closes its sound while its video is paused and opens
 # a new one on resume, a moment after TuxTalk restored, at the lowered level.
