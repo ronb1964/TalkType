@@ -242,3 +242,23 @@ def test_the_package_scripts_name_the_same_files_as_the_app(script):
 def test_both_packages_run_the_removal_script():
     for name in ("build-deb.sh", "build-rpm.sh"):
         assert '--before-remove "$PROJECT_DIR/packaging/before-remove.sh"' in (ROOT / name).read_text()
+
+
+def test_a_second_uninstall_request_while_asking_opens_no_second_question(monkeypatch):
+    """Clicking Uninstall TuxTalk... again while the question is up (or
+    tuxtalk --uninstall beside it) once stacked a second question inside
+    the first one's dialog loop, and neither could close."""
+    import types
+    from tuxtalk import tray as tray_mod
+    t = types.SimpleNamespace(_uninstalling=False, _shut_down=lambda: None,
+                              _leave_main_loop=lambda: None)
+    asked = []
+
+    def run(stop_tray_parts):
+        asked.append(1)
+        tray_mod.DictationTray.uninstall(t)      # the second request, from inside the first
+        return False
+    monkeypatch.setattr(uninstall, "run", run)
+    tray_mod.DictationTray.uninstall(t)
+    assert asked == [1]
+    assert t._uninstalling is False              # and the next request is asked again

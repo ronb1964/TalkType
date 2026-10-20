@@ -564,6 +564,7 @@ class DictationTray:
         # Track subprocess windows
         self.preferences_process = None
         self._menu_window = None    # menu_window.MenuWindow while it's open
+        self._uninstalling = False  # the uninstall's question is up, or it's running
 
         # Cached PID of the dictation service (for fast /proc-based status checks)
         self._service_pid = None
@@ -2023,8 +2024,18 @@ class DictationTray:
     def uninstall(self, _=None):
         """Preferences' Uninstall TuxTalk... and tuxtalk --uninstall: ask,
         remove everything (uninstall.py), then quit."""
+        # A second request while the question is up would open another one
+        # inside the first's dialog loop, and neither could close properly.
+        if self._uninstalling:
+            logger.info("Uninstall already asked; ignoring the second request")
+            return False
+        self._uninstalling = True
         from . import uninstall
-        if uninstall.run(stop_tray_parts=self._shut_down):
+        try:
+            done = uninstall.run(stop_tray_parts=self._shut_down)
+        finally:
+            self._uninstalling = False
+        if done:
             self._leave_main_loop()
         return False  # one-shot when scheduled through GLib
 
