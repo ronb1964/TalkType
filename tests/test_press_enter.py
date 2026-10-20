@@ -94,6 +94,17 @@ def test_a_cut_off_dictation_is_typed_but_not_sent(monkeypatch):
     app.state.continue_mid_sentence = False
 
 
+def test_a_cut_off_dictation_gets_no_period_in_a_text_editor_either(monkeypatch):
+    """Ron, 2026-10-20: KWrite got "Meet me at noon and." The text-editor rule
+    turned the send off before the "and" was looked at."""
+    monkeypatch.setattr(app, "_press_enter_after", True)
+    events = _dictate(monkeypatch, "Meet me at noon and", prepared=lambda r: r + ". ",
+                      window="org.kde.kwrite")
+    assert events == [("typed", "Meet me at noon and ")]
+    assert app.state.continue_mid_sentence is True
+    app.state.continue_mid_sentence = False
+
+
 def test_saying_press_enter_sends_even_after_and(monkeypatch):
     monkeypatch.setattr(app, "_press_enter_after", True)
     events = _dictate(monkeypatch, "Bring chips and, press enter",

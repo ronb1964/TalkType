@@ -3917,17 +3917,17 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         # "Send each dictation automatically" waits for the end of the
         # recording, not each phrase of Type at pause.
         press_enter = said_enter or (_press_enter_after and chunk_role != "middle")
-        cut_off = ""
+        # Before the text-editor rule below turns the send off, so a text
+        # editor gets no period after the "and" either (Ron, 2026-10-20).
+        cut_off = ends_unfinished(raw) if press_enter and not said_enter else ""
         if press_enter and not said_enter and is_document_window(_query_focused_window_class()):
             logger.info("Not sending: Enter only starts a new line in this app")
             press_enter = False
-        if press_enter and not said_enter:
-            cut_off = ends_unfinished(raw)
-            if cut_off:
-                # The key came up mid-sentence: type it, but don't send half
-                # a message. Saying "press enter" always sends.
-                logger.info(f'Held back the Enter: the dictation ended on "{cut_off}"')
-                press_enter = False
+        if press_enter and cut_off:
+            # The key came up mid-sentence: type it, but don't send half
+            # a message. Saying "press enter" always sends.
+            logger.info(f'Held back the Enter: the dictation ended on "{cut_off}"')
+            press_enter = False
         if said_enter and not raw.strip():
             # Only "press enter" was said.
             if chunk_role != "middle":
