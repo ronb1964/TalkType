@@ -3,8 +3,20 @@
 All notable changes to TuxTalk are documented here. It was called TalkType
 before 0.15.0, so older entries use that name.
 
-## [Unreleased]
+## [0.17.0] - 2026-10-20
 
+- Parakeet is more accurate. TuxTalk now downloads Parakeet Ultra,
+  Moondream's retrained version of NVIDIA's Parakeet: the same size and
+  speed, with fewer mistakes. In our tests on 2,400 recordings in English,
+  German, Spanish and Italian it made 8 to 21% fewer mistakes on the
+  graphics card, and 20 to 30% fewer on the processor, where TuxTalk's old
+  copy had lost some accuracy to compression. On clips of silence and noise
+  it typed nothing, where the old one now and then typed "Thank you.", and
+  it writes numbers as digits more often ("8:30", "12 feet"). If you already
+  use Parakeet, TuxTalk offers the update once (a 670 MB download); your
+  Parakeet keeps working until then, and if you say Not Now. After a Not
+  Now, Preferences → General shows an Update Parakeet button until you take
+  it.
 - New: Uninstall TuxTalk, at the bottom of Preferences → Updates & Backup,
   or `tuxtalk --uninstall` when TuxTalk won't open. Removing the package or
   deleting the AppImage only ever took the program away. The hotkey helper
@@ -24,7 +36,12 @@ before 0.15.0, so older entries use that name.
   volume again.
 - Turning other sounds down now works on Zorin OS: the .deb brings the small
   pulseaudio-utils package it needs, which Zorin doesn't install.
-
+- Fixed: with the GNOME extension, dictating into GNOME Terminal (Ubuntu
+  24.04, Zorin, Debian) typed a stray ^V instead of your words, because
+  TuxTalk didn't recognize it as a terminal. It now pastes there the way
+  terminals need, in plain text.
+- Fixed: a quick tap of F8 to hold a send could count as a dictation, so
+  "Not sent. Press Enter when you're ready." didn't show.
 - Power Saving no longer turns dictation off. After the idle time TuxTalk
   lets go of the speech model, which frees the processor and graphics card
   as before, but F8 keeps working: the next dictation loads the model again,
@@ -92,17 +109,6 @@ before 0.15.0, so older entries use that name.
   "It's a little bit more than a little bit." TuxTalk already hears each
   phrase again with the one before it to place the punctuation; for a phrase
   that short it now types the words it heard there when they're fewer.
-- Parakeet is more accurate. TuxTalk now downloads Parakeet Ultra,
-  Moondream's retrained version of NVIDIA's Parakeet: the same size and
-  speed, with fewer mistakes. In our tests on 2,400 recordings in English,
-  German, Spanish and Italian it made 8 to 21% fewer mistakes on the
-  graphics card, and 20 to 30% fewer on the processor, where TuxTalk's old
-  copy had lost some accuracy to compression. On clips of silence and noise
-  it typed nothing, where the old one now and then typed "Thank you.", and
-  it writes numbers as digits more often ("8:30", "12 feet"). If you already use Parakeet, TuxTalk offers the
-  update once (a 670 MB download); your Parakeet keeps working until then,
-  and if you say Not Now. After a Not Now, Preferences → General shows an
-  Update Parakeet button until you take it.
 
 ## [0.16.0] - 2026-10-18
 

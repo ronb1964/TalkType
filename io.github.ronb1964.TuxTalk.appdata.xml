@@ -95,6 +95,19 @@
   </screenshots>
 
   <releases>
+    <release version="0.17.0" date="2026-10-20">
+      <description>
+        <p>A more accurate Parakeet, and an uninstall that takes everything with it</p>
+        <ul>
+          <li>Parakeet Ultra: the same size and speed, with fewer mistakes</li>
+          <li>Uninstall TuxTalk removes the hotkey helper, downloads and shortcuts too, with one password</li>
+          <li>Power Saving lets go of the speech model but F8 keeps working</li>
+          <li>Help sorted by what you're doing, using your own keys</li>
+          <li>A shorter first run and simpler Preferences</li>
+          <li>Removing the .deb or .rpm takes the hotkey helper with it</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.16.0" date="2026-10-18">
       <description>
         <p>Hotkeys without the input group, and dictation you can send by voice</p>
