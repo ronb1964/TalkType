@@ -5,6 +5,20 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- New: Uninstall TuxTalk, at the bottom of Preferences → Updates & Backup,
+  or `tuxtalk --uninstall` when TuxTalk won't open. Removing the package or
+  deleting the AppImage only ever took the program away. The hotkey helper
+  kept running, start at login and the menu entry stayed, and the speech
+  models, engines and NVIDIA libraries it downloaded sat in your home folder,
+  a few GB of them. This removes all of it after one password prompt: the
+  program (it removes the .deb, .rpm or AUR package for you), the hotkey
+  helper and the typing permission, every download, the GNOME extension and
+  KDE's shortcut entries, and the input group if an older version put you
+  in it (it asks). Your settings, Your Words, snippets and stats stay unless
+  you tick the box, and backups you saved are never touched.
+- Removing the .deb or .rpm with apt or dnf now takes the hotkey helper and
+  its rules with it. Updating keeps them.
+
 - Power Saving no longer turns dictation off. After the idle time TuxTalk
   lets go of the speech model, which frees the processor and graphics card
   as before, but F8 keeps working: the next dictation loads the model again,
