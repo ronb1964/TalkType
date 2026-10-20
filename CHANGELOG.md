@@ -44,7 +44,9 @@ before 0.15.0, so older entries use that name.
   "Not sent. Press Enter when you're ready." didn't show.
 - Fixed: with Send each dictation automatically on, a dictation you cut off
   on "and" in a text editor like KWrite still got a period ("Meet me at noon
-  and."). It now stops without one there too, as it does in a chat box.
+  and."). It now stops without one there too, as it does in a chat box. And
+  the next dictation carries that sentence on in lowercase only in the same
+  window; elsewhere it starts with a capital.
 - Power Saving no longer turns dictation off. After the idle time TuxTalk
   lets go of the speech model, which frees the processor and graphics card
   as before, but F8 keeps working: the next dictation loads the model again,
