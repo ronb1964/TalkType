@@ -24,5 +24,12 @@ env_args=()
 while IFS= read -r -d '' var; do
     env_args+=("$var")
 done < "/proc/$shell_pid/environ"
+# A launcher also passes the session's systemd environment, which holds the
+# X display. GNOME Shell's own has none (it starts Xwayland itself), and
+# without it TuxTalk's service fell back to native Wayland, where its
+# floating labels take the keyboard: the held-send space "bug" of 2026-10-18.
+while IFS= read -r var; do
+    env_args+=("$var")
+done < <(systemctl --user show-environment | grep -E '^(DISPLAY|XAUTHORITY)=')
 
 exec systemd-run --user --scope --quiet --collect env -i "${env_args[@]}" "$@"
