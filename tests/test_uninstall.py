@@ -181,6 +181,9 @@ def test_the_question_lists_only_what_this_computer_has(home):
     assert "TuxTalk itself (its AppImage)" in text
     assert "(2.5 GB)" in text
     assert "hotkey helper" not in text and "GNOME extension" not in text
+    pathlib.Path(uinput_helper.UDEV_RULE_PATH).write_text("")     # 0.15's rule, no helper
+    text = uninstall.confirm_text(_find(home), 1)
+    assert "the permission it set up to type" in text and "hotkey helper" not in text
     pathlib.Path(secure_input.UNIT_PATH).write_text("")
     (home / ".local/share/gnome-shell/extensions/talktype@ronb1964.github.io").mkdir(parents=True)
     text = uninstall.confirm_text(_find(home, "deb"), 1)

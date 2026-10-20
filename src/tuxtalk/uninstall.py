@@ -80,7 +80,8 @@ class Plan:
     personal: list = field(default_factory=list)      # removed only when asked
     runtime: list = field(default_factory=list)
     hub: Path = None                 # Hugging Face's model cache
-    helper: bool = False             # hotkey helper or a typing rule installed
+    helper: bool = False             # the hotkey helper is installed
+    typing_rule: bool = False        # a udev rule lets TuxTalk type (either version)
     input_group: bool = False        # TuxTalk's old setup put the user in it
     ydotoold_unit: Path = None       # TuxTalk's systemd user unit, if any
     extension: bool = False
@@ -91,7 +92,7 @@ class Plan:
 
     @property
     def needs_root(self):
-        return self.helper or self.input_group or self.package is not None
+        return self.helper or self.typing_rule or self.input_group or self.package is not None
 
 
 def hf_hub_cache(home, environ=os.environ):
@@ -175,9 +176,9 @@ def find(home, install_type, environ=os.environ, appimage=None):
     if _ours(unit):
         plan.ydotoold_unit = unit
     plan.extension = exists(Path(desktop_detect.get_extension_dir()) / extension_helper.EXTENSION_UUID)
-    plan.helper = any(os.path.exists(p) for p in (
-        secure_input.UNIT_PATH, secure_input.HELPER_PATH, secure_input.UINPUT_RULE_PATH,
-        uinput_helper.UDEV_RULE_PATH))
+    plan.helper = any(os.path.exists(p) for p in (secure_input.UNIT_PATH, secure_input.HELPER_PATH))
+    plan.typing_rule = any(os.path.exists(p) for p in (secure_input.UINPUT_RULE_PATH,
+                                                       uinput_helper.UDEV_RULE_PATH))
     # Only the old setup's own rule says TuxTalk put the user in the group.
     plan.input_group = os.path.exists(uinput_helper.UDEV_RULE_PATH) and _in_input_group()
     return plan
@@ -388,12 +389,12 @@ def confirm_text(plan, size):
     lines = [program] if program else []
     if plan.helper:
         lines.append("its hotkey helper and the permission to type into other apps")
+    elif plan.typing_rule:
+        lines.append("the permission it set up to type into other apps")
     if plan.downloads:
         lines.append(f"the speech models, engines and libraries it downloaded ({_size_text(size)})")
-    extras = ["starting at login and its menu entry"]
-    if plan.extension:
-        extras.append("the GNOME extension")
-    lines.append(" and ".join(extras))
+    lines.append("starting at login, its menu entry and the GNOME extension" if plan.extension
+                 else "starting at login and its menu entry")
     return "\n".join(f"•  {line}" for line in lines)
 
 
