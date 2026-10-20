@@ -40,7 +40,7 @@ def restart_tuxtalk(run):
     run.vm.ssh("pkill -f '[T]uxTalk-v'", check=False)
     time.sleep(2)
     mark = run.log_mark()
-    run.vm.session_background("tuxtalk", f"/var/home/ron/AppImages/{run.appimage.name}")
+    run.vm.session_background("tuxtalk", f"{run.vm.home}/AppImages/{run.appimage.name}")
     if run.wait_log(mark, "Dictation service is ready", timeout=120) is None:
         raise Abort("TuxTalk didn't start again")
     return mark

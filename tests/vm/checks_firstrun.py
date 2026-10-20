@@ -21,7 +21,7 @@ def welcome(run):
     run.vm.tap("esc")   # GNOME starts in the overview; leave it before a window opens
     time.sleep(1)
     run.first_run_mark = run.log_mark()
-    run.vm.session_background("tuxtalk", f"/var/home/ron/AppImages/{run.appimage.name}")
+    run.vm.session_background("tuxtalk", f"{run.vm.home}/AppImages/{run.appimage.name}")
     if run.vm.ui("find", "dialog", WELCOME, timeout=120) is None:
         raise Abort("the welcome screen never appeared")
     time.sleep(2)
@@ -106,8 +106,11 @@ def password_prompt(run):
 
 @check("First run", "fix_typing", "Fix Typing finishes with no restart needed")
 def fix_typing(run):
-    run.vm.ssh(f"mkdir -p ~/.local/bin && cp ~/{REMOTE}/pkexec-shim.sh ~/.local/bin/pkexec "
-               f"&& chmod +x ~/.local/bin/pkexec && rm -f ~/{REMOTE}/pkexec-calls.log")
+    # /usr/local/bin, not ~/.local/bin: TuxTalk already runs with the session's
+    # PATH, and Ubuntu and Zorin put ~/.local/bin on it only when it existed
+    # at login.
+    run.vm.ssh(f"sudo install -D -m 755 ~/{REMOTE}/pkexec-shim.sh /usr/local/bin/pkexec "
+               f"&& rm -f ~/{REMOTE}/pkexec-calls.log")
     run.vm.ui("click", "button", "~Fix Typing", WELCOME, check=True)
     if run.vm.ui("find", "label", "Typing Setup Complete!", timeout=60) is None:
         raise Abort("Fix Typing didn't finish: " + " | ".join(texts(run, WELCOME)[-3:]))

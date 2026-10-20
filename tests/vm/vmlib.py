@@ -2,6 +2,7 @@
 virtual keyboard (through QEMU, so the guest kernel sees real key events, the
 same as a USB keyboard), screenshots, and the guest helpers in guest/.
 """
+import functools
 import json
 import shlex
 import subprocess
@@ -43,6 +44,10 @@ VMS = {v.key: v for v in (
            ["gnome-terminal", "--wait", "--"]),
     VMSpec("kde", "fedora44-KDE", "192.168.122.227", 1920, 1080, ("kde",),
            ["konsole", "-e"]),
+    # Zorin's own taskbar and AppIndicator extension on GNOME 46 (the Zorin
+    # forum user who couldn't reach TuxTalk 0.15.1, 2026-10).
+    VMSpec("zorin", "ZorinOS18", "192.168.122.88", 1280, 800, ("gnome",),
+           ["gnome-terminal", "--wait", "--"]),
 )}
 
 
@@ -56,6 +61,11 @@ class VM:
         self.spec = spec
 
     # Power and snapshots
+
+    @functools.cached_property
+    def home(self):
+        """The test user's home folder: /var/home/ron on Silverblue, /home/ron elsewhere."""
+        return self.ssh("echo $HOME").stdout.strip()
 
     def state(self):
         return _virsh("domstate", self.spec.domain).stdout.strip()

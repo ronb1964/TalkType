@@ -187,8 +187,8 @@ def duck_audio(run):
 def _player(run, status):
     """Dictate once with a pretend player in *status*; (its calls, the log)."""
     run.vm.ssh(f"rm -f {PLAYER_LOG}")
-    run.vm.session_background("player", "python3", f"/var/home/ron/{REMOTE}/fake_player.py",
-                              f"/var/home/ron/{REMOTE}/player.txt", status)
+    run.vm.session_background("player", "python3", f"{run.vm.home}/{REMOTE}/fake_player.py",
+                              f"{run.vm.home}/{REMOTE}/player.txt", status)
     time.sleep(2)
     run.sink_ready()
     _typed, _heard, log = run.say("basic")

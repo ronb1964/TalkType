@@ -161,9 +161,9 @@ class Run:
             self.close_sink(name)
         alive = f"kill -0 $(cat {pid_file} 2>/dev/null) 2>/dev/null"
         if self.vm.ssh(alive, check=False).returncode:
-            path = f"/var/home/ron/{REMOTE}/{name}.txt"
+            path = f"{self.vm.home}/{REMOTE}/{name}.txt"
             self.vm.ssh(f"rm -f {path} {path}.pid")
-            self.vm.session_background(name, "python3", f"/var/home/ron/{REMOTE}/sink.py",
+            self.vm.session_background(name, "python3", f"{self.vm.home}/{REMOTE}/sink.py",
                                        path, title)
             if self.vm.ui("find", "frame", title, timeout=20) is None:
                 raise Abort(f"the test window {title!r} didn't open")

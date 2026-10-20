@@ -10,7 +10,7 @@
                                VM as it is now (no revert, no first run)
   run.py report RUN_FOLDER     rebuild a run's report.html
 
-VMs: silverblue, ubuntu, mint, kde (see vmlib.VMS). Runs are kept in
+VMs: silverblue, ubuntu, mint, kde, zorin (see vmlib.VMS). Runs are kept in
 ~/.local/share/talktype-vm-tools/runs/. See README.md.
 """
 import argparse
@@ -57,6 +57,12 @@ def set_up_vm(vm, appimage):
     pretend microphones. Returns what the report says about the VM."""
     vm.revert_and_boot()
     vm.install_guest_helpers()
+    if vm.ssh("command -v pactl", check=False).returncode:
+        # Zorin ships without pactl. The pretend microphones need it, and so
+        # does TuxTalk's "turn other sounds down", so a stock Zorin can't do
+        # that: a finding of its own (2026-10-20), not tested here.
+        vm.ssh("sudo -n DEBIAN_FRONTEND=noninteractive apt-get install -y -q pulseaudio-utils",
+               timeout=600)
     vm.ssh("mkdir -p ~/AppImages")
     vm.put(appimage, f"AppImages/{appimage.name}")
     vm.ssh(f"chmod +x ~/AppImages/{appimage.name}")

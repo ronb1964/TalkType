@@ -29,7 +29,7 @@ config=$(ls -A ~/.config/tuxtalk 2>/dev/null | tr '\n' ' ')
 models=$(ls -A ~/.cache/huggingface/hub 2>/dev/null | grep -E 'Systran|parakeet|whisper|Qwen' | tr '\n' ' ')
 rules=$(ls /etc/udev/rules.d | grep -E '[t]uxtalk|[t]alktype' | tr '\n' ' ')
 procs=$(ps -u "$USER" -o args= | grep -E '[t]uxtalk\.|[T]uxTalk-|[w]hisper-server|[l]lama-server' | grep -v ' tt/' | head -3 | tr '\n' ';')
-left=$(find ~ -path ~/tt -prune -o \( -iname '*tuxtalk*' -o -iname '*talktype*' \) -print 2>/dev/null | grep -v '^/var/home/ron/tt$\|^/home/ron/tt$' | head -20 | tr '\n' ' ')
+left=$(find ~ -path ~/tt -prune -o \( -iname '*tuxtalk*' -o -iname '*talktype*' \) -print 2>/dev/null | grep -vx "$HOME/tt" | head -20 | tr '\n' ' ')
 python3 - "$apps" "$data" "$config" "$models" "$rules" "$procs" "$left" <<'EOF'
 import json, os, subprocess, sys
 names = ["appimages", "data", "config", "models", "rules", "processes", "left"]
@@ -170,7 +170,7 @@ def uninstall_reinstall(run):
     run.vm.put(run.appimage, f"{REMOTE}/{name}")
     run.vm.ssh(f"mkdir -p ~/AppImages && mv -f ~/{REMOTE}/{name} ~/AppImages/{name} "
                f"&& chmod +x ~/AppImages/{name}")
-    run.vm.session_background("tuxtalk", f"/var/home/ron/AppImages/{name}")
+    run.vm.session_background("tuxtalk", f"{run.vm.home}/AppImages/{name}")
     welcome = run.vm.ui("find", "dialog", WELCOME, timeout=120)
     shot = run.shot("uninstall-reinstalled")
     quit_tuxtalk(run)
@@ -182,7 +182,7 @@ def uninstall_reinstall(run):
 @check(SECTION, "uninstall_all", "tuxtalk --uninstall, settings too: nothing of TuxTalk is left")
 def uninstall_all(run):
     name = run.appimage.name
-    run.vm.session_background("uninstall", f"/var/home/ron/AppImages/{name}", "--uninstall")
+    run.vm.session_background("uninstall", f"{run.vm.home}/AppImages/{name}", "--uninstall")
     if run.vm.ui("find", "label", QUESTION, ASK_BOX, timeout=60) is None:
         return Outcome("fail", "tuxtalk --uninstall asked nothing",
                        screenshot=run.shot("uninstall-cli-none"))
