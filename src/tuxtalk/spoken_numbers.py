@@ -12,7 +12,10 @@ it sit a few fixes for what it gets wrong in dictation:
 - "a hundred people" stays as said (not "a 100 people");
 - digits read out one at a time join up ("08 6 2 0" -> "08620");
 - years join up ("19 84" -> "1984", "19 oh 5" -> "1905");
-- times get their colon ("at 7 30" -> "at 7:30").
+- times get their colon ("at 7 30" -> "at 7:30");
+- with "Digits from 10 up", a count below 10 the engine wrote as a digit
+  becomes a word again ("3 cats" -> "three cats"), as Parakeet Ultra often
+  writes them.
 The English-only fixes run for English alone; the rest is plain digits.
 """
 import logging
@@ -69,6 +72,47 @@ _RE_YEAR = re.compile(r"(?<![\d.,:])\b(1[1-9]|20) ([1-9]\d)\b(?![.,:]?\d)")
 # "19 oh 5": nineteen oh five.
 _RE_YEAR_OH = re.compile(r"\b(1[1-9]|20) oh (\d)\b", re.IGNORECASE)
 
+# A lone digit 1-9 before a lowercase word: a count Parakeet Ultra wrote as a
+# digit ("3 cats"), which "Digits from 10 up" writes as a word.
+_RE_SMALL_DIGIT = re.compile(r"(?<![\w.,:$€£#+\-/])([1-9])(?=\s+([a-z][\w'-]*))")
+_RE_RANGE_AFTER = re.compile(r"\s+(?:to|and|or|through|out of)\s+\d")
+_RE_RANGE_BEFORE = re.compile(r"\d\s+(?:to|and|or|through|out of)$")
+_SMALL_WORDS = ("one", "two", "three", "four", "five", "six", "seven", "eight", "nine")
+# Words that put a number on something rather than count it ("page 3").
+_LABELS = frozenset({
+    "page", "pages", "chapter", "step", "version", "level", "number", "no", "room", "row",
+    "line", "gate", "track", "season", "episode", "part", "volume", "grade", "floor",
+    "platform", "channel", "verse", "figure", "table", "option", "round", "day", "week",
+    "slide", "section", "item", "zone", "phase", "stage", "seat", "lane", "bus", "route",
+})
+# Units and clock words a digit stays in front of ("3 pm", "2 kg").
+_UNITS = frozenset({
+    "am", "pm", "kg", "km", "cm", "mm", "m", "g", "mg", "lb", "lbs", "oz", "ft", "mph",
+    "kph", "gb", "mb", "kb", "tb", "ms", "hz", "khz", "ghz", "v", "w", "x", "k",
+})
+
+
+def _small_digits_as_words(text: str) -> str:
+    """The counts below 10 that the engine wrote as digits, as words. A digit
+    after a name or a label ("Python 3", "page 3"), before a unit ("3 GB",
+    "3 pm") or in a range ("2 to 4") stays a digit."""
+    def word(m: re.Match) -> str:
+        digit, after = m.group(1), m.group(2)
+        before = text[:m.start()].rstrip()
+        prev = re.search(r"([\w'-]+)\W*$", before)
+        if after.lower() in _UNITS:
+            return digit
+        if _RE_RANGE_AFTER.match(text, m.end()) or _RE_RANGE_BEFORE.search(before):
+            return digit                                    # "2 to 4", "3 out of 10"
+        sentence_start = not before or before[-1] in ".!?"
+        if prev and not sentence_start:
+            if prev.group(1).lower() in _LABELS or (prev.group(1)[0].isupper()
+                                                     and prev.group(1) != "I"):
+                return digit
+        spelled = _SMALL_WORDS[int(digit) - 1]
+        return spelled.capitalize() if sentence_start else spelled
+    return _RE_SMALL_DIGIT.sub(word, text)
+
 
 def _language(code: str) -> str:
     """"en_US", "pt-BR" or "de" -> the bare language code."""
@@ -118,6 +162,8 @@ def to_digits(text: str, language: str, small_as_words: bool = False) -> str:
         text = _RE_YEAR_OH.sub(lambda m: f"{m.group(1)}0{m.group(2)}", text)
     text = _RE_YEAR.sub(lambda m: m.group(1) + m.group(2), text)
     text = _RE_DIGIT_RUN.sub(lambda m: m.group().replace(" ", ""), text)
+    if english and small_as_words:
+        text = _small_digits_as_words(text)
 
     for i, phrase in enumerate(hidden):
         text = text.replace(chr(0xE000 + i), phrase)

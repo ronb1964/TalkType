@@ -34,6 +34,10 @@ before 0.15.0, so older entries use that name.
   come back almost silent after dictating (Brave closes its sound while
   paused and reopens it at the lowered level). It now plays at its own
   volume again.
+- Numbers, "Digits from 10 up": Parakeet Ultra sometimes writes a small
+  count as a digit itself, so "three cats" came out "3 cats". In English
+  TuxTalk now writes those as words, but leaves "Python 3", "page 3",
+  "3 GB", "3 PM" and "2 to 4" as they are.
 - Turning other sounds down is gentler: they go to half their volume
   setting while you dictate, so a call or a video stays audible. A quarter
   of it, as before, sounded almost muted.

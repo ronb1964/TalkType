@@ -67,6 +67,28 @@ def test_one_to_nine_stay_words(text, expected):
     assert to_digits(text, "en", small_as_words=True) == expected
 
 
+@pytest.mark.parametrize("text, expected", [
+    # Parakeet Ultra writes some small counts as digits itself (Ron's 0.17 test).
+    ("I have 3 cats and 25 chickens.", "I have three cats and 25 chickens."),
+    ("3 cats came in.", "Three cats came in."),
+    ("It took 5 minutes. 2 people left.", "It took five minutes. Two people left."),
+    # Where a small digit isn't a count of the next thing, it stays.
+    ("I use Python 3 every day.", "I use Python 3 every day."),
+    ("Windows 7 machines", "Windows 7 machines"),
+    ("Turn to page 3 now, step 4 next.", "Turn to page 3 now, step 4 next."),
+    ("Meet at 3 pm or 4 o'clock.", "Meet at 3 PM or four o'clock."),
+    ("It holds 3 GB, 2 kg and 5 km.", "It holds 3 GB, 2 kg and 5 km."),
+    ("Between 3 and 15 people, 2 to 4 days.", "Between 3 and 15 people, 2 to 4 days."),
+    ("Press F8, then B5 at 3:30, 2.5 times, 4%.", "Press F8, then B5 at 3:30, 2.5 times, 4%."),
+])
+def test_small_digits_the_engine_wrote_become_words(text, expected):
+    assert to_digits(text, "en", small_as_words=True) == expected
+
+
+def test_as_digits_leaves_the_engines_digits_alone():
+    assert to_digits("I have 3 cats.", "en") == "I have 3 cats."
+
+
 @pytest.mark.parametrize("text, lang, expected", [
     ("Die Straße ist dreiundzwanzig Meter lang", "de", "Die Straße ist 23 Meter lang"),
     ("Tengo veinticinco años y tres gatos", "es", "Tengo 25 años y 3 gatos"),
