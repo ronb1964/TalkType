@@ -38,7 +38,7 @@ from . import (ai_cleanup, config, desktop_detect, extension_helper,  # noqa: E4
                file_transcribe, gnome_keybindings, kwin_hotkeys,
                parakeet_engine, secure_input, service_launcher, uinput_helper,
                update_checker, whisper_vulkan)
-from .logger import setup_logger  # noqa: E402
+from .logger import setup_logger, stop_file_logging  # noqa: E402
 from .ui_style import message_dialog  # noqa: E402
 
 logger = setup_logger(__name__)
@@ -553,6 +553,9 @@ def run(stop_tray_parts=None):
         undo_desktop_changes(plan)
         # Looked for again: stopping may have written a file (the stats).
         again = find(Path.home(), install_type, appimage=update_checker.get_running_appimage_path())
+        if delete_personal:
+            logger.info("Uninstalled TuxTalk; deleting the settings and this log")
+            stop_file_logging()         # its folder is about to go
         _wait_for(lambda: remove_files(again, delete_personal))
         _wait_for(_refresh_menus)
     finally:

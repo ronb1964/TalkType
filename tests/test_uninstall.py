@@ -262,3 +262,25 @@ def test_a_second_uninstall_request_while_asking_opens_no_second_question(monkey
     tray_mod.DictationTray.uninstall(t)
     assert asked == [1]
     assert t._uninstalling is False              # and the next request is asked again
+
+
+def test_logging_after_the_settings_folder_is_deleted_neither_fails_nor_recreates_it(tmp_path):
+    """Uninstalling with the settings deletes the log's folder; the next log
+    line crashed the uninstall before its closing message (VM test,
+    2026-10-20). Run apart, so this process's own logging is untouched."""
+    import sys
+    log_dir = tmp_path / "config"
+    script = (
+        "import logging, shutil\n"
+        "from tuxtalk.logger import setup_logger, stop_file_logging\n"
+        "log = setup_logger('tuxtalk.anything')\n"
+        "log.info('before')\n"
+        "stop_file_logging()\n"
+        f"shutil.rmtree({str(log_dir)!r})\n"
+        "log.info('after')\n"
+        "setup_logger('tuxtalk.later').info('a logger set up afterwards')\n"
+        "logging.getLogger('tuxtalk').warning('the package logger')\n")
+    ran = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True,
+                         env={**os.environ, "TUXTALK_LOG_DIR": str(log_dir)})
+    assert ran.returncode == 0, ran.stderr
+    assert not log_dir.exists()

@@ -127,6 +127,23 @@ def _shared_handler() -> logging.Handler:
     return handler
 
 
+def stop_file_logging() -> None:
+    """Write no more to the log file in this process. Uninstalling with the
+    settings deletes the log's folder, and the WatchedFileHandler would then
+    raise on the next line: Python 3.10 reopens a removed file outside the
+    handler's own error handling, and here the folder is gone too. Loggers
+    set up afterwards get a handler that drops the lines."""
+    global _handler
+    if _handler is None:
+        return
+    loggers = [logging.getLogger()] + [lg for lg in logging.Logger.manager.loggerDict.values()
+                                       if isinstance(lg, logging.Logger)]
+    for lg in loggers:
+        lg.removeHandler(_handler)
+    _handler.close()
+    _handler = logging.NullHandler()
+
+
 def setup_logger(name: str, level: int = logging.INFO) -> logging.Logger:
     """Return the logger *name*, writing to the dev or production log file.
 
