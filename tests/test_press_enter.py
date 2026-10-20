@@ -105,6 +105,21 @@ def test_a_cut_off_dictation_gets_no_period_in_a_text_editor_either(monkeypatch)
     app.state.continue_mid_sentence = False
 
 
+@pytest.mark.parametrize("window, typed", [
+    ("org.kde.kwrite", "this is where it goes on."),
+    ("com.anthropic.Claude", "This is where it goes on."),
+])
+def test_a_cut_off_sentence_goes_on_in_lowercase_only_in_its_own_window(monkeypatch, window,
+                                                                         typed):
+    """Ron, 2026-10-20: "meet me at noon and" in KWrite, then a message in
+    another window began with a small letter."""
+    monkeypatch.setattr(app, "_press_enter_after", False)
+    monkeypatch.setattr(app.state, "continue_mid_sentence", True)
+    monkeypatch.setattr(app.state, "last_inserted_window", "org.kde.kwrite")
+    events = _dictate(monkeypatch, "This is where it goes on", window=window)
+    assert events[0][1].strip() == typed
+
+
 def test_saying_press_enter_sends_even_after_and(monkeypatch):
     monkeypatch.setattr(app, "_press_enter_after", True)
     events = _dictate(monkeypatch, "Bring chips and, press enter",

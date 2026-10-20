@@ -3051,7 +3051,12 @@ def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: b
     # Handle mid-sentence continuation after undo:
     # lowercase the first letter if we're continuing a sentence
     if state.continue_mid_sentence and text:
-        if text[0].isupper() and _safe_to_lowercase_first_word(text):
+        # In another window it's a new sentence (Ron, 2026-10-20: a message
+        # after "meet me at noon and" in KWrite began with a small letter).
+        focused = _query_focused_window_class()
+        elsewhere = (focused is not None and state.last_inserted_window is not None
+                     and focused != state.last_inserted_window)
+        if not elsewhere and text[0].isupper() and _safe_to_lowercase_first_word(text):
             text = text[0].lower() + text[1:]
             logger.info("Lowercased first letter for mid-sentence continuation")
         state.continue_mid_sentence = False
