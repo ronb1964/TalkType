@@ -27,6 +27,7 @@ import checks_extension  # noqa: F401
 import checks_firstrun  # noqa: F401
 import checks_prefs  # noqa: F401
 import checks_send  # noqa: F401
+import checks_uninstall  # noqa: F401
 import checks_update  # noqa: F401
 import report
 from harness import CHECKS, Abort, Result, Run
@@ -34,10 +35,10 @@ from vmlib import GUEST_DIR, REMOTE, TOOLS, VM, VMS
 
 RUNS = TOOLS / "runs"
 # First run must come before Preferences (its defaults), and Preferences
-# before dictation, which changes settings.
+# before dictation, which changes settings. Uninstall takes it all away: last.
 SECTION_ORDER = ["First run", "Preferences", "Dictation", "Words and numbers",
                  "Send automatically", "Sound and other windows", "With the GNOME extension",
-                 "Parakeet update"]
+                 "Parakeet update", "Uninstall"]
 LOG_LINES = 25
 
 
