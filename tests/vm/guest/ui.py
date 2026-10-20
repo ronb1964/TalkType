@@ -51,8 +51,15 @@ def states(obj):
     return [s for s in wanted if found.contains(getattr(Atspi.StateType, s.upper()))]
 
 
+def role(obj):
+    # Newer at-spi2-core names a button "button"; older ones (Zorin 18) say
+    # "push button". The checks ask for the new name everywhere.
+    name = obj.get_role_name()
+    return "button" if name == "push button" else name
+
+
 def describe(obj):
-    info = {"role": obj.get_role_name(), "name": obj.get_name() or "", "states": states(obj)}
+    info = {"role": role(obj), "name": obj.get_name() or "", "states": states(obj)}
     text = obj.get_text_iface() if hasattr(obj, "get_text_iface") else None
     if text is not None:
         info["text"] = Atspi.Text.get_text(obj, 0, Atspi.Text.get_character_count(obj))
@@ -87,12 +94,12 @@ def walk(obj, depth=0, limit=40):
             yield from walk(child, depth + 1, limit)
 
 
-def find(role, name, window=None):
+def find(wanted_role, name, window=None):
     for _app, win in windows():
         if not matches(window, win.get_name()):
             continue
         for _depth, obj in walk(win):
-            if obj.get_role_name() == role and matches(name, obj.get_name()):
+            if role(obj) == wanted_role and matches(name, obj.get_name()):
                 # "visible", not "showing": GTK says showing only for widgets
                 # scrolled into view, and buttons below the fold still work.
                 if HIDDEN_TOO or "visible" in states(obj):
@@ -100,10 +107,10 @@ def find(role, name, window=None):
     return None
 
 
-def wait_for(role, name, window=None):
+def wait_for(wanted_role, name, window=None):
     deadline = time.monotonic() + TIMEOUT
     while True:
-        obj = find(role, name, window)
+        obj = find(wanted_role, name, window)
         if obj is not None or time.monotonic() > deadline:
             return obj
         time.sleep(0.3)
@@ -150,7 +157,7 @@ def main(argv):
                 print(json.dumps({"error": f"{args[1]!r} can't be pressed"}))
                 return 1
         elif command == "items":
-            out = [describe(o) for _d, o in walk(obj) if o.get_role_name() in
+            out = [describe(o) for _d, o in walk(obj) if role(o) in
                    ("menu item", "check menu item", "radio menu item", "list item", "table cell")]
         else:
             out = describe(obj)

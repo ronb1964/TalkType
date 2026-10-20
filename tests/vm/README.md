@@ -18,7 +18,7 @@ either (none are named `test_*.py`), because they need the VMs.
 3. **The password prompt.** The harness clicks Fix Typing, checks that the
    desktop's password prompt appears exactly once, takes a screenshot and
    cancels it. Nobody ever types a password. Only then does it put
-   `guest/pkexec-shim.sh` in `~/.local/bin/pkexec`, which runs the same root
+   `guest/pkexec-shim.sh` in `/usr/local/bin/pkexec`, which runs the same root
    script through the test VM's passwordless sudo. Fix Typing runs again and
    the rest of first run carries on. Typing the real password is listed as
    Ron's check.

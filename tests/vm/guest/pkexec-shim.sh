@@ -1,5 +1,5 @@
 #!/bin/bash
-# Test-VM stand-in for pkexec, installed as ~/.local/bin/pkexec only AFTER the
+# Test-VM stand-in for pkexec, installed as /usr/local/bin/pkexec only AFTER the
 # harness has seen the real password prompt appear (and cancelled it). It runs
 # the same root script through the VM's passwordless sudo, which exists only
 # on the test VMs, so the rest of first-run can go on with nobody typing a
