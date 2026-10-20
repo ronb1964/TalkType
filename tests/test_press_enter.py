@@ -378,6 +378,25 @@ def test_a_short_tap_types_the_space_when_released(countdown, monkeypatch):
     assert TYPED == [" "] and reasons == [app.HELD_SEND_NOTICE]
 
 
+def test_typing_the_space_doesnt_turn_a_tap_into_a_dictation(countdown, monkeypatch):
+    """Zorin VM, 2026-10-20: a 183 ms tap plus the time ydotool took to type
+    the space came to over MIN_HOLD_MS, so the held send got no "Not sent"
+    notice. How long the key was down is what counts."""
+    reasons = []
+    monkeypatch.setattr(app, "cancel_recording",
+                        lambda beeps, notify, reason="": reasons.append(reason))
+    monkeypatch.setattr(app, "_inject_text",
+                        lambda text, mode, t0: app.time.sleep(0.1) or TYPED.append(text) or "ok")
+    monkeypatch.setattr(app.state, "owed_space", None)
+    app._send_automatically("test", " ", "type")
+    monkeypatch.setattr(app.state, "held_send", app._hold_pending_send(announce=False))
+    monkeypatch.setattr(app.state, "silence", None)
+    monkeypatch.setattr(app.state, "chunks_submitted", 0)
+    monkeypatch.setattr(app.state, "press_t0", app.time.time() - 0.15)
+    assert app._finish_capture(False, False) is None
+    assert TYPED == [" "] and reasons == [app.HELD_SEND_NOTICE]
+
+
 def test_a_sent_message_never_gets_the_space(countdown):
     pressed, _ = countdown
     app._send_automatically("test", " ", "type")

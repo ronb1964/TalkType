@@ -3392,11 +3392,12 @@ def _finish_capture(beeps_on: bool, notify_on: bool):
         if dead_mic:
             _warn_silent_mic()
         return None
+    # Before the space below: the time typing it takes isn't part of the press.
+    held_ms = int((time.time() - (state.press_t0 or time.time())) * 1000)
     if state.held_send and state.owed_space is not None and not state.chunks_submitted:
         # The hotkey that held the send is up now; a tap leaves the text as
         # it is, a dictation goes after this space.
         _type_owed_space()
-    held_ms = int((time.time() - (state.press_t0 or time.time())) * 1000)
     if held_ms < MIN_HOLD_MS:
         if state.held_send:
             cancel_recording(beeps_on, notify_on, HELD_SEND_NOTICE)
