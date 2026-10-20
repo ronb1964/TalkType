@@ -268,3 +268,28 @@ def test_a_low_label_sits_above_a_chat_windows_message_box():
     assert screen_message.low_center(Rect(100, 50, 1000, 1200)) == (600, 1050)
     # A short window: a quarter of its height above the bottom.
     assert screen_message.low_center(Rect(0, 0, 400, 400)) == (200, 300)
+
+
+def test_without_an_x_display_the_label_opens_no_window_that_takes_the_keyboard(monkeypatch):
+    """On native Wayland GTK 3 makes the label an ordinary window that takes
+    the focus: everything typed while "Press Enter when you're ready" showed
+    was lost (VM test, 2026-10-20). There it isn't shown at all."""
+    from gi.repository import Gdk, Gtk
+    from tuxtalk import screen_message
+
+    class Monitor:
+        def get_geometry(self):
+            area = Gdk.Rectangle()
+            area.width, area.height = 1920, 1080
+            return area
+
+    class WaylandDisplay:          # everything a display has here, but not GdkX11.X11Display
+        def get_primary_monitor(self):
+            return Monitor()
+        get_monitor = get_monitor_at_point = lambda self, *_: Monitor()
+    monkeypatch.setattr(Gdk.Display, "get_default", staticmethod(lambda: WaylandDisplay()))
+
+    windows = []
+    monkeypatch.setattr(Gtk, "Window", lambda *a, **k: windows.append(a) or 1 / 0)
+    screen_message._show_now("Sending in 2 s", None)
+    assert windows == []

@@ -127,6 +127,18 @@ def _show_over_window_now(text, report, seconds=None, warning=True, tag=None, lo
     return _show_now(text, center, seconds, warning, tag)
 
 
+def _floats_without_focus(display):
+    """Whether a label can float over the active window here without taking
+    the keyboard: only on X11 (XWayland). The service falls back to native
+    Wayland when there's no X display, and there GTK 3 makes the label an
+    ordinary window that takes the focus, so everything typed while it shows
+    is lost ("Press Enter when you're ready" included; VM test, 2026-10-20)."""
+    import gi
+    gi.require_version("GdkX11", "3.0")
+    from gi.repository import GdkX11
+    return isinstance(display, GdkX11.X11Display)
+
+
 def _show_now(text, center, seconds=None, warning=True, tag=None):
     """Build the label and show it for *seconds* (None: reading_seconds());
     GTK thread only."""
@@ -140,6 +152,10 @@ def _show_now(text, center, seconds=None, warning=True, tag=None):
         from .window_geometry import Rect
 
         display = Gdk.Display.get_default()
+        if not _floats_without_focus(display):
+            logger.info(f"Not showing {text!r} over the window: no X display, so it would "
+                        "take the keyboard")
+            return False
         if center is None:
             mon = display.get_primary_monitor() or display.get_monitor(0)
             g = mon.get_geometry()
