@@ -10,8 +10,12 @@ import time
 from pathlib import Path
 
 from harness import CONFIG, Abort, Outcome, check
+from vmlib import TOOLS
 
 V3_REPO = "models--istupakov--parakeet-tdt-0.6b-v3-onnx"
+# The harness's own copy: fresh-start-for-testing.sh empties this computer's
+# Hugging Face cache, and these checks ran without v3 after it (2026-10-20).
+V3_CACHE = TOOLS / "hf-cache"
 V3_FILES = ("config.json", "vocab.txt", "nemo128.onnx", "decoder_joint-model.int8.onnx",
             "encoder-model.int8.onnx")
 ULTRA_DIR = "~/.local/share/TuxTalk/parakeet-ultra"
@@ -21,10 +25,9 @@ PREFS = "TuxTalk Preferences"
 def put_original_v3(run):
     """The v3 download as 0.16 left it: refs/main naming a snapshot folder
     that holds the five files."""
-    snapshots = sorted((Path.home() / ".cache/huggingface/hub" / V3_REPO / "snapshots").iterdir())
-    if not snapshots:
-        raise Abort("this computer has no cached Parakeet v3 to copy into the VM")
-    local = snapshots[-1]
+    from huggingface_hub import snapshot_download
+    local = Path(snapshot_download("istupakov/parakeet-tdt-0.6b-v3-onnx",
+                                   allow_patterns=list(V3_FILES), cache_dir=V3_CACHE))
     remote = f".cache/huggingface/hub/{V3_REPO}"
     run.vm.ssh(f"mkdir -p ~/{remote}/refs ~/{remote}/snapshots/{local.name} && "
                f"printf %s {local.name} > ~/{remote}/refs/main")
