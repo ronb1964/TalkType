@@ -218,6 +218,71 @@ enough interest and I'll make it happen.
 | **Audio** | Working microphone |
 | **GPU (optional)** | Any NVIDIA, AMD or Intel graphics chip (Vulkan), or CUDA on NVIDIA |
 
+### Uninstalling
+
+Open Preferences, go to **Updates & Backup** and click **Uninstall TuxTalk…**
+at the bottom. It removes TuxTalk and everything it set up on your computer:
+the program itself, the hotkey helper and the typing permission, the speech
+models and everything else it downloaded (CUDA libraries included), start at
+login, the menu entry and the GNOME extension. It asks for your password once.
+Your settings and word list stay unless you tick the box to delete them too,
+so installing again picks up where you left off.
+
+If TuxTalk won't open, the same thing runs from a terminal:
+
+```bash
+tuxtalk --uninstall                          # .deb, .rpm and AUR
+~/AppImages/TuxTalk.AppImage --uninstall     # AppImage
+```
+
+Removing only the package (`sudo apt remove tuxtalk`, `sudo dnf remove tuxtalk`,
+`sudo pacman -R tuxtalk-appimage`) takes the hotkey helper with it from 0.17 on,
+but leaves your settings and the downloads in your home folder.
+
+<details>
+<summary>Removing everything by hand (any version, including before 0.17)</summary>
+
+Quit TuxTalk from its menu first. Then the system parts, which need your password:
+
+```bash
+sudo systemctl disable --now tuxtalk-hotkeys.service
+sudo rm -f /etc/systemd/system/tuxtalk-hotkeys.service /etc/udev/rules.d/70-tuxtalk-uinput.rules /etc/udev/rules.d/99-talktype-uinput.rules
+sudo rm -rf /usr/local/libexec/tuxtalk
+sudo systemctl daemon-reload
+sudo udevadm control --reload-rules
+```
+
+Then remove the package if you installed one (`sudo apt remove tuxtalk`,
+`sudo dnf remove tuxtalk` or `sudo pacman -R tuxtalk-appimage`), and what's in
+your home folder:
+
+```bash
+rm -f ~/AppImages/TuxTalk.AppImage ~/AppImages/TalkType.AppImage
+rm -f ~/.config/autostart/tuxtalk.desktop ~/.local/share/applications/tuxtalk.desktop
+rm -f ~/.local/share/icons/hicolor/*/apps/tuxtalk.png
+rm -rf ~/.local/share/TuxTalk ~/.config/tuxtalk
+rm -rf ~/.cache/huggingface/hub/models--Systran--faster-whisper-* ~/.cache/huggingface/hub/models--istupakov--parakeet-tdt-0.6b-v3-onnx ~/.cache/huggingface/hub/models--ggml-org--parakeet-GGUF ~/.cache/huggingface/hub/models--ggerganov--whisper.cpp ~/.cache/huggingface/hub/models--Qwen--Qwen2.5-1.5B-Instruct-GGUF
+gnome-extensions uninstall talktype@ronb1964.github.io
+```
+
+The second-to-last line also deletes your settings and word list; leave out
+`~/.config/tuxtalk` to keep them. The last line only matters on GNOME.
+
+Versions before 0.16 may also have set up a typing service and put you in the
+`input` group. Check first that `~/.config/systemd/user/ydotoold.service` says
+"TuxTalk keystroke injection" (or TalkType), then:
+
+```bash
+systemctl --user disable --now ydotoold.service
+rm -f ~/.config/systemd/user/ydotoold.service
+sudo gpasswd -d $USER input
+```
+
+Skip the last line if another program you use needs the `input` group (a key
+remapper, for instance). Log out and back in afterwards.
+
+</details>
+
 ---
 
 ## Quick Start
