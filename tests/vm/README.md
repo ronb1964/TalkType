@@ -39,7 +39,14 @@ either (none are named `test_*.py`), because they need the VMs.
    Ultra. TuxTalk starts again and must keep dictating on v3, offer the
    update once, remember Not Now, and update from Preferences
    (`checks_update.py`).
-7. **Report.** `report.py` writes `report.html` with every check per VM:
+7. **Uninstall.** Last, because it takes everything away: Preferences →
+   Updates & Backup → Uninstall TuxTalk… must ask first (Cancel changes
+   nothing), then remove the hotkey helper, the AppImage, the downloads, the
+   launcher, autostart and the extension with one password prompt while
+   keeping the settings. Installing again must start first-run setup, and
+   `--uninstall` with "Also delete my settings" ticked must leave nothing
+   named TuxTalk or TalkType in the home folder (`checks_uninstall.py`).
+8. **Report.** `report.py` writes `report.html` with every check per VM:
    pass, fail, misheard, manual or skipped, with the typed text, the log
    lines and a screenshot. It ends with the checks only a person can do.
 
