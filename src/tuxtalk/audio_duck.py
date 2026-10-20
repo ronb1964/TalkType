@@ -243,19 +243,31 @@ class AudioDucker:
         streams = list_streams(self._run)
         now = {st["index"]: st["volumes"] for st in streams}
         put_back = 0
+        reset = {}
         for index, (original, lowered, app) in ducked.items():
             if index not in now:
                 # Ended while turned down: the desktop would keep it that
                 # quiet for the app's next sound. Put that right now, or else
                 # owe it until the app is seen again.
-                if app and not self._reset(app, original):
+                if app and self._reset(app, original):
+                    reset[app] = {"original": original, "lowered": lowered}
+                elif app:
                     self._owed[app] = {"original": original, "lowered": lowered}
                 continue
             if now[index] != lowered:
                 continue        # the user set its volume themselves meanwhile
             if _set_volume(index, original, self._run):
                 put_back += 1
+        if reset:
+            # The memory is right again, but the app may have opened its next
+            # sound before that, at the lowered level: Brave resuming a video
+            # it was paused on (Ron, 2026-10-20). Look again, after the reset.
+            streams = list_streams(self._run)
+            for app, entry in reset.items():
+                self._owed.setdefault(app, entry)
         put_back += self._settle_owed(streams)
+        for app in reset:
+            self._owed.pop(app, None)   # nothing at the lowered level: settled
         if ducked:
             logger.info(f"Put {put_back} sound(s) back to their volume")
         self._save()

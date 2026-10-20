@@ -248,6 +248,22 @@ def test_a_stream_gone_while_down_has_the_desktops_memory_put_right_at_once(tmp_
     assert d._owed == {}
 
 
+def test_a_player_that_reopened_its_sound_before_the_reset_gets_its_volume_back(tmp_path):
+    """Ron, 2026-10-20, "Pause music and videos, turn the rest down": Brave
+    was turned down a moment before its pause took, closed its sound, and
+    opened a new one on resume, before the restore, at the lowered level the
+    desktop remembered. The reset put the memory right but not that stream,
+    so the video played on almost silent."""
+    pactl = FakePactl({5: {"pid": 77, "volumes": [65536, 65536], "app": "Brave"}})
+    d = _ducker(tmp_path, pactl, reset=lambda app, v: True)
+    d._duck_now()
+    del pactl.streams[5]                                                   # paused
+    pactl.streams[6] = {"pid": 77, "volumes": [16384, 16384], "app": "Brave"}   # resumed
+    d._restore_now()
+    assert pactl.streams[6]["volumes"] == [65536, 65536]
+    assert d._owed == {}
+
+
 def test_owed_apps_from_before_are_reset_at_the_next_start(tmp_path):
     resets = []
     pactl = FakePactl({5: {"pid": 77, "volumes": [50000], "app": "Brave"}})
