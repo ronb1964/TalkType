@@ -58,7 +58,11 @@ OPEN_METHODS = {
     "fix-word": "FixWordInDictation",
     "help": "ShowHelp",
     "quit": "Quit",
+    "uninstall": "Uninstall",
 }
+
+# The OPEN_METHODS entries with their own option instead of --open NAME.
+_OWN_OPTION = ("quit", "uninstall")
 
 
 def _parse(argv):
@@ -75,10 +79,12 @@ def _parse(argv):
         group.add_argument(f"--{action}", dest="action", action="store_const",
                            const=action, help=text)
     group.add_argument("--open", dest="open", metavar="WINDOW",
-                       choices=[name for name in OPEN_METHODS if name != "quit"],
+                       choices=[name for name in OPEN_METHODS if name not in _OWN_OPTION],
                        help="open a window: menu, preferences, transcribe, fix-word or help")
     group.add_argument("--quit", dest="open", action="store_const", const="quit",
                        help="quit TuxTalk")
+    group.add_argument("--uninstall", dest="open", action="store_const", const="uninstall",
+                       help="remove TuxTalk and everything it set up (asks first)")
     args, _others = ap.parse_known_args(argv)
     return args
 
@@ -94,7 +100,7 @@ def parse_action(argv):
 
 def parse_open(argv):
     """The window --open names ("menu", "preferences"...), "quit" for
-    --quit, or None."""
+    --quit, "uninstall" for --uninstall, or None."""
     return _parse(argv).open
 
 

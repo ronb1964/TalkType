@@ -363,6 +363,12 @@ class TuxTalkDBusService(dbus.service.Object):
         self._dispatch('quit')
 
     @dbus.service.method(DBUS_INTERFACE)
+    def Uninstall(self):
+        """Ask, then remove TuxTalk and everything it set up (uninstall.py).
+        Called by Preferences and tuxtalk --uninstall."""
+        self._dispatch('uninstall')
+
+    @dbus.service.method(DBUS_INTERFACE)
     def RestartApp(self):
         """Restart TuxTalk (tray and dictation service) into a just-installed update"""
         self._dispatch('restart_app')

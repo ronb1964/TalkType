@@ -183,9 +183,11 @@ def session_bus():
             if method == "allComponents":
                 obj = bus.get_object(KGLOBALACCEL_SERVICE, KGLOBALACCEL_PATH)
                 return obj.allComponents(dbus_interface=KGLOBALACCEL_INTERFACE, **t)
-            if method in ("componentShortcuts", "componentIsActive"):
+            if method in ("componentShortcuts", "componentIsActive", "componentCleanUp"):
                 obj = bus.get_object(KGLOBALACCEL_SERVICE, args[0])
-                name = "allShortcutInfos" if method == "componentShortcuts" else "isActive"
+                name = {"componentShortcuts": "allShortcutInfos",
+                        "componentIsActive": "isActive",
+                        "componentCleanUp": "cleanUp"}[method]
                 return getattr(obj, name)(dbus_interface=KGLOBALACCEL_COMPONENT_INTERFACE, **t)
             if method in ("shortcutNames", "allShortcutInfos"):
                 obj = bus.get_object(KGLOBALACCEL_SERVICE, KWIN_COMPONENT_PATH)
@@ -267,6 +269,31 @@ def app_shortcuts_since(since):
 # kglobalaccel components that are TuxTalk's own: TalkType's portal
 # component (io.github.ronb1964.TalkType) can linger with F3/F4 in it.
 _OUR_COMPONENTS = ("tuxtalk", "talktype", "io.github.ronb1964.")
+
+
+def forget_our_components(bus=None) -> None:
+    """Uninstalling: drop TuxTalk's own kglobalaccel components, so System
+    Settings -> Shortcuts lists nothing of it. cleanUp() removes a
+    component's shortcuts once nothing runs that registered them, which is
+    why this comes after TuxTalk has stopped. Never raises."""
+    if not should_claim():
+        return
+    try:
+        bus = bus or session_bus()
+        paths = [str(p) for p in bus.call("allComponents") or []]
+    except Exception as e:
+        logger.debug(f"Could not list KDE's shortcut components: {e}")
+        return
+    for path in paths:
+        if path == KWIN_COMPONENT_PATH:
+            continue
+        try:
+            infos = bus.call("componentShortcuts", path) or []
+            if any(str(info[2]).lower().startswith(_OUR_COMPONENTS) for info in infos):
+                bus.call("componentCleanUp", path)
+                logger.info(f"Removed TuxTalk's KDE shortcut component {path}")
+        except Exception as e:
+            logger.debug(f"Could not clean up KDE shortcut component {path}: {e}")
 
 
 def _desktop_file_exists(name) -> bool:

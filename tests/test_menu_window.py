@@ -45,7 +45,7 @@ def test_every_open_name_has_a_tray_action():
     from tuxtalk import tray
     source = inspect.getsource(tray.DictationTray.open_window)
     for name in control.OPEN_METHODS:
-        if name != "quit":
+        if name not in control._OWN_OPTION:
             assert f'"{name}"' in source
 
 

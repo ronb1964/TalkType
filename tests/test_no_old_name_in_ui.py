@@ -27,6 +27,8 @@ ALLOWED_WHOLE = {"io.github.ronb1964.TalkType", "/io/github/ronb1964/TalkType"}
 # Whole strings that are the old name on purpose, per file.
 ALLOWED_EXACT = {
     "settings_backup.py": {"TalkType"},     # backups saved before the rename still load
+    # Files an install from before the rename left, which the uninstall removes.
+    "uninstall.py": {"TalkType", "TalkType.AppImage", "(TalkType keystroke injection)"},
     # The one-time notice after an old TalkType install is converted.
     "tray.py": {
         "TalkType is now TuxTalk",

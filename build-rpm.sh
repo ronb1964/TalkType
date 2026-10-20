@@ -128,6 +128,7 @@ offline, on the processor or an NVIDIA, AMD or Intel graphics card." \
     --depends "libayatana-appindicator-gtk3" \
     --depends "portaudio" \
     --after-install "$POSTINST" \
+    --before-remove "$PROJECT_DIR/packaging/before-remove.sh" \
     --replaces "talktype < 0.15.0" \
     --conflicts "talktype < 0.15.0" \
     --provides "talktype" \

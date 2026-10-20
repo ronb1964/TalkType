@@ -3389,7 +3389,33 @@ class PreferencesWindow:
         vbox.pack_start(info_row, False, False, 0)
 
         self._add_backup_section(vbox, header, dim, indented, separator)
+
+        # The development version and a Flatpak are removed another way
+        # (uninstall.run says how).
+        if install_type not in ("dev", "flatpak"):
+            vbox.pack_start(separator(), False, False, 0)
+            row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+            row.pack_start(dim("Remove TuxTalk and everything it set up on this computer."),
+                           True, True, 0)
+            uninstall_btn = Gtk.Button(label="Uninstall TuxTalk\u2026")
+            uninstall_btn.connect("clicked", self._on_uninstall_clicked)
+            row.pack_end(uninstall_btn, False, False, 0)
+            vbox.pack_start(row, False, False, 0)
         return vbox
+
+    def _on_uninstall_clicked(self, _button):
+        """The running TuxTalk asks and does the work (uninstall.py), so it
+        can stop itself and close this window. With none running, this
+        window does it."""
+        from . import control
+        try:
+            if control.open_in_running("uninstall"):
+                return
+        except Exception as e:
+            print(f"Could not ask TuxTalk to uninstall: {e}", file=sys.stderr)
+        from . import uninstall
+        if uninstall.run():
+            self.on_cancel(None)
 
     def _on_check_updates_clicked(self, button):
         """Handle check for updates button click."""

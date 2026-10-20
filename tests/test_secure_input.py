@@ -18,10 +18,11 @@ def test_the_install_script_is_valid_bash_and_installs_root_owned():
     assert si.helper_source() in script
 
 
-def test_the_uninstall_script_is_valid_bash_and_takes_everything_away():
-    script = si.uninstall_script()
+def test_the_uninstall_lines_are_valid_bash_and_take_everything_away():
+    from tuxtalk.uinput_helper import UDEV_RULE_PATH
+    script = si.uninstall_lines()
     assert subprocess.run(["bash", "-n"], input=script, text=True).returncode == 0
-    for path in (si.UNIT_PATH, si.HELPER_PATH, si.UINPUT_RULE_PATH):
+    for path in (si.UNIT_PATH, si.HELPER_PATH, si.UINPUT_RULE_PATH, UDEV_RULE_PATH):
         assert path in script
 
 

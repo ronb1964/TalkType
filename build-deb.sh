@@ -140,6 +140,7 @@ fpm -s dir -t deb \
     --depends "libayatana-appindicator3-1" \
     --depends "libportaudio2" \
     --after-install "$POSTINST" \
+    --before-remove "$PROJECT_DIR/packaging/before-remove.sh" \
     --replaces "talktype < 0.15.0" \
     --conflicts "talktype < 0.15.0" \
     --provides "talktype" \

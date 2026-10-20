@@ -159,16 +159,17 @@ exit 1
 """
 
 
-def uninstall_script():
-    """The script pkexec runs as root to take it all away again."""
-    return f"""set -uo pipefail
-systemctl disable --now {SERVICE} 2>/dev/null
-rm -f {UNIT_PATH} {HELPER_PATH} {UINPUT_RULE_PATH}
+def uninstall_lines():
+    """Shell lines, run as root, taking the helper and both typing rules
+    (this one and the input group's old one) away again. Part of the
+    uninstall's root script (uninstall.py)."""
+    from .uinput_helper import UDEV_RULE_PATH
+    return f"""systemctl disable --now {SERVICE} 2>/dev/null
+rm -f {UNIT_PATH} {HELPER_PATH} {UINPUT_RULE_PATH} {UDEV_RULE_PATH}
 rmdir --ignore-fail-on-non-empty {HELPER_DIR} 2>/dev/null
 systemctl daemon-reload
 udevadm control --reload-rules
 udevadm trigger --action=change --sysname-match=uinput
-exit 0
 """
 
 
@@ -187,6 +188,11 @@ def _leave_group_lines():
 # gpasswd (the group lives in /usr/lib/group on an immutable system, or
 # gpasswd failed), so Preferences doesn't claim they left it.
 STILL_IN_GROUP = "TUXTALK_STILL_IN_INPUT_GROUP"
+
+# Printed by the uninstall's root script when the package manager refused
+# to remove TuxTalk's package (another install running, say), followed by
+# its last lines. Everything else was still removed.
+PACKAGE_NOT_REMOVED = "TUXTALK_PACKAGE_NOT_REMOVED"
 
 
 def _still_in_group_check():
@@ -295,6 +301,9 @@ def _pkexec(script, what):
         if STILL_IN_GROUP in (result.stdout or ""):
             logger.warning("Still in the input group after gpasswd")
             return True, STILL_IN_GROUP
+        if PACKAGE_NOT_REMOVED in (result.stdout or ""):
+            logger.warning(f"The package manager didn't remove TuxTalk: {result.stdout.strip()}")
+            return True, PACKAGE_NOT_REMOVED
         return True, ""
     if pkexec_was_declined(result):
         logger.info(f"Hotkey helper {what}: cancelled at the password prompt")
@@ -352,8 +361,3 @@ def install_with_pkexec(leave_group=False):
     """Install (or update) the helper and the typing rule, and with
     *leave_group* leave the input group too. (ok, message)."""
     return _run_as_root(install_script(leave_group), "installed")
-
-
-def uninstall_with_pkexec():
-    """Remove the helper and the typing rule. (ok, message)."""
-    return _run_as_root(uninstall_script(), "removed")

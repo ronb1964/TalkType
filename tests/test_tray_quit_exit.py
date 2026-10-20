@@ -20,6 +20,8 @@ def test_quit_queues_a_hard_exit(monkeypatch):
     t = types.SimpleNamespace(_stop_kwin_focus_provider=lambda: None,
                               _kill_service=lambda: None,
                               preferences_process=None, dbus_service=None)
+    t._shut_down = lambda: tray_mod.DictationTray._shut_down(t)
+    t._leave_main_loop = lambda: tray_mod.DictationTray._leave_main_loop(t)
 
     tray_mod.DictationTray.quit_app(t, None)
 

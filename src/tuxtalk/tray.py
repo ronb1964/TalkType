@@ -213,6 +213,10 @@ def _open_from_command_line(name):
     if name == "quit":
         print("TuxTalk isn't running.")
         sys.exit(0)
+    if name == "uninstall":
+        # Nothing to start first: this process does it on its own.
+        from . import uninstall
+        sys.exit(0 if uninstall.run() else 1)
     print("Starting TuxTalk.")
 
 
@@ -739,6 +743,10 @@ class DictationTray:
                 def quit(self):
                     """Quit via tray."""
                     GLib.idle_add(self.tray.quit_app, None)
+
+                def uninstall(self):
+                    """Uninstall TuxTalk (Preferences, tuxtalk --uninstall)."""
+                    GLib.idle_add(self.tray.uninstall)
 
                 def restart_app(self):
                     """Restart into a just-installed update (called by
@@ -2009,6 +2017,19 @@ class DictationTray:
 
     def quit_app(self, _):
         """Quit the tray and stop the dictation service."""
+        self._shut_down()
+        self._leave_main_loop()
+
+    def uninstall(self, _=None):
+        """Preferences' Uninstall TuxTalk... and tuxtalk --uninstall: ask,
+        remove everything (uninstall.py), then quit."""
+        from . import uninstall
+        if uninstall.run(stop_tray_parts=self._shut_down):
+            self._leave_main_loop()
+        return False  # one-shot when scheduled through GLib
+
+    def _shut_down(self):
+        """Everything Quit stops, short of leaving the main loop."""
         # Before anything else: take our script back out of KWin. Leaving it
         # loaded means it keeps calling a D-Bus name that no longer exists.
         self._stop_kwin_focus_provider()
@@ -2047,6 +2068,7 @@ class DictationTray:
                 logger.error(f"Error unregistering D-Bus service: {e}")
             self.dbus_service = None
 
+    def _leave_main_loop(self):
         # Quit the GTK main loop; main() returns and the process exits.
         Gtk.main_quit()
 

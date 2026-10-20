@@ -376,12 +376,14 @@ def uninstall_extension() -> bool:
             except Exception:
                 pass  # Ignore errors - extension might not be recognized
 
-            # Disabling puts it on disabled-extensions, and a failed disable
-            # (a shell that never loaded it) leaves it on enabled-extensions:
-            # an uninstall leaves it on neither.
-            desktop_detect.forget_extension(
-                EXTENSION_UUID, ("disabled-extensions", "enabled-extensions"))
+        # Disabling puts it on disabled-extensions, and a failed disable
+        # (a shell that never loaded it) leaves it on enabled-extensions:
+        # an uninstall leaves it on neither. Also when the folder is
+        # already gone, so a folder deleted by hand leaves no entry behind.
+        desktop_detect.forget_extension(
+            EXTENSION_UUID, ("disabled-extensions", "enabled-extensions"))
 
+        if os.path.exists(target_dir):
             # Remove the extension files
             shutil.rmtree(target_dir)
             print("Extension uninstalled")
