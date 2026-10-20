@@ -34,8 +34,6 @@ before 0.15.0, so older entries use that name.
   come back almost silent after dictating (Brave closes its sound while
   paused and reopens it at the lowered level). It now plays at its own
   volume again.
-- Fixed before release: switching the model between Parakeet and a Whisper
-  model in Preferences crashed it (new in 0.17's simpler General tab).
 - Numbers, "Digits from 10 up": Parakeet Ultra sometimes writes a small
   count as a digit itself, so "three cats" came out "3 cats". In English
   TuxTalk now writes those as words, but leaves "Python 3", "page 3",
