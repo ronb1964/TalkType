@@ -218,7 +218,7 @@ down instead (Discord calls, games), do both, or leave them alone.
   again from your apps. It has Preferences, Help, Recent Dictations and Fix a Word,
   and the line under the switch says which speech model runs, and where.
 • <b>Preferences → General</b>: your keys, and the speech setup. On first run TuxTalk
-  Recommends a setup for your computer (the speech model, on your graphics card if
+  recommends a setup for your computer (the speech model, on your graphics card if
   it's faster) for the language you speak. "Change model, device or language" is
   there if you ever want something else.
 
@@ -239,9 +239,10 @@ that window is on the screen, instead of always in the same spot.
     create_tab("💬 Chatting", f'''<span size="large"><b>Chats and Messages</b></span>
 
 <b>Sending a message</b>
-End what you say with <b>press enter</b>: "see you at noon, press enter" types
-"See you at noon." and presses Enter, which sends it. Saying only "press enter"
-just presses Enter. <b>new line</b> starts a new line and never sends anything.
+Hold <b>{hold}</b>, say your message ending with <b>press enter</b>, let go:
+"see you at noon, press enter" types "See you at noon." and presses Enter, which
+sends it. Hold <b>{hold}</b> and say only "press enter" to just press Enter.
+<b>new line</b> starts a new line and never sends anything.
 
 <b>Optional: send every dictation</b>
 <b>Preferences → Advanced → Send each dictation automatically.</b> TuxTalk waits
@@ -258,10 +259,13 @@ presses Enter.
     off, so it isn't sent.
 
 <b>Changing it before it's sent</b> 🧪 Labs
-With voice editing on, say <b>edit that, make it friendlier</b> right after you
-dictate: TuxTalk selects what it just typed and rewrites it. A message that was
-already sent can't be changed, so with the automatic send, tap <b>{hold}</b> during
-the wait first. The Writing tab has more.
+With voice editing on, right after you dictate: hold <b>{hold}</b>, say <b>edit that,
+make it friendlier</b>, let go. TuxTalk selects what it just typed and rewrites it.
+A message that was already sent can't be changed, so with the automatic send:
+  1. Tap <b>{hold}</b> during the countdown, so it isn't sent.
+  2. Hold <b>{hold}</b>, say <b>edit that, make it friendlier</b>, let go.
+  3. Press Enter when it reads right.
+The Writing tab has more.
 
 <b>On a call</b>
 <b>Preferences → Audio → Other sound while you dictate → Turn everything down</b>
@@ -425,13 +429,14 @@ punctuation is as usual. (Preferences → Advanced → Fine-tuning → Plain tex
 terminals and code editors.)
 
 <b>Running a command</b>
-End it with <b>press enter</b>: "git status press enter" types the command and runs
-it. Send each dictation automatically presses Enter in a terminal too.
+Hold <b>{hold}</b>, say <b>git status, press enter</b>, let go: the command is typed and
+run. Send each dictation automatically presses Enter in a terminal too.
 
 <b>Long commands</b>
-Snippets: say a short phrase and TuxTalk types the full text. Add them in
-<b>Preferences → Words</b>. Wrap the text in "quotes" to type it exactly as written,
-without capitals or a period.
+Snippets: say a short phrase and TuxTalk types the full text. Add one in
+<b>Preferences → Words → Add Snippet</b>, then hold <b>{hold}</b>, say its phrase, let go.
+Wrap the text in "quotes" to type it exactly as written, without capitals or a
+period.
 
 <b>What's different in a terminal</b>
   • <b>delete everything</b> clears the line you're typing (Ctrl+E, Ctrl+U).
@@ -451,6 +456,9 @@ on/off toggle. The seconds box beside it sets how long a pause ends it.
 <span size="large">🧪 <b>Type at Pause</b></span>
 Each phrase is typed as soon as you pause, while you go on talking, instead of
 all of it when you stop. Nothing that was typed changes afterwards.
+Turn it on in <b>Preferences → Advanced → TuxTalk Labs → Type at pause</b>. Then hold
+<b>{hold}</b> (or double-tap <b>{toggle}</b>), say "see you at noon", pause: it's typed, and
+you can go on talking.
 
 <b>How it works</b>
   • A pause of about a second ends a phrase, and it's typed right away.
@@ -458,7 +466,7 @@ all of it when you stop. Nothing that was typed changes afterwards.
     then a period goes in, or a comma, or the sentence just carries on.
   • "delete last sentence" and the other commands work on the phrase before them.
 
-<b>Fine-tuning</b>
+<b>Fine-tuning</b> (under Type at pause → Adjust Settings)
   • <b>Pause length</b>: how long a silence ends a phrase.
   • <b>Noise filter</b>: raise it in a noisy room, lower it for a soft voice or a quiet
     microphone.
@@ -468,6 +476,7 @@ all of it when you stop. Nothing that was typed changes afterwards.
     your voice, which should go past the green line, and it flashes green wherever a
     phrase would be typed. If it never flashes when you pause, raise the noise filter.
     If it flashes while you're still talking, lower it.
+
 <span size="large"><b>Transcribe a File</b></span> (TuxTalk menu → Transcribe a File...)
   • Turns a recording or a video into text: MP3, M4A, OGG, WAV, FLAC, MP4, MKV, WebM
     and more.
@@ -503,7 +512,8 @@ In <b>Preferences → Words</b>.
 
 <b>Snippets</b>
 Say a short phrase and TuxTalk types the full text: "my email" →
-user@example.com. Add your own in Preferences → Words.
+user@example.com. Add your own in <b>Preferences → Words → Add Snippet</b>, then hold
+<b>{hold}</b>, say the phrase, let go.
 
 <b>Getting it back</b>
 <b>Recent Dictations</b> in the TuxTalk menu keeps your last 20. {paste_tip}
@@ -601,8 +611,14 @@ turn on "Log transcribed text" (Preferences → Advanced → Fine-tuning), for a
     # Plain string, not an f-string: the brace commands below contain { and }.
     create_tab("🗣️ Commands", '''<span size="large"><b>Voice Commands Reference</b></span>
 
-Say these as you dictate. The commands are English words, whatever language you
-dictate in. A shorter list is in the TuxTalk menu → Voice Commands....
+There are two kinds:
+• <b>Inside what you say</b>: punctuation and formatting, said as you talk. Hold your
+  dictation key and say "see you tomorrow comma bring snacks period".
+• <b>On their own</b>: <b>delete last sentence</b>, <b>edit that</b>…, <b>fix that word</b>. Say
+  them right after the dictation they're about, as a dictation by themselves: hold
+  your dictation key, say only the command, let go.
+The commands are English words, whatever language you dictate in. A shorter list
+is in the TuxTalk menu → Voice Commands....
 
 <b>Punctuation:</b>
 • Say <b>comma</b> for ,

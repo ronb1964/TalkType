@@ -15,7 +15,7 @@ README = (ROOT / "README.md").read_text()
 
 def test_first_run_is_the_recommended_setup():
     assert "Offers to use your NVIDIA graphics card" not in HELP
-    assert "Recommends a setup for your computer" in HELP
+    assert "recommends a setup for your computer" in HELP
     assert "it asks which one you want" not in README
 
 
