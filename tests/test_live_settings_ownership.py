@@ -184,6 +184,24 @@ def test_power_saving_rests_the_model_and_keeps_the_service(monkeypatch):
     assert shown == []                    # nothing to explain: F8 still works
 
 
+def test_power_saving_waits_for_a_transcription_still_running(monkeypatch):
+    """Codex review of 0.17: the idle clock starts when the key comes up, so a
+    long transcription or Type at pause chunks still typing could outlast a
+    1-minute timeout and lose the Vulkan engine mid-request."""
+    _idle(monkeypatch)
+    monkeypatch.setattr(app, "_config_file_changed", lambda: False)
+    engine = _Engine()
+    monkeypatch.setattr(app, "model", engine)
+    cfg = _cfg(auto_timeout_enabled=True, auto_timeout_minutes=1)
+    svc = app._ServiceState(cfg)
+    svc.last_activity = 0.0
+    with app._inject_lock:                # a dictation is being transcribed
+        app._service_tick(cfg, svc)
+    assert app.model is engine and not engine.closed
+    app._service_tick(cfg, svc)           # done: now it rests
+    assert app.model is None
+
+
 def test_the_next_dictation_loads_the_model_again(monkeypatch):
     built = []
     monkeypatch.setattr(app, "model", None)

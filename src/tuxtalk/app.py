@@ -4934,7 +4934,10 @@ def _service_tick(cfg, svc: "_ServiceState") -> "LiveSettings | None":
                 stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
                                cfg.auto_space, cfg.auto_period, cfg.injection_mode)
             svc.last_activity = now
-    if svc.timeout_enabled and not state.is_recording and model is not None:
+    # Not while a dictation is still being transcribed or typed: every worker
+    # holds _inject_lock, and the idle clock starts when the key comes up.
+    if (svc.timeout_enabled and not state.is_recording and model is not None
+            and not _inject_lock.locked()):
         if now - svc.last_activity > svc.timeout_seconds:
             _rest_model(svc.timeout_minutes)
 
