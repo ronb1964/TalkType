@@ -44,6 +44,18 @@ def is_own_window_class(wm_class) -> bool:
     return bool(wm_class) and wm_class.lower() in _OWN_CLASSES
 
 
+# wl-copy without a data-control protocol sets the clipboard from a window of
+# its own, which holds the focus for a moment and hands it back. Taken for the
+# focused window, it made a paste into Konsole pick Ctrl+V and type ^V.
+_CLIPBOARD_TOOL_CLASSES = frozenset({"io.github.bugaevc.wl-clipboard", "wl-clipboard"})
+
+
+def is_clipboard_tool_class(wm_class) -> bool:
+    """Whether *wm_class* is wl-copy's brief window, which never receives a
+    dictation."""
+    return wm_class in _CLIPBOARD_TOOL_CLASSES
+
+
 def desktop_id(install_type: str) -> str:
     """The launcher name (without .desktop) for this kind of install."""
     return _BY_INSTALL_TYPE.get(install_type, APP_ID)

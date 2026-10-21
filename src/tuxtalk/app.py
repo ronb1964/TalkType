@@ -2271,15 +2271,17 @@ def _query_focused_window_class() -> str | None:
     directly (compositor_focus.py).
 
     TuxTalk's own windows count as unknown: a stale report of Preferences
-    must not pick the paste shortcut for the app the user is really in.
+    must not pick the paste shortcut for the app the user is really in. So
+    does wl-copy's brief window, which the tray already leaves out of its
+    reports.
     """
-    from .desktop_identity import is_own_window_class
+    from .desktop_identity import is_clipboard_tool_class, is_own_window_class
     reported = _query_reported_window_class()
     if reported and not is_own_window_class(reported):
         return reported
     from .compositor_focus import focused_class
     asked = focused_class()
-    return None if is_own_window_class(asked) else asked
+    return None if is_own_window_class(asked) or is_clipboard_tool_class(asked) else asked
 
 
 def _query_reported_window_class() -> str | None:

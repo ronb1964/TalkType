@@ -234,6 +234,13 @@ def test_the_next_window_after_wl_copy_is_followed_again(tray):
     assert tray.geometry() == KWRITE_AT
 
 
+def test_wl_copys_window_from_the_compositor_counts_as_unknown(monkeypatch):
+    """Sway, Hyprland and niri are asked directly, without the tray."""
+    monkeypatch.setattr(app, "_get_tray_dbus_proxy", lambda: _Tray(""))
+    monkeypatch.setattr(compositor_focus, "focused_class", lambda: WL_COPY)
+    assert app._query_focused_window_class() is None
+
+
 def test_undo_remembers_the_window_the_text_went_to_not_wl_copys(monkeypatch, tray):
     """"Delete last sentence" refuses in any window but the remembered one."""
     tray.report("org.kde.kwrite", KWRITE_AT)

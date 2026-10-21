@@ -20,11 +20,9 @@ _focused_window_class: str | None = None
 # "x,y,w,h|output|ox,oy,ow,oh" from the same reporters (window_geometry.py).
 _focused_window_geometry: str = ""
 
-# wl-copy without a data-control protocol sets the clipboard from a window of
-# its own, which holds the focus for a moment and hands it back. When that
-# window was cached, a paste into Konsole picked Ctrl+V and typed ^V, so its
-# reports are left out, and so is the geometry sent after each of them.
-_CLIPBOARD_TOOL_CLASSES = frozenset({"io.github.bugaevc.wl-clipboard", "wl-clipboard"})
+# True from a report of wl-copy's brief window (desktop_identity) until the
+# next window's. Its reports are left out, and so is the geometry sent after
+# each of them: the focus goes back to the window before it.
 _clipboard_tool_focused = False
 
 # The bus identifiers, at module level so providers that fill the focused-window
@@ -240,10 +238,10 @@ class TuxTalkDBusService(dbus.service.Object):
         subprocess from this service.
         """
         global _focused_window_class, _clipboard_tool_focused
-        _clipboard_tool_focused = wm_class in _CLIPBOARD_TOOL_CLASSES
+        from .desktop_identity import is_clipboard_tool_class, is_own_window_class
+        _clipboard_tool_focused = is_clipboard_tool_class(wm_class)
         if _clipboard_tool_focused:
             return
-        from .desktop_identity import is_own_window_class
         # TuxTalk's own window (Preferences) is never a paste target, and kept
         # here it would outlive a reporter that stops, such as an extension
         # uninstalled from Preferences.
