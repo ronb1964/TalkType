@@ -70,14 +70,6 @@ def test_style_options_present():
         assert style in text
 
 
-def test_backing_options_present():
-    text = PREFS.read_text()
-    for level in ("off", "soft", "medium", "strong"):
-        assert level in text
-
-
-
-
 def test_offset_boxes_show_up_and_right_as_positive():
     """Typing a negative number to move the indicator UP feels backwards, so
     the vertical box flips the sign it shows; the saved value keeps screen

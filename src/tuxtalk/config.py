@@ -277,7 +277,6 @@ def _validation_problems(s: Settings) -> list[tuple[str, str]]:
     if s.indicator_color_mode.lower() not in VALID_COLOR_MODES:
         problems.append(("indicator_color_mode", f"Invalid indicator_color_mode '{s.indicator_color_mode}'. Valid options: {', '.join(sorted(VALID_COLOR_MODES))}"))
 
-
     if not (0.0 <= s.press_enter_delay <= 4.0):
         problems.append(("press_enter_delay", f"Invalid press_enter_delay '{s.press_enter_delay}'. Must be between 0 and 4"))
     if not (0.5 <= s.auto_stop_seconds <= 10.0):

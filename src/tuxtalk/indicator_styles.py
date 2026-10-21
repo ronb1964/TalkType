@@ -95,15 +95,13 @@ def backing_alpha(r, core, plateau=0.42):
     cosine lands at r=1 with zero slope, so the backing dissolves instead of
     ending in a hard outline.
     """
-    if core <= 0.0:
-        return 0.0
     if r <= plateau:
         return core
     t = (r - plateau) / (1.0 - plateau)
     return core * (0.5 + 0.5 * math.cos(math.pi * t))
 
 
-def draw_backing(cr, cx, cy, rx, ry, core):
+def draw_backing(cr, cx, cy, rx, ry):
     """Feathered dark backing centered at (cx,cy), sized rx×ry.
 
     Sampled across many stops because cairo draws straight lines between stops,
@@ -111,8 +109,6 @@ def draw_backing(cr, cx, cy, rx, ry, core):
     the ellipse feathers to zero inside the window, or the window clips it into
     a hard edge.
     """
-    if core <= 0.001:
-        return
     cr.save()
     cr.translate(cx, cy)
     cr.scale(rx, ry)
@@ -120,16 +116,16 @@ def draw_backing(cr, cx, cy, rx, ry, core):
     N = 96
     for k in range(N + 1):
         r = k / N
-        g.add_color_stop_rgba(r, 0.05, 0.06, 0.09, backing_alpha(r, core))
+        g.add_color_stop_rgba(r, 0.05, 0.06, 0.09, backing_alpha(r, BACKING_CORE))
     cr.set_source(g)
     cr.arc(0, 0, 1, 0, 2 * math.pi)
     cr.fill()
     cr.restore()
 
 
-def draw_waveform(cr, w, h, samples, level, color_rgb, backing_core, sensitivity):
+def draw_waveform(cr, w, h, samples, level, color_rgb, sensitivity):
     """The waveform style: the recent samples as one line across the middle."""
-    draw_backing(cr, w / 2, h / 2, w * 0.48, h * 0.44, backing_core)
+    draw_backing(cr, w / 2, h / 2, w * 0.48, h * 0.44)
     if len(samples) == 0:
         return
     iw = w * 0.60
@@ -148,9 +144,9 @@ def draw_waveform(cr, w, h, samples, level, color_rgb, backing_core, sensitivity
     cr.stroke()
 
 
-def draw_bars(cr, w, h, spectrum, color_rgb, backing_core):
+def draw_bars(cr, w, h, spectrum, color_rgb):
     """The bars style: one bar per spectrum band, rising from a baseline."""
-    draw_backing(cr, w / 2, h / 2, w * 0.49, h * 0.46, backing_core)
+    draw_backing(cr, w / 2, h / 2, w * 0.49, h * 0.46)
     n = len(spectrum)
     if n == 0:
         return
@@ -271,13 +267,13 @@ def radial_offsets(samples, sensitivity, bins=RADIAL_BINS, gain=None):
     return out
 
 
-def draw_radial(cr, w, h, samples, level, color_rgb, backing_core, sensitivity, gain=None):
+def draw_radial(cr, w, h, samples, level, color_rgb, sensitivity, gain=None):
     """The radial style: a ring around a dot that swells with the voice."""
     cx, cy = w / 2, h / 2
     max_r = min(w, h) * RADIAL_MAX_R
     # 1.15 x the ring keeps the feathered edge inside the window (0.42 * 1.15
     # = 0.483 of the shorter side), so it never gets clipped into a hard edge.
-    draw_backing(cr, cx, cy, max_r * 1.15, max_r * 1.15, backing_core)
+    draw_backing(cr, cx, cy, max_r * 1.15, max_r * 1.15)
     if len(samples) == 0:
         return
     base = max_r * RADIAL_BASE

@@ -448,21 +448,20 @@ class RecordingIndicator(Gtk.Window):
         # orb keeps its own draw path below.
         if self.style != "orb":
             st = indicator_styles
-            core = st.BACKING_CORE
             color = self._resolved_color()
             # A copy: the audio thread extends and trims the live list while
             # this draws.
             wave = list(self.waveform) if self.waveform is not None else []
             if self.style == "waveform":
                 st.draw_waveform(cr, width, height, wave,
-                                 self.audio_level, color, core, self.sensitivity)
+                                 self.audio_level, color, self.sensitivity)
             elif self.style == "bars":
                 st.draw_bars(cr, width, height,
                              self.spectrum if self.spectrum is not None else [],
-                             color, core)
+                             color)
             elif self.style == "radial":
                 st.draw_radial(cr, width, height, wave,
-                               self.audio_level, color, core, self.sensitivity,
+                               self.audio_level, color, self.sensitivity,
                                gain=self._radial_gain)
             return
 
