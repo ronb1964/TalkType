@@ -29,6 +29,7 @@ if command -v flatpak >/dev/null; then
         xargs -r -n1 flatpak remote-delete --user --force 2>/dev/null
 fi
 rm -rf ~/.var/app/io.github.ronb1964.TalkType ~/.var/app/io.github.ronb1964.TuxTalk
+rm -rf ~/tt-test ~/kit/TuxTalk* ~/kit/TalkType*      # the Mint VM's hand testing
 rm -f ~/.local/share/applications/tuxtalk*.desktop ~/.local/share/applications/talktype*.desktop
 find ~/.local/share/icons -name 'tuxtalk*' -delete 2>/dev/null
 find ~/.local/share/icons -name 'talktype*' -delete 2>/dev/null
@@ -43,7 +44,11 @@ rm -rf ~/.local/share/gnome-shell/extensions/talktype@ronb1964.github.io
 if [ -e /etc/udev/rules.d/99-talktype-uinput.rules ] || id -nG | grep -qw input; then
     if sudo -n true 2>/dev/null; then
         sudo -n rm -f /etc/udev/rules.d/99-talktype-uinput.rules
-        sudo -n gpasswd -d "$USER" input >/dev/null 2>&1
+        sudo -n gpasswd -d "$USER" input
+        if getent group input | cut -d: -f4 | tr , '\n' | grep -qx "$USER"; then
+            echo "still in the input group after gpasswd: remove it by hand" >&2
+            exit 1
+        fi
         echo "input group and old uinput rule removed (takes effect at the next boot)"
     else
         echo "the old input-group setup is here and sudo needs a password: remove it by hand" >&2

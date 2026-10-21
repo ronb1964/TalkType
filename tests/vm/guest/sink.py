@@ -16,6 +16,7 @@ import sys
 import gi
 
 gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")   # Fedora 44 would load Gdk 4 otherwise
 from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
 
