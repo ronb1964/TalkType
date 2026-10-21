@@ -45,7 +45,6 @@ big ways. Roughly in order:
 
 ## Safety and context
 
-- [ ] Don't dictate into password fields. TuxTalk types into whatever has focus, password boxes included. The code to recognise a password field exists (`atspi_helper.py`) but nothing uses it yet.
 - [ ] An option to need a modifier with the dictation key (Ctrl+F8, say) so it can't be set off by accident.
 - [ ] A tray item to pause dictation for a while without stopping the service.
 - [ ] Only listen on certain workspaces.

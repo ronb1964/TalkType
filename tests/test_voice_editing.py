@@ -382,6 +382,14 @@ def test_without_the_ai_downloaded_it_says_where_to_turn_it_on(edit_env, monkeyp
     assert "Preferences" in edit_env["notices"][0] and edit_env["typed"] == []
 
 
+def test_a_rewrite_is_not_typed_or_kept_in_a_password_field(edit_env, monkeypatch):
+    from tuxtalk import atspi_helper
+    monkeypatch.setattr(atspi_helper, "focused_is_password", lambda: True)
+    run_edit()
+    assert edit_env["typed"] == [] and edit_env["history"] == []
+    assert edit_env["beeps"] == [app.CANCEL_BEEP] and edit_env["put_back"] == 1
+
+
 def test_the_clipboard_comes_back_even_when_typing_fails(edit_env, monkeypatch):
     monkeypatch.setattr(app, "_inject_text", lambda text, mode, t0, one_block=False: (_ for _ in ()).throw(RuntimeError("boom")))
     run_edit()

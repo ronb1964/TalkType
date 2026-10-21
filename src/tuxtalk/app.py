@@ -3520,6 +3520,25 @@ def _report_undelivered(outcome: str, beeps_on: bool):
     _notify("TuxTalk", message)
 
 
+PASSWORD_FIELD_LABEL = "TuxTalk doesn't type into password fields"
+
+
+def _refuse_password_field(beeps_on: bool) -> bool:
+    """True when the cursor is in a password field (atspi_helper.py): then
+    nothing is typed, and the text stays out of Recent Dictations too, since
+    it may be the password itself. The cancel beep and a label over the
+    window say so, whatever the notifications setting; no notification, as
+    it's a rule rather than an error (like _edit_problem's)."""
+    from . import atspi_helper
+    if not atspi_helper.focused_is_password():
+        return False
+    logger.info("Not typed: the cursor is in a password field")
+    _beep(beeps_on, *CANCEL_BEEP)
+    from . import screen_message
+    screen_message.show_over_active_window(PASSWORD_FIELD_LABEL)
+    return True
+
+
 # Silence put between two chunks when the engine hears them together, so the
 # pause is still there to hear (the cut kept only 0.3 s of it).
 JOINT_GAP_S = 0.5
@@ -3982,6 +4001,11 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
             # Kept for a send that's held, which types it after all.
             core = text.rstrip(" ")
             space_left_off, text = text[len(core):], core
+
+        # Before the beep and the "Transcribed" notification, which shows the
+        # words: in a password field they may be the password.
+        if text and _refuse_password_field(beeps_on):
+            return
 
         # Beep to confirm transcription is done
         if chunk_role != "middle":
@@ -4564,6 +4588,8 @@ def _edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0
         if not result or result == selected:
             _edit_problem("no_answer", beeps_on)
             return
+        if _refuse_password_field(beeps_on):
+            return
         logger.info(f"Voice edit result: {_loggable(result)} "
                     f"(took {time.time() - t0:.2f}s)")
         history.add_entry(result)
@@ -4644,6 +4670,8 @@ def _paste_last_dictation(cfg) -> None:
     text = entries[0].replace("\n", _LINE_BREAK_MARKER)
     if getattr(cfg, "auto_space", True):
         text += " "
+    if _refuse_password_field(cfg.beeps):
+        return
     logger.info("Paste last dictation")
     outcome = _inject_text(text, cfg.injection_mode, time.time())
     if outcome in _UNDELIVERED_NOTICES:

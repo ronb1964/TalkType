@@ -89,6 +89,16 @@ def _no_real_send_countdown(monkeypatch, request):
 
 
 @pytest.fixture(autouse=True)
+def _no_real_password_check(monkeypatch, request):
+    """Typing first asks the accessibility bus whether the cursor is in a
+    password field. On the user's desktop the answer depends on the window
+    they have open; test_password_fields fakes the bus itself."""
+    from tuxtalk import atspi_helper
+    if request.module.__name__.rpartition(".")[2] != "test_password_fields":
+        monkeypatch.setattr(atspi_helper, "focused_is_password", lambda: False)
+
+
+@pytest.fixture(autouse=True)
 def _no_real_explanation_windows(monkeypatch, tmp_path):
     """Never open an explanation window on the user's desktop, and never read
     or write their "don't explain again" choices. Tests that want the window
