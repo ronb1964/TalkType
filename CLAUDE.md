@@ -27,6 +27,20 @@ Old folders, launchers and KDE shortcuts are moved or cleaned on start by
 - Make and test code changes in `/home/ron/Projects/TalkType/src/`
 - NEVER edit files in `.claude/worktrees/` — Ron's dev version runs from the main project
 
+### Step 1b: Two Code Reviews, Then Fix
+- Everything changed since the last release tag (`git diff vX.Y.Z -- src/
+  gnome-extension/ packaging/`) gets two independent read-only reviews: one by
+  Claude and one by Codex (the codex-direct agent), each for bugs and against
+  "CODE A HUMAN REVIEWER WOULD RESPECT" below.
+- Verify each finding yourself, fix what's real (with a test where it's
+  behaviour), and tell Ron in plain words what was found and fixed.
+- The same two reviews run on any feature branch before it is merged into main.
+- Once a month, a full sweep of the whole codebase for leftovers, duplicates
+  and clutter. Raise it yourself when the last one (see memory) is 30 days old.
+- Ron, 2026-10-20: "I'm relying on you to ensure that it remains that way ...
+  periodic code reviews and include Codex in there to catch anything that you
+  may miss."
+
 ### Step 2: Ask Before Building
 - **NEVER run `./build-release.sh` without asking Ron first**
 - Say: "Ready to build the AppImage?" and WAIT for confirmation
