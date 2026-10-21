@@ -152,8 +152,9 @@ def main(argv):
                 continue
             for depth, obj in walk(win):
                 out.append({"depth": depth, **describe(obj)})
-    elif command in ("find", "click", "items"):
-        obj = wait_for(args[0], args[1], args[2] if len(args) > 2 else None)
+    elif command in ("find", "click", "items", "pick"):
+        at = 3 if command == "pick" else 2     # where WINDOW is
+        obj = wait_for(args[0], args[1], args[at] if len(args) > at else None)
         if obj is None:
             print(json.dumps({"error": f"no {args[0]} {args[1]!r} showing"}))
             return 1
@@ -164,25 +165,23 @@ def main(argv):
                 return 1
         elif command == "items":
             out = [describe(o) for o in entries(obj)]
+        elif command == "pick":
+            # The entry's index is the dropdown's row: right for a flat list
+            # with no separators, which is what TuxTalk's dropdowns are.
+            found = entries(obj)
+            index = next((i for i, o in enumerate(found) if matches(args[2], o.get_name())), None)
+            if index is None:
+                print(json.dumps({"error": f"no {args[2]!r} in {args[1]!r}",
+                                  "items": [o.get_name() for o in found]}))
+                return 1
+            # Through the dropdown's selection, as a screen reader picks: its
+            # list is never popped up, so its entries can't be clicked.
+            if not obj.select_child(index):
+                print(json.dumps({"error": f"{args[2]!r} can't be picked"}))
+                return 1
+            out = describe(found[index])
         else:
             out = describe(obj)
-    elif command == "pick":
-        obj = wait_for(args[0], args[1], args[3] if len(args) > 3 else None)
-        if obj is None:
-            print(json.dumps({"error": f"no {args[0]} {args[1]!r} showing"}))
-            return 1
-        found = entries(obj)
-        index = next((i for i, o in enumerate(found) if matches(args[2], o.get_name())), None)
-        if index is None:
-            print(json.dumps({"error": f"no {args[2]!r} in {args[1]!r}",
-                              "items": [o.get_name() for o in found]}))
-            return 1
-        # Through the dropdown's selection, as a screen reader picks: its
-        # list is never popped up, so its entries can't be clicked.
-        if not obj.select_child(index):
-            print(json.dumps({"error": f"{args[2]!r} can't be picked"}))
-            return 1
-        out = describe(found[index])
     elif command == "tab":
         obj = wait_for("page tab", args[0], args[1] if len(args) > 1 else None)
         if obj is None:
