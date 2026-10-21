@@ -42,11 +42,11 @@ before 0.15.0, so older entries use that name.
   are COSMIC shortcuts, listed as TuxTalk's in Settings → Keyboard → Custom
   shortcuts, and they go again when dictation stops. A key COSMIC or you
   already use for something else is left alone, and the log says so.
-- Setup Complete and the other setup windows leave room for panels and docks.
-  Wayland doesn't tell apps where those are, so on a 1280x800 screen Setup
-  Complete was as tall as the screen and its buttons sat behind Pop!_OS's
-  dock. The windows now open at most four fifths of the screen tall and
-  scroll the rest.
+- Every TuxTalk window leaves room for panels and docks. Wayland doesn't
+  tell apps where those are, so on a 1280x800 screen Setup Complete and
+  About were as tall as the screen and their buttons sat behind Pop!_OS's
+  dock. Windows now open at most three quarters of the screen tall, and
+  one whose content needs more scrolls it, with its buttons kept in view.
 - On X11 desktops (Linux Mint Cinnamon and other X11 sessions), dropdowns
   open as a list under the button again. Since 0.14.3 a wrong check gave X11
   the workaround meant for Wayland.

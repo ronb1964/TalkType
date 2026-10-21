@@ -2344,8 +2344,9 @@ def _show_rename_notice_once():
 
 
 def main():
-    from . import desktop_identity
+    from . import desktop_identity, ui_style
     desktop_identity.apply()        # TuxTalk's icon on its windows, not KDE's generic one
+    ui_style.fit_windows_to_screen()   # buttons clear of panels and docks
     # tuxtalk --toggle/--start/--stop (control.py). With TuxTalk running this
     # asks it and exits; otherwise this process starts TuxTalk and the request
     # waits for the speech model below.

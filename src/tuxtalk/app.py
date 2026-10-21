@@ -5548,8 +5548,9 @@ def parse_args():
     return ap.parse_args()
 
 def main():
-    from . import desktop_identity
+    from . import desktop_identity, ui_style
     desktop_identity.apply()        # TuxTalk's icon on its windows, not KDE's generic one
+    ui_style.fit_windows_to_screen()   # buttons clear of panels and docks
     # The loaded speech model. Usually built after the GTK loop starts; built
     # earlier when it must first be downloaded (see the GTK section below).
     global model, _gtk_loop_running

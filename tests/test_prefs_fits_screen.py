@@ -68,8 +68,9 @@ def test_every_tab_scrolls_so_the_window_can_shrink(monkeypatch):
 def test_short_screen_caps_the_opening_height(monkeypatch):
     w = _build(monkeypatch, 768)
     try:
-        _width, height = w.window.get_default_size()
-        assert 0 < height <= 768 - 96
+        ui_style.fit_window_to_screen(w.window)     # as when the window is created
+        _width, height = w.window.get_size()
+        assert 0 < height <= ui_style.workarea_height() - ui_style._TITLE_BAR
         assert _min_height(w) <= height
     finally:
         w.window.destroy()
@@ -91,9 +92,9 @@ def test_tall_screen_opens_with_words_shown_whole(monkeypatch):
 
 
 @pytest.mark.parametrize("screen, panels, usable", [
-    (800, 0, 640),          # Wayland: the work area is the whole screen
-    (800, 32, 640),         # a top panel alone still leaves room for a dock
-    (1080, 400, 680),       # a work area smaller than that is kept
+    (800, 0, 600),          # Wayland: the work area is the whole screen
+    (800, 32, 600),         # a top panel alone still leaves room for a dock
+    (1080, 500, 580),       # a work area smaller than that is kept
 ])
 def test_windows_never_count_on_the_whole_screen(monkeypatch, screen, panels, usable):
     """Pop!_OS, 1280x800: Setup Complete was as tall as the screen and its

@@ -213,8 +213,9 @@ def main(argv=None):
     if kind not in EXPLANATIONS:
         return 1
     try:
-        from . import desktop_identity
+        from . import desktop_identity, ui_style
         desktop_identity.apply()        # TuxTalk's icon on the window, not a generic one
+        ui_style.fit_windows_to_screen()   # buttons clear of panels and docks
     except Exception:
         pass
     dialog, check = build_dialog(kind)

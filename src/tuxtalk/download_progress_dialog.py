@@ -449,6 +449,8 @@ if __name__ == '__main__':
     # Show the dialog with two dummy downloads, for checking it by hand.
     import sys
     Gtk.init(sys.argv)
+    from .ui_style import fit_windows_to_screen
+    fit_windows_to_screen()
 
     def dummy_download(progress_callback, cancel_event):
         import time

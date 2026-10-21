@@ -189,17 +189,23 @@ def forward_combo_scroll(combo):
 # The share of the screen's height a window may count on, whatever the work
 # area says. Under Wayland GTK 3 isn't told about panels and docks, so the work
 # area is the whole screen: on Pop!_OS at 1280x800, Setup Complete filled it
-# and its buttons sat behind COSMIC's dock (VM, 2026-10-21).
-USABLE_SHARE = 0.8
+# and its buttons sat behind COSMIC's dock (VM, 2026-10-21). Three quarters is
+# also as tall as COSMIC opens a window, title bar included; asked for more,
+# it cut the bottom off.
+USABLE_SHARE = 0.75
 
 
-def workarea_height():
-    """A cautious usable height of the primary monitor, in logical pixels, or None."""
+def workarea_height(near=None):
+    """A cautious usable height, in logical pixels, of the monitor showing
+    window *near* (a dialog's parent; it has to be on screen), else of the
+    primary monitor; None when unknown."""
     try:
         display = Gdk.Display.get_default()
         if display is None:
             return None
-        monitor = display.get_primary_monitor()
+        shown = near.get_window() if near is not None else None
+        monitor = (display.get_monitor_at_window(shown) if shown is not None
+                   else display.get_primary_monitor())
         if monitor is None and display.get_n_monitors() > 0:
             monitor = display.get_monitor(0)
         if monitor is None:
@@ -210,38 +216,142 @@ def workarea_height():
         return None
 
 
-def fit_dialog_to_screen(dialog, width, desired_height, min_height=320, margin=96):
-    """Size a dialog to (width, desired_height) but never taller than the monitor's
-    work area, and always make it resizable.
+def fit_dialog_to_screen(dialog, width, desired_height):
+    """Open a dialog *width* wide and *desired_height* tall (below 0: as tall
+    as its content), resizable. Onboarding dialogs are tall; on a short
+    screen fit_window_to_screen takes the height down when the window is
+    created, and content in a Gtk.ScrolledWindow then scrolls instead of
+    running the buttons off the screen."""
+    dialog.set_resizable(True)
+    dialog.set_default_size(width, desired_height if desired_height > 0 else -1)
 
-    Onboarding dialogs are tall. On a shorter screen (a laptop, a VM, a scaled
-    display) a fixed height runs the footer buttons off the bottom edge, and
-    GNOME on Wayland won't reliably let the user move or resize such a window.
-    Capping the height to the work area keeps the buttons on screen.
 
-    Pass desired_height < 0 to keep GTK's content-based auto-height (still resizable).
-    For content that can exceed the cap, wrap it in a Gtk.ScrolledWindow so the
-    overflow scrolls instead of being clipped.
+# What the desktop's title bar adds above a window when it draws one; GTK
+# sizes the window without it. When GTK draws the title bar itself (its
+# "csd" windows, as on COSMIC and GNOME), it's already in the size.
+_TITLE_BAR = 40
 
-    Never raises — a sizing failure must not stop a window from opening.
-    """
+
+def fit_window_to_screen(window):
+    """Keep *window* no taller than workarea_height() less its title bar, so
+    its buttons stay clear of the screen's edge and of docks Wayland doesn't
+    report (About and Setup Complete sat behind COSMIC's dock at 1280x800).
+
+    A window whose content can't shrink that far gives up height from the
+    scrolling areas it has (_shrink_scrollers), and if that isn't enough
+    its content goes in one (_scroll_body); a dialog's own button row stays
+    below it, always in view. Called for every window by
+    fit_windows_to_screen(). Never raises: a window that doesn't fit beats
+    one that doesn't open."""
     try:
-        dialog.set_resizable(True)
-        if desired_height is None or desired_height < 0:
-            dialog.set_default_size(width, -1)
-            return dialog
-
-        avail = workarea_height()
-        if avail is not None:
-            desired_height = min(desired_height, max(min_height, avail - margin))
-        dialog.set_default_size(width, desired_height)
+        # A window isn't on a monitor before it's shown; its parent is.
+        avail = workarea_height(window.get_transient_for())
+        if not avail or window.is_maximized():
+            return
+        drawn_by_gtk = window.get_style_context().has_class("csd")
+        cap = avail if drawn_by_gtk else avail - _TITLE_BAR
+        _shrink_scrollers(window, cap)
+        scrolled = _scroll_body(window) if window.get_preferred_height()[0] > cap else None
+        if scrolled is not None:
+            # COSMIC opens a window at a height of its own choosing (about
+            # 420 px at 1280x800) unless its minimum asks for more, so the
+            # scrolling part asks for what fills the cap, not just a sliver.
+            rest = window.get_preferred_height()[0] - scrolled.get_preferred_height()[0]
+            content = scrolled.get_child().get_preferred_height()[1]
+            scrolled.set_min_content_height(max(0, min(content, cap - rest)))
+        width, height = window.get_size()
+        # A window that now scrolls opens as tall as its content, up to the cap.
+        wanted = max(height, window.get_allocated_height(),
+                     window.get_preferred_height()[1] if scrolled else 0)
+        if wanted > cap or scrolled:
+            height = min(wanted, cap)
+            # Wayland goes by the default size when the window first shows,
+            # X11 by the resize.
+            window.set_default_size(width, height)
+            window.resize(width, height)
     except Exception as e:
-        logger.warning(f"fit_dialog_to_screen failed: {e}")
-        try:
-            dialog.set_default_size(width, desired_height if (desired_height or 0) > 0 else -1)
-        except Exception:
-            pass
-    return dialog
+        logger.warning(f"Could not fit {window.get_title()!r} to the screen: {e}")
+
+
+def _shrink_scrollers(window, cap):
+    """Take height off the minimums the scrolling areas in *window* ask for,
+    the tallest first, until the window's minimum fits *cap*. Setup Complete
+    keeps its buttons under its own scrolling text, and About its links
+    under What's New; shrinking those keeps them in view, where scrolling
+    the whole window would push them out of it. Measured again after each,
+    since one beside a taller one, or on a hidden page, changes nothing."""
+    scrollers = []
+
+    def collect(w):
+        if not w.get_visible():
+            return                      # nor anything in it
+        if isinstance(w, Gtk.ScrolledWindow):
+            scrollers.append(w)
+        elif isinstance(w, Gtk.Container):
+            w.foreach(collect)
+    window.foreach(collect)
+    for scroller in sorted(scrollers, key=Gtk.ScrolledWindow.get_min_content_height,
+                           reverse=True):
+        too_tall = window.get_preferred_height()[0] - cap
+        asked = scroller.get_min_content_height()
+        if too_tall <= 0 or asked <= 0:
+            return
+        scroller.set_min_content_height(max(0, asked - too_tall))
+
+
+def _scroll_body(window):
+    """Move the window's content, but not a dialog's button row, into a
+    vertical scrolling area, and return that (None if there's no content)."""
+    scrolled = Gtk.ScrolledWindow()
+    scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+    scrolled.set_propagate_natural_height(True)
+    scrolled.set_propagate_natural_width(True)
+    if isinstance(window, Gtk.Dialog):
+        body = window.get_content_area()
+        inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=body.get_spacing())
+        for part in body.get_children():
+            if Gtk.Buildable.get_name(part) == "action_box":    # GtkDialog's own name
+                continue
+            expand, fill, padding, pack_type = (body.child_get_property(part, name) for name in
+                                                ("expand", "fill", "padding", "pack-type"))
+            body.remove(part)
+            pack = inner.pack_start if pack_type == Gtk.PackType.START else inner.pack_end
+            pack(part, expand, fill, padding)
+        scrolled.add(inner)
+        body.pack_start(scrolled, True, True, 0)
+        body.reorder_child(scrolled, 0)
+    else:
+        inner = window.get_child()
+        if inner is None:
+            return None
+        window.remove(inner)
+        scrolled.add(inner)
+        window.add(scrolled)
+    inner.show()
+    scrolled.get_child().show()     # the viewport GTK puts round a plain box
+    scrolled.show()
+    return scrolled
+
+
+def _on_window_realize(widget, *_args):
+    """Emission hook for every widget's "realize": a toplevel window is
+    fitted then, sized but not yet on screen. True keeps the hook installed."""
+    if isinstance(widget, Gtk.Window) and widget.get_window_type() == Gtk.WindowType.TOPLEVEL:
+        fit_window_to_screen(widget)
+    return True
+
+
+# The hook's id once installed (for tests to take it out again).
+_fitting_hook = None
+
+
+def fit_windows_to_screen():
+    """Fit every window this process opens to the screen
+    (fit_window_to_screen), including ones built later, so no window has to
+    remember to opt in. Called once at each process's start; safe again."""
+    global _fitting_hook
+    if _fitting_hook is None:
+        _fitting_hook = GObject.add_emission_hook(Gtk.Widget, "realize", _on_window_realize)
 
 
 # Onboarding screens that scroll. While there's more below, the bottom edge of
