@@ -123,6 +123,20 @@ def test_a_smart_apostrophe_on_a_us_keyboard_is_untypable_not_garbled():
     assert planner.plan("I\u2019m") is None
 
 
+def test_a_layout_libxkbcommon_doesnt_know_is_typed_as_us(monkeypatch):
+    """A custom layout: typed as US, as ydotool did, not left untyped."""
+    monkeypatch.setattr(kl, "active_layout", lambda: ("no-such-layout", ""))
+    assert replay(kl.planner_for(kl.US), kl.layout_key_events("Hi there")) == "Hi there"
+
+
+def test_a_us_less_than_sign_uses_shift_and_comma():
+    """The <> key beside the left Shift is missing on US keyboards, and a
+    desktop set to a US model may map nothing to it."""
+    assert kl.planner_for(kl.US).plan("<>") == [(42, 1), (51, 1), (51, 0), (42, 0),
+                                                (42, 1), (52, 1), (52, 0), (42, 0)]
+    assert kl.KeyPlanner("de", "").plan("<") == [(86, 1), (86, 0)]     # its only key there
+
+
 def test_the_blocking_character_is_named():
     """Naming it saves matching timestamps to find which dictation fell back."""
     assert kl.KeyPlanner("ua", "").plan_or_blocker("Це Windows 10") == (None, "W")

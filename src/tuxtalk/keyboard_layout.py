@@ -74,6 +74,7 @@ def _lib():
 _EVDEV_OFFSET = 8               # xkb keycode = evdev keycode + 8
 _KEY_LEFTSHIFT = 42             # evdev
 _KEY_RIGHTALT = 100             # evdev; AltGr on almost every layout
+_KEY_102ND = 86                 # evdev; the <> key of ISO keyboards
 _ISO_LEVEL3_SHIFT = 0xfe03      # keysym AltGr produces
 _INVALID_MOD = 0xffffffff
 
@@ -96,6 +97,15 @@ _DEAD_KEYS = {
 }
 
 
+def _cost(entry):
+    """How much a key is avoided: one for Shift, one for AltGr, three for the
+    extra key beside the left Shift (ISO keyboards' <>). US keyboards don't
+    have that key; a desktop set to a US model may map nothing to it, and
+    "<" would go missing where Shift+comma works."""
+    keycode, shift, altgr = entry
+    return shift + altgr + (3 if keycode == _KEY_102ND else 0)
+
+
 class KeyPlanner:
     """The keys that type text on one layout (layout + variant, e.g. "ch", "")."""
 
@@ -112,7 +122,7 @@ class KeyPlanner:
         self._index()
 
     def _index(self):
-        """Map every keysym to its cheapest key: fewest of Shift and AltGr."""
+        """Map every keysym to its cheapest key (_cost)."""
         x = _lib()
         shift = x.xkb_keymap_mod_get_index(self.keymap, b"Shift")
         altgr = x.xkb_keymap_mod_get_index(self.keymap, b"Mod5")
@@ -134,8 +144,7 @@ class KeyPlanner:
                     if sym == _ISO_LEVEL3_SHIFT and mask == 0:
                         altgr_keys.append(kc - _EVDEV_OFFSET)
                     entry = (kc - _EVDEV_OFFSET, bool(mask & shift_bit), bool(mask & altgr_bit))
-                    cost = entry[1] + entry[2]
-                    if sym not in self._keys or cost < self._keys[sym][1] + self._keys[sym][2]:
+                    if sym not in self._keys or _cost(entry) < _cost(self._keys[sym]):
                         self._keys[sym] = entry
         # Right Alt if it is AltGr, as it is on real keyboards; layouts also map a
         # virtual key to it, which works in the keymap but not on every compositor.
@@ -424,7 +433,14 @@ def layout_key_events(text):
     active layout, or on US when it can't be read. Raises UntypableText if
     the layout has no way to type some character."""
     layout = active_layout() or US
-    tokens, blocker = planner_for(layout).plan_or_blocker(text)
+    try:
+        planner = planner_for(layout)
+    except ValueError as e:
+        # A layout libxkbcommon doesn't know (a custom one, say): typed as
+        # US, as ydotool did, rather than not at all.
+        logger.warning(f"{e}; typing as US")
+        layout, planner = US, planner_for(US)
+    tokens, blocker = planner.plan_or_blocker(text)
     if tokens is None:
         raise UntypableText(layout, blocker)
     return tokens
