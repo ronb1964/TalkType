@@ -23,8 +23,10 @@ module it uses afterwards is imported here, up front.
 import grp
 import os
 import pwd
+import re
 import shutil
 import signal
+import stat
 import subprocess
 import threading
 import time
@@ -54,19 +56,39 @@ PERSONAL_DATA = ("stats.json", "stats.json.bak", file_transcribe.RECENT_FILE)
 DOWNLOADED_DATA = ("cuda", "ai-engine", "parakeet-ultra", "whisper-vulkan", "kwin",
                    ".first_run_done", ".hotkey_test_mode", "remote_desktop_token",
                    gnome_keybindings.BACKUP_NAME)
+# The folders in it whose programs TuxTalk runs, stopped before deleting.
+ENGINE_FOLDERS = ("whisper-vulkan", "ai-engine", "parakeet-ultra", "cuda")
 # What TuxTalk keeps in its settings folder (tests/test_uninstall.py again).
 CONFIG_NAMES = ("config.toml", "custom_commands.toml", custom_words.FILE_NAME, "backups",
                 "kde-hotkeys.json", "explained.json", ".launchers-renamed",
                 rename_migration.NOTICE_FILE, LOG_FILE_NAME, "talktype.log")
 
+# The copies TuxTalk writes beside its own files: config.toml.bak and
+# .before-words-tab, tuxtalk.log.old, config.toml.corrupt-<time>, and a
+# save's config.toml.<random>.tmp (config.write_text_atomic, through
+# tempfile.mkstemp's eight characters).
+_COPY_SUFFIXES = ("bak", "old")
+_COPY_PREFIXES = ("before-", "corrupt-")
+_SAVE_TEMP = re.compile(r"[a-z0-9_]{8}\.tmp")
+
+
+def _hub_folder(repo):
+    """The Hugging Face cache's folder name for *repo*."""
+    return f"models--{repo.replace('/', '--')}"
+
+
 # Each Hugging Face repository TuxTalk downloads from, as the cache names
 # its folder. Only these: the cache is shared, and another app's models in
 # it are not ours to delete. One folder holds a whole repository, so
 # whisper.cpp's may hold another app's models too: hence the question's
-# "other apps may use them".
-HF_REPOS = tuple(f"models--{repo.replace('/', '--')}" for repo in (
-    *model_helper.MODEL_REPOS.values(), parakeet_engine.V3_REPO, whisper_vulkan.MODEL_REPO,
-    *whisper_vulkan.MODEL_REPOS.values(), ai_cleanup.MODEL_REPO))
+# "other apps may use them". The Whisper models are every name a config may
+# hold (an older one may say small.en), as faster-whisper downloads them from
+# Systran; to it, "large" is large-v3.
+HF_REPOS = tuple(sorted({_hub_folder(repo) for repo in (
+    *(model_helper.MODEL_REPOS.get(m, f"Systran/faster-whisper-{m}")
+      for m in config.VALID_MODELS - {"large"} if not parakeet_engine.is_parakeet(m)),
+    parakeet_engine.V3_REPO, whisper_vulkan.MODEL_REPO,
+    *whisper_vulkan.MODEL_REPOS.values(), ai_cleanup.MODEL_REPO)}))
 
 # The runtime folder's files that hold dictated text: Recent Dictations and
 # Fix a Word's last dictation. Logging out empties the folder anyway; its
@@ -92,6 +114,7 @@ class Plan:
     leftovers: list = field(default_factory=list)     # launchers, autostart, program
     personal: list = field(default_factory=list)      # removed only when asked
     folders: list = field(default_factory=list)       # (folder, its names): emptied when asked
+    kept: list = field(default_factory=list)          # left on purpose (a restore to retry)
     runtime: list = field(default_factory=list)
     hub: Path = None                 # Hugging Face's model cache
     helper: bool = False             # the hotkey helper is installed
@@ -157,15 +180,20 @@ def _in_input_group():
 
 
 def _known(entry, names):
-    """Whether *entry* is one of *names*, or a file copied from one of the
-    files beside it (config.toml.bak, tuxtalk.log.old, a save's .tmp file).
-    Only files: a folder named backups.photos is someone else's."""
+    """Whether *entry* is one of *names*, or a copy TuxTalk writes of one of
+    those files (_COPY_SUFFIXES). Not config.toml.notes or a folder named
+    backups.photos: those are someone else's."""
     name = entry.name
     if name in names:
         return True
     if entry.is_dir() and not entry.is_symlink():
         return False
-    return any("." in known and name.startswith(known + ".") for known in names)
+    for known in names:
+        rest = name[len(known) + 1:] if name.startswith(known + ".") else None
+        if rest and (rest in _COPY_SUFFIXES or rest.startswith(_COPY_PREFIXES)
+                     or _SAVE_TEMP.fullmatch(rest)):
+            return True
+    return False
 
 
 def _contents(folder, names):
@@ -193,9 +221,12 @@ def find(home, install_type, environ=os.environ, appimage=None):
     for entry in _contents(data_dir, data_names):
         (plan.personal if _known(entry, PERSONAL_DATA) else plan.downloads).append(entry)
     plan.hub = hf_hub_cache(home, environ)
-    for name in HF_REPOS:
-        plan.shared += [path for path in (plan.hub / name, plan.hub / ".locks" / name)
-                        if exists(path)]
+    # A .locks that is a link leads somewhere else: deleting through it
+    # would reach another folder's files.
+    locks = plan.hub / ".locks"
+    folders = [plan.hub] + ([] if locks.is_symlink() else [locks])
+    plan.shared = [folder / name for name in HF_REPOS for folder in folders
+                   if exists(folder / name)]
 
     apps = home / "AppImages"
     # The versioned files too: started at login, TuxTalk runs from the copy
@@ -243,19 +274,26 @@ def find(home, install_type, environ=os.environ, appimage=None):
 
 
 def disk_size(paths):
-    """Bytes *paths* take on disk (each file counted once)."""
-    total, seen = 0, set()
+    """Bytes *paths* take on disk (each file counted once). A link counts as
+    nothing: only the link is removed, never what it leads to."""
+    seen = {}
+
+    def count(path):
+        try:
+            st = os.lstat(path)
+        except OSError:
+            return
+        if stat.S_ISREG(st.st_mode):
+            seen[(st.st_dev, st.st_ino)] = st.st_blocks * 512
+
     for top in paths:
+        if os.path.islink(top) or not os.path.isdir(top):
+            count(top)
+            continue
         for root, _dirs, files in os.walk(top):
             for name in files:
-                try:
-                    st = os.lstat(os.path.join(root, name))
-                except OSError:
-                    continue
-                if (st.st_dev, st.st_ino) not in seen:
-                    seen.add((st.st_dev, st.st_ino))
-                    total += st.st_blocks * 512
-    return total
+                count(os.path.join(root, name))
+    return sum(seen.values())
 
 
 def _package_lines(plan):
@@ -270,7 +308,7 @@ def _package_lines(plan):
                    f"else rpm -e {name}; fi")
     else:
         command = f"pacman -R --noconfirm {name}"
-    return (f'if ! out=$( {{ {command}; }} 2>&1 ); then\n'
+    return (f'if ! out=$( {{ {command}; }} </dev/null 2>&1 ); then\n'
             f'    echo {secure_input.PACKAGE_NOT_REMOVED}\n'
             f'    printf "%s\\n" "$out" | tail -n 3\n'
             f'fi\n')
@@ -282,7 +320,7 @@ def root_script(plan, leave_group):
     even if one before it failed."""
     lines = "set -uo pipefail\n"
     if leave_group:
-        lines += secure_input._leave_group_lines()
+        lines += secure_input.leave_group_lines()
     lines += secure_input.uninstall_lines()
     if plan.package:
         lines += _package_lines(plan)
@@ -303,13 +341,17 @@ def _remove(path):
     return True
 
 
-def _empty(folder, names):
+def _empty(folder, names, kept=()):
     """Remove what's in *folder* (through a link, only what's TuxTalk's by
-    *names*), then the folder, or the link and the folder it led to if
-    that's empty now. What it couldn't remove."""
+    *names*) but what's *kept* (real paths), then the folder, or the link and the folder it led
+    to if that's empty now. What it couldn't remove."""
     target = folder.resolve() if folder.is_symlink() else None
     failed = []
-    for entry in _contents(folder, names):
+    entries = _contents(folder, names)
+    held = [entry for entry in entries if os.path.realpath(entry) in kept]
+    for entry in entries:
+        if entry in held:
+            continue
         if (target is not None and entry.name == "backups" and entry.is_dir()
                 and not entry.is_symlink()):
             # A synced folder may keep a backups folder of its own.
@@ -321,7 +363,7 @@ def _empty(folder, names):
                 pass        # not only TuxTalk's
         elif not _remove(entry):
             failed.append(entry)
-    if not failed and not _remove(folder):
+    if not failed and not held and not _remove(folder):
         failed.append(folder)
     if target is not None:
         try:
@@ -342,10 +384,11 @@ def remove_files(plan, delete_personal, delete_shared):
         paths += plan.personal
     if plan.ydotoold_unit is not None:
         paths.append(plan.ydotoold_unit)
-    failed = [path for path in paths if not _remove(path)]
+    kept = {os.path.realpath(path) for path in plan.kept}
+    failed = [path for path in paths if os.path.realpath(path) not in kept and not _remove(path)]
     if delete_personal:
         for folder, names in plan.folders:
-            failed += _empty(folder, names)
+            failed += _empty(folder, names, kept)
     # Folders TuxTalk made and nothing else uses: gone once empty.
     folders = [plan.home / "AppImages", plan.hub / ".locks", plan.hub]
     if plan.hub.parent.name == "huggingface":
@@ -364,10 +407,10 @@ def remove_files(plan, delete_personal, delete_shared):
     return list(left.values())
 
 
-def _tuxtalk_pids(data_dir):
+def _tuxtalk_pids(engines):
     """This user's other TuxTalk processes: its Python modules (service,
     Preferences, Transcribe a File, an old TalkType) and the engines it
-    downloaded into *data_dir*."""
+    downloaded into the *engines* folders."""
     me, uid = os.getpid(), os.getuid()
     pids = []
     for entry in os.listdir("/proc"):
@@ -383,7 +426,7 @@ def _tuxtalk_pids(data_dir):
             continue
         module = any(a == "-m" and b.startswith(("tuxtalk.", "talktype."))
                      for a, b in zip(argv, argv[1:]))
-        if (module or exe.startswith(str(data_dir) + os.sep)) and not _is_dev(pid):
+        if (module or exe.startswith(engines)) and not _is_dev(pid):
             pids.append(pid)
     return pids
 
@@ -405,8 +448,11 @@ def stop_tuxtalk(plan, stop_tray_parts=None):
         stop_tray_parts()
     service_launcher.stop_dictation_service()      # also lets KDE have the hotkeys back
     uinput_helper.stop_ydotoold_we_started()
-    data_dir = (plan.home / ".local" / "share" / config.DATA_DIR).resolve()
-    pids = _tuxtalk_pids(data_dir)
+    # Each engine folder, not the whole data folder: that may be a link into
+    # a folder where other programs run from.
+    data_dir = plan.home / ".local" / "share" / config.DATA_DIR
+    pids = _tuxtalk_pids(tuple(os.path.realpath(data_dir / name) + os.sep
+                               for name in ENGINE_FOLDERS))
     for pid in pids:
         try:
             os.kill(pid, signal.SIGTERM)
@@ -431,15 +477,22 @@ def undo_desktop_changes(plan):
     test was cut short, the GNOME extension, KDE's shortcut entries. Runs
     after stop_tuxtalk() and before the files go (the keybindings' backup
     is one of them). Returns what's still there, in words."""
-    gnome_keybindings.restore_left_over()
     left = []
+    if not gnome_keybindings.restore_left_over():
+        # Its backup stays (remove_files leaves plan.kept), so a reinstall
+        # can still put them back.
+        plan.kept.append(plan.home / ".local" / "share" / config.DATA_DIR
+                         / gnome_keybindings.BACKUP_NAME)
+        left.append("GNOME's Alt+F7 and Alt+F8 shortcuts, which a hotkey test had "
+                    "cleared (TuxTalk couldn't put them back)")
     if plan.extension or desktop_detect.is_gnome():
         extension_helper.uninstall_extension()
         # Its result can't tell "removed nothing" from "wasn't there".
         folder = Path(desktop_detect.get_extension_dir()) / extension_helper.EXTENSION_UUID
         if os.path.lexists(folder):
             left.append(f"the GNOME extension ({_shown(folder, plan.home)})")
-    kwin_hotkeys.forget_our_components()
+    if not kwin_hotkeys.forget_our_components():
+        left.append("TuxTalk's entries in KDE's Shortcuts settings")
     return left
 
 
@@ -482,9 +535,18 @@ def confirm_text(plan, size):
     if size >= 1000 ** 2:       # not just the small files it keeps there
         lines.append("the engines, libraries and models it downloaded to its own folder "
                      f"({_size_text(size)})")
-    lines.append("starting at login, its menu entry and the GNOME extension" if plan.extension
-                 else "starting at login and its menu entry")
+    found = {path.parent.name for path in plan.leftovers}
+    desktop = [what for what, there in (("starting at login", "autostart" in found),
+                                        ("its menu entry", "applications" in found),
+                                        ("the GNOME extension", plan.extension)) if there]
+    if desktop:
+        lines.append(_and(desktop))
     return "\n".join(f"•  {line}" for line in lines)
+
+
+def _and(items):
+    """"a", "a and b", "a, b and c"."""
+    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
 
 
 def _shown(path, home):
@@ -495,14 +557,29 @@ def _shown(path, home):
         return str(path)
 
 
-def shared_text(plan, size):
-    """The line under the shared-models box: what's there, how big, where."""
-    ai = f"models--{ai_cleanup.MODEL_REPO.replace('/', '--')}"
+def _shared_what(plan):
+    """What the shared cache holds of TuxTalk's, in words, and whether that's
+    more than one thing."""
+    ai = _hub_folder(ai_cleanup.MODEL_REPO)
     names = {path.name for path in plan.shared}
-    what = ("The AI model" if names == {ai} else
-            "Speech models and the AI model" if ai in names else "Speech models")
-    return (f"{what}, {_size_text(size)}, in {_shown(plan.hub, plan.home)}. "
-            "Otherwise they stay there for other apps, or for TuxTalk if you install it again.")
+    if names == {ai}:
+        return "the AI model", False
+    return ("speech models and the AI model" if ai in names else "speech models"), True
+
+
+def shared_label(plan):
+    """The shared-models box."""
+    what, several = _shared_what(plan)
+    return (f"Also delete {what} in the shared download folder "
+            f"(other apps may use {'them' if several else 'it'})")
+
+
+def shared_text(plan, size):
+    """The line under the shared-models box: how big, and where."""
+    several = _shared_what(plan)[1]
+    return (f"{_size_text(size)} in {_shown(plan.hub, plan.home)}. Otherwise "
+            f"{'they stay' if several else 'it stays'} there for other apps, or for TuxTalk "
+            "if you install it again.")
 
 
 def _wait_for(work):
@@ -551,8 +628,7 @@ def _ask(plan):
 
     shared = None
     if plan.shared:
-        shared = Gtk.CheckButton(label="Also delete speech models in the shared download "
-                                       "folder (other apps may use them)")
+        shared = Gtk.CheckButton(label=shared_label(plan))
         area.pack_start(shared, False, False, 0)
         area.pack_start(_note(shared_text(plan, disk_size(plan.shared))), False, False, 0)
 
@@ -615,10 +691,22 @@ ROOT_LEFT = {"helper": f"the hotkey helper ({secure_input.SERVICE})",
              "rule": "the typing permission in /etc/udev/rules.d"}
 
 
-def root_result(report, leave_group):
-    """The Result of the root script, from its report lines (_pkexec)."""
+def root_result(report, leave_group, package=False):
+    """The Result of the root script, from its report lines (_pkexec).
+    *package* is whether it removed a package too."""
     lines = report.splitlines()
     result = Result(package_failed=secure_input.PACKAGE_NOT_REMOVED in lines)
+    if secure_input.RAN_TOO_LONG in lines:
+        # It ran to the end, but what it said was lost.
+        unsure = ["the hotkey helper"]
+        if package:
+            unsure.append("the program's package")
+        if leave_group:
+            unsure.append("your place in the 'input' group")
+        result.not_removed.append(f"maybe {_and(unsure)} (removing "
+                                  f"{'them' if len(unsure) > 1 else 'it'} took too long to "
+                                  "confirm)")
+        return result
     result.not_removed = [ROOT_LEFT[line.split()[1]] for line in lines
                           if line.startswith(secure_input.NOT_REMOVED + " ")]
     still_in_group = secure_input.STILL_IN_GROUP in lines
@@ -654,12 +742,14 @@ def done_text(plan, delete_personal, delete_shared, result):
         logout.append("leaving the 'input' group takes effect then")
     if logout:
         parts.append("Log out and back in to finish: " + ", and ".join(logout) + ".")
-    if not delete_personal and any(folder.exists() for folder, _names in plan.folders):
+    if not delete_personal and (plan.home / ".config" / config.CONFIG_DIR).exists():
         parts.append("Your settings, Your Words and snippets are kept in "
                      f"<tt>~/.config/{config.CONFIG_DIR}</tt>.")
     if not delete_shared and plan.shared:
-        parts.append("The models in the shared download folder are kept in "
-                     f"<tt>{GLib.markup_escape_text(_shown(plan.hub, plan.home))}</tt>.")
+        what, several = _shared_what(plan)
+        where = GLib.markup_escape_text(_shown(plan.hub, plan.home))
+        parts.append(f"{what[0].upper() + what[1:]} in the shared download folder "
+                     f"{'are' if several else 'is'} kept in <tt>{where}</tt>.")
     if result.not_removed:
         parts.append(f'Ask in <a href="{FEEDBACK_URL}">Discussions</a> and we\'ll help you '
                      "remove the rest.")
@@ -675,12 +765,11 @@ def _remove_as_root(plan, leave_group):
     ok, message = _wait_for(lambda: secure_input._run_as_root(
         root_script(plan, leave_group), "removed (uninstalling TuxTalk)"))
     if ok:
-        return root_result(message, leave_group)
+        return root_result(message, leave_group, plan.package is not None)
     if message == secure_input.TIMED_OUT:
         _tell(Gtk.MessageType.ERROR, "TuxTalk couldn't uninstall",
-              "The password prompt, or removing what needs it, took too long, so TuxTalk "
-              "stopped waiting. The hotkey helper may already be gone; the rest is still "
-              "there. Try Uninstall TuxTalk… again.")
+              "Nothing was removed: the password prompt was open too long. Try Uninstall "
+              "TuxTalk… again.")
     elif message != "cancelled":
         _tell(Gtk.MessageType.ERROR, "TuxTalk couldn't uninstall",
               f"Nothing was removed.\n\n{message}")
@@ -695,6 +784,7 @@ def _remove_the_rest(plan, delete_personal, delete_shared, stop_tray_parts, resu
     result.not_removed += undo_desktop_changes(plan)
     # Looked for again: stopping may have written a file (the stats).
     again = find(home, plan.install_type, appimage=update_checker.get_running_appimage_path())
+    again.kept = plan.kept
     if delete_personal:
         logger.info("Uninstalled TuxTalk; deleting the settings and this log")
         stop_file_logging()         # its folder is about to go
@@ -738,8 +828,9 @@ def run(stop_tray_parts=None):
             result.not_removed.append(f"some of the rest: the uninstall stopped partway ({e})")
     finally:
         window.destroy()
-    logger.info("Uninstalled TuxTalk" if not result.not_removed
-                else f"Uninstalled TuxTalk, except: {', '.join(result.not_removed)}")
+    left = result.not_removed + (["the package"] if result.package_failed else [])
+    logger.info("Uninstalled TuxTalk" if result.complete
+                else f"Uninstalled TuxTalk, except: {', '.join(left)}")
     _tell(Gtk.MessageType.INFO if result.complete else Gtk.MessageType.WARNING,
           done_heading(result), done_text(plan, delete_personal, delete_shared, result),
           markup=True)

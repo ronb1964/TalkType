@@ -6,7 +6,9 @@ real one, and conftest.py fails any test that reaches pkexec.
 import os
 import pathlib
 import re
+import shutil
 import subprocess
+import time
 import types
 
 import pytest
@@ -85,24 +87,50 @@ def test_downloads_and_launchers_go_and_settings_and_shared_models_stay(home):
         "Documents", "Documents/TuxTalk-settings-2026-10-20-0900.zip"])
 
 
-def test_shared_models_go_when_asked_but_only_the_ones_tuxtalk_offers(home):
-    """The Hugging Face cache is shared: an older faster-whisper model
-    TuxTalk never offered may be another app's (review of 0.17)."""
-    (home / HUB / "models--Systran--faster-whisper-large-v2").mkdir()
+def test_shared_models_go_when_asked_but_only_ones_tuxtalk_downloads(home):
+    """The Hugging Face cache is shared: a faster-whisper model TuxTalk never
+    downloads is another app's (review of 0.17). One an older config could
+    still name (small.en) is TuxTalk's."""
+    for repo in ("models--Systran--faster-distil-whisper-large-v3",
+                 "models--Systran--faster-whisper-small.en"):
+        (home / HUB / repo).mkdir()
     uninstall.remove_files(_find(home), delete_personal=False, delete_shared=True)
     assert sorted(p.name for p in (home / HUB).iterdir()) == [
-        "models--Systran--faster-whisper-large-v2", "models--someone--another-apps-model"]
+        "models--Systran--faster-distil-whisper-large-v3", "models--someone--another-apps-model"]
+
+
+def test_a_linked_locks_folder_is_never_deleted_through(home, tmp_path):
+    locks = home / HUB / ".locks"
+    shutil.rmtree(locks)
+    elsewhere = tmp_path / "elsewhere"
+    (elsewhere / "models--Systran--faster-whisper-small").mkdir(parents=True)
+    locks.symlink_to(elsewhere)
+    uninstall.remove_files(_find(home), delete_personal=False, delete_shared=True)
+    assert (elsewhere / "models--Systran--faster-whisper-small").exists()
 
 
 def test_the_shared_models_box_says_what_is_there_and_where(home):
     plan = _find(home)
-    assert uninstall.shared_text(plan, 600_000_000).startswith(
-        f"Speech models and the AI model, 600 MB, in ~/{HUB}.")
+    assert uninstall.shared_label(plan) == ("Also delete speech models and the AI model in the "
+                                            "shared download folder (other apps may use them)")
+    assert uninstall.shared_text(plan, 600_000_000).startswith(f"600 MB in ~/{HUB}. Otherwise they")
     uninstall.remove_files(plan, delete_personal=False, delete_shared=True)
     assert _find(home).shared == []         # so the question has no box
     kept = uninstall.done_text(plan, delete_personal=False, delete_shared=False,
                                result=uninstall.Result())
     assert f"shared download folder are kept in <tt>~/{HUB}</tt>" in kept
+
+
+def test_only_the_ai_model_is_named_as_it(home):
+    shutil.rmtree(home / HUB / "models--Systran--faster-whisper-small")
+    shutil.rmtree(home / HUB / ".locks")
+    plan = _find(home)
+    assert uninstall.shared_label(plan) == ("Also delete the AI model in the shared download "
+                                            "folder (other apps may use it)")
+    assert "Otherwise it stays" in uninstall.shared_text(plan, 1)
+    kept = uninstall.done_text(plan, delete_personal=False, delete_shared=False,
+                               result=uninstall.Result())
+    assert "The AI model in the shared download folder is kept" in kept
 
 
 def test_asked_to_it_leaves_nothing_of_tuxtalk_but_the_saved_backup(home):
@@ -319,7 +347,17 @@ def test_the_question_lists_only_what_this_computer_has(home):
     pathlib.Path(secure_input.UNIT_PATH).write_text("")
     (home / ".local/share/gnome-shell/extensions/talktype@ronb1964.github.io").mkdir(parents=True)
     text = uninstall.confirm_text(_find(home, "deb"), 1)
-    assert "the tuxtalk package" in text and "hotkey helper" in text and "GNOME extension" in text
+    assert "the tuxtalk package" in text and "hotkey helper" in text
+    assert "starting at login, its menu entry and the GNOME extension" in text
+    (home / ".config/autostart/tuxtalk.desktop").unlink()
+    assert "•  its menu entry and the GNOME extension" in uninstall.confirm_text(_find(home), 1)
+
+
+def test_the_settings_line_shows_only_when_the_settings_folder_is_there(home):
+    shutil.rmtree(home / ".config/tuxtalk")
+    text = uninstall.done_text(_find(home), delete_personal=False, delete_shared=True,
+                               result=uninstall.Result())
+    assert "Your settings" not in text
 
 
 def test_the_closing_message_says_how_to_finish_a_refused_package(home):
@@ -401,8 +439,8 @@ def test_a_file_that_went_on_the_second_try_isnt_reported(home, monkeypatch):
 def test_an_extension_that_stays_is_named(home, monkeypatch):
     ext = home / ".local/share/gnome-shell/extensions/talktype@ronb1964.github.io"
     ext.mkdir(parents=True)
-    monkeypatch.setattr(uninstall.gnome_keybindings, "restore_left_over", lambda: None)
-    monkeypatch.setattr(uninstall.kwin_hotkeys, "forget_our_components", lambda: None)
+    monkeypatch.setattr(uninstall.gnome_keybindings, "restore_left_over", lambda: True)
+    monkeypatch.setattr(uninstall.kwin_hotkeys, "forget_our_components", lambda: True)
     monkeypatch.setattr(uninstall.extension_helper, "uninstall_extension", lambda: False)
     assert uninstall.undo_desktop_changes(_find(home)) == [
         "the GNOME extension (~/.local/share/gnome-shell/extensions/talktype@ronb1964.github.io)"]
@@ -411,24 +449,100 @@ def test_an_extension_that_stays_is_named(home, monkeypatch):
     assert uninstall.undo_desktop_changes(_find(home)) == []
 
 
-def test_a_time_out_while_running_as_root_is_a_time_out(monkeypatch):
-    """After the password the script runs as root, and killing it on the
-    time-out raised PermissionError, which nothing caught: no closing message
-    (review of 0.17)."""
+def test_a_desktop_change_that_wont_undo_is_named_and_its_backup_kept(home, monkeypatch):
+    """A cleared GNOME Alt+F7/Alt+F8 that won't come back keeps its backup,
+    so it can be put back later; KDE shortcut entries that stay are named."""
+    backup = home / ".local/share/TuxTalk/gnome-keybindings-backup.json"
+    backup.write_text("{}")
+    monkeypatch.setattr(uninstall.gnome_keybindings, "restore_left_over", lambda: False)
+    monkeypatch.setattr(uninstall.kwin_hotkeys, "forget_our_components", lambda: False)
+    monkeypatch.setattr(uninstall.desktop_detect, "is_gnome", lambda: False)
+    plan = _find(home)
+    left = uninstall.undo_desktop_changes(plan)
+    assert left[0].startswith("GNOME's Alt+F7 and Alt+F8 shortcuts")
+    assert left[1] == "TuxTalk's entries in KDE's Shortcuts settings"
+    again = _find(home)
+    again.kept = plan.kept
+    uninstall.remove_files(again, delete_personal=True, delete_shared=False)
+    assert backup.exists()
+
+
+def test_a_time_out_after_the_password_carries_on_unsure(monkeypatch):
+    """After the password the script runs as root and can't be killed, so it
+    ran to the end (the package removed too): the rest is uninstalled, with a
+    line saying it couldn't be confirmed, not "try again" with the program
+    gone (review of 0.17)."""
     def run(*a, **k):
         raise PermissionError(1, "Operation not permitted")
     monkeypatch.setattr(secure_input.subprocess, "run", run)
     monkeypatch.setattr(secure_input, "PKEXEC_TIMEOUT", 0)
-    assert secure_input._pkexec("true", "tested") == (False, secure_input.TIMED_OUT)
+    ok, report = secure_input._pkexec("true", "tested")
+    assert (ok, report) == (True, secure_input.RAN_TOO_LONG)
+    result = uninstall.root_result(report, leave_group=False, package=True)
+    assert result.not_removed == ["maybe the hotkey helper and the program's package "
+                                  "(removing them took too long to confirm)"]
 
 
-def test_a_timed_out_password_prompt_doesnt_claim_nothing_changed(home, monkeypatch):
+def test_a_password_prompt_left_open_removes_nothing(home, monkeypatch):
     told = []
     monkeypatch.setattr(uninstall.secure_input, "_run_as_root",
                         lambda script, what: (False, secure_input.TIMED_OUT))
     monkeypatch.setattr(uninstall, "_tell", lambda kind, heading, body, **k: told.append(body))
     assert uninstall._remove_as_root(_find(home), leave_group=False) is None
-    assert "may already be gone" in told[0] and "Nothing was removed" not in told[0]
+    assert told[0].startswith("Nothing was removed: the password prompt was open too long")
+
+
+def test_a_linked_folders_copies_are_only_the_ones_tuxtalk_writes(home, tmp_path):
+    config = home / ".config/tuxtalk"
+    synced = tmp_path / "Sync"
+    synced.mkdir()
+    for name in ("config.toml.bak", "config.toml.ab1_cd2z.tmp", "config.toml.corrupt-20261020-0900",
+                 "custom_words.txt.before-words-tab", "tuxtalk.log.old"):
+        (synced / name).write_text("ours")
+    for name in ("config.toml.personal-notes", "config.toml.mine.tmp"):
+        (synced / name).write_text("someone else's")
+    shutil.rmtree(config)
+    config.symlink_to(synced)
+    uninstall.remove_files(_find(home), delete_personal=True, delete_shared=False)
+    assert sorted(p.name for p in synced.iterdir()) == ["config.toml.mine.tmp",
+                                                         "config.toml.personal-notes"]
+
+
+def test_the_download_size_counts_files_and_never_follows_a_link(tmp_path):
+    big = tmp_path / "big.bin"
+    big.write_bytes(b"x" * 300_000)
+    folder = tmp_path / "models"
+    folder.mkdir()
+    (folder / "model.bin").write_bytes(b"x" * 200_000)
+    link = tmp_path / "link"
+    link.symlink_to(folder)
+    assert uninstall.disk_size([big]) >= 300_000
+    assert uninstall.disk_size([link]) < 10_000
+    assert uninstall.disk_size([folder, link]) == uninstall.disk_size([folder])
+
+
+def test_only_programs_in_tuxtalks_engine_folders_are_stopped(home, tmp_path):
+    """The data folder may be a link into a folder other programs run from:
+    stopping TuxTalk must not stop them (review of 0.17)."""
+    data = home / ".local/share/TuxTalk"
+    shared = tmp_path / "disk"
+    data.rename(shared)
+    data.symlink_to(shared)
+    (shared / "other").mkdir()
+    started = []
+    try:
+        for folder in ("whisper-vulkan", "other"):
+            copy = shared / folder / "sleep"
+            shutil.copy("/bin/sleep", copy)
+            started.append(subprocess.Popen([str(copy), "30"]))
+        time.sleep(0.3)
+        engines = tuple(os.path.realpath(data / name) + os.sep for name in uninstall.ENGINE_FOLDERS)
+        pids = uninstall._tuxtalk_pids(engines)
+        assert started[0].pid in pids and started[1].pid not in pids
+    finally:
+        for process in started:
+            process.kill()
+            process.wait()
 
 
 def test_an_error_partway_still_ends_with_a_message_and_quits(home, monkeypatch):

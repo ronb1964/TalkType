@@ -18,7 +18,8 @@ DONE = "TuxTalk is uninstalled"
 # AT-SPI names a message box by its kind, not its title.
 ASK_BOX, DONE_BOX = "Question", "Information"
 DELETE_BOX = "Also delete my settings, Your Words, snippets and stats"
-SHARED_BOX = "Also delete speech models in the shared download folder (other apps may use them)"
+# Its words follow what the folder holds (uninstall.shared_label).
+SHARED_BOX = "~in the shared download folder (other apps may use"
 UUID = "talktype@ronb1964.github.io"
 
 # One look at everything the uninstall should take away, as JSON. The

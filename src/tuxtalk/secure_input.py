@@ -136,7 +136,7 @@ def install_script(leave_group=False):
     """The script pkexec runs as root to set it all up. With *leave_group*
     (switching from the input group) the user also leaves that group, in
     the same password prompt."""
-    leave = _leave_group_lines() if leave_group else ""
+    leave = leave_group_lines() if leave_group else ""
     return f"""set -euo pipefail
 umask 022
 # The folder the service runs from must be root's own, never a link.
@@ -180,7 +180,7 @@ fi
 """
 
 
-def _leave_group_lines():
+def leave_group_lines():
     """Shell lines taking the user who asked (pkexec's PKEXEC_UID, which they
     can't fake) out of the input group, with the old rule that gave that
     group /dev/uinput."""
@@ -205,9 +205,14 @@ PACKAGE_NOT_REMOVED = "TUXTALK_PACKAGE_NOT_REMOVED"
 # still there after removing it, so the uninstall doesn't claim it's gone.
 NOT_REMOVED = "TUXTALK_NOT_REMOVED"
 
-# _pkexec()'s message when pkexec didn't return in PKEXEC_TIMEOUT: the
-# script may have run some of the way by then.
+# _pkexec()'s message when the password prompt stayed open past
+# PKEXEC_TIMEOUT: pkexec was stopped there, and nothing ran as root.
 TIMED_OUT = "That took too long. Please try again."
+
+# _pkexec()'s message, with ok=True, when the time ran out after the
+# password: the script, running as root, couldn't be stopped and was waited
+# for, but its output and exit status were lost.
+RAN_TOO_LONG = "TUXTALK_RAN_TOO_LONG"
 
 
 def _still_in_group_check():
@@ -308,10 +313,11 @@ def _pkexec(script, what):
     except PermissionError:
         if time.monotonic() - started < PKEXEC_TIMEOUT:
             raise
-        # Timed out after the password, while the script ran as root: this
-        # user can't stop it, and subprocess waited for it to end instead.
-        logger.warning(f"Hotkey helper {what}: timed out while running as root")
-        return False, TIMED_OUT
+        # Killing pkexec on the time-out fails once it runs the script as
+        # root; subprocess then waits for the script to end.
+        logger.warning(f"Hotkey helper {what}: ran past the time-out as root; "
+                       "its result is unknown")
+        return True, RAN_TOO_LONG
     except FileNotFoundError:
         return False, "pkexec isn't installed, so TuxTalk can't ask for your password."
     if result.returncode == 0:
