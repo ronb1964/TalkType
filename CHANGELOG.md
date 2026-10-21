@@ -3,6 +3,17 @@
 All notable changes to TuxTalk are documented here. It was called TalkType
 before 0.15.0, so older entries use that name.
 
+## [Unreleased]
+
+- TuxTalk no longer types into password fields. Dictate with the cursor in
+  a password box and nothing is typed: you hear the low beep and "TuxTalk
+  doesn't type into password fields" shows over the window. The words aren't
+  kept in Recent Dictations either, since they may be the password. The same
+  goes for Paste Last Dictation and voice editing. TuxTalk asks the desktop's
+  accessibility service, so it works in GTK apps (most GNOME, Cinnamon and
+  Xfce apps), and in KDE apps and Firefox only while accessibility is on.
+  Chrome, Brave and Electron apps don't say, so there it types as before.
+
 ## [0.17.0] - 2026-10-20
 
 - Parakeet is more accurate. TuxTalk now downloads Parakeet Ultra,
