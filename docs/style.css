@@ -159,7 +159,7 @@ code, kbd, pre { font-family: var(--f-mono); }
 }
 .theme-btn:hover { background: color-mix(in srgb, var(--sky-ink) 10%, transparent); }
 .theme-btn svg { width: 20px; height: 20px; }
-@media (max-width: 720px) {
+@media (max-width: 820px) {
   .top nav a.nav-hide { display: none; }
 }
 
