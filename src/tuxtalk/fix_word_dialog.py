@@ -409,8 +409,15 @@ def main(argv=None):
     if not entries:
         show_fix_word_dialog(0, copy_text=copy_text)    # says there's nothing yet
         return 0
+    in_place = bool(typed and typed.strip())
+    if in_place and not os.environ.get("FLATPAK_ID"):
+        # This process types the fix on a virtual keyboard of its own. Made
+        # now, the desktop has taken it on (and, on X11, given it the user's
+        # layout) long before the window closes.
+        from . import virtual_keyboard
+        virtual_keyboard.start()
     dialog = _FixWordDialog(entries, 0, copy_text, before_show=place_over_active_window,
-                            in_place=bool(typed and typed.strip()))
+                            in_place=in_place)
     dialog.window.connect("destroy", lambda _w: Gtk.main_quit())
     dialog.window.present()
     Gtk.main()
