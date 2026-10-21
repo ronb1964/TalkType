@@ -4807,14 +4807,15 @@ def _wake_model():
         if model is None:
             logger.info("Power saving: loading the speech model again for this dictation")
             try:
-                model = _build_model_or_exit(load_config())
-            except SystemExit:
-                # Its "nothing will load" exit, raised in a dictation's thread,
-                # would end only that thread. Say so; the next dictation tries again.
-                logger.error("Power saving: the speech model wouldn't load again")
-                _notify("TuxTalk", "The speech model is missing or wouldn't load. Choose "
-                        "Restart Service in the TuxTalk menu to download it again, or "
-                        "pick a model in Preferences.")
+                # Not _build_model_or_exit: its fallback saves another model
+                # over the user's choice, which a graphics card that fails
+                # once on waking shouldn't do, and its exit would end only
+                # this dictation's thread. The next dictation tries again.
+                model = build_model(load_config())
+            except ModelUnavailable as e:
+                logger.error(f"Power saving: the speech model wouldn't load again: {e}")
+                _notify("TuxTalk", "The speech model wouldn't load. Choose Restart Service "
+                        "in the TuxTalk menu, or pick a model in Preferences.")
                 return None
             _notify_tray_running_engine()
         return model

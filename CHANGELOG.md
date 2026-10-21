@@ -22,8 +22,8 @@ before 0.15.0, so older entries use that name.
   partway still ends with a message instead of a half-closed TuxTalk.
 - Power Saving: if the speech model's files were deleted while it rested,
   the next dictation tried to open the download window from the wrong place
-  and could crash the dictation service. It now uses another downloaded
-  model, or says the model is missing.
+  and could crash the dictation service. It now says the model wouldn't
+  load, and your choice of model stays as it was.
 - On X11 desktops (Linux Mint Cinnamon and other X11 sessions), dropdowns
   open as a list under the button again. Since 0.14.3 a wrong check gave X11
   the workaround meant for Wayland.
