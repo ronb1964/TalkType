@@ -38,8 +38,9 @@ class VMSpec:
 VMS = {v.key: v for v in (
     VMSpec("silverblue", "Fedora Silverblue 44", "192.168.122.198", 1920, 1200,
            ("gnome", "no-tray", "immutable"), ["ptyxis", "--new-window", "--"]),
+    # Ubuntu 26.04 ships Ptyxis as its terminal, and no gnome-terminal.
     VMSpec("ubuntu", "ubuntu26.04", "192.168.122.32", 1920, 1200, ("gnome",),
-           ["gnome-terminal", "--wait", "--"]),
+           ["ptyxis", "--new-window", "--"]),
     # Cinnamon opens a terminal small in a corner, where clicking the middle
     # of the screen would land on the test window behind it.
     VMSpec("mint", "MintCinnamon", "192.168.122.199", 1920, 1080, ("cinnamon", "x11"),
