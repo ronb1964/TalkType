@@ -75,8 +75,8 @@ _RE_YEAR_OH = re.compile(r"\b(1[1-9]|20) oh (\d)\b", re.IGNORECASE)
 # A lone digit 1-9 before a lowercase word: a count Parakeet Ultra wrote as a
 # digit ("3 cats"), which "Digits from 10 up" writes as a word.
 _RE_SMALL_DIGIT = re.compile(r"(?<![\w.,:$€£#+\-/])([1-9])(?=\s+([a-z][\w'-]*))")
-_RE_RANGE_AFTER = re.compile(r"\s+(?:to|and|or|through|out of)\s+\d")
-_RE_RANGE_BEFORE = re.compile(r"\d\s+(?:to|and|or|through|out of)$")
+_RE_RANGE_AFTER = re.compile(r"\s+(?:to|and|or|through|out of|x|by)\s+\d")
+_RE_RANGE_BEFORE = re.compile(r"\d\s+(?:to|and|or|through|out of|x|by)$")
 _SMALL_WORDS = ("one", "two", "three", "four", "five", "six", "seven", "eight", "nine")
 # Words that put a number on something rather than count it ("page 3").
 _LABELS = frozenset({
@@ -88,7 +88,7 @@ _LABELS = frozenset({
 # Units and clock words a digit stays in front of ("3 pm", "2 kg").
 _UNITS = frozenset({
     "am", "pm", "kg", "km", "cm", "mm", "m", "g", "mg", "lb", "lbs", "oz", "ft", "mph",
-    "kph", "gb", "mb", "kb", "tb", "ms", "hz", "khz", "ghz", "v", "w", "x", "k",
+    "kph", "gb", "mb", "kb", "tb", "ms", "hz", "khz", "ghz", "v", "w", "x", "k", "percent",
 })
 
 
@@ -106,8 +106,10 @@ def _small_digits_as_words(text: str) -> str:
             return digit                                    # "2 to 4", "3 out of 10"
         sentence_start = not before or before[-1] in ".!?"
         if prev and not sentence_start:
-            if prev.group(1).lower() in _LABELS or (prev.group(1)[0].isupper()
-                                                     and prev.group(1) != "I"):
+            before_word = prev.group(1)
+            # A name: any capital in it ("Python 3", "iPhone 5"), not "I".
+            if before_word.lower() in _LABELS or (before_word != "I"
+                                                  and not before_word.islower()):
                 return digit
         spelled = _SMALL_WORDS[int(digit) - 1]
         return spelled.capitalize() if sentence_start else spelled

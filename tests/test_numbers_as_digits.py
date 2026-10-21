@@ -80,6 +80,10 @@ def test_one_to_nine_stay_words(text, expected):
     ("It holds 3 GB, 2 kg and 5 km.", "It holds 3 GB, 2 kg and 5 km."),
     ("Between 3 and 15 people, 2 to 4 days.", "Between 3 and 15 people, 2 to 4 days."),
     ("Press F8, then B5 at 3:30, 2.5 times, 4%.", "Press F8, then B5 at 3:30, 2.5 times, 4%."),
+    # Review of 0.17: a size, a percentage and a name with a small first letter.
+    ("Buy 2 x 4 boards and 2 by 6 joists.", "Buy 2 x 4 boards and 2 by 6 joists."),
+    ("It was a 3 percent rise.", "It was a 3 percent rise."),
+    ("My iPhone 5 died.", "My iPhone 5 died."),
 ])
 def test_small_digits_the_engine_wrote_become_words(text, expected):
     assert to_digits(text, "en", small_as_words=True) == expected
