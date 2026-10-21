@@ -61,7 +61,7 @@ def test_a_system_wide_cuda_install_keeps_large_v3(monkeypatch):
 def test_the_swap_is_told_to_the_user(monkeypatch):
     monkeypatch.setattr("tuxtalk.cuda_helper.has_cuda_libraries", lambda: False)
     notes = []
-    monkeypatch.setattr(app, "_notify", lambda title, body: notes.append(body))
+    monkeypatch.setattr(app, "_notify", lambda title, body: notes.append(f"{title}\n{body}"))
     app._guard_large_v3_without_cuda(_cfg("cuda"))
     assert notes and "Medium" in notes[0]
     # The CUDA download is offered in General, Device; Advanced only shows status.

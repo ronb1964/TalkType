@@ -534,7 +534,7 @@ user@example.com. Add your own in <b>Preferences → Words → Add Snippet</b>, 
 <b>No key works (dictation never starts)</b>
 {no_hotkey_block}
 
-<b>"TuxTalk heard only silence"</b>
+<b>"No sound from the microphone"</b>
 The microphone sent nothing but silence: it's muted, turned all the way down, or
 it's the wrong one. Check its mute switch, then <b>Preferences → Audio →
 Microphone</b> and the test beside it.

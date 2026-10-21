@@ -55,9 +55,8 @@ def test_never_on_first_run_or_flatpak(env, monkeypatch):
 def test_notice_wording():
     s = r.recommend("en", NVIDIA)
     assert tray.recommend_notice_text(s) == (
-        "There's a better setup for this computer: Parakeet on your NVIDIA GeForce "
-        "RTX 4070 SUPER. Choose Performance → Recommended for this computer in the "
-        "TuxTalk menu to switch.")
+        "Parakeet on your NVIDIA GeForce RTX 4070 SUPER. Choose Performance → Recommended "
+        "for this computer in the TuxTalk menu to switch.")
 
 
 def test_waits_for_the_dictation_service(env, monkeypatch):

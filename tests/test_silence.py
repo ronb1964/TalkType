@@ -361,14 +361,16 @@ def test_dead_mic_is_digital_silence_only():
 def test_a_dead_mic_is_reported_not_transcribed(monkeypatch):
     from tuxtalk import app
     said, transcribed = [], []
-    monkeypatch.setattr(app, "_notify", lambda title, msg: said.append(msg))
+    monkeypatch.setattr(app, "_notify", lambda title, msg: said.append((title, msg)))
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
     monkeypatch.setattr(app, "_transcribe_audio", lambda *a: transcribed.append(1) or "hi")
     frames = [np.zeros(app.SAMPLE_RATE * 2, dtype=np.int16).tobytes()]
     app._transcribe_and_inject(frames, app.SAMPLE_RATE, beeps_on=False,
                                smart_quotes=False, notify_on=False)
     assert transcribed == []
-    assert said == [app.SILENT_MIC_NOTICE]
+    # The pop-up shows the title and a line or two: the problem itself must be
+    # the title, not "TuxTalk", which the desktop already shows as the sender.
+    assert said == [("No sound from the microphone", app.SILENT_MIC_NOTICE)]
 
 
 def _feed(det, audio):

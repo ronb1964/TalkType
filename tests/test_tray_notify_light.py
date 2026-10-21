@@ -27,7 +27,7 @@ SCRIPT = textwrap.dedent("""
     config.save_config = lambda c: None
     model_helper.is_model_cached_fast = lambda model: True
     shown = []
-    notify.notify = lambda title, body: shown.append(body)
+    notify.notify = lambda title, body: shown.append(title + " | " + body)
 
     lightest = Preset("lightest", "Lightest", "", "base", "cpu")
     t = types.SimpleNamespace(

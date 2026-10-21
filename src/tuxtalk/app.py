@@ -1720,7 +1720,7 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
             _release_all_grabs()
             _beep(beeps_on, *CANCEL_BEEP)
             if notify_on:
-                _notify("TuxTalk", "Microphone unavailable — check that no other app is using it")
+                _notify("Microphone unavailable", "Check that no other app is using it.")
             return False
 
     _arm_chunker(getattr(state, "recording_samplerate", SAMPLE_RATE), edit_mode)
@@ -1728,7 +1728,7 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
     print("Recording…")
     logger.debug("Recording started")
     _beep(beeps_on, *START_BEEP)
-    if notify_on: _notify("TuxTalk", "Recording… (speak now)")
+    if notify_on: _notify("Recording… speak now", "")
 
     # Notify GNOME extension that recording started (turns icon red)
     _notify_tray_recording_state(True)
@@ -1792,7 +1792,7 @@ def cancel_recording(beeps_on: bool, notify_on: bool, reason="Cancelled"):
     _beep(beeps_on, *CANCEL_BEEP)
     print(reason)
     logger.debug(f"Recording cancelled: {reason}")
-    if notify_on: _notify("TuxTalk", reason)
+    if notify_on: _notify(reason, "")
 
     # Hide recording indicator
     if recording_indicator:
@@ -2726,18 +2726,18 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
             _forget_shown()
             state.continue_mid_sentence = False
             _beep(beeps_on, *READY_BEEP)
-            if notify_on: _notify("TuxTalk", "Cleared input field")
+            if notify_on: _notify("Cleared the text box", "")
         else:
             print("Could not clear input field (text injection unavailable)")
             _beep(beeps_on, *CANCEL_BEEP)
-            if notify_on: _notify("TuxTalk", "Could not clear field")
+            if notify_on: _notify("Couldn't clear the text box", "")
         return True
 
     if not state.last_inserted_text:
         print("Nothing to undo (no previous dictation)")
         logger.info("Undo requested but no previous text to undo")
         _beep(beeps_on, *CANCEL_BEEP)
-        if notify_on: _notify("TuxTalk", "Nothing to undo")
+        if notify_on: _notify("Nothing to undo", "")
         return True
 
     # Backspacing the last dictation's length in a different window would
@@ -2773,14 +2773,14 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
             state.continue_mid_sentence = False
             _beep(beeps_on, *CANCEL_BEEP)
             if notify_on:
-                _notify("TuxTalk", "Undo stopped partway, so some of the text may still be there")
+                _notify("Undo stopped partway", "Some of the text may still be there.")
             return True
         if not deleted:
             print("Undo failed — nothing was deleted")
             logger.error("Undo failed: backspaces were not delivered; buffer left unchanged")
             _beep(beeps_on, *CANCEL_BEEP)
             if notify_on:
-                _notify("TuxTalk", "Undo failed — text couldn't be deleted")
+                _notify("Undo failed", "The text couldn't be deleted.")
             return True
 
         # Update last_inserted_text to reflect what remains
@@ -2797,7 +2797,7 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
             else:
                 state.continue_mid_sentence = False
         _beep(beeps_on, *READY_BEEP)
-        if notify_on: _notify("TuxTalk", f"Undid last {label}")
+        if notify_on: _notify(f"Undid the last {label}", "")
     else:
         print("Nothing to undo for this scope")
         _beep(beeps_on, *CANCEL_BEEP)
@@ -3340,25 +3340,31 @@ def _finish_capture(beeps_on: bool, notify_on: bool):
 
 
 PASSWORD_FIELD_LABEL = "TuxTalk doesn't type into password fields"
+PASSWORD_FIELD_TITLE = "Not typed into a password field"
 PASSWORD_FIELD_NOTICE = ("TuxTalk doesn't type into password fields, so it stopped there. "
                          "Type the password on the keyboard.")
 
 # What to tell the user when a dictation didn't reach the window. The text is
 # in Recent Dictations by then (it's saved before injection starts), unless a
 # password field refused it (_unsay).
+_UNDELIVERED_TITLES = {
+    "failed": "Couldn't type the dictation",
+    "partial": "Only part of the dictation was typed",
+    "password_field": PASSWORD_FIELD_TITLE,
+}
 _UNDELIVERED_NOTICES = {
-    "failed": "Couldn't type that dictation into the window. It's saved in Recent "
-              "Dictations in the TuxTalk menu: click it to copy, then paste with Ctrl+V.",
-    "partial": "Only part of that dictation reached the window. The whole text is saved "
-               "in Recent Dictations in the TuxTalk menu: click it to copy, then paste "
-               "with Ctrl+V.",
+    "failed": "It's saved in Recent Dictations in the TuxTalk menu: click it to copy, "
+              "then paste with Ctrl+V.",
+    "partial": "The whole text is saved in Recent Dictations in the TuxTalk menu: click "
+               "it to copy, then paste with Ctrl+V.",
     # Said its own way, with a label over the window (_password_field_refused).
     "password_field": PASSWORD_FIELD_NOTICE,
 }
 
 
-SILENT_MIC_NOTICE = ("TuxTalk heard only silence from the microphone. If you spoke, check "
-                     "that it isn't muted or unplugged, and that the right one is picked in "
+SILENT_MIC_TITLE = "No sound from the microphone"
+SILENT_MIC_NOTICE = ("TuxTalk heard only silence. If you spoke, check that the microphone "
+                     "isn't muted or unplugged, and that the right one is picked in "
                      "Preferences \u2192 Audio.")
 
 
@@ -3369,7 +3375,7 @@ def _warn_silent_mic():
     Oct 2026)."""
     print(SILENT_MIC_NOTICE)
     logger.warning("The microphone sent only silence (muted, unplugged or the wrong one?)")
-    _notify("TuxTalk", SILENT_MIC_NOTICE)
+    _notify(SILENT_MIC_TITLE, SILENT_MIC_NOTICE)
 
 
 def _device_name(idx) -> str:
@@ -3391,7 +3397,7 @@ def _warn_mic_switched(old_idx, new_idx):
               "back in usually fixes this.")
     print(notice)
     logger.warning(f"Recording from {new or new_idx!r}: {old or old_idx!r} didn't open")
-    _notify("TuxTalk", notice)
+    _notify("Recording from another microphone", notice)
 
 
 def _frames_are_dead_mic(frames, rec_sr) -> bool:
@@ -3431,7 +3437,7 @@ def _report_undelivered(outcome: str, beeps_on: bool):
     print(message)
     logger.warning(f"Dictation not delivered ({outcome}); told the user")
     _beep(beeps_on, *CANCEL_BEEP)
-    _notify("TuxTalk", message)
+    _notify(_UNDELIVERED_TITLES[outcome], message)
 
 
 def _refuse_password_field(beeps_on: bool) -> bool:
@@ -3456,7 +3462,7 @@ def _password_field_refused(beeps_on: bool) -> None:
     from . import screen_message
     screen_message.show_over_active_window(PASSWORD_FIELD_LABEL)
     if not (beeps_on and _gtk_loop_running and os.environ.get("DISPLAY")):
-        _notify("TuxTalk", PASSWORD_FIELD_NOTICE)
+        _notify(PASSWORD_FIELD_TITLE, PASSWORD_FIELD_NOTICE)
 
 
 # Silence put between two chunks when the engine hears them together, so the
@@ -3563,7 +3569,7 @@ def _erase_typed(text: str) -> bool:
         logger.error("Correction across a pause stopped partway; typing the phrase as said")
         state.last_inserted_text = ""
         _forget_shown()
-        _notify("TuxTalk", "A correction stopped partway, so check the text before it")
+        _notify("A correction stopped partway", "Check the text before it.")
         return False
     if deleted:
         _trim_shown(text, len(text))
@@ -3963,7 +3969,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         if chunk_role != "middle":
             _beep(beeps_on, *READY_BEEP)
             _ellipsis = "…"
-            if notify_on: _notify("TuxTalk", f"Transcribed: {text[:80]}{_ellipsis if len(text)>80 else ''}")
+            if notify_on: _notify("Transcribed", f"{text[:80]}{_ellipsis if len(text)>80 else ''}")
 
         # Stage 4: Inject text into the active application. It goes into the
         # Recent Dictations list first, so it can be recovered even if the
@@ -4022,7 +4028,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         # would sound like it worked.
         _beep(beeps_on, *CANCEL_BEEP)
         _ellipsis = "…"
-        _notify("TuxTalk", f"Transcription failed: {str(e)[:60]}{_ellipsis if len(str(e))>60 else ''}")
+        _notify("Transcription failed", f"{str(e)[:120]}{_ellipsis if len(str(e))>120 else ''}")
 
 
 def stop_recording(
@@ -4173,7 +4179,7 @@ def _edit_problem(kind: str, beeps_on: bool) -> None:
     except Exception as e:
         logger.debug(f"Could not float the message over the window: {e}")
     if not explained:
-        _notify("TuxTalk", message)
+        _notify(_EDIT_LABELS[kind], message)
 
 
 def _send_copy_keystroke() -> bool:
@@ -4253,7 +4259,7 @@ def _handle_fix_word(raw: str, beeps_on: bool) -> bool:
     except Exception as e:
         logger.warning(f"Could not open Fix a Word: {e}")
         _beep(beeps_on, *CANCEL_BEEP)
-        _notify("TuxTalk", "Fix a Word didn't open. Choose it in the TuxTalk menu instead.")
+        _notify("Fix a Word didn't open", "Choose it in the TuxTalk menu instead.")
     return True
 
 
@@ -4806,8 +4812,8 @@ def _wake_model():
                 model = build_model(load_config())
             except ModelUnavailable as e:
                 logger.error(f"Power saving: the speech model wouldn't load again: {e}")
-                _notify("TuxTalk", "The speech model wouldn't load. Choose Restart Service "
-                        "in the TuxTalk menu, or pick a model in Preferences.")
+                _notify("The speech model wouldn't load",
+                "Choose Restart Service in the TuxTalk menu, or pick a model in Preferences.")
                 return None
             _notify_tray_running_engine()
         return model
@@ -5187,10 +5193,10 @@ def _guard_large_v3_without_cuda(cfg):
             )
             print("large-v3 requires CUDA (not installed). Falling back to 'medium'.")
             cfg.model = "medium"
-            _notify("TuxTalk", "Large-v3 needs the CUDA files, which aren't installed, so "
-                               "TuxTalk is using Medium for now. Pick CUDA under "
-                               "Preferences, General, Device to download it and "
-                               "use Large-v3 again.")
+            _notify("Using Medium instead of Large-v3",
+                        "Large-v3 needs the CUDA files, which aren't installed. Pick CUDA "
+                        "under Preferences, General, Device to download them and use "
+                        "Large-v3 again.")
     except Exception:
         pass  # If cuda_helper unavailable, let the existing error handling deal with it
 
@@ -5249,10 +5255,9 @@ def _build_model_or_exit(settings: Settings):
             logger.warning(f"Dictation service stopping: fallback {fallback} could not load either")
             sys.exit(1)
         if isinstance(e, ModelWontLoad):
-            _notify("TuxTalk",
-                    f"{model_title(wanted)} is downloaded but wouldn't load, so "
-                    f"TuxTalk is using {model_title(fallback)} for now. It tries "
-                    f"{model_title(wanted)} again the next time dictation starts.")
+            _notify(f"Using {model_title(fallback)} for now",
+                    f"{model_title(wanted)} is downloaded but wouldn't load. TuxTalk tries "
+                    "it again the next time dictation starts.")
             return model
         try:
             from .config import load_config, save_config
@@ -5261,10 +5266,9 @@ def _build_model_or_exit(settings: Settings):
             save_config(saved)
         except Exception as save_error:
             logger.warning(f"Could not save the fallback model to settings: {save_error}")
-        _notify("TuxTalk",
-                f"{model_title(wanted)} wasn't downloaded, so TuxTalk is using "
-                f"{model_title(fallback)} for now. You can choose "
-                f"{model_title(wanted)} again in Preferences.")
+        _notify(f"Using {model_title(fallback)} for now",
+                f"{model_title(wanted)} wasn't downloaded. You can choose it again in "
+                "Preferences.")
         return model
 
 
@@ -5290,8 +5294,9 @@ def _build_vulkan_model(settings: Settings):
         except Exception as e:
             reason = f"the graphics engine failed to start ({e})"
     logger.warning(f"Vulkan GPU not used for {settings.model}: {reason}; using the processor")
-    _notify("TuxTalk", "Couldn't use your graphics card through Vulkan, so TuxTalk is using the "
-                        "processor for now. Choose the device again in Preferences to set it up.")
+    _notify("Couldn't use the graphics card",
+                "TuxTalk is using the processor for now. Choose the device again in "
+                "Preferences to set it up.")
     return None
 
 
@@ -5322,8 +5327,9 @@ def _build_parakeet_gpu_model(settings: Settings):
     except Exception as e:
         reason = f"the graphics helper failed to start ({e})"
     logger.warning(f"Vulkan GPU not used for Parakeet: {reason}; using the processor")
-    _notify("TuxTalk", "Couldn't run Parakeet on your graphics card, so TuxTalk is using the "
-                        "processor for now. Choose the device again in Preferences to set it up.")
+    _notify("Couldn't run Parakeet on the graphics card",
+                "TuxTalk is using the processor for now. Choose the device again in "
+                "Preferences to set it up.")
     return None
 
 
@@ -5430,9 +5436,9 @@ def build_model(settings: Settings):
             # past every fallback below. Processor for this run; the setting
             # stays, since downloading CUDA again in Preferences fixes it.
             logger.warning("Device is CUDA but the CUDA libraries are missing; using the processor")
-            _notify("TuxTalk", "The CUDA files are missing, so TuxTalk is using the processor "
-                                "for now. Pick CUDA under Preferences, General, Device to "
-                                "download them again.")
+            _notify("The CUDA files are missing",
+                        "TuxTalk is using the processor for now. Pick CUDA under Preferences, "
+                        "General, Device to download them again.")
             settings = Settings(**{**vars(settings), "device": "cpu"})
 
     compute_type = "float16" if settings.device.lower() == "cuda" else "int8"
@@ -5488,9 +5494,9 @@ def build_model(settings: Settings):
                 _record_engine(settings.model, "cpu")
                 # This switches the saved device to the processor (below), so
                 # the user is told.
-                _notify("TuxTalk", "Couldn't use your NVIDIA graphics card (CUDA), so TuxTalk "
-                                    "switched to the processor. Choose the device again in "
-                                    "Preferences to try the graphics card.")
+                _notify("Couldn't use the NVIDIA graphics card",
+                            "TuxTalk switched to the processor. Choose the device again in "
+                            "Preferences to try the graphics card.")
 
                 # Persist device=cpu to config so future service restarts don't
                 # try CUDA again and crash in a loop.

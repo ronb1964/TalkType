@@ -129,7 +129,7 @@ def test_fix_in_text_leaves_another_window_alone(monkeypatch):
     notices = []
     monkeypatch.setattr(fw, "_REFOCUS_S", 0)
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "firefox")
-    monkeypatch.setattr(app, "_notify", lambda t, m: notices.append(m))
+    monkeypatch.setattr(app, "_notify", lambda t, m: notices.append(f"{t}\n{m}"))
     monkeypatch.setattr(app, "_output_backend", lambda: pytest.fail("typed into the wrong window"))
     assert fw.fix_in_text(" Hello. ", (0, 5, "Hi"), "org.kde.kwrite") is False
     assert notices and "wasn't changed" in notices[0]

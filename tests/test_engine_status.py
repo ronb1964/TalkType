@@ -28,16 +28,16 @@ def test_status_lines(cfg_model, cfg_device, running, expected):
 
 
 def test_parakeet_preset_on_a_gpu_machine_says_how_to_use_it():
-    text = preset_notice("Fast & Accurate", "parakeet-v3", "cpu", gpu_offered=True)
+    text = preset_notice("parakeet-v3", "cpu", gpu_offered=True)
     assert "on the processor" in text and "Vulkan" in text
 
 
 def test_no_gpu_hint_without_a_usable_graphics_chip():
-    assert "Vulkan" not in preset_notice("Balanced", "small", "cpu", gpu_offered=False)
+    assert "Vulkan" not in preset_notice("small", "cpu", gpu_offered=False)
 
 
 def test_gpu_preset_says_which_engine():
-    assert "graphics card (CUDA)" in preset_notice("Most Accurate", "large-v3", "cuda", True)
+    assert "graphics card (CUDA)" in preset_notice("large-v3", "cuda", True)
 
 
 @pytest.fixture

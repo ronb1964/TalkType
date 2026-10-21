@@ -125,7 +125,7 @@ def test_cancel_falls_back_to_a_downloaded_model_and_saves_it(monkeypatch):
     monkeypatch.setattr(cuda_helper, "has_cuda_libraries", lambda: False)
     monkeypatch.setattr(config, "load_config", lambda: SimpleNamespace(model="parakeet-v3"))
     monkeypatch.setattr(config, "save_config", lambda cfg: saved.append(cfg.model))
-    monkeypatch.setattr(app, "_notify", lambda title, body: notes.append(body))
+    monkeypatch.setattr(app, "_notify", lambda title, body: notes.append(f"{title}\n{body}"))
 
     settings = _settings(model="parakeet-v3", device="cpu")
     assert app._build_model_or_exit(settings) == "model:small"
@@ -227,7 +227,7 @@ def test_a_model_that_wont_load_falls_back_without_replacing_the_choice(monkeypa
     monkeypatch.setattr(model_helper, "is_model_cached_fast", lambda m: m in ("small", "medium"))
     monkeypatch.setattr(cuda_helper, "has_cuda_libraries", lambda: False)
     monkeypatch.setattr(config, "save_config", lambda cfg: saved.append(cfg.model))
-    monkeypatch.setattr(app, "_notify", lambda title, body: notes.append(body))
+    monkeypatch.setattr(app, "_notify", lambda title, body: notes.append(f"{title}\n{body}"))
 
     settings = _settings(model="medium", device="cpu")
     assert app._build_model_or_exit(settings) == "model:small"

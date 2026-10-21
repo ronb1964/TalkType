@@ -366,14 +366,14 @@ def fix_in_text(typed, fix, window):
     focused = app._query_focused_window_class()
     if window and focused and focused != window:
         logger.info(f"Fix a Word: {focused!r} has the focus, not {window!r}; text left as it was")
-        app._notify("TuxTalk", "The fix is saved, but your text wasn't changed: another "
-                               "window had the focus.")
+        app._notify("Your text wasn't changed",
+                    "The fix is saved, but another window had the focus.")
         return False
     from .atspi_helper import focused_is_password
     if focused_is_password():
         logger.info("Fix a Word: a password field has the focus; text left as it was")
-        app._notify("TuxTalk", "The fix is saved, but your text wasn't changed: the cursor "
-                               "is in a password field.")
+        app._notify("Your text wasn't changed",
+                    "The fix is saved, but the cursor is in a password field.")
         return False
     core = typed.strip()
     # From the cursor back to the end of the picked words: the spaces after

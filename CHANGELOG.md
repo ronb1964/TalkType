@@ -5,6 +5,9 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- Notifications say what happened in their title, like "No sound from the
+  microphone", with what to do underneath. They used to be titled "TuxTalk",
+  which the desktop already shows, and the pop-up cut the message off.
 - Uninstall no longer deletes the speech models in Hugging Face's shared
   download folder (~/.cache/huggingface/hub) unless you ask: other apps may
   use the same models. The question has a box for them, unticked, with their

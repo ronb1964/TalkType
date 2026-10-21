@@ -372,14 +372,14 @@ class _IconToggleItem(Gtk.ImageMenuItem):
             self.set_image(Gtk.Image())
 
 
-def preset_notice(label, model, device, gpu_offered):
+def preset_notice(model, device, gpu_offered):
     """The notification after choosing a Performance preset.
 
     It says where the model really runs and, if that's the processor on a
     computer with a usable graphics chip, how to move it there.
     """
     from .recommend import engine_line, engine_status
-    text = f"Performance: {label}\n{engine_line(model, device)}."
+    text = f"{engine_line(model, device)}."
     if engine_status(model, device)[1].startswith("CPU") and gpu_offered:
         text += " To use your graphics card, set the Device to Vulkan in Preferences."
     return text + "\nRestarting service..."
@@ -388,8 +388,8 @@ def preset_notice(label, model, device, gpu_offered):
 def recommend_notice_text(setup):
     """The one-time notice for an existing user whose setup isn't the
     recommended one. *setup* is recommend.Setup; its title says what and where."""
-    return (f"There's a better setup for this computer: {setup.title}. Choose Performance "
-            "→ Recommended for this computer in the TuxTalk menu to switch.")
+    return (f"{setup.title}. Choose Performance → Recommended for this computer in the "
+            "TuxTalk menu to switch.")
 
 
 def maybe_show_recommend_notice():
@@ -412,7 +412,7 @@ def maybe_show_recommend_notice():
         better = recommend.differs_from_recommendation(cfg, recommend.detect_hardware(cfg))
         if better is not None:
             from .notify import notify as _notify
-            _notify("TuxTalk", recommend_notice_text(better))
+            _notify("A better setup for this computer", recommend_notice_text(better))
             logger.info(f"Told the user about the recommended setup: {better.title}")
         cfg.recommend_notice_shown = True
         save_config(cfg)
@@ -448,8 +448,8 @@ def _offer_parakeet_update(device):
     updated = download_parakeet_update(device)
     if updated is None:
         from .notify import notify
-        notify("TuxTalk", "The Parakeet update didn't finish downloading. "
-                          "TuxTalk will offer it again next time it starts.")
+        notify("The Parakeet update didn't finish",
+               "TuxTalk will offer it again the next time it starts.")
     return updated
 
 
@@ -1211,7 +1211,7 @@ class DictationTray:
             except Exception:
                 _gpu_offered = False
             logger.info(f"Applied performance preset: {preset.label} ({model} on {device})")
-            _notify("TuxTalk", preset_notice(preset.label, cfg.model, cfg.device, _gpu_offered))
+            _notify(f"Performance: {preset.label}", preset_notice(cfg.model, cfg.device, _gpu_offered))
             self.update_menu_display()
             self._emit_model_changed(cfg.model)
             self.restart_service(None)
@@ -1937,8 +1937,7 @@ class DictationTray:
         """Tell the user a GNOME extension update is out. Check for Updates
         covers only the app, so point to the tab that installs it."""
         from .notify import notify
-        notify("Extension Update Available",
-               "A new version of the TuxTalk GNOME extension is available. "
+        notify("GNOME extension update available",
                "Open Preferences → Updates & Backup to install it.")
         logger.info("Showed extension update notification")
         return False
