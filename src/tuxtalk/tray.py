@@ -206,7 +206,7 @@ def _open_from_command_line(name):
         sys.exit(1)
     if status is True:
         sys.exit(0)
-    if status is False:
+    if status is False and name != "uninstall":     # that one this process can do
         print("The running TuxTalk can't do that. It may be an older version "
               "or still starting; try again in a moment.", file=sys.stderr)
         sys.exit(1)

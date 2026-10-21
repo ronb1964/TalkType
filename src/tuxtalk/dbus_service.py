@@ -366,6 +366,11 @@ class TuxTalkDBusService(dbus.service.Object):
     def Uninstall(self):
         """Ask, then remove TuxTalk and everything it set up (uninstall.py).
         Called by Preferences and tuxtalk --uninstall."""
+        if not hasattr(self.app, "uninstall"):
+            # The dictation service standing in for the tray can't. Saying so
+            # lets the caller do it itself instead of taking silence as done.
+            raise dbus.exceptions.DBusException(
+                "This TuxTalk can't uninstall", name="org.freedesktop.DBus.Error.UnknownMethod")
         self._dispatch('uninstall')
 
     @dbus.service.method(DBUS_INTERFACE)

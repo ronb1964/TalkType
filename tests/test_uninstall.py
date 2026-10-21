@@ -311,3 +311,27 @@ def test_in_the_development_version_the_button_only_explains(monkeypatch):
     monkeypatch.setattr(uninstall, "find", lambda *a, **k: pytest.fail("looked for things to remove"))
     assert uninstall.run() is False
     assert told == ["Not for this copy of TuxTalk"]
+
+
+def test_a_tuxtalk_that_cant_uninstall_says_so():
+    """The dictation service stands in for a crashed tray but can't
+    uninstall: it used to accept the call and do nothing, and Preferences and
+    tuxtalk --uninstall took that as done (review of 0.17)."""
+    import types
+    import dbus
+    from tuxtalk.dbus_service import TuxTalkDBusService
+    svc = TuxTalkDBusService.__new__(TuxTalkDBusService)
+    svc.app = types.SimpleNamespace()
+    with pytest.raises(dbus.exceptions.DBusException) as refused:
+        svc.Uninstall()
+    assert refused.value.get_dbus_name() == "org.freedesktop.DBus.Error.UnknownMethod"
+
+
+def test_the_command_line_uninstalls_itself_when_the_running_one_cant(monkeypatch):
+    from tuxtalk import tray
+    monkeypatch.setattr(control, "open_in_running", lambda name, tray_starting: False)
+    ran = []
+    monkeypatch.setattr(uninstall, "run", lambda: ran.append(1) or True)
+    with pytest.raises(SystemExit) as finished:
+        tray._open_from_command_line("uninstall")
+    assert ran == [1] and finished.value.code == 0
