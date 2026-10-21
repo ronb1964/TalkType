@@ -186,8 +186,15 @@ def forward_combo_scroll(combo):
     combo.connect("scroll-event", _on_scroll)
 
 
+# The share of the screen's height a window may count on, whatever the work
+# area says. Under Wayland GTK 3 isn't told about panels and docks, so the work
+# area is the whole screen: on Pop!_OS at 1280x800, Setup Complete filled it
+# and its buttons sat behind COSMIC's dock (VM, 2026-10-21).
+USABLE_SHARE = 0.8
+
+
 def workarea_height():
-    """The primary monitor's usable height (minus panels) in pixels, or None."""
+    """A cautious usable height of the primary monitor, in logical pixels, or None."""
     try:
         display = Gdk.Display.get_default()
         if display is None:
@@ -195,7 +202,10 @@ def workarea_height():
         monitor = display.get_primary_monitor()
         if monitor is None and display.get_n_monitors() > 0:
             monitor = display.get_monitor(0)
-        return monitor.get_workarea().height if monitor is not None else None
+        if monitor is None:
+            return None
+        return min(monitor.get_workarea().height,
+                   int(monitor.get_geometry().height * USABLE_SHARE))
     except Exception:
         return None
 

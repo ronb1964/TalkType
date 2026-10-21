@@ -20,10 +20,12 @@ from tuxtalk.config import Settings  # noqa: E402
 from dataclasses import asdict  # noqa: E402
 
 
-def _fake_display(height):
-    """A display whose primary monitor's work area is *height* tall."""
-    workarea = SimpleNamespace(height=height, width=1280)
-    monitor = SimpleNamespace(get_workarea=lambda: workarea)
+def _fake_display(height, workarea_height=None):
+    """A display whose primary monitor is *height* tall, its work area
+    *workarea_height* (the whole screen, as Wayland reports it, if None)."""
+    geometry = SimpleNamespace(height=height, width=1280)
+    workarea = SimpleNamespace(height=workarea_height or height, width=1280)
+    monitor = SimpleNamespace(get_workarea=lambda: workarea, get_geometry=lambda: geometry)
     return SimpleNamespace(get_primary_monitor=lambda: monitor,
                            get_n_monitors=lambda: 1,
                            get_monitor=lambda i: monitor)
@@ -86,3 +88,18 @@ def test_tall_screen_opens_with_words_shown_whole(monkeypatch):
         assert height >= content.get_preferred_height()[1] + 150
     finally:
         w.window.destroy()
+
+
+@pytest.mark.parametrize("screen, panels, usable", [
+    (800, 0, 640),          # Wayland: the work area is the whole screen
+    (800, 32, 640),         # a top panel alone still leaves room for a dock
+    (1080, 400, 680),       # a work area smaller than that is kept
+])
+def test_windows_never_count_on_the_whole_screen(monkeypatch, screen, panels, usable):
+    """Pop!_OS, 1280x800: Setup Complete was as tall as the screen and its
+    buttons sat behind COSMIC's floating dock, which Wayland doesn't report."""
+    if not Gtk.init_check()[0]:
+        pytest.skip("no display")
+    display = _fake_display(screen, screen - panels)
+    monkeypatch.setattr(ui_style.Gdk.Display, "get_default", lambda: display)
+    assert ui_style.workarea_height() == usable
