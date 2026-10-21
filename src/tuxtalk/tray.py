@@ -372,48 +372,6 @@ class _IconToggleItem(Gtk.ImageMenuItem):
             self.set_image(Gtk.Image())
 
 
-def engine_status(cfg_model, cfg_device, running=None):
-    """(model id, device text) for what the menus say runs: "GPU (Vulkan)", "CPU".
-
-    *running* is (model, device) as reported by the dictation service, or None
-    when it hasn't reported (stopped, starting, or an older service). The lines
-    show what really runs, so a fallback to the processor is not reported as
-    the graphics card; when that differs from the setting, the device text
-    says why in a few words.
-    """
-    from .parakeet_engine import effective_device
-    names = {'cpu': 'CPU', 'cuda': 'GPU (CUDA)', 'vulkan': 'GPU (Vulkan)'}
-    wanted = str(cfg_device or "cpu").lower()
-    if running:
-        model, device = running[0], str(running[1]).lower()
-    else:
-        model, device = cfg_model, effective_device(cfg_model, wanted)
-    text = names.get(device, device.upper())
-    if device == "cpu" and wanted in ("cuda", "vulkan"):
-        from .parakeet_engine import is_parakeet
-        if wanted == "cuda" and is_parakeet(model):
-            text += " (Parakeet can't use CUDA)"
-        elif running:
-            text += f" ({'CUDA' if wanted == 'cuda' else 'Vulkan'} didn't start)"
-    return model, text
-
-
-def where_it_runs(device_text):
-    """engine_status's device text in words, keeping any reason: "the
-    processor", "the graphics card (Vulkan)", "the processor (Vulkan didn't start)"."""
-    if device_text.startswith("CPU"):
-        return "the processor" + device_text[len("CPU"):]
-    return "the graphics card" + device_text[len("GPU"):]
-
-
-def engine_line(cfg_model, cfg_device, running=None):
-    """The menus' one line about what runs: "Parakeet on the graphics card (Vulkan)".
-    The tray, the no-tray menu window and the GNOME extension (GetStatus) all show it."""
-    from .recommend import model_title
-    model, device_text = engine_status(cfg_model, cfg_device, running)
-    return f"{model_title(model)} on {where_it_runs(device_text)}"
-
-
 def preset_notice(label, model, device, gpu_offered):
     """The notification after choosing a Performance preset.
 
@@ -421,6 +379,7 @@ def preset_notice(label, model, device, gpu_offered):
     computer with a usable graphics chip, how to move it there.
     """
     from .model_helper import model_display_name
+    from .recommend import engine_status, where_it_runs
     where = where_it_runs(engine_status(model, device)[1])
     text = f"Performance: {label}\n{model_display_name(model)} on {where}."
     if where.startswith("the processor") and gpu_offered:
@@ -1311,6 +1270,7 @@ class DictationTray:
         if hasattr(self, 'engine_item'):
             try:
                 from .config import load_config
+                from .recommend import engine_line
                 cfg = load_config()
                 running = None
                 if is_running and getattr(self, "dbus_service", None):
