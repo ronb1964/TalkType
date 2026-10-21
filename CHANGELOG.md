@@ -3,6 +3,20 @@
 All notable changes to TuxTalk are documented here. It was called TalkType
 before 0.15.0, so older entries use that name.
 
+## [Unreleased]
+
+- Typing is about six times faster. TuxTalk now types with its own virtual
+  keyboard instead of ydotool: a 25-letter sentence that took 0.6 seconds to
+  appear now takes about 0.1. Undo and select by voice are as quick. Paste
+  stays the way most dictations arrive on Wayland.
+- No more "TuxTalk's typing helper had stopped". The ydotool program and its
+  ydotoold daemon are gone, so there's nothing to start or keep running, and
+  first-run setup no longer asks to install ydotool. The ydotoold an older
+  version started, and the service file it set up, are removed when this
+  version starts.
+- If a slow computer drops letters, `typing_delay` in config.toml slows the
+  keyboard down again (6 or 12 are safe values; 2 is the new default).
+
 ## [0.17.0] - 2026-10-20
 
 - Parakeet is more accurate. TuxTalk now downloads Parakeet Ultra,

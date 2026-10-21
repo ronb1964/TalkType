@@ -7,11 +7,12 @@ arch=('x86_64')
 url="https://tuxtalk.app/"
 license=('MIT')
 # The AppImage itself bundles libayatana-appindicator3 with its dbusmenu
-# libraries, and ydotool, ydotoold and wl-clipboard, so those depends are
-# belt and braces. They stay until a clean Arch install has been tested
-# without them. The AppImage needs fusermount to mount itself, which fuse2
-# provides (fuse3's fusermount3 works too).
-depends=('fuse2' 'ydotool' 'wl-clipboard' 'libayatana-appindicator')
+# libraries, and wl-clipboard, so those depends are belt and braces. They
+# stay until a clean Arch install has been tested without them. TuxTalk types
+# with its own virtual keyboard since 0.18, so ydotool isn't needed. The
+# AppImage needs fusermount to mount itself, which fuse2 provides (fuse3's
+# fusermount3 works too).
+depends=('fuse2' 'wl-clipboard' 'libayatana-appindicator')
 optdepends=(
     'pipewire-pulse: PipeWire audio support'
     'pulseaudio: PulseAudio support'

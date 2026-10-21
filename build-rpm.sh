@@ -4,7 +4,7 @@
 # Repackages the release AppImage into a Fedora/RHEL/openSUSE .rpm.
 #
 # Same approach as build-deb.sh: the AppImage already bundles a self-contained
-# runtime (its own Python, GTK bindings, faster-whisper/CTranslate2, ydotool,
+# runtime (its own Python, GTK bindings, faster-whisper/CTranslate2,
 # wl-clipboard) built on Ubuntu 22.04 for wide glibc compatibility. We extract that
 # finished tree and wrap it as an .rpm rather than maintaining a second build.
 # Run ./build-release.sh FIRST.
@@ -18,7 +18,7 @@
 #
 # System deps are DECLARED (the bundle relies on the host's GTK stack). Fedora names:
 #   gtk3, libayatana-appindicator-gtk3 (tray), portaudio (mic).
-#   ydotool + wl-clipboard ARE bundled inside /opt/talktype, so they are not declared.
+#   wl-clipboard IS bundled inside /opt/talktype, so it is not declared.
 #
 # Requires: fpm (gem install --user-install fpm) and rpmbuild (rpm-build package).
 
@@ -74,7 +74,7 @@ mv "$TREE" "$STAGE/opt/talktype"
 # Third-party licenses ride inside the AppImage's tree (packaging/collect-licenses.sh).
 # Refuse to package an AppImage built without them.
 LIC_SRC="$STAGE/opt/talktype/usr/share/licenses"
-for f in tuxtalk/LICENSE tuxtalk/THIRD_PARTY_LICENSES.md ydotool/LICENSE wl-clipboard/COPYING; do
+for f in tuxtalk/LICENSE tuxtalk/THIRD_PARTY_LICENSES.md wl-clipboard/COPYING; do
     [ -f "$LIC_SRC/$f" ] || { echo "❌ The AppImage has no $f: rebuild it with ./build-release.sh"; exit 1; }
 done
 # Fedora keeps a package's license in /usr/share/licenses/<package>/.

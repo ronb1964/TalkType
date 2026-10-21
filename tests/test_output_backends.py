@@ -1,4 +1,4 @@
-"""The Ydotool backend must keep delegating to app._type_text so the non-Flatpak
+"""The virtual-keyboard backend must keep delegating to app._type_text so the non-Flatpak
 typing path is behaviorally unchanged."""
 import os
 
@@ -24,7 +24,7 @@ class _FakeSessionBase:
         return False
 
 
-def test_ydotool_backend_delegates_to_type_text(monkeypatch):
+def test_virtual_keyboard_backend_delegates_to_type_text(monkeypatch):
     from tuxtalk import app
     from tuxtalk.output_backends import VirtualKeyboardOutputBackend
     calls = []
@@ -89,8 +89,8 @@ def test_save_token_creates_missing_data_dir(tmp_path, monkeypatch):
     assert b._load_token() == "restore-token-abc"
 
 
-def test_output_backend_accessor_returns_ydotool_on_host(monkeypatch):
-    # No FLATPAK_ID on the host -> ydotool backend.
+def test_output_backend_accessor_returns_the_virtual_keyboard_on_host(monkeypatch):
+    # No FLATPAK_ID on the host -> the virtual-keyboard backend.
     monkeypatch.delenv("FLATPAK_ID", raising=False)
     from tuxtalk import app
     app._OUTPUT_BACKEND = None  # reset the process cache for the test
@@ -98,12 +98,12 @@ def test_output_backend_accessor_returns_ydotool_on_host(monkeypatch):
     assert isinstance(app._output_backend(), VirtualKeyboardOutputBackend)
 
 
-# --- Editing key-combos must route through the backend, not hardcoded ydotool ---
+# --- Editing key-combos must route through the backend, not the host keyboard ---
 # The 'delete everything' and char-undo commands press special keys (Ctrl+A,
-# Backspace). Calling ydotool directly does nothing in the Flatpak sandbox (no
-# ydotoold), so the commands would silently fail there.
+# Backspace). The virtual keyboard can't be made in the Flatpak sandbox (no
+# /dev/uinput), so calling it directly would silently fail there.
 
-def test_ydotool_backend_select_all_delete_delegates(monkeypatch):
+def test_virtual_keyboard_backend_select_all_delete_delegates(monkeypatch):
     from tuxtalk import app
     from tuxtalk.output_backends import VirtualKeyboardOutputBackend
     calls = []
@@ -112,7 +112,7 @@ def test_ydotool_backend_select_all_delete_delegates(monkeypatch):
     assert calls == ["clear"]
 
 
-def test_ydotool_backend_backspaces_delegates(monkeypatch):
+def test_virtual_keyboard_backend_backspaces_delegates(monkeypatch):
     from tuxtalk import app
     from tuxtalk.output_backends import VirtualKeyboardOutputBackend
     calls = []
@@ -177,7 +177,7 @@ def test_libei_backend_backspaces_via_fresh_session(monkeypatch):
 
 def test_handle_undo_everything_routes_through_backend(monkeypatch):
     # 'delete everything' must call the backend's select_all_delete, so it works
-    # on the Flatpak (libei) exactly like on the host (ydotool).
+    # on the Flatpak (libei) exactly like on the host (the virtual keyboard).
     from tuxtalk import app
     monkeypatch.setattr(app, "detect_undo_command", lambda raw: ("everything", 1))
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)

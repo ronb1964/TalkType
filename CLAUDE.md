@@ -92,6 +92,7 @@ First run (since 0.14.2 it recommends one setup; CUDA is not offered here):
 - [ ] No system tray (Silverblue VM, plain GNOME): the welcome screen's "Install GNOME Extension" is ticked, with the amber "this desktop has no system tray" line. Untick it and finish setup: TuxTalk's menu window appears (log: "No system tray and no extension running"). Opening TuxTalk from the apps again brings it back (log: "Opened the menu window (no system tray here)"); its buttons work, and the switch turns dictation off and on. Right-click TuxTalk in the dash: Preferences, Transcribe a File, Help, Quit TuxTalk. On KDE, opening TuxTalk again shows the same window without the no-tray note
 - [ ] Press enter: in a chat box (or KWrite) dictate "see you at noon, press enter": types "See you at noon." then a real Enter (log: 'Pressed Enter (said "press enter")'). Saying only "press enter" just presses Enter. "press enter to continue" mid-sentence is typed as words; "new line" still makes a line without sending. Preferences → Advanced → Text → "Send each dictation automatically (press Enter)" (off, "Send: After 2 seconds" greyed until ticked; choices Right away to After 4 seconds). Ticked, in a chat box: "Sending in 2 s. Tap F8 to hold it." floats over the lower part of the window, just above the message box, counts down 2, 1 (with 4 seconds: 4, 3, 2, 1), then Enter (log: "Sending in 2s", "Pressed Enter"). Tap F8 during the wait: "Not sent. Press Enter when you're ready." and nothing is sent (log: "Held the send"); tap F9 the same, with no recording started. Hold F8 during the wait and keep talking: that dictation is added after a space ("delay. All right", not "delay.All") and then sent. Switch windows during the wait: the countdown stops at once with "Not sent: you switched windows." and nothing is sent (log: "Not sent: another window has the focus now"). "Right away" sends at once. In KWrite (or LibreOffice Writer) nothing is sent and no new line appears (log: "Not sending: Enter only starts a new line in this app"); saying "press enter" there still presses it. "it inserted a carriage return" is typed as words. Let a dictation send in KWrite, then say "edit that, make it more formal": nothing is typed, and "Already sent. Tap the hotkey sooner" floats over the window (log: "Voice edit not done: already_sent_auto"). "meet me at noon and" (let go after "and") is typed with no period and not sent (log: 'Held back the Enter: the dictation ended on "and"'); the next dictation carries on in lowercase
 - [ ] Your Words for Parakeet: with TuxTalk in Preferences → Words, on Parakeet say "I dictate everything with TuxTalk": log "Your Words for Parakeet on the graphics chip: N spellings" (Vulkan) or "Your Words for Parakeet: N spellings" (processor), and "Your Words: Parakeet wrote 'TuxTalk'" when it had to steer. Ordinary sentences ("tax talks went on", "the cat clawed the couch") come out unchanged
+- [ ] Own virtual keyboard (0.18): the log shows "Made TuxTalk's virtual keyboard" when the service starts and `pgrep ydotoold` finds nothing. Preferences → Advanced → Show fine-tuning → Text Injection → Keystroke Typing (or Mint, X11, which always types): "Typed N chars in …s (2 ms a key event)" and the text is right, capitals and punctuation included; also on a German or Swiss layout (Y and Z, umlauts). A VM updated from 0.17 that had run Fix Typing: `~/.config/systemd/user/ydotoold.service` is gone after the first start (log: "Removed the ydotoold service")
 - [ ] Silent microphone: mute the mic (or pick a dead input) and hold F8 for two seconds: cancel beep and "TuxTalk heard only silence from the microphone..." (always, even with notifications off). A quiet room with a working mic does not say this
 - [ ] Turn other sounds down: Preferences → Audio → "Other sound while you dictate" reads "Pause music and videos"; its other choices are "Pause music and videos, turn the rest down", "Turn everything down" and "Leave it alone". Pick "Turn everything down". With a YouTube video or a Discord call playing, hold F8: the sound drops to half its volume setting (quieter, still audible) and comes back after (log: "Turned 1 other sound(s) down", "Put 1 sound(s) back"). Change that app's volume during a dictation: it keeps your change
 - [ ] Turn other sounds down with a video already paused: pause a YouTube video in Brave, pick "Turn everything down", hold F8, then play the video: its sound comes back at full volume (log: "Put 1 sound(s) back" or nothing turned down)
@@ -231,6 +232,27 @@ hashes in `parakeet_ultra.py`. Upload with `gh release create ... --prerelease`
 (a normal release would become "latest" for the updater), and only with Ron's OK:
 it is public. How the files were made and checked: the release's README and
 Obsidian "TalkType/2026-10-19 - Parakeet-ultra bake-off".
+
+---
+
+## TYPING — TUXTALK'S OWN VIRTUAL KEYBOARD
+
+Since 0.18 every key TuxTalk presses (typed text, Enter, Ctrl+V, backspaces,
+select and move) goes through one uinput keyboard the dictation service makes
+when it starts (`src/tuxtalk/virtual_keyboard.py`). There is no ydotool or
+ydotoold any more; `keyboard_layout.py` works out the keys for the active
+layout, US included. The keyboard is shaped like a keyboard and a pointer on
+purpose: TuxTalk's hotkey reader and the installed hotkey helper skip pointers,
+so neither grabs or listens to it. Access to /dev/uinput comes from the hotkey
+helper's udev rule (`secure_input.py`) or the older input-group rule.
+
+Timing (`KEY_DELAY_MS`, config `typing_delay`, default 2 ms after each key
+event) was measured in the VMs: 1 ms is clean in every app class tested, 0 ms
+overflows the kernel's buffer, and the delay also sets how long a frozen
+desktop survives (about 64 key events' worth). Never lower it without the
+same VM measurements (`kbbench`, notes in Obsidian "TalkType/2026-10-20 - own
+virtual keyboard"). Tests get a recording keyboard from `tests/conftest.py`;
+never make a real one in a test, it types into Ron's focused window.
 
 ---
 

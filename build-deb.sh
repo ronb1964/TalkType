@@ -5,7 +5,7 @@
 #
 # WHY this reuses the AppImage instead of building from scratch:
 #   ./build-release.sh already assembles a fully self-contained runtime (its own
-#   Python, GTK bindings, faster-whisper/CTranslate2, ydotool, wl-clipboard) inside
+#   Python, GTK bindings, faster-whisper/CTranslate2, wl-clipboard) inside
 #   an Ubuntu 22.04 container for wide glibc compatibility. That same tree is exactly
 #   what a .deb needs — so we extract the finished AppImage and wrap it as a .deb
 #   rather than maintaining a second, divergent build. Run build-release.sh FIRST.
@@ -20,7 +20,7 @@
 #   libgtk-3-0, libayatana-appindicator3-1 (tray), libportaudio2 (mic),
 #   pulseaudio-utils (pactl, for turning other sounds down while dictating:
 #   Zorin OS ships without it, 2026-10-20; it works on PipeWire too).
-#   ydotool + wl-clipboard ARE bundled inside /opt/talktype, so they are not declared.
+#   wl-clipboard IS bundled inside /opt/talktype, so it is not declared.
 #
 # Requires: fpm (gem install --user-install fpm) and ar/tar (binutils/coreutils).
 # Builds fine on a non-Debian host (Fedora/Nobara) — no dpkg-deb needed.
@@ -76,7 +76,7 @@ mv "$TREE" "$STAGE/opt/talktype"
 # Third-party licenses ride inside the AppImage's tree (packaging/collect-licenses.sh).
 # Refuse to package an AppImage built without them.
 LIC_SRC="$STAGE/opt/talktype/usr/share/licenses"
-for f in tuxtalk/LICENSE tuxtalk/THIRD_PARTY_LICENSES.md ydotool/LICENSE wl-clipboard/COPYING; do
+for f in tuxtalk/LICENSE tuxtalk/THIRD_PARTY_LICENSES.md wl-clipboard/COPYING; do
     [ -f "$LIC_SRC/$f" ] || { echo "❌ The AppImage has no $f: rebuild it with ./build-release.sh"; exit 1; }
 done
 # Debian keeps a package's license in /usr/share/doc/<package>/copyright.

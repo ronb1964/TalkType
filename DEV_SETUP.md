@@ -9,7 +9,7 @@ TuxTalk is Python with GTK 3. GTK's Python bindings (PyGObject) can't be pip ins
 On Fedora or Nobara:
 
 ```bash
-sudo dnf install -y portaudio-devel ydotool wl-clipboard \
+sudo dnf install -y portaudio-devel wl-clipboard \
                     python3-gobject libayatana-appindicator-gtk3 libnotify
 ```
 

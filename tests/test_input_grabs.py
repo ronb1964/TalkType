@@ -438,14 +438,13 @@ def test_unifying_mouse_advertising_letter_keys_is_not_grabbed():
     assert app._is_keyboard_device(mx) is False
 
 
-def test_the_apps_own_injection_device_is_not_grabbed():
-    """ydotoold's virtual device is how TuxTalk types — never grab it."""
-    ydotool = FakeDevice("ydotoold virtual device", {
-        ecodes.EV_KEY: sorted(app._LETTER_KEYS) + [ecodes.BTN_LEFT],
-        ecodes.EV_REL: [ecodes.REL_X, ecodes.REL_Y],
-    })
+def test_the_apps_own_virtual_keyboard_is_not_grabbed():
+    """TuxTalk types on it: grabbed while recording (Type at pause), what it
+    types would never reach the app."""
+    from tuxtalk import virtual_keyboard
+    ours = FakeDevice(virtual_keyboard.NAME, virtual_keyboard._capabilities())
 
-    assert app._is_keyboard_device(ydotool) is False
+    assert app._is_keyboard_device(ours) is False
 
 
 # --- the Voice Commands hotkey is a grab path too ---------------------------

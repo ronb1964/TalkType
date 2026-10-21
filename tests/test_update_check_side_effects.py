@@ -13,8 +13,8 @@ or wait forever.
    killing a package manager mid-transaction is far worse than waiting, so the
    process is left alone to finish.
 
-3. wtype has a timeout, like the ydotool branch directly above it (killed and
-   reaped after 20s); otherwise a compositor that stalls freezes dictation with
+3. wtype, used when TuxTalk can't make its virtual keyboard, has a timeout
+   (killed and reaped after 20s); otherwise a compositor that stalls freezes dictation with
    no text and no error.
 """
 

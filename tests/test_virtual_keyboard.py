@@ -5,7 +5,7 @@ would type into whatever window has the focus on the computer running them.
 """
 import pytest
 
-from tuxtalk import app, uinput_helper, virtual_keyboard
+from tuxtalk import app, virtual_keyboard
 
 
 def test_a_short_dictation_types_in_a_fraction_of_the_time_ydotool_took(keyboard):
@@ -90,20 +90,6 @@ def test_an_undo_stopped_partway_forgets_the_buffer(monkeypatch):
 
 
 # --- its shape ---------------------------------------------------------------
-
-class _Device:
-    def __init__(self, capabilities):
-        self._caps = capabilities
-
-    def capabilities(self):
-        return self._caps
-
-
-def test_tuxtalks_hotkey_reader_never_grabs_its_own_keyboard():
-    """The service grabs the keyboards while the hotkey is held. Grabbing its
-    own would swallow what it types while recording (Type at pause)."""
-    assert uinput_helper.is_keyboard_device(_Device(virtual_keyboard._capabilities())) is False
-
 
 def test_the_installed_hotkey_helper_skips_it_too():
     """Helpers already on users' computers skip pointers, as they skipped

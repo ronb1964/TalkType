@@ -5,11 +5,11 @@
 # every file has been copied into AppDir. The .deb and .rpm repackage the
 # AppImage's tree, so they carry these too (under /opt/talktype).
 #
-#   packaging/collect-licenses.sh <AppDir> <ydotool source> <wl-clipboard source>
+#   packaging/collect-licenses.sh <AppDir> <wl-clipboard source>
 #
 # What it writes, under <AppDir>/usr/share/licenses/:
 #   tuxtalk/LICENSE, tuxtalk/THIRD_PARTY_LICENSES.md  - ours, and the overview
-#   ydotool/, wl-clipboard/                             - built from source here
+#   wl-clipboard/                                       - built from source here
 #   ctranslate2/, tokenizers/                           - their wheels ship no license
 #   <ubuntu package>/copyright                          - every library copied from Ubuntu
 #   tuxtalk/bundled-ubuntu-packages.txt                - those packages and exact versions
@@ -20,15 +20,13 @@
 set -euo pipefail
 
 APPDIR="$1"
-YDOTOOL_SRC="$2"
-WLCLIP_SRC="$3"
+WLCLIP_SRC="$2"
 LIC="$APPDIR/usr/share/licenses"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 PROJECT="$(dirname "$HERE")"
 
-mkdir -p "$LIC/tuxtalk" "$LIC/ydotool" "$LIC/wl-clipboard" "$LIC/ctranslate2" "$LIC/tokenizers"
+mkdir -p "$LIC/tuxtalk" "$LIC/wl-clipboard" "$LIC/ctranslate2" "$LIC/tokenizers"
 cp "$PROJECT/LICENSE" "$PROJECT/THIRD_PARTY_LICENSES.md" "$LIC/tuxtalk/"
-cp "$YDOTOOL_SRC/LICENSE" "$LIC/ydotool/LICENSE"
 cp "$WLCLIP_SRC/COPYING" "$LIC/wl-clipboard/COPYING"
 cp "$HERE/licenses/ctranslate2-LICENSE" "$LIC/ctranslate2/LICENSE"
 cp "$HERE/licenses/tokenizers-LICENSE" "$LIC/tokenizers/LICENSE"
@@ -88,4 +86,4 @@ for pkg in $(printf '%s\n' "${!PACKAGES[@]}" | sort); do
 done
 
 chmod -R a+rX "$LIC"
-echo "   ✅ Licenses: TuxTalk, ydotool, wl-clipboard, ctranslate2, tokenizers + ${#PACKAGES[@]} Ubuntu packages"
+echo "   ✅ Licenses: TuxTalk, wl-clipboard, ctranslate2, tokenizers + ${#PACKAGES[@]} Ubuntu packages"
