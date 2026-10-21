@@ -146,6 +146,6 @@ def test_success_stays_quiet(dictation):
 def test_an_exception_while_typing_is_a_failure_too(dictation):
     """It is a typing failure, not a "Transcription error" shown only with
     notifications on: the transcription worked."""
-    notes, beeps = dictation(RuntimeError("ydotoold socket vanished"), beeps_on=True)
+    notes, beeps = dictation(RuntimeError("the keyboard layout went away"), beeps_on=True)
     assert len(notes) == 1 and "Recent Dictations" in notes[0]
     assert beeps == [app.READY_BEEP, app.CANCEL_BEEP]

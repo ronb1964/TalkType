@@ -2480,7 +2480,7 @@ def _determine_injection_method(injection_mode: str) -> tuple[str, str]:
 
     Auto pastes on Wayland: the paste keystroke is picked per paste from the
     focused window's class (Ctrl+Shift+V in a terminal), and Electron apps where
-    paste is broken are switched to fast typing in _inject_text. It types on X11.
+    paste is broken are typed into instead, in _inject_text. It types on X11.
     """
     # Inside a Flatpak, clipboard-paste needs wl-copy (not bundled) and the libei
     # output backend types directly — always type, never attempt paste.
