@@ -368,7 +368,7 @@ def _fetch_with_retry(fetch, filename, sleep=None):
 
 
 def download_model_with_progress(model_name, device="cpu", compute_type="int8", parent=None,
-                                 show_confirmation=True, redownload_broken=True,
+                                 show_confirmation=True, dialogs=True,
                                  result_info=None):
     """
     Load a model, first downloading it behind a progress dialog if needed.
@@ -379,9 +379,10 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
         compute_type: Compute type ("int8", "float16", etc.)
         parent: Optional parent window for dialog
         show_confirmation: Whether to show confirmation dialog before download (default True)
-        redownload_broken: False when this thread must not open GTK dialogs
-            (another thread runs Gtk.main()); a downloaded model that won't
-            load then raises BrokenModelFiles instead of downloading again.
+        dialogs: False when this thread must not open GTK dialogs (another
+            thread runs Gtk.main()). A downloaded model that won't load then
+            raises BrokenModelFiles instead of downloading again, and one
+            that isn't downloaded returns None instead of downloading.
         result_info: Optional dict; "cancelled" is set True in it when the
             user declined or cancelled, which a None return can't tell apart
             from a failed download.
@@ -403,11 +404,16 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
             # load on the processor) is the caller's to report.
             if is_parakeet(model_name) or _loads_on_cpu(model_name):
                 raise
-            if not redownload_broken:
+            if not dialogs:
                 raise BrokenModelFiles(
                     f"{model_name} looked downloaded but won't load: {e}") from e
             logger.warning(f"Model {model_name} looked downloaded but won't load "
                            f"({e}); downloading it again")
+
+    if not dialogs:
+        logger.warning(f"Model {model_name} isn't downloaded, and this thread can't show "
+                       "the download")
+        return None
 
     logger.info(f"Model {model_name} NOT cached - showing download progress dialog")
     print(f"Model {model_name} NOT cached - will download and show progress")

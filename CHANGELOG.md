@@ -19,6 +19,10 @@ before 0.15.0, so older entries use that name.
   it hadn't managed to. If the password prompt times out it now says the
   hotkey helper may already be gone, not that nothing changed, and an error
   partway still ends with a message instead of a half-closed TuxTalk.
+- Power Saving: if the speech model's files were deleted while it rested,
+  the next dictation tried to open the download window from the wrong place
+  and could crash the dictation service. It now uses another downloaded
+  model, or says the model is missing.
 - The "Parakeet got more accurate" offer pops up by itself, so Enter there
   now means Not Now. An Enter meant for another window no longer starts the
   670 MB download.

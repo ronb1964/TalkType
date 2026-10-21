@@ -172,14 +172,34 @@ def test_broken_files_raise_instead_of_opening_dialogs_off_the_gtk_thread(monkey
     monkeypatch.setattr(model_helper, "message_dialog", no_dialogs)
     monkeypatch.setattr(model_helper.Gtk, "Dialog", no_dialogs)
     with pytest.raises(model_helper.BrokenModelFiles):
-        model_helper.download_model_with_progress("small", redownload_broken=False)
+        model_helper.download_model_with_progress("small", dialogs=False)
+
+
+def test_power_saving_never_opens_a_download_off_the_gtk_thread(monkeypatch):
+    """Power Saving loads the model again on a dictation's thread. If its
+    files went missing meanwhile, the download dialogs would open there, with
+    Gtk.main() running on another thread (review of 0.17). It is treated as
+    unavailable and the user is told instead."""
+    def no_dialogs(*a, **k):
+        raise AssertionError("a GTK dialog was opened")
+
+    shown = []
+    monkeypatch.setattr(app, "model", None)
+    monkeypatch.setattr(app, "_gtk_loop_running", True)
+    monkeypatch.setattr(app, "load_config", lambda: _settings(device="cpu"))
+    monkeypatch.setattr(model_helper, "is_model_cached_fast", lambda m: False)
+    monkeypatch.setattr(model_helper, "message_dialog", no_dialogs)
+    monkeypatch.setattr(model_helper.Gtk, "Dialog", no_dialogs)
+    monkeypatch.setattr(app, "_notify", lambda title, body: shown.append(body))
+    assert app._wake_model() is None
+    assert shown and "Restart Service" in shown[0]
 
 
 def test_the_service_treats_broken_files_as_an_unavailable_model(monkeypatch):
     asked = []
 
     def broken(*a, **k):
-        asked.append(k.get("redownload_broken"))
+        asked.append(k.get("dialogs"))
         raise model_helper.BrokenModelFiles("small won't load")
 
     monkeypatch.setattr(app, "_gtk_loop_running", True)

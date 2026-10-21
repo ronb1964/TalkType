@@ -4812,8 +4812,9 @@ def _wake_model():
                 # Its "nothing will load" exit, raised in a dictation's thread,
                 # would end only that thread. Say so; the next dictation tries again.
                 logger.error("Power saving: the speech model wouldn't load again")
-                _notify("TuxTalk", "The speech model wouldn't load. Choose Restart "
-                        "Service in the TuxTalk menu, or pick a model in Preferences.")
+                _notify("TuxTalk", "The speech model is missing or wouldn't load. Choose "
+                        "Restart Service in the TuxTalk menu to download it again, or "
+                        "pick a model in Preferences.")
                 return None
             _notify_tray_running_engine()
         return model
@@ -5446,7 +5447,7 @@ def build_model(settings: Settings):
             settings.model,
             device=settings.device,
             compute_type=compute_type,
-            redownload_broken=not _gtk_loop_running,
+            dialogs=not _gtk_loop_running,
         )
 
         if model is None:
@@ -5480,7 +5481,7 @@ def build_model(settings: Settings):
                     device="cpu",
                     compute_type="int8",
                     show_confirmation=False,
-                    redownload_broken=not _gtk_loop_running,
+                    dialogs=not _gtk_loop_running,
                 )
 
                 if model is None:
