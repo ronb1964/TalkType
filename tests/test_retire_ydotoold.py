@@ -61,11 +61,15 @@ Description=ydotool daemon (TuxTalk keystroke injection)
 @pytest.fixture
 def home(monkeypatch, tmp_path, runtime):
     monkeypatch.setenv("HOME", str(tmp_path))
-    calls = []
-    monkeypatch.setattr(uh.subprocess, "run", lambda cmd, **k: calls.append(cmd))
-    unit = tmp_path / ".config" / "systemd" / "user" / "ydotoold.service"
-    unit.parent.mkdir(parents=True)
-    return types.SimpleNamespace(unit=unit, calls=calls)
+    env = types.SimpleNamespace(calls=[], returncode=0)
+
+    def run(cmd, **k):
+        env.calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, env.returncode, "", "Access denied")
+    monkeypatch.setattr(uh.subprocess, "run", run)
+    env.unit = tmp_path / ".config" / "systemd" / "user" / "ydotoold.service"
+    env.unit.parent.mkdir(parents=True)
+    return env
 
 
 def test_the_unit_tuxtalk_wrote_is_disabled_and_removed(home):
@@ -79,3 +83,12 @@ def test_a_ydotoold_unit_of_someone_elses_stays(home):
     home.unit.write_text("[Unit]\nDescription=ydotool daemon\n")
     uh.retire_ydotoold()
     assert home.unit.exists() and home.calls == []
+
+
+def test_a_unit_that_wouldnt_stop_is_kept_for_next_time(home):
+    """Removed while systemd still runs it, ydotoold would go on until logout
+    and nothing would try again."""
+    home.unit.write_text(OUR_UNIT)
+    home.returncode = 1
+    uh.retire_ydotoold()
+    assert home.unit.exists()

@@ -358,12 +358,17 @@ def retire_ydotoold():
     if unit is None:
         return
     try:
-        subprocess.run(["systemctl", "--user", "disable", "--now", "ydotoold.service"],
-                       capture_output=True, timeout=15)
+        result = subprocess.run(["systemctl", "--user", "disable", "--now", "ydotoold.service"],
+                                capture_output=True, text=True, timeout=15)
+        if result.returncode != 0:
+            # Kept, so the next start tries again: removed while systemd still
+            # runs it, the daemon would go on until logout.
+            logger.warning(f"Could not stop the old ydotoold service: {result.stderr.strip()}")
+            return
         os.remove(unit)
         subprocess.run(["systemctl", "--user", "daemon-reload"], capture_output=True, timeout=15)
         logger.info("Removed the ydotoold service TuxTalk used to type with")
-    except Exception as e:
+    except (OSError, subprocess.SubprocessError) as e:
         logger.warning(f"Could not remove the old ydotoold service: {e}")
 
 
