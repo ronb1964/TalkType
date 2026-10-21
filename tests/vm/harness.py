@@ -21,7 +21,8 @@ DBUS = ("gdbus call --session --dest io.github.ronb1964.TalkType "
 
 # Log lines that mean a dictation has been dealt with, one way or another.
 FINISHED = ("Text injected", "Auto-stop: nothing said", "sent only silence",
-            "recording with no speech", "Pressed Enter", "Voice command:")
+            "recording with no speech", "Pressed Enter", "Voice command:",
+            "in a password field")
 
 
 @dataclass
@@ -152,10 +153,11 @@ class Run:
 
     # The text window TuxTalk types into
 
-    def sink_ready(self, name="sink", title="TT Sink", fresh=False):
+    def sink_ready(self, name="sink", title="TT Sink", fresh=False, password=False):
         """The test window open, empty and in front. *fresh* opens it anew,
         on top of every other window (two test windows are both maximised,
-        so the click that focuses one lands on whichever is on top)."""
+        so the click that focuses one lands on whichever is on top).
+        *password*: one password box instead of a text area."""
         pid_file = f"~/{REMOTE}/{name}.txt.pid"
         if fresh:
             self.close_sink(name)
@@ -164,7 +166,7 @@ class Run:
             path = f"{self.vm.home}/{REMOTE}/{name}.txt"
             self.vm.ssh(f"rm -f {path} {path}.pid")
             self.vm.session_background(name, "python3", f"{self.vm.home}/{REMOTE}/sink.py",
-                                       path, title)
+                                       path, title, *(["password"] if password else []))
             if self.vm.ui("find", "frame", title, timeout=20) is None:
                 raise Abort(f"the test window {title!r} didn't open")
             time.sleep(1)
