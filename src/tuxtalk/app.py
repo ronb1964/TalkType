@@ -502,12 +502,14 @@ def _claim_desktop_hotkeys(cfg):
 
     We read them below the desktop, so without this F8 also reaches the app
     ("~" in a terminal). On KDE a KWin script holds them (kwin_hotkeys); on
-    GNOME the extension does, from the list sent to the tray here. Called at
-    startup and after every live settings change. Neither part can fail
-    dictation: the KDE claim never raises, and this is a fire-and-forget call.
+    GNOME the extension does, from the list sent to the tray here; on other
+    X11 desktops the X server does (x11_hotkeys). Called at startup and after
+    every live settings change. None of it can fail dictation: the claims
+    never raise, and the tray call is fire-and-forget.
     """
-    from . import gnome_hotkeys, kwin_hotkeys
+    from . import gnome_hotkeys, kwin_hotkeys, x11_hotkeys
     kwin_hotkeys.claim(cfg)
+    x11_hotkeys.claim(cfg)
     try:
         import dbus
         _get_tray_dbus_proxy().NotifyClaimedHotkeys(
@@ -5053,7 +5055,8 @@ def _loop_evdev(cfg: Settings, input_device_idx, keyboards=None):
     # stop_dictation_service, the tray, or this exit hook; registered even if
     # the claim failed, since a later hotkey change can still succeed, and
     # release() is a no-op off KDE. GNOME's extension lets go by itself when
-    # the tray reports the service stopped.
+    # the tray reports the service stopped, and the X server when this
+    # process's connection closes.
     from . import kwin_hotkeys
     _claim_desktop_hotkeys(cfg)
     atexit.register(kwin_hotkeys.release)

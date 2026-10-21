@@ -125,6 +125,15 @@ def _no_real_kwin(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_real_x11_grabs(request, monkeypatch):
+    """Never let a test grab keys on the user's X display: in an X11 session
+    it would take F8 away from them. test_x11_hotkeys runs its own Xvfb."""
+    from tuxtalk import x11_hotkeys
+    if request.module.__name__.rpartition(".")[2] != "test_x11_hotkeys":
+        monkeypatch.setattr(x11_hotkeys, "claim", lambda cfg: False)
+
+
+@pytest.fixture(autouse=True)
 def _no_real_tuxtalk(monkeypatch):
     """Never let a test send commands to the user's running TuxTalk.
 

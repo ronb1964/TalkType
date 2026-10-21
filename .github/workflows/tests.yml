@@ -35,7 +35,7 @@ jobs:
             python3-venv python3-gi python3-gi-cairo python3-dbus python3-evdev \
             gir1.2-gtk-3.0 gir1.2-ayatanaappindicator3-0.1 gir1.2-notify-0.7 libportaudio2 \
             libxkbregistry0 xkb-data \
-            xvfb xauth dbus dbus-x11
+            xvfb xauth dbus dbus-x11 libxtst6
 
       - name: Python packages
         run: |

@@ -131,7 +131,7 @@ def _from_niri(path):
 
 # --- X11 ----------------------------------------------------------------------------
 # libxcb through ctypes. It's on every X11 system (Xlib itself is built on it),
-# so this needs no new dependency.
+# so this needs no new dependency. x11_hotkeys uses it too.
 
 _XCB_ATOM_WINDOW = 33           # predefined atoms (xproto)
 _XCB_ATOM_WM_CLASS = 67
@@ -152,11 +152,15 @@ class _AtomReply(ctypes.Structure):
                 ("atom", ctypes.c_uint32)]
 
 
+class _Error(ctypes.Structure):
+    _fields_ = [("response_type", ctypes.c_uint8), ("error_code", ctypes.c_uint8)]
+
+
 _xcb = None
 
 
-def _xcb_lib():
-    """libxcb with the few signatures used here, loaded once."""
+def xcb_lib():
+    """libxcb with the few signatures used here and in x11_hotkeys, loaded once."""
     global _xcb
     if _xcb is None:
         lib = ctypes.CDLL("libxcb.so.1")
@@ -181,12 +185,23 @@ def _xcb_lib():
         lib.xcb_get_property_value.restype = P
         lib.xcb_get_property_value.argtypes = [P]
         lib.xcb_get_property_value_length.argtypes = [P]
+        lib.xcb_grab_key_checked.restype = _Cookie
+        lib.xcb_grab_key_checked.argtypes = [P, U8, U32, U16, U8, U8, U8]
+        lib.xcb_ungrab_key.restype = _Cookie
+        lib.xcb_ungrab_key.argtypes = [P, U8, U32, U16]
+        lib.xcb_request_check.restype = ctypes.POINTER(_Error)
+        lib.xcb_request_check.argtypes = [P, _Cookie]
+        lib.xcb_ungrab_keyboard.restype = _Cookie
+        lib.xcb_ungrab_keyboard.argtypes = [P, U32]
+        lib.xcb_wait_for_event.restype = P
+        lib.xcb_wait_for_event.argtypes = [P]
+        lib.xcb_flush.argtypes = [P]
         _xcb = lib
     return _xcb
 
 
-_free = ctypes.CDLL(None).free
-_free.argtypes = [ctypes.c_void_p]
+free = ctypes.CDLL(None).free
+free.argtypes = [ctypes.c_void_p]
 
 
 def _x11_property(lib, conn, window, atom):
@@ -195,14 +210,14 @@ def _x11_property(lib, conn, window, atom):
     cookie = lib.xcb_get_property(conn, 0, window, atom, _XCB_GET_PROPERTY_TYPE_ANY, 0, 1024)
     reply = lib.xcb_get_property_reply(conn, cookie, ctypes.byref(error))
     if error.value:
-        _free(error)
+        free(error)
     if not reply:
         return None
     try:
         length = lib.xcb_get_property_value_length(reply)
         return ctypes.string_at(lib.xcb_get_property_value(reply), length) if length > 0 else None
     finally:
-        _free(reply)
+        free(reply)
 
 
 def parse_wm_class(raw):
@@ -212,31 +227,38 @@ def parse_wm_class(raw):
     return parts[-1] if parts else None
 
 
+def x11_root(lib, conn, screen_number):
+    """The root window of screen *screen_number* (from xcb_connect), or None."""
+    screens = lib.xcb_setup_roots_iterator(lib.xcb_get_setup(conn))
+    for _ in range(screen_number):
+        lib.xcb_screen_next(ctypes.byref(screens))
+    if not screens.data:
+        return None
+    return ctypes.c_uint32.from_address(screens.data).value   # xcb_screen_t starts with root
+
+
 def _from_x11():
     """The class of the window named in _NET_ACTIVE_WINDOW, through XCB."""
-    lib = _xcb_lib()
+    lib = xcb_lib()
     screen_number = ctypes.c_int(0)
     conn = lib.xcb_connect(None, ctypes.byref(screen_number))   # $DISPLAY
     try:
         if not conn or lib.xcb_connection_has_error(conn):
             return None
-        screens = lib.xcb_setup_roots_iterator(lib.xcb_get_setup(conn))
-        for _ in range(screen_number.value):
-            lib.xcb_screen_next(ctypes.byref(screens))
-        if not screens.data:
+        root = x11_root(lib, conn, screen_number.value)
+        if not root:
             return None
-        root = ctypes.c_uint32.from_address(screens.data).value   # xcb_screen_t starts with root
 
         name = b"_NET_ACTIVE_WINDOW"
         error = ctypes.c_void_p()
         atom_reply = lib.xcb_intern_atom_reply(
             conn, lib.xcb_intern_atom(conn, 1, len(name), name), ctypes.byref(error))
         if error.value:
-            _free(error)
+            free(error)
         if not atom_reply:
             return None
         active_atom = atom_reply.contents.atom
-        _free(atom_reply)
+        free(atom_reply)
         if not active_atom:
             return None             # no EWMH window manager running
 
@@ -253,7 +275,7 @@ def _from_x11():
             lib.xcb_disconnect(conn)
 
 
-def _is_x11_session(env):
+def is_x11_session(env):
     """XDG_SESSION_TYPE when it is set; otherwise an X DISPLAY with no Wayland one."""
     session = (env.get("XDG_SESSION_TYPE") or "").lower()
     if session:
@@ -273,7 +295,7 @@ def focused_class():
         path = env.get("SWAYSOCK") or env.get("I3SOCK")
         if path:
             return _from_i3(path) or None
-        if _is_x11_session(env):
+        if is_x11_session(env):
             return _from_x11() or None
     except Exception as e:
         logger.debug(f"Could not ask the compositor for the focused window: {e}")

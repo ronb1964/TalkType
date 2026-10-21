@@ -28,6 +28,12 @@ before 0.15.0, so older entries use that name.
   the next dictation tried to open the download window from the wrong place
   and could crash the dictation service. It now says the model wouldn't
   load, and your choice of model stays as it was.
+- On X11 desktops other than KDE and GNOME (Linux Mint Cinnamon, Xfce,
+  MATE), the dictation keys no longer reach the app you're in as well.
+  Dictating into a terminal typed "^[[19~" (what F8 sends) before the words.
+  While dictation is on, the X server now keeps the keys for TuxTalk, as KDE
+  and GNOME already did; if another program already uses one of them, the
+  log says so.
 - On X11 desktops (Linux Mint Cinnamon and other X11 sessions), dropdowns
   open as a list under the button again. Since 0.14.3 a wrong check gave X11
   the workaround meant for Wayland.
