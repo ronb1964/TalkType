@@ -29,7 +29,10 @@ if command -v flatpak >/dev/null; then
         xargs -r -n1 flatpak remote-delete --user --force 2>/dev/null
 fi
 rm -rf ~/.var/app/io.github.ronb1964.TalkType ~/.var/app/io.github.ronb1964.TuxTalk
-rm -rf ~/tt-test ~/kit/TuxTalk* ~/kit/TalkType*      # the Mint VM's hand testing
+rm -rf ~/tt-test ~/kit/TuxTalk* ~/kit/TalkType* ~/run1-bak    # hand testing
+rm -rf ~/.local/share/TuxTalk.bak* ~/.local/share/TalkType*.bak*
+rm -rf ~/.local/share/flatpak/repo/refs/heads/deploy/app/io.github.ronb1964.T* \
+    ~/.local/share/flatpak/repo/refs/remotes/talktype-origin
 rm -f ~/.local/share/applications/tuxtalk*.desktop ~/.local/share/applications/talktype*.desktop
 find ~/.local/share/icons -name 'tuxtalk*' -delete 2>/dev/null
 find ~/.local/share/icons -name 'talktype*' -delete 2>/dev/null
@@ -37,6 +40,17 @@ if command -v gnome-extensions >/dev/null; then
     gnome-extensions uninstall talktype@ronb1964.github.io 2>/dev/null
 fi
 rm -rf ~/.local/share/gnome-shell/extensions/talktype@ronb1964.github.io
+
+# A run leaves its pkexec stand-in behind (checks_firstrun), and with it
+# first run sets typing up silently: no prompt for the checks to see.
+if grep -qs "Test-VM stand-in for pkexec" /usr/local/bin/pkexec; then
+    if sudo -n rm -f /usr/local/bin/pkexec; then
+        echo "pkexec stand-in removed"
+    else
+        echo "the pkexec stand-in is installed and sudo needs a password: remove it by hand" >&2
+        exit 1
+    fi
+fi
 
 # Before the hotkey helper (0.16), setup put the user in the input group
 # with a uinput rule of its own. A VM still set up that way types without
