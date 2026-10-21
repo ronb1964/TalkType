@@ -12,8 +12,10 @@ import os
 
 class OutputBackend:
     """Types text into the focused application. Returns True if the text was
-    actually delivered, False if injection failed (never raises — the caller
-    surfaces a plain-language notice on False).
+    actually delivered, False if injection failed (the caller surfaces a
+    plain-language notice on False). The host's virtual keyboard raises
+    virtual_keyboard.StoppedPartway when it failed partway, for typing as for
+    backspaces: then nothing may deliver the text again.
 
     Beyond plain text, editing voice commands need to press key combos —
     'delete everything' (Ctrl+A + Backspace) and character-undo (Backspace ×N).

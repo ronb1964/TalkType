@@ -2024,12 +2024,13 @@ def _with_owed_space(text: str) -> str:
 def _send_shift_enter():
     """Send Shift+Enter keystrokes to create line break without submitting."""
     # KEY_LEFTSHIFT (42), KEY_ENTER (28)
-    return _send_keys([(42, 1), (28, 1), (28, 0), (42, 0)], what="shift+enter")
+    return _send_keys([(42, 1), (28, 1), (28, 0), (42, 0)], what="shift+enter",
+                      raise_if_partial=True)
 
 def _send_enter():
     """Send Enter keystroke to create a new line."""
     # KEY_ENTER (28)
-    return _send_keys([(28, 1), (28, 0)], what="enter")
+    return _send_keys([(28, 1), (28, 0)], what="enter", raise_if_partial=True)
 
 def _send_select_all_delete():
     """Send Ctrl+A then Backspace to clear the entire input field.
@@ -2100,7 +2101,9 @@ def _type_text_raw(text: str) -> bool:
 
     Text the layout has no keys for (an emoji, Latin text on a Ukrainian
     layout) is pasted instead, which works on any layout. Without a virtual
-    keyboard (no access to /dev/uinput), wtype, where the desktop has one."""
+    keyboard (no access to /dev/uinput), wtype, where the desktop has one.
+    Raises virtual_keyboard.StoppedPartway when the keyboard failed partway:
+    some of the text is in the app, and nothing may type it again."""
     from . import keyboard_layout
     events = None
     try:
@@ -2112,18 +2115,16 @@ def _type_text_raw(text: str) -> bool:
         if _is_wayland_session():
             return _paste_text(text)
         return _paste_text_x11(text)
-    except Exception as e:
-        logger.error(f"Couldn't work out the keys for the keyboard layout: {e}")
+    except (OSError, AttributeError) as e:
+        # No libxkbcommon, or one older than 1.0 without the calls it needs.
+        logger.error(f"Couldn't load libxkbcommon to work out the keys: {e}")
     if events is not None:
         started = time.time()
-        try:
-            if virtual_keyboard.send(events, _key_delay()):
-                logger.info(f"Typed {len(text)} chars in {time.time() - started:.2f}s "
-                            f"({_key_delay()} ms a key event)")
-                return True
-        except virtual_keyboard.StoppedPartway:
-            # Some of it is in the app; wtype would type it all again.
-            return False
+        delay = _key_delay()
+        if _send_keys(events, what=f"{len(text)} chars", delay_ms=delay, raise_if_partial=True):
+            logger.info(f"Typed {len(text)} chars in {time.time() - started:.2f}s "
+                        f"({delay} ms a key event)")
+            return True
     if _which("wtype"):
         # Report wtype's real exit code so the undo buffer only tracks text
         # that was actually typed, and bound the wait so a stalled compositor
@@ -2325,7 +2326,7 @@ def _send_paste_keystroke(focused_class: str | None, primary_holds_text: bool = 
     else:
         keys = [(29, 1), (47, 1), (47, 0), (29, 0)]  # Ctrl+V
         logger.info(f"Paste: Ctrl+V (class={focused_class!r})")
-    if not _send_keys(keys, what="paste"):
+    if not _send_keys(keys, what="paste", raise_if_partial=True):
         # The keystroke never reached the desktop: the text is sitting on the
         # clipboard but never made it into the app.
         logger.error("Paste keystroke failed — text was not inserted")
@@ -2457,6 +2458,8 @@ def _paste_text(text: str) -> bool:
                 # isn't lost either way.
                 if keeping:
                     _clipboard_keeper.after_paste(text)
+    except virtual_keyboard.StoppedPartway:
+        raise       # the paste may have happened: nothing may deliver it again
     except subprocess.TimeoutExpired as e:
         logger.error(f"Paste injection timeout: {e}")
     except Exception as e:
@@ -2951,7 +2954,18 @@ def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = Fa
     "delete last sentence" refuse in the very window that got the text
     (Ron, 2026-10-15).
     """
-    outcome = _deliver_text(text, injection_mode, t0, one_block)
+    try:
+        outcome = _deliver_text(text, injection_mode, t0, one_block)
+    except virtual_keyboard.StoppedPartway:
+        # An unknown part of the text is in the app. Typing or pasting it
+        # again would double that part, and undo or "select that" counting
+        # on it would eat the user's own text.
+        logger.error("The virtual keyboard stopped partway through the dictation")
+        state.last_inserted_text = ""
+        state.continue_mid_sentence = False
+        state.nav_context = None
+        _forget_shown()
+        outcome = "partial"
     if outcome != "failed":
         try:
             landed = _query_focused_window_class()

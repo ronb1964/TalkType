@@ -6,9 +6,10 @@ it to the desktop like a press on a real keyboard, and the desktop reads it
 with the user's own layout (keyboard_layout.py works out which keys to press).
 
 Until 0.18 the keys went through ydotool: a daemon, ydotoold, that TuxTalk had
-to start, watch and restart ("TuxTalk's typing helper had stopped"), and one
-ydotool process started for every keystroke. Writing to our own device needs
-the same /dev/uinput access ydotoold needed, and nothing else.
+to start, watch and restart ("TuxTalk's typing helper had stopped"), and a
+ydotool program started for every piece of text and every shortcut. Writing
+to our own device needs the same /dev/uinput access ydotoold needed, and
+nothing else.
 
 Who may open /dev/uinput is set up outside this module: the hotkey helper's
 udev rule gives it to the user at the screen (secure_input.py), the older
@@ -54,8 +55,8 @@ _failure = None     # why the keyboard couldn't be made, logged once
 
 
 def _capabilities():
-    """Every key a layout can put a character on, and a pointer's REL_X and
-    left button. TuxTalk's hotkey readers (the service's own, and the hotkey
+    """Every key a layout can put a character on, and a mouse's motion, wheel
+    and three buttons. TuxTalk's hotkey readers (the service's own, and the hotkey
     helper already installed on users' computers) skip any device that is a
     pointer too, which is how they always ignored ydotoold's keyboard and
     mouse; shaped like it, ours is never grabbed or listened to for hotkeys.
@@ -67,9 +68,24 @@ def _capabilities():
     return {e.EV_KEY: keys, e.EV_REL: [e.REL_X, e.REL_Y, e.REL_WHEEL]}
 
 
+def _keyboard_class():
+    from evdev import UInput
+
+    class Keyboard(UInput):
+        def _find_device(self, fd):
+            """Skip opening the new device to read it back: TuxTalk only
+            writes to it. With the hotkey helper installed only the helper
+            may read /dev/input, and python-evdev retried for two seconds
+            before giving up, on every keyboard made."""
+            return None
+
+    return Keyboard
+
+
 def _make_device():
-    from evdev import UInput, ecodes
-    return UInput(_capabilities(), name=NAME, bustype=ecodes.BUS_VIRTUAL, phys="tuxtalk/keyboard")
+    from evdev import ecodes
+    return _keyboard_class()(_capabilities(), name=NAME, bustype=ecodes.BUS_VIRTUAL,
+                             phys="tuxtalk/keyboard")
 
 
 def _open():
@@ -78,8 +94,9 @@ def _open():
     if _device is not None:
         return _device
     try:
+        from evdev import UInputError
         _device = _make_device()
-    except Exception as e:
+    except (OSError, UInputError, ImportError) as e:
         reason = f"{type(e).__name__}: {e}"
         if reason != _failure:
             logger.error(f"Can't make TuxTalk's virtual keyboard ({reason}); nothing can be typed")
@@ -87,8 +104,6 @@ def _open():
         return None
     _ready_at = time.monotonic() + SETTLE_S
     _failure = None
-    # Not its /dev/input path: python-evdev finds that by reading the input
-    # devices, which only the hotkey helper may do when it's installed.
     logger.info("Made TuxTalk's virtual keyboard")
     return _device
 
@@ -102,8 +117,11 @@ def start() -> bool:
 def send(events, delay_ms: float = KEY_DELAY_MS) -> bool:
     """Press and release keys: *events* is [(evdev key code, 1 down / 0 up)].
 
-    Waits *delay_ms* after each event, on a schedule from the start so
-    sleeping a little long doesn't add up over a long text. True when every
+    Waits *delay_ms* after each event, on a schedule kept from the start, so
+    sleeping a little long doesn't add up over a long text. When this process
+    was held up (a busy computer), the schedule starts again from then rather
+    than catching up in a burst, which would overflow the kernel's buffer and
+    lose whole words. True when every
     event was sent, False when none could be. Raises StoppedPartway when the
     keyboard failed after some had reached the app: the caller can't know
     how much of the text landed.
@@ -124,15 +142,20 @@ def send(events, delay_ms: float = KEY_DELAY_MS) -> bool:
             time.sleep(wait)
         step = delay_ms / 1000
         due = time.monotonic()
-        down = set()
+        down = {}           # keys held, in the order they went down
         sent = 0
         try:
             for code, value in events:
                 device.write(ecodes.EV_KEY, code, value)
-                device.syn()
+                # Counted before the SYN: the event may reach the app even
+                # if the SYN after it fails.
                 sent += 1
-                (down.add if value else down.discard)(code)
-                due += step
+                if value:
+                    down[code] = True
+                else:
+                    down.pop(code, None)
+                device.syn()
+                due = max(due + step, time.monotonic())
                 left = due - time.monotonic()
                 if left > 0:
                     time.sleep(left)
@@ -143,14 +166,15 @@ def send(events, delay_ms: float = KEY_DELAY_MS) -> bool:
                 raise StoppedPartway(f"{sent} of {len(events)} key events")
             return False
         if down:
-            logger.warning(f"Letting go of keys left down: {sorted(down)}")
+            logger.warning(f"Letting go of keys left down: {list(down)}")
             _release(device, down)
         return True
 
 
 def _release(device, codes) -> None:
+    """Let go of *codes* (in the order they went down), the last one first."""
     from evdev import ecodes
-    for code in codes:
+    for code in reversed(list(codes)):
         device.write(ecodes.EV_KEY, code, 0)
     device.syn()
 
