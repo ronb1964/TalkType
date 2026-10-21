@@ -608,9 +608,10 @@ hear the low beep, "TuxTalk doesn't type into password fields" shows over the wi
 and nothing is typed or kept in Recent Dictations. Type passwords on the keyboard.
   • It always knows a password box in GTK apps (most GNOME, Cinnamon and Xfce apps).
   • In KDE apps and Firefox only while accessibility is on (a screen reader turns it on).
-  • Chrome, Brave and apps built on them (Discord, Slack, VS Code) don't tell it, nor
-    does the desktop's own password prompt or a terminal asking for one (sudo):
-    there, don't dictate while the cursor is in the password box.
+  • In Chrome, Brave and apps built on them (Discord, Slack, VS Code) only if
+    accessibility was already on when they started.
+  • The desktop's own password prompt and a terminal asking for one (sudo) don't tell
+    it: there, don't dictate while the cursor is in the password box.
 
 <b>Bug reports and feedback</b>
   • <b>Report bugs:</b> <a href="{ISSUES_URL}">TuxTalk issues on GitHub</a>

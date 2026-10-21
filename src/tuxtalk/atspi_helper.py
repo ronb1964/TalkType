@@ -8,11 +8,11 @@ dictation service dispatches while this runs on another thread.
 
 Which apps answer (tried 2026-10-20): GTK 3 and GTK 4 apps always. Qt (KDE
 apps) and Firefox only while accessibility is switched on, by a screen reader
-or the desktop's accessibility setting. Chrome never showed up, not even
-with --force-renderer-accessibility, so Chromium-based browsers and Electron
-apps (Brave, Discord, VS Code) aren't covered. An app that doesn't answer, a
-slow bus or none at all counts as "not a password field", so typing goes
-ahead as it always did.
+or the desktop's accessibility setting. Chromium-based browsers and Electron
+apps (Brave, Discord, VS Code) only if it was on when they started
+(ACCESSIBILITY_ENABLED=1 or the desktop setting); turned on later, they need
+a restart. An app that doesn't answer, a slow bus or none at all counts as
+"not a password field", so typing goes ahead as it always did.
 """
 
 import logging
