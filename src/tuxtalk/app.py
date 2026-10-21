@@ -547,8 +547,8 @@ def _show_voice_commands_via_dbus():
     except Exception as e:
         logger.debug(f"Could not show voice commands via D-Bus: {e}")
 
-# Milliseconds after each typed key event (config typing_delay, set in main)
-_typing_delay = virtual_keyboard.KEY_DELAY_MS
+# Milliseconds after each typed key event (config key_delay, set in main)
+_key_delay_ms = virtual_keyboard.KEY_DELAY_MS
 
 # Global custom commands (loaded from config in main)
 _custom_commands: dict[str, str] = {}
@@ -1361,8 +1361,8 @@ def _reload_live_settings(cfg, indicator):
             if hasattr(fresh, key) and hasattr(cfg, key):
                 setattr(cfg, key, getattr(fresh, key))
 
-        global _typing_delay
-        _typing_delay = cfg.typing_delay
+        global _key_delay_ms
+        _key_delay_ms = cfg.key_delay
 
         global _log_transcripts
         _log_transcripts = getattr(cfg, "log_transcripts", False)
@@ -1821,7 +1821,7 @@ SHORTCUT_DELAY_MS = 12
 
 def _key_delay() -> int:
     """The wait after each key of typed text, backspaces and moves."""
-    return max(1, min(50, _typing_delay))
+    return max(1, min(50, _key_delay_ms))
 
 
 def _send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY_MS,
@@ -5416,8 +5416,8 @@ def main():
 
     _guard_large_v3_without_cuda(cfg)
 
-    global _typing_delay
-    _typing_delay = cfg.typing_delay
+    global _key_delay_ms
+    _key_delay_ms = cfg.key_delay
     # Made now, so the desktop has taken it on long before the first
     # dictation is typed. The Flatpak types through the portal instead.
     if not os.environ.get("FLATPAK_ID"):

@@ -70,11 +70,11 @@ class TestChangeSignalHasOneOwner:
         monkeypatch.setattr(app, "_config_file_changed", lambda: True)
         monkeypatch.setattr(app, "load_config", lambda: _cfg(
             hotkey="F9", toggle_hotkey="", voice_commands_hotkey="", mode="hold",
-            typing_delay=12, log_transcripts=False,
+            key_delay=12, log_transcripts=False,
         ))
 
         cfg = _cfg(hotkey="F8", toggle_hotkey="", voice_commands_hotkey="",
-                   mode="hold", typing_delay=12, log_transcripts=False)
+                   mode="hold", key_delay=12, log_transcripts=False)
         live = app._service_tick(cfg, app._ServiceState(cfg))
 
         assert live is not None, "the tick must return what it reloaded"

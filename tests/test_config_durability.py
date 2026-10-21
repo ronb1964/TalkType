@@ -701,22 +701,22 @@ def test_a_setting_with_a_carriage_return_survives_a_save(config_path):
 
 
 def test_a_wrong_typed_value_costs_only_that_setting(config_path):
-    """typing_delay = "fast" must not make the whole file count as damaged,
+    """key_delay = "fast" must not make the whole file count as damaged,
     quarantined and rolled back to the .bak copy."""
-    config_path.write_text('model = "small"\nhotkey = "F8"\ntyping_delay = "fast"\n')
+    config_path.write_text('model = "small"\nhotkey = "F8"\nkey_delay = "fast"\n')
     loaded = config.load_config()
     assert loaded.model == "small"
     assert loaded.hotkey == "F8"
-    assert loaded.typing_delay == config.Settings().typing_delay
+    assert loaded.key_delay == config.Settings().key_delay
     assert not list(config_path.parent.glob("config.toml.corrupt-*"))
 
 
 def test_an_infinite_number_in_a_whole_number_setting_costs_only_that_setting(config_path):
     """int(inf) raises OverflowError rather than ValueError."""
-    config_path.write_text('model = "small"\ntyping_delay = inf\n')
+    config_path.write_text('model = "small"\nkey_delay = inf\n')
     loaded = config.load_config()
     assert loaded.model == "small"
-    assert loaded.typing_delay == config.Settings().typing_delay
+    assert loaded.key_delay == config.Settings().key_delay
     assert not list(config_path.parent.glob("config.toml.corrupt-*"))
 
 
@@ -724,22 +724,30 @@ def test_a_config_from_before_the_own_keyboard_types_at_the_new_speed(config_pat
     """Every saved config holds ydotool's typing_delay = 12, so without this
     nobody who updated would type faster."""
     config_path.write_text('model = "small"\ntyping_delay = 12\n')
-    assert config.load_config().typing_delay == config.Settings().typing_delay < 12
+    assert config.load_config().key_delay == config.Settings().key_delay < 12
 
 
 def test_a_typing_delay_set_by_hand_is_kept(config_path):
     config_path.write_text('model = "small"\ntyping_delay = 20\n')
-    assert config.load_config().typing_delay == 20
+    assert config.load_config().key_delay == 20
+
+
+def test_a_key_delay_of_12_set_after_the_update_stays(config_path):
+    """The carry-over happens once: 12 is a safe value to set by hand."""
+    config_path.write_text('model = "small"\nkey_delay = 12\n')
+    assert config.load_config().key_delay == 12
+    config.save_config(config.load_config())
+    assert "typing_delay" not in config_path.read_text()
 
 
 def test_recovery_from_backup_skips_only_the_bad_field(config_path):
     config_path.write_text("this is = = not toml")
     (config_path.parent / "config.toml.bak").write_text(
-        'hotkey = "F7"\ntyping_delay = "fast"\nmodel = "small"\n')
+        'hotkey = "F7"\nkey_delay = "fast"\nmodel = "small"\n')
     loaded = config.load_config()
     assert loaded.hotkey == "F7"
     assert loaded.model == "small"
-    assert loaded.typing_delay == config.Settings().typing_delay
+    assert loaded.key_delay == config.Settings().key_delay
 
 
 def test_changing_a_loaded_object_without_saving_changes_nothing_else(config_path):

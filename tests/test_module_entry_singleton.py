@@ -4,7 +4,7 @@ Running the dictation service as `python -m tuxtalk.app` executes app.py under
 the name "__main__". But the input backends reach the app via
 `from . import app` — module "tuxtalk.app" — which is a SEPARATE module object
 with its own globals. main() assigns model, _custom_commands, dbus_service,
-_typing_delay and friends as module globals; if main() runs in "__main__" while
+_key_delay_ms and friends as module globals; if main() runs in "__main__" while
 the recording loop runs in "tuxtalk.app", every one of those globals is
 invisible over there and transcription dies with `NameError: name 'model'`.
 

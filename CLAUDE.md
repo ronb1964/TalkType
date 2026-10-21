@@ -246,7 +246,7 @@ purpose: TuxTalk's hotkey reader and the installed hotkey helper skip pointers,
 so neither grabs or listens to it. Access to /dev/uinput comes from the hotkey
 helper's udev rule (`secure_input.py`) or the older input-group rule.
 
-Timing (`KEY_DELAY_MS`, config `typing_delay`, default 2 ms after each key
+Timing (`KEY_DELAY_MS`, config `key_delay`, default 2 ms after each key
 event) was measured in the VMs: 1 ms is clean in every app class tested, 0 ms
 overflows the kernel's buffer, and the delay also sets how long a frozen
 desktop survives (about 64 key events' worth). Never lower it without the

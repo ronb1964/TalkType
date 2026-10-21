@@ -31,8 +31,8 @@ def test_a_long_dictation_is_typed_to_the_end(keyboard):
     assert keyboard.typed_keys().count(57) == 400      # every space
 
 
-def test_the_typing_delay_setting_slows_every_key(settled, monkeypatch):
-    monkeypatch.setattr(app, "_typing_delay", 20)
+def test_the_key_delay_setting_slows_every_key(settled, monkeypatch):
+    monkeypatch.setattr(app, "_key_delay_ms", 20)
     started = settled.clock.now
     app._type_text_raw("abcde")
     assert settled.clock.now - started == pytest.approx(10 * 0.020)

@@ -32,7 +32,7 @@ NAME = "TuxTalk virtual keyboard"
 # the desktop typing survives: 64 times it. Frozen on purpose mid-text, KWin
 # lost letters after 100 ms at 1 ms and after 200 ms at 2 ms, none at 4 ms.
 # ydotool's 12 ms (24 ms a letter) came from letters arriving out of order at
-# 5 ms, in December 2025, with ydotoold in between. The typing_delay setting
+# 5 ms, in December 2025, with ydotoold in between. The key_delay setting
 # raises it for a computer that loses letters.
 KEY_DELAY_MS = 2
 

@@ -104,7 +104,7 @@ class TestSettingsCoverage:
         "key",
         ["auto_period", "auto_space", "beeps", "notify", "smart_quotes",
          "language", "injection_mode", "hotkey", "toggle_hotkey", "mode",
-         "typing_delay", "indicator_position", "indicator_size",
+         "key_delay", "indicator_position", "indicator_size",
          "launch_at_login", "auto_check_updates"],
     )
     def test_known_live_settings_are_live(self, key):

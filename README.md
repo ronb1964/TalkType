@@ -498,7 +498,7 @@ auto_period = true        # Add period at end of sentences
 - Look in `~/.config/tuxtalk/tuxtalk.log` for "Made TuxTalk's virtual keyboard".
   If it says "Can't make TuxTalk's virtual keyboard" instead, open Preferences →
   Advanced → Show system check and click Fix Typing Permissions
-- If some letters go missing on a slow computer, add `typing_delay = 6` (or
+- If some letters go missing on a slow computer, add `key_delay = 6` (or
   higher) to `~/.config/tuxtalk/config.toml` and restart TuxTalk
 
 ### Hotkey not working?

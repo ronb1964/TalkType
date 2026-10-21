@@ -14,7 +14,7 @@ before 0.15.0, so older entries use that name.
   first-run setup no longer asks to install ydotool. The ydotoold an older
   version started, and the service file it set up, are removed when this
   version starts.
-- If a slow computer drops letters, `typing_delay` in config.toml slows the
+- If a slow computer drops letters, `key_delay` in config.toml slows the
   keyboard down again (6 or 12 are safe values; 2 is the new default).
 
 ## [0.17.0] - 2026-10-20
