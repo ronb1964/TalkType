@@ -16,6 +16,8 @@ from vmlib import REMOTE
 
 LOG = "~/.config/tuxtalk/tuxtalk.log"
 CONFIG = "~/.config/tuxtalk/config.toml"
+# What the tray (and Preferences, which it starts) print, from session_background.
+OUT = f"~/{REMOTE}/tuxtalk.out"
 DBUS = ("gdbus call --session --dest io.github.ronb1964.TalkType "
         "--object-path /io/github/ronb1964/TalkType --method io.github.ronb1964.TalkType.")
 
@@ -96,12 +98,12 @@ class Run:
 
     # The TuxTalk log
 
-    def log_mark(self):
-        out = self.vm.ssh(f"stat -c %s {LOG} 2>/dev/null || echo 0", check=False).stdout.strip()
+    def log_mark(self, file=LOG):
+        out = self.vm.ssh(f"stat -c %s {file} 2>/dev/null || echo 0", check=False).stdout.strip()
         return int(out or 0)
 
-    def log_since(self, mark):
-        return self.vm.ssh(f"tail -c +{mark + 1} {LOG} 2>/dev/null", check=False).stdout
+    def log_since(self, mark, file=LOG):
+        return self.vm.ssh(f"tail -c +{mark + 1} {file} 2>/dev/null", check=False).stdout
 
     def wait_log(self, mark, *needles, timeout=30):
         """The log since *mark* once it holds any of *needles*, else None."""

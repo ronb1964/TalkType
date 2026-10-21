@@ -116,6 +116,8 @@ Checks are plain functions registered with `@check(section, id, name)` in the
 then in file order. Each returns an `Outcome`; raising `Abort` stops the run
 for that VM when TuxTalk is unusable. `ui.py dump "Window title"` prints a
 window's widget tree, which is the quickest way to find a label to press.
+`ui.py pick "combo box" NAME ITEM` chooses an entry in a dropdown, as
+`prefs_model_switch` does with the Model dropdown.
 
 To try a new check without a whole run, leave a VM on after a run
 (`--keep-running`) and run just that check on it as it is:

@@ -5,7 +5,7 @@ Cancel. CLAUDE.md Step 8, the Preferences lines.
 import time
 
 from checks_firstrun import FLAGS
-from harness import Abort, Outcome, check
+from harness import OUT, Abort, Outcome, check
 
 PREFS = "TuxTalk Preferences"
 TABS = ["General", "Audio", "Advanced", "Words", "Stats", "Updates & Backup"]
@@ -225,3 +225,70 @@ def prefs_languages(run):
     run.vm.ui("click", "button", "Cancel", PREFS)
     return verdict(problems, "Detect automatically and 35 native-name languages, no “Several "
                              "languages…” on Parakeet; the setup line and the recommended setup")
+
+
+@check("Preferences", "prefs_model_switch",
+       "Model: Parakeet to small and back, Preferences stays open; Cancel keeps Parakeet")
+def prefs_model_switch(run):
+    """0.17 test, 2026-10-20: Parakeet to small crashed Preferences, the
+    Language dropdown's refill calling itself (5cec98a)."""
+    # Preferences is its own process: an uncaught error in a GTK handler goes
+    # to the tray's output, not always into the log.
+    out_mark, mark = run.log_mark(OUT), run.log_mark()
+    # prefs_languages' Cancel lets go of the pidfile a moment before that
+    # Preferences exits, and opening one in between brings nothing up.
+    run.vm.ssh("timeout 10 sh -c 'while pgrep -f [t]uxtalk.prefs >/dev/null; do sleep 0.3; done'",
+               check=False)
+    run.dbus("OpenPreferences")
+    if run.vm.ui("find", "page tab", "General", PREFS, timeout=30) is None:
+        return Outcome("fail", "Preferences didn't open")
+    problems, closed, shot = [], False, None
+    try:
+        run.vm.ui("tab", "General", PREFS)
+        open_fold(run, "Change model, device or language")
+        # The Model dropdown is named by the id of its model (its first
+        # column), its entries by what they show. Small is picked again at
+        # the end, so Cancel has a change to throw away.
+        small = ("small", "~small — good balance", True)
+        back = ("small", "parakeet-v3", "~Parakeet — recommended", False)
+        steps = [("parakeet-v3",) + small, back, ("parakeet-v3",) + small]
+        for current, model, entry, whisper in steps:
+            if run.vm.ui("pick", "combo box", current, entry, PREFS, timeout=5) is None:
+                problems.append(f"couldn't pick {model} in the Model dropdown")
+                break
+            time.sleep(1.5)     # the loop happened at once, so 1.5 s is enough
+            if run.vm.ui("find", "page tab", "General", PREFS, timeout=10) is None:
+                problems.append(f"Preferences closed after picking {model}")
+                closed = True
+                break
+            if find(run, "combo box", model) is None:
+                problems.append(f"the Model dropdown doesn't read {model}")
+                break
+            languages = [i["name"] for i in run.vm.ui("items", "combo box", "Detect automatically",
+                                                      PREFS, timeout=5) or []]
+            if not languages:
+                problems.append(f"no Language dropdown after picking {model}")
+            elif ("Several languages…" in languages) != whisper:
+                problems.append(f"the Language list wasn't refilled for {model}")
+        shot = run.shot("prefs-model-switch")
+    finally:
+        cancelled = not closed and run.vm.ui("click", "button", "Cancel", PREFS, timeout=5)
+    if not closed:
+        time.sleep(1)
+        if not cancelled:
+            problems.append("couldn't press Cancel")
+        elif run.vm.ui("find", "page tab", "General", PREFS, timeout=1) is not None:
+            problems.append("Preferences stayed open after Cancel")
+    model = run.config().get("model", "").strip('"')
+    if model != "parakeet-v3":
+        problems.append(f"Cancel left the model at {model}")
+    lines = (run.log_since(mark) + run.log_since(out_mark, OUT)).splitlines()
+    errors = ([line for line in lines if "RecursionError" in line]
+              or [line for line in lines if "Traceback" in line])
+    if errors:
+        problems.append(f"in the log: “{errors[0].strip()[:120]}”")
+    outcome = verdict(problems, "Parakeet to small and back: Preferences stayed open and the "
+                                "Language list followed the model; small again, then Cancel kept "
+                                "Parakeet")
+    outcome.screenshot = shot
+    return outcome
