@@ -160,3 +160,37 @@ def test_the_checkbox_says_what_it_does(monkeypatch):
     finally:
         voice.window.destroy()
         tray.window.destroy()
+
+
+def test_fixing_in_the_text_uses_the_users_speed_and_waits_for_the_last_keys(monkeypatch, tmp_path):
+    """This window types from its own process: the service's speed setting
+    isn't there unless it reads it, and its keyboard goes when it ends."""
+    pytest.importorskip("gi")
+    import json
+    from tuxtalk import config, fix_word_dialog as fw
+    path = tmp_path / "fix.json"
+    path.write_text(json.dumps({"text": " Mary had a lamb. ", "window": "org.kde.kwrite"}))
+
+    class Dialog:
+        def __init__(self, entries, index, copy_text, before_show=None, in_place=False):
+            self.fixed_for_text = (5, 8, "Marie")
+            self.window = type("W", (), {"connect": lambda *a: None, "present": lambda *a: None})()
+    monkeypatch.setattr(fw, "_FixWordDialog", Dialog)
+    monkeypatch.setattr(fw.Gtk, "main", lambda: None)
+    monkeypatch.setattr(config, "load_config", lambda: config.Settings(key_delay=20))
+    monkeypatch.setattr(app, "_key_delay_ms", app._key_delay_ms)
+    monkeypatch.setattr(fw, "fix_in_text", lambda *a: True)
+    waits = []
+    monkeypatch.setattr(fw.time, "sleep", waits.append)
+    assert fw.main(["--in-place", str(path)]) == 0
+    assert app._key_delay_ms == 20
+    assert waits == [fw.LAST_KEYS_S]
+
+
+def test_a_fix_the_keyboard_dropped_partway_is_not_done(monkeypatch, keyboard):
+    pytest.importorskip("gi")
+    from tuxtalk import fix_word_dialog as fw
+    monkeypatch.setattr(fw.time, "sleep", lambda s: None)
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "org.kde.kwrite")
+    keyboard.fail_after = 3
+    assert fw.fix_in_text(" Hello there. ", (0, 5, "Hi"), "org.kde.kwrite") is False
