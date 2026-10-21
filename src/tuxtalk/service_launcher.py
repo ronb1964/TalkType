@@ -251,13 +251,14 @@ def stop_dictation_service(force: bool = False) -> None:
         except OSError:
             pass  # exited between the scan and the kill
     # SIGTERM/SIGKILL skip the service's exit hooks, so hand its hotkeys back
-    # to the desktop from here. Otherwise KWin would keep swallowing F8 with
-    # dictation off.
+    # to the desktop from here. Otherwise KWin or COSMIC would keep swallowing
+    # F8 with dictation off.
     try:
-        from . import kwin_hotkeys
+        from . import cosmic_hotkeys, kwin_hotkeys
         kwin_hotkeys.release()
+        cosmic_hotkeys.release()
     except Exception as e:
-        logger.debug(f"Could not release the KWin hotkeys: {e}")
+        logger.debug(f"Could not release the desktop's hotkeys: {e}")
 
 
 def build_service_env(base_env=None, dev_pythonpath=None):

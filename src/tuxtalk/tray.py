@@ -547,8 +547,8 @@ class DictationTray:
         # Track service state for change detection
         self._last_service_state = self.is_service_running()
         if not self._last_service_state:
-            # A service that crashed in an earlier session can leave KWin
-            # holding the hotkeys back from every app.
+            # A service that crashed in an earlier session can leave KWin or
+            # COSMIC holding the hotkeys back from every app.
             self._release_desktop_hotkeys()
 
         # Check service status every second to keep the icon and menu current
@@ -1060,10 +1060,11 @@ class DictationTray:
         if self.is_service_running():
             return
         try:
-            from . import kwin_hotkeys
+            from . import cosmic_hotkeys, kwin_hotkeys
             kwin_hotkeys.release()
+            cosmic_hotkeys.release()
         except Exception as e:
-            logger.debug(f"Could not release the KWin hotkeys: {e}")
+            logger.debug(f"Could not release the desktop's hotkeys: {e}")
 
     def toggle_service(self, widget):
         """Toggle dictation service on/off."""

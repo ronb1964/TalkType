@@ -1,9 +1,9 @@
-"""Asking Sway, i3, Hyprland and niri which window has focus.
+"""Asking Sway, i3, Hyprland, niri and COSMIC which window has focus.
 
 Each test runs a stand-in compositor on a real Unix socket that speaks that
 compositor's real protocol, so the framing, the parsing and the clean-up are
 all exercised. The real compositors were checked by hand (headless, in a
-container).
+container; COSMIC in the Pop!_OS test VM).
 """
 import json
 import socket
@@ -34,7 +34,8 @@ def _serve(path, handler):
 
 def _clear_env(monkeypatch):
     for var in ("SWAYSOCK", "I3SOCK", "HYPRLAND_INSTANCE_SIGNATURE", "NIRI_SOCKET",
-                "XDG_SESSION_TYPE", "DISPLAY", "WAYLAND_DISPLAY"):
+                "XDG_SESSION_TYPE", "DISPLAY", "WAYLAND_DISPLAY", "XDG_CURRENT_DESKTOP",
+                "DESKTOP_SESSION"):
         monkeypatch.delenv(var, raising=False)
 
 
@@ -292,3 +293,220 @@ def test_no_x_server_at_all_is_unknown_not_an_error(monkeypatch):
 def test_x11_terminals_get_terminal_paste(wm_class):
     from tuxtalk.app import is_terminal_class
     assert is_terminal_class(wm_class)
+
+
+# --- COSMIC ------------------------------------------------------------------------
+
+def _wl_message(obj, opcode, payload=b""):
+    return struct.pack("<IHH", obj, opcode, 8 + len(payload)) + payload
+
+
+def _wl_str(text):
+    raw = text.encode() + b"\0"
+    return struct.pack("<I", len(raw)) + raw + b"\0" * (-len(raw) % 4)
+
+
+class FakeCosmic:
+    """cosmic-comp's side of the window list, as the Pop!_OS VM showed it:
+    each window and its app_id on binding the ext list, and the states only
+    a moment after they're asked for, closed by zcosmic_toplevel_info's done."""
+
+    def __init__(self, path, windows, active=None, info_version=3):
+        self.windows = list(windows)            # app_ids, in the order they opened
+        self.handles = {}                       # app_id -> (ext handle, cosmic handle)
+        self.active = active
+        self.info_version = info_version
+        self.server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.server.bind(str(path))
+        self.server.listen(1)
+        self.conn = None
+        self.lock = threading.Lock()
+        threading.Thread(target=self._serve, daemon=True).start()
+
+    def _send(self, data):
+        with self.lock:
+            if self.conn is not None:       # a late send_states after stop()
+                self.conn.sendall(data)
+
+    def _serve(self):
+        self.conn, _ = self.server.accept()
+        self.server.close()
+        globals_ = [(1, "ext_foreign_toplevel_list_v1", 1)]
+        if self.info_version:
+            globals_.append((2, "zcosmic_toplevel_info_v1", self.info_version))
+        bound, unread = {}, b""
+        while True:
+            try:
+                chunk = self.conn.recv(65536)
+            except OSError:
+                return
+            if not chunk:
+                return
+            unread += chunk
+            while len(unread) >= 8 and len(unread) >= struct.unpack_from("<H", unread, 6)[0]:
+                obj, opcode, size = struct.unpack_from("<IHH", unread)
+                body, unread = unread[8:size], unread[size:]
+                if (obj, opcode) == (1, 1):                       # get_registry
+                    registry = struct.unpack_from("<I", body)[0]
+                    for name, interface, version in globals_:
+                        self._send(_wl_message(registry, 0, struct.pack("<I", name)
+                                               + _wl_str(interface) + struct.pack("<I", version)))
+                elif (obj, opcode) == (1, 0):                     # sync
+                    self._send(_wl_message(struct.unpack_from("<I", body)[0], 0, b"\0" * 4))
+                elif obj == registry and opcode == 0:             # bind
+                    name = struct.unpack_from("<I", body)[0]
+                    new = struct.unpack_from("<I", body, len(body) - 4)[0]
+                    bound[name] = new
+                    if name == 1:
+                        for i, app_id in enumerate(self.windows):
+                            self._open(new, 0xff000000 + i, app_id)
+                elif obj == bound.get(2) and opcode == 1:         # get_cosmic_toplevel
+                    cosmic, ext = struct.unpack_from("<II", body)
+                    app_id = next(a for a, (e, _c) in self.handles.items() if e == ext)
+                    self.handles[app_id] = (ext, cosmic)
+                    self.info = obj
+                    threading.Timer(0.05, self.send_states).start()
+
+    def _open(self, toplevel_list, ext, app_id):
+        self.handles[app_id] = (ext, None)
+        self._send(_wl_message(toplevel_list, 0, struct.pack("<I", ext))
+                   + _wl_message(ext, 3, _wl_str(app_id)) + _wl_message(ext, 1))
+
+    def send_states(self):
+        for app_id, (_ext, cosmic) in self.handles.items():
+            if cosmic is not None:
+                states = [0, 2] if app_id == self.active else [0]   # maximized, activated
+                self._send(_wl_message(cosmic, 8, struct.pack("<I", 4 * len(states))
+                                       + struct.pack(f"<{len(states)}I", *states)))
+        self._send(_wl_message(self.info, 2))
+
+    def focus(self, app_id):
+        self.active = app_id
+        self.send_states()
+
+    def close_window(self, app_id):
+        ext, _cosmic = self.handles.pop(app_id)
+        self._send(_wl_message(ext, 0))
+
+    def stop(self):
+        with self.lock:
+            if self.conn is not None:
+                self.conn.shutdown(socket.SHUT_RDWR)
+                self.conn.close()
+                self.conn = None
+
+
+@pytest.fixture
+def cosmic(tmp_path, monkeypatch):
+    """A COSMIC session whose compositor is started by calling the fixture."""
+    _clear_env(monkeypatch)
+    monkeypatch.setattr(cf, "_cosmic", None)
+    monkeypatch.setenv("XDG_CURRENT_DESKTOP", "COSMIC")
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+    monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-1")
+    started = []
+
+    def start(*windows, **kw):
+        started.append(FakeCosmic(tmp_path / "wayland-1", windows, **kw))
+        return started[-1]
+
+    yield start
+    for compositor in started:
+        compositor.stop()
+
+
+def _wait_for(expected):
+    import time
+    deadline = time.monotonic() + 2
+    while cf.focused_class() != expected and time.monotonic() < deadline:
+        time.sleep(0.01)
+    return cf.focused_class()
+
+
+def test_cosmic_names_the_activated_window(cosmic):
+    cosmic("org.mozilla.firefox", "gnome-terminal-server", active="gnome-terminal-server")
+    assert cf.focused_class() == "gnome-terminal-server"
+
+
+def test_cosmic_answers_at_once_after_the_first_question(cosmic):
+    """cosmic-comp sends states late, so the connection stays open: a paste
+    mustn't wait for them every time."""
+    import time
+    cosmic("org.gnome.TextEditor", active="org.gnome.TextEditor")
+    cf.focused_class()
+    started = time.monotonic()
+    assert cf.focused_class() == "org.gnome.TextEditor"
+    assert time.monotonic() - started < 0.01
+
+
+def test_cosmic_follows_a_switch_to_another_window(cosmic):
+    """What the send countdown needs: switching windows during the wait."""
+    compositor = cosmic("org.gnome.TextEditor", "gnome-terminal-server",
+                        active="org.gnome.TextEditor")
+    assert cf.focused_class() == "org.gnome.TextEditor"
+    compositor.focus("gnome-terminal-server")
+    assert _wait_for("gnome-terminal-server") == "gnome-terminal-server"
+
+
+def test_cosmic_with_the_focused_window_closed_is_unknown(cosmic):
+    compositor = cosmic("org.gnome.TextEditor", "gnome-terminal-server",
+                        active="gnome-terminal-server")
+    assert cf.focused_class() == "gnome-terminal-server"
+    compositor.close_window("gnome-terminal-server")
+    assert _wait_for(None) is None
+
+
+def test_cosmic_with_no_windows_is_unknown_without_waiting(cosmic):
+    import time
+    cosmic()
+    started = time.monotonic()
+    assert cf.focused_class() is None
+    assert time.monotonic() - started < 0.5
+
+
+def test_a_cosmic_without_window_states_is_unknown(cosmic):
+    """Before zcosmic_toplevel_info version 2 there was no ext list to pair
+    it with; nothing to ask, so no answer, quickly."""
+    import time
+    cosmic("org.gnome.TextEditor", active="org.gnome.TextEditor", info_version=1)
+    started = time.monotonic()
+    assert cf.focused_class() is None
+    assert time.monotonic() - started < 0.5
+
+
+def test_a_cosmic_that_never_sends_the_states_costs_one_wait_only(cosmic, monkeypatch):
+    import time
+    monkeypatch.setattr(cf, "COSMIC_FIRST_ANSWER", 0.2)
+    monkeypatch.setattr(FakeCosmic, "send_states", lambda self: None)
+    cosmic("org.gnome.TextEditor", active="org.gnome.TextEditor")
+    assert cf.focused_class() is None
+    started = time.monotonic()
+    assert cf.focused_class() is None
+    assert time.monotonic() - started < 0.05
+
+
+def test_cosmic_is_asked_again_after_the_compositor_restarts(cosmic, tmp_path):
+    first = cosmic("org.gnome.TextEditor", active="org.gnome.TextEditor")
+    assert cf.focused_class() == "org.gnome.TextEditor"
+    first.stop()
+    (tmp_path / "wayland-1").unlink()
+    assert _wait_for(None) is None
+    cosmic("gnome-terminal-server", active="gnome-terminal-server")
+    assert _wait_for("gnome-terminal-server") == "gnome-terminal-server"
+
+
+def test_a_malformed_message_ends_the_connection_instead_of_spinning():
+    """A message claiming zero bytes would otherwise be read again forever,
+    a thread spinning at full speed."""
+    ours, theirs = socket.socketpair()
+    with ours, theirs:
+        ours.settimeout(1)
+        theirs.sendall(struct.pack("<IHH", 7, 0, 0))
+        with pytest.raises(ConnectionError):
+            cf._Wayland(ours).read_until(None, None, lambda *event: None)
+
+
+def test_gnome_terminal_on_cosmic_gets_terminal_paste():
+    """COSMIC names GNOME Terminal's windows after its server process."""
+    from tuxtalk.app import is_terminal_class
+    assert is_terminal_class("gnome-terminal-server")
