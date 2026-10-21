@@ -6,6 +6,7 @@ import time
 
 from checks_firstrun import FLAGS
 from harness import Abort, Outcome, check
+from vmlib import REMOTE
 
 PREFS = "TuxTalk Preferences"
 TABS = ["General", "Audio", "Advanced", "Words", "Stats", "Updates & Backup"]
@@ -225,3 +226,54 @@ def prefs_languages(run):
     run.vm.ui("click", "button", "Cancel", PREFS)
     return verdict(problems, "Detect automatically and 35 native-name languages, no “Several "
                              "languages…” on Parakeet; the setup line and the recommended setup")
+
+
+@check("Preferences", "prefs_model_switch",
+       "Model: Parakeet to small and back, Preferences stays open")
+def prefs_model_switch(run):
+    """0.17 test, 2026-10-20: Parakeet to small crashed Preferences, the
+    Language dropdown's refill calling itself (5cec98a)."""
+    # Preferences is its own process: an uncaught error in a GTK handler goes
+    # to the tray's output, not always into the log.
+    out = f"~/{REMOTE}/tuxtalk.out"
+    out_mark = int(run.vm.ssh(f"stat -c %s {out} 2>/dev/null || echo 0",
+                              check=False).stdout.strip() or 0)
+    mark = run.log_mark()
+    run.dbus("OpenPreferences")
+    if run.vm.ui("find", "page tab", "General", PREFS, timeout=30) is None:
+        return Outcome("fail", "Preferences didn't open")
+    run.vm.ui("tab", "General", PREFS)
+    open_fold(run, "Change model, device or language")
+    problems = []
+    # The Model dropdown is named by the id of its model (its first column),
+    # its entries by what they show.
+    steps = [("parakeet-v3", "small", "~small — good balance", True),
+             ("small", "parakeet-v3", "~Parakeet — recommended", False)]
+    for current, model, entry, whisper in steps:
+        if run.vm.ui("pick", "combo box", current, entry, PREFS, timeout=5) is None:
+            problems.append(f"couldn't pick {model} in the Model dropdown")
+            break
+        time.sleep(1.5)     # the refill that looped ran straight away
+        if run.vm.ui("find", "page tab", "General", PREFS, timeout=10) is None:
+            problems.append(f"Preferences closed after picking {model}")
+            break
+        if find(run, "combo box", model) is None:
+            problems.append(f"the Model dropdown doesn't read {model}")
+        languages = [i["name"] for i in run.vm.ui("items", "combo box", "Detect automatically",
+                                                  PREFS, timeout=5) or []]
+        if not languages:
+            problems.append(f"no Language dropdown after picking {model}")
+        elif ("Several languages…" in languages) != whisper:
+            problems.append(f"the Language list wasn't refilled for {model}")
+    shot = run.shot("prefs-model-switch")
+    run.vm.ui("click", "button", "Cancel", PREFS, timeout=5)
+    model = run.config().get("model", "").strip('"')
+    if model != "parakeet-v3":
+        problems.append(f"Cancel left the model at {model}")
+    errors = run.log_since(mark) + run.vm.ssh(f"tail -c +{out_mark + 1} {out}",
+                                              check=False).stdout
+    problems += [f"“{e}” in the log" for e in ("Traceback", "RecursionError") if e in errors]
+    outcome = verdict(problems, "Parakeet to small and back: Preferences stayed open, the Language "
+                                "list followed the model, Cancel kept Parakeet")
+    outcome.screenshot = shot
+    return outcome

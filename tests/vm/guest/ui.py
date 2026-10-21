@@ -10,6 +10,7 @@ python3 inside the desktop session (session-run.sh). Prints JSON.
   ui.py click ROLE NAME [WINDOW]     wait for a widget and press it
   ui.py texts WINDOW                 every label and text in a window
   ui.py items ROLE NAME [WINDOW]     the entries under a widget (a dropdown)
+  ui.py pick ROLE NAME ITEM [WINDOW] choose the entry ITEM in a dropdown
   ui.py tab NAME [WINDOW]            switch a notebook to the tab called NAME
 
 NAME matches exactly; "~part" matches any name containing "part". WINDOW is
@@ -33,6 +34,7 @@ from gi.repository import Atspi  # noqa: E402
 TIMEOUT = 20.0
 HIDDEN_TOO = False
 PRESS_ACTIONS = ("click", "press", "activate", "toggle")
+ITEM_ROLES = ("menu item", "check menu item", "radio menu item", "list item", "table cell")
 
 
 def matches(pattern, name):
@@ -116,6 +118,10 @@ def wait_for(wanted_role, name, window=None):
         time.sleep(0.3)
 
 
+def entries(obj):
+    return [o for _d, o in walk(obj) if role(o) in ITEM_ROLES]
+
+
 def press(obj):
     if obj.get_action_iface() is None:
         return False
@@ -157,10 +163,26 @@ def main(argv):
                 print(json.dumps({"error": f"{args[1]!r} can't be pressed"}))
                 return 1
         elif command == "items":
-            out = [describe(o) for _d, o in walk(obj) if role(o) in
-                   ("menu item", "check menu item", "radio menu item", "list item", "table cell")]
+            out = [describe(o) for o in entries(obj)]
         else:
             out = describe(obj)
+    elif command == "pick":
+        obj = wait_for(args[0], args[1], args[3] if len(args) > 3 else None)
+        if obj is None:
+            print(json.dumps({"error": f"no {args[0]} {args[1]!r} showing"}))
+            return 1
+        found = entries(obj)
+        index = next((i for i, o in enumerate(found) if matches(args[2], o.get_name())), None)
+        if index is None:
+            print(json.dumps({"error": f"no {args[2]!r} in {args[1]!r}",
+                              "items": [o.get_name() for o in found]}))
+            return 1
+        # Through the dropdown's selection, as a screen reader picks: its
+        # list is never popped up, so its entries can't be clicked.
+        if not obj.select_child(index):
+            print(json.dumps({"error": f"{args[2]!r} can't be picked"}))
+            return 1
+        out = describe(found[index])
     elif command == "tab":
         obj = wait_for("page tab", args[0], args[1] if len(args) > 1 else None)
         if obj is None:
