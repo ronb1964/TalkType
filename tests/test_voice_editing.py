@@ -815,7 +815,7 @@ def test_exact_jobs_are_done_in_code_even_before_the_ai_is_ready(edit_env, monke
 @pytest.fixture
 def keys_sent(edit_env, monkeypatch):
     sent = []
-    monkeypatch.setattr(app, "_ydotool_key", lambda keys, what="": sent.append(list(keys)) or True)
+    monkeypatch.setattr(app, "_send_keys", lambda keys, what="", **kw: sent.append(list(keys)) or True)
     monkeypatch.setattr("tuxtalk.keyboard_layout.active_layout", lambda: ("us", ""))
     return sent
 
@@ -824,7 +824,7 @@ def test_bold_in_a_word_processor_is_its_shortcut(edit_env, keys_sent, monkeypat
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "Make this bold and italic.")
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "libreoffice-writer")
     run_edit()
-    assert keys_sent == [["29:1", "48:1", "48:0", "29:0"], ["29:1", "23:1", "23:0", "29:0"]]
+    assert keys_sent == [[(29, 1), (48, 1), (48, 0), (29, 0)], [(29, 1), (23, 1), (23, 0), (29, 0)]]
     assert edit_env["typed"] == [] and edit_env["notices"] == [] and edit_env["engine"].asked == []
     assert edit_env["beeps"] == [app.READY_BEEP] and edit_env["put_back"] == 1
 
@@ -856,7 +856,7 @@ def test_a_none_answer_is_no_answer(engine, monkeypatch, answer):
 def test_delete_this_presses_delete(edit_env, keys_sent, monkeypatch):
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "Delete this.")
     run_edit()
-    assert keys_sent == [["111:1", "111:0"]]
+    assert keys_sent == [[(111, 1), (111, 0)]]
     assert edit_env["typed"] == [] and edit_env["engine"].asked == [] and edit_env["notices"] == []
 
 
@@ -981,7 +981,7 @@ def test_delete_and_exact_jobs_work_without_the_ai_downloaded(edit_env, keys_sen
     monkeypatch.setattr(app, "_ai_engine", None)
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "Delete this.")
     run_edit()
-    assert keys_sent == [["111:1", "111:0"]] and edit_env["notices"] == []
+    assert keys_sent == [[(111, 1), (111, 0)]] and edit_env["notices"] == []
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "Make this all caps.")
     run_edit()
     assert edit_env["typed"] == ["WE FINISHED THE ELECTRICAL TODAY."] and edit_env["notices"] == []
@@ -994,7 +994,7 @@ def test_a_long_selection_can_still_be_deleted_or_made_bold(edit_env, keys_sent,
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "libreoffice-writer")
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, lang: "Make this bold.")
     run_edit()
-    assert keys_sent == [["111:1", "111:0"], ["29:1", "48:1", "48:0", "29:0"]]
+    assert keys_sent == [[(111, 1), (111, 0)], [(29, 1), (48, 1), (48, 0), (29, 0)]]
     assert edit_env["notices"] == []
 
 

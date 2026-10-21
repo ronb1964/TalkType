@@ -202,25 +202,20 @@ def test_keys_that_could_not_be_pressed_say_so(dictation):
     assert dictation["problems"] == ["shortcut_failed"]
 
 
-def test_ydotool_holds_each_modifier_around_its_key(monkeypatch):
+def test_each_modifier_is_held_around_its_key(keyboard):
     from tuxtalk import app
-    sent = []
-    monkeypatch.setattr(app, "_ydotool_key", lambda seq, **k: sent.append(seq) or True)
     assert app._send_chords([((C, S), "LEFT"), ((), "END")]) is True
-    seq = sent[0]
-    assert seq[2:] == ["29:1", "42:1", "105:1", "105:0", "42:0", "29:0", "107:1", "107:0"]
+    assert keyboard.events == [(29, 1), (42, 1), (105, 1), (105, 0), (42, 0), (29, 0),
+                               (107, 1), (107, 0)]
 
 
-def test_shift_is_held_once_across_a_run_of_keys(monkeypatch):
+def test_shift_is_held_once_across_a_run_of_keys(keyboard):
     """Selecting a sentence crawled across the line: forty Shift presses at
-    typing speed (Ron, 2026-10-14)."""
+    ydotool's typing speed (Ron, 2026-10-14)."""
     from tuxtalk import app
-    sent = []
-    monkeypatch.setattr(app, "_ydotool_key", lambda seq, **k: sent.append(seq) or True)
     app._send_chords([((), "LEFT")] + [((S,), "LEFT")] * 3)
-    assert sent[0][2:] == ["105:1", "105:0", "42:1", "105:1", "105:0", "105:1", "105:0",
-                           "105:1", "105:0", "42:0"]
-    assert int(sent[0][1]) < app.BACKSPACE_DELAY_MS
+    assert keyboard.events == [(105, 1), (105, 0), (42, 1), (105, 1), (105, 0), (105, 1),
+                               (105, 0), (105, 1), (105, 0), (42, 0)]
 
 
 def test_what_i_said_is_only_trusted_in_the_window_it_went_to(dictation, monkeypatch):

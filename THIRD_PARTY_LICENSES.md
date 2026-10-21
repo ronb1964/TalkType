@@ -12,17 +12,22 @@ license. All of their license texts are installed with TuxTalk:
 
 | Program | Version | License | Source code |
 |---|---|---|---|
-| ydotool | commit `708e96ff27e381a8c549418a9d34cdde12305317` | AGPL-3.0-or-later | https://github.com/ReimuNotMoe/ydotool |
 | wl-clipboard | `v2.3.0` | GPL-3.0-or-later | https://github.com/bugaevc/wl-clipboard |
 
-Both are built unmodified from the source at the version above, and TuxTalk
-runs them as separate programs. ydotool types the dictated text; wl-clipboard
-handles the clipboard for paste mode. The complete source for those exact
-versions is at the addresses above, and backup copies are kept at
-https://github.com/ronb1964/ydotool and https://github.com/ronb1964/wl-clipboard.
-If it ever goes missing from all of those, open an issue at
-https://github.com/ronb1964/TuxTalk/issues and I'll provide a copy, for at
-least three years after the last TuxTalk release that includes it.
+It is built unmodified from the source at the version above, and TuxTalk runs
+it as a separate program to handle the clipboard for paste mode. The complete
+source for that exact version is at the address above, and a backup copy is
+kept at https://github.com/ronb1964/wl-clipboard. If it ever goes missing from
+both, open an issue at https://github.com/ronb1964/TuxTalk/issues and I'll
+provide a copy, for at least three years after the last TuxTalk release that
+includes it.
+
+TuxTalk 0.17.0 and earlier also included **ydotool** (AGPL-3.0-or-later),
+built unmodified from commit `708e96ff27e381a8c549418a9d34cdde12305317` of
+https://github.com/ReimuNotMoe/ydotool, to type the dictated text. TuxTalk now
+types with its own virtual keyboard. The same promise holds for that ydotool:
+its source is at that address and at https://github.com/ronb1964/ydotool, and
+I'll provide a copy on request until three years after 0.17.0.
 
 ## Python and Python packages
 

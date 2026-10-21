@@ -120,7 +120,7 @@ class Plan:
     helper: bool = False             # the hotkey helper is installed
     typing_rule: bool = False        # a udev rule lets TuxTalk type (either version)
     input_group: bool = False        # TuxTalk's old setup put the user in it
-    ydotoold_unit: Path = None       # TuxTalk's systemd user unit, if any
+    ydotoold_unit: Path = None       # the systemd user unit TuxTalk used until 0.18
     extension: bool = False
 
     @property
@@ -158,16 +158,6 @@ def hf_hub_cache(home, environ=os.environ):
         return path(environ["HF_HOME"]) / "hub"
     cache = Path(environ["XDG_CACHE_HOME"]) if environ.get("XDG_CACHE_HOME") else home / ".cache"
     return cache / "huggingface" / "hub"
-
-
-def _ours(path):
-    """A systemd user unit TuxTalk wrote (uinput_helper's template); the name
-    ydotoold.service is generic, so the description has to say so."""
-    try:
-        text = path.read_text()
-    except OSError:
-        return False
-    return "(TuxTalk keystroke injection)" in text or "(TalkType keystroke injection)" in text
 
 
 def _in_input_group():
@@ -261,9 +251,9 @@ def find(home, install_type, environ=os.environ, appimage=None):
     runtime = Path(environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}")
     plan.runtime = [runtime / name for name in RUNTIME_FILES if exists(runtime / name)]
 
-    unit = home / ".config" / "systemd" / "user" / "ydotoold.service"
-    if _ours(unit):
-        plan.ydotoold_unit = unit
+    unit = uinput_helper.our_ydotoold_unit(home)
+    if unit is not None:
+        plan.ydotoold_unit = Path(unit)
     plan.extension = exists(Path(desktop_detect.get_extension_dir()) / extension_helper.EXTENSION_UUID)
     plan.helper = any(os.path.exists(p) for p in (secure_input.UNIT_PATH, secure_input.HELPER_PATH))
     plan.typing_rule = any(os.path.exists(p) for p in (secure_input.UINPUT_RULE_PATH,

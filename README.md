@@ -213,7 +213,7 @@ enough interest and I'll make it happen.
 | Requirement | Details |
 |------------|---------|
 | **OS** | Linux, on Wayland or X11 (GNOME, KDE, Sway, Hyprland and more) |
-| **Dependencies** | None to install by hand — ydotool, ydotoold and wl-clipboard ship inside TuxTalk, and the ydotoold daemon starts automatically on first run |
+| **Dependencies** | None to install by hand. TuxTalk types with its own virtual keyboard, and wl-clipboard ships inside it |
 | **Permissions** | First run asks for your admin password once, to set up the hotkey helper and let TuxTalk type into other apps. No restart needed (without systemd it uses the `input` group, and then it does) |
 | **Audio** | Working microphone |
 | **GPU (optional)** | Any NVIDIA, AMD or Intel graphics chip (Vulkan), or CUDA on NVIDIA |
@@ -269,7 +269,8 @@ The second-to-last line also deletes your settings and word list; leave out
 `~/.config/tuxtalk` to keep them. The last line only matters on GNOME.
 
 Versions before 0.16 may also have set up a typing service and put you in the
-`input` group. Check first that `~/.config/systemd/user/ydotoold.service` says
+`input` group. 0.18 and later remove that service when they start; if it's
+still there, check first that `~/.config/systemd/user/ydotoold.service` says
 "TuxTalk keystroke injection" (or TalkType), then:
 
 ```bash
@@ -494,8 +495,11 @@ auto_period = true        # Add period at end of sentences
 <summary><b>Troubleshooting</b></summary>
 
 ### Text not appearing?
-- Check ydotoold is running: `pgrep -a ydotoold` (TuxTalk starts it for you)
-- Verify socket exists: `ls $XDG_RUNTIME_DIR/.ydotool_socket`
+- Look in `~/.config/tuxtalk/tuxtalk.log` for "Made TuxTalk's virtual keyboard".
+  If it says "Can't make TuxTalk's virtual keyboard" instead, open Preferences →
+  Advanced → Show system check and click Fix Typing Permissions
+- If some letters go missing on a slow computer, add `key_delay = 6` (or
+  higher) to `~/.config/tuxtalk/config.toml` and restart TuxTalk
 
 ### Hotkey not working?
 - Another app may be using F8/F9 - try different keys in Preferences
@@ -572,7 +576,7 @@ system and the rest goes in a venv. `run-dev.sh` puts the two together.
 
 ```bash
 # Prerequisites (Fedora/Nobara; other distros have the same packages under similar names)
-sudo dnf install -y portaudio-devel ydotool wl-clipboard \
+sudo dnf install -y portaudio-devel wl-clipboard \
                     python3-gobject libayatana-appindicator-gtk3 libnotify
 
 # Clone and install
@@ -586,7 +590,8 @@ python3 -m venv .venv
 ./run-dev.sh
 ```
 
-You don't need to set up ydotoold yourself. TuxTalk starts it when it needs it.
+To type, TuxTalk needs to make a virtual keyboard through `/dev/uinput`. First-run
+setup's Fix Typing gives it that.
 
 To run the tests (swap in your Python version, `python3 --version` shows it):
 
@@ -605,7 +610,7 @@ More in [DEV_SETUP.md](DEV_SETUP.md).
 
 MIT License. See [LICENSE](LICENSE) for details.
 
-TuxTalk's downloads also include other open-source software, like ydotool and wl-clipboard, each under its own license. [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) lists them.
+TuxTalk's downloads also include other open-source software, like wl-clipboard, each under its own license. [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) lists them.
 
 <p align="center">
   <a href="https://github.com/ronb1964/TuxTalk/releases/latest">Download</a> &bull;

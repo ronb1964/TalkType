@@ -26,7 +26,6 @@ from .logger import setup_logger
 from .uinput_helper import (
     check_all_device_permissions,
     get_portaudio_status,
-    get_ydotoold_status,
 )
 
 logger = setup_logger(__name__)
@@ -36,8 +35,6 @@ logger = setup_logger(__name__)
 # group membership, so uinput alone says nothing about hotkeys.
 # Returns (has_access, reason).
 detect_uinput_access = check_all_device_permissions
-# A dict with running, ydotool_installed, service_exists, needs_setup, message.
-detect_ydotoold_status = get_ydotoold_status
 # A dict with installed, needs_install, message (PortAudio records the audio).
 detect_portaudio_status = get_portaudio_status
 
@@ -55,62 +52,23 @@ def _status_markup(text, color, max_lines=4):
     return f'<span color="{color}">{GLib.markup_escape_text(chr(10).join(lines))}</span>'
 
 
-def _fix_typing_steps(do_ydotoold, do_uinput):
+def _fix_typing_steps():
     """The blocking part of Fix Typing; runs off the GTK thread.
 
-    Returns a dict: results (lines to show), ydotoold_fixed, uinput_fixed and
-    ydotoold_running.
+    Returns a dict: results (lines to show), uinput_fixed and needs_restart.
     """
-    from tuxtalk.uinput_helper import (
-        check_ydotoold_running,
-        ensure_ydotoold_running,
-        setup_ydotoold_service,
-    )
     from tuxtalk.secure_input import fix_permissions
-    results = []
-    ydotoold_fixed = uinput_fixed = needs_restart = False
-
-    # Step 1: Set up ydotoold daemon if needed
-    if do_ydotoold:
-        logger.info("Setting up ydotoold service...")
-        ydotoold_success, ydotoold_msg = setup_ydotoold_service()
-        if ydotoold_success:
-            results.append("✅ ydotoold daemon started")
-            ydotoold_fixed = True
-            logger.info("ydotoold service setup successful")
-        else:
-            results.append(f"❌ ydotoold: {ydotoold_msg}")
-            logger.warning(f"ydotoold setup failed: {ydotoold_msg}")
-
-    # Step 2: Set up uinput permissions if needed
-    if do_uinput:
-        logger.info("Setting up uinput permissions...")
-        uinput_success, uinput_msg, needs_restart = fix_permissions()
-        if uinput_success:
-            results.append("✅ Device permissions configured")
-            uinput_fixed = True
-            logger.info("uinput permissions setup successful")
-            # A daemon started without the permission has exited.
-            ensure_ydotoold_running()
-        else:
-            if "cancelled" not in uinput_msg.lower():
-                results.append(f"❌ Permissions: {uinput_msg}")
-            else:
-                results.append("⚠️ Permissions setup cancelled")
-            logger.warning(f"uinput setup result: {uinput_msg}")
-
-    # ensure_ydotoold_running only starts the daemon; give it a moment before
-    # deciding whether it runs.
-    running = check_ydotoold_running()
-    if not running and (ydotoold_fixed or uinput_fixed):
-        for _ in range(10):
-            time.sleep(0.2)
-            if check_ydotoold_running():
-                running = True
-                break
-    return {"results": results, "ydotoold_fixed": ydotoold_fixed,
-            "uinput_fixed": uinput_fixed, "ydotoold_running": running,
-            "needs_restart": needs_restart}
+    logger.info("Setting up typing and hotkey permissions...")
+    fixed, message, needs_restart = fix_permissions()
+    if fixed:
+        logger.info("Typing and hotkey permissions set up")
+        results = ["✅ Device permissions configured"]
+    else:
+        logger.warning(f"Permission setup result: {message}")
+        results = (["⚠️ Permissions setup cancelled"] if "cancelled" in message.lower()
+                   else [f"❌ Permissions: {message}"])
+    return {"results": results, "uinput_fixed": fixed,
+            "needs_restart": needs_restart if fixed else False}
 
 
 class SplashScreen:
@@ -376,14 +334,6 @@ class WelcomeDialog:
         has_uinput, _ = detect_uinput_access()
         self.needs_uinput_fix = not has_uinput
 
-        # Detect ydotoold daemon status (required for keystroke injection)
-        self.ydotoold_status = detect_ydotoold_status()
-        self.needs_ydotoold_setup = self.ydotoold_status.get('needs_setup', False)
-
-        logger.info(f"ydotoold status: running={self.ydotoold_status.get('running')}, "
-                   f"installed={self.ydotoold_status.get('ydotool_installed')}, "
-                   f"needs_setup={self.needs_ydotoold_setup}")
-
         # Detect PortAudio status (required for audio recording)
         self.portaudio_status = detect_portaudio_status()
         self.needs_portaudio_install = self.portaudio_status.get('needs_install', False)
@@ -392,7 +342,7 @@ class WelcomeDialog:
                    f"needs_install={self.needs_portaudio_install}")
 
         # Inside a Flatpak, typing uses the portal + libei path (Backend B): there
-        # is no ydotool/uinput/input-group setup and no reboot. Showing the host
+        # is no uinput/input-group setup and no reboot. Showing the host
         # "Typing Setup Required" step there is wrong (and its fixes can't run in
         # the sandbox). Instead we show a short "Shortcut Setup" step explaining
         # that the DESKTOP assigns the dictation key.
@@ -421,8 +371,7 @@ class WelcomeDialog:
             additional_height += 225  # recommendation card + its options button
             if self.is_flatpak:
                 additional_height += 190  # Shortcut setup section (Flatpak)
-            # Typing setup section shows if either uinput OR ydotoold needs fixing
-            elif self.needs_uinput_fix or self.needs_ydotoold_setup:
+            elif self.needs_uinput_fix:
                 additional_height += 250  # Typing setup section
             # PortAudio setup section
             if self.needs_portaudio_install:
@@ -439,12 +388,10 @@ class WelcomeDialog:
         self.gpu_check = None  # "Use my graphics card" under Other options
         self.required_pulse_box = None  # Flatpak: the red pulsing "Required" warning box
         self.fix_typing_button = None
-        self.install_ydotool_button = None
         self.typing_status_label = None
         self.uinput_fixed = False  # Track if user fixed uinput during this dialog
         # Only the "input" group needs a restart; the hotkey helper doesn't.
         self.restart_needed = False
-        self.ydotoold_fixed = False  # Track if user fixed ydotoold during this dialog
         self.install_portaudio_button = None
         self.portaudio_status_label = None
         self.portaudio_fixed = False  # Track if user installed PortAudio during this dialog
@@ -714,14 +661,14 @@ class WelcomeDialog:
             self._build_portaudio_setup_section(vbox)
 
             # Separator after PortAudio section
-            if self.needs_uinput_fix or self.needs_ydotoold_setup or self.offer_extension:
+            if self.needs_uinput_fix or self.offer_extension:
                 sep_portaudio = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
                 sep_portaudio.set_margin_top(15)
                 sep_portaudio.set_margin_bottom(10)
                 vbox.pack_start(sep_portaudio, False, False, 0)
 
         # Flatpak: typing works out of the box (libei). The only setup is letting
-        # the desktop assign the dictation shortcut. Host: the ydotool/uinput step.
+        # the desktop assign the dictation shortcut. Host: the uinput step.
         if self.is_flatpak:
             self._build_shortcut_setup_section(vbox)
 
@@ -731,8 +678,7 @@ class WelcomeDialog:
                 sep_sc.set_margin_bottom(10)
                 vbox.pack_start(sep_sc, False, False, 0)
         # Typing setup section (shown if needed - this is critical for typing to work)
-        # Shows if either uinput permissions OR ydotoold daemon needs fixing
-        elif self.needs_uinput_fix or self.needs_ydotoold_setup:
+        elif self.needs_uinput_fix:
             self._build_typing_setup_section(vbox)
 
             # Separator after typing setup section
@@ -1090,7 +1036,7 @@ class WelcomeDialog:
         """Flatpak-only setup step: the desktop assigns the dictation shortcut.
 
         Inside the sandbox typing works via the portal + libei path with no
-        ydotool/uinput/input-group setup, so the host "Typing Setup Required"
+        uinput/input-group setup, so the host "Typing Setup Required"
         step does not apply. The one thing the user must do is let their desktop
         bind a key to the TuxTalk dictate shortcuts. Desktops without the
         GlobalShortcuts portal never reach here — _build_dialog shows them the
@@ -1256,7 +1202,7 @@ class WelcomeDialog:
         vbox.pack_start(frame, False, False, 0)
 
     def _build_typing_setup_section(self, vbox):
-        """Build the typing setup section (uinput permissions + ydotoold daemon)."""
+        """Build the typing setup section: permission to type and hear hotkeys."""
         typing_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         typing_box.set_margin_start(10)
         typing_box.set_margin_top(5)
@@ -1271,19 +1217,13 @@ class WelcomeDialog:
 
         # What Fix Typing will do, worked out first so the line below only
         # asks for a restart when the fix really needs one (the hotkey
-        # helper doesn't; the "input" group and a new ydotoold service do).
-        details = []
-        if self.needs_ydotoold_setup and self.ydotoold_status.get('ydotool_installed'):
-            details.append("🔧 Sets up ydotoold daemon as a user service")
-        fix_restarts = False
-        if self.needs_uinput_fix:
-            from tuxtalk.secure_input import fix_description
-            lines, fix_restarts = fix_description()
-            details.extend(f"🔧 {GLib.markup_escape_text(line)}" for line in lines)
-        needs_restart = fix_restarts or (self.needs_ydotoold_setup and not self.needs_uinput_fix)
+        # helper doesn't; the "input" group does).
+        from tuxtalk.secure_input import fix_description
+        lines, needs_restart = fix_description()
+        details = [f"🔧 {GLib.markup_escape_text(line)}" for line in lines]
         if needs_restart:
             details.append("🔄 Restart your computer to apply (logging out is often not enough)")
-        elif self.needs_uinput_fix:
+        else:
             details.append("✓ No restart needed")
 
         explain_text = (
@@ -1307,15 +1247,6 @@ class WelcomeDialog:
         status_box.set_margin_start(15)
         status_box.set_margin_top(8)
 
-        # ydotoold status
-        ydotoold_icon = "✅" if self.ydotoold_status.get('running') else "❌"
-        ydotoold_text = "ydotoold daemon running" if self.ydotoold_status.get('running') else "ydotoold daemon not running"
-        ydotoold_label = Gtk.Label()
-        ydotoold_label.set_markup(f'{ydotoold_icon} {ydotoold_text}')
-        ydotoold_label.set_halign(Gtk.Align.START)
-        status_box.pack_start(ydotoold_label, False, False, 0)
-        self._ydotoold_status_label = ydotoold_label
-
         # uinput permission status
         uinput_icon = "✅" if not self.needs_uinput_fix else "❌"
         uinput_text = "Input device permissions OK" if not self.needs_uinput_fix else "Input device permissions needed"
@@ -1324,13 +1255,6 @@ class WelcomeDialog:
         uinput_label.set_halign(Gtk.Align.START)
         status_box.pack_start(uinput_label, False, False, 0)
         self._uinput_status_label = uinput_label
-
-        # ydotool installed status (only show if not installed)
-        if not self.ydotoold_status.get('ydotool_installed'):
-            ydotool_label = Gtk.Label()
-            ydotool_label.set_markup('❌ <span color="#f44336">ydotool not installed (required)</span>')
-            ydotool_label.set_halign(Gtk.Align.START)
-            status_box.pack_start(ydotool_label, False, False, 0)
 
         typing_box.pack_start(status_box, False, False, 0)
 
@@ -1354,16 +1278,15 @@ class WelcomeDialog:
             details_box.pack_start(label, False, False, 0)
 
         # On the "input" group path, why and what it means (secure_input).
-        if self.needs_uinput_fix:
-            from tuxtalk.secure_input import fallback_note
-            note = fallback_note()
-            if note:
-                label = Gtk.Label(label=f"🔒 {note}", xalign=0)
-                label.set_line_wrap(True)
-                label.set_max_width_chars(70)
-                label.set_opacity(0.9)
-                label.set_margin_top(4)
-                details_box.pack_start(label, False, False, 0)
+        from tuxtalk.secure_input import fallback_note
+        note = fallback_note()
+        if note:
+            label = Gtk.Label(label=f"🔒 {note}", xalign=0)
+            label.set_line_wrap(True)
+            label.set_max_width_chars(70)
+            label.set_opacity(0.9)
+            label.set_margin_top(4)
+            details_box.pack_start(label, False, False, 0)
 
         typing_box.pack_start(details_box, False, False, 0)
 
@@ -1372,33 +1295,13 @@ class WelcomeDialog:
         button_box.set_margin_start(10)
         button_box.set_margin_top(12)
 
-        # Show different buttons based on what's needed
-        if not self.ydotoold_status.get('ydotool_installed'):
-            # ydotool not installed - show install button
-            self.install_ydotool_button = Gtk.Button(label="📦 Install ydotool")
-            self.install_ydotool_button.get_style_context().add_class("suggested-action")
-            self.install_ydotool_button.connect("clicked", self._on_install_ydotool_clicked)
-            self.install_ydotool_button.set_tooltip_text(
-                "Install ydotool using your system's package manager.\n"
-                "This will prompt for your admin password."
-            )
-            button_box.pack_start(self.install_ydotool_button, False, False, 0)
-
-            # Fix button (disabled until ydotool is installed)
-            self.fix_typing_button = Gtk.Button(label="🔧 Fix Typing")
-            self.fix_typing_button.set_sensitive(False)
-            self.fix_typing_button.set_tooltip_text("Install ydotool first")
-            button_box.pack_start(self.fix_typing_button, False, False, 0)
-        else:
-            # ydotool is installed - show fix button
-            self.fix_typing_button = Gtk.Button(label="🔧 Fix Typing (Recommended)")
-            self.fix_typing_button.get_style_context().add_class("suggested-action")
-            self.fix_typing_button.connect("clicked", self._on_fix_typing_clicked)
-            self.fix_typing_button.set_tooltip_text(
-                "Configure system for keystroke injection.\n"
-                "Sets up ydotoold daemon and device permissions."
-            )
-            button_box.pack_start(self.fix_typing_button, False, False, 0)
+        self.fix_typing_button = Gtk.Button(label="🔧 Fix Typing (Recommended)")
+        self.fix_typing_button.get_style_context().add_class("suggested-action")
+        self.fix_typing_button.connect("clicked", self._on_fix_typing_clicked)
+        self.fix_typing_button.set_tooltip_text(
+            "Lets TuxTalk type into your apps and hear its hotkeys.\n"
+            "This will prompt for your admin password.")
+        button_box.pack_start(self.fix_typing_button, False, False, 0)
 
         # Status label (shown after fix attempt)
         self.typing_status_label = Gtk.Label()
@@ -1411,8 +1314,8 @@ class WelcomeDialog:
         typing_box.pack_start(button_box, False, False, 0)
 
         # Alternative note
-        # Not "use Clipboard Paste instead": paste presses Ctrl+V through the
-        # same ydotool, so it needs these permissions too.
+        # Not "use Clipboard Paste instead": paste presses Ctrl+V on the same
+        # virtual keyboard, so it needs these permissions too.
         alt_note = Gtk.Label()
         alt_note.set_markup(
             '<span><i>💡 If you skip this, TuxTalk can\'t type into other apps, but every\n'
@@ -1432,8 +1335,7 @@ class WelcomeDialog:
         """Whether the typing setup this computer needs hasn't been done."""
         if self.is_flatpak:
             return False
-        return ((self.needs_uinput_fix and not self.uinput_fixed)
-                or (self.needs_ydotoold_setup and not self.ydotoold_fixed))
+        return self.needs_uinput_fix and not self.uinput_fixed
 
     def _on_set_it_up(self, _button):
         """"Set it up" does the typing setup first when it's needed, so a user
@@ -1446,7 +1348,7 @@ class WelcomeDialog:
             self._continue_after_fix = True
             self._on_fix_typing_clicked(button)
         else:
-            # Fix Typing can't run yet (ydotool still to be installed).
+            # Fix Typing is still running.
             self._continue_without_typing()
 
     def _continue_without_typing(self):
@@ -1470,17 +1372,13 @@ class WelcomeDialog:
             self.dialog.response(Gtk.ResponseType.OK)
 
     def _on_fix_typing_clicked(self, button):
-        """Handle the Fix Typing button click - sets up both ydotoold and uinput permissions."""
+        """Handle the Fix Typing button click: the typing and hotkey permissions."""
         # Disable button while processing
         button.set_sensitive(False)
         button.set_label("Setting up...")
         self.typing_status_label.set_markup('<span>Setting up typing...</span>')
-        # A retry runs only the step that hasn't worked yet.
-        do_ydotoold = self.needs_ydotoold_setup and not self.ydotoold_fixed
-        do_uinput = self.needs_uinput_fix and not self.uinput_fixed
-        self._run_in_background(
-            lambda: _fix_typing_steps(do_ydotoold, do_uinput),
-            lambda outcome: self._finish_fix_typing(button, outcome))
+        self._run_in_background(_fix_typing_steps,
+                                lambda outcome: self._finish_fix_typing(button, outcome))
 
     def _finish_fix_typing(self, button, outcome):
         """Show the result of Fix Typing (GTK thread), then carry on with
@@ -1503,32 +1401,23 @@ class WelcomeDialog:
                 _status_markup(f"Error: {outcome}", "#f44336"))
             return
 
-        results = outcome["results"]
-        if outcome["ydotoold_fixed"]:
-            self.ydotoold_fixed = True
         if outcome["uinput_fixed"]:
             self.uinput_fixed = True
-            self.restart_needed = self.restart_needed or outcome.get("needs_restart", True)
-        ydotoold_running = outcome["ydotoold_running"]
-        permissions_set = self.uinput_fixed or not self.needs_uinput_fix
-        ydotoold_failed = self.needs_ydotoold_setup and not self.ydotoold_fixed
+            self.restart_needed = self.restart_needed or outcome["needs_restart"]
         needs_restart = self.restart_needed
 
-        if ydotoold_running and permissions_set:
-            # Full success - everything is working
+        if self.uinput_fixed:
             button.set_label("✅ Fixed!")
             button.set_sensitive(False)  # Disable - no more action needed
-            # The ❌ lines above the button still said "not running" and
-            # "needed" after the fix worked (Silverblue VM, 2026-10-16).
-            for attr, text in (("_ydotoold_status_label", "ydotoold daemon running"),
-                               ("_uinput_status_label", "Input device permissions OK")):
-                label = getattr(self, attr, None)
-                if label is not None:
-                    label.set_markup(f"✅ {text}")
+            # The ❌ line above the button still said "needed" after the fix
+            # worked (Silverblue VM, 2026-10-16).
+            label = getattr(self, "_uinput_status_label", None)
+            if label is not None:
+                label.set_markup("✅ Input device permissions OK")
 
             restart_note = " Restart your computer to complete." if needs_restart else ""
             self.typing_status_label.set_markup(
-                f'<span color="#4CAF50"><b>✓ Ready!</b> ydotoold running, permissions set.{restart_note}</span>'
+                f'<span color="#4CAF50"><b>✓ Ready!</b> Permissions set.{restart_note}</span>'
             )
 
             # Show success dialog
@@ -1540,126 +1429,19 @@ class WelcomeDialog:
                 text="Typing Setup Complete!"
             )
             msg.format_secondary_text(
-                "TuxTalk is configured for keystroke injection.\n\n"
-                + ("A restart will be needed to activate this — but finish "
-                   "setup first. You'll be reminded at the end.\n\n"
-                   if needs_restart else "")
+                ("A restart will be needed to activate this — but finish "
+                 "setup first. You'll be reminded at the end.\n\n"
+                 if needs_restart else "")
                 + "TuxTalk can now type directly into your applications!"
             )
             msg.run()
             msg.destroy()
-
-        elif permissions_set and not ydotoold_failed and self.uinput_fixed and needs_restart:
-            # Permissions set and nothing failed, but ydotoold isn't running
-            # yet: it starts after the restart on some systems.
-            button.set_label("✅ Permissions Set")
-            button.set_sensitive(False)  # Disable - permissions are done
-
-            self.typing_status_label.set_markup(
-                '<span color="#4CAF50"><b>✓ Device permissions configured</b></span>\n'
-                '<span color="#FF9800">A restart will be needed — you\'ll be reminded when setup finishes.</span>'
-            )
-
-            # Show partial success dialog
-            msg = message_dialog(
-                transient_for=self.dialog,
-                modal=True,
-                message_type=Gtk.MessageType.INFO,
-                buttons=Gtk.ButtonsType.OK,
-                text="Permissions Configured"
-            )
-            msg.format_secondary_text(
-                "Device permissions have been configured.\n\n"
-                "A restart will be needed to activate them — but finish setup "
-                "first. You'll be reminded at the end, once everything is ready."
-            )
-            msg.run()
-            msg.destroy()
-
-        elif permissions_set and not ydotoold_failed:
-            # Permissions were already fine and the typing helper was set up;
-            # it starts together with TuxTalk.
-            button.set_label("✅ Set Up")
-            button.set_sensitive(False)
-            self.typing_status_label.set_markup(
-                '<span color="#4CAF50"><b>✓ Typing helper set up.</b> It starts with TuxTalk.</span>')
-
         else:
-            # A step failed or was cancelled: show what went wrong and let the
-            # user try again (only the unfinished step runs again).
+            # Failed or cancelled: show what went wrong and let the user try again.
             button.set_sensitive(True)
             button.set_label("🔧 Fix Typing (Recommended)")
-
-            result_text = "\n".join(results) if results else "Setup was cancelled"
-            if needs_restart:
-                result_text += "\nA restart will be needed for the permissions."
+            result_text = "\n".join(outcome["results"]) or "Setup was cancelled"
             self.typing_status_label.set_markup(_status_markup(result_text, "#FF9800"))
-
-    def _on_install_ydotool_clicked(self, button):
-        """Handle the Install ydotool button click."""
-        from tuxtalk.uinput_helper import install_ydotool_with_pkexec
-
-        # Disable button while processing
-        button.set_sensitive(False)
-        button.set_label("Installing...")
-        self.typing_status_label.set_markup('<span>Installing ydotool...</span>')
-        self._run_in_background(lambda: install_ydotool_with_pkexec(),
-                                lambda outcome: self._finish_install_ydotool(button, outcome))
-
-    def _finish_install_ydotool(self, button, outcome):
-        """Show the result of the ydotool install (GTK thread)."""
-        if isinstance(outcome, Exception):
-            logger.error(f"Error installing ydotool: {outcome}")
-            button.set_sensitive(True)
-            button.set_label("📦 Install ydotool")
-            self.typing_status_label.set_markup(
-                _status_markup(f"Error: {outcome}", "#f44336"))
-            return
-        success, message = outcome
-        if success:
-            button.set_label("✅ Installed!")
-            self.typing_status_label.set_markup(
-                '<span color="#4CAF50"><b>ydotool installed!</b> Now click "Fix Typing" to complete setup.</span>'
-            )
-
-            # Update internal state
-            self.ydotoold_status['ydotool_installed'] = True
-
-            # Enable and highlight the Fix Typing button
-            if self.fix_typing_button:
-                self.fix_typing_button.set_sensitive(True)
-                self.fix_typing_button.set_label("🔧 Fix Typing (Recommended)")
-                self.fix_typing_button.get_style_context().add_class("suggested-action")
-                self.fix_typing_button.connect("clicked", self._on_fix_typing_clicked)
-                self.fix_typing_button.set_tooltip_text(
-                    "Configure system for keystroke injection.\n"
-                    "Sets up ydotoold daemon and device permissions."
-                )
-
-            # Show success message
-            msg = message_dialog(
-                transient_for=self.dialog,
-                modal=True,
-                message_type=Gtk.MessageType.INFO,
-                buttons=Gtk.ButtonsType.OK,
-                text="ydotool Installed!"
-            )
-            msg.format_secondary_text(
-                "ydotool has been installed successfully.\n\n"
-                "Now click the 'Fix Typing' button to complete the setup."
-            )
-            msg.run()
-            msg.destroy()
-        else:
-            button.set_sensitive(True)
-            button.set_label("📦 Install ydotool")
-
-            if "cancelled" in message.lower():
-                self.typing_status_label.set_markup(
-                    '<span color="#FF9800">Installation cancelled. You can try again.</span>'
-                )
-            else:
-                self.typing_status_label.set_markup(_status_markup(message, "#f44336"))
 
     def _build_gnome_extension_option(self, vbox):
         """Build GNOME extension checkbox and details."""
@@ -2031,9 +1813,6 @@ class WelcomeDialog:
         result['uinput_fixed'] = self.uinput_fixed
         result['needs_restart'] = self.restart_needed
         result['needs_uinput_fix'] = self.needs_uinput_fix and not self.uinput_fixed
-        result['ydotoold_setup'] = not self.needs_ydotoold_setup or self.ydotoold_fixed
-        result['needs_typing_setup'] = (self.needs_uinput_fix and not self.uinput_fixed) or \
-                                       (self.needs_ydotoold_setup and not self.ydotoold_fixed)
 
         # Include PortAudio status
         result['portaudio_installed'] = not self.needs_portaudio_install or self.portaudio_fixed

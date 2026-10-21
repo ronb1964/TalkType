@@ -2417,8 +2417,8 @@ class PreferencesWindow:
 
         check.attach(self._subheading("Typing setup"), 0, crow, 2, 1)
         crow += 1
-        # The Typing Setup body is host-only — it configures
-        # /dev/uinput permissions for ydotool. The Flatpak types through the
+        # The Typing Setup body is host-only — it configures the /dev/uinput
+        # permission TuxTalk's virtual keyboard needs. The Flatpak types through the
         # libei portal (nothing to configure), so show a one-line note instead of
         # a "Fix Typing Permissions" button that can't do anything.
         if os.environ.get("FLATPAK_ID"):
@@ -5638,7 +5638,7 @@ class PreferencesWindow:
             self._leave_input_group(button)
             return
         try:
-            from . import uinput_helper, secure_input
+            from . import secure_input
 
             lines, restarts = secure_input.fix_description()
             note = secure_input.fallback_note()     # on the "input" group path
@@ -5697,8 +5697,6 @@ class PreferencesWindow:
                     needs_restart = False
                 else:
                     success, message, needs_restart = secure_input.fix_permissions()
-                if success:
-                    uinput_helper.ensure_ydotoold_running()   # one started without permission has exited
             except Exception as e:
                 success, message = False, str(e)
             GLib.idle_add(self._finish_fix_typing, button, success, message, needs_restart, switching)

@@ -24,9 +24,9 @@ from tuxtalk import app, clipboard, compositor_focus, dbus_service, desktop_iden
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 EXT = ROOT / "gnome-extension" / "talktype@ronb1964.github.io"
 
-CTRL_V = ["29:1", "47:1", "47:0", "29:0"]
-CTRL_SHIFT_V = ["42:1", "29:1", "47:1", "47:0", "29:0", "42:0"]
-SHIFT_INSERT = ["42:1", "110:1", "110:0", "42:0"]
+CTRL_V = [(29, 1), (47, 1), (47, 0), (29, 0)]
+CTRL_SHIFT_V = [(42, 1), (29, 1), (47, 1), (47, 0), (29, 0), (42, 0)]
+SHIFT_INSERT = [(42, 1), (110, 1), (110, 0), (42, 0)]
 
 
 # --- TuxTalk's own class is not a target ---------------------------------------------
@@ -114,7 +114,7 @@ class _Copy:
 
 @pytest.fixture
 def paste_env(monkeypatch):
-    """A Wayland session where wl-copy and ydotool work; records what is run."""
+    """A Wayland session where wl-copy works; records what is run and pressed."""
     monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
     monkeypatch.setattr(app, "_which", lambda name: f"/usr/bin/{name}")
     monkeypatch.setattr(app.time, "sleep", lambda s: None)
@@ -128,7 +128,7 @@ def paste_env(monkeypatch):
         env["copies"].append(list(cmd))
         return subprocess.CompletedProcess(cmd, env["primary_rc"])
     monkeypatch.setattr(app.subprocess, "run", run)
-    monkeypatch.setattr(app, "_ydotool_key", lambda keys, **kw: env["keys"].append(list(keys)) or True)
+    monkeypatch.setattr(app, "_send_keys", lambda keys, **kw: env["keys"].append(list(keys)) or True)
     return env
 
 

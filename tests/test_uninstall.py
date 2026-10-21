@@ -254,7 +254,7 @@ def test_the_downloaded_appimage_in_appimages_goes_after_a_login_start(home):
 def test_only_tuxtalks_own_ydotoold_unit_is_removed(home):
     unit = home / ".config/systemd/user/ydotoold.service"
     unit.parent.mkdir(parents=True)
-    unit.write_text(uinput_helper.YDOTOOLD_SERVICE_TEMPLATE.format(ydotoold_path="/usr/bin/ydotoold"))
+    unit.write_text("[Unit]\nDescription=ydotool daemon (TuxTalk keystroke injection)\n")
     assert _find(home).ydotoold_unit == unit
     unit.write_text("[Unit]\nDescription=Someone's own ydotoold\n")
     assert _find(home).ydotoold_unit is None

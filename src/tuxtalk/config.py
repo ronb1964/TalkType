@@ -15,6 +15,7 @@ from dataclasses import dataclass, field, fields
 import sys
 
 from .logger import setup_logger
+from .virtual_keyboard import KEY_DELAY_MS
 
 # setup_logger, so every process that reads settings also has the log file
 # handler that "Damaged config…" and "Resetting invalid setting…" go to.
@@ -170,8 +171,8 @@ class Settings:
     language: str = ""          # optional language code (e.g., "en"); empty = auto-detect
     auto_space: bool = True     # prepend a space before new utterance when not starting a new line/tab
     auto_period: bool = True   # append a period when an utterance ends without terminal punctuation
-    injection_mode: str = "auto"  # "auto" (smart detection), "type" (ydotool/wtype), or "paste" (wl-copy + Ctrl+V)
-    typing_delay: int = 12  # milliseconds between keystrokes when typing (5-50, higher = slower but more reliable)
+    injection_mode: str = "auto"  # "auto" (smart detection), "type" (the virtual keyboard), or "paste" (wl-copy + Ctrl+V)
+    key_delay: int = KEY_DELAY_MS  # milliseconds after each typed key event (1-50, higher = slower)
     # Turn dictation off after a while unused, to save power: on by default
     # on a laptop, off on a desktop, where F8 then simply always works.
     auto_timeout_enabled: bool = field(default_factory=lambda: has_battery())
@@ -320,6 +321,20 @@ def _migrate_settings(s: Settings) -> Settings:
     return s
 
 
+# typing_delay's default while TuxTalk typed through ydotool (until 0.18).
+YDOTOOL_TYPING_DELAY = 12
+
+
+def _carry_over_typing_delay(s: Settings, data: dict) -> None:
+    """typing_delay, ydotool's wait until 0.18, became key_delay. Every saved
+    config holds its default, 12, which isn't carried over, or nobody would
+    type faster; another number was set by hand and is. Once saved, the file
+    has key_delay instead, so this happens once."""
+    old = data.get("typing_delay")
+    if "key_delay" not in data and type(old) is int and old != YDOTOOL_TYPING_DELAY:
+        s.key_delay = old
+
+
 def _repair_invalid_fields(s: Settings, error: ConfigError) -> Settings:
     """Reset only the settings that are unusable, keeping everything else.
 
@@ -353,7 +368,7 @@ _TYPE_CASTERS = {"str": str, "bool": bool, "int": int, "float": float}
 def _apply_toml(s: Settings, data: dict) -> list[str]:
     """Copy the values in *data* onto *s*, casting each to its field's type.
 
-    A value that will not cast (a hand-edited `typing_delay = "fast"`) keeps
+    A value that will not cast (a hand-edited `key_delay = "fast"`) keeps
     that one setting at its default instead of making the whole file look
     damaged. Returns the names of the settings it skipped.
     """
@@ -503,6 +518,7 @@ def load_config() -> Settings:
                 raise ValueError("config file is empty")
             # Apply TOML values using dataclass field types for casting
             _apply_toml(s, data)
+            _carry_over_typing_delay(s, data)
         except OSError as e:
             # The file could not be READ — permissions, a bad mount, too many
             # open handles. That is not corruption, and it must never trigger
@@ -746,7 +762,7 @@ LIVE_APPLIED_KEYS = {
     "voice_commands_hotkey",
     "paste_last_hotkey",
     "mode",
-    "typing_delay",
+    "key_delay",
     "indicator_position",
     "indicator_size",
     "indicator_offset_x",

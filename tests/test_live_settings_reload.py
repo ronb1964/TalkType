@@ -7,7 +7,7 @@ live immediately, because each dictation passes them into stop_recording()
 fresh.
 
 Values copied into loop locals at startup — the hotkey keycodes, the hold/
-toggle mode, typing_delay, the indicator object — need explicit re-application,
+toggle mode, key_delay, the indicator object — need explicit re-application,
 which is what _reload_live_settings returns to the caller.
 
 A damaged config must never take down a running dictation session: the reload

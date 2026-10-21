@@ -71,20 +71,20 @@ def test_type_mode_failure_is_failed(monkeypatch, quiet):
 
 @pytest.fixture
 def electron(monkeypatch, quiet):
-    """Claude Desktop focused: the fast-type path."""
+    """Claude Desktop focused: typed, not pasted."""
     cls = next(iter(app._ELECTRON_PASTE_BROKEN_CLASSES))
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: cls)
     _paste_mode(monkeypatch)
 
 
-def test_fast_type_that_lands_is_ok(monkeypatch, electron):
-    monkeypatch.setattr(app, "_type_text_fast", lambda t: True)
+def test_typing_into_electron_that_lands_is_ok(monkeypatch, electron):
+    monkeypatch.setattr(app, "_type_text_raw", lambda t: True)
     assert app._inject_text("hello", "auto", 0.0) == "ok"
 
 
-def test_fast_type_stopping_partway_is_partial(monkeypatch, electron):
+def test_typing_into_electron_stopping_partway_is_partial(monkeypatch, electron):
     calls = []
-    monkeypatch.setattr(app, "_type_text_fast", lambda t: calls.append(t) or len(calls) == 1)
+    monkeypatch.setattr(app, "_type_text_raw", lambda t: calls.append(t) or len(calls) == 1)
     assert app._inject_text(MARKER.join(["first", "second"]), "auto", 0.0) == "partial"
 
 
@@ -146,6 +146,6 @@ def test_success_stays_quiet(dictation):
 def test_an_exception_while_typing_is_a_failure_too(dictation):
     """It is a typing failure, not a "Transcription error" shown only with
     notifications on: the transcription worked."""
-    notes, beeps = dictation(RuntimeError("ydotoold socket vanished"), beeps_on=True)
+    notes, beeps = dictation(RuntimeError("the keyboard layout went away"), beeps_on=True)
     assert len(notes) == 1 and "Recent Dictations" in notes[0]
     assert beeps == [app.READY_BEEP, app.CANCEL_BEEP]

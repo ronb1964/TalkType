@@ -10,6 +10,8 @@ Saying "fix that word" opens it too (app._handle_fix_word), as its own
 process (main() below) placed over the app being dictated into, on the
 newest dictation only: no dropdown, which XWayland would break.
 """
+import time
+
 import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk, GLib
@@ -345,6 +347,10 @@ class _FixWordDialog:
 # How long the app gets to take the focus back after the window closes.
 _REFOCUS_S = 0.5
 
+# How long the desktop gets to read the last keys of a fix before this
+# process, and its keyboard, go.
+LAST_KEYS_S = 0.1
+
 
 def fix_in_text(typed, fix, window):
     """Swap just the picked words in what TuxTalk *typed*, in the focused
@@ -354,7 +360,6 @@ def fix_in_text(typed, fix, window):
     the replacement and steps forward again; nothing else is retyped. Not
     when another window than *window* has the focus (None: unknown, go
     ahead). True if done."""
-    import time
     from . import app
     start, end, replacement = fix
     time.sleep(_REFOCUS_S)
@@ -368,10 +373,14 @@ def fix_in_text(typed, fix, window):
     # From the cursor back to the end of the picked words: the spaces after
     # the dictation, then whatever followed the words in it.
     back = (len(typed) - len(typed.rstrip())) + (len(core) - end)
+    from . import virtual_keyboard
     backend = app._output_backend()
-    done = (backend.press_keys([((), "LEFT")] * back + [(("SHIFT",), "LEFT")] * (end - start))
-            and backend.type_text(replacement)
-            and backend.press_keys([((), "RIGHT")] * back))
+    try:
+        done = (backend.press_keys([((), "LEFT")] * back + [(("SHIFT",), "LEFT")] * (end - start))
+                and backend.type_text(replacement)
+                and backend.press_keys([((), "RIGHT")] * back))
+    except virtual_keyboard.StoppedPartway:
+        done = False
     logger.info("Fix a Word: fixed it in the text" if done else "Fix a Word: couldn't fix the text")
     return bool(done)
 
@@ -409,13 +418,25 @@ def main(argv=None):
     if not entries:
         show_fix_word_dialog(0, copy_text=copy_text)    # says there's nothing yet
         return 0
+    in_place = bool(typed and typed.strip())
+    if in_place and not os.environ.get("FLATPAK_ID"):
+        # This process types the fix on a virtual keyboard of its own. Made
+        # now, the desktop has taken it on (and, on X11, given it the user's
+        # layout) long before the window closes. The service sets the user's
+        # typing speed in its own main(); this process has to read it.
+        from . import app, virtual_keyboard
+        from .config import load_config
+        app._key_delay_ms = load_config().key_delay
+        virtual_keyboard.start()
     dialog = _FixWordDialog(entries, 0, copy_text, before_show=place_over_active_window,
-                            in_place=bool(typed and typed.strip()))
+                            in_place=in_place)
     dialog.window.connect("destroy", lambda _w: Gtk.main_quit())
     dialog.window.present()
     Gtk.main()
-    if dialog.fixed_for_text is not None:
-        fix_in_text(typed, dialog.fixed_for_text, window)
+    if dialog.fixed_for_text is not None and fix_in_text(typed, dialog.fixed_for_text, window):
+        # The keyboard goes when this process ends, and with it any keys the
+        # desktop hasn't read yet.
+        time.sleep(LAST_KEYS_S)
     return 0
 
 
