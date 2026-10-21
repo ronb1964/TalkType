@@ -12,7 +12,7 @@ import types
 
 import numpy as np
 import pytest
-from gi.repository import GLib
+from gi.repository import Gio, GLib
 
 from tuxtalk import app, atspi_helper, history, screen_message
 
@@ -89,7 +89,7 @@ class FakeA11yBus:
     widgets, each a (bus name, path) pair like the real ones."""
 
     def __init__(self):
-        self.nodes = {}
+        self.nodes, self.calls = {}, []
         self.apps = self._add(("registry", "root"))["children"]
 
     def _add(self, ref, **node):
@@ -99,8 +99,9 @@ class FakeA11yBus:
 
     def app(self, name, focus_role, active=True, collection=True, hang=False):
         """An app with one window holding a text box and the focused widget,
-        of *focus_role*. *collection* False is a Qt app: no Collection
-        interface, so it is walked. *hang*: it never answers."""
+        of *focus_role*. *collection* False is an app without the Collection
+        interface (Qt 5), so it is walked; "slow" times out on it. *hang*: it
+        never answers at all."""
         def ref(path):
             return (f":{name}", path)
         common = dict(collection=collection, hang=hang)
@@ -116,6 +117,7 @@ class FakeA11yBus:
         if (name, path) == (atspi_helper._REGISTRY, atspi_helper._ROOT):
             name, path = "registry", "root"
         node = self.nodes[(name, path)]
+        self.calls.append((name, path, method))
         if node["hang"]:
             time.sleep(timeout_ms / 1000)
             raise GLib.Error("Timeout was reached")
@@ -128,8 +130,13 @@ class FakeA11yBus:
         if method == "Get":
             return GLib.Variant("(v)", (GLib.Variant("s", node["name"]),))
         if method == "GetMatches":
+            if node["collection"] == "slow":
+                time.sleep(timeout_ms / 1000)
+                raise GLib.Error("Timeout was reached")
             if not node["collection"]:
-                raise GLib.Error("No such interface “org.a11y.atspi.Collection”")
+                raise Gio.DBusError.new_for_dbus_error(
+                    "org.freedesktop.DBus.Error.UnknownMethod",
+                    "No such interface “org.a11y.atspi.Collection”")
             found = [c for c in node["children"] if self.nodes[c]["states"] & FOCUSED]
             return GLib.Variant("(a(so))", (found,))
         raise AssertionError(f"unexpected call {method}")
@@ -138,7 +145,7 @@ class FakeA11yBus:
 @pytest.fixture
 def bus(monkeypatch):
     fake = FakeA11yBus()
-    monkeypatch.setattr(atspi_helper, "_a11y_bus", lambda: fake)
+    monkeypatch.setattr(atspi_helper, "_a11y_bus", lambda deadline: fake)
     return fake
 
 
@@ -152,7 +159,7 @@ def test_a_focused_text_box_is_not_a_password_field(bus):
     assert atspi_helper.focused_is_password() is False
 
 
-def test_qt_apps_without_the_collection_interface_are_walked(bus):
+def test_apps_without_the_collection_interface_are_walked(bus):
     bus.app("kwrite", PASSWORD, collection=False)
     assert atspi_helper.focused_is_password() is True
 
@@ -163,12 +170,12 @@ def test_a_password_field_in_a_window_in_the_background_doesnt_count(bus):
 
 
 def test_no_accessibility_bus_means_typing_as_usual(monkeypatch):
-    monkeypatch.setattr(atspi_helper, "_a11y_bus", lambda: None)
+    monkeypatch.setattr(atspi_helper, "_a11y_bus", lambda deadline: None)
     assert atspi_helper.focused_is_password() is False
 
 
 def test_a_bus_that_errors_means_typing_as_usual(monkeypatch):
-    def broken():
+    def broken(deadline):
         raise GLib.Error("The name org.a11y.Bus was not provided by any .service files")
     monkeypatch.setattr(atspi_helper, "_a11y_bus", broken)
     assert atspi_helper.focused_is_password() is False
@@ -197,3 +204,49 @@ def test_a_bus_where_everything_hangs_gives_up_within_the_budget(bus, monkeypatc
     assert atspi_helper.focused_is_password() is False
     took = time.monotonic() - started
     assert took < atspi_helper.BUDGET_S + atspi_helper.CALL_TIMEOUT_MS / 1000
+
+
+def test_a_slow_search_isnt_followed_by_a_walk_of_the_same_app(bus):
+    bus.app("slowpoke", PASSWORD, collection="slow")
+    assert atspi_helper.focused_is_password() is False
+    assert ("GetChildren" not in
+            [method for name, path, method in bus.calls if path == "/1"])
+
+
+def test_every_active_window_is_asked(bus, caplog):
+    """A desktop shell that calls its own window active too must not hide
+    the app the focus is really in."""
+    bus.app("cinnamon", TEXT)
+    bus.app("gedit", PASSWORD)
+    with caplog.at_level(logging.INFO, logger="tuxtalk.atspi_helper"):
+        assert atspi_helper.focused_is_password() is True
+    assert "several apps" in caplog.text
+
+
+@pytest.fixture
+def no_connection_yet(monkeypatch):
+    monkeypatch.setattr(atspi_helper, "_bus", None)
+    monkeypatch.setattr(atspi_helper, "_connecting", False)
+
+
+def test_a_bus_that_never_finishes_connecting_doesnt_hold_up_typing(no_connection_yet,
+                                                                     monkeypatch):
+    """Opening the connection can hang on D-Bus's 25 s handshake timeout."""
+    def stuck():
+        time.sleep(1)
+    monkeypatch.setattr(atspi_helper, "_open_bus", stuck)
+    started = time.monotonic()
+    assert atspi_helper.focused_is_password() is False
+    assert time.monotonic() - started < atspi_helper.BUDGET_S + 0.1
+    # While it's still trying, the next question doesn't wait at all.
+    started = time.monotonic()
+    assert atspi_helper.focused_is_password() is False
+    assert time.monotonic() - started < 0.05
+
+
+def test_the_first_question_waits_for_a_quick_connection(no_connection_yet, monkeypatch):
+    fake = FakeA11yBus()
+    fake.app("gedit", PASSWORD)
+    fake.is_closed = lambda: False
+    monkeypatch.setattr(atspi_helper, "_open_bus", lambda: fake)
+    assert atspi_helper.focused_is_password() is True

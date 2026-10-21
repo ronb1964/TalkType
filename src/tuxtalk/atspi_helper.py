@@ -6,7 +6,8 @@ AppImage doesn't ship libatspi's typelib, and libatspi shares one bus
 connection with GTK's own accessibility bridge, which the GTK thread of the
 dictation service dispatches while this runs on another thread.
 
-Which apps answer (tried 2026-10-20): GTK 3 and GTK 4 apps always. Qt (KDE
+Which apps answer (tried 2026-10-20): GTK 3 and GTK 4 apps, unless their
+accessibility is switched off (GTK_A11Y=none, NO_AT_BRIDGE=1). Qt (KDE
 apps) and Firefox only while accessibility is switched on, by a screen reader
 or the desktop's accessibility setting. Chromium-based browsers and Electron
 apps (Brave, Discord, VS Code) only if it was on when they started
@@ -16,6 +17,7 @@ a restart. An app that doesn't answer, a slow bus or none at all counts as
 """
 
 import logging
+import threading
 import time
 
 from gi.repository import Gio, GLib
@@ -41,7 +43,18 @@ _ROLE_PASSWORD_TEXT = 40
 # The shell's own "window" is always active; the focus is in an app's.
 _SKIPPED_APPS = {"gnome-shell"}
 
+# Replies from an app without the Collection interface (Qt 5, some others).
+_NO_COLLECTION = {
+    "org.freedesktop.DBus.Error.UnknownMethod",
+    "org.freedesktop.DBus.Error.UnknownInterface",
+    "org.freedesktop.DBus.Error.UnknownObject",
+    "org.freedesktop.DBus.Error.NotSupported",
+}
+
 _bus = None
+_connecting = False
+_bus_changed = threading.Condition()
+_last_active = ()
 
 
 class _OutOfTime(Exception):
@@ -49,19 +62,26 @@ class _OutOfTime(Exception):
 
 
 def focused_is_password() -> bool:
-    """True when the focused widget of the active window is a password field.
+    """True when the focused widget of an active window is a password field.
     False when it isn't, and whenever that can't be found out in BUDGET_S."""
     started = time.monotonic()
+    deadline = started + BUDGET_S
     try:
-        bus = _a11y_bus()
+        bus = _a11y_bus(deadline)
         if bus is None:
             return False
-        deadline = started + BUDGET_S
-        for window in _active_windows(bus, deadline):
-            focused = _focused_in(bus, window, deadline)
-            if focused is not None:
-                return _call(bus, focused, _ACCESSIBLE, "GetRole", None, deadline)[0] \
-                    == _ROLE_PASSWORD_TEXT
+        # Every active window is asked, not the first: a desktop shell other
+        # than GNOME's may call its own window active too.
+        windows = list(_active_windows(bus, deadline))
+        _log_several_active(windows)
+        for _app, window in windows:
+            try:
+                focused = _focused_in(bus, window, deadline)
+                if focused is not None and _call(bus, focused, _ACCESSIBLE, "GetRole",
+                                                 None, deadline)[0] == _ROLE_PASSWORD_TEXT:
+                    return True
+            except GLib.Error as e:
+                logger.debug(f"Password field check: a window didn't answer: {e.message}")
         return False
     except _OutOfTime:
         logger.info(f"Password field check: no answer in {BUDGET_S}s, typing as usual")
@@ -78,23 +98,50 @@ def focused_is_password() -> bool:
         logger.debug(f"Password field check took {time.monotonic() - started:.3f}s")
 
 
-def _a11y_bus():
-    """TuxTalk's own connection to the accessibility bus, or None without one."""
-    global _bus
-    if _bus is not None and not _bus.is_closed():
-        return _bus
+def _a11y_bus(deadline):
+    """TuxTalk's own connection to the accessibility bus, or None while there
+    is none. It is opened on a thread of its own: a bus that accepts the
+    socket but never answers holds the handshake for D-Bus's 25 s, which no
+    timeout of Gio's covers. Only the call that starts the opening waits for
+    it, and only until *deadline*; later ones don't while it's still trying."""
+    global _connecting
+    with _bus_changed:
+        if _bus is not None and not _bus.is_closed():
+            return _bus
+        if _connecting:
+            return None
+        _connecting = True
+        threading.Thread(target=_connect, name="a11y-bus", daemon=True).start()
+        _bus_changed.wait_for(lambda: not _connecting,
+                              timeout=max(0.0, deadline - time.monotonic()))
+        return _bus if _bus is not None and not _bus.is_closed() else None
+
+
+def _connect():
+    global _bus, _connecting
+    bus = None
+    try:
+        bus = _open_bus()
+    except GLib.Error as e:
+        logger.debug(f"No accessibility bus: {e.message}")
+    finally:
+        with _bus_changed:
+            _bus, _connecting = bus, False
+            _bus_changed.notify_all()
+
+
+def _open_bus():
     session = Gio.bus_get_sync(Gio.BusType.SESSION, None)
     address = session.call_sync(
         "org.a11y.Bus", "/org/a11y/bus", "org.a11y.Bus", "GetAddress", None,
         GLib.VariantType("(s)"), Gio.DBusCallFlags.NO_AUTO_START, CALL_TIMEOUT_MS, None)[0]
     if not address:
         return None
-    _bus = Gio.DBusConnection.new_for_address_sync(
+    return Gio.DBusConnection.new_for_address_sync(
         address,
         Gio.DBusConnectionFlags.AUTHENTICATION_CLIENT
         | Gio.DBusConnectionFlags.MESSAGE_BUS_CONNECTION,
         None, None)
-    return _bus
 
 
 def _call(bus, node, interface, method, args, deadline):
@@ -119,11 +166,12 @@ def _states(bus, node, deadline) -> int:
 
 
 def _active_windows(bus, deadline):
+    """(app name, window) for each window that says it's active."""
     for app in _children(bus, (_REGISTRY, _ROOT), deadline):
         try:
-            if _call(bus, app, "org.freedesktop.DBus.Properties", "Get",
-                     GLib.Variant("(ss)", (_ACCESSIBLE, "Name")), deadline)[0] \
-                    in _SKIPPED_APPS:
+            name = _call(bus, app, "org.freedesktop.DBus.Properties", "Get",
+                         GLib.Variant("(ss)", (_ACCESSIBLE, "Name")), deadline)[0]
+            if name in _SKIPPED_APPS:
                 continue
             windows = _children(bus, app, deadline)
         except GLib.Error:
@@ -131,9 +179,19 @@ def _active_windows(bus, deadline):
         for window in windows:
             try:
                 if _states(bus, window, deadline) & 1 << _STATE_ACTIVE:
-                    yield window
+                    yield name, window
             except GLib.Error:
                 continue
+
+
+def _log_several_active(windows):
+    """Say so when more than one app calls a window active, once per change:
+    then the focus may be in either, and both are asked."""
+    global _last_active
+    names = tuple(sorted(name for name, _window in windows))
+    if len(names) > 1 and names != _last_active:
+        logger.info(f"Password field check: several apps say a window is active: {names}")
+    _last_active = names
 
 
 def _focused_in(bus, window, deadline):
@@ -146,8 +204,9 @@ def _focused_in(bus, window, deadline):
     try:
         found = _call(bus, window, _COLLECTION, "GetMatches", rule, deadline)[0]
         return found[0] if found else None
-    except GLib.Error:
-        # Qt has no Collection interface: walk the visible widgets instead.
+    except GLib.Error as e:
+        if Gio.DBusError.get_remote_error(e) not in _NO_COLLECTION:
+            raise   # a timeout: walking the same slow app would only take longer
         return _walk_for_focus(bus, window, deadline)
 
 
