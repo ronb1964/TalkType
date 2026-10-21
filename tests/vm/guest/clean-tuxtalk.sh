@@ -29,7 +29,7 @@ if command -v flatpak >/dev/null; then
         xargs -r -n1 flatpak remote-delete --user --force 2>/dev/null
 fi
 rm -rf ~/.var/app/io.github.ronb1964.TalkType ~/.var/app/io.github.ronb1964.TuxTalk
-rm -rf ~/tt-test ~/kit/TuxTalk* ~/kit/TalkType* ~/run1-bak    # hand testing
+rm -rf ~/tt-test ~/kit/TuxTalk* ~/kit/TalkType* ~/run*-bak ~/tt-keyd    # hand testing
 rm -rf ~/.local/share/TuxTalk.bak* ~/.local/share/TalkType*.bak*
 rm -rf ~/.local/share/flatpak/repo/refs/heads/deploy/app/io.github.ronb1964.T* \
     ~/.local/share/flatpak/repo/refs/remotes/talktype-origin
@@ -50,6 +50,12 @@ if grep -qs "Test-VM stand-in for pkexec" /usr/local/bin/pkexec; then
         echo "the pkexec stand-in is installed and sudo needs a password: remove it by hand" >&2
         exit 1
     fi
+fi
+
+# The 0.15 test round (2026-10-13) let polkit approve everything without a
+# password, so pkexec never showed the prompt the first-run checks look for.
+if sudo -n test -e /etc/polkit-1/rules.d/49-nopasswd.rules; then
+    sudo -n rm -f /etc/polkit-1/rules.d/49-nopasswd.rules && echo "polkit no-password rule removed"
 fi
 
 # Before the hotkey helper (0.16), setup put the user in the input group
