@@ -11,6 +11,7 @@ gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, GLib
 from .ui_style import message_dialog
 from .logger import setup_logger
+from .recommend import model_title
 from .parakeet_engine import (
     PARAKEET_MODEL, cached_model_dir as _parakeet_cached_dir,
     is_parakeet, load_parakeet_model,
@@ -61,13 +62,6 @@ def load_model(model_name, device="cpu", compute_type="int8"):
         compute_type=compute_type,
         cpu_threads=os.cpu_count() or 4,
     )
-
-
-def model_display_name(model_name):
-    """Human-friendly model name for dialog titles and messages."""
-    if is_parakeet(model_name):
-        return "Parakeet"
-    return model_name.title()
 
 
 # Hugging Face repository for each Whisper model. Parakeet comes from
@@ -368,7 +362,7 @@ def _fetch_with_retry(fetch, filename, sleep=None):
 
 
 def download_model_with_progress(model_name, device="cpu", compute_type="int8", parent=None,
-                                 show_confirmation=True, redownload_broken=True,
+                                 show_confirmation=True, dialogs=True,
                                  result_info=None):
     """
     Load a model, first downloading it behind a progress dialog if needed.
@@ -379,9 +373,10 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
         compute_type: Compute type ("int8", "float16", etc.)
         parent: Optional parent window for dialog
         show_confirmation: Whether to show confirmation dialog before download (default True)
-        redownload_broken: False when this thread must not open GTK dialogs
-            (another thread runs Gtk.main()); a downloaded model that won't
-            load then raises BrokenModelFiles instead of downloading again.
+        dialogs: False when this thread must not open GTK dialogs (another
+            thread runs Gtk.main()). A downloaded model that won't load then
+            raises BrokenModelFiles instead of downloading again, and one
+            that isn't downloaded returns None instead of downloading.
         result_info: Optional dict; "cancelled" is set True in it when the
             user declined or cancelled, which a None return can't tell apart
             from a failed download.
@@ -403,11 +398,16 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
             # load on the processor) is the caller's to report.
             if is_parakeet(model_name) or _loads_on_cpu(model_name):
                 raise
-            if not redownload_broken:
+            if not dialogs:
                 raise BrokenModelFiles(
                     f"{model_name} looked downloaded but won't load: {e}") from e
             logger.warning(f"Model {model_name} looked downloaded but won't load "
                            f"({e}); downloading it again")
+
+    if not dialogs:
+        logger.warning(f"Model {model_name} isn't downloaded, and this thread can't show "
+                       "the download")
+        return None
 
     logger.info(f"Model {model_name} NOT cached - showing download progress dialog")
     print(f"Model {model_name} NOT cached - will download and show progress")
@@ -419,7 +419,7 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
             parent=parent,
             message_type=Gtk.MessageType.QUESTION,
             buttons=Gtk.ButtonsType.OK_CANCEL,
-            text=f"Download {model_display_name(model_name)} Model?"
+            text=f"Download {model_title(model_name)} Model?"
         )
 
         settings = Gtk.Settings.get_default()
@@ -427,7 +427,7 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
             settings.set_property("gtk-application-prefer-dark-theme", True)
 
         confirm_dialog.format_secondary_text(
-            f"TuxTalk needs to download the {model_display_name(model_name)} AI model ({size_str}) for speech recognition.\n\n"
+            f"TuxTalk needs to download the {model_title(model_name)} AI model ({size_str}) for speech recognition.\n\n"
             f"This is a one-time download that will be cached for future use.\n\n"
             "Continue with download?"
         )
@@ -441,7 +441,7 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
                 result_info["cancelled"] = True
             return None
 
-    progress_dialog = Gtk.Dialog(title=f"Downloading Model: {model_display_name(model_name)}")
+    progress_dialog = Gtk.Dialog(title=f"Downloading Model: {model_title(model_name)}")
     progress_dialog.set_default_size(500, 150)
     progress_dialog.set_modal(True)
     progress_dialog.set_position(Gtk.WindowPosition.CENTER)
@@ -461,7 +461,7 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
     content.set_spacing(15)
 
     title_label = Gtk.Label()
-    title_label.set_markup(f'<span size="large"><b>Downloading {model_display_name(model_name)} Model</b></span>')
+    title_label.set_markup(f'<span size="large"><b>Downloading {model_title(model_name)} Model</b></span>')
     content.pack_start(title_label, False, False, 0)
 
     status_label = Gtk.Label()
@@ -685,7 +685,7 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
             settings.set_property("gtk-application-prefer-dark-theme", True)
 
         msg.format_secondary_text(
-            f"Could not download {model_display_name(model_name)} model.\n\n"
+            f"Could not download {model_title(model_name)} model.\n\n"
             f"Error: {str(download_error[0])}\n\n"
             "Check your internet connection and try again."
         )

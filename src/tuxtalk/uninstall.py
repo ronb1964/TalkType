@@ -8,10 +8,12 @@ login, the GNOME extension, KDE shortcuts, and gigabytes of downloads
 (speech models, the Vulkan and AI engines, CUDA libraries). A Zorin OS user
 removed the .deb in October 2026 and found all of it still there.
 
-This takes all of it away, with one password prompt. Downloads always go;
-settings, Your Words, snippets and stats only when asked, so a reinstall
-can pick up where it left off. Backup files the user saved elsewhere are
-theirs and stay.
+This takes all of it away, with one password prompt. TuxTalk's own
+downloads always go; settings, Your Words, snippets and stats only when
+asked, so a reinstall can pick up where it left off, and the speech models
+in Hugging Face's shared cache only when asked too, since other apps may
+use the same ones. Backup files the user saved elsewhere are theirs and
+stay.
 
 It runs in the tray's process when TuxTalk is running: an AppImage's files
 vanish when its first process (the tray) exits, and this needs them to the
@@ -21,8 +23,10 @@ module it uses afterwards is imported here, up front.
 import grp
 import os
 import pwd
+import re
 import shutil
 import signal
+import stat
 import subprocess
 import threading
 import time
@@ -34,27 +38,57 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
-from . import (ai_cleanup, config, desktop_detect, extension_helper,  # noqa: E402
-               file_transcribe, gnome_keybindings, kwin_hotkeys,
-               parakeet_engine, secure_input, service_launcher, uinput_helper,
-               update_checker, whisper_vulkan)
-from .logger import setup_logger, stop_file_logging  # noqa: E402
+from . import (ai_cleanup, config, custom_words, desktop_detect,  # noqa: E402
+               extension_helper, file_transcribe, gnome_keybindings, kwin_hotkeys,
+               model_helper, parakeet_engine, rename_migration, secure_input,
+               service_launcher, settings_backup, uinput_helper, update_checker,
+               whisper_vulkan)
+from .logger import LOG_FILE_NAME, setup_logger, stop_file_logging  # noqa: E402
 from .ui_style import message_dialog  # noqa: E402
 
 logger = setup_logger(__name__)
 
 # The files in the data folder that are the user's own: kept unless they
-# ask for them to go. Everything else there is downloaded or rebuilt by
-# itself (tests/test_uninstall.py makes every name in the code choose).
+# ask for them to go.
 PERSONAL_DATA = ("stats.json", "stats.json.bak", file_transcribe.RECENT_FILE)
+# The rest of what TuxTalk puts there, downloaded or rebuilt by itself
+# (tests/test_uninstall.py makes every name in the code pick one of the two).
+DOWNLOADED_DATA = ("cuda", "ai-engine", "parakeet-ultra", "whisper-vulkan", "kwin",
+                   ".first_run_done", ".hotkey_test_mode", "remote_desktop_token",
+                   gnome_keybindings.BACKUP_NAME)
+# The folders in it whose programs TuxTalk runs, stopped before deleting.
+ENGINE_FOLDERS = ("whisper-vulkan", "ai-engine", "parakeet-ultra", "cuda")
+# What TuxTalk keeps in its settings folder (tests/test_uninstall.py again).
+CONFIG_NAMES = ("config.toml", "custom_commands.toml", custom_words.FILE_NAME, "backups",
+                "kde-hotkeys.json", "explained.json", ".launchers-renamed",
+                rename_migration.NOTICE_FILE, LOG_FILE_NAME, "talktype.log")
+
+# The copies TuxTalk writes beside its own files: config.toml.bak and
+# .before-words-tab, tuxtalk.log.old, config.toml.corrupt-<time>, and a
+# save's config.toml.<random>.tmp (config.write_text_atomic, through
+# tempfile.mkstemp's eight characters).
+_COPY_SUFFIXES = ("bak", "old")
+_COPY_PREFIXES = ("before-", "corrupt-")
+_SAVE_TEMP = re.compile(r"[a-z0-9_]{8}\.tmp")
+
+
+def _hub_folder(repo):
+    """The Hugging Face cache's folder name for *repo*."""
+    return f"models--{repo.replace('/', '--')}"
+
 
 # Each Hugging Face repository TuxTalk downloads from, as the cache names
-# its folder. faster-whisper also maps the .en and older large names onto
-# Systran's repos, hence the pattern.
-HF_REPOS = ("models--Systran--faster-whisper-*",
-            *(f"models--{repo.replace('/', '--')}" for repo in (
-                parakeet_engine.V3_REPO, whisper_vulkan.MODEL_REPO,
-                *whisper_vulkan.MODEL_REPOS.values(), ai_cleanup.MODEL_REPO)))
+# its folder. Only these: the cache is shared, and another app's models in
+# it are not ours to delete. One folder holds a whole repository, so
+# whisper.cpp's may hold another app's models too: hence the question's
+# "other apps may use them". The Whisper models are every name a config may
+# hold (an older one may say small.en), as faster-whisper downloads them from
+# Systran; to it, "large" is large-v3.
+HF_REPOS = tuple(sorted({_hub_folder(repo) for repo in (
+    *(model_helper.MODEL_REPOS.get(m, f"Systran/faster-whisper-{m}")
+      for m in config.VALID_MODELS - {"large"} if not parakeet_engine.is_parakeet(m)),
+    parakeet_engine.V3_REPO, whisper_vulkan.MODEL_REPO,
+    *whisper_vulkan.MODEL_REPOS.values(), ai_cleanup.MODEL_REPO)}))
 
 # The runtime folder's files that hold dictated text: Recent Dictations and
 # Fix a Word's last dictation. Logging out empties the folder anyway; its
@@ -76,8 +110,11 @@ class Plan:
     home: Path
     install_type: str
     downloads: list = field(default_factory=list)     # always removed
+    shared: list = field(default_factory=list)        # in the Hugging Face cache: only when asked
     leftovers: list = field(default_factory=list)     # launchers, autostart, program
     personal: list = field(default_factory=list)      # removed only when asked
+    folders: list = field(default_factory=list)       # (folder, its names): emptied when asked
+    kept: list = field(default_factory=list)          # left on purpose (a restore to retry)
     runtime: list = field(default_factory=list)
     hub: Path = None                 # Hugging Face's model cache
     helper: bool = False             # the hotkey helper is installed
@@ -95,12 +132,30 @@ class Plan:
         return self.helper or self.typing_rule or self.input_group or self.package is not None
 
 
+@dataclass
+class Result:
+    """How the uninstall went, for the closing message."""
+    left_group: bool = False         # gpasswd really took the user out
+    package_failed: bool = False     # the package manager refused
+    not_removed: list = field(default_factory=list)   # what's still there, in words
+
+    @property
+    def complete(self):
+        return not self.not_removed and not self.package_failed
+
+
 def hf_hub_cache(home, environ=os.environ):
-    """Where Hugging Face keeps its models, by its own rules."""
-    if environ.get("HF_HUB_CACHE"):
-        return Path(environ["HF_HUB_CACHE"])
+    """Where Hugging Face keeps its models, by its own rules (huggingface_hub's
+    constants.py; HUGGINGFACE_HUB_CACHE is the older name, still honoured).
+    Worked out here rather than read from there, so the tests can point it
+    at a made-up home."""
+    def path(value):
+        return Path(os.path.expanduser(os.path.expandvars(value)))
+    for name in ("HF_HUB_CACHE", "HUGGINGFACE_HUB_CACHE"):
+        if environ.get(name):
+            return path(environ[name])
     if environ.get("HF_HOME"):
-        return Path(environ["HF_HOME"]) / "hub"
+        return path(environ["HF_HOME"]) / "hub"
     cache = Path(environ["XDG_CACHE_HOME"]) if environ.get("XDG_CACHE_HOME") else home / ".cache"
     return cache / "huggingface" / "hub"
 
@@ -124,6 +179,34 @@ def _in_input_group():
     return group.gr_gid in os.getgroups() or pwd.getpwuid(os.getuid()).pw_name in group.gr_mem
 
 
+def _known(entry, names):
+    """Whether *entry* is one of *names*, or a copy TuxTalk writes of one of
+    those files (_COPY_SUFFIXES). Not config.toml.notes or a folder named
+    backups.photos: those are someone else's."""
+    name = entry.name
+    if name in names:
+        return True
+    if entry.is_dir() and not entry.is_symlink():
+        return False
+    for known in names:
+        rest = name[len(known) + 1:] if name.startswith(known + ".") else None
+        if rest and (rest in _COPY_SUFFIXES or rest.startswith(_COPY_PREFIXES)
+                     or _SAVE_TEMP.fullmatch(rest)):
+            return True
+    return False
+
+
+def _contents(folder, names):
+    """What's in *folder*. When the folder is a link to somewhere else (the
+    models moved to a bigger disk, the settings kept in a synced folder),
+    only what TuxTalk knows by *names*: the rest there isn't ours."""
+    if not folder.is_dir():
+        return []
+    linked = folder.is_symlink()
+    return [entry for entry in sorted(folder.iterdir())
+            if not linked or _known(entry, names)]
+
+
 def find(home, install_type, environ=os.environ, appimage=None):
     """The Plan for *home*: only what exists. *appimage* is the running
     AppImage's path, if any."""
@@ -134,13 +217,16 @@ def find(home, install_type, environ=os.environ, appimage=None):
     def exists(path):
         return os.path.lexists(path)
 
-    if data_dir.is_dir():
-        for entry in sorted(data_dir.iterdir()):
-            (plan.personal if entry.name in PERSONAL_DATA else plan.downloads).append(entry)
+    data_names = PERSONAL_DATA + DOWNLOADED_DATA
+    for entry in _contents(data_dir, data_names):
+        (plan.personal if _known(entry, PERSONAL_DATA) else plan.downloads).append(entry)
     plan.hub = hf_hub_cache(home, environ)
-    for pattern in HF_REPOS:
-        plan.downloads += (sorted(plan.hub.glob(pattern))
-                           + sorted((plan.hub / ".locks").glob(pattern)))
+    # A .locks that is a link leads somewhere else: deleting through it
+    # would reach another folder's files.
+    locks = plan.hub / ".locks"
+    folders = [plan.hub] + ([] if locks.is_symlink() else [locks])
+    plan.shared = [folder / name for name in HF_REPOS for folder in folders
+                   if exists(folder / name)]
 
     apps = home / "AppImages"
     # The versioned files too: started at login, TuxTalk runs from the copy
@@ -163,15 +249,14 @@ def find(home, install_type, environ=os.environ, appimage=None):
         if exists(path) and path not in plan.leftovers:
             plan.leftovers.append(path)
 
-    if config_dir.is_dir() or config_dir.is_symlink():
-        plan.personal.insert(0, config_dir)
-    # The names from before the 0.15.0 rename: links to the folders above, or
-    # the real folders behind them when the rename couldn't move them.
-    for old in (home / ".config" / "talktype", home / ".local" / "share" / "TalkType"):
-        if exists(old):
-            plan.personal.append(old)
-    if data_dir.is_dir():
-        plan.personal.append(data_dir)      # the folder itself, last
+    # The names from before the 0.15.0 rename are links to the folders here,
+    # or the real folders behind them when the rename couldn't move them.
+    for folder, names in ((config_dir, CONFIG_NAMES),
+                          (home / ".config" / "talktype", CONFIG_NAMES),
+                          (home / ".local" / "share" / "TalkType", data_names),
+                          (data_dir, data_names)):
+        if exists(folder):
+            plan.folders.append((folder, names))
 
     runtime = Path(environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}")
     plan.runtime = [runtime / name for name in RUNTIME_FILES if exists(runtime / name)]
@@ -188,20 +273,27 @@ def find(home, install_type, environ=os.environ, appimage=None):
     return plan
 
 
-def download_size(plan):
-    """Bytes the downloads take on disk (each file counted once)."""
-    total, seen = 0, set()
-    for top in plan.downloads:
+def disk_size(paths):
+    """Bytes *paths* take on disk (each file counted once). A link counts as
+    nothing: only the link is removed, never what it leads to."""
+    seen = {}
+
+    def count(path):
+        try:
+            st = os.lstat(path)
+        except OSError:
+            return
+        if stat.S_ISREG(st.st_mode):
+            seen[(st.st_dev, st.st_ino)] = st.st_blocks * 512
+
+    for top in paths:
+        if os.path.islink(top) or not os.path.isdir(top):
+            count(top)
+            continue
         for root, _dirs, files in os.walk(top):
             for name in files:
-                try:
-                    st = os.lstat(os.path.join(root, name))
-                except OSError:
-                    continue
-                if (st.st_dev, st.st_ino) not in seen:
-                    seen.add((st.st_dev, st.st_ino))
-                    total += st.st_blocks * 512
-    return total
+                count(os.path.join(root, name))
+    return sum(seen.values())
 
 
 def _package_lines(plan):
@@ -216,7 +308,7 @@ def _package_lines(plan):
                    f"else rpm -e {name}; fi")
     else:
         command = f"pacman -R --noconfirm {name}"
-    return (f'if ! out=$( {{ {command}; }} 2>&1 ); then\n'
+    return (f'if ! out=$( {{ {command}; }} </dev/null 2>&1 ); then\n'
             f'    echo {secure_input.PACKAGE_NOT_REMOVED}\n'
             f'    printf "%s\\n" "$out" | tail -n 3\n'
             f'fi\n')
@@ -228,7 +320,7 @@ def root_script(plan, leave_group):
     even if one before it failed."""
     lines = "set -uo pipefail\n"
     if leave_group:
-        lines += 'gpasswd -d "$(id -nu "${PKEXEC_UID:?}")" input || true\n'
+        lines += secure_input.leave_group_lines()
     lines += secure_input.uninstall_lines()
     if plan.package:
         lines += _package_lines(plan)
@@ -236,7 +328,8 @@ def root_script(plan, leave_group):
 
 
 def _remove(path):
-    """Remove a file, a link (never what it points at), or a folder."""
+    """Remove a file, a link (never what it points at), or a folder. False
+    when it couldn't."""
     try:
         if path.is_symlink() or not path.is_dir():
             path.unlink(missing_ok=True)
@@ -244,35 +337,58 @@ def _remove(path):
             shutil.rmtree(path)
     except OSError as e:
         logger.warning(f"Could not remove {path}: {e}")
+        return False
+    return True
 
 
-def _empty(folder):
-    """Remove what's in *folder*, following a link to it (a user who moved
-    the models to a bigger disk), then the folder, or the link and the
-    folder it led to."""
+def _empty(folder, names, kept=()):
+    """Remove what's in *folder* (through a link, only what's TuxTalk's by
+    *names*) but what's *kept* (real paths), then the folder, or the link and the folder it led
+    to if that's empty now. What it couldn't remove."""
     target = folder.resolve() if folder.is_symlink() else None
-    if folder.is_dir():
-        for entry in folder.iterdir():
-            _remove(entry)
-    _remove(folder)
+    failed = []
+    entries = _contents(folder, names)
+    held = [entry for entry in entries if os.path.realpath(entry) in kept]
+    for entry in entries:
+        if entry in held:
+            continue
+        if (target is not None and entry.name == "backups" and entry.is_dir()
+                and not entry.is_symlink()):
+            # A synced folder may keep a backups folder of its own.
+            failed += [copy for copy in sorted(entry.iterdir())
+                       if settings_backup.is_ours(copy.name) and not _remove(copy)]
+            try:
+                entry.rmdir()
+            except OSError:
+                pass        # not only TuxTalk's
+        elif not _remove(entry):
+            failed.append(entry)
+    if not failed and not held and not _remove(folder):
+        failed.append(folder)
     if target is not None:
         try:
             target.rmdir()
         except OSError:
             pass        # gone already, or something else is in it
+    return failed
 
 
-def remove_files(plan, delete_personal):
-    """Delete the files the plan lists. Only files: the desktop's own
-    settings are undone by undo_desktop_changes() first."""
-    for path in plan.downloads + plan.leftovers + plan.runtime:
-        _remove(path)
+def remove_files(plan, delete_personal, delete_shared):
+    """Delete the files the plan lists, and return those it couldn't. Only
+    files: the desktop's own settings are undone by undo_desktop_changes()
+    first."""
+    paths = plan.downloads + plan.leftovers + plan.runtime
+    if delete_shared:
+        paths += plan.shared
     if delete_personal:
-        for path in plan.personal:
-            if path.is_dir():
-                _empty(path)
-            else:
-                _remove(path)
+        paths += plan.personal
+    if plan.ydotoold_unit is not None:
+        paths.append(plan.ydotoold_unit)
+    kept = {os.path.realpath(path) for path in plan.kept}
+    failed = [path for path in paths if os.path.realpath(path) not in kept and not _remove(path)]
+    if delete_personal:
+        for folder, names in plan.folders:
+            failed += _empty(folder, names, kept)
     # Folders TuxTalk made and nothing else uses: gone once empty.
     folders = [plan.home / "AppImages", plan.hub / ".locks", plan.hub]
     if plan.hub.parent.name == "huggingface":
@@ -282,14 +398,19 @@ def remove_files(plan, delete_personal):
             folder.rmdir()
         except OSError:
             pass        # not empty, or not there
-    if plan.ydotoold_unit is not None:
-        _remove(plan.ydotoold_unit)
+    # A download that wouldn't go may have gone with its folder after all,
+    # and one that stays may be listed again through the old TalkType link.
+    left = {}
+    for path in failed:
+        if os.path.lexists(path):
+            left.setdefault(os.path.realpath(path), path)
+    return list(left.values())
 
 
-def _tuxtalk_pids(data_dir):
+def _tuxtalk_pids(engines):
     """This user's other TuxTalk processes: its Python modules (service,
     Preferences, Transcribe a File, an old TalkType) and the engines it
-    downloaded into *data_dir*."""
+    downloaded into the *engines* folders."""
     me, uid = os.getpid(), os.getuid()
     pids = []
     for entry in os.listdir("/proc"):
@@ -305,7 +426,7 @@ def _tuxtalk_pids(data_dir):
             continue
         module = any(a == "-m" and b.startswith(("tuxtalk.", "talktype."))
                      for a, b in zip(argv, argv[1:]))
-        if (module or exe.startswith(str(data_dir) + os.sep)) and not _is_dev(pid):
+        if (module or exe.startswith(engines)) and not _is_dev(pid):
             pids.append(pid)
     return pids
 
@@ -327,8 +448,11 @@ def stop_tuxtalk(plan, stop_tray_parts=None):
         stop_tray_parts()
     service_launcher.stop_dictation_service()      # also lets KDE have the hotkeys back
     uinput_helper.stop_ydotoold_we_started()
-    data_dir = (plan.home / ".local" / "share" / config.DATA_DIR).resolve()
-    pids = _tuxtalk_pids(data_dir)
+    # Each engine folder, not the whole data folder: that may be a link into
+    # a folder where other programs run from.
+    data_dir = plan.home / ".local" / "share" / config.DATA_DIR
+    pids = _tuxtalk_pids(tuple(os.path.realpath(data_dir / name) + os.sep
+                               for name in ENGINE_FOLDERS))
     for pid in pids:
         try:
             os.kill(pid, signal.SIGTERM)
@@ -352,11 +476,24 @@ def undo_desktop_changes(plan):
     """Put the desktop back as it was: Alt+F7/Alt+F8 on GNOME if the hotkey
     test was cut short, the GNOME extension, KDE's shortcut entries. Runs
     after stop_tuxtalk() and before the files go (the keybindings' backup
-    is one of them)."""
-    gnome_keybindings.restore_left_over()
+    is one of them). Returns what's still there, in words."""
+    left = []
+    if not gnome_keybindings.restore_left_over():
+        # Its backup stays (remove_files leaves plan.kept), so a reinstall
+        # can still put them back.
+        plan.kept.append(plan.home / ".local" / "share" / config.DATA_DIR
+                         / gnome_keybindings.BACKUP_NAME)
+        left.append("GNOME's Alt+F7 and Alt+F8 shortcuts, which a hotkey test had "
+                    "cleared (TuxTalk couldn't put them back)")
     if plan.extension or desktop_detect.is_gnome():
         extension_helper.uninstall_extension()
-    kwin_hotkeys.forget_our_components()
+        # Its result can't tell "removed nothing" from "wasn't there".
+        folder = Path(desktop_detect.get_extension_dir()) / extension_helper.EXTENSION_UUID
+        if os.path.lexists(folder):
+            left.append(f"the GNOME extension ({_shown(folder, plan.home)})")
+    if not kwin_hotkeys.forget_our_components():
+        left.append("TuxTalk's entries in KDE's Shortcuts settings")
+    return left
 
 
 def _refresh_menus():
@@ -395,11 +532,54 @@ def confirm_text(plan, size):
         lines.append("its hotkey helper and the permission to type into other apps")
     elif plan.typing_rule:
         lines.append("the permission it set up to type into other apps")
-    if plan.downloads:
-        lines.append(f"the speech models, engines and libraries it downloaded ({_size_text(size)})")
-    lines.append("starting at login, its menu entry and the GNOME extension" if plan.extension
-                 else "starting at login and its menu entry")
+    if size >= 1000 ** 2:       # not just the small files it keeps there
+        lines.append("the engines, libraries and models it downloaded to its own folder "
+                     f"({_size_text(size)})")
+    found = {path.parent.name for path in plan.leftovers}
+    desktop = [what for what, there in (("starting at login", "autostart" in found),
+                                        ("its menu entry", "applications" in found),
+                                        ("the GNOME extension", plan.extension)) if there]
+    if desktop:
+        lines.append(_and(desktop))
     return "\n".join(f"•  {line}" for line in lines)
+
+
+def _and(items):
+    """"a", "a and b", "a, b and c"."""
+    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
+
+
+def _shown(path, home):
+    """*path* with the home folder as ~, as people know it."""
+    try:
+        return f"~/{path.relative_to(home)}"
+    except ValueError:
+        return str(path)
+
+
+def _shared_what(plan):
+    """What the shared cache holds of TuxTalk's, in words, and whether that's
+    more than one thing."""
+    ai = _hub_folder(ai_cleanup.MODEL_REPO)
+    names = {path.name for path in plan.shared}
+    if names == {ai}:
+        return "the AI model", False
+    return ("speech models and the AI model" if ai in names else "speech models"), True
+
+
+def shared_label(plan):
+    """The shared-models box."""
+    what, several = _shared_what(plan)
+    return (f"Also delete {what} in the shared download folder "
+            f"(other apps may use {'them' if several else 'it'})")
+
+
+def shared_text(plan, size):
+    """The line under the shared-models box: how big, and where."""
+    several = _shared_what(plan)[1]
+    return (f"{_size_text(size)} in {_shown(plan.hub, plan.home)}. Otherwise "
+            f"{'they stay' if several else 'it stays'} there for other apps, or for TuxTalk "
+            "if you install it again.")
 
 
 def _wait_for(work):
@@ -421,12 +601,21 @@ def _wait_for(work):
     return result["value"]
 
 
-def _ask(plan, size):
-    """(delete_personal, leave_group), or None for Cancel."""
+def _note(text):
+    """A dim, wrapped line under a tickbox in the question."""
+    label = Gtk.Label(xalign=0, label=text)
+    label.set_line_wrap(True)
+    label.set_max_width_chars(60)
+    label.get_style_context().add_class("dim-label")
+    return label
+
+
+def _ask(plan):
+    """(delete_personal, delete_shared, leave_group), or None for Cancel."""
     dialog = message_dialog(message_type=Gtk.MessageType.QUESTION,
                             buttons=Gtk.ButtonsType.NONE, text="Uninstall TuxTalk?")
     text = ("This removes TuxTalk and everything it set up on this computer:\n\n"
-            + confirm_text(plan, size))
+            + confirm_text(plan, disk_size(plan.downloads)))
     if plan.needs_root:
         text += "\n\nYou'll be asked for your password once."
     dialog.format_secondary_text(text)
@@ -434,25 +623,23 @@ def _ask(plan, size):
 
     personal = Gtk.CheckButton(label="Also delete my settings, Your Words, snippets and stats")
     area.pack_start(personal, False, False, 0)
-    note = Gtk.Label(xalign=0, label="Otherwise they stay, so installing TuxTalk again picks "
-                                     "up where you left off. Backups you saved stay either way.")
-    note.set_line_wrap(True)
-    note.set_max_width_chars(60)
-    note.get_style_context().add_class("dim-label")
-    area.pack_start(note, False, False, 0)
+    area.pack_start(_note("Otherwise they stay, so installing TuxTalk again picks up where "
+                          "you left off. Backups you saved stay either way."), False, False, 0)
+
+    shared = None
+    if plan.shared:
+        shared = Gtk.CheckButton(label=shared_label(plan))
+        area.pack_start(shared, False, False, 0)
+        area.pack_start(_note(shared_text(plan, disk_size(plan.shared))), False, False, 0)
 
     group = None
     if plan.input_group:
         group = Gtk.CheckButton(label="Take me out of the 'input' group")
         group.set_active(True)
         area.pack_start(group, False, False, 0)
-        why = Gtk.Label(xalign=0, label="TuxTalk added you to it, which lets programs read the "
-                                        "keyboard. Untick it if another program you use needs "
-                                        "it, a key remapper for instance.")
-        why.set_line_wrap(True)
-        why.set_max_width_chars(60)
-        why.get_style_context().add_class("dim-label")
-        area.pack_start(why, False, False, 0)
+        area.pack_start(_note("TuxTalk added you to it, which lets programs read the keyboard. "
+                              "Untick it if another program you use needs it, a key remapper "
+                              "for instance."), False, False, 0)
 
     dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
     button = dialog.add_button("Uninstall", Gtk.ResponseType.OK)
@@ -462,7 +649,8 @@ def _ask(plan, size):
     dialog.set_keep_above(True)
     area.show_all()
     answer = dialog.run()
-    choice = (personal.get_active(), bool(group and group.get_active()))
+    choice = (personal.get_active(), bool(shared and shared.get_active()),
+              bool(group and group.get_active()))
     dialog.destroy()
     return choice if answer == Gtk.ResponseType.OK else None
 
@@ -498,35 +686,117 @@ def _tell(kind, heading, body, markup=False):
     dialog.destroy()
 
 
-def done_text(plan, delete_personal, left_group, package_failed):
+# What the root script's NOT_REMOVED lines name, in words.
+ROOT_LEFT = {"helper": f"the hotkey helper ({secure_input.SERVICE})",
+             "rule": "the typing permission in /etc/udev/rules.d"}
+
+
+def root_result(report, leave_group, package=False):
+    """The Result of the root script, from its report lines (_pkexec).
+    *package* is whether it removed a package too."""
+    lines = report.splitlines()
+    result = Result(package_failed=secure_input.PACKAGE_NOT_REMOVED in lines)
+    if secure_input.RAN_TOO_LONG in lines:
+        # It ran to the end, but what it said was lost.
+        unsure = ["the hotkey helper"]
+        if package:
+            unsure.append("the program's package")
+        if leave_group:
+            unsure.append("your place in the 'input' group")
+        result.not_removed.append(f"maybe {_and(unsure)} (removing "
+                                  f"{'them' if len(unsure) > 1 else 'it'} took too long to "
+                                  "confirm)")
+        return result
+    result.not_removed = [ROOT_LEFT[line.split()[1]] for line in lines
+                          if line.startswith(secure_input.NOT_REMOVED + " ")]
+    still_in_group = secure_input.STILL_IN_GROUP in lines
+    result.left_group = leave_group and not still_in_group
+    if leave_group and still_in_group:
+        result.not_removed.append("your place in the 'input' group")
+    return result
+
+
+def done_heading(result):
+    return "TuxTalk is uninstalled" if result.complete else "TuxTalk couldn't remove everything"
+
+
+def done_text(plan, delete_personal, delete_shared, result):
     """The closing message's body (Pango markup)."""
     parts = []
-    if package_failed:
+    if result.not_removed:
+        shown = [GLib.markup_escape_text(item) for item in result.not_removed[:6]]
+        if len(result.not_removed) > 6:
+            shown.append(f"and {len(result.not_removed) - 6} more")
+        parts.append("These are still there:\n" + "\n".join(f"•  {item}" for item in shown))
+    if result.package_failed:
         command = {"deb": "sudo apt remove tuxtalk", "rpm": "sudo dnf remove tuxtalk",
                    "aur": "sudo pacman -R tuxtalk-appimage"}[plan.install_type]
-        parts.append("Everything else is gone, but the package manager wouldn't remove "
-                     "the program itself (it may be busy with an update). Remove it "
-                     f"later with:\n<tt>{command}</tt>")
+        parts.append("The package manager wouldn't remove the program itself (it may be "
+                     f"busy with an update). Remove it later with:\n<tt>{command}</tt>")
     elif plan.install_type == "package":
         parts.append("Remove the tuxtalk package with your package manager to finish.")
     logout = []
     if plan.extension:
         logout.append("GNOME shows the extension's menu until then")
-    if left_group:
+    if result.left_group:
         logout.append("leaving the 'input' group takes effect then")
     if logout:
         parts.append("Log out and back in to finish: " + ", and ".join(logout) + ".")
-    if not delete_personal and any(p.exists() for p in plan.personal):
+    if not delete_personal and (plan.home / ".config" / config.CONFIG_DIR).exists():
         parts.append("Your settings, Your Words and snippets are kept in "
                      f"<tt>~/.config/{config.CONFIG_DIR}</tt>.")
-    parts.append(f'If TuxTalk didn\'t work out for you, <a href="{FEEDBACK_URL}">tell us '
-                 "why</a>. It helps.")
+    if not delete_shared and plan.shared:
+        what, several = _shared_what(plan)
+        where = GLib.markup_escape_text(_shown(plan.hub, plan.home))
+        parts.append(f"{what[0].upper() + what[1:]} in the shared download folder "
+                     f"{'are' if several else 'is'} kept in <tt>{where}</tt>.")
+    if result.not_removed:
+        parts.append(f'Ask in <a href="{FEEDBACK_URL}">Discussions</a> and we\'ll help you '
+                     "remove the rest.")
+    else:
+        parts.append(f'If TuxTalk didn\'t work out for you, <a href="{FEEDBACK_URL}">tell us '
+                     "why</a>. It helps.")
     return "\n\n".join(parts)
 
 
+def _remove_as_root(plan, leave_group):
+    """The root script's Result, or None when it didn't run (cancelled,
+    failed or timed out; the user has been told)."""
+    ok, message = _wait_for(lambda: secure_input._run_as_root(
+        root_script(plan, leave_group), "removed (uninstalling TuxTalk)"))
+    if ok:
+        return root_result(message, leave_group, plan.package is not None)
+    if message == secure_input.TIMED_OUT:
+        _tell(Gtk.MessageType.ERROR, "TuxTalk couldn't uninstall",
+              "Nothing was removed: the password prompt was open too long. Try Uninstall "
+              "TuxTalk… again.")
+    elif message != "cancelled":
+        _tell(Gtk.MessageType.ERROR, "TuxTalk couldn't uninstall",
+              f"Nothing was removed.\n\n{message}")
+    return None
+
+
+def _remove_the_rest(plan, delete_personal, delete_shared, stop_tray_parts, result):
+    """Stop TuxTalk, undo its desktop changes and delete its files, adding
+    what's left to *result*."""
+    home = plan.home
+    stop_tuxtalk(plan, stop_tray_parts)
+    result.not_removed += undo_desktop_changes(plan)
+    # Looked for again: stopping may have written a file (the stats).
+    again = find(home, plan.install_type, appimage=update_checker.get_running_appimage_path())
+    again.kept = plan.kept
+    if delete_personal:
+        logger.info("Uninstalled TuxTalk; deleting the settings and this log")
+        stop_file_logging()         # its folder is about to go
+    failed = _wait_for(lambda: remove_files(again, delete_personal, delete_shared))
+    result.not_removed += [_shown(path, home) for path in failed]
+    _wait_for(_refresh_menus)
+
+
 def run(stop_tray_parts=None):
-    """Ask, then uninstall. True when TuxTalk was uninstalled and the caller
-    should quit; False when nothing changed."""
+    """Ask, then uninstall. True when TuxTalk was uninstalled, if not
+    always all of it, and the caller should quit; False when nothing
+    changed."""
     install_type = update_checker.get_install_type()
     if install_type in ("dev", "flatpak"):
         _tell(Gtk.MessageType.INFO, "Not for this copy of TuxTalk",
@@ -534,38 +804,34 @@ def run(stop_tray_parts=None):
               "is removed with: flatpak uninstall --delete-data io.github.ronb1964.TuxTalk")
         return False
     plan = find(Path.home(), install_type, appimage=update_checker.get_running_appimage_path())
-    choice = _ask(plan, download_size(plan))
+    choice = _ask(plan)
     if choice is None:
         return False
-    delete_personal, leave_group = choice
+    delete_personal, delete_shared, leave_group = choice
     logger.info(f"Uninstalling TuxTalk ({install_type}); settings "
-                + ("deleted" if delete_personal else "kept"))
+                + ("deleted" if delete_personal else "kept") + ", shared models "
+                + ("deleted" if delete_shared else "kept"))
 
     window = _working_window()
     try:
-        package_failed = False
+        result = Result()
         if plan.needs_root:
-            ok, message = _wait_for(lambda: secure_input._run_as_root(
-                root_script(plan, leave_group), "removed (uninstalling TuxTalk)"))
-            if not ok:
-                window.destroy()
-                if message != "cancelled":
-                    _tell(Gtk.MessageType.ERROR, "TuxTalk couldn't uninstall",
-                          f"Nothing was removed.\n\n{message}")
+            result = _remove_as_root(plan, leave_group)
+            if result is None:
                 return False
-            package_failed = message == secure_input.PACKAGE_NOT_REMOVED
-        stop_tuxtalk(plan, stop_tray_parts)
-        undo_desktop_changes(plan)
-        # Looked for again: stopping may have written a file (the stats).
-        again = find(Path.home(), install_type, appimage=update_checker.get_running_appimage_path())
-        if delete_personal:
-            logger.info("Uninstalled TuxTalk; deleting the settings and this log")
-            stop_file_logging()         # its folder is about to go
-        _wait_for(lambda: remove_files(again, delete_personal))
-        _wait_for(_refresh_menus)
+        try:
+            _remove_the_rest(plan, delete_personal, delete_shared, stop_tray_parts, result)
+        except Exception as e:
+            # The program, the helper or the tray may be gone already: going
+            # back to a half-stopped TuxTalk would be worse than saying so.
+            logger.exception("The uninstall stopped partway")
+            result.not_removed.append(f"some of the rest: the uninstall stopped partway ({e})")
     finally:
         window.destroy()
-    logger.info("Uninstalled TuxTalk")
-    _tell(Gtk.MessageType.INFO, "TuxTalk is uninstalled",
-          done_text(plan, delete_personal, leave_group, package_failed), markup=True)
+    left = result.not_removed + (["the package"] if result.package_failed else [])
+    logger.info("Uninstalled TuxTalk" if result.complete
+                else f"Uninstalled TuxTalk, except: {', '.join(left)}")
+    _tell(Gtk.MessageType.INFO if result.complete else Gtk.MessageType.WARNING,
+          done_heading(result), done_text(plan, delete_personal, delete_shared, result),
+          markup=True)
     return True

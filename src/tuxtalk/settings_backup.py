@@ -130,6 +130,17 @@ def snapshots_dir():
     return os.path.join(os.path.dirname(config.CONFIG_PATH), "backups")
 
 
+_LAST_SAVED = "last-saved-backup"
+_FOLDER = "backup-folder"
+
+
+def is_ours(name):
+    """Whether the file *name* in snapshots_dir() is one this module writes:
+    the uninstall deletes only these when the settings folder is a link
+    into a folder that may hold a backups folder of its own."""
+    return name in (_LAST_SAVED, _FOLDER) or _COPY_NAME.match(name) is not None
+
+
 def _read_bytes(path):
     try:
         with open(path, "rb") as f:
@@ -180,7 +191,7 @@ def _last_saved_path():
     """When a backup file was last saved, for "Last saved:" in Preferences.
     Kept out of config.toml: Preferences writing a setting outside Apply/OK
     moves the baseline Apply compares against."""
-    return os.path.join(snapshots_dir(), "last-saved-backup")
+    return os.path.join(snapshots_dir(), _LAST_SAVED)
 
 
 def last_saved():
@@ -195,7 +206,7 @@ def last_saved():
 def _folder_path():
     """The folder the user picked for backup files, kept beside the copies
     for the same reason as _last_saved_path."""
-    return os.path.join(snapshots_dir(), "backup-folder")
+    return os.path.join(snapshots_dir(), _FOLDER)
 
 
 def backup_folder():

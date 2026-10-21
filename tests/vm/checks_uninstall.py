@@ -18,6 +18,8 @@ DONE = "TuxTalk is uninstalled"
 # AT-SPI names a message box by its kind, not its title.
 ASK_BOX, DONE_BOX = "Question", "Information"
 DELETE_BOX = "Also delete my settings, Your Words, snippets and stats"
+# Its words follow what the folder holds (uninstall.shared_label).
+SHARED_BOX = "~in the shared download folder (other apps may use"
 UUID = "talktype@ronb1964.github.io"
 
 # One look at everything the uninstall should take away, as JSON. The
@@ -101,18 +103,25 @@ def uninstall_cancel(run):
         return Outcome("fail", "Preferences has no Uninstall TuxTalk… button, or no question came")
     shot = run.shot("uninstall-question")
     box = run.vm.ui("find", "check box", DELETE_BOX, ASK_BOX, timeout=5)
+    shared = run.vm.ui("find", "check box", SHARED_BOX, ASK_BOX, timeout=5)
     run.vm.ui("click", "button", "Cancel", ASK_BOX, check=True)
     time.sleep(2)
     after = state(run)
     run.vm.ui("click", "button", "Cancel", PREFS)
     question = " ".join(words)
     problems = []
-    for wanted in ("TuxTalk itself (its AppImage)", "hotkey helper", "it downloaded (",
+    for wanted in ("TuxTalk itself (its AppImage)", "hotkey helper", "to its own folder (",
                    "starting at login", "password once"):
         if wanted not in question:
             problems.append(f"the question doesn't say “{wanted}”")
     if box is None or "checked" in box["states"]:
         problems.append("the delete-my-settings box is missing or ticked")
+    # The box shows only when the shared cache holds TuxTalk's models.
+    if bool(before["models"]) != (shared is not None):
+        problems.append(f"the shared-models box is {'missing' if shared is None else 'shown'} "
+                        f"with models {before['models']!r}")
+    elif shared is not None and "checked" in shared["states"]:
+        problems.append("the shared-models box is ticked")
     for key in ("appimages", "helper", "autostart", "models", "data"):
         if before[key] != after[key]:
             problems.append(f"Cancel changed {key}: {before[key]!r} -> {after[key]!r}")
@@ -126,6 +135,7 @@ def uninstall_cancel(run):
 @check(SECTION, "uninstall_keep", "Uninstall from Preferences: everything goes but the settings")
 def uninstall_keep(run):
     calls = root_calls(run)
+    models = state(run)["models"]
     if ask_from_preferences(run) is None:
         return Outcome("fail", "no question came")
     mark = run.log_mark()
@@ -144,9 +154,12 @@ def uninstall_keep(run):
         problems.append(f"{root_calls(run) - calls} password prompts (one expected)")
     if now["helper"] == "active" or now["helper_file"]:
         problems.append(f"hotkey helper still there ({now['helper']})")
-    for key in ("rules", "appimages", "models", "processes"):
+    for key in ("rules", "appimages", "processes"):
         if now[key]:
             problems.append(f"{key} left: {now[key]}")
+    if now["models"] != models:
+        problems.append(f"the shared models changed, though the box was unticked: "
+                        f"{models!r} -> {now['models']!r}")
     for key in ("autostart", "launcher", "extension"):
         if now[key]:
             problems.append(f"the {key} is still there")
@@ -159,7 +172,8 @@ def uninstall_keep(run):
     if "Uninstalled TuxTalk" not in run.log_since(mark):
         problems.append("the log doesn't say “Uninstalled TuxTalk”")
     detail = "; ".join(problems) or ("One password prompt; helper, rules, AppImage, downloads, "
-                                     "launcher, autostart and extension gone; settings kept. "
+                                     "launcher, autostart and extension gone; settings and "
+                                     "shared models kept. "
                                      "Message: " + " ".join(words[1:])[:200])
     return Outcome("fail" if problems else "pass", detail, screenshot=shot)
 
@@ -179,7 +193,8 @@ def uninstall_reinstall(run):
     return Outcome("pass", "The welcome screen opened: setup starts over", screenshot=shot)
 
 
-@check(SECTION, "uninstall_all", "tuxtalk --uninstall, settings too: nothing of TuxTalk is left")
+@check(SECTION, "uninstall_all", "tuxtalk --uninstall, settings and shared models too: "
+                                 "nothing of TuxTalk is left")
 def uninstall_all(run):
     name = run.appimage.name
     run.vm.session_background("uninstall", f"{run.vm.home}/AppImages/{name}", "--uninstall")
@@ -187,6 +202,8 @@ def uninstall_all(run):
         return Outcome("fail", "tuxtalk --uninstall asked nothing",
                        screenshot=run.shot("uninstall-cli-none"))
     run.vm.ui("click", "check box", DELETE_BOX, ASK_BOX, check=True)
+    if run.vm.ui("find", "check box", SHARED_BOX, ASK_BOX, timeout=5) is not None:
+        run.vm.ui("click", "check box", SHARED_BOX, ASK_BOX, check=True)
     run.vm.ui("click", "button", "Uninstall", ASK_BOX, check=True)
     finished = wait_done(run)
     if finished is None:

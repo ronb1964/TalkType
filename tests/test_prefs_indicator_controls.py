@@ -11,14 +11,6 @@ def test_controls_write_the_new_config_keys():
         assert key in text, f"Preferences never writes {key}"
 
 
-def test_backing_has_no_control_but_keeps_its_value():
-    """The backing row went in the 0.16 simplicity review: it was greyed out for
-    the default Orb. A backing someone already set still draws (config default
-    "medium"), so Preferences neither shows nor rewrites it."""
-    text = PREFS.read_text()
-    assert "indicator_backing" not in text
-
-
 def test_no_redundant_orb_checkbox():
     """The color dropdown governs the orb; the separate checkbox was confusing."""
     text = PREFS.read_text()
@@ -76,14 +68,6 @@ def test_style_options_present():
     text = PREFS.read_text()
     for style in ("orb", "waveform", "bars", "radial"):
         assert style in text
-
-
-def test_backing_options_present():
-    text = PREFS.read_text()
-    for level in ("off", "soft", "medium", "strong"):
-        assert level in text
-
-
 
 
 def test_offset_boxes_show_up_and_right_as_positive():

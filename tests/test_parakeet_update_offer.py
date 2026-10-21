@@ -121,6 +121,28 @@ def test_the_offer_names_its_real_size(disk, monkeypatch):
     assert "Download (669 MB)" in shown and "Not Now" in shown
 
 
+def test_enter_on_the_offer_means_not_now(disk, monkeypatch):
+    """The offer opens by itself about 20 s after start; someone typing
+    elsewhere who presses Enter as it comes up must not start a download."""
+    class Dialog:
+        def __init__(self, **kwargs): pass
+        def format_secondary_text(self, text): pass
+        def add_button(self, label, response): pass
+        def set_keep_above(self, on): pass
+        def destroy(self): pass
+
+        def set_default_response(self, response):
+            self.default = response
+
+        def run(self):
+            return self.default         # what Enter picks
+
+    monkeypatch.setattr("tuxtalk.ui_style.message_dialog", lambda **k: Dialog())
+    monkeypatch.setattr("tuxtalk.model_helper.download_parakeet_update",
+                        lambda device: pytest.fail("Enter started the download"))
+    assert tray._offer_parakeet_update("vulkan") is False
+
+
 @pytest.fixture
 def prefs_row(monkeypatch):
     """Preferences' Update Parakeet row with only what it needs."""

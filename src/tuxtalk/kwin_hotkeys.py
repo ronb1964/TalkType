@@ -271,19 +271,21 @@ def app_shortcuts_since(since):
 _OUR_COMPONENTS = ("tuxtalk", "talktype", "io.github.ronb1964.")
 
 
-def forget_our_components(bus=None) -> None:
+def forget_our_components(bus=None) -> bool:
     """Uninstalling: drop TuxTalk's own kglobalaccel components, so System
     Settings -> Shortcuts lists nothing of it. cleanUp() removes a
     component's shortcuts once nothing runs that registered them, which is
-    why this comes after TuxTalk has stopped. Never raises."""
+    why this comes after TuxTalk has stopped. Never raises; False when one
+    may be left."""
     if not should_claim():
-        return
+        return True
     try:
         bus = bus or session_bus()
         paths = [str(p) for p in bus.call("allComponents") or []]
     except Exception as e:
-        logger.debug(f"Could not list KDE's shortcut components: {e}")
-        return
+        logger.warning(f"Could not list KDE's shortcut components: {e}")
+        return False
+    all_gone = True
     for path in paths:
         if path == KWIN_COMPONENT_PATH:
             continue
@@ -293,7 +295,9 @@ def forget_our_components(bus=None) -> None:
                 bus.call("componentCleanUp", path)
                 logger.info(f"Removed TuxTalk's KDE shortcut component {path}")
         except Exception as e:
-            logger.debug(f"Could not clean up KDE shortcut component {path}: {e}")
+            logger.warning(f"Could not clean up KDE shortcut component {path}: {e}")
+            all_gone = False
+    return all_gone
 
 
 def _desktop_file_exists(name) -> bool:

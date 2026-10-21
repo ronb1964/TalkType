@@ -9,7 +9,8 @@ import types
 import pytest
 
 from tuxtalk.dbus_service import TuxTalkDBusService
-from tuxtalk.tray import engine_status, preset_notice
+from tuxtalk.recommend import engine_status
+from tuxtalk.tray import preset_notice
 
 
 @pytest.mark.parametrize("cfg_model,cfg_device,running,expected", [
@@ -81,7 +82,7 @@ def test_the_service_records_every_load_path():
 ])
 def test_the_menus_say_what_runs_in_one_line(cfg_model, cfg_device, running, expected):
     """"Active Model" and "Device" were two lines; one sentence says both."""
-    from tuxtalk.tray import engine_line
+    from tuxtalk.recommend import engine_line
     assert engine_line(cfg_model, cfg_device, running) == expected
 
 
@@ -89,3 +90,22 @@ def test_the_gnome_menu_gets_the_trays_line(svc):
     svc.app.current_preset = lambda: "custom"
     svc.NotifyRunningEngine("parakeet-v3", "cpu")
     assert svc.GetStatus()["engine"] == "Parakeet on the processor (Vulkan didn't start)"
+
+
+def test_the_dictation_services_status_doesnt_load_the_tray():
+    """The dictation service runs the D-Bus class too, when it stands in for
+    a crashed tray: its status line must not import the whole tray (and its
+    indicator library) into the service. Run apart, with a clean import list."""
+    import subprocess
+    import sys
+    script = (
+        "import sys, types\n"
+        "from tuxtalk.dbus_service import TuxTalkDBusService\n"
+        "s = TuxTalkDBusService.__new__(TuxTalkDBusService)\n"
+        "s.app = types.SimpleNamespace(config=types.SimpleNamespace(model='small', device='cpu'),\n"
+        "                              current_preset=lambda: 'custom')\n"
+        "s.running_engine, s.claimed_hotkeys = None, []\n"
+        "assert s.GetStatus()['engine'] == 'Whisper Small on the processor'\n"
+        "assert 'tuxtalk.tray' not in sys.modules, 'the tray was imported'\n")
+    ran = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True)
+    assert ran.returncode == 0, ran.stderr[-800:]

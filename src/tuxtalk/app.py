@@ -1400,7 +1400,6 @@ def _reload_live_settings(cfg, indicator):
                 style=cfg.indicator_style,
                 color_mode=cfg.indicator_color_mode,
                 custom_color=cfg.indicator_color,
-                backing=cfg.indicator_backing,
                 sensitivity=cfg.indicator_sensitivity,
                 follow_window=getattr(cfg, "indicator_follow_window", False),
             )
@@ -4808,13 +4807,15 @@ def _wake_model():
         if model is None:
             logger.info("Power saving: loading the speech model again for this dictation")
             try:
-                model = _build_model_or_exit(load_config())
-            except SystemExit:
-                # Its "nothing will load" exit, raised in a dictation's thread,
-                # would end only that thread. Say so; the next dictation tries again.
-                logger.error("Power saving: the speech model wouldn't load again")
-                _notify("TuxTalk", "The speech model wouldn't load. Choose Restart "
-                        "Service in the TuxTalk menu, or pick a model in Preferences.")
+                # Not _build_model_or_exit: its fallback saves another model
+                # over the user's choice, which a graphics card that fails
+                # once on waking shouldn't do, and its exit would end only
+                # this dictation's thread. The next dictation tries again.
+                model = build_model(load_config())
+            except ModelUnavailable as e:
+                logger.error(f"Power saving: the speech model wouldn't load again: {e}")
+                _notify("TuxTalk", "The speech model wouldn't load. Choose Restart Service "
+                        "in the TuxTalk menu, or pick a model in Preferences.")
                 return None
             _notify_tray_running_engine()
         return model
@@ -5232,7 +5233,8 @@ def _build_model_or_exit(settings: Settings):
     try:
         return build_model(settings)
     except ModelUnavailable as e:
-        from .model_helper import OFFERED_MODELS, is_model_cached_fast, model_display_name
+        from .model_helper import OFFERED_MODELS, is_model_cached_fast
+        from .recommend import model_title
         try:
             from .cuda_helper import has_cuda_libraries
             has_cuda = has_cuda_libraries()
@@ -5255,9 +5257,9 @@ def _build_model_or_exit(settings: Settings):
             sys.exit(1)
         if isinstance(e, ModelWontLoad):
             _notify("TuxTalk",
-                    f"{model_display_name(wanted)} is downloaded but wouldn't load, so "
-                    f"TuxTalk is using {model_display_name(fallback)} for now. It tries "
-                    f"{model_display_name(wanted)} again the next time dictation starts.")
+                    f"{model_title(wanted)} is downloaded but wouldn't load, so "
+                    f"TuxTalk is using {model_title(fallback)} for now. It tries "
+                    f"{model_title(wanted)} again the next time dictation starts.")
             return model
         try:
             from .config import load_config, save_config
@@ -5267,9 +5269,9 @@ def _build_model_or_exit(settings: Settings):
         except Exception as save_error:
             logger.warning(f"Could not save the fallback model to settings: {save_error}")
         _notify("TuxTalk",
-                f"{model_display_name(wanted)} wasn't downloaded, so TuxTalk is using "
-                f"{model_display_name(fallback)} for now. You can choose "
-                f"{model_display_name(wanted)} again in Preferences.")
+                f"{model_title(wanted)} wasn't downloaded, so TuxTalk is using "
+                f"{model_title(fallback)} for now. You can choose "
+                f"{model_title(wanted)} again in Preferences.")
         return model
 
 
@@ -5447,7 +5449,7 @@ def build_model(settings: Settings):
             settings.model,
             device=settings.device,
             compute_type=compute_type,
-            redownload_broken=not _gtk_loop_running,
+            dialogs=not _gtk_loop_running,
         )
 
         if model is None:
@@ -5481,7 +5483,7 @@ def build_model(settings: Settings):
                     device="cpu",
                     compute_type="int8",
                     show_confirmation=False,
-                    redownload_broken=not _gtk_loop_running,
+                    dialogs=not _gtk_loop_running,
                 )
 
                 if model is None:
@@ -5771,7 +5773,6 @@ def main():
                         style=cfg.indicator_style,
                         color_mode=cfg.indicator_color_mode,
                         custom_color=cfg.indicator_color,
-                        backing=cfg.indicator_backing,
                         sensitivity=cfg.indicator_sensitivity,
                         follow_window=getattr(cfg, "indicator_follow_window", False),
                     )

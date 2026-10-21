@@ -2771,11 +2771,11 @@ def _processor_model(model, result):
 def _ask_retry_download(model):
     """After a failed first-run download: True to try *model* again, False
     to use a smaller model."""
-    from .model_helper import model_display_name
+    from .recommend import model_title
     msg = message_dialog(
         message_type=Gtk.MessageType.QUESTION,
         buttons=Gtk.ButtonsType.NONE,
-        text=f"Try downloading {model_display_name(model)} again?",
+        text=f"Try downloading {model_title(model)} again?",
     )
     msg.format_secondary_text(
         "The download didn't finish, often just a slow moment on the network. "
@@ -2790,15 +2790,15 @@ def _ask_retry_download(model):
 
 def _tell_using_smaller_model(chosen, used):
     """Say that setup fell back from *chosen* to *used*, and how to go back."""
-    from .model_helper import model_display_name
+    from .recommend import model_title
     msg = message_dialog(
         message_type=Gtk.MessageType.INFO,
         buttons=Gtk.ButtonsType.OK,
-        text=f"Using {model_display_name(used)} for now",
+        text=f"Using {model_title(used)} for now",
     )
     msg.format_secondary_text(
-        f"{model_display_name(chosen)} couldn't be downloaded, so TuxTalk will use "
-        f"{model_display_name(used)}. To switch later, open Preferences, General and "
+        f"{model_title(chosen)} couldn't be downloaded, so TuxTalk will use "
+        f"{model_title(used)}. To switch later, open Preferences, General and "
         "click Use Recommended.")
     msg.run()
     msg.destroy()

@@ -206,7 +206,7 @@ def test_the_next_dictation_loads_the_model_again(monkeypatch):
     built = []
     monkeypatch.setattr(app, "model", None)
     monkeypatch.setattr(app, "load_config", lambda: "settings")
-    monkeypatch.setattr(app, "_build_model_or_exit",
+    monkeypatch.setattr(app, "build_model",
                         lambda settings: built.append(settings) or _Engine())
     monkeypatch.setattr(app, "_notify_tray_running_engine", lambda: None)
     first = app._wake_model()
@@ -215,12 +215,15 @@ def test_the_next_dictation_loads_the_model_again(monkeypatch):
 
 
 def test_a_model_that_wont_load_again_is_said_not_raised(monkeypatch):
-    """_build_model_or_exit exits when nothing loads; in a dictation's thread
-    that would end only the thread, leaving a service without a model."""
+    """Raised in a dictation's thread, it would end only the thread, leaving a
+    service without a model. And no other model is saved over the user's
+    choice: a graphics card failing once on waking shouldn't change it."""
     shown = []
     monkeypatch.setattr(app, "model", None)
     monkeypatch.setattr(app, "load_config", lambda: "settings")
-    monkeypatch.setattr(app, "_build_model_or_exit", lambda s: (_ for _ in ()).throw(SystemExit(1)))
+    monkeypatch.setattr(app, "build_model",
+                        lambda s: (_ for _ in ()).throw(app.ModelUnavailable("not downloaded")))
+    monkeypatch.setattr(app, "_build_model_or_exit", lambda s: pytest.fail("fell back"))
     monkeypatch.setattr(app, "_notify", lambda title, body: shown.append(body))
     assert app._wake_model() is None
     assert shown and "Restart Service" in shown[0]

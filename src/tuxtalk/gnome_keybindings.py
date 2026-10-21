@@ -42,12 +42,13 @@ def _set(key, value):
 
 def restore(saved):
     """Put the saved bindings back; never raises (it runs from finally blocks).
+    True once they all are.
 
     One failed key never skips the other. The backup file is deleted only
     once every key is back, so a failure is retried at the next start.
     """
     if not saved:
-        return
+        return True
     all_back = True
     for key, value in saved.items():
         if key not in KEYS or not isinstance(value, str):
@@ -63,22 +64,25 @@ def restore(saved):
             pass
         except Exception as e:
             logger.debug(f"Could not remove the keybinding backup: {e}")
+    return all_back
 
 
 def restore_left_over():
-    """Restore bindings a previous run cleared and never put back."""
+    """Restore bindings a previous run cleared and never put back. False
+    when some are still cleared (the backup then stays, for another try)."""
     try:
         with open(_backup_path(), encoding="utf-8") as f:
             saved = json.load(f)
     except FileNotFoundError:
-        return
+        return True
     except Exception as e:
         logger.warning(f"Unreadable GNOME keybinding backup: {e}")
-        return
-    if isinstance(saved, dict):
-        logger.warning("Putting back GNOME's Alt+F8/Alt+F7 bindings left cleared by a "
-                       "hotkey test that didn't finish")
-        restore(saved)
+        return False
+    if not isinstance(saved, dict):
+        return True
+    logger.warning("Putting back GNOME's Alt+F8/Alt+F7 bindings left cleared by a "
+                   "hotkey test that didn't finish")
+    return restore(saved)
 
 
 def disable_for_hotkey_test():

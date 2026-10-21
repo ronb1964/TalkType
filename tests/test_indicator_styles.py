@@ -18,12 +18,6 @@ def test_backing_alpha_endpoints_and_monotonic():
     assert all(vals[i] >= vals[i + 1] - 1e-9 for i in range(len(vals) - 1))
 
 
-def test_backing_off_is_zero():
-    assert S.backing_alpha(0.0, 0.0) == 0.0
-    assert S.BACKING_LEVELS["off"] == 0.0
-    assert set(S.BACKING_LEVELS) == {"off", "soft", "medium", "strong"}
-
-
 def test_resolve_color_system_uses_accent():
     assert S.resolve_color("system", "#48b7f5", (0.2, 0.4, 0.26)) == (0.2, 0.4, 0.26)
 
@@ -69,12 +63,15 @@ def test_orb_palette_derives_from_the_base_color():
 
 
 def _has_ink(draw):
+    """Whether *draw* put the style's blue on the surface: the dark backing
+    behind every style doesn't count."""
     cairo = pytest.importorskip("cairo")
     surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, 200, 120)
     cr = cairo.Context(surf)
     draw(cr)
     surf.flush()
-    return any(b != 0 for b in surf.get_data())
+    pixels = np.frombuffer(surf.get_data(), np.uint8).reshape(120, surf.get_stride() // 4, 4)
+    return bool((pixels[:, :200, 0] > 40).any())     # ARGB32 keeps blue first
 
 
 def _wave():
@@ -82,28 +79,23 @@ def _wave():
 
 
 def test_waveform_draws_something():
-    assert _has_ink(lambda cr: S.draw_waveform(cr, 200, 120, _wave(), 0.6, (0.3, 0.7, 0.96), 0.5, 1.0))
+    assert _has_ink(lambda cr: S.draw_waveform(cr, 200, 120, _wave(), 0.6, (0.3, 0.7, 0.96), 1.0))
 
 
 def test_bars_draw_something():
     spec = np.linspace(0.1, 1.0, 20).astype(np.float32)
-    assert _has_ink(lambda cr: S.draw_bars(cr, 200, 120, spec, (0.3, 0.7, 0.96), 0.5))
+    assert _has_ink(lambda cr: S.draw_bars(cr, 200, 120, spec, (0.3, 0.7, 0.96)))
 
 
 def test_radial_draws_something():
-    assert _has_ink(lambda cr: S.draw_radial(cr, 200, 120, _wave(), 0.6, (0.3, 0.7, 0.96), 0.5, 1.0))
-
-
-def test_draw_with_backing_off_still_draws_the_visualization():
-    spec = np.linspace(0.1, 1.0, 20).astype(np.float32)
-    assert _has_ink(lambda cr: S.draw_bars(cr, 200, 120, spec, (0.3, 0.7, 0.96), 0.0))
+    assert _has_ink(lambda cr: S.draw_radial(cr, 200, 120, _wave(), 0.6, (0.3, 0.7, 0.96), 1.0))
 
 
 def test_empty_data_does_not_crash():
     # The service may draw a frame before any audio has arrived.
-    _has_ink(lambda cr: S.draw_waveform(cr, 200, 120, [], 0.0, (0.3, 0.7, 0.96), 0.5, 1.0))
-    _has_ink(lambda cr: S.draw_bars(cr, 200, 120, [], (0.3, 0.7, 0.96), 0.5))
-    _has_ink(lambda cr: S.draw_radial(cr, 200, 120, [], 0.0, (0.3, 0.7, 0.96), 0.5, 1.0))
+    _has_ink(lambda cr: S.draw_waveform(cr, 200, 120, [], 0.0, (0.3, 0.7, 0.96), 1.0))
+    _has_ink(lambda cr: S.draw_bars(cr, 200, 120, [], (0.3, 0.7, 0.96)))
+    _has_ink(lambda cr: S.draw_radial(cr, 200, 120, [], 0.0, (0.3, 0.7, 0.96), 1.0))
 
 
 # --- Radial: big enough to see, and moving with ordinary speech ---
@@ -140,9 +132,10 @@ def test_radial_fills_its_window():
     w, h = 200, 180
     surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, w, h)
     cr = cairo.Context(surf)
-    S.draw_radial(cr, w, h, _speech(0.4), 1.0, (0.3, 0.7, 0.96), 0.0, 1.0)
-    a = np.frombuffer(surf.get_data(), np.uint8).reshape(h, surf.get_stride() // 4, 4)[:, :w, 3]
-    ys, xs = np.nonzero(a > 40)
+    S.draw_radial(cr, w, h, _speech(0.4), 1.0, (0.3, 0.7, 0.96), 1.0)
+    # The ring's blue, not the dark backing around it (ARGB32 keeps blue first).
+    blue = np.frombuffer(surf.get_data(), np.uint8).reshape(h, surf.get_stride() // 4, 4)[:, :w, 0]
+    ys, xs = np.nonzero(blue > 40)
     reach = np.max(np.hypot(xs - w / 2, ys - h / 2))
     assert reach > 0.35 * min(w, h)
     assert reach <= 0.5 * min(w, h)   # and never past the window's edge

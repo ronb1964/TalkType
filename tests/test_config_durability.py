@@ -185,6 +185,18 @@ def test_loading_a_config_with_one_bad_value_falls_back_for_that_key(config_path
     assert loaded.model == "small", "unrelated settings were discarded"
 
 
+def test_a_removed_setting_in_an_old_config_is_dropped_quietly(config_path):
+    """indicator_backing lost its control in 0.16 and its setting after 0.17:
+    a config (or backup) that still has it loads as before, and the next save
+    leaves it out."""
+    config_path.write_text('model = "small"\nindicator_backing = "strong"\n')
+    loaded = config.load_config()
+    assert loaded.model == "small"
+    config.save_config(loaded)
+    assert "indicator_backing" not in config_path.read_text()
+    assert config.load_config().model == "small"
+
+
 # --- custom commands are settings too ---------------------------------------
 
 @pytest.fixture

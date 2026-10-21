@@ -1,7 +1,7 @@
 """New recording-indicator config keys: defaults, validation, live-apply.
 
 These settings drive the selectable indicator styles (waveform, bars, radial)
-alongside the orb, plus color, backing and sensitivity. They must all apply
+alongside the orb, plus color and sensitivity. They must all apply
 live — the service reads them without a restart — so every one belongs in
 LIVE_APPLIED_KEYS.
 """
@@ -15,7 +15,6 @@ def test_new_indicator_fields_have_approved_defaults():
     # expressed as a custom color, so the orb keeps its classic gradient.
     assert s.indicator_color_mode == "custom"
     assert s.indicator_color == config.CLASSIC_CYAN_HEX
-    assert s.indicator_backing == "medium"
     assert s.indicator_sensitivity == 1.0
 
 
@@ -23,7 +22,6 @@ def test_valid_sets_exist():
     assert config.VALID_INDICATOR_STYLES == {"orb", "waveform", "bars", "radial"}
     # There are two choices: match the desktop accent, or pick a color.
     assert config.VALID_COLOR_MODES == {"system", "custom"}
-    assert config.VALID_BACKINGS == {"off", "soft", "medium", "strong"}
 
 
 def test_legacy_cyan_mode_migrates_to_custom_classic_cyan():
@@ -50,7 +48,7 @@ def test_migration_leaves_a_real_custom_color_untouched():
 
 def test_new_keys_are_live_applied_not_restart():
     keys = {"indicator_style", "indicator_color_mode", "indicator_color",
-            "indicator_backing", "indicator_sensitivity"}
+            "indicator_sensitivity"}
     assert keys <= config.LIVE_APPLIED_KEYS
     assert not (keys & config.RESTART_REQUIRED_KEYS)
 
@@ -60,13 +58,6 @@ def test_invalid_style_is_reported():
     s.indicator_style = "bogus"
     problems = dict(config._validation_problems(s))
     assert "indicator_style" in problems
-
-
-def test_invalid_backing_is_reported():
-    s = config.Settings()
-    s.indicator_backing = "loud"
-    problems = dict(config._validation_problems(s))
-    assert "indicator_backing" in problems
 
 
 def test_sensitivity_out_of_range_is_reported():

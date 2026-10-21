@@ -3,6 +3,43 @@
 All notable changes to TuxTalk are documented here. It was called TalkType
 before 0.15.0, so older entries use that name.
 
+## [Unreleased]
+
+- Uninstall no longer deletes the speech models in Hugging Face's shared
+  download folder (~/.cache/huggingface/hub) unless you ask: other apps may
+  use the same models. The question has a box for them, unticked, with their
+  size, when there are any. Only the folders TuxTalk downloads into are
+  removed from there.
+- Uninstall and linked folders: if your TuxTalk settings or downloads folder
+  is a link into another folder (a synced folder, a bigger disk), only
+  TuxTalk's own files are removed from there. Before, everything in that
+  folder went.
+- Uninstall says what it couldn't remove. It used to finish with "TuxTalk
+  is uninstalled" even when the hotkey helper, a file or the input group
+  change hadn't gone, and asked you to log out to leave the input group when
+  it hadn't managed to. If removing what needs the password runs past its
+  time limit, the rest is still uninstalled and the message says it couldn't
+  confirm the helper and package went; an error partway still ends with a
+  message instead of a half-closed TuxTalk. GNOME's Alt+F7 and Alt+F8, if a
+  hotkey test had left them cleared and they won't come back, are named and
+  their backup kept, and so are KDE shortcut entries that stay. The question
+  lists only what this computer has.
+- Power Saving: if the speech model's files were deleted while it rested,
+  the next dictation tried to open the download window from the wrong place
+  and could crash the dictation service. It now says the model wouldn't
+  load, and your choice of model stays as it was.
+- On X11 desktops (Linux Mint Cinnamon and other X11 sessions), dropdowns
+  open as a list under the button again. Since 0.14.3 a wrong check gave X11
+  the workaround meant for Wayland.
+- Download windows and notices call a model what the menus call it
+  ("Whisper Small", not "Small").
+- The "Parakeet got more accurate" offer pops up by itself, so Enter there
+  now means Not Now. An Enter meant for another window no longer starts the
+  670 MB download.
+- The waveform, bars and radial indicators all draw the standard soft
+  backing again. A backing picked before 0.16 (Off, Soft or Strong) had no
+  control left to change it; that setting is gone.
+
 ## [0.17.0] - 2026-10-20
 
 - Parakeet is more accurate. TuxTalk now downloads Parakeet Ultra,

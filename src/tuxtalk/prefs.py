@@ -6393,8 +6393,8 @@ class PreferencesWindow:
         Returns:
             tuple: (success: bool, was_downloaded: bool, cancelled: bool)
         """
-        from .model_helper import (is_model_cached_fast, make_model_download_func,
-                                   model_display_name)
+        from .model_helper import is_model_cached_fast, make_model_download_func
+        from .recommend import model_title
 
         # Completeness check on the cached files (no model loading — this
         # runs on every Apply/OK click). A partial cache left by a cancelled
@@ -6424,7 +6424,7 @@ class PreferencesWindow:
 
         # Status label
         status_label = Gtk.Label()
-        status_label.set_markup(f'<b>Downloading the speech model: {GLib.markup_escape_text(model_display_name(model_name))}</b>\n<span size="small">({size_str})</span>\n\nThis may take a few minutes depending on your connection...')
+        status_label.set_markup(f'<b>Downloading the speech model: {GLib.markup_escape_text(model_title(model_name))}</b>\n<span size="small">({size_str})</span>\n\nThis may take a few minutes depending on your connection...')
         status_label.set_line_wrap(True)
         content.pack_start(status_label, False, False, 0)
 
@@ -6499,7 +6499,7 @@ class PreferencesWindow:
         if _ok:
             print(f"Model {model_name} downloaded successfully")
             self._message(Gtk.MessageType.INFO, "Model Downloaded Successfully!",
-                          f"The {model_display_name(model_name)} model has been "
+                          f"The {model_title(model_name)} model has been "
                           "downloaded and is ready to use.")
         return (_ok, _ok, cancelled)  # (success, was_downloaded, cancelled)
 

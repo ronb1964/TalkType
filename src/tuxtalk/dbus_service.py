@@ -150,7 +150,7 @@ class TuxTalkDBusService(dbus.service.Object):
         # dict is backward-compatible: extensions ignore what they do not read.
         if hasattr(self.app, 'config'):
             # The GNOME menu's line about what runs, word for word the tray's.
-            from .tray import engine_line
+            from .recommend import engine_line
             status['engine'] = engine_line(getattr(self.app.config, 'model', ''),
                                            getattr(self.app.config, 'device', 'cpu'),
                                            self.running_engine)

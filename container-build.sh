@@ -307,7 +307,6 @@ REQUIRED_TYPELIBS=(
     "AyatanaAppIndicator3-0.1.typelib"
     "Gtk-3.0.typelib"
     "Gdk-3.0.typelib"
-    "GdkX11-3.0.typelib"
     "GdkPixbuf-2.0.typelib"
     "Gio-2.0.typelib"
     "Pango-1.0.typelib"

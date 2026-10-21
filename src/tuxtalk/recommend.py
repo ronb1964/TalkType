@@ -12,7 +12,7 @@ import functools
 import os
 from dataclasses import dataclass
 
-from .parakeet_engine import PARAKEET_LANGUAGES
+from .parakeet_engine import PARAKEET_LANGUAGES, effective_device, is_parakeet
 
 PARAKEET = "parakeet-v3"
 
@@ -219,6 +219,45 @@ def recommend(language, hw, model=None, use_gpu=None):
 def model_title(model):
     """"Parakeet", "Whisper Small": a model's name as the menus show it."""
     return _TITLES.get(model, f"Whisper {model.capitalize()}")
+
+
+def engine_status(cfg_model, cfg_device, running=None):
+    """(model id, device text) for what the menus say runs: "GPU (Vulkan)", "CPU".
+
+    *running* is (model, device) as reported by the dictation service, or None
+    when it hasn't reported (stopped, starting, or an older service). The lines
+    show what really runs, so a fallback to the processor is not reported as
+    the graphics card; when that differs from the setting, the device text
+    says why in a few words.
+    """
+    names = {'cpu': 'CPU', 'cuda': 'GPU (CUDA)', 'vulkan': 'GPU (Vulkan)'}
+    wanted = str(cfg_device or "cpu").lower()
+    if running:
+        model, device = running[0], str(running[1]).lower()
+    else:
+        model, device = cfg_model, effective_device(cfg_model, wanted)
+    text = names.get(device, device.upper())
+    if device == "cpu" and wanted in ("cuda", "vulkan"):
+        if wanted == "cuda" and is_parakeet(model):
+            text += " (Parakeet can't use CUDA)"
+        elif running:
+            text += f" ({'CUDA' if wanted == 'cuda' else 'Vulkan'} didn't start)"
+    return model, text
+
+
+def where_it_runs(device_text):
+    """engine_status's device text in words, keeping any reason: "the
+    processor", "the graphics card (Vulkan)", "the processor (Vulkan didn't start)"."""
+    if device_text.startswith("CPU"):
+        return "the processor" + device_text[len("CPU"):]
+    return "the graphics card" + device_text[len("GPU"):]
+
+
+def engine_line(cfg_model, cfg_device, running=None):
+    """The menus' one line about what runs: "Parakeet on the graphics card (Vulkan)".
+    The tray, the no-tray menu window and the GNOME extension (GetStatus) all show it."""
+    model, device_text = engine_status(cfg_model, cfg_device, running)
+    return f"{model_title(model)} on {where_it_runs(device_text)}"
 
 
 def setup_title(model, device, hw):
