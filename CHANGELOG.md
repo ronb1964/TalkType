@@ -3,6 +3,13 @@
 All notable changes to TuxTalk are documented here. It was called TalkType
 before 0.15.0, so older entries use that name.
 
+## [Unreleased]
+
+- Uninstall no longer deletes the speech models in Hugging Face's shared
+  download folder (~/.cache/huggingface/hub) unless you ask: other apps may
+  use the same models. The question has a box for them, unticked, with their
+  size, when there are any. Only the models TuxTalk offers are ever removed.
+
 ## [0.17.0] - 2026-10-20
 
 - Parakeet is more accurate. TuxTalk now downloads Parakeet Ultra,

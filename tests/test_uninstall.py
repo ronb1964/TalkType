@@ -63,12 +63,18 @@ def _left(home):
     return sorted(str(p.relative_to(home)) for p in home.rglob("*"))
 
 
-def test_downloads_and_launchers_go_and_settings_stay(home):
+HUB = ".cache/huggingface/hub"
+
+
+def test_downloads_and_launchers_go_and_settings_and_shared_models_stay(home):
     plan = _find(home)
-    uninstall.remove_files(plan, delete_personal=False)
+    uninstall.remove_files(plan, delete_personal=False, delete_shared=False)
     assert _left(home) == sorted([
-        ".cache", ".cache/huggingface", ".cache/huggingface/hub",
-        ".cache/huggingface/hub/models--someone--another-apps-model",
+        ".cache", ".cache/huggingface", HUB, f"{HUB}/.locks",
+        f"{HUB}/.locks/models--Systran--faster-whisper-small",
+        f"{HUB}/models--Qwen--Qwen2.5-1.5B-Instruct-GGUF",
+        f"{HUB}/models--Systran--faster-whisper-small",
+        f"{HUB}/models--someone--another-apps-model",
         ".config", ".config/autostart", ".config/tuxtalk",
         ".config/tuxtalk/config.toml", ".config/tuxtalk/custom_words.txt",
         ".local", ".local/share", ".local/share/TuxTalk",
@@ -78,9 +84,29 @@ def test_downloads_and_launchers_go_and_settings_stay(home):
         "Documents", "Documents/TuxTalk-settings-2026-10-20-0900.zip"])
 
 
+def test_shared_models_go_when_asked_but_only_the_ones_tuxtalk_offers(home):
+    """The Hugging Face cache is shared: an older faster-whisper model
+    TuxTalk never offered may be another app's (review of 0.17)."""
+    (home / HUB / "models--Systran--faster-whisper-large-v2").mkdir()
+    uninstall.remove_files(_find(home), delete_personal=False, delete_shared=True)
+    assert sorted(p.name for p in (home / HUB).iterdir()) == [
+        "models--Systran--faster-whisper-large-v2", "models--someone--another-apps-model"]
+
+
+def test_the_shared_models_box_says_what_is_there_and_where(home):
+    plan = _find(home)
+    assert uninstall.shared_text(plan, 600_000_000).startswith(
+        f"Speech models and the AI model, 600 MB, in ~/{HUB}.")
+    uninstall.remove_files(plan, delete_personal=False, delete_shared=True)
+    assert _find(home).shared == []         # so the question has no box
+    kept = uninstall.done_text(plan, delete_personal=False, delete_shared=False,
+                               left_group=False, package_failed=False)
+    assert f"shared download folder are kept in <tt>~/{HUB}</tt>" in kept
+
+
 def test_asked_to_it_leaves_nothing_of_tuxtalk_but_the_saved_backup(home):
     plan = _find(home)
-    uninstall.remove_files(plan, delete_personal=True)
+    uninstall.remove_files(plan, delete_personal=True, delete_shared=True)
     left = _left(home)
     assert not [p for p in left if "tuxtalk" in p.lower() and not p.startswith("Documents")]
     assert "Documents/TuxTalk-settings-2026-10-20-0900.zip" in left
@@ -94,9 +120,9 @@ def test_models_moved_to_another_disk_are_deleted_there_too(home, tmp_path):
     data.rename(big_disk)
     data.symlink_to(big_disk)
     plan = _find(home)
-    uninstall.remove_files(plan, delete_personal=False)
+    uninstall.remove_files(plan, delete_personal=False, delete_shared=False)
     assert sorted(p.name for p in big_disk.iterdir()) == ["recent-transcripts.json", "stats.json"]
-    uninstall.remove_files(_find(home), delete_personal=True)
+    uninstall.remove_files(_find(home), delete_personal=True, delete_shared=False)
     assert not os.path.lexists(data) and not big_disk.exists()
 
 
@@ -117,7 +143,7 @@ def test_the_downloaded_appimage_in_appimages_goes_after_a_login_start(home):
                  "BambuStudio.AppImage"):
         (apps / name).write_text("program")
     plan = _find(home, appimage=str(apps / "TuxTalk.AppImage"))
-    uninstall.remove_files(plan, delete_personal=False)
+    uninstall.remove_files(plan, delete_personal=False, delete_shared=False)
     assert sorted(p.name for p in apps.iterdir()) == ["BambuStudio.AppImage"]
 
 
@@ -149,6 +175,10 @@ def test_the_hugging_face_cache_follows_its_own_settings(tmp_path):
     assert uninstall.hf_hub_cache(home, {"XDG_CACHE_HOME": "/c"}) == pathlib.Path("/c/huggingface/hub")
     assert uninstall.hf_hub_cache(home, {"HF_HOME": "/h", "XDG_CACHE_HOME": "/c"}) == pathlib.Path("/h/hub")
     assert uninstall.hf_hub_cache(home, {"HF_HUB_CACHE": "/x", "HF_HOME": "/h"}) == pathlib.Path("/x")
+    assert uninstall.hf_hub_cache(home, {"HUGGINGFACE_HUB_CACHE": "/old", "HF_HOME": "/h"}) \
+        == pathlib.Path("/old")
+    assert uninstall.hf_hub_cache(home, {"HF_HUB_CACHE": "/x", "HUGGINGFACE_HUB_CACHE": "/old"}) \
+        == pathlib.Path("/x")
 
 
 @pytest.mark.parametrize("install_type,command", [
@@ -204,8 +234,8 @@ def test_the_question_lists_only_what_this_computer_has(home):
 
 
 def test_the_closing_message_says_how_to_finish_a_refused_package(home):
-    text = uninstall.done_text(_find(home, "rpm"), delete_personal=True, left_group=False,
-                               package_failed=True)
+    text = uninstall.done_text(_find(home, "rpm"), delete_personal=True, delete_shared=True,
+                               left_group=False, package_failed=True)
     assert "sudo dnf remove tuxtalk" in text
     assert "Log out" not in text
 
