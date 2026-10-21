@@ -96,6 +96,10 @@ def password_prompt(run):
     # Never type a password: cancel, then let the test-only stand-in finish the job.
     run.vm.tap("esc")
     time.sleep(3)
+    # COSMIC's prompt ignores Escape. Ending the pkexec it serves closes the
+    # prompt on any desktop, and TuxTalk sees a cancelled password.
+    run.vm.ssh("sudo -n pkill -x pkexec", check=False)
+    time.sleep(2)
     if prompts == 1 and pkexecs == 1:
         return Outcome("manual", "The desktop's password prompt appeared once (cancelled here: "
                        "nobody types a password in a VM). Typing the real password is Ron's "
