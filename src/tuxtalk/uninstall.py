@@ -36,19 +36,27 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
-from . import (ai_cleanup, config, desktop_detect, extension_helper,  # noqa: E402
-               file_transcribe, gnome_keybindings, kwin_hotkeys, model_helper,
-               parakeet_engine, secure_input, service_launcher, uinput_helper,
-               update_checker, whisper_vulkan)
-from .logger import setup_logger, stop_file_logging  # noqa: E402
+from . import (ai_cleanup, config, custom_words, desktop_detect,  # noqa: E402
+               extension_helper, file_transcribe, gnome_keybindings, kwin_hotkeys,
+               model_helper, parakeet_engine, rename_migration, secure_input,
+               service_launcher, uinput_helper, update_checker, whisper_vulkan)
+from .logger import LOG_FILE_NAME, setup_logger, stop_file_logging  # noqa: E402
 from .ui_style import message_dialog  # noqa: E402
 
 logger = setup_logger(__name__)
 
 # The files in the data folder that are the user's own: kept unless they
-# ask for them to go. Everything else there is downloaded or rebuilt by
-# itself (tests/test_uninstall.py makes every name in the code choose).
+# ask for them to go.
 PERSONAL_DATA = ("stats.json", "stats.json.bak", file_transcribe.RECENT_FILE)
+# The rest of what TuxTalk puts there, downloaded or rebuilt by itself
+# (tests/test_uninstall.py makes every name in the code pick one of the two).
+DOWNLOADED_DATA = ("cuda", "ai-engine", "parakeet-ultra", "whisper-vulkan", "kwin",
+                   ".first_run_done", ".hotkey_test_mode", "remote_desktop_token",
+                   gnome_keybindings.BACKUP_NAME)
+# What TuxTalk keeps in its settings folder (tests/test_uninstall.py again).
+CONFIG_NAMES = ("config.toml", "custom_commands.toml", custom_words.FILE_NAME, "backups",
+                "kde-hotkeys.json", "explained.json", ".launchers-renamed",
+                rename_migration.NOTICE_FILE, LOG_FILE_NAME, "talktype.log")
 
 # Each Hugging Face repository TuxTalk downloads from, as the cache names
 # its folder. Only these: the cache is shared, and another app's models in
@@ -80,6 +88,7 @@ class Plan:
     shared: list = field(default_factory=list)        # in the Hugging Face cache: only when asked
     leftovers: list = field(default_factory=list)     # launchers, autostart, program
     personal: list = field(default_factory=list)      # removed only when asked
+    folders: list = field(default_factory=list)       # (folder, its names): emptied when asked
     runtime: list = field(default_factory=list)
     hub: Path = None                 # Hugging Face's model cache
     helper: bool = False             # the hotkey helper is installed
@@ -128,6 +137,23 @@ def _in_input_group():
     return group.gr_gid in os.getgroups() or pwd.getpwuid(os.getuid()).pw_name in group.gr_mem
 
 
+def _known(name, names):
+    """Whether *name* is one of *names*, or a copy of one beside it
+    (config.toml.bak, tuxtalk.log.old, a save's .tmp file)."""
+    return any(name == known or name.startswith(known + ".") for known in names)
+
+
+def _contents(folder, names):
+    """What's in *folder*. When the folder is a link to somewhere else (the
+    models moved to a bigger disk, the settings kept in a synced folder),
+    only what TuxTalk knows by *names*: the rest there isn't ours."""
+    if not folder.is_dir():
+        return []
+    linked = folder.is_symlink()
+    return [entry for entry in sorted(folder.iterdir())
+            if not linked or _known(entry.name, names)]
+
+
 def find(home, install_type, environ=os.environ, appimage=None):
     """The Plan for *home*: only what exists. *appimage* is the running
     AppImage's path, if any."""
@@ -138,9 +164,9 @@ def find(home, install_type, environ=os.environ, appimage=None):
     def exists(path):
         return os.path.lexists(path)
 
-    if data_dir.is_dir():
-        for entry in sorted(data_dir.iterdir()):
-            (plan.personal if entry.name in PERSONAL_DATA else plan.downloads).append(entry)
+    data_names = PERSONAL_DATA + DOWNLOADED_DATA
+    for entry in _contents(data_dir, data_names):
+        (plan.personal if _known(entry.name, PERSONAL_DATA) else plan.downloads).append(entry)
     plan.hub = hf_hub_cache(home, environ)
     for name in HF_REPOS:
         plan.shared += [path for path in (plan.hub / name, plan.hub / ".locks" / name)
@@ -167,15 +193,14 @@ def find(home, install_type, environ=os.environ, appimage=None):
         if exists(path) and path not in plan.leftovers:
             plan.leftovers.append(path)
 
-    if config_dir.is_dir() or config_dir.is_symlink():
-        plan.personal.insert(0, config_dir)
-    # The names from before the 0.15.0 rename: links to the folders above, or
-    # the real folders behind them when the rename couldn't move them.
-    for old in (home / ".config" / "talktype", home / ".local" / "share" / "TalkType"):
-        if exists(old):
-            plan.personal.append(old)
-    if data_dir.is_dir():
-        plan.personal.append(data_dir)      # the folder itself, last
+    # The names from before the 0.15.0 rename are links to the folders here,
+    # or the real folders behind them when the rename couldn't move them.
+    for folder, names in ((config_dir, CONFIG_NAMES),
+                          (home / ".config" / "talktype", CONFIG_NAMES),
+                          (home / ".local" / "share" / "TalkType", data_names),
+                          (data_dir, data_names)):
+        if exists(folder):
+            plan.folders.append((folder, names))
 
     runtime = Path(environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}")
     plan.runtime = [runtime / name for name in RUNTIME_FILES if exists(runtime / name)]
@@ -250,14 +275,13 @@ def _remove(path):
         logger.warning(f"Could not remove {path}: {e}")
 
 
-def _empty(folder):
-    """Remove what's in *folder*, following a link to it (a user who moved
-    the models to a bigger disk), then the folder, or the link and the
-    folder it led to."""
+def _empty(folder, names):
+    """Remove what's in *folder* (through a link, only what's TuxTalk's by
+    *names*), then the folder, or the link and the folder it led to if
+    that's empty now."""
     target = folder.resolve() if folder.is_symlink() else None
-    if folder.is_dir():
-        for entry in folder.iterdir():
-            _remove(entry)
+    for entry in _contents(folder, names):
+        _remove(entry)
     _remove(folder)
     if target is not None:
         try:
@@ -276,10 +300,9 @@ def remove_files(plan, delete_personal, delete_shared):
             _remove(path)
     if delete_personal:
         for path in plan.personal:
-            if path.is_dir():
-                _empty(path)
-            else:
-                _remove(path)
+            _remove(path)
+        for folder, names in plan.folders:
+            _empty(folder, names)
     # Folders TuxTalk made and nothing else uses: gone once empty.
     folders = [plan.home / "AppImages", plan.hub / ".locks", plan.hub]
     if plan.hub.parent.name == "huggingface":
@@ -550,7 +573,7 @@ def done_text(plan, delete_personal, delete_shared, left_group, package_failed):
         logout.append("leaving the 'input' group takes effect then")
     if logout:
         parts.append("Log out and back in to finish: " + ", and ".join(logout) + ".")
-    if not delete_personal and any(p.exists() for p in plan.personal):
+    if not delete_personal and any(folder.exists() for folder, _names in plan.folders):
         parts.append("Your settings, Your Words and snippets are kept in "
                      f"<tt>~/.config/{config.CONFIG_DIR}</tt>.")
     if not delete_shared and plan.shared:

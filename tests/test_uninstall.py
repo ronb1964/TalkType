@@ -126,6 +126,48 @@ def test_models_moved_to_another_disk_are_deleted_there_too(home, tmp_path):
     assert not os.path.lexists(data) and not big_disk.exists()
 
 
+def test_a_linked_settings_folder_loses_only_tuxtalks_files(home, tmp_path):
+    """Settings kept in a synced folder through a link: the folder holds other
+    things too, and only what TuxTalk put there may go (review of 0.17)."""
+    config = home / ".config/tuxtalk"
+    synced = tmp_path / "Sync/dotfiles"
+    synced.mkdir(parents=True)
+    for name in ("config.toml", "config.toml.bak", "custom_words.txt", "tuxtalk.log.old"):
+        (synced / name).write_text("ours")
+    (synced / "backups").mkdir()
+    (synced / "notes.md").write_text("someone else's")
+    (synced / "zshrc").write_text("someone else's")
+    for path in config.iterdir():
+        path.unlink()
+    config.rmdir()
+    config.symlink_to(synced)
+    uninstall.remove_files(_find(home), delete_personal=True, delete_shared=False)
+    assert not os.path.lexists(config)
+    assert sorted(p.name for p in synced.iterdir()) == ["notes.md", "zshrc"]
+
+
+def test_a_moved_data_folder_keeps_what_isnt_tuxtalks(home, tmp_path):
+    data = home / ".local/share/TuxTalk"
+    big_disk = tmp_path / "bigdisk/Models"
+    big_disk.parent.mkdir()
+    data.rename(big_disk)
+    data.symlink_to(big_disk)
+    (big_disk / "my-own-model.gguf").write_text("someone else's")
+    uninstall.remove_files(_find(home), delete_personal=True, delete_shared=False)
+    assert not os.path.lexists(data)
+    assert [p.name for p in big_disk.iterdir()] == ["my-own-model.gguf"]
+
+
+def test_a_link_inside_the_settings_folder_is_removed_not_followed(home, tmp_path):
+    elsewhere = tmp_path / "Dropbox/backups"
+    elsewhere.mkdir(parents=True)
+    (elsewhere / "TuxTalk-settings.zip").write_text("a backup")
+    (home / ".config/tuxtalk/backups").symlink_to(elsewhere)
+    uninstall.remove_files(_find(home), delete_personal=True, delete_shared=False)
+    assert not (home / ".config/tuxtalk").exists()
+    assert [p.name for p in elsewhere.iterdir()] == ["TuxTalk-settings.zip"]
+
+
 def test_the_running_appimage_goes_but_the_aur_packages_copy_is_pacmans(home, tmp_path):
     downloaded = home / "Downloads/TuxTalk-v0.17.0-x86_64.AppImage"
     downloaded.parent.mkdir()
@@ -160,13 +202,23 @@ def test_every_file_in_the_data_folder_is_sorted_into_personal_or_not():
     """A new file in the data folder has to be put in PERSONAL_DATA (kept
     unless asked) or here (always deleted), so nobody's data is deleted
     by surprise."""
-    rebuilt = {"cuda", "ai-engine", "parakeet-ultra", "whisper-vulkan", "kwin",
-               ".first_run_done", ".hotkey_test_mode", "remote_desktop_token"}
     names = set()
     for source in (ROOT / "src/tuxtalk").glob("*.py"):
         names |= set(re.findall(r'get_data_dir\(\),\s*"([^"]+)"', source.read_text()))
     assert names, "the pattern no longer finds the data folder's files"
-    assert names <= rebuilt | set(uninstall.PERSONAL_DATA), names - rebuilt
+    known = set(uninstall.DOWNLOADED_DATA) | set(uninstall.PERSONAL_DATA)
+    assert names <= known, names - known
+
+
+def test_every_file_in_the_settings_folder_is_known_by_name():
+    """A linked settings folder loses only the names in CONFIG_NAMES, so a new
+    file TuxTalk writes there has to be added to them."""
+    names = set()
+    for source in (ROOT / "src/tuxtalk").glob("*.py"):
+        names |= set(re.findall(r'dirname\((?:config\.)?CONFIG_PATH\),\s*"([^"]+)"',
+                                source.read_text()))
+    assert names, "the pattern no longer finds the settings folder's files"
+    assert names <= set(uninstall.CONFIG_NAMES), names - set(uninstall.CONFIG_NAMES)
 
 
 def test_the_hugging_face_cache_follows_its_own_settings(tmp_path):
