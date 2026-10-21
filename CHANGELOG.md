@@ -12,6 +12,9 @@ before 0.15.0, so older entries use that name.
 - The "Parakeet got more accurate" offer pops up by itself, so Enter there
   now means Not Now. An Enter meant for another window no longer starts the
   670 MB download.
+- The waveform, bars and radial indicators all draw the standard soft
+  backing again. A backing picked before 0.16 (Off, Soft or Strong) had no
+  control left to change it; that setting is gone.
 
 ## [0.17.0] - 2026-10-20
 

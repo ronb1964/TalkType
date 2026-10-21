@@ -1400,7 +1400,6 @@ def _reload_live_settings(cfg, indicator):
                 style=cfg.indicator_style,
                 color_mode=cfg.indicator_color_mode,
                 custom_color=cfg.indicator_color,
-                backing=cfg.indicator_backing,
                 sensitivity=cfg.indicator_sensitivity,
                 follow_window=getattr(cfg, "indicator_follow_window", False),
             )
@@ -5771,7 +5770,6 @@ def main():
                         style=cfg.indicator_style,
                         color_mode=cfg.indicator_color_mode,
                         custom_color=cfg.indicator_color,
-                        backing=cfg.indicator_backing,
                         sensitivity=cfg.indicator_sensitivity,
                         follow_window=getattr(cfg, "indicator_follow_window", False),
                     )

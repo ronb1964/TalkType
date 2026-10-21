@@ -140,7 +140,7 @@ class RecordingIndicator(Gtk.Window):
 
     def __init__(self, position="center", offset_x=0, offset_y=0, size="medium",
                  style="orb", color_mode="custom", custom_color="#4db3ff",
-                 backing="medium", sensitivity=1.0, follow_window=False):
+                 sensitivity=1.0, follow_window=False):
         super().__init__(title="TuxTalk Recording")
         # TuxTalk Labs: show near the bottom of the window being dictated
         # into, instead of the fixed position (_follow_target).
@@ -152,7 +152,6 @@ class RecordingIndicator(Gtk.Window):
         self.style = style
         self.color_mode = color_mode
         self.custom_color = custom_color
-        self.backing = backing
         self.sensitivity = sensitivity
         self.waveform = None   # rolling recent samples for waveform/radial
         self._wave_history = []          # accumulated rolling window (see set_waveform)
@@ -328,7 +327,7 @@ class RecordingIndicator(Gtk.Window):
 
     def apply_settings(self, position, size, offset_x, offset_y,
                        style=None, color_mode=None, custom_color=None,
-                       backing=None, sensitivity=None, follow_window=None):
+                       sensitivity=None, follow_window=None):
         """Adopt new appearance settings without rebuilding the indicator.
 
         show_at_position() reads position, scale and the offsets at show time,
@@ -369,8 +368,6 @@ class RecordingIndicator(Gtk.Window):
             self.color_mode = color_mode
         if custom_color is not None:
             self.custom_color = custom_color
-        if backing is not None:
-            self.backing = backing
         if sensitivity is not None:
             self.sensitivity = sensitivity
 
@@ -451,7 +448,7 @@ class RecordingIndicator(Gtk.Window):
         # orb keeps its own draw path below.
         if self.style != "orb":
             st = indicator_styles
-            core = st.BACKING_LEVELS.get(self.backing, 0.5)
+            core = st.BACKING_CORE
             color = self._resolved_color()
             # A copy: the audio thread extends and trims the live list while
             # this draws.

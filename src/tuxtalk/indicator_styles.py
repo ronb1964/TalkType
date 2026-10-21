@@ -9,8 +9,9 @@ import random
 import cairo
 import numpy as np
 
-# Core alpha of the soft dark backing, per level.
-BACKING_LEVELS = {"off": 0.0, "soft": 0.34, "medium": 0.50, "strong": 0.68}
+# Core alpha of the soft dark backing behind the non-orb styles, which keeps
+# them readable over a light window.
+BACKING_CORE = 0.50
 
 # The classic orb cyan; also the fallback for an unreadable custom color.
 CYAN = (0.30, 0.70, 1.0)

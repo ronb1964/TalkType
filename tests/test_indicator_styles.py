@@ -20,8 +20,6 @@ def test_backing_alpha_endpoints_and_monotonic():
 
 def test_backing_off_is_zero():
     assert S.backing_alpha(0.0, 0.0) == 0.0
-    assert S.BACKING_LEVELS["off"] == 0.0
-    assert set(S.BACKING_LEVELS) == {"off", "soft", "medium", "strong"}
 
 
 def test_resolve_color_system_uses_accent():

@@ -103,7 +103,6 @@ VALID_INDICATOR_STYLES = {"orb", "waveform", "bars", "radial"}
 # Match the desktop accent, or pick a color. An older config's "cyan" mode is
 # migrated to custom + CLASSIC_CYAN_HEX on load (see _migrate_settings).
 VALID_COLOR_MODES = {"system", "custom"}
-VALID_BACKINGS = {"off", "soft", "medium", "strong"}
 
 # The classic cyan the orb has always drawn, as a hex color. This is the exact
 # blue of the original hand-tuned orb gradient (0.30, 0.70, 1.0), so when it is
@@ -185,7 +184,6 @@ class Settings:
     indicator_style: str = "orb"        # orb / waveform / bars / radial
     indicator_color_mode: str = "custom"  # system / custom (governs every style)
     indicator_color: str = CLASSIC_CYAN_HEX  # the chosen color; defaults to classic cyan
-    indicator_backing: str = "medium"   # off / soft / medium / strong (soft dark backing)
     indicator_sensitivity: float = 1.0  # scales how strongly audio drives the animation (0.5-2.0)
     indicator_follow_window: bool = False  # TuxTalk Labs: show near the bottom of the window being dictated into
     voice_commands_hotkey: str = "Ctrl+Alt+V"  # hotkey combo to open voice commands quick reference
@@ -279,8 +277,6 @@ def _validation_problems(s: Settings) -> list[tuple[str, str]]:
     if s.indicator_color_mode.lower() not in VALID_COLOR_MODES:
         problems.append(("indicator_color_mode", f"Invalid indicator_color_mode '{s.indicator_color_mode}'. Valid options: {', '.join(sorted(VALID_COLOR_MODES))}"))
 
-    if s.indicator_backing.lower() not in VALID_BACKINGS:
-        problems.append(("indicator_backing", f"Invalid indicator_backing '{s.indicator_backing}'. Valid options: {', '.join(sorted(VALID_BACKINGS))}"))
 
     if not (0.0 <= s.press_enter_delay <= 4.0):
         problems.append(("press_enter_delay", f"Invalid press_enter_delay '{s.press_enter_delay}'. Must be between 0 and 4"))
@@ -759,7 +755,6 @@ LIVE_APPLIED_KEYS = {
     "indicator_style",
     "indicator_color_mode",
     "indicator_color",
-    "indicator_backing",
     "indicator_sensitivity",
     "indicator_follow_window",
 
