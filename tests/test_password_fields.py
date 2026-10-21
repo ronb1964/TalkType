@@ -149,6 +149,82 @@ def test_delivery_stops_when_the_focus_moves_into_a_password_field(desktop, monk
     assert desktop["pasted"] == ["first line"] and desktop["typed"] == []
 
 
+def test_a_paste_stopped_there_isnt_finished_by_typing(desktop, monkeypatch):
+    """Not asked a second time: a slow app whose answer runs out of time says
+    "no", and the rest of the dictation was then typed into the field."""
+    monkeypatch.setattr(app, "_determine_injection_method", lambda mode: ("paste", "test"))
+    monkeypatch.setattr(app, "_send_shift_enter", lambda: True)
+    monkeypatch.setattr(app.time, "sleep", lambda s: None)
+    desktop["answers"] = [False, True]          # then "no" to any further question
+    assert app._inject_text("first line\nsecond line", "auto", 0.0) == "password_field"
+    assert desktop["pasted"] == ["first line"] and desktop["typed"] == []
+
+
+def test_typed_line_by_line_it_stops_there_too(desktop, monkeypatch):
+    """X11 types every dictation, and asks again before each line as the paste does."""
+    keys = []
+    monkeypatch.setattr(app, "_output_backend",
+                        lambda: types.SimpleNamespace(typeable=lambda t: t,
+                                                      type_text=app._type_text))
+    monkeypatch.setattr(app, "_type_text_raw", lambda t: keys.append(t) or True)
+    monkeypatch.setattr(app, "_send_shift_enter", lambda: keys.append("SHIFT+ENTER") or True)
+    monkeypatch.setattr(app.time, "sleep", lambda s: None)
+    desktop["answers"], desktop["password"] = [False], True
+    assert app._inject_text("first line\nsecond line", "auto", 0.0) == "password_field"
+    assert keys == ["first line", "SHIFT+ENTER"]
+    assert app.state.last_inserted_text == ""      # undo deletes nothing it can't count
+
+
+def test_a_dictation_refused_at_the_last_moment_leaves_recent_dictations(desktop, monkeypatch):
+    """It goes into Recent Dictations before it's typed; refused then, it comes back out."""
+    forgotten = []
+    monkeypatch.setattr(history, "forget", lambda text: forgotten.append(text))
+    monkeypatch.setattr(app.state, "said_text", "")
+    desktop["answers"] = [False, False, True]    # before the AI, before the beep, at delivery
+    dictate(monkeypatch)
+    assert desktop["typed"] == []
+    assert len(forgotten) == 1 and "swordfish" in forgotten[0]
+
+
+def test_sending_automatically_doesnt_press_enter_in_a_password_field(desktop, monkeypatch):
+    """Dictate a username, tab into the password box during the wait: Enter
+    there would submit the login form."""
+    pressed = []
+    monkeypatch.setattr(app, "_press_enter_key", lambda why: pressed.append(why) or True)
+    pending = {"window": None, "why": "sending automatically", "timer": None}
+    monkeypatch.setattr(app.state, "pending_send", pending)
+    desktop["password"] = True
+    app._send_when_due(pending)
+    assert pressed == [] and desktop["labels"] == [app.PASSWORD_FIELD_NOT_SENT]
+    desktop["password"], desktop["labels"] = False, []
+    app.state.pending_send = pending
+    app._send_when_due(pending)
+    assert pressed == ["sending automatically"]
+
+
+def test_no_wait_doesnt_backspace_in_a_password_field(desktop, monkeypatch):
+    """The AI behind "no wait" can take seconds after the first check."""
+    erased = []
+    monkeypatch.setattr(app, "_output_backend",
+                        lambda: types.SimpleNamespace(backspaces=lambda n: erased.append(n)))
+    monkeypatch.setattr(app.state, "last_inserted_window", None)
+    desktop["password"] = True
+    assert app._erase_typed("Meet at three. ") is False
+    assert erased == []
+
+
+def test_fix_a_word_doesnt_touch_a_password_field(desktop, monkeypatch):
+    from tuxtalk import fix_word_dialog
+    keys = []
+    monkeypatch.setattr(fix_word_dialog, "_REFOCUS_S", 0)
+    monkeypatch.setattr(app, "_output_backend",
+                        lambda: types.SimpleNamespace(press_keys=lambda c: keys.append(c) or True,
+                                                      type_text=lambda t: keys.append(t) or True))
+    desktop["password"] = True
+    assert fix_word_dialog.fix_in_text("I use tax talk ", (6, 14, "TuxTalk"), "kwrite") is False
+    assert keys == []
+
+
 # --- the question: which widget has the focus, and is it a password field ----------
 
 class FakeA11yBus:

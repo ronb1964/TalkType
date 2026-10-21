@@ -1919,6 +1919,7 @@ def _send_label(seconds_left: float) -> str:
 
 
 SWITCHED_WINDOW_NOTICE = "Not sent: you switched windows."
+PASSWORD_FIELD_NOT_SENT = "Not sent: the cursor is in a password field."
 
 
 def _count_down(pending: dict, seconds_left: int) -> None:
@@ -1965,6 +1966,16 @@ def _send_when_due(pending: dict) -> None:
         logger.info("Not sent: another window has the focus now")
         from . import screen_message
         screen_message.show_over_active_window(SWITCHED_WINDOW_NOTICE, warning=False,
+                                               tag=SEND_LABEL_TAG, low=True)
+        return
+    # Tabbing from a username into the password box during the wait must
+    # not submit the form: "press enter" said on its own is the only Enter a
+    # password field gets.
+    from .atspi_helper import focused_is_password
+    if focused_is_password():
+        logger.info("Not sent: a password field has the focus now")
+        from . import screen_message
+        screen_message.show_over_active_window(PASSWORD_FIELD_NOT_SENT, warning=False,
                                                tag=SEND_LABEL_TAG, low=True)
         return
     _press_enter_key(pending["why"])
@@ -2026,11 +2037,6 @@ def _send_shift_enter():
     return _send_keys([(42, 1), (28, 1), (28, 0), (42, 0)], what="shift+enter",
                       raise_if_partial=True)
 
-def _send_enter():
-    """Send Enter keystroke to create a new line."""
-    # KEY_ENTER (28)
-    return _send_keys([(28, 1), (28, 0)], what="enter", raise_if_partial=True)
-
 def _send_select_all_delete():
     """Send Ctrl+A then Backspace to clear the entire input field.
 
@@ -2057,42 +2063,34 @@ def _output_backend():
     return _OUTPUT_BACKEND
 
 
+class PasswordFieldNow(Exception):
+    """The focus moved into a password field partway through typing a
+    dictation of several lines. The lines before it are in the app."""
+
+
 def _type_text(text: str) -> bool:
-    """Type text (handling line-break markers). Returns True if it was
-    actually typed into the focused app, False if injection failed.
+    """Type text, its line-break markers as Shift+Enter. Returns True if it
+    was actually typed into the focused app, False if injection failed.
 
     Stops at the first part or line break that fails: typing on after a gap
-    would leave the later lines run into the earlier ones."""
-    # Handle special markers first
-    if "§SHIFT_ENTER§" in text:
-        parts = text.split("§SHIFT_ENTER§")
-        for i, part in enumerate(parts):
-            if part and not _type_text_raw(part):
+    would leave the later lines run into the earlier ones. Before each
+    further line the focus is asked again, as the paste does, and a password
+    field there raises PasswordFieldNow."""
+    from .atspi_helper import focused_is_password
+    parts = text.split("\xa7SHIFT_ENTER\xa7")
+    for i, part in enumerate(parts):
+        if i and focused_is_password():
+            raise PasswordFieldNow()
+        if part and not _type_text_raw(part):
+            return False
+        if i < len(parts) - 1:  # Not the last part, send Shift+Enter
+            time.sleep(0.05)  # Small delay between text and key
+            # The line break is part of the text: a failed one is a
+            # partial injection, and the undo buffer must not count it.
+            if not _send_shift_enter():
                 return False
-            if i < len(parts) - 1:  # Not the last part, send Shift+Enter
-                time.sleep(0.05)  # Small delay between text and key
-                # The line break is part of the text: a failed one is a
-                # partial injection, and the undo buffer must not count it.
-                if not _send_shift_enter():
-                    return False
-                time.sleep(0.05)  # Small delay after key
-        return True
-
-    # Handle regular newlines by converting them to Enter key presses
-    if "\n" in text:
-        parts = text.split("\n")
-        for i, part in enumerate(parts):
-            if part and not _type_text_raw(part):
-                return False
-            if i < len(parts) - 1:  # Not the last part, send Enter
-                time.sleep(0.05)  # Small delay between text and key
-                if not _send_enter():
-                    return False
-                time.sleep(0.05)  # Small delay after key
-        return True
-
-    # Normal text typing
-    return _type_text_raw(text)
+            time.sleep(0.05)  # Small delay after key
+    return True
 
 def _type_text_raw(text: str) -> bool:
     """Type *text* on TuxTalk's virtual keyboard, with the keys of the active
@@ -2962,6 +2960,16 @@ def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = Fa
         state.nav_context = None
         _forget_shown()
         outcome = "partial"
+    except PasswordFieldNow:
+        # The lines before it are in the app, but which form they took
+        # (pasted, typed after a failed paste) isn't tracked: undo then
+        # deletes nothing rather than the wrong amount.
+        logger.warning("Stopped typing: a password field has the focus now")
+        state.last_inserted_text = ""
+        state.continue_mid_sentence = False
+        state.nav_context = None
+        _forget_shown()
+        outcome = "password_field"
     if outcome not in ("failed", "password_field"):
         try:
             landed = _query_focused_window_class()
@@ -3118,10 +3126,10 @@ def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = F
         # re-injecting the whole text would duplicate the chunks that already
         # landed, which undo can't clean up.
         resume_at = None
-        needs_break = False
+        needs_break = password_field = False
         for i, part in enumerate(parts):
             if i and focused_is_password():
-                resume_at = i
+                resume_at, password_field = i, True
                 break
             if part:
                 logger.info(f"Pasting part {i+1}/{len(parts)}: {len(part)} chars")
@@ -3143,12 +3151,12 @@ def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = F
         if resume_at is None:
             print(f"Inject (smart paste) {len(parts)} chunks, {len(text)} total chars")
             logger.info(f"Smart hybrid paste completed: {len(parts)} chunks")
-        elif focused_is_password():
+        elif password_field:
+            # Not asked again: a second answer that comes back "no" (a slow
+            # app, out of time) would type the rest into the password field.
             # The chunks before reached the document, and so did the line
-            # break after the last of them unless that break is what failed.
-            delivered = marker.join(parts[:resume_at])
-            if resume_at and not needs_break:
-                delivered += marker
+            # break after the last of them: the check comes after it.
+            delivered = marker.join(parts[:resume_at]) + marker
             state.last_inserted_text = delivered.replace(marker, "\n")
             logger.warning(f"Stopped after {resume_at}/{len(parts)} chunks: a password field "
                            "has the focus now")
@@ -3330,11 +3338,12 @@ def _finish_capture(beeps_on: bool, notify_on: bool):
 
 
 PASSWORD_FIELD_LABEL = "TuxTalk doesn't type into password fields"
-PASSWORD_FIELD_NOTICE = ("Nothing was typed: TuxTalk doesn't type into password fields. "
+PASSWORD_FIELD_NOTICE = ("TuxTalk doesn't type into password fields, so it stopped there. "
                          "Type the password on the keyboard.")
 
 # What to tell the user when a dictation didn't reach the window. The text is
-# always in Recent Dictations by then (it's saved before injection starts).
+# in Recent Dictations by then (it's saved before injection starts), unless a
+# password field refused it (_unsay).
 _UNDELIVERED_NOTICES = {
     "failed": "Couldn't type that dictation into the window. It's saved in Recent "
               "Dictations in the TuxTalk menu: click it to copy, then paste with Ctrl+V.",
@@ -3462,11 +3471,12 @@ def _context_samples() -> int:
     return int(CONTEXT_S * SAMPLE_RATE)
 
 
-def _remember_said(text: str, chunked: bool, takes_back: str = "") -> None:
+def _remember_said(text: str, chunked: bool, takes_back: str = "") -> str:
     """Put *text* in Recent Dictations, one entry per recording: a phrase of
     a recording typed at pauses (*chunked*) adds to its recording's entry.
     *takes_back* is the end of that entry a correction across a pause
-    replaced ("Meet at three. " for "Meet at four")."""
+    replaced ("Meet at three. " for "Meet at four"). Returns the entry as it
+    was before, for _unsay."""
     from . import history
     text = text.replace(history._LINE_BREAK_MARKER, "\n")
     old = state.said_text if chunked and state.said_serial == state.recording_serial else ""
@@ -3476,6 +3486,18 @@ def _remember_said(text: str, chunked: bool, takes_back: str = "") -> None:
         history.add_entry(state.said_text, replaces=old)
     else:
         history.add_entry(state.said_text)
+    return old
+
+
+def _unsay(before: str) -> None:
+    """Undo the last _remember_said, which returned *before*: the text went
+    into Recent Dictations first and was then refused for a password field."""
+    from . import history
+    said, state.said_text = state.said_text, before
+    if before:
+        history.add_entry(before, replaces=said)
+    else:
+        history.forget(said)
 
 
 def _remember_shown(piece: str, chunked: bool, ok: bool) -> None:
@@ -3526,6 +3548,12 @@ def _erase_typed(text: str) -> bool:
     if (focused is not None and state.last_inserted_window is not None
             and focused != state.last_inserted_window):
         logger.info("Correction across a pause skipped: the phrase is in another window")
+        return False
+    # The AI that found the correction can take seconds, time enough to
+    # click into a password field of the same window.
+    from .atspi_helper import focused_is_password
+    if focused_is_password():
+        logger.info("Correction across a pause skipped: a password field has the focus")
         return False
     try:
         deleted = _output_backend().backspaces(len(text))
@@ -3942,7 +3970,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
             text = _with_owed_space(text)
         if text:
             chunked = chunk_role is not None
-            _remember_said(text, chunked, taken_back)
+            said_before = _remember_said(text, chunked, taken_back)
             try:
                 outcome = _inject_text(text, injection_mode, t0)
             except Exception as e:
@@ -3951,6 +3979,8 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
                 # "Transcription error" below.
                 logger.error(f"Injection error: {e}", exc_info=True)
                 outcome = "failed"
+            if outcome == "password_field":
+                _unsay(said_before)
             _remember_shown(state.last_inserted_text, chunked, outcome == "ok")
             if outcome in _UNDELIVERED_NOTICES:
                 _report_undelivered(outcome, beeps_on)
@@ -4444,6 +4474,8 @@ def _edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0
             if _focus_moved(focused_class):
                 _edit_problem("focus_moved", beeps_on)
                 return
+            if _refuse_password_field(beeps_on):
+                return
             # KEY_DELETE=111: the selection is still selected.
             if _send_keys([(111, 1), (111, 0)], what="delete"):
                 logger.info("Voice edit: deleted the selection")
@@ -4462,6 +4494,8 @@ def _edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0
                 return
             if _focus_moved(focused_class):
                 _edit_problem("focus_moved", beeps_on)
+                return
+            if _refuse_password_field(beeps_on):
                 return
             # The selection is still selected, so the app's shortcut formats it.
             if all(_send_format_shortcut(kind) for kind in fmt):
@@ -4534,6 +4568,8 @@ def _edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0
         except Exception as e:
             logger.error(f"Voice edit: typing the rewrite failed: {e}", exc_info=True)
             outcome = "failed"
+        if outcome == "password_field":
+            history.forget(result)
         if outcome in _UNDELIVERED_NOTICES:
             _report_undelivered(outcome, beeps_on)
         else:

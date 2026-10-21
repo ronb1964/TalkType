@@ -369,6 +369,12 @@ def fix_in_text(typed, fix, window):
         app._notify("TuxTalk", "The fix is saved, but your text wasn't changed: another "
                                "window had the focus.")
         return False
+    from .atspi_helper import focused_is_password
+    if focused_is_password():
+        logger.info("Fix a Word: a password field has the focus; text left as it was")
+        app._notify("TuxTalk", "The fix is saved, but your text wasn't changed: the cursor "
+                               "is in a password field.")
+        return False
     core = typed.strip()
     # From the cursor back to the end of the picked words: the spaces after
     # the dictation, then whatever followed the words in it.

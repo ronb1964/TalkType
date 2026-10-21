@@ -252,22 +252,11 @@ def test_undo_shrinks_its_buffer_when_the_backspaces_land(monkeypatch, undo_env)
 
 # --- line breaks are part of the text, and part of the report ---------------
 
-def test_type_text_reports_failure_when_the_enter_key_fails(monkeypatch):
-    """A dictation containing "new line" is typed in parts with an Enter key
-    between them, so _type_text must check what _send_enter() returns as well
-    as the text parts.
-
-    Otherwise the undo buffer records one more character than the document
-    actually received per failed break, and "undo that" backspaces that far
-    past the dictation — into text the user typed themselves.
-    """
-    monkeypatch.setattr(app, "_type_text_raw", lambda t: True)
-    monkeypatch.setattr(app, "_send_enter", lambda: False)
-
-    assert app._type_text("hello\nworld") is False
-
-
 def test_type_text_reports_failure_when_the_shift_enter_key_fails(monkeypatch):
+    """A dictation containing "new line" is typed in parts with Shift+Enter
+    between them, so _type_text must check what the key returns as well as
+    the text parts. Otherwise the undo buffer counts a line break the
+    document never got, and "undo that" backspaces into the user's own text."""
     monkeypatch.setattr(app, "_type_text_raw", lambda t: True)
     monkeypatch.setattr(app, "_send_shift_enter", lambda: False)
 
@@ -276,16 +265,16 @@ def test_type_text_reports_failure_when_the_shift_enter_key_fails(monkeypatch):
 
 def test_type_text_reports_success_when_every_part_lands(monkeypatch):
     monkeypatch.setattr(app, "_type_text_raw", lambda t: True)
-    monkeypatch.setattr(app, "_send_enter", lambda: True)
+    monkeypatch.setattr(app, "_send_shift_enter", lambda: True)
 
-    assert app._type_text("hello\nworld") is True
+    assert app._type_text("hello§SHIFT_ENTER§world") is True
 
 
 def test_type_text_still_reports_failure_when_a_text_part_fails(monkeypatch):
     monkeypatch.setattr(app, "_type_text_raw", lambda t: False)
-    monkeypatch.setattr(app, "_send_enter", lambda: True)
+    monkeypatch.setattr(app, "_send_shift_enter", lambda: True)
 
-    assert app._type_text("hello\nworld") is False
+    assert app._type_text("hello§SHIFT_ENTER§world") is False
 
 
 def test_injection_method_forces_type_in_flatpak(monkeypatch):

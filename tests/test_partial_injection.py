@@ -37,9 +37,9 @@ def test_typing_stops_at_the_first_part_that_fails(monkeypatch, quiet):
 def test_typing_stops_when_a_line_break_fails(monkeypatch, quiet):
     typed = []
     monkeypatch.setattr(app, "_type_text_raw", lambda t: typed.append(t) or True)
-    monkeypatch.setattr(app, "_send_enter", lambda: False)
+    monkeypatch.setattr(app, "_send_shift_enter", lambda: False)
 
-    assert app._type_text("one\ntwo") is False
+    assert app._type_text(MARKER.join(["one", "two"])) is False
     assert typed == ["one"]
 
 
@@ -52,15 +52,14 @@ def test_terminal_remainder_never_presses_a_plain_enter(monkeypatch, quiet):
     monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "konsole")
     monkeypatch.setattr(app, "_paste_text", lambda t: False)
-    monkeypatch.setattr(app, "_type_text_raw", lambda t: True)
-    enters, shift_enters = [], []
-    monkeypatch.setattr(app, "_send_enter", lambda: enters.append(1) or True)
+    typed, shift_enters = [], []
+    monkeypatch.setattr(app, "_type_text_raw", lambda t: typed.append(t) or True)
     monkeypatch.setattr(app, "_send_shift_enter", lambda: shift_enters.append(1) or True)
 
     outcome = app._inject_text(f"ls{MARKER}foo", "auto", 0.0)
 
     assert outcome == "ok"
-    assert enters == [], "a plain Enter was pressed in a terminal"
+    assert not any("\n" in t for t in typed), "a plain Enter was typed in a terminal"
     assert shift_enters == [], "Shift+Enter was pressed in a terminal"
 
 
@@ -77,7 +76,6 @@ def test_typed_snippet_newline_is_shift_enter_on_x11(monkeypatch, quiet):
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "kwrite")
     keys = []
     monkeypatch.setattr(app, "_type_text_raw", lambda t: keys.append(t) or True)
-    monkeypatch.setattr(app, "_send_enter", lambda: keys.append("ENTER") or True)
     monkeypatch.setattr(app, "_send_shift_enter", lambda: keys.append("SHIFT+ENTER") or True)
 
     outcome = app._inject_text("Best regards,\nRon ", "auto", 0.0)

@@ -64,7 +64,19 @@ def add_entry(text, replaces=None):
     if not text:
         return
     old = _clean(replaces)
-    entries = [text] + [e for e in get_entries() if e != text and e != old]
+    _save([text] + [e for e in get_entries() if e != text and e != old])
+
+
+def forget(text):
+    """Take *text* back out: it went in first, then wasn't typed after all
+    (a password field), so it may be the password itself. Never raises."""
+    text = _clean(text)
+    entries = get_entries()
+    if text in entries:
+        _save([e for e in entries if e != text])
+
+
+def _save(entries):
     try:
         path = _history_path()
         # Write to a temp file and rename, so a reader never sees half a file.
