@@ -588,7 +588,7 @@ def _detect_system_package_manager() -> Optional[str]:
     return None
 
 
-def get_install_type(*, appimage_env=None, flatpak_env=None,
+def get_install_type(*, appimage_env=None, flatpak_env=None, appdir_env=None,
                      module_path=None, pkg_query=None) -> str:
     """How TuxTalk is installed. One of:
       'flatpak'  — running inside a Flatpak sandbox
@@ -600,10 +600,18 @@ def get_install_type(*, appimage_env=None, flatpak_env=None,
     """
     appimage_env = os.environ.get("APPIMAGE", "") if appimage_env is None else appimage_env
     flatpak_env = os.environ.get("FLATPAK_ID", "") if flatpak_env is None else flatpak_env
+    appdir_env = os.environ.get("APPDIR", "") if appdir_env is None else appdir_env
     if module_path is None:
         module_path = os.path.realpath(__file__)
     if pkg_query is None:
         pkg_query = _detect_system_package_manager
+    # APPIMAGE is inherited by everything an AppImage starts: a .deb TuxTalk
+    # opened from an AppImage terminal sees that terminal's. It is ours only
+    # when this code runs from inside the AppImage.
+    in_appdir = bool(appdir_env) and module_path.startswith(
+        os.path.realpath(appdir_env).rstrip("/") + "/")
+    if "/.mount_" not in module_path and not in_appdir:
+        appimage_env = ""
 
     if flatpak_env:
         return "flatpak"

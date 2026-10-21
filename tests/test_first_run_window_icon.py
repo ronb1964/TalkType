@@ -23,6 +23,8 @@ def home(tmp_path, monkeypatch):
     monkeypatch.setattr(uc, "_refresh_desktop_menu_cache", lambda: None)
     monkeypatch.delenv("FLATPAK_ID", raising=False)
     monkeypatch.setenv("APPIMAGE", str(tmp_path / "Downloads" / "TuxTalk-v0.15.0-x86_64.AppImage"))
+    # Running from inside it: APPIMAGE alone may be another app's, inherited.
+    monkeypatch.setenv("APPDIR", str(ROOT))
     return tmp_path
 
 

@@ -27,6 +27,24 @@ def test_self_managed_appimage_under_home():
                             module_path="/tmp/.mount_abc/usr/src/tuxtalk/u.py") == "appimage"
 
 
+def test_an_appimage_variable_inherited_from_another_app_is_ignored():
+    """A .deb install started from a terminal or editor that is itself an
+    AppImage inherits that app's APPIMAGE. Taking it for TuxTalk's own made
+    Uninstall delete the other app's file (review of 0.17)."""
+    assert get_install_type(appimage_env="/home/ron/Apps/VSCodium.AppImage",
+                            appdir_env="/tmp/.mount_VSCodiXYZ", flatpak_env="",
+                            module_path="/opt/talktype/usr/src/tuxtalk/update_checker.py",
+                            pkg_query=lambda: "deb") == "deb"
+
+
+def test_an_extracted_appimage_counts_by_its_appdir():
+    """--appimage-extract-and-run: no /.mount_ path, but the code is in APPDIR."""
+    assert get_install_type(appimage_env="/home/ron/AppImages/TuxTalk.AppImage",
+                            appdir_env="/tmp/appimage_extracted_abc", flatpak_env="",
+                            module_path="/tmp/appimage_extracted_abc/usr/src/tuxtalk/u.py"
+                            ) == "appimage"
+
+
 def test_rpm_package_from_opt_tree():
     # .deb/.rpm ship the EXTRACTED tree; APPIMAGE is unset, source lives in /opt/talktype
     assert get_install_type(appimage_env="", flatpak_env="",
