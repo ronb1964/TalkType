@@ -9,6 +9,9 @@ before 0.15.0, so older entries use that name.
   download folder (~/.cache/huggingface/hub) unless you ask: other apps may
   use the same models. The question has a box for them, unticked, with their
   size, when there are any. Only the models TuxTalk offers are ever removed.
+- The "Parakeet got more accurate" offer pops up by itself, so Enter there
+  now means Not Now. An Enter meant for another window no longer starts the
+  670 MB download.
 
 ## [0.17.0] - 2026-10-20
 

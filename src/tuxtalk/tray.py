@@ -479,7 +479,9 @@ def _offer_parakeet_update(device):
         "keeps working while it downloads.")
     dialog.add_button("Not Now", Gtk.ResponseType.CANCEL)
     dialog.add_button(f"Download ({size_text})", Gtk.ResponseType.OK)
-    dialog.set_default_response(Gtk.ResponseType.OK)
+    # It comes up by itself while people may be typing: an Enter meant for
+    # their own window must not start a 670 MB download.
+    dialog.set_default_response(Gtk.ResponseType.CANCEL)
     dialog.set_keep_above(True)
     answer = dialog.run()
     dialog.destroy()
