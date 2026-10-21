@@ -5232,7 +5232,8 @@ def _build_model_or_exit(settings: Settings):
     try:
         return build_model(settings)
     except ModelUnavailable as e:
-        from .model_helper import OFFERED_MODELS, is_model_cached_fast, model_display_name
+        from .model_helper import OFFERED_MODELS, is_model_cached_fast
+        from .recommend import model_title
         try:
             from .cuda_helper import has_cuda_libraries
             has_cuda = has_cuda_libraries()
@@ -5255,9 +5256,9 @@ def _build_model_or_exit(settings: Settings):
             sys.exit(1)
         if isinstance(e, ModelWontLoad):
             _notify("TuxTalk",
-                    f"{model_display_name(wanted)} is downloaded but wouldn't load, so "
-                    f"TuxTalk is using {model_display_name(fallback)} for now. It tries "
-                    f"{model_display_name(wanted)} again the next time dictation starts.")
+                    f"{model_title(wanted)} is downloaded but wouldn't load, so "
+                    f"TuxTalk is using {model_title(fallback)} for now. It tries "
+                    f"{model_title(wanted)} again the next time dictation starts.")
             return model
         try:
             from .config import load_config, save_config
@@ -5267,9 +5268,9 @@ def _build_model_or_exit(settings: Settings):
         except Exception as save_error:
             logger.warning(f"Could not save the fallback model to settings: {save_error}")
         _notify("TuxTalk",
-                f"{model_display_name(wanted)} wasn't downloaded, so TuxTalk is using "
-                f"{model_display_name(fallback)} for now. You can choose "
-                f"{model_display_name(wanted)} again in Preferences.")
+                f"{model_title(wanted)} wasn't downloaded, so TuxTalk is using "
+                f"{model_title(fallback)} for now. You can choose "
+                f"{model_title(wanted)} again in Preferences.")
         return model
 
 

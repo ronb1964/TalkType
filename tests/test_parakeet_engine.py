@@ -86,10 +86,14 @@ def test_parakeet_silence_returns_none(monkeypatch):
     assert app._transcribe_audio(np.zeros(8000, dtype=np.float32), language=None) is None
 
 
-def test_display_name_is_friendly():
-    from tuxtalk.model_helper import model_display_name
-    assert model_display_name("parakeet-v3") == "Parakeet"
-    assert model_display_name("small") == "Small"
+def test_every_screen_names_a_model_the_same_way():
+    """Dialogs said "Small" where the menus said "Whisper Small" (review of 0.17)."""
+    from tuxtalk import recommend
+    from tuxtalk.model_helper import OFFERED_MODELS
+    assert recommend.model_title("parakeet-v3") == "Parakeet"
+    assert recommend.model_title("small") == "Whisper Small"
+    assert recommend.model_title("large-v3") == "Whisper Large-v3"
+    assert all(recommend.model_title(m) for m in OFFERED_MODELS)
 
 
 def test_menus_show_the_device_parakeet_really_uses():

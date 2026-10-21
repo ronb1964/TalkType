@@ -197,12 +197,13 @@ def load_engine(cfg):
     that's the device, the processor when the graphics chip can't be used.
     Raises NotDownloaded when the model isn't on this computer."""
     from . import custom_words, language_limit, whisper_vulkan
-    from .model_helper import is_model_cached_fast, model_display_name
+    from .model_helper import is_model_cached_fast
     from .parakeet_engine import is_parakeet, load_parakeet_model
+    from .recommend import model_title
 
     name, device = cfg.model, (cfg.device or "cpu").lower()
     parakeet = is_parakeet(name)
-    title = "Parakeet" if parakeet else f"Whisper {model_display_name(name)}"
+    title = model_title(name)
     language = cfg.language or None
     limit_to = () if language else language_limit.parse(getattr(cfg, "auto_languages", ""))
     if not language:

@@ -378,11 +378,10 @@ def preset_notice(label, model, device, gpu_offered):
     It says where the model really runs and, if that's the processor on a
     computer with a usable graphics chip, how to move it there.
     """
-    from .model_helper import model_display_name
-    from .recommend import engine_status, where_it_runs
-    where = where_it_runs(engine_status(model, device)[1])
-    text = f"Performance: {label}\n{model_display_name(model)} on {where}."
-    if where.startswith("the processor") and gpu_offered:
+    from .recommend import engine_line
+    line = engine_line(model, device)
+    text = f"Performance: {label}\n{line}."
+    if " on the processor" in line and gpu_offered:
         text += " To use your graphics card, set the Device to Vulkan in Preferences."
     return text + "\nRestarting service..."
 

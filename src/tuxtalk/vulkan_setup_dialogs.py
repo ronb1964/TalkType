@@ -14,7 +14,7 @@ from .ui_style import message_dialog
 
 from . import whisper_vulkan as wv
 from .logger import setup_logger
-from .model_helper import model_display_name
+from .recommend import model_title
 
 logger = setup_logger(__name__)
 
@@ -60,7 +60,7 @@ def ensure_files(parent, model, confirm):
     """Make sure the engine and *model*'s whisper.cpp file are downloaded.
     True when both are there."""
     from .download_progress_dialog import DownloadTask, UnifiedDownloadDialog
-    name = model_display_name(model)
+    name = model_title(model)
     tasks, needed = [], []
     # Engine build 1 (0.12.0 to 0.13.1) can't run Parakeet, so it's fetched
     # again, as a superset, the first time someone sets Parakeet up.
@@ -213,7 +213,7 @@ def set_up(parent, model, confirm=True):
         # English-only and older Whisper variants (small.en, large-v2, ...) have
         # no file in whisper.cpp's format here.
         message(parent, Gtk.MessageType.INFO, "Pick another model first",
-                f"{model_display_name(model)} can't run on your graphics chip through Vulkan.\n\n"
+                f"{model_title(model)} can't run on your graphics chip through Vulkan.\n\n"
                 "To use your graphics chip, choose Parakeet or a Whisper model (Small, Medium "
                 "or Large-v3) and then choose Vulkan again.")
         return False
