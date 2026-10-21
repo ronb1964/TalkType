@@ -54,6 +54,9 @@ VMS = {v.key: v for v in (
     # can't be given a command to run, so the checks use gnome-terminal.
     VMSpec("pop", "Pop!_OS", "192.168.122.40", 1280, 800, ("cosmic",),
            ["gnome-terminal", "--maximize", "--wait", "--"]),
+    # Rolling release with the newest Plasma, and the .rpm outside Fedora.
+    VMSpec("suse", "OpenSUSE_Tumbleweed", "192.168.122.182", 1280, 800, ("kde",),
+           ["konsole", "-e"]),
 )}
 
 
