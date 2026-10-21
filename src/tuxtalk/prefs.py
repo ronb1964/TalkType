@@ -5110,9 +5110,16 @@ class PreferencesWindow:
             choice = SEVERAL_LANGUAGES
             self.update_config("language_mode", "auto")
             self.update_config("auto_languages", language_limit.to_setting(codes))
-            for entry in self.lang_combo.get_model():
-                if entry[1] == SEVERAL_LANGUAGES:   # ComboBoxText rows are (text, id)
-                    entry[0] = several_languages_label(self.config["auto_languages"])
+            label = several_languages_label(self.config["auto_languages"])
+            # A new label on the selected entry fires "changed", which would
+            # open this picker again (as the CUDA entry's label looped).
+            self._filling_languages = True
+            try:
+                for entry in self.lang_combo.get_model():   # ComboBoxText rows are (text, id)
+                    if entry[1] == SEVERAL_LANGUAGES and entry[0] != label:
+                        entry[0] = label
+            finally:
+                self._filling_languages = False
         self._select_language_choice(choice)
         self._update_model_combo_hint()
         return True

@@ -58,3 +58,17 @@ def test_switching_between_parakeet_and_whisper_settles(monkeypatch, start, to, 
     assert len(hints) < 10
     assert w._languages_for_model == to
     w.window.destroy()
+
+
+def test_a_new_several_languages_label_doesnt_reopen_the_picker(monkeypatch):
+    """Relabelling the selected "Several: ..." entry fires "changed"; while it
+    does, the Language handler must see a refill, not a new pick (Codex
+    review of 0.17, the same loop as the CUDA label)."""
+    w = _build(monkeypatch, "small", "cpu")
+    monkeypatch.setitem(w.config, "auto_languages", "en,es")
+    monkeypatch.setattr(Gtk.Dialog, "run", lambda self: Gtk.ResponseType.OK)
+    seen = []
+    w.lang_combo.get_model().connect("row-changed", lambda *_: seen.append(w._filling_languages))
+    assert w._pick_several_languages() is True
+    assert seen and all(seen)
+    w.window.destroy()
