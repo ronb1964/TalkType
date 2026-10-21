@@ -50,6 +50,10 @@ VMS = {v.key: v for v in (
     # forum user who couldn't reach TuxTalk 0.15.1, 2026-10).
     VMSpec("zorin", "ZorinOS18", "192.168.122.88", 1280, 800, ("gnome",),
            ["gnome-terminal", "--wait", "--"]),
+    # COSMIC (System76's own desktop, Pop's default since 24.04). cosmic-term
+    # can't be given a command to run, so the checks use gnome-terminal.
+    VMSpec("pop", "Pop!_OS", "192.168.122.40", 1280, 800, ("cosmic",),
+           ["gnome-terminal", "--maximize", "--wait", "--"]),
 )}
 
 
@@ -114,7 +118,7 @@ class VM:
             if time.monotonic() > deadline:
                 raise TimeoutError(f"{self.spec.key}: no ssh after {timeout}s")
             time.sleep(3)
-        shells = "gnome-shell|plasmashell|cinnamon"
+        shells = "gnome-shell|plasmashell|cinnamon|cosmic-panel"
         while self.ssh(f"pgrep -u $(id -u) -x '{shells}'", check=False).returncode != 0:
             if time.monotonic() > deadline:
                 raise TimeoutError(f"{self.spec.key}: the desktop never started")
