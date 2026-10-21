@@ -136,6 +136,8 @@ def test_a_linked_settings_folder_loses_only_tuxtalks_files(home, tmp_path):
     for name in ("config.toml", "config.toml.bak", "custom_words.txt", "tuxtalk.log.old"):
         (synced / name).write_text("ours")
     (synced / "backups").mkdir()
+    (synced / "backups/settings-20261020-090000.zip").write_text("ours")
+    (synced / "backups/last-saved-backup").write_text("ours")
     (synced / "backups.photos").mkdir()
     (synced / "backups.photos/beach.jpg").write_text("someone else's")
     (synced / "notes.md").write_text("someone else's")
@@ -148,6 +150,34 @@ def test_a_linked_settings_folder_loses_only_tuxtalks_files(home, tmp_path):
     assert not os.path.lexists(config)
     assert sorted(p.name for p in synced.iterdir()) == ["backups.photos", "notes.md", "zshrc"]
     assert (synced / "backups.photos/beach.jpg").exists()
+
+
+def test_a_synced_folders_own_backups_folder_keeps_its_files(home, tmp_path):
+    """Settings linked into a dotfiles folder that had a backups folder
+    before TuxTalk: only TuxTalk's copies go from it (review of 0.17)."""
+    config = home / ".config/tuxtalk"
+    dotfiles = tmp_path / "dotfiles"
+    (dotfiles / "backups").mkdir(parents=True)
+    (dotfiles / "backups/settings-20261020-090000.zip").write_text("ours")
+    (dotfiles / "backups/zshrc-2025.tar").write_text("someone else's")
+    for path in config.iterdir():
+        path.unlink()
+    config.rmdir()
+    config.symlink_to(dotfiles)
+    uninstall.remove_files(_find(home), delete_personal=True, delete_shared=False)
+    assert [p.name for p in (dotfiles / "backups").iterdir()] == ["zshrc-2025.tar"]
+
+
+def test_something_that_wont_go_is_listed_once(home):
+    """Through the old TalkType link it was listed two more times."""
+    (home / ".local/share/TalkType").symlink_to("TuxTalk")
+    stuck = home / ".local/share/TuxTalk/cuda"
+    (stuck / "lib").chmod(0o500)
+    try:
+        failed = uninstall.remove_files(_find(home), delete_personal=True, delete_shared=False)
+    finally:
+        (stuck / "lib").chmod(0o700)
+    assert failed == [stuck]
 
 
 def test_a_moved_data_folder_keeps_what_isnt_tuxtalks(home, tmp_path):
@@ -235,6 +265,7 @@ def test_the_hugging_face_cache_follows_its_own_settings(tmp_path):
         == pathlib.Path("/old")
     assert uninstall.hf_hub_cache(home, {"HF_HUB_CACHE": "/x", "HUGGINGFACE_HUB_CACHE": "/old"}) \
         == pathlib.Path("/x")
+    assert uninstall.hf_hub_cache(home, {"HF_HOME": "~/hf"}) == pathlib.Path.home() / "hf/hub"
 
 
 @pytest.mark.parametrize("install_type,command", [
@@ -378,6 +409,17 @@ def test_an_extension_that_stays_is_named(home, monkeypatch):
     monkeypatch.setattr(uninstall.extension_helper, "uninstall_extension",
                         lambda: ext.rmdir() or True)
     assert uninstall.undo_desktop_changes(_find(home)) == []
+
+
+def test_a_time_out_while_running_as_root_is_a_time_out(monkeypatch):
+    """After the password the script runs as root, and killing it on the
+    time-out raised PermissionError, which nothing caught: no closing message
+    (review of 0.17)."""
+    def run(*a, **k):
+        raise PermissionError(1, "Operation not permitted")
+    monkeypatch.setattr(secure_input.subprocess, "run", run)
+    monkeypatch.setattr(secure_input, "PKEXEC_TIMEOUT", 0)
+    assert secure_input._pkexec("true", "tested") == (False, secure_input.TIMED_OUT)
 
 
 def test_a_timed_out_password_prompt_doesnt_claim_nothing_changed(home, monkeypatch):

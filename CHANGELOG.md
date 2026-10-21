@@ -8,7 +8,8 @@ before 0.15.0, so older entries use that name.
 - Uninstall no longer deletes the speech models in Hugging Face's shared
   download folder (~/.cache/huggingface/hub) unless you ask: other apps may
   use the same models. The question has a box for them, unticked, with their
-  size, when there are any. Only the models TuxTalk offers are ever removed.
+  size, when there are any. Only the folders TuxTalk downloads into are
+  removed from there.
 - Uninstall and linked folders: if your TuxTalk settings or downloads folder
   is a link into another folder (a synced folder, a bigger disk), only
   TuxTalk's own files are removed from there. Before, everything in that

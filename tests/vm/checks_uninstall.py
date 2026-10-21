@@ -109,7 +109,7 @@ def uninstall_cancel(run):
     run.vm.ui("click", "button", "Cancel", PREFS)
     question = " ".join(words)
     problems = []
-    for wanted in ("TuxTalk itself (its AppImage)", "hotkey helper", "it downloaded (",
+    for wanted in ("TuxTalk itself (its AppImage)", "hotkey helper", "to its own folder (",
                    "starting at login", "password once"):
         if wanted not in question:
             problems.append(f"the question doesn't say “{wanted}”")

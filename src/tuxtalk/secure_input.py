@@ -25,6 +25,7 @@ the password dialog is open.
 """
 import os
 import subprocess
+import time
 
 from .logger import setup_logger
 
@@ -298,10 +299,18 @@ def _run_as_root(script, what):
 def _pkexec(script, what):
     """(ok, message) after running *script* through pkexec."""
     from .uinput_helper import pkexec_was_declined
+    started = time.monotonic()
     try:
         result = subprocess.run(["pkexec", "/bin/bash", "-s"], input=script, text=True,
                                 capture_output=True, timeout=PKEXEC_TIMEOUT)
     except subprocess.TimeoutExpired:
+        return False, TIMED_OUT
+    except PermissionError:
+        if time.monotonic() - started < PKEXEC_TIMEOUT:
+            raise
+        # Timed out after the password, while the script ran as root: this
+        # user can't stop it, and subprocess waited for it to end instead.
+        logger.warning(f"Hotkey helper {what}: timed out while running as root")
         return False, TIMED_OUT
     except FileNotFoundError:
         return False, "pkexec isn't installed, so TuxTalk can't ask for your password."

@@ -39,7 +39,8 @@ from gi.repository import GLib, Gtk  # noqa: E402
 from . import (ai_cleanup, config, custom_words, desktop_detect,  # noqa: E402
                extension_helper, file_transcribe, gnome_keybindings, kwin_hotkeys,
                model_helper, parakeet_engine, rename_migration, secure_input,
-               service_launcher, uinput_helper, update_checker, whisper_vulkan)
+               service_launcher, settings_backup, uinput_helper, update_checker,
+               whisper_vulkan)
 from .logger import LOG_FILE_NAME, setup_logger, stop_file_logging  # noqa: E402
 from .ui_style import message_dialog  # noqa: E402
 
@@ -60,7 +61,9 @@ CONFIG_NAMES = ("config.toml", "custom_commands.toml", custom_words.FILE_NAME, "
 
 # Each Hugging Face repository TuxTalk downloads from, as the cache names
 # its folder. Only these: the cache is shared, and another app's models in
-# it are not ours to delete.
+# it are not ours to delete. One folder holds a whole repository, so
+# whisper.cpp's may hold another app's models too: hence the question's
+# "other apps may use them".
 HF_REPOS = tuple(f"models--{repo.replace('/', '--')}" for repo in (
     *model_helper.MODEL_REPOS.values(), parakeet_engine.V3_REPO, whisper_vulkan.MODEL_REPO,
     *whisper_vulkan.MODEL_REPOS.values(), ai_cleanup.MODEL_REPO))
@@ -120,12 +123,16 @@ class Result:
 
 def hf_hub_cache(home, environ=os.environ):
     """Where Hugging Face keeps its models, by its own rules (huggingface_hub's
-    constants.py; HUGGINGFACE_HUB_CACHE is the older name, still honoured)."""
+    constants.py; HUGGINGFACE_HUB_CACHE is the older name, still honoured).
+    Worked out here rather than read from there, so the tests can point it
+    at a made-up home."""
+    def path(value):
+        return Path(os.path.expanduser(os.path.expandvars(value)))
     for name in ("HF_HUB_CACHE", "HUGGINGFACE_HUB_CACHE"):
         if environ.get(name):
-            return Path(environ[name])
+            return path(environ[name])
     if environ.get("HF_HOME"):
-        return Path(environ["HF_HOME"]) / "hub"
+        return path(environ["HF_HOME"]) / "hub"
     cache = Path(environ["XDG_CACHE_HOME"]) if environ.get("XDG_CACHE_HOME") else home / ".cache"
     return cache / "huggingface" / "hub"
 
@@ -301,7 +308,19 @@ def _empty(folder, names):
     *names*), then the folder, or the link and the folder it led to if
     that's empty now. What it couldn't remove."""
     target = folder.resolve() if folder.is_symlink() else None
-    failed = [entry for entry in _contents(folder, names) if not _remove(entry)]
+    failed = []
+    for entry in _contents(folder, names):
+        if (target is not None and entry.name == "backups" and entry.is_dir()
+                and not entry.is_symlink()):
+            # A synced folder may keep a backups folder of its own.
+            failed += [copy for copy in sorted(entry.iterdir())
+                       if settings_backup.is_ours(copy.name) and not _remove(copy)]
+            try:
+                entry.rmdir()
+            except OSError:
+                pass        # not only TuxTalk's
+        elif not _remove(entry):
+            failed.append(entry)
     if not failed and not _remove(folder):
         failed.append(folder)
     if target is not None:
@@ -336,8 +355,13 @@ def remove_files(plan, delete_personal, delete_shared):
             folder.rmdir()
         except OSError:
             pass        # not empty, or not there
-    # A download that wouldn't go may have gone with its folder after all.
-    return [path for path in failed if os.path.lexists(path)]
+    # A download that wouldn't go may have gone with its folder after all,
+    # and one that stays may be listed again through the old TalkType link.
+    left = {}
+    for path in failed:
+        if os.path.lexists(path):
+            left.setdefault(os.path.realpath(path), path)
+    return list(left.values())
 
 
 def _tuxtalk_pids(data_dir):
@@ -455,8 +479,9 @@ def confirm_text(plan, size):
         lines.append("its hotkey helper and the permission to type into other apps")
     elif plan.typing_rule:
         lines.append("the permission it set up to type into other apps")
-    if plan.downloads:
-        lines.append(f"the speech models, engines and libraries it downloaded ({_size_text(size)})")
+    if size >= 1000 ** 2:       # not just the small files it keeps there
+        lines.append("the engines, libraries and models it downloaded to its own folder "
+                     f"({_size_text(size)})")
     lines.append("starting at login, its menu entry and the GNOME extension" if plan.extension
                  else "starting at login and its menu entry")
     return "\n".join(f"•  {line}" for line in lines)
@@ -633,7 +658,7 @@ def done_text(plan, delete_personal, delete_shared, result):
         parts.append("Your settings, Your Words and snippets are kept in "
                      f"<tt>~/.config/{config.CONFIG_DIR}</tt>.")
     if not delete_shared and plan.shared:
-        parts.append("The speech models in the shared download folder are kept in "
+        parts.append("The models in the shared download folder are kept in "
                      f"<tt>{GLib.markup_escape_text(_shown(plan.hub, plan.home))}</tt>.")
     if result.not_removed:
         parts.append(f'Ask in <a href="{FEEDBACK_URL}">Discussions</a> and we\'ll help you '
