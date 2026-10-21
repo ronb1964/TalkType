@@ -61,7 +61,7 @@ def test_a_file_asked_for_by_name_is_never_optional(monkeypatch):
     def fails(**kwargs):
         raise OSError("connection reset")
     monkeypatch.setattr(huggingface_hub, "hf_hub_download", fails)
-    monkeypatch.setattr(M, "_files_to_download", lambda name, repo: [("model.gguf", 10)])
+    monkeypatch.setattr(M, "_files_to_download", lambda repo: [("model.gguf", 10)])
     download = M.make_model_download_func("AI model", repo_id="some/repo",
                                           only_files=["model.gguf"])
     assert download(lambda *a: None, type("E", (), {"is_set": lambda self: False})()) is False
@@ -78,7 +78,7 @@ def test_the_disk_space_check_looks_where_the_files_go(monkeypatch):
     monkeypatch.setattr(huggingface_hub.constants, "HF_HUB_CACHE", "/elsewhere/hub")
     monkeypatch.setattr(download_utils, "free_space_bytes",
                         lambda path: asked.append(path) or 1)
-    monkeypatch.setattr(M, "_files_to_download", lambda name, repo: [("model.bin", 10 ** 9)])
+    monkeypatch.setattr(M, "_files_to_download", lambda repo: [("model.bin", 10 ** 9)])
     messages = []
     download = M.make_model_download_func("small")
     assert download(lambda msg, pct: messages.append(msg),

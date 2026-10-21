@@ -47,7 +47,7 @@ def test_whisper_downloads_are_not_filtered(monkeypatch):
         lambda repo_id, recursive=True: [SimpleNamespace(path="model.bin", size=10),
                                          SimpleNamespace(path="README.md", size=1)],
     )
-    files = model_helper._files_to_download("small", "Systran/faster-whisper-small")
+    files = model_helper._files_to_download("Systran/faster-whisper-small")
     assert {p for p, _ in files} == {"model.bin", "README.md"}
 
 

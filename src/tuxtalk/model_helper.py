@@ -37,8 +37,8 @@ def _download_is_usable(failed_files) -> bool:
     return not (failed_names & set(ESSENTIAL_MODEL_FILES + VOCABULARY_FILES))
 
 
-def _files_to_download(model_name, repo_id):
-    """(path, size) pairs to fetch for *model_name*: the whole repo.
+def _files_to_download(repo_id):
+    """(path, size) pairs to fetch: every file in the Hugging Face repo *repo_id*.
     Raises if the file list cannot be fetched (callers fall back)."""
     from huggingface_hub import list_repo_tree
     files_info = list(list_repo_tree(repo_id, recursive=True))
@@ -173,7 +173,7 @@ def make_model_download_func(model_name, repo_id=None, only_files=None):
             progress_callback("Getting file list...", 1)
 
             try:
-                files_with_sizes = _files_to_download(model_name, repo)
+                files_with_sizes = _files_to_download(repo)
                 if only_files:
                     files_with_sizes = [(p, s) for p, s in files_with_sizes if p in only_files]
                 total_bytes = sum(size for _, size in files_with_sizes)
@@ -553,7 +553,7 @@ def download_model_with_progress(model_name, device="cpu", compute_type="int8", 
                 raise ValueError(f"Unknown model: {model_name}")
 
             try:
-                files_with_sizes = _files_to_download(model_name, repo_id)
+                files_with_sizes = _files_to_download(repo_id)
                 total_bytes = sum(size for _, size in files_with_sizes)
                 progress_state['total_bytes'] = total_bytes
                 logger.info(f"Model {model_name}: {len(files_with_sizes)} files, {total_bytes / 1024 / 1024:.1f} MB total")

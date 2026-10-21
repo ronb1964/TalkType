@@ -45,7 +45,7 @@ def test_fallback_download_closes_the_window(monkeypatch):
     fake_fw.WhisperModel = lambda *a, **k: loaded
     monkeypatch.setitem(sys.modules, "faster_whisper", fake_fw)
 
-    def no_list(name, repo):
+    def no_list(repo):
         raise OSError("rate limited")
 
     monkeypatch.setattr(mh, "is_model_cached_fast", lambda name: False)

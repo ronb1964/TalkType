@@ -1803,7 +1803,6 @@ class PreferencesWindow:
         def _on_style_changed(combo):
             self.update_config("indicator_style", combo.get_active_id())
         style_combo.connect("changed", _on_style_changed)
-        self._style_combo = style_combo
         ind.attach(style_combo, 1, row, 1, 1)
         row += 1
 
