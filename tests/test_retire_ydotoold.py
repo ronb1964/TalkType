@@ -1,8 +1,6 @@
-"""Quit stops the typing helper (ydotoold) TuxTalk started, and no other.
-
-Found in the 0.15.0 VM round: after Quit, the ydotoold TuxTalk had started
-kept running. One run by a systemd service (Ron's machine) or by another
-program may still be needed, so it must be left alone.
+"""0.18 types on its own keyboard, so what an older TuxTalk set up to run
+ydotoold goes: the ydotoold it started, and the systemd user unit Fix Typing
+wrote. A ydotoold or unit of another program's stays.
 """
 import subprocess
 import types
@@ -19,20 +17,7 @@ def runtime(monkeypatch, tmp_path):
     return tmp_path
 
 
-def test_the_ydotoold_tuxtalk_starts_is_noted(runtime, monkeypatch):
-    monkeypatch.setattr(uh, "check_ydotoold_running", lambda: False)
-    monkeypatch.setattr(uh.subprocess, "Popen", lambda *a, **k: types.SimpleNamespace(pid=4242))
-    uh.ensure_ydotoold_running()
-    assert (runtime / "tuxtalk-ydotoold.pid").read_text() == "4242"
-
-
-def test_one_already_running_is_not_noted(runtime, monkeypatch):
-    monkeypatch.setattr(uh, "check_ydotoold_running", lambda: True)
-    uh.ensure_ydotoold_running()
-    assert not (runtime / "tuxtalk-ydotoold.pid").exists()
-
-
-def test_quit_stops_the_one_we_started(runtime):
+def test_the_one_an_older_tuxtalk_started_is_stopped(runtime):
     # A real process named ydotoold: a copy of sleep under that name.
     import shutil
     fake = runtime / "ydotoold"
@@ -66,3 +51,31 @@ def test_nothing_noted_stops_nothing(runtime, monkeypatch):
     (runtime / "tuxtalk-ydotoold.pid").write_text("not a number")
     uh.stop_ydotoold_we_started()
     assert killed == []
+
+
+OUR_UNIT = """[Unit]
+Description=ydotool daemon (TuxTalk keystroke injection)
+"""
+
+
+@pytest.fixture
+def home(monkeypatch, tmp_path, runtime):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    calls = []
+    monkeypatch.setattr(uh.subprocess, "run", lambda cmd, **k: calls.append(cmd))
+    unit = tmp_path / ".config" / "systemd" / "user" / "ydotoold.service"
+    unit.parent.mkdir(parents=True)
+    return types.SimpleNamespace(unit=unit, calls=calls)
+
+
+def test_the_unit_tuxtalk_wrote_is_disabled_and_removed(home):
+    home.unit.write_text(OUR_UNIT)
+    uh.retire_ydotoold()
+    assert not home.unit.exists()
+    assert ["systemctl", "--user", "disable", "--now", "ydotoold.service"] in home.calls
+
+
+def test_a_ydotoold_unit_of_someone_elses_stays(home):
+    home.unit.write_text("[Unit]\nDescription=ydotool daemon\n")
+    uh.retire_ydotoold()
+    assert home.unit.exists() and home.calls == []

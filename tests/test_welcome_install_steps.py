@@ -2,8 +2,8 @@
 
 Package installs and the pkexec script can take up to five minutes, so they
 run off the GTK thread. Fix Typing must not report "Device permissions
-configured" and disable itself when only the ydotoold step was needed and it
-failed. Raw installer output is escaped before it goes into Pango markup.
+configured" and disable itself when the fix failed. Raw installer output is
+escaped before it goes into Pango markup.
 """
 import threading
 
@@ -14,60 +14,44 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk  # noqa: E402
 
 from tuxtalk import recommend as r  # noqa: E402
-from tuxtalk import uinput_helper  # noqa: E402
+from tuxtalk import secure_input  # noqa: E402
 from tuxtalk import welcome_dialog as wd  # noqa: E402
 
 
 @pytest.fixture
 def dialog(monkeypatch):
-    """Permissions fine, ydotoold not running: the typing section shows."""
+    """Permissions needed: the typing section shows."""
     if not Gtk.init_check()[0]:
         pytest.skip("no display")
     monkeypatch.setattr(r, "detect_hardware", lambda cfg=None: r.Hardware(None, False))
     monkeypatch.setattr(r, "system_language", lambda env=None: "en")
-    monkeypatch.setattr(wd, "detect_uinput_access", lambda: (True, ""))
-    monkeypatch.setattr(wd, "detect_ydotoold_status",
-                        lambda: {"needs_setup": True, "ydotool_installed": True})
+    monkeypatch.setattr(wd, "detect_uinput_access", lambda: (False, "not in input group"))
     monkeypatch.setattr(wd, "detect_portaudio_status", lambda: {"needs_install": False})
     d = wd.WelcomeDialog(force_gnome=False)
     yield d
     d.destroy()
 
 
-def test_a_failed_ydotoold_step_is_reported_and_can_be_retried(dialog, monkeypatch):
+def test_a_failed_fix_is_reported_and_can_be_retried(dialog, monkeypatch):
     dialogs = []
     monkeypatch.setattr(wd, "message_dialog", lambda **k: dialogs.append(k) or None)
     button = dialog.fix_typing_button
-    outcome = {"results": ["❌ ydotoold: ydotoold daemon not found."],
-               "ydotoold_fixed": False, "uinput_fixed": False, "ydotoold_running": False}
+    outcome = {"results": ["❌ Permissions: udevadm not found"], "uinput_fixed": False,
+               "needs_restart": False}
     dialog._finish_fix_typing(button, outcome)
     assert button.get_sensitive()
     assert "Fix Typing" in button.get_label()
-    assert "ydotoold daemon not found" in dialog.typing_status_label.get_text()
+    assert "udevadm not found" in dialog.typing_status_label.get_text()
     assert "permissions configured" not in dialog.typing_status_label.get_text().lower()
     assert dialogs == []          # no "Permissions Configured" box
 
 
-def test_the_steps_run_only_what_is_still_needed(monkeypatch):
-    calls = []
-    monkeypatch.setattr(uinput_helper, "setup_ydotoold_service",
-                        lambda: calls.append("ydotoold") or (False, "nope"))
-    monkeypatch.setattr(uinput_helper, "install_udev_rule_with_pkexec",
-                        lambda *a: calls.append("udev") or (True, "ok"))
-    monkeypatch.setattr(uinput_helper, "ensure_ydotoold_running", lambda: None)
-    monkeypatch.setattr(uinput_helper, "check_ydotoold_running", lambda: False)
-    monkeypatch.setattr(wd.time, "sleep", lambda s: None)
-    result = wd._fix_typing_steps(do_ydotoold=False, do_uinput=True)
-    assert calls == ["udev"]
-    assert result["uinput_fixed"] and not result["ydotoold_fixed"]
-
-
-def test_a_daemon_that_starts_a_moment_later_counts_as_running(monkeypatch):
-    answers = iter([False, False, True])
-    monkeypatch.setattr(uinput_helper, "setup_ydotoold_service", lambda: (True, "built-in"))
-    monkeypatch.setattr(uinput_helper, "check_ydotoold_running", lambda: next(answers))
-    monkeypatch.setattr(wd.time, "sleep", lambda s: None)
-    assert wd._fix_typing_steps(do_ydotoold=True, do_uinput=False)["ydotoold_running"]
+def test_a_cancelled_fix_says_so(monkeypatch):
+    monkeypatch.setattr(secure_input, "fix_permissions",
+                        lambda: (False, "Authentication was cancelled.", True))
+    result = wd._fix_typing_steps()
+    assert not result["uinput_fixed"] and not result["needs_restart"]
+    assert "cancelled" in result["results"][0]
 
 
 def test_status_text_is_escaped_and_short():
@@ -122,8 +106,8 @@ def test_nothing_is_updated_after_the_window_closed(dialog, monkeypatch):
 
 
 def test_installs_run_one_at_a_time(dialog, monkeypatch):
-    """Started together, Install PortAudio and Install ydotool would make the
-    second package-manager run fail on the first one's lock."""
+    """Started together, Install PortAudio and Fix Typing would put two
+    password prompts up at once."""
     monkeypatch.setattr(wd.GLib, "idle_add", lambda fn, *a: None)
     first_running = threading.Event()
     release_first = threading.Event()
@@ -152,8 +136,6 @@ def needs_uinput(monkeypatch):
     monkeypatch.setattr(r, "detect_hardware", lambda cfg=None: r.Hardware(None, False))
     monkeypatch.setattr(r, "system_language", lambda env=None: "en")
     monkeypatch.setattr(wd, "detect_uinput_access", lambda: (False, "not in input group"))
-    monkeypatch.setattr(wd, "detect_ydotoold_status",
-                        lambda: {"needs_setup": False, "ydotool_installed": True})
     monkeypatch.setattr(wd, "detect_portaudio_status", lambda: {"needs_install": False})
     d = wd.WelcomeDialog(force_gnome=False)
     responses = []
@@ -187,8 +169,8 @@ class _Answer:
 
 
 def _fix_outcome(ok):
-    return {"results": [] if ok else ["❌ Permissions: cancelled"], "ydotoold_fixed": False,
-            "uinput_fixed": ok, "ydotoold_running": True}
+    return {"results": [] if ok else ["❌ Permissions: cancelled"], "uinput_fixed": ok,
+            "needs_restart": False}
 
 
 def test_set_it_up_runs_the_typing_fix_first(needs_uinput, monkeypatch):
@@ -224,7 +206,7 @@ def test_a_cancelled_fix_can_still_continue(needs_uinput, monkeypatch):
 def test_set_it_up_goes_straight_on_when_nothing_is_needed(dialog, monkeypatch):
     responses = []
     monkeypatch.setattr(dialog.dialog, "response", lambda r: responses.append(r))
-    dialog.ydotoold_fixed = True                 # the fixture's only pending step, done
+    dialog.uinput_fixed = True                   # the fixture's only pending step, done
     dialog.continue_button.clicked()
     assert responses == [Gtk.ResponseType.OK]
 
@@ -238,8 +220,6 @@ def test_the_extension_is_offered_only_when_it_is_not_running(monkeypatch, activ
     monkeypatch.setattr(r, "detect_hardware", lambda cfg=None: r.Hardware(None, False))
     monkeypatch.setattr(r, "system_language", lambda env=None: "en")
     monkeypatch.setattr(wd, "detect_uinput_access", lambda: (True, ""))
-    monkeypatch.setattr(wd, "detect_ydotoold_status",
-                        lambda: {"needs_setup": False, "ydotool_installed": True})
     monkeypatch.setattr(wd, "detect_portaudio_status", lambda: {"needs_install": False})
     monkeypatch.setattr(wd, "_extension_already_active", lambda: active)
     d = wd.WelcomeDialog(force_gnome=True)

@@ -25,7 +25,6 @@ def dialog(monkeypatch):
                         lambda cfg=None: r.Hardware("NVIDIA GeForce RTX 4070 SUPER", True))
     monkeypatch.setattr(r, "system_language", lambda env=None: "en")
     monkeypatch.setattr(wd, "detect_uinput_access", lambda: (True, ""))
-    monkeypatch.setattr(wd, "detect_ydotoold_status", lambda: {"needs_setup": False})
     monkeypatch.setattr(wd, "detect_portaudio_status", lambda: {"needs_install": False})
     d = wd.WelcomeDialog(force_gnome=False)
     yield d
@@ -128,7 +127,6 @@ def test_the_card_shows_on_a_computer_with_nothing_to_fix(monkeypatch):
                         lambda cfg=None: r.Hardware("AMD Radeon 780M", False))
     monkeypatch.setattr(r, "system_language", lambda env=None: "de")
     monkeypatch.setattr(wd, "detect_uinput_access", lambda: (True, ""))
-    monkeypatch.setattr(wd, "detect_ydotoold_status", lambda: {"needs_setup": False})
     monkeypatch.setattr(wd, "detect_portaudio_status", lambda: {"needs_install": False})
     d = wd.WelcomeDialog(force_gnome=False)
     try:

@@ -2051,11 +2051,6 @@ class DictationTray:
         except Exception as e:
             logger.error(f"Error stopping dictation service: {e}")
 
-        # The typing helper too, if TuxTalk started it (never one a systemd
-        # service or another program runs).
-        from .uinput_helper import stop_ydotoold_we_started
-        stop_ydotoold_we_started()
-
         # Close preferences window if open
         if self.preferences_process and self.preferences_process.poll() is None:
             try:
@@ -2443,8 +2438,8 @@ def main():
     from .settings_backup import snapshot_if_changed
     snapshot_if_changed()
 
-    from .uinput_helper import ensure_ydotoold_running
-    ensure_ydotoold_running()       # the typing daemon
+    from .uinput_helper import retire_ydotoold
+    retire_ydotoold()       # what TuxTalk typed through until 0.18
 
     tray = DictationTray()
 

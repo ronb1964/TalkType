@@ -107,12 +107,10 @@ def test_a_running_helper_counts_as_hotkeys_working(monkeypatch):
 
 
 def test_first_run_fix_with_the_helper_asks_for_no_restart(monkeypatch):
-    from tuxtalk import uinput_helper, welcome_dialog as wd
+    from tuxtalk import welcome_dialog as wd
     monkeypatch.setattr(si, "can_install", lambda: (True, ""))
     monkeypatch.setattr(si, "install_with_pkexec", lambda: (True, ""))
-    monkeypatch.setattr(uinput_helper, "ensure_ydotoold_running", lambda: None)
-    monkeypatch.setattr(uinput_helper, "check_ydotoold_running", lambda: True)
-    result = wd._fix_typing_steps(do_ydotoold=False, do_uinput=True)
+    result = wd._fix_typing_steps()
     assert result["uinput_fixed"] and result["needs_restart"] is False
 
 

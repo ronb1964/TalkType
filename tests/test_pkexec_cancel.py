@@ -41,15 +41,6 @@ def test_a_real_failure_still_reports_the_error(monkeypatch):
     assert "usermod" in message
 
 
-def test_ydotool_install_treats_not_authorized_as_cancelled(monkeypatch):
-    monkeypatch.setattr(uinput_helper, "check_ydotool_available", lambda: (False, None))
-    monkeypatch.setattr(uinput_helper, "detect_package_manager",
-                        lambda: ("dnf", ["dnf", "install", "-y", "ydotool"]))
-    monkeypatch.setattr(uinput_helper.subprocess, "run", _fake_run(127, NOT_AUTHORIZED))
-    ok, message = uinput_helper.install_ydotool_with_pkexec()
-    assert not ok and "cancelled" in message.lower()
-
-
 class _Recorder:
     def __init__(self):
         self.label, self.sensitive, self.markup = None, None, None
