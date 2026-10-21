@@ -149,10 +149,16 @@ def _in_input_group():
     return group.gr_gid in os.getgroups() or pwd.getpwuid(os.getuid()).pw_name in group.gr_mem
 
 
-def _known(name, names):
-    """Whether *name* is one of *names*, or a copy of one beside it
-    (config.toml.bak, tuxtalk.log.old, a save's .tmp file)."""
-    return any(name == known or name.startswith(known + ".") for known in names)
+def _known(entry, names):
+    """Whether *entry* is one of *names*, or a file copied from one of the
+    files beside it (config.toml.bak, tuxtalk.log.old, a save's .tmp file).
+    Only files: a folder named backups.photos is someone else's."""
+    name = entry.name
+    if name in names:
+        return True
+    if entry.is_dir() and not entry.is_symlink():
+        return False
+    return any("." in known and name.startswith(known + ".") for known in names)
 
 
 def _contents(folder, names):
@@ -163,7 +169,7 @@ def _contents(folder, names):
         return []
     linked = folder.is_symlink()
     return [entry for entry in sorted(folder.iterdir())
-            if not linked or _known(entry.name, names)]
+            if not linked or _known(entry, names)]
 
 
 def find(home, install_type, environ=os.environ, appimage=None):
@@ -178,7 +184,7 @@ def find(home, install_type, environ=os.environ, appimage=None):
 
     data_names = PERSONAL_DATA + DOWNLOADED_DATA
     for entry in _contents(data_dir, data_names):
-        (plan.personal if _known(entry.name, PERSONAL_DATA) else plan.downloads).append(entry)
+        (plan.personal if _known(entry, PERSONAL_DATA) else plan.downloads).append(entry)
     plan.hub = hf_hub_cache(home, environ)
     for name in HF_REPOS:
         plan.shared += [path for path in (plan.hub / name, plan.hub / ".locks" / name)
@@ -330,7 +336,8 @@ def remove_files(plan, delete_personal, delete_shared):
             folder.rmdir()
         except OSError:
             pass        # not empty, or not there
-    return failed
+    # A download that wouldn't go may have gone with its folder after all.
+    return [path for path in failed if os.path.lexists(path)]
 
 
 def _tuxtalk_pids(data_dir):
@@ -399,11 +406,17 @@ def undo_desktop_changes(plan):
     """Put the desktop back as it was: Alt+F7/Alt+F8 on GNOME if the hotkey
     test was cut short, the GNOME extension, KDE's shortcut entries. Runs
     after stop_tuxtalk() and before the files go (the keybindings' backup
-    is one of them)."""
+    is one of them). Returns what's still there, in words."""
     gnome_keybindings.restore_left_over()
+    left = []
     if plan.extension or desktop_detect.is_gnome():
         extension_helper.uninstall_extension()
+        # Its result can't tell "removed nothing" from "wasn't there".
+        folder = Path(desktop_detect.get_extension_dir()) / extension_helper.EXTENSION_UUID
+        if os.path.lexists(folder):
+            left.append(f"the GNOME extension ({_shown(folder, plan.home)})")
     kwin_hotkeys.forget_our_components()
+    return left
 
 
 def _refresh_menus():
@@ -654,7 +667,7 @@ def _remove_the_rest(plan, delete_personal, delete_shared, stop_tray_parts, resu
     what's left to *result*."""
     home = plan.home
     stop_tuxtalk(plan, stop_tray_parts)
-    undo_desktop_changes(plan)
+    result.not_removed += undo_desktop_changes(plan)
     # Looked for again: stopping may have written a file (the stats).
     again = find(home, plan.install_type, appimage=update_checker.get_running_appimage_path())
     if delete_personal:

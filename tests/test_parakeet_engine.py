@@ -86,14 +86,25 @@ def test_parakeet_silence_returns_none(monkeypatch):
     assert app._transcribe_audio(np.zeros(8000, dtype=np.float32), language=None) is None
 
 
-def test_every_screen_names_a_model_the_same_way():
-    """Dialogs said "Small" where the menus said "Whisper Small" (review of 0.17)."""
-    from tuxtalk import recommend
-    from tuxtalk.model_helper import OFFERED_MODELS
-    assert recommend.model_title("parakeet-v3") == "Parakeet"
-    assert recommend.model_title("small") == "Whisper Small"
-    assert recommend.model_title("large-v3") == "Whisper Large-v3"
-    assert all(recommend.model_title(m) for m in OFFERED_MODELS)
+def test_the_download_question_names_the_model_as_the_menus_do(monkeypatch):
+    """It said "Download Small Model?" where the menus said "Whisper Small"
+    (review of 0.17)."""
+    from tuxtalk import model_helper
+    asked = []
+
+    class Question:
+        def __init__(self, **kwargs):
+            asked.append(kwargs["text"])
+        def format_secondary_text(self, text): pass
+        def set_position(self, position): pass
+        def destroy(self): pass
+        def run(self):
+            return model_helper.Gtk.ResponseType.CANCEL
+
+    monkeypatch.setattr(model_helper, "is_model_cached_fast", lambda m: False)
+    monkeypatch.setattr(model_helper, "message_dialog", lambda **k: Question(**k))
+    assert model_helper.download_model_with_progress("small") is None
+    assert asked == ["Download Whisper Small Model?"]
 
 
 def test_menus_show_the_device_parakeet_really_uses():

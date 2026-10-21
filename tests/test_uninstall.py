@@ -136,6 +136,8 @@ def test_a_linked_settings_folder_loses_only_tuxtalks_files(home, tmp_path):
     for name in ("config.toml", "config.toml.bak", "custom_words.txt", "tuxtalk.log.old"):
         (synced / name).write_text("ours")
     (synced / "backups").mkdir()
+    (synced / "backups.photos").mkdir()
+    (synced / "backups.photos/beach.jpg").write_text("someone else's")
     (synced / "notes.md").write_text("someone else's")
     (synced / "zshrc").write_text("someone else's")
     for path in config.iterdir():
@@ -144,7 +146,8 @@ def test_a_linked_settings_folder_loses_only_tuxtalks_files(home, tmp_path):
     config.symlink_to(synced)
     uninstall.remove_files(_find(home), delete_personal=True, delete_shared=False)
     assert not os.path.lexists(config)
-    assert sorted(p.name for p in synced.iterdir()) == ["notes.md", "zshrc"]
+    assert sorted(p.name for p in synced.iterdir()) == ["backups.photos", "notes.md", "zshrc"]
+    assert (synced / "backups.photos/beach.jpg").exists()
 
 
 def test_a_moved_data_folder_keeps_what_isnt_tuxtalks(home, tmp_path):
@@ -347,6 +350,34 @@ def test_files_that_wont_go_are_listed_in_the_closing_message(home):
                                result=result)
     assert "These are still there:\n•  ~/.local/share/TuxTalk/cuda" in text
     assert uninstall.done_heading(result) == "TuxTalk couldn't remove everything"
+
+
+def test_a_file_that_went_on_the_second_try_isnt_reported(home, monkeypatch):
+    """A download that wouldn't go at first can go with its folder when the
+    settings are deleted too; the closing message must not list it."""
+    real, tries = uninstall._remove, []
+
+    def flaky(path):
+        if path.name == "cuda" and not tries:
+            tries.append(path)
+            return False
+        return real(path)
+    monkeypatch.setattr(uninstall, "_remove", flaky)
+    assert uninstall.remove_files(_find(home), delete_personal=True, delete_shared=False) == []
+    assert tries
+
+
+def test_an_extension_that_stays_is_named(home, monkeypatch):
+    ext = home / ".local/share/gnome-shell/extensions/talktype@ronb1964.github.io"
+    ext.mkdir(parents=True)
+    monkeypatch.setattr(uninstall.gnome_keybindings, "restore_left_over", lambda: None)
+    monkeypatch.setattr(uninstall.kwin_hotkeys, "forget_our_components", lambda: None)
+    monkeypatch.setattr(uninstall.extension_helper, "uninstall_extension", lambda: False)
+    assert uninstall.undo_desktop_changes(_find(home)) == [
+        "the GNOME extension (~/.local/share/gnome-shell/extensions/talktype@ronb1964.github.io)"]
+    monkeypatch.setattr(uninstall.extension_helper, "uninstall_extension",
+                        lambda: ext.rmdir() or True)
+    assert uninstall.undo_desktop_changes(_find(home)) == []
 
 
 def test_a_timed_out_password_prompt_doesnt_claim_nothing_changed(home, monkeypatch):
