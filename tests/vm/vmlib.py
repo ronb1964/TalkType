@@ -57,6 +57,9 @@ VMS = {v.key: v for v in (
     # Rolling release with the newest Plasma, and the .rpm outside Fedora.
     VMSpec("suse", "OpenSUSE_Tumbleweed", "192.168.122.182", 1280, 800, ("kde",),
            ["konsole", "-e"]),
+    # The oldest libraries of the .deb distros, and Xfce on X11.
+    VMSpec("debian", "debian13", "192.168.122.168", 1280, 800, ("xfce", "x11"),
+           ["xfce4-terminal", "--maximize", "-x"]),
 )}
 
 
@@ -121,7 +124,7 @@ class VM:
             if time.monotonic() > deadline:
                 raise TimeoutError(f"{self.spec.key}: no ssh after {timeout}s")
             time.sleep(3)
-        shells = "gnome-shell|plasmashell|cinnamon|cosmic-panel"
+        shells = "gnome-shell|plasmashell|cinnamon|cosmic-panel|xfce4-session"
         while self.ssh(f"pgrep -u $(id -u) -x '{shells}'", check=False).returncode != 0:
             if time.monotonic() > deadline:
                 raise TimeoutError(f"{self.spec.key}: the desktop never started")

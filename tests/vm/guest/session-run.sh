@@ -11,7 +11,7 @@
 set -eu
 
 shell_pid=""
-for name in gnome-shell plasmashell cinnamon kwin_wayland cosmic-panel; do
+for name in gnome-shell plasmashell cinnamon kwin_wayland cosmic-panel xfce4-session; do
     shell_pid=$(pgrep -u "$(id -u)" -x -o "$name" || true)
     [ -n "$shell_pid" ] && break
 done
