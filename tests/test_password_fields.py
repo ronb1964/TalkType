@@ -27,28 +27,42 @@ TEXT = 61      # ATSPI_ROLE_TEXT
 
 @pytest.fixture
 def desktop(monkeypatch):
-    """Everything TuxTalk would do to the desktop, recorded."""
-    seen = {"typed": [], "history": [], "notes": [], "beeps": [], "labels": []}
-    monkeypatch.setattr(app, "_inject_text",
-                        lambda text, mode, t0, one_block=False: seen["typed"].append(text) or "ok")
+    """Everything TuxTalk would do to the desktop, recorded. *password* is
+    the answer to "is the focus in a password field?" once *answers* (one
+    per question, in order) run out."""
+    seen = {"typed": [], "pasted": [], "history": [], "notes": [], "beeps": [], "labels": [],
+            "password": False, "answers": []}
+
+    class Keyboard:
+        def typeable(self, text):
+            return text
+
+        def type_text(self, text):
+            seen["typed"].append(text)
+            return True
+
+    monkeypatch.setattr(app, "_output_backend", lambda: Keyboard())
+    monkeypatch.setattr(app, "_determine_injection_method", lambda mode: ("type", "test"))
+    monkeypatch.setattr(app, "_paste_text",
+                        lambda text, *a, **k: seen["pasted"].append(text) or True)
     monkeypatch.setattr(history, "add_entry",
                         lambda text, replaces=None: seen["history"].append(text))
     monkeypatch.setattr(app, "_notify", lambda title, body: seen["notes"].append(body))
-    monkeypatch.setattr(app, "_beep", lambda on, *tone, **k: seen["beeps"].append(tone))
+    monkeypatch.setattr(app, "_beep", lambda on, *tone, **k: on and seen["beeps"].append(tone))
     monkeypatch.setattr(screen_message, "show_over_active_window",
                         lambda text, **k: seen["labels"].append(text))
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: None)
     monkeypatch.setattr(app, "_usage_stats", False, raising=False)
-    seen["password"] = False
-    monkeypatch.setattr(atspi_helper, "focused_is_password", lambda: seen["password"])
+    monkeypatch.setattr(atspi_helper, "focused_is_password",
+                        lambda: seen["answers"].pop(0) if seen["answers"] else seen["password"])
     return seen
 
 
-def dictate(monkeypatch, said="my secret is swordfish"):
+def dictate(monkeypatch, said="my secret is swordfish", beeps_on=True, chunk_role=None):
     monkeypatch.setattr(app, "_transcribe_audio", lambda audio, language: said)
     frames = [(np.ones(app.SAMPLE_RATE, dtype=np.int16) * 1000).tobytes()]
-    app._transcribe_and_inject(frames, app.SAMPLE_RATE, beeps_on=True,
-                               smart_quotes=False, notify_on=True)
+    app._transcribe_and_inject(frames, app.SAMPLE_RATE, beeps_on=beeps_on,
+                               smart_quotes=False, notify_on=True, chunk_role=chunk_role)
 
 
 def test_a_dictation_in_a_password_field_is_not_typed_or_kept(desktop, monkeypatch, caplog):
@@ -70,6 +84,49 @@ def test_a_dictation_anywhere_else_is_typed_and_kept(desktop, monkeypatch):
     assert desktop["labels"] == []
 
 
+def test_beep_and_label_say_it_without_a_notification(desktop, monkeypatch):
+    monkeypatch.setattr(app, "_gtk_loop_running", True)
+    monkeypatch.setenv("DISPLAY", ":0")
+    desktop["password"] = True
+    dictate(monkeypatch)
+    assert desktop["notes"] == []
+
+
+@pytest.mark.parametrize("beeps_on, label_can_show", [(False, True), (True, False)])
+def test_a_notification_says_it_when_beep_or_label_cant(desktop, monkeypatch, beeps_on,
+                                                        label_can_show):
+    monkeypatch.setattr(app, "_gtk_loop_running", label_can_show)
+    monkeypatch.setenv("DISPLAY", ":0")
+    desktop["password"] = True
+    dictate(monkeypatch, beeps_on=beeps_on)
+    assert desktop["notes"] == [app.PASSWORD_FIELD_NOTICE]
+
+
+def test_type_at_pause_types_nothing_of_its_own_into_a_password_field(desktop, monkeypatch):
+    """The mark held back from the phrase before, a held "No wait." and the
+    local AI all come before the words; none of them reach the field."""
+    ran = []
+    monkeypatch.setattr(app, "_resolve_boundary", lambda *a, **k: ran.append("mark"))
+    monkeypatch.setattr(app, "_flush_boundary", lambda *a, **k: ran.append("mark"))
+    monkeypatch.setattr(app, "_prepare_text", lambda *a, **k: ran.append("cleanup") or "x")
+    monkeypatch.setattr(app.state, "pending_boundary", {"mark": "."})
+    monkeypatch.setattr(app.state, "held_cue", "No wait.")
+    desktop["password"] = True
+    dictate(monkeypatch, chunk_role="middle")
+    assert desktop["typed"] == [] and ran == []
+    assert app.state.pending_boundary is None and app.state.held_cue == ""
+    assert desktop["labels"] == [app.PASSWORD_FIELD_LABEL]
+
+
+def test_saying_only_press_enter_still_presses_enter_there(desktop, monkeypatch):
+    """Type the password by hand, then say "press enter" to log in."""
+    pressed = []
+    monkeypatch.setattr(app, "_press_enter_key", lambda why: pressed.append(why) or True)
+    desktop["password"] = True
+    dictate(monkeypatch, said="press enter")
+    assert pressed and desktop["typed"] == [] and desktop["labels"] == []
+
+
 def test_paste_last_dictation_types_nothing_in_a_password_field(desktop, monkeypatch):
     monkeypatch.setattr(history, "get_entries", lambda: ["my secret is swordfish"])
     cfg = types.SimpleNamespace(beeps=True, auto_space=True, injection_mode="type")
@@ -80,6 +137,16 @@ def test_paste_last_dictation_types_nothing_in_a_password_field(desktop, monkeyp
     desktop["password"] = False
     app._paste_last_dictation(cfg)
     assert desktop["typed"] == ["my secret is swordfish "]
+
+
+def test_delivery_stops_when_the_focus_moves_into_a_password_field(desktop, monkeypatch):
+    """Pasted line by line, a dictation is asked about again before each line."""
+    monkeypatch.setattr(app, "_determine_injection_method", lambda mode: ("paste", "test"))
+    monkeypatch.setattr(app, "_send_shift_enter", lambda: True)
+    monkeypatch.setattr(app.time, "sleep", lambda s: None)
+    desktop["answers"], desktop["password"] = [False], True   # a text box, then a password field
+    assert app._inject_text("first line\nsecond line", "auto", 0.0) == "password_field"
+    assert desktop["pasted"] == ["first line"] and desktop["typed"] == []
 
 
 # --- the question: which widget has the focus, and is it a password field ----------
