@@ -7,6 +7,7 @@ import os
 import pathlib
 import re
 import subprocess
+import types
 
 import pytest
 
@@ -100,7 +101,7 @@ def test_the_shared_models_box_says_what_is_there_and_where(home):
     uninstall.remove_files(plan, delete_personal=False, delete_shared=True)
     assert _find(home).shared == []         # so the question has no box
     kept = uninstall.done_text(plan, delete_personal=False, delete_shared=False,
-                               left_group=False, package_failed=False)
+                               result=uninstall.Result())
     assert f"shared download folder are kept in <tt>~/{HUB}</tt>" in kept
 
 
@@ -248,7 +249,9 @@ def test_the_root_script_removes_the_package_last(home, install_type, command):
 def test_an_appimage_has_no_package_to_remove_and_leaving_the_group_is_asked_for(home):
     script = uninstall.root_script(_find(home), leave_group=True)
     assert "apt-get" not in script and "pacman" not in script
-    assert 'gpasswd -d "$(id -nu "${PKEXEC_UID:?}")" input' in script
+    assert 'gpasswd -d "$user" input' in script
+    assert f"echo {secure_input.STILL_IN_GROUP}" in script
+    assert subprocess.run(["bash", "-n"], input=script, text=True).returncode == 0
 
 
 def test_a_package_manager_that_refuses_is_reported(home, tmp_path):
@@ -286,10 +289,97 @@ def test_the_question_lists_only_what_this_computer_has(home):
 
 
 def test_the_closing_message_says_how_to_finish_a_refused_package(home):
+    result = uninstall.Result(package_failed=True)
     text = uninstall.done_text(_find(home, "rpm"), delete_personal=True, delete_shared=True,
-                               left_group=False, package_failed=True)
+                               result=result)
     assert "sudo dnf remove tuxtalk" in text
     assert "Log out" not in text
+    assert uninstall.done_heading(result) == "TuxTalk couldn't remove everything"
+
+
+def test_what_the_root_script_couldnt_remove_is_named_not_hidden():
+    """The closing message said "TuxTalk is uninstalled" whatever the root
+    steps did, and "log out to leave the input group" when gpasswd had
+    failed (review of 0.17)."""
+    report = "\n".join([f"{secure_input.NOT_REMOVED} helper", secure_input.STILL_IN_GROUP])
+    result = uninstall.root_result(report, leave_group=True)
+    assert result.not_removed == ["the hotkey helper (tuxtalk-hotkeys.service)",
+                                  "your place in the 'input' group"]
+    assert not result.left_group and not result.complete
+    assert uninstall.root_result("", leave_group=True).left_group
+    assert uninstall.root_result("", leave_group=True).complete
+
+
+def test_the_root_script_reports_a_helper_still_there(tmp_path, monkeypatch):
+    """Run for real against made-up paths, with an rm that fails."""
+    for name in ("UNIT_PATH", "HELPER_PATH", "UINPUT_RULE_PATH"):
+        monkeypatch.setattr(secure_input, name, str(tmp_path / name))
+        (tmp_path / name).write_text("")
+    monkeypatch.setattr(uinput_helper, "UDEV_RULE_PATH", str(tmp_path / "old-rule"))
+    fake = tmp_path / "bin"
+    fake.mkdir()
+    for name, body in (("systemctl", "exit 3"), ("udevadm", "exit 0"), ("rmdir", "exit 0")):
+        (fake / name).write_text(f"#!/bin/sh\n{body}\n")
+        (fake / name).chmod(0o755)
+    env = {"PATH": f"{fake}:/usr/bin:/bin"}
+    (fake / "rm").write_text("#!/bin/sh\nexit 1\n")
+    (fake / "rm").chmod(0o755)
+    ran = subprocess.run(["bash", "-c", secure_input.uninstall_lines()], capture_output=True,
+                         text=True, env=env)
+    assert ran.stdout.split("\n")[:2] == [f"{secure_input.NOT_REMOVED} helper",
+                                         f"{secure_input.NOT_REMOVED} rule"]
+    (fake / "rm").unlink()
+    ran = subprocess.run(["bash", "-c", secure_input.uninstall_lines()], capture_output=True,
+                         text=True, env=env)
+    assert secure_input.NOT_REMOVED not in ran.stdout
+
+
+def test_files_that_wont_go_are_listed_in_the_closing_message(home):
+    stuck = home / ".local/share/TuxTalk/cuda"
+    (stuck / "lib").chmod(0o500)        # its file can't be deleted
+    try:
+        failed = uninstall.remove_files(_find(home), delete_personal=False, delete_shared=False)
+    finally:
+        (stuck / "lib").chmod(0o700)
+    assert stuck in failed
+    result = uninstall.Result(not_removed=[uninstall._shown(stuck, home)])
+    text = uninstall.done_text(_find(home), delete_personal=False, delete_shared=False,
+                               result=result)
+    assert "These are still there:\n•  ~/.local/share/TuxTalk/cuda" in text
+    assert uninstall.done_heading(result) == "TuxTalk couldn't remove everything"
+
+
+def test_a_timed_out_password_prompt_doesnt_claim_nothing_changed(home, monkeypatch):
+    told = []
+    monkeypatch.setattr(uninstall.secure_input, "_run_as_root",
+                        lambda script, what: (False, secure_input.TIMED_OUT))
+    monkeypatch.setattr(uninstall, "_tell", lambda kind, heading, body, **k: told.append(body))
+    assert uninstall._remove_as_root(_find(home), leave_group=False) is None
+    assert "may already be gone" in told[0] and "Nothing was removed" not in told[0]
+
+
+def test_an_error_partway_still_ends_with_a_message_and_quits(home, monkeypatch):
+    """With the tray's parts already stopped, going back to it would leave a
+    half-shut TuxTalk (review of 0.17)."""
+    told = []
+    monkeypatch.setattr(uninstall.update_checker, "get_install_type", lambda: "appimage")
+    monkeypatch.setattr(uninstall.update_checker, "get_running_appimage_path", lambda: None)
+    plan = _find(home)
+    monkeypatch.setattr(uninstall, "find", lambda *a, **k: plan)
+    monkeypatch.setattr(uninstall, "_ask", lambda plan: (False, False, False))
+    monkeypatch.setattr(uninstall, "_working_window", lambda: types.SimpleNamespace(destroy=lambda: None))
+    monkeypatch.setattr(uninstall, "_tell", lambda kind, heading, body, **k: told.append((heading, body)))
+
+    def stop(plan, stop_tray_parts):
+        stop_tray_parts()
+        raise RuntimeError("D-Bus went away")
+    monkeypatch.setattr(uninstall, "stop_tuxtalk", stop)
+    stopped = []
+    assert uninstall.run(stop_tray_parts=lambda: stopped.append(1)) is True
+    assert stopped == [1]
+    heading, body = told[0]
+    assert heading == "TuxTalk couldn't remove everything"
+    assert "stopped partway (D-Bus went away)" in body
 
 
 def test_tuxtalk_minus_minus_uninstall():

@@ -170,6 +170,12 @@ rmdir --ignore-fail-on-non-empty {HELPER_DIR} 2>/dev/null
 systemctl daemon-reload
 udevadm control --reload-rules
 udevadm trigger --action=change --sysname-match=uinput
+if systemctl is-active --quiet {SERVICE} || [ -e {UNIT_PATH} ] || [ -e {HELPER_PATH} ]; then
+    echo "{NOT_REMOVED} helper"
+fi
+if [ -e {UINPUT_RULE_PATH} ] || [ -e {UDEV_RULE_PATH} ]; then
+    echo "{NOT_REMOVED} rule"
+fi
 """
 
 
@@ -193,6 +199,14 @@ STILL_IN_GROUP = "TUXTALK_STILL_IN_INPUT_GROUP"
 # to remove TuxTalk's package (another install running, say), followed by
 # its last lines. Everything else was still removed.
 PACKAGE_NOT_REMOVED = "TUXTALK_PACKAGE_NOT_REMOVED"
+
+# Printed by uninstall_lines(), followed by "helper" or "rule", for what is
+# still there after removing it, so the uninstall doesn't claim it's gone.
+NOT_REMOVED = "TUXTALK_NOT_REMOVED"
+
+# _pkexec()'s message when pkexec didn't return in PKEXEC_TIMEOUT: the
+# script may have run some of the way by then.
+TIMED_OUT = "That took too long. Please try again."
 
 
 def _still_in_group_check():
@@ -288,18 +302,20 @@ def _pkexec(script, what):
         result = subprocess.run(["pkexec", "/bin/bash", "-s"], input=script, text=True,
                                 capture_output=True, timeout=PKEXEC_TIMEOUT)
     except subprocess.TimeoutExpired:
-        return False, "That took too long. Please try again."
+        return False, TIMED_OUT
     except FileNotFoundError:
         return False, "pkexec isn't installed, so TuxTalk can't ask for your password."
     if result.returncode == 0:
         logger.info(f"Hotkey helper {what}")
-        if STILL_IN_GROUP in (result.stdout or ""):
+        out = result.stdout or ""
+        if STILL_IN_GROUP in out:
             logger.warning("Still in the input group after gpasswd")
-            return True, STILL_IN_GROUP
-        if PACKAGE_NOT_REMOVED in (result.stdout or ""):
-            logger.warning(f"The package manager didn't remove TuxTalk: {result.stdout.strip()}")
-            return True, PACKAGE_NOT_REMOVED
-        return True, ""
+        if PACKAGE_NOT_REMOVED in out:
+            logger.warning(f"The package manager didn't remove TuxTalk: {out.strip()}")
+        if NOT_REMOVED in out:
+            logger.warning(f"Not removed as root: {out.strip()}")
+        # The script's own report lines (the markers above), one per line.
+        return True, "\n".join(line for line in out.splitlines() if line.startswith("TUXTALK_"))
     if pkexec_was_declined(result):
         logger.info(f"Hotkey helper {what}: cancelled at the password prompt")
         return False, "cancelled"

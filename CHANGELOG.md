@@ -13,6 +13,12 @@ before 0.15.0, so older entries use that name.
   is a link into another folder (a synced folder, a bigger disk), only
   TuxTalk's own files are removed from there. Before, everything in that
   folder went.
+- Uninstall says what it couldn't remove. It used to finish with "TuxTalk
+  is uninstalled" even when the hotkey helper, a file or the input group
+  change hadn't gone, and asked you to log out to leave the input group when
+  it hadn't managed to. If the password prompt times out it now says the
+  hotkey helper may already be gone, not that nothing changed, and an error
+  partway still ends with a message instead of a half-closed TuxTalk.
 - The "Parakeet got more accurate" offer pops up by itself, so Enter there
   now means Not Now. An Enter meant for another window no longer starts the
   670 MB download.

@@ -106,6 +106,18 @@ class Plan:
         return self.helper or self.typing_rule or self.input_group or self.package is not None
 
 
+@dataclass
+class Result:
+    """How the uninstall went, for the closing message."""
+    left_group: bool = False         # gpasswd really took the user out
+    package_failed: bool = False     # the package manager refused
+    not_removed: list = field(default_factory=list)   # what's still there, in words
+
+    @property
+    def complete(self):
+        return not self.not_removed and not self.package_failed
+
+
 def hf_hub_cache(home, environ=os.environ):
     """Where Hugging Face keeps its models, by its own rules (huggingface_hub's
     constants.py; HUGGINGFACE_HUB_CACHE is the older name, still honoured)."""
@@ -257,7 +269,7 @@ def root_script(plan, leave_group):
     even if one before it failed."""
     lines = "set -uo pipefail\n"
     if leave_group:
-        lines += 'gpasswd -d "$(id -nu "${PKEXEC_UID:?}")" input || true\n'
+        lines += secure_input._leave_group_lines()
     lines += secure_input.uninstall_lines()
     if plan.package:
         lines += _package_lines(plan)
@@ -265,7 +277,8 @@ def root_script(plan, leave_group):
 
 
 def _remove(path):
-    """Remove a file, a link (never what it points at), or a folder."""
+    """Remove a file, a link (never what it points at), or a folder. False
+    when it couldn't."""
     try:
         if path.is_symlink() or not path.is_dir():
             path.unlink(missing_ok=True)
@@ -273,36 +286,41 @@ def _remove(path):
             shutil.rmtree(path)
     except OSError as e:
         logger.warning(f"Could not remove {path}: {e}")
+        return False
+    return True
 
 
 def _empty(folder, names):
     """Remove what's in *folder* (through a link, only what's TuxTalk's by
     *names*), then the folder, or the link and the folder it led to if
-    that's empty now."""
+    that's empty now. What it couldn't remove."""
     target = folder.resolve() if folder.is_symlink() else None
-    for entry in _contents(folder, names):
-        _remove(entry)
-    _remove(folder)
+    failed = [entry for entry in _contents(folder, names) if not _remove(entry)]
+    if not failed and not _remove(folder):
+        failed.append(folder)
     if target is not None:
         try:
             target.rmdir()
         except OSError:
             pass        # gone already, or something else is in it
+    return failed
 
 
 def remove_files(plan, delete_personal, delete_shared):
-    """Delete the files the plan lists. Only files: the desktop's own
-    settings are undone by undo_desktop_changes() first."""
-    for path in plan.downloads + plan.leftovers + plan.runtime:
-        _remove(path)
+    """Delete the files the plan lists, and return those it couldn't. Only
+    files: the desktop's own settings are undone by undo_desktop_changes()
+    first."""
+    paths = plan.downloads + plan.leftovers + plan.runtime
     if delete_shared:
-        for path in plan.shared:
-            _remove(path)
+        paths += plan.shared
     if delete_personal:
-        for path in plan.personal:
-            _remove(path)
+        paths += plan.personal
+    if plan.ydotoold_unit is not None:
+        paths.append(plan.ydotoold_unit)
+    failed = [path for path in paths if not _remove(path)]
+    if delete_personal:
         for folder, names in plan.folders:
-            _empty(folder, names)
+            failed += _empty(folder, names)
     # Folders TuxTalk made and nothing else uses: gone once empty.
     folders = [plan.home / "AppImages", plan.hub / ".locks", plan.hub]
     if plan.hub.parent.name == "huggingface":
@@ -312,8 +330,7 @@ def remove_files(plan, delete_personal, delete_shared):
             folder.rmdir()
         except OSError:
             pass        # not empty, or not there
-    if plan.ydotoold_unit is not None:
-        _remove(plan.ydotoold_unit)
+    return failed
 
 
 def _tuxtalk_pids(data_dir):
@@ -555,21 +572,47 @@ def _tell(kind, heading, body, markup=False):
     dialog.destroy()
 
 
-def done_text(plan, delete_personal, delete_shared, left_group, package_failed):
+# What the root script's NOT_REMOVED lines name, in words.
+ROOT_LEFT = {"helper": f"the hotkey helper ({secure_input.SERVICE})",
+             "rule": "the typing permission in /etc/udev/rules.d"}
+
+
+def root_result(report, leave_group):
+    """The Result of the root script, from its report lines (_pkexec)."""
+    lines = report.splitlines()
+    result = Result(package_failed=secure_input.PACKAGE_NOT_REMOVED in lines)
+    result.not_removed = [ROOT_LEFT[line.split()[1]] for line in lines
+                          if line.startswith(secure_input.NOT_REMOVED + " ")]
+    still_in_group = secure_input.STILL_IN_GROUP in lines
+    result.left_group = leave_group and not still_in_group
+    if leave_group and still_in_group:
+        result.not_removed.append("your place in the 'input' group")
+    return result
+
+
+def done_heading(result):
+    return "TuxTalk is uninstalled" if result.complete else "TuxTalk couldn't remove everything"
+
+
+def done_text(plan, delete_personal, delete_shared, result):
     """The closing message's body (Pango markup)."""
     parts = []
-    if package_failed:
+    if result.not_removed:
+        shown = [GLib.markup_escape_text(item) for item in result.not_removed[:6]]
+        if len(result.not_removed) > 6:
+            shown.append(f"and {len(result.not_removed) - 6} more")
+        parts.append("These are still there:\n" + "\n".join(f"•  {item}" for item in shown))
+    if result.package_failed:
         command = {"deb": "sudo apt remove tuxtalk", "rpm": "sudo dnf remove tuxtalk",
                    "aur": "sudo pacman -R tuxtalk-appimage"}[plan.install_type]
-        parts.append("Everything else is gone, but the package manager wouldn't remove "
-                     "the program itself (it may be busy with an update). Remove it "
-                     f"later with:\n<tt>{command}</tt>")
+        parts.append("The package manager wouldn't remove the program itself (it may be "
+                     f"busy with an update). Remove it later with:\n<tt>{command}</tt>")
     elif plan.install_type == "package":
         parts.append("Remove the tuxtalk package with your package manager to finish.")
     logout = []
     if plan.extension:
         logout.append("GNOME shows the extension's menu until then")
-    if left_group:
+    if result.left_group:
         logout.append("leaving the 'input' group takes effect then")
     if logout:
         parts.append("Log out and back in to finish: " + ", and ".join(logout) + ".")
@@ -579,14 +622,53 @@ def done_text(plan, delete_personal, delete_shared, left_group, package_failed):
     if not delete_shared and plan.shared:
         parts.append("The speech models in the shared download folder are kept in "
                      f"<tt>{GLib.markup_escape_text(_shown(plan.hub, plan.home))}</tt>.")
-    parts.append(f'If TuxTalk didn\'t work out for you, <a href="{FEEDBACK_URL}">tell us '
-                 "why</a>. It helps.")
+    if result.not_removed:
+        parts.append(f'Ask in <a href="{FEEDBACK_URL}">Discussions</a> and we\'ll help you '
+                     "remove the rest.")
+    else:
+        parts.append(f'If TuxTalk didn\'t work out for you, <a href="{FEEDBACK_URL}">tell us '
+                     "why</a>. It helps.")
     return "\n\n".join(parts)
 
 
+def _remove_as_root(plan, leave_group):
+    """The root script's Result, or None when it didn't run (cancelled,
+    failed or timed out; the user has been told)."""
+    ok, message = _wait_for(lambda: secure_input._run_as_root(
+        root_script(plan, leave_group), "removed (uninstalling TuxTalk)"))
+    if ok:
+        return root_result(message, leave_group)
+    if message == secure_input.TIMED_OUT:
+        _tell(Gtk.MessageType.ERROR, "TuxTalk couldn't uninstall",
+              "The password prompt, or removing what needs it, took too long, so TuxTalk "
+              "stopped waiting. The hotkey helper may already be gone; the rest is still "
+              "there. Try Uninstall TuxTalk… again.")
+    elif message != "cancelled":
+        _tell(Gtk.MessageType.ERROR, "TuxTalk couldn't uninstall",
+              f"Nothing was removed.\n\n{message}")
+    return None
+
+
+def _remove_the_rest(plan, delete_personal, delete_shared, stop_tray_parts, result):
+    """Stop TuxTalk, undo its desktop changes and delete its files, adding
+    what's left to *result*."""
+    home = plan.home
+    stop_tuxtalk(plan, stop_tray_parts)
+    undo_desktop_changes(plan)
+    # Looked for again: stopping may have written a file (the stats).
+    again = find(home, plan.install_type, appimage=update_checker.get_running_appimage_path())
+    if delete_personal:
+        logger.info("Uninstalled TuxTalk; deleting the settings and this log")
+        stop_file_logging()         # its folder is about to go
+    failed = _wait_for(lambda: remove_files(again, delete_personal, delete_shared))
+    result.not_removed += [_shown(path, home) for path in failed]
+    _wait_for(_refresh_menus)
+
+
 def run(stop_tray_parts=None):
-    """Ask, then uninstall. True when TuxTalk was uninstalled and the caller
-    should quit; False when nothing changed."""
+    """Ask, then uninstall. True when TuxTalk was uninstalled, if not
+    always all of it, and the caller should quit; False when nothing
+    changed."""
     install_type = update_checker.get_install_type()
     if install_type in ("dev", "flatpak"):
         _tell(Gtk.MessageType.INFO, "Not for this copy of TuxTalk",
@@ -604,30 +686,23 @@ def run(stop_tray_parts=None):
 
     window = _working_window()
     try:
-        package_failed = False
+        result = Result()
         if plan.needs_root:
-            ok, message = _wait_for(lambda: secure_input._run_as_root(
-                root_script(plan, leave_group), "removed (uninstalling TuxTalk)"))
-            if not ok:
-                window.destroy()
-                if message != "cancelled":
-                    _tell(Gtk.MessageType.ERROR, "TuxTalk couldn't uninstall",
-                          f"Nothing was removed.\n\n{message}")
+            result = _remove_as_root(plan, leave_group)
+            if result is None:
                 return False
-            package_failed = message == secure_input.PACKAGE_NOT_REMOVED
-        stop_tuxtalk(plan, stop_tray_parts)
-        undo_desktop_changes(plan)
-        # Looked for again: stopping may have written a file (the stats).
-        again = find(Path.home(), install_type, appimage=update_checker.get_running_appimage_path())
-        if delete_personal:
-            logger.info("Uninstalled TuxTalk; deleting the settings and this log")
-            stop_file_logging()         # its folder is about to go
-        _wait_for(lambda: remove_files(again, delete_personal, delete_shared))
-        _wait_for(_refresh_menus)
+        try:
+            _remove_the_rest(plan, delete_personal, delete_shared, stop_tray_parts, result)
+        except Exception as e:
+            # The program, the helper or the tray may be gone already: going
+            # back to a half-stopped TuxTalk would be worse than saying so.
+            logger.exception("The uninstall stopped partway")
+            result.not_removed.append(f"some of the rest: the uninstall stopped partway ({e})")
     finally:
         window.destroy()
-    logger.info("Uninstalled TuxTalk")
-    _tell(Gtk.MessageType.INFO, "TuxTalk is uninstalled",
-          done_text(plan, delete_personal, delete_shared, leave_group, package_failed),
+    logger.info("Uninstalled TuxTalk" if not result.not_removed
+                else f"Uninstalled TuxTalk, except: {', '.join(result.not_removed)}")
+    _tell(Gtk.MessageType.INFO if result.complete else Gtk.MessageType.WARNING,
+          done_heading(result), done_text(plan, delete_personal, delete_shared, result),
           markup=True)
     return True
