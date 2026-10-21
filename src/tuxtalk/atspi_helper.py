@@ -706,4 +706,4 @@ if __name__ == "__main__":
             print("  No focused context found")
     else:
         print("\nAT-SPI is not available on this system")
-        print("Text insertion will fall back to typing")
+        print("Text insertion will fall back to ydotool/wtype")
