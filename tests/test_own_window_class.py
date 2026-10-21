@@ -158,3 +158,99 @@ def test_a_known_window_keeps_its_shortcut_and_leaves_the_primary_alone(monkeypa
     assert app._paste_text("hello") is True
     assert not any("--primary" in c for c in paste_env["copies"])
     assert paste_env["keys"] == [keys]
+
+
+# --- wl-copy's own window -------------------------------------------------------------
+# Without a data-control protocol, wl-copy sets the clipboard from a small window of
+# its own, which takes the focus for a moment and hands it back. A dictation into
+# Konsole read the focus in that moment and pasted with Ctrl+V, readline's
+# quoted-insert, so ^V appeared instead of the text. Log:
+# "Paste: Ctrl+V (class='io.github.bugaevc.wl-clipboard')".
+
+WL_COPY, WL_COPY_AT = "io.github.bugaevc.wl-clipboard", "0,0,1,1|DP-1|0,0,1920,1080"
+KONSOLE_AT = "100,100,800,600|DP-1|0,0,1920,1080"
+KWRITE_AT = "900,100,800,600|DP-1|0,0,1920,1080"
+
+
+class _TrayCache:
+    """The tray's real focus cache, filled the way the KWin script and the GNOME
+    extension fill it (the class, then the geometry) and asked like the service asks."""
+
+    def __init__(self):
+        self.service = object.__new__(dbus_service.TuxTalkDBusService)
+
+    def report(self, wm_class, geometry):
+        dbus_service.TuxTalkDBusService.SetFocusedWindowClass(self.service, wm_class)
+        dbus_service.TuxTalkDBusService.SetFocusedWindowGeometry(self.service, geometry)
+
+    def geometry(self):
+        return dbus_service.TuxTalkDBusService.GetFocusedWindowGeometry(self.service)
+
+    def GetFocusedWindowClass(self, **kw):
+        return dbus_service.TuxTalkDBusService.GetFocusedWindowClass(self.service)
+
+
+class _CopyReportingItsWindow(_Copy):
+    def __init__(self, tray):
+        super().__init__()
+        self.tray = tray
+
+    def wait(self, timeout=None):
+        self.tray.report(WL_COPY, WL_COPY_AT)
+        return super().wait(timeout)
+
+
+@pytest.fixture
+def tray(monkeypatch):
+    monkeypatch.setattr(dbus_service, "_focused_window_class", None)
+    monkeypatch.setattr(dbus_service, "_focused_window_geometry", "")
+    monkeypatch.setattr(dbus_service, "_clipboard_tool_focused", False)
+    tray = _TrayCache()
+    monkeypatch.setattr(app, "_get_tray_dbus_proxy", lambda: tray)
+    monkeypatch.setattr(compositor_focus, "focused_class", lambda: None)
+    return tray
+
+
+def test_a_terminal_gets_the_terminal_paste_while_wl_copy_has_the_focus(monkeypatch, paste_env,
+                                                                         tray):
+    tray.report("org.kde.konsole", KONSOLE_AT)
+    monkeypatch.setattr(app.subprocess, "Popen", lambda cmd, **kw: _CopyReportingItsWindow(tray))
+    assert app._paste_text("git status") is True
+    assert paste_env["keys"] == [CTRL_SHIFT_V]
+
+
+def test_floating_messages_stay_over_the_window_while_wl_copy_has_the_focus(tray):
+    """"Sending in 2 s" is placed from the geometry right after the paste."""
+    tray.report("org.kde.konsole", KONSOLE_AT)
+    tray.report(WL_COPY, WL_COPY_AT)
+    assert tray.geometry() == KONSOLE_AT
+
+
+def test_the_next_window_after_wl_copy_is_followed_again(tray):
+    tray.report("org.kde.konsole", KONSOLE_AT)
+    tray.report(WL_COPY, WL_COPY_AT)
+    tray.report("org.kde.kwrite", KWRITE_AT)
+    assert app._query_focused_window_class() == "org.kde.kwrite"
+    assert tray.geometry() == KWRITE_AT
+
+
+def test_wl_copys_window_from_the_compositor_counts_as_unknown(monkeypatch):
+    """Sway, Hyprland and niri are asked directly, without the tray."""
+    monkeypatch.setattr(app, "_get_tray_dbus_proxy", lambda: _Tray(""))
+    monkeypatch.setattr(compositor_focus, "focused_class", lambda: WL_COPY)
+    assert app._query_focused_window_class() is None
+
+
+def test_undo_remembers_the_window_the_text_went_to_not_wl_copys(monkeypatch, tray):
+    """"Delete last sentence" refuses in any window but the remembered one."""
+    tray.report("org.kde.kwrite", KWRITE_AT)
+
+    def paste(text):
+        tray.report(WL_COPY, WL_COPY_AT)
+        return True
+
+    monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
+    monkeypatch.setattr(app, "_paste_text", paste)
+    monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
+    app._inject_text("Hello. ", "paste", 0.0)
+    assert app.state.last_inserted_window == "org.kde.kwrite"

@@ -387,12 +387,6 @@ def test_the_window_the_text_landed_in_is_remembered(monkeypatch, wayland):
     assert app.state.last_inserted_window == "com.anthropic.Claude"
 
 
-def test_the_clipboard_tools_own_window_is_never_remembered(monkeypatch, wayland):
-    _focus_moves_on_paste(monkeypatch, "org.kde.kwrite", "io.github.bugaevc.wl-clipboard")
-    app._inject_text("Hello. ", "paste", 0.0)
-    assert app.state.last_inserted_window == "org.kde.kwrite"
-
-
 def test_an_unknown_window_after_typing_keeps_the_one_before(monkeypatch, wayland):
     _focus_moves_on_paste(monkeypatch, "org.kde.kwrite", None)
     app._inject_text("Hello. ", "paste", 0.0)

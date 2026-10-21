@@ -61,6 +61,11 @@ before 0.15.0, so older entries use that name.
   version starts.
 - If a slow computer drops letters, `key_delay` in config.toml slows the
   keyboard down again (6 or 12 are safe values; 2 is the new default).
+- A dictation pasted into a terminal could come out as a lone ^V. The
+  clipboard tool TuxTalk pastes with can open a tiny window of its own for a
+  moment, and TuxTalk sometimes took it for the window you were in, so the
+  terminal got an ordinary app's paste key instead of its own. "Sending in
+  2 s" could be placed over that tiny window too.
 
 ## [0.17.0] - 2026-10-20
 
