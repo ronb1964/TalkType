@@ -732,24 +732,20 @@ def test_an_infinite_number_in_a_whole_number_setting_costs_only_that_setting(co
     assert not list(config_path.parent.glob("config.toml.corrupt-*"))
 
 
-def test_a_config_from_before_the_own_keyboard_types_at_the_new_speed(config_path):
-    """Every saved config holds ydotool's typing_delay = 12, so without this
-    nobody who updated would type faster."""
-    config_path.write_text('model = "small"\ntyping_delay = 12\n')
-    assert config.load_config().key_delay == config.Settings().key_delay < 12
-
-
-def test_a_typing_delay_set_by_hand_is_kept(config_path):
-    config_path.write_text('model = "small"\ntyping_delay = 20\n')
-    assert config.load_config().key_delay == 20
-
-
-def test_a_key_delay_of_12_set_after_the_update_stays(config_path):
-    """The carry-over happens once: 12 is a safe value to set by hand."""
-    config_path.write_text('model = "small"\nkey_delay = 12\n')
-    assert config.load_config().key_delay == 12
+def test_a_typing_delay_from_ydotool_days_does_not_slow_the_new_keyboard(config_path):
+    """typing_delay was ydotool's wait, and its fast path for Electron apps
+    ignored it. Carried over, a hand-set 25 made typing into Claude Desktop
+    take 3 seconds a sentence instead of a blink."""
+    for old in (12, 25):
+        config_path.write_text(f'model = "small"\ntyping_delay = {old}\n')
+        assert config.load_config().key_delay == config.Settings().key_delay
     config.save_config(config.load_config())
     assert "typing_delay" not in config_path.read_text()
+
+
+def test_a_key_delay_set_by_hand_stays(config_path):
+    config_path.write_text('model = "small"\nkey_delay = 12\n')
+    assert config.load_config().key_delay == 12
 
 
 def test_recovery_from_backup_skips_only_the_bad_field(config_path):

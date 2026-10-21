@@ -321,20 +321,6 @@ def _migrate_settings(s: Settings) -> Settings:
     return s
 
 
-# typing_delay's default while TuxTalk typed through ydotool (until 0.18).
-YDOTOOL_TYPING_DELAY = 12
-
-
-def _carry_over_typing_delay(s: Settings, data: dict) -> None:
-    """typing_delay, ydotool's wait until 0.18, became key_delay. Every saved
-    config holds its default, 12, which isn't carried over, or nobody would
-    type faster; another number was set by hand and is. Once saved, the file
-    has key_delay instead, so this happens once."""
-    old = data.get("typing_delay")
-    if "key_delay" not in data and type(old) is int and old != YDOTOOL_TYPING_DELAY:
-        s.key_delay = old
-
-
 def _repair_invalid_fields(s: Settings, error: ConfigError) -> Settings:
     """Reset only the settings that are unusable, keeping everything else.
 
@@ -518,7 +504,6 @@ def load_config() -> Settings:
                 raise ValueError("config file is empty")
             # Apply TOML values using dataclass field types for casting
             _apply_toml(s, data)
-            _carry_over_typing_delay(s, data)
         except OSError as e:
             # The file could not be READ — permissions, a bad mount, too many
             # open handles. That is not corruption, and it must never trigger
