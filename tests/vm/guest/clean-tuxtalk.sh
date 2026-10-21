@@ -29,7 +29,8 @@ if command -v flatpak >/dev/null; then
         xargs -r -n1 flatpak remote-delete --user --force 2>/dev/null
 fi
 rm -rf ~/.var/app/io.github.ronb1964.TalkType ~/.var/app/io.github.ronb1964.TuxTalk
-rm -rf ~/tt-test ~/kit/TuxTalk* ~/kit/TalkType* ~/run*-bak ~/tt-keyd    # hand testing
+rm -rf ~/tt-test ~/kit/TuxTalk* ~/kit/TalkType* ~/run*-bak ~/tt-keyd ~/old-talktype-test \
+    ~/pre015bak ~/TalkType.flatpak    # hand testing
 rm -rf ~/.local/share/TuxTalk.bak* ~/.local/share/TalkType*.bak*
 rm -rf ~/.local/share/flatpak/repo/refs/heads/deploy/app/io.github.ronb1964.T* \
     ~/.local/share/flatpak/repo/refs/remotes/talktype-origin
