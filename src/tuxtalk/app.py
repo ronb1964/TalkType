@@ -3087,7 +3087,7 @@ def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = Fa
     (Ron, 2026-10-15).
     """
     outcome = _deliver_text(text, injection_mode, t0, one_block)
-    if outcome != "failed":
+    if outcome not in ("failed", "password_field"):
         try:
             landed = _query_focused_window_class()
         except Exception:
@@ -3107,9 +3107,15 @@ def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = F
     t0 is the timestamp when stop_recording began (for timing logs).
 
     Returns how it went: "ok" (all of it arrived), "partial" (some chunks of a
-    multi-part dictation arrived, then it stopped) or "failed" (none did).
+    multi-part dictation arrived, then it stopped), "failed" (none did) or
+    "password_field" (the focus is in one, so the rest wasn't sent).
     The caller tells the user about anything but "ok", so a dictation that
     never arrived doesn't fail silently.
+
+    The focus may have moved into a password field since the text was made,
+    so that is asked again first, and before each further chunk of a
+    multi-part delivery. What no check can close: the milliseconds between
+    the last answer and the keys that follow it.
 
     *one_block* (voice editing) pastes text with line breaks in one go, real
     newlines and all. Line by line with Enter in between, an editor continues
@@ -3117,6 +3123,9 @@ def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = F
     as Shift+Enter, since a plain Enter would send a chat message; that holds
     for every typed line break, not only voice editing's.
     """
+    from .atspi_helper import focused_is_password
+    if focused_is_password():
+        return "password_field"
     # Which window this text goes into, so select and move by voice only
     # trusts "what I just said" in that same window.
     try:
@@ -3157,9 +3166,13 @@ def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = F
             success = True
             delivered_parts = 0  # chunks confirmed in the document
             breaks_sent = 0      # line breaks confirmed after those chunks
+            password_field = False
             if marker in unified:
                 parts = unified.split(marker)
                 for i, part in enumerate(parts):
+                    if i and focused_is_password():
+                        success, password_field = False, True
+                        break
                     if part and not _type_text_fast(part):
                         success = False
                         break
@@ -3198,7 +3211,7 @@ def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = F
                     f"Fast-type stopped after {delivered_parts} chunk(s) — "
                     f"not re-injecting, undo buffer holds only what landed"
                 )
-                return "partial"
+                return "password_field" if password_field else "partial"
             # Nothing landed, so the normal injection path can safely try again.
             logger.warning("Fast-type failed, falling through to normal injection")
         elif focused_class in _ELECTRON_PASTE_BROKEN_CLASSES:
@@ -3236,6 +3249,9 @@ def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = F
         resume_at = None
         needs_break = False
         for i, part in enumerate(parts):
+            if i and focused_is_password():
+                resume_at = i
+                break
             if part:
                 logger.info(f"Pasting part {i+1}/{len(parts)}: {len(part)} chars")
                 if not _paste_text(part):
@@ -3256,6 +3272,16 @@ def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = F
         if resume_at is None:
             print(f"Inject (smart paste) {len(parts)} chunks, {len(text)} total chars")
             logger.info(f"Smart hybrid paste completed: {len(parts)} chunks")
+        elif focused_is_password():
+            # The chunks before reached the document, and so did the line
+            # break after the last of them unless that break is what failed.
+            delivered = marker.join(parts[:resume_at])
+            if resume_at and not needs_break:
+                delivered += marker
+            state.last_inserted_text = delivered.replace(marker, "\n")
+            logger.warning(f"Stopped after {resume_at}/{len(parts)} chunks: a password field "
+                           "has the focus now")
+            return "password_field"
         else:
             remainder = (marker if needs_break else "") + marker.join(parts[resume_at:])
             # A terminal's single chunk carries real newlines for bracketed
@@ -3432,6 +3458,10 @@ def _finish_capture(beeps_on: bool, notify_on: bool):
     return frames, rec_sr
 
 
+PASSWORD_FIELD_LABEL = "TuxTalk doesn't type into password fields"
+PASSWORD_FIELD_NOTICE = ("Nothing was typed: TuxTalk doesn't type into password fields. "
+                         "Type the password on the keyboard.")
+
 # What to tell the user when a dictation didn't reach the window. The text is
 # always in Recent Dictations by then (it's saved before injection starts).
 _UNDELIVERED_NOTICES = {
@@ -3440,6 +3470,8 @@ _UNDELIVERED_NOTICES = {
     "partial": "Only part of that dictation reached the window. The whole text is saved "
                "in Recent Dictations in the TuxTalk menu: click it to copy, then paste "
                "with Ctrl+V.",
+    # Said its own way, with a label over the window (_password_field_refused).
+    "password_field": PASSWORD_FIELD_NOTICE,
 }
 
 
@@ -3498,6 +3530,9 @@ def _report_undelivered(outcome: str, beeps_on: bool):
     too slow to dictate. The low cancel beep follows the "done" beep, which has already played, so a
     desktop without notifications still hears that something went wrong.
     """
+    if outcome == "password_field":
+        _password_field_refused(beeps_on)
+        return
     message = _UNDELIVERED_NOTICES[outcome]
     if outcome == "failed":
         # When the typing setup is the reason, say what fixes it.
@@ -3517,6 +3552,31 @@ def _report_undelivered(outcome: str, beeps_on: bool):
     logger.warning(f"Dictation not delivered ({outcome}); told the user")
     _beep(beeps_on, *CANCEL_BEEP)
     _notify("TuxTalk", message)
+
+
+def _refuse_password_field(beeps_on: bool) -> bool:
+    """True when the cursor is in a password field (atspi_helper.py), after
+    saying so (_password_field_refused)."""
+    from . import atspi_helper
+    if not atspi_helper.focused_is_password():
+        return False
+    _password_field_refused(beeps_on)
+    return True
+
+
+def _password_field_refused(beeps_on: bool) -> None:
+    """Nothing is typed in a password field, and the text stays out of Recent
+    Dictations too, since it may be the password itself. The cancel beep and
+    a label over the window say so, whatever the notifications setting. The
+    notification is only for when neither would be noticed: beeps off, or no
+    X display or GTK loop for the label (screen_message._floats_without_focus);
+    otherwise it's a rule, not an error (like _edit_problem's)."""
+    logger.info("Not typed: the cursor is in a password field")
+    _beep(beeps_on, *CANCEL_BEEP)
+    from . import screen_message
+    screen_message.show_over_active_window(PASSWORD_FIELD_LABEL)
+    if not (beeps_on and _gtk_loop_running and os.environ.get("DISPLAY")):
+        _notify("TuxTalk", PASSWORD_FIELD_NOTICE)
 
 
 # Silence put between two chunks when the engine hears them together, so the
@@ -3882,12 +3942,25 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
             _beep(beeps_on, *CANCEL_BEEP)
             return
 
+        from .enter_command import split_press_enter
+        rest, said_enter = split_press_enter(raw)
+        enter_only = said_enter and not rest.strip()
+        # A password field gets nothing: not the words, nor what Type at
+        # pause would type first (the mark held back from the last phrase, a
+        # held "No wait.", backspaces for a correction), and the local AI
+        # never sees them. Only "press enter" on its own still presses
+        # Enter: people type the password by hand, then say it to log in.
+        from . import atspi_helper
+        if atspi_helper.focused_is_password():
+            state.pending_boundary, state.held_cue = None, ""
+            if not enter_only:
+                _password_field_refused(beeps_on)
+                return
+
         # Chunked dictation: the chunk before this one held back its final
         # mark; decide it now, before a command acts on what was typed.
         if chunk_role is not None and state.pending_boundary is not None:
-            from .enter_command import split_press_enter
-            rest, enter_only = split_press_enter(raw)
-            if enter_only and not rest.strip():
+            if enter_only:
                 # Only "press enter" after the pause: the sentence before it
                 # ends here (its held-back mark, or the auto-period), with no
                 # space to go out in the sent message.
@@ -3981,6 +4054,11 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
             # Kept for a send that's held, which types it after all.
             core = text.rstrip(" ")
             space_left_off, text = text[len(core):], core
+
+        # Again before the beep and the "Transcribed" notification, which
+        # shows the words: the focus may have moved while the AI cleaned them.
+        if text and _refuse_password_field(beeps_on):
+            return
 
         # Beep to confirm transcription is done
         if chunk_role != "middle":
@@ -4455,6 +4533,10 @@ def _edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0
     type the result over it. *spoken*: the instruction came after "edit
     that" in a dictation, which selected the text itself."""
     from . import ai_cleanup, clipboard, history, voice_edit_rules
+    # Before copying the selection or hearing the instruction; checked
+    # again before the rewrite replaces it.
+    if _refuse_password_field(beeps_on):
+        return
     # The selection first, so "select some text first" comes up even when
     # nothing was said.
     try:
@@ -4562,6 +4644,8 @@ def _edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0
         # (indenting one line); the AI's spacing-only answers are dropped above.
         if not result or result == selected:
             _edit_problem("no_answer", beeps_on)
+            return
+        if _refuse_password_field(beeps_on):
             return
         logger.info(f"Voice edit result: {_loggable(result)} "
                     f"(took {time.time() - t0:.2f}s)")

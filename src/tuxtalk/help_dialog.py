@@ -600,7 +600,20 @@ Your Words and stats in one file, to keep or to load on another computer with
 Everything runs on your computer; nothing you say is sent anywhere. Your Stats keeps
 only numbers (words, dictations, time), never the text. Recent Dictations keeps
 your last 20 in memory, gone when you log out. The log has your words only if you
-turn on "Log transcribed text" (Preferences → Advanced → Fine-tuning), for a bug report.
+turn on "Log transcribed text" (Preferences → Advanced → Fine-tuning), for a bug report;
+then it has what you said in a password box too, though nothing was typed there.
+
+<b>Password fields</b>
+TuxTalk doesn't type into a password box. Hold <b>{hold}</b> and talk there, let go: you
+hear the low beep, "TuxTalk doesn't type into password fields" shows over the window,
+and nothing is typed or kept in Recent Dictations. Type passwords on the keyboard.
+Saying only <b>press enter</b> there still presses Enter, to log in after you type it.
+  • It usually knows a password box in GTK apps (most GNOME, Cinnamon and Xfce apps).
+  • In KDE apps and Firefox only while accessibility is on (a screen reader turns it on).
+  • In Chrome, Brave and apps built on them (Discord, Slack, VS Code) only if
+    accessibility was already on when they started.
+  • The desktop's own password prompt and a terminal asking for one (sudo) don't tell
+    it: there, don't dictate while the cursor is in the password box.
 
 <b>Bug reports and feedback</b>
   • <b>Report bugs:</b> <a href="{ISSUES_URL}">TuxTalk issues on GitHub</a>

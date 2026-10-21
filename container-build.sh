@@ -295,11 +295,11 @@ cp /usr/lib/girepository-1.0/*.typelib AppDir/usr/lib/girepository-1.0/ 2>/dev/n
 # checked, so a missing Gtk, Gdk or GdkPixbuf would sail through the build and
 # crash the app on launch with a GI error the user cannot act on.
 #
-# Typelibs behind a try/except are deliberately NOT listed: Atspi
-# (password-field detection) is optional, is not bundled, and the code
-# already degrades without it. Desktop notifications don't use a typelib at
-# all: notify.py talks to the notification service over D-Bus, because a
-# bundled libnotify couldn't find Fedora's Notify typelib.
+# Typelibs behind a try/except are deliberately NOT listed: the code degrades
+# without them. Desktop notifications and password-field detection use none:
+# notify.py talks to the notification service over D-Bus, because a bundled
+# libnotify couldn't find Fedora's Notify typelib, and atspi_helper.py asks
+# the accessibility bus over D-Bus too, as libatspi's typelib isn't bundled.
 #
 # tests/test_bundled_typelibs.py derives the unguarded set from the source and
 # fails if this list drifts, so do not edit it by hand without running it.

@@ -17,9 +17,9 @@ The distinction that matters is guarded vs unguarded:
     except Exception:
         ...
 
-Notify and Atspi are deliberately absent from the AppImage and the code already
-degrades without them. Listing them in REQUIRED_TYPELIBS would hard-fail every
-build for features meant to be optional.
+A typelib imported only inside a try/except is optional: the code degrades
+without it, and listing it in REQUIRED_TYPELIBS would hard-fail every build
+for a feature meant to be optional.
 
 Guardedness is detected from the AST rather than a hand-maintained exempt list,
 so a new optional dependency is classified correctly without editing this file.

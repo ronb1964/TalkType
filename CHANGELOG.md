@@ -39,6 +39,17 @@ before 0.15.0, so older entries use that name.
 - The waveform, bars and radial indicators all draw the standard soft
   backing again. A backing picked before 0.16 (Off, Soft or Strong) had no
   control left to change it; that setting is gone.
+- TuxTalk no longer types into password fields. Dictate with the cursor in
+  a password box and nothing is typed: you hear the low beep and "TuxTalk
+  doesn't type into password fields" shows over the window. The words aren't
+  kept in Recent Dictations either, since they may be the password. The same
+  goes for Paste Last Dictation and voice editing. Saying only "press enter"
+  there still presses Enter, so you can log in after typing the password.
+  TuxTalk asks the desktop's accessibility service, so it usually works in
+  GTK apps (most GNOME, Cinnamon and Xfce apps), and in KDE apps and Firefox
+  only while accessibility is on.
+  Chrome, Brave and Electron apps (Discord, VS Code) only say so if
+  accessibility was already on when they started.
 
 ## [0.17.0] - 2026-10-20
 

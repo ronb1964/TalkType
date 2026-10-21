@@ -382,6 +382,26 @@ def test_without_the_ai_downloaded_it_says_where_to_turn_it_on(edit_env, monkeyp
     assert "Preferences" in edit_env["notices"][0] and edit_env["typed"] == []
 
 
+def test_in_a_password_field_the_selection_isnt_even_read(edit_env, monkeypatch):
+    from tuxtalk import atspi_helper
+    monkeypatch.setattr(atspi_helper, "focused_is_password", lambda: True)
+    monkeypatch.setattr(cb, "copy_selection", lambda send_copy: pytest.fail("read the selection"))
+    run_edit()
+    assert edit_env["typed"] == [] and edit_env["history"] == []
+    assert edit_env["engine"].asked == [] and edit_env["beeps"] == [app.CANCEL_BEEP]
+
+
+def test_a_rewrite_is_not_typed_or_kept_if_the_focus_moved_to_a_password_field(edit_env,
+                                                                                monkeypatch):
+    from tuxtalk import atspi_helper
+    answers = [False]       # a text box at the start, a password field by the end
+    monkeypatch.setattr(atspi_helper, "focused_is_password",
+                        lambda: answers.pop(0) if answers else True)
+    run_edit()
+    assert edit_env["typed"] == [] and edit_env["history"] == []
+    assert edit_env["beeps"] == [app.CANCEL_BEEP] and edit_env["put_back"] == 1
+
+
 def test_the_clipboard_comes_back_even_when_typing_fails(edit_env, monkeypatch):
     monkeypatch.setattr(app, "_inject_text", lambda text, mode, t0, one_block=False: (_ for _ in ()).throw(RuntimeError("boom")))
     run_edit()

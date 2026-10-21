@@ -6,7 +6,7 @@ import time
 import wave
 
 import numpy as np
-from harness import CONFIG, Abort, Outcome, check, heard_in
+from harness import CONFIG, FINISHED, Abort, Outcome, check, heard_in
 from vmlib import REMOTE
 
 TERM_FILE = f"~/{REMOTE}/term.txt"
@@ -201,6 +201,41 @@ def press_enter_words(run):
         return Outcome("pass", "Typed as words, no Enter", expected=expected,
                        typed=typed.rstrip(" "), heard=heard)
     return run.expect_typed("press_enter_words", expected, typed, heard)
+
+
+@check("Dictation", "password_field", "Nothing is typed into a password field, or kept")
+def password_field(run):
+    run.sink_ready("password", "TT Password", fresh=True, password=True)
+    _typed, _heard, mark = run.say("cat_couch", sink="password", wait=False)
+    refused = run.wait_log(mark, "in a password field", *FINISHED, timeout=25)
+    shot = run.shot("password-field")      # the label is up for a few seconds only
+    time.sleep(2)
+    in_box = run.sink_text("password")
+    run.close_sink("password")
+    problems = []
+    if in_box:
+        problems.append(f"typed {in_box!r} into the password box")
+    if not refused or "Not typed: the cursor is in a password field" not in refused:
+        problems.append("the log never said “Not typed: the cursor is in a password field”")
+    # Not in Recent Dictations: Paste Last Dictation in the ordinary window
+    # mustn't bring it back (it types the dictation before, or nothing).
+    run.sink_ready(fresh=True)
+    paste_mark = run.log_mark()
+    run.vm.tap("ctrl", "alt", "p")
+    run.wait_log(paste_mark, "Paste last dictation", timeout=10)
+    time.sleep(3)
+    if "couch" in run.sink_text():
+        problems.append("Paste Last Dictation typed it: it was kept in Recent Dictations")
+    detail = "; ".join(problems) or ("Nothing typed or kept; log: “Not typed: the cursor is in a "
+                                     "password field”; the label is in the screenshot")
+    return Outcome("fail" if problems else "pass", detail, typed=in_box, screenshot=shot)
+
+
+@check("Dictation", "password_field_others", "Other text boxes still get the dictation")
+def password_field_others(run):
+    run.sink_ready()
+    typed, heard, _log = run.say("cat_couch")
+    return run.expect_typed("cat_couch", "The cat clawed the couch.", typed, heard)
 
 
 @check("Words and numbers", "numbers_digits", "Numbers: As digits")
