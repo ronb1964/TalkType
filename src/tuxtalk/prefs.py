@@ -788,9 +788,15 @@ class PreferencesWindow:
         if combo is None:
             return
         label = device_label("cuda", model, getattr(self, "_cuda_ready", False))
-        for row in combo.get_model():
-            if row[1] == "cuda" and row[0] != label:   # ComboBoxText rows are (text, id)
-                row[0] = label
+        # Nor may the new label read as picking CUDA: with Parakeet that asks
+        # which Whisper model to use on CUDA, unasked.
+        combo.handler_block_by_func(self._on_device_changed)
+        try:
+            for row in combo.get_model():
+                if row[1] == "cuda" and row[0] != label:   # ComboBoxText rows are (text, id)
+                    row[0] = label
+        finally:
+            combo.handler_unblock_by_func(self._on_device_changed)
 
     def save_config(self):
         """Save config to TOML file (merge-on-save).
