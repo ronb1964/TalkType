@@ -513,7 +513,8 @@ WARNING_AMBER = "#e6aa3c"
 
 
 def hotkey_change_message(cfg, changed, refused, apps=None):
-    """(title, text, offer the test) for the question after OK or Apply, or None.
+    """(title, text, offer the test, a key clashes) for the question after OK or
+    Apply, or None.
 
     *changed*: the settings keys changed; *refused*: keys KDE already uses
     (kwin_hotkeys.refused_since), None when unknown; *apps*: {key: app} for
@@ -555,14 +556,14 @@ def hotkey_change_message(cfg, changed, refused, apps=None):
         return None
 
     if len(clashes) > 1:
-        title = "Heads up: KDE already uses some of these keys"
+        title = "KDE already uses some of these keys"
     elif clashes and clashes[0][1]:
-        title = f"Heads up: {clashes[0][0]} also opens {clashes[0][1]}"
+        title = f"{clashes[0][0]} also opens {clashes[0][1]}"
     elif clashes:
-        title = f"Heads up: KDE already uses {clashes[0][0]}"
+        title = f"KDE already uses {clashes[0][0]}"
     else:
         title = "Try your new hotkey?"
-    return title, "\n\n".join(lines), offer_test
+    return title, "\n\n".join(lines), offer_test, bool(clashes)
 
 
 def device_label(device, model, cuda_ready):
@@ -6847,8 +6848,7 @@ class PreferencesWindow:
                                         app_shortcuts_since(since) if refused else None)
         if message is None:
             return False
-        title, text, offer_test = message
-        clash = title.startswith("Heads up")
+        title, text, offer_test, clash = message
         dialog = message_dialog(transient_for=self.window, modal=True,
                                 message_type=Gtk.MessageType.QUESTION
                                 if offer_test and not clash else Gtk.MessageType.WARNING,
