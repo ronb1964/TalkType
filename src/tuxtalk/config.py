@@ -286,6 +286,8 @@ def _validation_problems(s: Settings) -> list[tuple[str, str]]:
         problems.append(("chunk_pause_seconds", f"Invalid chunk_pause_seconds '{s.chunk_pause_seconds}'. Must be between 0.3 and 3.0"))
     if not (3.0 <= s.chunk_speech_db <= 12.0):
         problems.append(("chunk_speech_db", f"Invalid chunk_speech_db '{s.chunk_speech_db}'. Must be between 3 and 12"))
+    if not (1 <= s.key_delay <= 50):
+        problems.append(("key_delay", f"Invalid key_delay '{s.key_delay}'. Must be between 1 and 50"))
     if not (0.5 <= s.indicator_sensitivity <= 2.0):
         problems.append(("indicator_sensitivity", f"Invalid indicator_sensitivity '{s.indicator_sensitivity}'. Must be between 0.5 and 2.0"))
 

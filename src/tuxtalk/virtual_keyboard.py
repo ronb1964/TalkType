@@ -76,7 +76,11 @@ def _keyboard_class():
             """Skip opening the new device to read it back: TuxTalk only
             writes to it. With the hotkey helper installed only the helper
             may read /dev/input, and python-evdev retried for two seconds
-            before giving up, on every keyboard made."""
+            before giving up, on every keyboard made.
+
+            _find_device is python-evdev's own, not part of its API: this
+            matches 1.9 (poetry.lock). Check it when updating evdev, since a
+            changed signature stops the keyboard from being made."""
             return None
 
     return Keyboard

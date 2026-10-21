@@ -748,6 +748,15 @@ def test_a_key_delay_set_by_hand_stays(config_path):
     assert config.load_config().key_delay == 12
 
 
+def test_a_key_delay_out_of_range_goes_back_to_the_default(config_path):
+    """500 ms a key would make a sentence take a minute to type; 0 overflows
+    the kernel's buffer and loses letters."""
+    for wrong in (0, 500):
+        config_path.write_text(f'model = "small"\nkey_delay = {wrong}\n')
+        loaded = config.load_config()
+        assert loaded.key_delay == config.Settings().key_delay and loaded.model == "small"
+
+
 def test_recovery_from_backup_skips_only_the_bad_field(config_path):
     config_path.write_text("this is = = not toml")
     (config_path.parent / "config.toml.bak").write_text(

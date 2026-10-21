@@ -1841,7 +1841,7 @@ def _send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY
             raise
         return False
     if not sent:
-        logger.error(f"Couldn't send {what}: TuxTalk has no virtual keyboard")
+        logger.error(f"Couldn't send {what}: TuxTalk's virtual keyboard isn't working")
     return sent
 
 
@@ -3447,7 +3447,7 @@ def _password_field_refused(beeps_on: bool) -> None:
     Dictations too, since it may be the password itself. The cancel beep and
     a label over the window say so, whatever the notifications setting. The
     notification is only for when neither would be noticed: beeps off, or no
-    X display or GTK loop for the label (screen_message._floats_without_focus);
+    X display or GTK loop for the label (the check below);
     otherwise it's a rule, not an error (like _edit_problem's)."""
     logger.info("Not typed: the cursor is in a password field")
     _beep(beeps_on, *CANCEL_BEEP)
