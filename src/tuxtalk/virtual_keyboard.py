@@ -67,15 +67,18 @@ def _capabilities():
     return {e.EV_KEY: keys, e.EV_REL: [e.REL_X, e.REL_Y, e.REL_WHEEL]}
 
 
+def _make_device():
+    from evdev import UInput, ecodes
+    return UInput(_capabilities(), name=NAME, bustype=ecodes.BUS_VIRTUAL, phys="tuxtalk/keyboard")
+
+
 def _open():
     """The keyboard, made the first time it's needed; None if it can't be."""
     global _device, _ready_at, _failure
     if _device is not None:
         return _device
     try:
-        from evdev import UInput, ecodes
-        _device = UInput(_capabilities(), name=NAME, bustype=ecodes.BUS_VIRTUAL,
-                         phys="tuxtalk/keyboard")
+        _device = _make_device()
     except Exception as e:
         reason = f"{type(e).__name__}: {e}"
         if reason != _failure:
@@ -84,7 +87,9 @@ def _open():
         return None
     _ready_at = time.monotonic() + SETTLE_S
     _failure = None
-    logger.info(f"Made TuxTalk's virtual keyboard ({_device.device.path})")
+    # Not its /dev/input path: python-evdev finds that by reading the input
+    # devices, which only the hotkey helper may do when it's installed.
+    logger.info("Made TuxTalk's virtual keyboard")
     return _device
 
 

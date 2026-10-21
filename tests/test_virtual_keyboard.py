@@ -8,11 +8,20 @@ import pytest
 from tuxtalk import app, virtual_keyboard
 
 
-def test_a_short_dictation_types_in_a_fraction_of_the_time_ydotool_took(keyboard):
+@pytest.fixture
+def settled(keyboard):
+    """The keyboard the service made at start, long taken on by the desktop."""
+    virtual_keyboard.start()
+    keyboard.clock.now = virtual_keyboard._ready_at
+    return keyboard
+
+
+def test_a_short_dictation_types_in_a_fraction_of_the_time_ydotool_took(settled):
     """ydotool needed about 0.6 s for 25 characters (24 ms a letter, VM
     measurement 2026-10-20); typing is the slowest step anyone sees."""
+    started = settled.clock.now
     assert app._type_text_raw("see you at noon tomorrow.") is True
-    assert keyboard.clock.now < 0.15
+    assert settled.clock.now - started < 0.15
 
 
 def test_a_long_dictation_is_typed_to_the_end(keyboard):
@@ -22,21 +31,28 @@ def test_a_long_dictation_is_typed_to_the_end(keyboard):
     assert keyboard.typed_keys().count(57) == 400      # every space
 
 
-def test_the_typing_delay_setting_slows_every_key(keyboard, monkeypatch):
+def test_the_typing_delay_setting_slows_every_key(settled, monkeypatch):
     monkeypatch.setattr(app, "_typing_delay", 20)
+    started = settled.clock.now
     app._type_text_raw("abcde")
-    assert keyboard.clock.now == pytest.approx(10 * 0.020)
+    assert settled.clock.now - started == pytest.approx(10 * 0.020)
 
 
 def test_keys_wait_until_the_desktop_has_taken_on_a_new_keyboard(keyboard, monkeypatch):
     """Keys sent the moment the keyboard appears are lost (the first letters
     of the dictation were missing in the VMs)."""
-    monkeypatch.setattr(virtual_keyboard, "_ready_at", virtual_keyboard.SETTLE_S)
     seen_at = []
     write = keyboard.write
     monkeypatch.setattr(keyboard, "write", lambda *a: seen_at.append(keyboard.clock.now) or write(*a))
     virtual_keyboard.send([(30, 1), (30, 0)])
     assert seen_at[0] >= virtual_keyboard.SETTLE_S
+
+
+def test_the_keyboard_is_made_with_the_hotkey_helper_installed(keyboard):
+    """Then the user can't read /dev/input, so python-evdev can't say which
+    event device the keyboard became; the service died over that once."""
+    assert keyboard.device is None
+    assert virtual_keyboard.start() is True
 
 
 def test_a_keyboard_that_fails_before_any_key_reports_nothing_sent(keyboard):
@@ -51,11 +67,13 @@ def test_a_keyboard_that_fails_partway_says_so(keyboard):
         app._send_backspaces(5)
 
 
-def test_a_keyboard_that_failed_is_made_again_next_time(keyboard, monkeypatch):
+def test_a_keyboard_that_failed_is_made_again_next_time(keyboard):
     keyboard.fail_after = 1
     with pytest.raises(virtual_keyboard.StoppedPartway):
         virtual_keyboard.send([(42, 1), (30, 1), (30, 0), (42, 0)])
     assert keyboard.closed and virtual_keyboard._device is None
+    keyboard.fail_after = None
+    assert virtual_keyboard.send([(30, 1), (30, 0)]) is True
 
 
 def test_keys_left_down_are_let_go(keyboard):

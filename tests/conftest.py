@@ -233,6 +233,10 @@ class FakeKeyboard:
     of typing them. *fail_after* makes writes fail after that many events, as
     a keyboard that breaks partway would."""
 
+    # python-evdev leaves it None when the user can't read /dev/input, as
+    # with the hotkey helper installed (the service died over it, 2026-10-20).
+    device = None
+
     def __init__(self):
         self.events = []        # [(code, value)], in order
         self.fail_after = None
@@ -278,11 +282,5 @@ def keyboard(monkeypatch):
     fake.clock = clock
     monkeypatch.setattr(virtual_keyboard, "time", clock)
     monkeypatch.setattr(virtual_keyboard, "_device", None)
-    monkeypatch.setattr(virtual_keyboard, "_ready_at", 0.0)
-
-    def make():
-        if virtual_keyboard._device is None:
-            virtual_keyboard._device = fake
-        return virtual_keyboard._device
-    monkeypatch.setattr(virtual_keyboard, "_open", make)
+    monkeypatch.setattr(virtual_keyboard, "_make_device", lambda: fake)
     return fake
