@@ -58,6 +58,10 @@
       var behavior = reduceMotion ? "auto" : "smooth";
       if (id === "top") window.scrollTo({ top: 0, behavior: behavior });
       else target.scrollIntoView({ behavior: behavior, block: "start" });
+      // The address must follow, or a refresh after the TuxTalk name jumps
+      // back to the #videos the visitor arrived with.
+      try { history.replaceState(null, "", location.pathname + location.search + (id === "top" ? "" : "#" + id)); }
+      catch (e) { /* sandboxed preview frame: scrolling is what matters there */ }
       if (id !== "top") {
         if (!target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
         target.focus({ preventScroll: true });
