@@ -126,10 +126,10 @@ def test_smart_paste_leaves_out_a_line_break_that_failed(monkeypatch, quiet):
     assert app.state.last_inserted_text == "first"
 
 
-def test_fast_type_records_the_line_break_that_landed(monkeypatch, quiet):
+def test_typing_into_electron_records_the_line_break_that_landed(monkeypatch, quiet):
     monkeypatch.setattr(app, "_determine_injection_method", lambda m: ("paste", "test"))
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "Claude")
-    monkeypatch.setattr(app, "_type_text_fast", lambda t: t == "first")
+    monkeypatch.setattr(app, "_type_text_raw", lambda t: t == "first")
     monkeypatch.setattr(app, "_send_shift_enter", lambda: True)
 
     outcome = app._inject_text(f"first{MARKER}second", "paste", 0.0)

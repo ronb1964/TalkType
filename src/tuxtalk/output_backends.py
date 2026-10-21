@@ -1,8 +1,9 @@
 """Text-injection backends.
 
 TuxTalk needs to type transcribed text into whatever app is focused. Outside a
-Flatpak it uses ydotool (Backend A); inside a Flatpak the uinput path is blocked,
-so it types through the RemoteDesktop portal + libei (Backend B). The backend is
+Flatpak it uses its own virtual keyboard (Backend A, virtual_keyboard.py);
+inside a Flatpak /dev/uinput is out of reach, so it types through the
+RemoteDesktop portal + libei (Backend B). The backend is
 chosen once at startup by FLATPAK_ID and hidden behind a single method so the
 recording core never knows which one is in use.
 """
@@ -16,9 +17,9 @@ class OutputBackend:
 
     Beyond plain text, editing voice commands need to press key combos —
     'delete everything' (Ctrl+A + Backspace) and character-undo (Backspace ×N).
-    Those go through the backend too, so the Flatpak (libei) and host (ydotool)
-    paths stay in lockstep instead of the commands hardcoding ydotool and
-    silently doing nothing inside the sandbox."""
+    Those go through the backend too, so the Flatpak (libei) and host
+    (virtual keyboard) paths stay in lockstep instead of the commands
+    hardcoding one and silently doing nothing inside the sandbox."""
 
     def type_text(self, text: str) -> bool:
         raise NotImplementedError
@@ -42,8 +43,8 @@ class OutputBackend:
         raise NotImplementedError
 
 
-class YdotoolOutputBackend(OutputBackend):
-    """Backend A: app.py's ydotool path."""
+class VirtualKeyboardOutputBackend(OutputBackend):
+    """Backend A: app.py's typing on TuxTalk's own virtual keyboard."""
 
     def type_text(self, text: str) -> bool:
         from . import app
@@ -281,4 +282,4 @@ def get_output_backend(flatpak_id=None) -> OutputBackend:
     """Pick the output backend. flatpak_id=None reads the real environment."""
     if flatpak_id is None:
         flatpak_id = os.environ.get("FLATPAK_ID", "")
-    return LibeiOutputBackend() if flatpak_id else YdotoolOutputBackend()
+    return LibeiOutputBackend() if flatpak_id else VirtualKeyboardOutputBackend()

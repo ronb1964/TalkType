@@ -334,8 +334,8 @@ class LibeiSession:
 
     def select_all_delete(self) -> bool:
         """Ctrl+A then Backspace — wipe the focused field. The libei counterpart
-        of the ydotool path used off-Flatpak (app._send_select_all_delete), so
-        the 'delete everything' voice command works inside the sandbox too."""
+        of app._send_select_all_delete, used off-Flatpak, so the 'delete
+        everything' voice command works inside the sandbox too."""
         def emit():
             self._emit_modified(KEY_LEFTCTRL, KEY_A)
             self._emit_key(KEY_BACKSPACE, shift=False)

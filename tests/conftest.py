@@ -226,3 +226,63 @@ def _no_real_snippets_or_words(monkeypatch, tmp_path_factory):
     from tuxtalk import config
     folder = tmp_path_factory.mktemp("snippets")
     monkeypatch.setattr(config, "CUSTOM_COMMANDS_PATH", str(folder / "custom_commands.toml"))
+
+
+class FakeKeyboard:
+    """Stands in for TuxTalk's virtual keyboard: keeps the key events instead
+    of typing them. *fail_after* makes writes fail after that many events, as
+    a keyboard that breaks partway would."""
+
+    def __init__(self):
+        self.events = []        # [(code, value)], in order
+        self.fail_after = None
+        self.closed = False
+
+    def write(self, _type, code, value):
+        if self.fail_after is not None and len(self.events) >= self.fail_after:
+            raise OSError(19, "No such device")
+        self.events.append((code, value))
+
+    def syn(self):
+        pass
+
+    def close(self):
+        self.closed = True
+
+    def typed_keys(self):
+        """The codes pressed down, in order."""
+        return [code for code, value in self.events if value == 1]
+
+
+class FakeClock:
+    """virtual_keyboard's time: waits pass at once, and their total shows how
+    long the typing would have taken."""
+
+    def __init__(self):
+        self.now = 0.0
+
+    def monotonic(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.now += max(0.0, seconds)
+
+
+@pytest.fixture(autouse=True)
+def keyboard(monkeypatch):
+    """A recording keyboard for every test. A real one would type into
+    whatever window has the focus on the computer running the tests."""
+    from tuxtalk import virtual_keyboard
+    fake = FakeKeyboard()
+    clock = FakeClock()
+    fake.clock = clock
+    monkeypatch.setattr(virtual_keyboard, "time", clock)
+    monkeypatch.setattr(virtual_keyboard, "_device", None)
+    monkeypatch.setattr(virtual_keyboard, "_ready_at", 0.0)
+
+    def make():
+        if virtual_keyboard._device is None:
+            virtual_keyboard._device = fake
+        return virtual_keyboard._device
+    monkeypatch.setattr(virtual_keyboard, "_open", make)
+    return fake

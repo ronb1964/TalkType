@@ -121,6 +121,9 @@ class TestWtypeIsBounded:
         from tuxtalk import app
 
         monkeypatch.setattr(app, "_which", lambda name: name == "wtype")
+        # No access to /dev/uinput: wtype is the way left to type.
+        from tuxtalk import virtual_keyboard
+        monkeypatch.setattr(virtual_keyboard, "_open", lambda: None)
 
         killed = []
 

@@ -84,15 +84,18 @@ def wayland(monkeypatch):
 
 # --- the paste path must report its real outcome ---------------------------
 
-def test_paste_reports_failure_when_the_keystroke_tool_is_down(monkeypatch, wayland):
-    """ydotool exits 2 with "Please check if ydotoold is running".
+@pytest.fixture
+def no_keyboard(monkeypatch):
+    """TuxTalk couldn't make its virtual keyboard (no access to /dev/uinput)."""
+    from tuxtalk import virtual_keyboard
+    monkeypatch.setattr(virtual_keyboard, "_open", lambda: None)
 
-    Discarding that result would report a paste that never happened as
-    success, and the undo buffer would record text the document never got.
-    """
+
+def test_paste_reports_failure_without_a_keyboard_to_press_ctrl_v(monkeypatch, wayland, no_keyboard):
+    """Reporting a paste that never happened as success would make the undo
+    buffer record text the document never got."""
     monkeypatch.setattr(app.subprocess, "Popen", lambda *a, **k: FakePopen(returncode=0))
-    monkeypatch.setattr(app.subprocess, "run",
-                        lambda *a, **k: FakeCompleted(returncode=2, stderr="ydotoold not running"))
+    monkeypatch.setattr(app.subprocess, "run", lambda *a, **k: FakeCompleted(returncode=0))
 
     assert app._paste_text("hello") is False
 
@@ -106,24 +109,25 @@ def test_paste_reports_failure_when_the_clipboard_tool_dies(monkeypatch, wayland
     assert app._paste_text("hello") is False
 
 
-def test_paste_reports_success_when_both_tools_succeed(monkeypatch, wayland):
+def test_paste_reports_success_when_the_clipboard_is_set_and_ctrl_v_sent(monkeypatch, wayland, keyboard):
     monkeypatch.setattr(app.subprocess, "Popen", lambda *a, **k: FakePopen(returncode=0))
     monkeypatch.setattr(app.subprocess, "run", lambda *a, **k: FakeCompleted(returncode=0))
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "org.kde.kwrite")
 
     assert app._paste_text("hello") is True
+    assert keyboard.events == [(29, 1), (47, 1), (47, 0), (29, 0)]     # Ctrl+V
 
 
-def test_paste_waits_for_wl_copy_to_set_the_clipboard(monkeypatch, wayland):
+def test_paste_waits_for_wl_copy_to_set_the_clipboard(monkeypatch, wayland, keyboard):
     """The wl-copy we start exits once the clipboard is set. One still running
     has not got that far, so Ctrl+V would paste the old clipboard contents,
     and killing it afterwards would stop it before it could serve the new one."""
     proc = FakePopen(returncode=None)
     monkeypatch.setattr(app.subprocess, "Popen", lambda *a, **k: proc)
-    keys = []
-    monkeypatch.setattr(app.subprocess, "run", lambda *a, **k: keys.append(a) or FakeCompleted(returncode=0))
+    monkeypatch.setattr(app.subprocess, "run", lambda *a, **k: FakeCompleted(returncode=0))
 
     assert app._paste_text("hello") is False
-    assert not keys, "pasted before the clipboard held the dictation"
+    assert not keyboard.events, "pasted before the clipboard held the dictation"
     assert proc.terminated, "a stuck wl-copy was left running"
 
 
@@ -136,61 +140,25 @@ def test_a_wl_copy_that_handed_off_is_not_killed(monkeypatch, wayland):
     assert not proc.terminated
 
 
-def test_paste_is_refused_outside_a_wayland_session(monkeypatch):
+def test_paste_is_refused_outside_a_wayland_session(monkeypatch, keyboard):
     """On an X11 login the clipboard tool fails instantly, and sending Ctrl+V
     anyway would paste the user's previous clipboard contents into their document."""
     monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
     monkeypatch.setattr(app, "_which", lambda name: f"/usr/bin/{name}")
-    fired = []
-    monkeypatch.setattr(app.subprocess, "run", lambda *a, **k: fired.append(a) or FakeCompleted(0))
 
     assert app._paste_text("hello") is False
-    assert not fired, "sent a paste keystroke on a session where the clipboard was never set"
-
-
-def test_paste_times_out_rather_than_hanging(monkeypatch, wayland):
-    """A wedged keystroke daemon must not block the thread that polls hotkeys."""
-    monkeypatch.setattr(app.subprocess, "Popen", lambda *a, **k: FakePopen(returncode=0))
-
-    def hang(*args, **kwargs):
-        raise subprocess.TimeoutExpired(cmd="ydotool", timeout=kwargs.get("timeout", 5))
-
-    monkeypatch.setattr(app.subprocess, "run", hang)
-
-    assert app._paste_text("hello") is False
-
-
-def test_every_keystroke_call_passes_a_timeout(monkeypatch, wayland):
-    seen = []
-
-    def record(*args, **kwargs):
-        seen.append(kwargs.get("timeout"))
-        return FakeCompleted(returncode=0)
-
-    monkeypatch.setattr(app.subprocess, "Popen", lambda *a, **k: FakePopen(returncode=0))
-    monkeypatch.setattr(app.subprocess, "run", record)
-
-    app._paste_text("hello")
-    app._send_shift_enter()
-    app._send_enter()
-    app._send_backspaces(3)
-
-    assert seen, "no subprocess calls were made"
-    assert all(t is not None for t in seen), f"a keystroke call had no timeout: {seen}"
+    assert not keyboard.events, "sent a paste keystroke on a session where the clipboard was never set"
 
 
 # --- backspaces must report whether they landed ----------------------------
 
-def test_send_backspaces_reports_failure_when_the_tool_fails(monkeypatch, wayland):
-    monkeypatch.setattr(app.subprocess, "run", lambda *a, **k: FakeCompleted(returncode=2))
-
+def test_send_backspaces_reports_failure_without_a_keyboard(wayland, no_keyboard):
     assert app._send_backspaces(5) is False
 
 
-def test_send_backspaces_reports_success(monkeypatch, wayland):
-    monkeypatch.setattr(app.subprocess, "run", lambda *a, **k: FakeCompleted(returncode=0))
-
+def test_send_backspaces_presses_backspace_that_many_times(wayland, keyboard):
     assert app._send_backspaces(5) is True
+    assert keyboard.typed_keys() == [14] * 5
 
 
 # --- partial injection must not re-send what already landed ----------------

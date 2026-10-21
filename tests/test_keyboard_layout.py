@@ -1,8 +1,9 @@
 """Typing on non-US keyboard layouts (GitHub issue #8).
 
-ydotool turns characters into US key positions, so on a Swiss German keyboard
-"my keyboard is lazy" comes out as "mz kezboard is layz". keyboard_layout works
-out the right physical keys for the active layout instead.
+Pressing every character's US key position, as ydotool did, makes "my keyboard
+is lazy" come out as "mz kezboard is layz" on a Swiss German keyboard.
+keyboard_layout works out the right physical keys for the active layout
+instead.
 
 Every mapping test replays the planned keys through libxkbcommon, the same
 library the compositor uses to turn key presses into characters, including
@@ -36,14 +37,13 @@ COMPOSED, CANCELLED, COMPOSING = 2, 3, 1
 
 def replay(planner, tokens):
     """The text a compositor using this layout would produce from `tokens`
-    (ydotool "keycode:pressed" strings), dead keys included."""
+    ((evdev keycode, pressed) pairs), dead keys included."""
     state = xkb.xkb_state_new(planner.keymap)
     table = xkb.xkb_compose_table_new_from_locale(planner.ctx, b"en_US.UTF-8", 0)
     compose = xkb.xkb_compose_state_new(table, 0)
     buf = C.create_string_buffer(32)
     out = ""
-    for token in tokens:
-        code, pressed = (int(v) for v in token.split(":"))
+    for code, pressed in tokens:
         kc = code + 8
         if pressed:
             sym = xkb.xkb_state_key_get_one_sym(state, kc)
@@ -89,8 +89,8 @@ def test_swiss_german_euro_sign():
 def test_y_and_z_use_the_keys_where_they_really_are():
     """As raw keys: on QWERTZ, y is evdev key 44 (US z)."""
     planner = kl.KeyPlanner("ch", "")
-    assert planner.plan("y") == ["44:1", "44:0"]
-    assert planner.plan("z") == ["21:1", "21:0"]
+    assert planner.plan("y") == [(44, 1), (44, 0)]
+    assert planner.plan("z") == [(21, 1), (21, 0)]
 
 
 def test_a_capital_umlaut_uses_the_accent_key_then_the_letter():
@@ -106,17 +106,21 @@ def test_text_the_layout_cannot_type_is_reported_not_garbled():
     assert kl.KeyPlanner("ru", "").plan("hello") is None      # no Latin letters
 
 
-def test_us_keyboards_keep_the_old_typing_path():
-    assert kl.needs_layout_typing(("us", ""), "anything") is False
-    assert kl.needs_layout_typing(None, "anything") is False          # unknown layout
-    assert kl.needs_layout_typing(("ch", ""), "anything") is True
-    assert kl.needs_layout_typing(("us", "intl"), "anything") is True  # dead-key variant
+def test_a_us_keyboard_types_every_printable_ascii_character_and_tab():
+    planner = kl.planner_for(kl.US)
+    text = "".join(chr(c) for c in range(32, 127)) + "\t"
+    assert replay(planner, planner.plan(text)) == text
 
 
-def test_non_ascii_on_a_us_keyboard_is_planned_not_typed_blind():
-    """`ydotool type` only knows US key positions: Cyrillic would come out as 9s."""
-    assert kl.needs_layout_typing(("us", ""), "Привіт") is True
-    assert kl.needs_layout_typing(("us", ""), "I\u2019m") is True       # smart apostrophe
+def test_a_layout_that_cant_be_read_is_typed_as_us(monkeypatch):
+    monkeypatch.setattr(kl, "active_layout", lambda: None)
+    assert replay(kl.planner_for(kl.US), kl.layout_key_events("Yes, 50%!")) == "Yes, 50%!"
+
+
+def test_a_smart_apostrophe_on_a_us_keyboard_is_untypable_not_garbled():
+    """US has no key for it; the dictation is pasted instead (app._type_text_raw)."""
+    planner = kl.planner_for(kl.US)
+    assert planner.plan("I\u2019m") is None
 
 
 def test_the_blocking_character_is_named():
@@ -241,47 +245,36 @@ def test_a_detection_failure_means_unknown(monkeypatch):
 # --- the dictation service uses it -------------------------------------------------
 
 @pytest.fixture
-def typing(monkeypatch):
+def typing(monkeypatch, keyboard):
     from tuxtalk import app
     calls = []
-    monkeypatch.setattr(app, "_which", lambda name: name == "ydotool")
-    monkeypatch.setattr(app, "_ydotool_key", lambda keys, **kw: calls.append(("key", list(keys))) or True)
     monkeypatch.setattr(app, "_paste_text", lambda text, **kw: calls.append(("paste", text)) or True)
     monkeypatch.setattr(app, "_paste_text_x11", lambda text: calls.append(("x11 paste", text)) or True)
     monkeypatch.setattr(app, "_is_wayland_session", lambda: True)
-
-    class Done:
-        returncode = 0
-
-        def communicate(self, input=None, timeout=None):
-            calls.append(("type", input.decode()))
-            return b"", b""
-
-    monkeypatch.setattr(app.subprocess, "Popen", lambda *a, **k: Done())
     return app, calls
 
 
-def test_type_mode_on_a_swiss_keyboard_sends_the_right_keys(typing, monkeypatch):
+def test_type_mode_on_a_swiss_keyboard_sends_the_right_keys(typing, keyboard, monkeypatch):
     app, calls = typing
     monkeypatch.setattr(kl, "active_layout", lambda: ("ch", ""))
     assert app._type_text_raw("my") is True
-    (kind, args), = calls
-    assert kind == "key" and args[0] == "-d"
-    assert args[2:] == ["50:1", "50:0", "44:1", "44:0"]      # m, then y on the Z key
+    assert keyboard.events == [(50, 1), (50, 0), (44, 1), (44, 0)]   # m, then y on the Z key
 
 
-def test_type_mode_on_a_us_keyboard_is_unchanged(typing, monkeypatch):
+def test_type_mode_on_a_us_keyboard_types_us_keys(typing, keyboard, monkeypatch):
     app, calls = typing
     monkeypatch.setattr(kl, "active_layout", lambda: ("us", ""))
     assert app._type_text_raw("my keyboard") is True
-    assert calls == [("type", "my keyboard")]
+    assert replay(kl.planner_for(kl.US), keyboard.events) == "my keyboard"
+    assert not calls
 
 
-def test_untypable_text_is_pasted_instead(typing, monkeypatch):
+def test_untypable_text_is_pasted_instead(typing, keyboard, monkeypatch):
     app, calls = typing
     monkeypatch.setattr(kl, "active_layout", lambda: ("de", ""))
     assert app._type_text_raw("nice 👍") is True
     assert calls == [("paste", "nice 👍")]
+    assert not keyboard.events, "typed part of a dictation that was then pasted whole"
 
 
 def test_untypable_text_on_x11_uses_the_x11_clipboard(typing, monkeypatch):
@@ -293,11 +286,11 @@ def test_untypable_text_on_x11_uses_the_x11_clipboard(typing, monkeypatch):
     assert calls == [("x11 paste", "Це Windows 10")]
 
 
-def test_ukrainian_on_a_ukrainian_layout_is_typed(typing, monkeypatch):
+def test_ukrainian_on_a_ukrainian_layout_is_typed(typing, keyboard, monkeypatch):
     app, calls = typing
     monkeypatch.setattr(kl, "active_layout", lambda: ("ua", ""))
     assert app._type_text_raw("Привіт") is True
-    assert calls[0][0] == "key"
+    assert replay(kl.planner_for(("ua", "")), keyboard.events) == "Привіт"
 
 
 def test_cyrillic_on_a_us_layout_is_pasted_not_typed(typing, monkeypatch):
@@ -305,13 +298,6 @@ def test_cyrillic_on_a_us_layout_is_pasted_not_typed(typing, monkeypatch):
     monkeypatch.setattr(kl, "active_layout", lambda: ("us", ""))
     assert app._type_text_raw("Привіт") is True
     assert calls == [("paste", "Привіт")]
-
-
-def test_the_electron_fast_path_is_layout_aware_too(typing, monkeypatch):
-    app, calls = typing
-    monkeypatch.setattr(kl, "active_layout", lambda: ("ch", ""))
-    assert app._type_text_fast("z") is True
-    assert calls and calls[0][0] == "key" and "21:1" in calls[0][1]
 
 
 # --- the layout registry (Sway names layouts by description) ---------------

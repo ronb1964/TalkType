@@ -171,8 +171,8 @@ class Settings:
     language: str = ""          # optional language code (e.g., "en"); empty = auto-detect
     auto_space: bool = True     # prepend a space before new utterance when not starting a new line/tab
     auto_period: bool = True   # append a period when an utterance ends without terminal punctuation
-    injection_mode: str = "auto"  # "auto" (smart detection), "type" (ydotool/wtype), or "paste" (wl-copy + Ctrl+V)
-    typing_delay: int = 12  # milliseconds between keystrokes when typing (5-50, higher = slower but more reliable)
+    injection_mode: str = "auto"  # "auto" (smart detection), "type" (the virtual keyboard), or "paste" (wl-copy + Ctrl+V)
+    typing_delay: int = 2  # milliseconds after each typed key event (1-50, higher = slower)
     # Turn dictation off after a while unused, to save power: on by default
     # on a laptop, off on a desktop, where F8 then simply always works.
     auto_timeout_enabled: bool = field(default_factory=lambda: has_battery())
@@ -310,6 +310,10 @@ def validate_config(s: Settings) -> None:
                           fields=[name for name, _ in problems])
 
 
+# typing_delay's default while TuxTalk typed through ydotool (until 0.18).
+YDOTOOL_TYPING_DELAY = 12
+
+
 def _migrate_settings(s: Settings) -> Settings:
     """Bring an older config forward to the current schema, in place.
 
@@ -318,10 +322,15 @@ def _migrate_settings(s: Settings) -> Settings:
 
     - indicator_color_mode 'cyan' → 'custom' + CLASSIC_CYAN_HEX, which keeps
       exactly the color these users saw.
+    - typing_delay 12, the default for ydotool until 0.18, → today's default.
+      Every saved config holds it, so without this nobody would type faster
+      with TuxTalk's own keyboard. Another number was set by hand and stays.
     """
     if s.indicator_color_mode == "cyan":
         s.indicator_color_mode = "custom"
         s.indicator_color = CLASSIC_CYAN_HEX
+    if s.typing_delay == YDOTOOL_TYPING_DELAY:
+        s.typing_delay = Settings.typing_delay
     return s
 
 

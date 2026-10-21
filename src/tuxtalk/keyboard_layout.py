@@ -1,23 +1,20 @@
 """
 Type text correctly on any keyboard layout.
 
-ydotool's `type` turns each character into the key it sits on in a US layout,
-and the compositor then reads that key with the user's real layout. On a Swiss
-German (QWERTZ) keyboard "my keyboard is lazy" arrives as "mz kezboard is
-layz", punctuation moves, and umlauts can't be typed at all (see issue #8).
-So for any layout other than plain US this module works out the real
-keys: it loads the active layout into libxkbcommon (the library compositors
-use to turn key presses into characters) and finds, for each character, the
-key plus Shift / AltGr that produces it. A character the layout has no key
-for, like a capital Ä on a Swiss keyboard, is typed as its accent's dead key
-followed by the letter. The keys go out through `ydotool key`, the same
-uinput path `ydotool type` uses, so no extra permission is needed.
+TuxTalk's virtual keyboard (virtual_keyboard.py) sends key positions, and the
+compositor reads them with the user's real layout. Sending the US position
+for every letter, as ydotool's `type` did, turns "my keyboard is lazy" into
+"mz kezboard is layz" on a Swiss German (QWERTZ) keyboard, moves punctuation
+and can't type umlauts at all (see issue #8). So this module works out the
+real keys: it loads the active layout into libxkbcommon (the library
+compositors use to turn key presses into characters) and finds, for each
+character, the key plus Shift / AltGr that produces it. A character the
+layout has no key for, like a capital Ä on a Swiss keyboard, is typed as its
+accent's dead key followed by the letter.
 
-US layouts keep using `ydotool type` for plain ASCII. Anything else on a US
-layout goes through the planner too: `ydotool type` turns Cyrillic into junk.
-If some character can't be typed on the active layout at all (an emoji, Latin
-text on a Ukrainian layout), the caller pastes that dictation instead, which
-works on any layout.
+A layout that can't be read is taken to be US. If some character can't be
+typed on the active layout at all (an emoji, Latin text on a Ukrainian
+layout), the caller pastes that dictation instead, which works on any layout.
 
 Finding the active layout depends on the desktop:
   KDE        org.kde.keyboard over D-Bus (the active one of the configured list)
@@ -151,17 +148,17 @@ class KeyPlanner:
         if altgr and self._altgr is None:
             return False
         held = ([_KEY_LEFTSHIFT] if shift else []) + ([self._altgr] if altgr else [])
-        tokens += [f"{k}:1" for k in held]
-        tokens += [f"{keycode}:1", f"{keycode}:0"]
-        tokens += [f"{k}:0" for k in reversed(held)]
+        tokens += [(k, 1) for k in held]
+        tokens += [(keycode, 1), (keycode, 0)]
+        tokens += [(k, 0) for k in reversed(held)]
         return True
 
     def _keysym(self, char):
         return 0x20 if char == " " else _lib().xkb_utf32_to_keysym(ord(char))
 
     def plan(self, text):
-        """ydotool `key` arguments ("keycode:pressed") that type *text*, or None
-        if some character can't be typed on this layout."""
+        """The key events [(evdev keycode, 1 down / 0 up)] that type *text*, or
+        None if some character can't be typed on this layout."""
         return self.plan_or_blocker(text)[0]
 
     def plan_or_blocker(self, text):
@@ -190,19 +187,6 @@ def planner_for(layout_variant):
     if layout_variant not in _planners:
         _planners[layout_variant] = KeyPlanner(*layout_variant)
     return _planners[layout_variant]
-
-
-def needs_layout_typing(layout_variant, text) -> bool:
-    """Whether text should be typed key by key for this layout: anything but
-    ASCII on plain US. Unknown layouts (None) keep `ydotool type`.
-
-    Non-ASCII on US goes through the planner as well, so that Cyrillic or an
-    emoji ends up pasted (UntypableText) rather than handed to `ydotool type`,
-    which only knows US key positions and types Ukrainian as a row of 9s."""
-    if not layout_variant:
-        return False
-    layout, variant = layout_variant
-    return not (layout == "us" and not variant and text.isascii())
 
 
 # --- the active layout ---------------------------------------------------------------
@@ -432,14 +416,14 @@ def active_layout():
         return None
 
 
+US = ("us", "")
+
+
 def layout_key_events(text):
-    """How to type *text* on the active layout:
-      None              plain US or unknown: use `ydotool type` as always
-      [] / ["30:1", ...] the ydotool `key` arguments that type it
-    Raises UntypableText if the layout has no way to type some character."""
-    layout = active_layout()
-    if not needs_layout_typing(layout, text):
-        return None
+    """The key events [(evdev keycode, 1 down / 0 up)] that type *text* on the
+    active layout, or on US when it can't be read. Raises UntypableText if
+    the layout has no way to type some character."""
+    layout = active_layout() or US
     tokens, blocker = planner_for(layout).plan_or_blocker(text)
     if tokens is None:
         raise UntypableText(layout, blocker)

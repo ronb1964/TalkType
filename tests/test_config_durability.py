@@ -720,6 +720,18 @@ def test_an_infinite_number_in_a_whole_number_setting_costs_only_that_setting(co
     assert not list(config_path.parent.glob("config.toml.corrupt-*"))
 
 
+def test_a_config_from_before_the_own_keyboard_types_at_the_new_speed(config_path):
+    """Every saved config holds ydotool's typing_delay = 12, so without this
+    nobody who updated would type faster."""
+    config_path.write_text('model = "small"\ntyping_delay = 12\n')
+    assert config.load_config().typing_delay == config.Settings().typing_delay < 12
+
+
+def test_a_typing_delay_set_by_hand_is_kept(config_path):
+    config_path.write_text('model = "small"\ntyping_delay = 20\n')
+    assert config.load_config().typing_delay == 20
+
+
 def test_recovery_from_backup_skips_only_the_bad_field(config_path):
     config_path.write_text("this is = = not toml")
     (config_path.parent / "config.toml.bak").write_text(

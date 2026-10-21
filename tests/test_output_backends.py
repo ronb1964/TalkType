@@ -26,10 +26,10 @@ class _FakeSessionBase:
 
 def test_ydotool_backend_delegates_to_type_text(monkeypatch):
     from tuxtalk import app
-    from tuxtalk.output_backends import YdotoolOutputBackend
+    from tuxtalk.output_backends import VirtualKeyboardOutputBackend
     calls = []
     monkeypatch.setattr(app, "_type_text", lambda t: calls.append(t) or True)
-    assert YdotoolOutputBackend().type_text("hello") is True
+    assert VirtualKeyboardOutputBackend().type_text("hello") is True
     assert calls == ["hello"]
 
 
@@ -94,8 +94,8 @@ def test_output_backend_accessor_returns_ydotool_on_host(monkeypatch):
     monkeypatch.delenv("FLATPAK_ID", raising=False)
     from tuxtalk import app
     app._OUTPUT_BACKEND = None  # reset the process cache for the test
-    from tuxtalk.output_backends import YdotoolOutputBackend
-    assert isinstance(app._output_backend(), YdotoolOutputBackend)
+    from tuxtalk.output_backends import VirtualKeyboardOutputBackend
+    assert isinstance(app._output_backend(), VirtualKeyboardOutputBackend)
 
 
 # --- Editing key-combos must route through the backend, not hardcoded ydotool ---
@@ -105,19 +105,19 @@ def test_output_backend_accessor_returns_ydotool_on_host(monkeypatch):
 
 def test_ydotool_backend_select_all_delete_delegates(monkeypatch):
     from tuxtalk import app
-    from tuxtalk.output_backends import YdotoolOutputBackend
+    from tuxtalk.output_backends import VirtualKeyboardOutputBackend
     calls = []
     monkeypatch.setattr(app, "_send_select_all_delete", lambda: calls.append("clear") or True)
-    assert YdotoolOutputBackend().select_all_delete() is True
+    assert VirtualKeyboardOutputBackend().select_all_delete() is True
     assert calls == ["clear"]
 
 
 def test_ydotool_backend_backspaces_delegates(monkeypatch):
     from tuxtalk import app
-    from tuxtalk.output_backends import YdotoolOutputBackend
+    from tuxtalk.output_backends import VirtualKeyboardOutputBackend
     calls = []
     monkeypatch.setattr(app, "_send_backspaces", lambda n: calls.append(n) or True)
-    assert YdotoolOutputBackend().backspaces(5) is True
+    assert VirtualKeyboardOutputBackend().backspaces(5) is True
     assert calls == [5]
 
 
@@ -213,16 +213,14 @@ def test_handle_undo_char_undo_routes_backspaces_through_backend(monkeypatch):
     assert got and got[0] > 0  # deleted a positive number of characters
 
 
-def test_flatpak_electron_app_types_via_libei_not_ydotool_fasttype(monkeypatch):
+def test_flatpak_electron_app_types_via_libei_not_the_virtual_keyboard(monkeypatch, keyboard):
     # On the Flatpak, dictating into an Electron app (Claude Desktop) must NOT
-    # attempt the ydotool fast-type path (dead in the sandbox). It types through
+    # use the virtual keyboard (no /dev/uinput in the sandbox). It types through
     # the libei backend directly, keeping only the tab→spaces safety (a real Tab
     # jumps focus to Claude Desktop's Send button).
     from tuxtalk import app
     monkeypatch.setenv("FLATPAK_ID", "io.github.ronb1964.TalkType")
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: "Claude")
-    fast_calls = []
-    monkeypatch.setattr(app, "_type_text_fast", lambda *a, **k: fast_calls.append(a) or True)
     typed = []
     from tuxtalk.output_backends import OutputBackend
 
@@ -234,7 +232,7 @@ def test_flatpak_electron_app_types_via_libei_not_ydotool_fasttype(monkeypatch):
     monkeypatch.setattr(app, "_output_backend", lambda: FakeBackend())
     app._inject_text("line1\tindented", "auto", 0.0)
 
-    assert fast_calls == [], "ydotool fast-type must not run on the Flatpak"
+    assert keyboard.events == [], "the virtual keyboard must not be used on the Flatpak"
     assert typed == ["line1    indented"], "tab→4 spaces, delivered via libei"
 
 

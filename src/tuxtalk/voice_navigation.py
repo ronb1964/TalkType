@@ -3,7 +3,7 @@
 
 Pure logic, like undo.py: which dictations are commands, and the keys each
 one presses. app.py presses them through the output backend, so the host
-(ydotool) and the Flatpak (libei) do the same.
+(the virtual keyboard) and the Flatpak (libei) do the same.
 
 A dictation is a command only when the WHOLE of it is one of the phrases
 here, so "I want to select the last sentence" is typed as text. Plain F8

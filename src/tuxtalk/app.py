@@ -32,6 +32,7 @@ from . import config as config_module
 from .logger import setup_logger, redact_text
 from .recording_indicator import RecordingIndicator
 from .undo import detect_undo_command, calculate_undo_length
+from . import virtual_keyboard
 import threading
 
 logger = setup_logger(__name__)
@@ -363,16 +364,6 @@ state = RecordingState()
 recording_indicator = None
 dbus_service = None
 
-# ---------------------------------------------------------------------------
-# Ydotool environment helper — used by all ydotool calls to set socket path
-# ---------------------------------------------------------------------------
-def _get_ydotool_env():
-    """Return env dict with YDOTOOL_SOCKET set for subprocess calls."""
-    from .uinput_helper import ydotool_socket_path
-    env = os.environ.copy()
-    env["YDOTOOL_SOCKET"] = ydotool_socket_path()
-    return env
-
 # Undo voice-command parsing/length logic lives in tuxtalk.undo so it can
 # be unit-tested without dragging in heavy audio/CUDA imports.
 
@@ -556,8 +547,8 @@ def _show_voice_commands_via_dbus():
     except Exception as e:
         logger.debug(f"Could not show voice commands via D-Bus: {e}")
 
-# Global typing delay (set from config in main)
-_typing_delay = 12  # milliseconds, default value
+# Milliseconds after each typed key event (config typing_delay, set in main)
+_typing_delay = virtual_keyboard.KEY_DELAY_MS
 
 # Global custom commands (loaded from config in main)
 _custom_commands: dict[str, str] = {}
@@ -1371,7 +1362,7 @@ def _reload_live_settings(cfg, indicator):
                 setattr(cfg, key, getattr(fresh, key))
 
         global _typing_delay
-        _typing_delay = getattr(cfg, "typing_delay", 12)
+        _typing_delay = cfg.typing_delay
 
         global _log_transcripts
         _log_transcripts = getattr(cfg, "log_transcripts", False)
@@ -1814,11 +1805,6 @@ def _is_wayland_session() -> bool:
     return bool(os.environ.get("WAYLAND_DISPLAY"))
 
 
-# ydotool talks to ydotoold over a socket. These calls run on the same thread
-# that polls for the hotkey, so an untimed call against a wedged daemon stops
-# dictation responding at all, with the tray still showing the service as up.
-YDOTOOL_TIMEOUT_S = 5.0
-
 # The wtype fallback types a whole utterance, so it needs far longer than a
 # single keystroke. wtype has no per-key delay, so a fixed ceiling is enough.
 WTYPE_TIMEOUT_S = 20.0
@@ -1827,60 +1813,37 @@ WTYPE_TIMEOUT_S = 20.0
 # usually a few milliseconds; a slower one is stuck, and nothing is pasted.
 WL_COPY_READY_TIMEOUT_S = 1.0
 
-# ydotool's own default wait after each `ydotool key` event. Backspaces pass it
-# explicitly, so their time limit is worked out from the speed really used.
-BACKSPACE_DELAY_MS = 12
+# Shortcuts and single keys (Ctrl+V, Enter, Delete) keep ydotool's pace from
+# before TuxTalk had its own keyboard: they're four key events at most, so
+# speed doesn't show, and every app TuxTalk knows has taken them like this.
+SHORTCUT_DELAY_MS = 12
 
 
-class KeystrokesStoppedPartway(Exception):
-    """ydotool was stopped by its time limit after sending some of the keys, so
-    an unknown number of them reached the app."""
+def _key_delay() -> int:
+    """The wait after each key of typed text, backspaces and moves."""
+    return max(1, min(50, _typing_delay))
 
 
-def _typing_timeout(n_chars: int, delay_ms: int) -> float:
-    """Seconds to allow `ydotool type -d D -H D` for *n_chars* characters.
+def _send_keys(events, what: str = "keystroke", delay_ms: float = SHORTCUT_DELAY_MS,
+               raise_if_partial: bool = False) -> bool:
+    """Press keys [(evdev code, 1 down / 0 up)] on TuxTalk's virtual keyboard.
+    True only if all of them were sent: keystrokes that never happened must
+    not reach the undo buffer.
 
-    Each character is a press, a hold and a release, about two delays, and a
-    capital adds a Shift press; the 50% margin covers that and a busy system.
-    It still stops a wedged ydotoold, just not a long dictation.
+    With *raise_if_partial*, a keyboard that failed partway raises
+    virtual_keyboard.StoppedPartway instead of returning False, for a caller
+    that must tell "none of the keys were sent" from "some of them were".
     """
-    return 10 + n_chars * 2 * delay_ms / 1000 * 1.5
-
-
-def _ydotool_key(keys, timeout: float = YDOTOOL_TIMEOUT_S, what: str = "keystroke",
-                 raise_on_timeout: bool = False) -> bool:
-    """Send raw key codes via ydotool. True only if they were actually delivered.
-
-    ydotool exits non-zero when it can't reach ydotoold ("Please check if
-    ydotoold is running"), so the exit code is checked: keystrokes that never
-    happened must not reach the undo buffer.
-
-    With *raise_on_timeout*, running out of time raises KeystrokesStoppedPartway
-    instead of returning False, for a caller that must tell "none of the keys
-    were sent" from "some of them were".
-    """
-    if not _which("ydotool"):
-        return False
     try:
-        result = subprocess.run(
-            ["ydotool", "key"] + list(keys),
-            check=False, env=_get_ydotool_env(),
-            capture_output=True, text=True, timeout=timeout,
-        )
-    except subprocess.TimeoutExpired:
-        logger.error(f"ydotool {what} timed out after {timeout:.0f}s — is ydotoold wedged?")
-        if raise_on_timeout:
-            raise KeystrokesStoppedPartway(what)
+        sent = virtual_keyboard.send(events, delay_ms)
+    except virtual_keyboard.StoppedPartway:
+        logger.error(f"{what}: the virtual keyboard stopped partway")
+        if raise_if_partial:
+            raise
         return False
-    except Exception as e:
-        logger.debug(f"ydotool {what} failed: {e}")
-        return False
-
-    if result.returncode != 0:
-        detail = (result.stderr or "").strip()
-        logger.error(f"ydotool {what} failed (exit {result.returncode}): {detail}")
-        return False
-    return True
+    if not sent:
+        logger.error(f"Couldn't send {what}: TuxTalk has no virtual keyboard")
+    return sent
 
 
 def _typed_breaks_for(text: str, window_class) -> str:
@@ -2061,12 +2024,12 @@ def _with_owed_space(text: str) -> str:
 def _send_shift_enter():
     """Send Shift+Enter keystrokes to create line break without submitting."""
     # KEY_LEFTSHIFT (42), KEY_ENTER (28)
-    return _ydotool_key(["42:1", "28:1", "28:0", "42:0"], what="shift+enter")
+    return _send_keys([(42, 1), (28, 1), (28, 0), (42, 0)], what="shift+enter")
 
 def _send_enter():
     """Send Enter keystroke to create a new line."""
     # KEY_ENTER (28)
-    return _ydotool_key(["28:1", "28:0"], what="enter")
+    return _send_keys([(28, 1), (28, 0)], what="enter")
 
 def _send_select_all_delete():
     """Send Ctrl+A then Backspace to clear the entire input field.
@@ -2076,18 +2039,17 @@ def _send_select_all_delete():
     pasting from elsewhere.
     """
     # KEY_LEFTCTRL (29) + KEY_A (30), then KEY_BACKSPACE (14)
-    if not _ydotool_key(["29:1", "30:1", "30:0", "29:0"], what="select-all"):
+    if not _send_keys([(29, 1), (30, 1), (30, 0), (29, 0)], what="select-all"):
         return False
     time.sleep(0.05)
-    return _ydotool_key(["14:1", "14:0"], what="delete")
+    return _send_keys([(14, 1), (14, 0)], what="delete")
 
 _OUTPUT_BACKEND = None
 
 
 def _output_backend():
-    """Process-wide OutputBackend, chosen once by FLATPAK_ID. Backend A
-    (ydotool) delegates to _type_text below, so the non-Flatpak path is
-    unchanged; Backend B (libei) is used only inside a Flatpak."""
+    """Process-wide OutputBackend, chosen once by FLATPAK_ID: TuxTalk's own
+    virtual keyboard (_type_text below), or libei inside a Flatpak."""
     global _OUTPUT_BACKEND
     if _OUTPUT_BACKEND is None:
         from .output_backends import get_output_backend
@@ -2132,81 +2094,40 @@ def _type_text(text: str) -> bool:
     # Normal text typing
     return _type_text_raw(text)
 
-def _type_on_layout(text: str, delay_ms: int, what: str):
-    """Type *text* on a non-US keyboard layout, or return None to use
-    `ydotool type` (plain US layouts, or the layout couldn't be read).
+def _type_text_raw(text: str) -> bool:
+    """Type *text* on TuxTalk's virtual keyboard, with the keys of the active
+    layout (keyboard_layout). True only if it was typed.
 
-    `ydotool type` sends US key positions, which the compositor reads with the
-    real layout: Y and Z swapped on QWERTZ, umlauts impossible (issue #8).
-    keyboard_layout works out the real keys instead. If the layout can't type
-    some character at all, the dictation is pasted, which works on any layout."""
+    Text the layout has no keys for (an emoji, Latin text on a Ukrainian
+    layout) is pasted instead, which works on any layout. Without a virtual
+    keyboard (no access to /dev/uinput), wtype, where the desktop has one."""
     from . import keyboard_layout
+    events = None
     try:
-        tokens = keyboard_layout.layout_key_events(text)
+        events = keyboard_layout.layout_key_events(text)
     except keyboard_layout.UntypableText as e:
         layout, blocker = e.args
-        logger.info(f"{what}: the {layout} keyboard layout can't type {blocker!r} "
+        logger.info(f"The {layout} keyboard layout can't type {blocker!r} "
                     f"(U+{ord(blocker):04X}); pasting instead")
         if _is_wayland_session():
             return _paste_text(text)
         return _paste_text_x11(text)
     except Exception as e:
-        logger.warning(f"{what}: couldn't work out keys for the keyboard layout ({e}); typing as US")
-        return None
-    if tokens is None:
-        return None
-    logger.info(f"{what}: typing {len(text)} chars for the keyboard layout, delay={delay_ms}ms")
-    # ydotool key -d is the wait between every press and release, so a
-    # character takes about two delays, like `ydotool type -d -H` with the same value.
-    timeout = 10 + len(tokens) * delay_ms / 1000 * 2
-    return _ydotool_key(["-d", str(delay_ms)] + tokens, timeout=timeout, what=what)
-
-
-def _type_text_raw(text: str):
-    """Type text with ydotool, falling back to wtype. True only if it was typed.
-
-    _typing_delay sets the keystroke timing: lower is faster but can
-    transpose letters.
-    """
-    if _which("ydotool"):
-        layout_result = _type_on_layout(text, max(5, min(50, _typing_delay)), "layout typing")
-        if layout_result is not None:
-            return layout_result
+        logger.error(f"Couldn't work out the keys for the keyboard layout: {e}")
+    if events is not None:
+        started = time.time()
         try:
-            env = _get_ydotool_env()
-            # -d = pause between keys, -H = how long each key is held (ms).
-            # Lower values are faster but may cause letters to arrive out of order.
-            delay_ms = max(5, min(50, _typing_delay))  # Clamp to 5-50ms
-            delay_str = str(delay_ms)
-            timeout = _typing_timeout(len(text), delay_ms)
-            logger.info(f"ydotool type: delay={delay_str}ms, text_len={len(text)}")
-            proc = subprocess.Popen(
-                ["ydotool", "type", "-d", delay_str, "-H", delay_str, "-f", "-"],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                env=env
-            )
-            try:
-                _, stderr = proc.communicate(input=text.encode("utf-8"), timeout=timeout)
-            except subprocess.TimeoutExpired:
-                # Kill and reap the hung ydotool so it doesn't linger and keep
-                # typing into whatever is focused later.
-                proc.kill()
-                proc.communicate()
-                logger.error(f"ydotool type timed out after {timeout:.0f}s; killed the process")
-                return False
-            if proc.returncode != 0:
-                logger.error(f"ydotool type failed: rc={proc.returncode}, stderr={stderr.decode()}")
-                return False
-            logger.info(f"ydotool type succeeded: rc=0, typed {len(text)} chars")
-            return True
-        except Exception as e:
-            logger.debug(f"ydotool failed: {e}")
+            if virtual_keyboard.send(events, _key_delay()):
+                logger.info(f"Typed {len(text)} chars in {time.time() - started:.2f}s "
+                            f"({_key_delay()} ms a key event)")
+                return True
+        except virtual_keyboard.StoppedPartway:
+            # Some of it is in the app; wtype would type it all again.
+            return False
     if _which("wtype"):
         # Report wtype's real exit code so the undo buffer only tracks text
-        # that was actually typed, and bound the wait like the ydotool branch
-        # so a stalled compositor can't freeze dictation.
+        # that was actually typed, and bound the wait so a stalled compositor
+        # can't freeze dictation.
         proc = subprocess.Popen(["wtype", "--", text])
         try:
             proc.communicate(timeout=WTYPE_TIMEOUT_S)
@@ -2229,8 +2150,8 @@ def _type_text_raw(text: str):
             return False
         except Exception:
             pass
-    logger.error("Could not type text: no ydotool/wtype/wl-copy available")
-    print("Could not type text (no ydotool/wtype).")
+    logger.error("Could not type text: no virtual keyboard, wtype or wl-copy")
+    print("Could not type text.")
     return False
 
 # Window classes that need Ctrl+Shift+V for paste (terminals).
@@ -2328,10 +2249,10 @@ def is_terminal_class(wm_class: str | None) -> bool:
     return wm_class.lower() in _TERMINAL_WM_CLASSES_LOWER
 
 
-# Electron/Chromium apps where synthetic paste (Ctrl+V via ydotool) is broken
-# on Wayland — modifier-key chords from /dev/uinput are silently dropped and
-# the focused input blurs. For these apps, route to a fast Type path instead
-# (plain character keystrokes still work, per OpenWhispr #240 and others).
+# Electron/Chromium apps where synthetic paste (Ctrl+V from /dev/uinput) is
+# broken on Wayland — modifier-key chords are silently dropped and the focused
+# input blurs. These apps are typed into instead (plain character keystrokes
+# still work, per OpenWhispr #240 and others).
 _ELECTRON_PASTE_BROKEN_CLASSES = frozenset({
     "Claude", "claude", "claude-desktop", "Claude Desktop", "anthropic-claude",
     # Claude Desktop reports this reverse-DNS id or one of the names above,
@@ -2385,45 +2306,6 @@ def _query_reported_window_class() -> str | None:
         return None
 
 
-def _type_text_fast(text: str, delay_ms: int = 1):
-    """Type text via ydotool with a very small inter-event delay.
-
-    Used for Electron/Chromium apps where clipboard-paste is broken on Wayland.
-    1ms per event (about 415 chars/sec) is the practical floor; going lower
-    risks Electron's input buffer dropping characters under burst.
-    """
-    if not _which("ydotool"):
-        logger.error("Fast-type fallback: ydotool unavailable")
-        return False
-    layout_result = _type_on_layout(text, max(1, delay_ms), "layout fast-type")
-    if layout_result is not None:
-        return layout_result
-    try:
-        env = _get_ydotool_env()
-        d = str(max(1, delay_ms))
-        timeout = _typing_timeout(len(text), max(1, delay_ms))
-        logger.info(f"ydotool fast-type: delay={d}ms, text_len={len(text)}")
-        proc = subprocess.Popen(
-            ["ydotool", "type", "-d", d, "-H", d, "-f", "-"],
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            env=env,
-        )
-        try:
-            _stdout, stderr = proc.communicate(input=text.encode("utf-8"), timeout=timeout)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.communicate()
-            logger.error(f"ydotool fast-type timed out after {timeout:.0f}s; killed the process")
-            return False
-        if proc.returncode != 0:
-            logger.error(f"ydotool fast-type failed: rc={proc.returncode}, stderr={stderr.decode(errors='replace')}")
-            return False
-        return True
-    except Exception as e:
-        logger.error(f"Fast-type exception: {e}")
-        return False
-
-
 def _send_paste_keystroke(focused_class: str | None, primary_holds_text: bool = False) -> bool:
     """Send the paste shortcut for *focused_class*. True if it was sent.
 
@@ -2435,15 +2317,15 @@ def _send_paste_keystroke(focused_class: str | None, primary_holds_text: bool = 
     apps."""
     # KEY_LEFTSHIFT=42, KEY_LEFTCTRL=29, KEY_V=47, KEY_INSERT=110
     if is_terminal_class(focused_class):
-        keys = ["42:1", "29:1", "47:1", "47:0", "29:0", "42:0"]  # Ctrl+Shift+V
+        keys = [(42, 1), (29, 1), (47, 1), (47, 0), (29, 0), (42, 0)]  # Ctrl+Shift+V
         logger.info(f"Paste: Ctrl+Shift+V (terminal class={focused_class!r})")
     elif focused_class is None and primary_holds_text:
-        keys = ["42:1", "110:1", "110:0", "42:0"]  # Shift+Insert
+        keys = [(42, 1), (110, 1), (110, 0), (42, 0)]  # Shift+Insert
         logger.info("Paste: Shift+Insert (window unknown; clipboard and primary selection set)")
     else:
-        keys = ["29:1", "47:1", "47:0", "29:0"]  # Ctrl+V
+        keys = [(29, 1), (47, 1), (47, 0), (29, 0)]  # Ctrl+V
         logger.info(f"Paste: Ctrl+V (class={focused_class!r})")
-    if not _ydotool_key(keys, what="paste"):
+    if not _send_keys(keys, what="paste"):
         # The keystroke never reached the desktop: the text is sitting on the
         # clipboard but never made it into the app.
         logger.error("Paste keystroke failed — text was not inserted")
@@ -2502,7 +2384,7 @@ def _paste_text(text: str) -> bool:
         return False
 
     try:
-        if _which("wl-copy") and _which("ydotool"):
+        if _which("wl-copy"):
             # Copy text to clipboard
             paste_start = time.time()
             logger.info(f"TIMING: Starting paste operation for {len(text)} chars")
@@ -2550,11 +2432,10 @@ def _paste_text(text: str) -> bool:
                         _clipboard_keeper.before_primary()
                     primary_holds_text = _copy_to_primary(text)
 
-                ydotool_start = time.time()
+                keystroke_start = time.time()
                 if not _send_paste_keystroke(focused_class, primary_holds_text):
                     return False
-                ydotool_time = time.time() - ydotool_start
-                logger.info(f"TIMING: ydotool paste command took {ydotool_time:.3f}s")
+                logger.info(f"TIMING: paste keystroke took {time.time() - keystroke_start:.3f}s")
 
                 # Brief delay for paste to register
                 time.sleep(0.05)
@@ -2643,20 +2524,14 @@ def _send_backspaces(count: int) -> bool:
 
     The caller updates the undo buffer from this result, so a wrong answer here
     desynchronises the buffer from the document and the next undo eats the
-    user's own writing. Raises KeystrokesStoppedPartway when the time limit
-    stopped ydotool after some of the backspaces had already landed.
+    user's own writing. Raises virtual_keyboard.StoppedPartway when the
+    keyboard failed after some of the backspaces had already landed.
     """
     if count <= 0:
         return True
-    # KEY_BACKSPACE = 14, pressed and released once per character. Each event
-    # is followed by BACKSPACE_DELAY_MS, so a long undo takes seconds and the
-    # time limit grows with it (plus a 50% margin and the startup allowance).
-    key_sequence = ["-d", str(BACKSPACE_DELAY_MS)]
-    for _ in range(count):
-        key_sequence.extend(["14:1", "14:0"])
-    timeout = YDOTOOL_TIMEOUT_S + count * 2 * BACKSPACE_DELAY_MS / 1000 * 1.5
-    return _ydotool_key(key_sequence, timeout=timeout, what=f"{count} backspaces",
-                        raise_on_timeout=True)
+    # KEY_BACKSPACE = 14, pressed and released once per character.
+    return _send_keys([(14, 1), (14, 0)] * count, what=f"{count} backspaces",
+                      delay_ms=_key_delay(), raise_if_partial=True)
 
 # Key names voice_navigation uses -> Linux key codes (the letter A is looked up
 # on the active layout, as Ctrl shortcuts are matched by letter).
@@ -2674,33 +2549,22 @@ def _nav_keycode(name: str) -> int:
         return 30    # KEY_A on a US layout
 
 
-# Navigation keys go faster than typing: a selection is drawn as it grows, and
-# at typing speed it crawled visibly across the line.
-NAV_KEY_DELAY_MS = 4
-
-
 def _send_chords(chords) -> bool:
-    """Press [(modifiers, key)] in order with ydotool. Consecutive keys with
-    the same modifiers share one press of them (Shift held once across forty
-    Lefts, not pressed forty times), which halves the events and never leaves
-    a modifier flapping. True only if they were delivered."""
-    if not chords:
-        return True
-    sequence = ["-d", str(NAV_KEY_DELAY_MS)]
-    events = 0
+    """Press [(modifiers, key)] in order. Consecutive keys with the same
+    modifiers share one press of them (Shift held once across forty Lefts,
+    not pressed forty times), which halves the events and never leaves a
+    modifier flapping. True only if they were delivered."""
+    events = []
     held = ()
     for mods, key in list(chords) + [((), None)]:
         if tuple(mods) != held:
-            sequence += [f"{_nav_keycode(m)}:0" for m in reversed(held)]
-            sequence += [f"{_nav_keycode(m)}:1" for m in mods]
-            events += len(held) + len(mods)
+            events += [(_nav_keycode(m), 0) for m in reversed(held)]
+            events += [(_nav_keycode(m), 1) for m in mods]
             held = tuple(mods)
         if key is not None:
             code = _nav_keycode(key)
-            sequence += [f"{code}:1", f"{code}:0"]
-            events += 2
-    timeout = YDOTOOL_TIMEOUT_S + events * NAV_KEY_DELAY_MS / 1000 * 1.5
-    return _ydotool_key(sequence, timeout=timeout, what=f"{len(chords)} navigation keys")
+            events += [(code, 1), (code, 0)]
+    return _send_keys(events, what=f"{len(chords)} navigation keys", delay_ms=_key_delay())
 
 
 def _transcribe_audio(audio_f32, language: str | None) -> str | None:
@@ -2894,7 +2758,7 @@ def _handle_undo(raw: str, beeps_on: bool, notify_on: bool) -> bool:
         # over the user's own text.
         try:
             deleted = _output_backend().backspaces(delete_count)
-        except KeystrokesStoppedPartway:
+        except virtual_keyboard.StoppedPartway:
             # Some of the text is gone and some isn't, by an unknown amount,
             # so the buffer no longer matches the document. Forgetting it is
             # the only safe choice: a later undo then deletes nothing.
@@ -3136,14 +3000,14 @@ def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = F
 
     # Electron-paste-broken override: if the focused window is an Electron app
     # where synthetic Ctrl+V silently fails on Wayland, skip clipboard-paste and
-    # use fast direct typing instead. Only kicks in for auto/paste — if the user
-    # explicitly chose "type", we already use Type mode.
+    # type instead. Only kicks in for auto/paste — if the user explicitly chose
+    # "type", we already use Type mode.
     if injection_mode != "type":
         focused_class = _query_focused_window_class()
         logger.info(f"Electron-broken check: focused_class={focused_class!r}")
         if focused_class in _ELECTRON_PASTE_BROKEN_CLASSES and not os.environ.get("FLATPAK_ID"):
-            logger.info(f"Electron-paste-broken override: class={focused_class!r}, using fast-type")
-            print(f"Electron app ({focused_class}): using fast-type fallback")
+            logger.info(f"Electron-paste-broken override: class={focused_class!r}, typing")
+            print(f"Electron app ({focused_class}): typing instead of pasting")
 
             # Split on §SHIFT_ENTER§ (line-break voice command) and \n so
             # we send actual Shift+Enter keystrokes between text chunks
@@ -3161,7 +3025,7 @@ def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = F
             if marker in unified:
                 parts = unified.split(marker)
                 for i, part in enumerate(parts):
-                    if part and not _type_text_fast(part):
+                    if part and not _type_text_raw(part):
                         success = False
                         break
                     delivered_parts = i + 1
@@ -3173,19 +3037,18 @@ def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = F
                         breaks_sent += 1
                         time.sleep(0.03)
             else:
-                success = _type_text_fast(unified)
+                success = _type_text_raw(unified)
                 delivered_parts = 1 if success else 0
 
             if success:
                 injection_time = time.time() - injection_start
-                logger.info(f"TIMING: Fast-type injection completed in {injection_time:.2f}s")
-                logger.info(f"Text injected via fast-type: {len(text)} chars in {injection_time:.2f}s")
+                logger.info(f"TIMING: Electron typing completed in {injection_time:.2f}s")
                 # Track injected text for undo. Store the typed form: tabs
                 # already replaced with 4 spaces, and each line-break marker
                 # as one '\n' (one Shift+Enter keystroke = one backspace),
                 # so backspace counts match what was actually sent.
                 state.last_inserted_text = unified.replace(marker, "\n")
-                logger.debug(f"Stored last inserted text for undo: {len(state.last_inserted_text)} chars (fast-type)")
+                logger.debug(f"Stored last inserted text for undo: {len(state.last_inserted_text)} chars (typed)")
                 return "ok"
 
             # Partial delivery: chunks already in the document must not be sent
@@ -3196,20 +3059,17 @@ def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = F
                     landed += marker   # the break after the last chunk landed too
                 state.last_inserted_text = landed.replace(marker, "\n")
                 logger.warning(
-                    f"Fast-type stopped after {delivered_parts} chunk(s) — "
+                    f"Typing stopped after {delivered_parts} chunk(s) — "
                     f"not re-injecting, undo buffer holds only what landed"
                 )
                 return "partial"
             # Nothing landed, so the normal injection path can safely try again.
-            logger.warning("Fast-type failed, falling through to normal injection")
+            logger.warning("Typing failed, falling through to normal injection")
         elif focused_class in _ELECTRON_PASTE_BROKEN_CLASSES:
-            # Flatpak: the libei backend types real key events, which are immune
-            # to the broken synthetic Ctrl+V that fast-type exists to work around
-            # — and ydotool isn't in the sandbox anyway. So there's nothing to
-            # fast-type around: keep only the Claude-Desktop tab safety (a real
-            # Tab jumps focus to the Send button) and fall through to libei typing.
-            logger.info(f"Flatpak + Electron app ({focused_class!r}): libei typing, "
-                        f"tab→spaces (skipping ydotool fast-type)")
+            # Flatpak: libei always types, so there's no paste to avoid; keep
+            # only the Claude-Desktop tab safety (a real Tab jumps focus to the
+            # Send button) and fall through to libei typing.
+            logger.info(f"Flatpak + Electron app ({focused_class!r}): libei typing, tab→spaces")
             text = text.replace("\t", "    ")
 
     use_paste = (actual_mode == "paste")
@@ -3505,8 +3365,6 @@ def _report_undelivered(outcome: str, beeps_on: bool):
         try:
             from . import uinput_helper
             reason = uinput_helper.typing_blocked_reason()
-            if reason == uinput_helper.TYPING_HELPER_STOPPED:
-                uinput_helper.ensure_ydotoold_running()
             if reason:
                 message = (f"{reason} The dictation is saved in Recent Dictations "
                            "in the TuxTalk menu: click it to copy, then paste with Ctrl+V.")
@@ -3601,7 +3459,7 @@ def _erase_typed(text: str) -> bool:
         return False
     try:
         deleted = _output_backend().backspaces(len(text))
-    except KeystrokesStoppedPartway:
+    except virtual_keyboard.StoppedPartway:
         logger.error("Correction across a pause stopped partway; typing the phrase as said")
         state.last_inserted_text = ""
         _forget_shown()
@@ -4202,7 +4060,7 @@ def _send_copy_keystroke() -> bool:
     """Ctrl+C. Terminals never get here (_transcribe_and_edit turns them away:
     Ctrl+C would stop the running program). True if it was sent."""
     # KEY_LEFTCTRL=29, KEY_C=46
-    return _ydotool_key(["29:1", "46:1", "46:0", "29:0"], what="copy")
+    return _send_keys([(29, 1), (46, 1), (46, 0), (29, 0)], what="copy")
 
 
 _FORMAT_LETTERS = {"bold": "b", "italic": "i", "underline": "u"}
@@ -4214,7 +4072,7 @@ def _send_format_shortcut(kind: str) -> bool:
     from .keyboard_layout import shortcut_keycode
     key = shortcut_keycode(_FORMAT_LETTERS[kind])
     # KEY_LEFTCTRL=29
-    return _ydotool_key(["29:1", f"{key}:1", f"{key}:0", "29:0"], what=kind)
+    return _send_keys([(29, 1), (key, 1), (key, 0), (29, 0)], what=kind)
 
 
 def _focus_moved(focused_class) -> bool:
@@ -4495,7 +4353,7 @@ def _edit_selection(get_instruction, beeps_on, injection_mode, focused_class, t0
                 _edit_problem("focus_moved", beeps_on)
                 return
             # KEY_DELETE=111: the selection is still selected.
-            if _ydotool_key(["111:1", "111:0"], what="delete"):
+            if _send_keys([(111, 1), (111, 0)], what="delete"):
                 logger.info("Voice edit: deleted the selection")
                 _beep(beeps_on, *READY_BEEP)
             else:
@@ -4729,7 +4587,8 @@ def _handle_key_event(event, mode, hold_key, toggle_key,
             _grab_keyboards_hiding(devices, {hold_key, *shift})
             start_recording(cfg.beeps, cfg.notify, input_device_idx, edit_mode=bool(shift))
         elif event.value == 0 and state.is_recording:
-            # Ungrab BEFORE text injection so ydotool can work
+            # Let go of the keyboards before typing, so the user's own keys
+            # reach the app again
             _release_all_grabs()
             stop_recording(cfg.beeps, cfg.smart_quotes, cfg.notify, cfg.language,
                            cfg.auto_space, cfg.auto_period, cfg.injection_mode)
@@ -5557,10 +5416,12 @@ def main():
 
     _guard_large_v3_without_cuda(cfg)
 
-    # Set global typing delay from config
     global _typing_delay
-    _typing_delay = getattr(cfg, 'typing_delay', 12)
-    logger.debug(f"Typing delay set to {_typing_delay}ms")
+    _typing_delay = cfg.typing_delay
+    # Made now, so the desktop has taken it on long before the first
+    # dictation is typed. The Flatpak types through the portal instead.
+    if not os.environ.get("FLATPAK_ID"):
+        virtual_keyboard.start()
 
     # Whether transcribed text may be written to the log (off = redacted).
     global _log_transcripts
@@ -5822,7 +5683,7 @@ def main():
     _cmd_start_from_toggle_key.clear()
     _mark_service_ready()
 
-    # Run the input backend chosen by FLATPAK_ID: evdev+ydotool everywhere
+    # Run the input backend chosen by FLATPAK_ID: evdev everywhere
     # (EvdevInputBackend -> _loop_evdev), portals inside a Flatpak.
     from .input_backends import get_input_backend
     get_input_backend(cfg=cfg, input_device_idx=input_device_idx).start()

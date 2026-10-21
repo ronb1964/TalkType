@@ -72,18 +72,16 @@ def test_no_input_group_does_not_crash(host, monkeypatch):
     assert "Fix Typing Permissions" in U.typing_blocked_reason()
 
 
-def test_failed_notice_names_the_cause_and_restarts_a_stopped_helper(monkeypatch):
+def test_failed_notice_names_the_cause(monkeypatch):
     from tuxtalk import app
-    shown, started = [], []
+    shown = []
     monkeypatch.setattr(app, "_notify", lambda title, body: shown.append(body))
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
-    monkeypatch.setattr(U, "typing_blocked_reason", lambda: U.TYPING_HELPER_STOPPED)
-    monkeypatch.setattr(U, "ensure_ydotoold_running", lambda: started.append(True))
+    monkeypatch.setattr(U, "typing_blocked_reason", lambda: U.TYPING_NO_PERMISSION)
 
     app._report_undelivered("failed", beeps_on=False)
 
-    assert started, "a stopped typing helper should be started again"
-    assert shown and shown[0].startswith(U.TYPING_HELPER_STOPPED)
+    assert shown and shown[0].startswith(U.TYPING_NO_PERMISSION)
     assert "Recent Dictations" in shown[0]
 
 

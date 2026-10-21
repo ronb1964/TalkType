@@ -1,7 +1,7 @@
 """Backend selection is keyed on FLATPAK_ID: portals inside a Flatpak,
 evdev+ydotool everywhere else."""
 from tuxtalk.output_backends import (
-    get_output_backend, YdotoolOutputBackend, LibeiOutputBackend,
+    get_output_backend, VirtualKeyboardOutputBackend, LibeiOutputBackend,
 )
 from tuxtalk.input_backends import (
     get_input_backend, EvdevInputBackend, PortalInputBackend,
@@ -9,7 +9,7 @@ from tuxtalk.input_backends import (
 
 
 def test_output_backend_is_ydotool_without_flatpak():
-    assert isinstance(get_output_backend(flatpak_id=""), YdotoolOutputBackend)
+    assert isinstance(get_output_backend(flatpak_id=""), VirtualKeyboardOutputBackend)
 
 
 def test_output_backend_is_libei_in_flatpak():
