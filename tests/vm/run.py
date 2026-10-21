@@ -57,6 +57,10 @@ def set_up_vm(vm, appimage):
     pretend microphones. Returns what the report says about the VM."""
     vm.revert_and_boot()
     vm.install_guest_helpers()
+    # What's named TuxTalk or TalkType before anything is installed (old hand
+    # testing on the VM): the uninstall checks only count what this run left.
+    vm.ssh(f"find ~ -path ~/{REMOTE} -prune -o \\( -iname '*tuxtalk*' -o -iname '*talktype*' \\) "
+           f"-print 2>/dev/null > ~/{REMOTE}/before-install.txt", check=False)
     if vm.ssh("command -v pactl", check=False).returncode:
         # Zorin ships without pactl. The pretend microphones need it, and so
         # does TuxTalk's "turn other sounds down", so a stock Zorin can't do

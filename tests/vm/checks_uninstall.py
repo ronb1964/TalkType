@@ -31,7 +31,7 @@ config=$(ls -A ~/.config/tuxtalk 2>/dev/null | tr '\n' ' ')
 models=$(ls -A ~/.cache/huggingface/hub 2>/dev/null | grep -E 'Systran|parakeet|whisper|Qwen' | tr '\n' ' ')
 rules=$(ls /etc/udev/rules.d | grep -E '[t]uxtalk|[t]alktype' | tr '\n' ' ')
 procs=$(ps -u "$USER" -o args= | grep -E '[t]uxtalk\.|[T]uxTalk-|[w]hisper-server|[l]lama-server' | grep -v ' tt/' | head -3 | tr '\n' ';')
-left=$(find ~ -path ~/tt -prune -o \( -iname '*tuxtalk*' -o -iname '*talktype*' \) -print 2>/dev/null | grep -vx "$HOME/tt" | head -20 | tr '\n' ' ')
+left=$(find ~ -path ~/tt -prune -o \( -iname '*tuxtalk*' -o -iname '*talktype*' \) -print 2>/dev/null | grep -vx "$HOME/tt" | grep -vxF -f ~/tt/before-install.txt | head -20 | tr '\n' ' ')
 python3 - "$apps" "$data" "$config" "$models" "$rules" "$procs" "$left" <<'EOF'
 import json, os, subprocess, sys
 names = ["appimages", "data", "config", "models", "rules", "processes", "left"]
