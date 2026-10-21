@@ -2937,11 +2937,6 @@ def _prepare_text(raw: str, smart_quotes: bool, auto_period: bool, auto_space: b
     return text
 
 
-# wl-copy opens a window of its own for a moment to set the clipboard. It
-# never receives the dictation, so it's never the window the text went to.
-_CLIPBOARD_TOOL_CLASSES = frozenset({"io.github.bugaevc.wl-clipboard", "wl-clipboard"})
-
-
 def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = False) -> str:
     """Insert *text* into the active app (_deliver_text), then remember the
     window it really landed in, for undo, "fix that word" and select and move.
@@ -2970,7 +2965,7 @@ def _inject_text(text: str, injection_mode: str, t0: float, one_block: bool = Fa
             landed = _query_focused_window_class()
         except Exception:
             landed = None
-        if landed and landed not in _CLIPBOARD_TOOL_CLASSES:
+        if landed:
             if landed != state.last_inserted_window:
                 logger.info(f"The text landed in {landed!r}, not {state.last_inserted_window!r}")
             state.last_inserted_window = landed

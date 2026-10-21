@@ -20,6 +20,13 @@ _focused_window_class: str | None = None
 # "x,y,w,h|output|ox,oy,ow,oh" from the same reporters (window_geometry.py).
 _focused_window_geometry: str = ""
 
+# wl-copy without a data-control protocol sets the clipboard from a window of
+# its own, which holds the focus for a moment and hands it back. When that
+# window was cached, a paste into Konsole picked Ctrl+V and typed ^V, so its
+# reports are left out, and so is the geometry sent after each of them.
+_CLIPBOARD_TOOL_CLASSES = frozenset({"io.github.bugaevc.wl-clipboard", "wl-clipboard"})
+_clipboard_tool_focused = False
+
 # The bus identifiers, at module level so providers that fill the focused-window
 # cache (the GNOME extension's Python side, and kwin_focus on KDE) can name the
 # same service without a second copy of these strings.
@@ -232,7 +239,10 @@ class TuxTalkDBusService(dbus.service.Object):
         GetFocusedWindowClass — the dictation engine runs in a separate
         subprocess from this service.
         """
-        global _focused_window_class
+        global _focused_window_class, _clipboard_tool_focused
+        _clipboard_tool_focused = wm_class in _CLIPBOARD_TOOL_CLASSES
+        if _clipboard_tool_focused:
+            return
         from .desktop_identity import is_own_window_class
         # TuxTalk's own window (Preferences) is never a paste target, and kept
         # here it would outlive a reporter that stops, such as an extension
@@ -248,7 +258,8 @@ class TuxTalkDBusService(dbus.service.Object):
         extension: "x,y,w,h|output|ox,oy,ow,oh" (window_geometry.py). Sent on
         every move, so it is cached without logging."""
         global _focused_window_geometry
-        _focused_window_geometry = str(geometry or "")
+        if not _clipboard_tool_focused:
+            _focused_window_geometry = str(geometry or "")
 
     @dbus.service.method(DBUS_INTERFACE, out_signature='s')
     def GetFocusedWindowGeometry(self):
