@@ -40,8 +40,10 @@ VMS = {v.key: v for v in (
            ("gnome", "no-tray", "immutable"), ["ptyxis", "--new-window", "--"]),
     VMSpec("ubuntu", "ubuntu26.04", "192.168.122.32", 1920, 1200, ("gnome",),
            ["gnome-terminal", "--wait", "--"]),
+    # Cinnamon opens a terminal small in a corner, where clicking the middle
+    # of the screen would land on the test window behind it.
     VMSpec("mint", "MintCinnamon", "192.168.122.199", 1920, 1080, ("cinnamon", "x11"),
-           ["gnome-terminal", "--wait", "--"]),
+           ["gnome-terminal", "--maximize", "--wait", "--"]),
     VMSpec("kde", "fedora44-KDE", "192.168.122.227", 1920, 1080, ("kde",),
            ["konsole", "-e"]),
     # Zorin's own taskbar and AppIndicator extension on GNOME 46 (the Zorin

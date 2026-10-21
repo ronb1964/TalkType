@@ -16,7 +16,7 @@ import sys
 import gi
 
 gi.require_version("Gtk", "3.0")
-from gi.repository import GLib, Gtk  # noqa: E402
+from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
 
 def main():
@@ -24,8 +24,12 @@ def main():
     title = sys.argv[2] if len(sys.argv) > 2 else "TT Sink"
     password = sys.argv[3:] == ["password"]
     # Its own app id per file: TuxTalk tells windows apart by app, so two
-    # test windows must look like two apps for a window switch to count.
-    GLib.set_prgname("tt-" + os.path.splitext(os.path.basename(out_path))[0])
+    # test windows must look like two apps for a window switch to count. On
+    # X11 that's the WM_CLASS class, which GTK takes from the script's name
+    # ("Sink.py") unless it's set too.
+    app_id = "tt-" + os.path.splitext(os.path.basename(out_path))[0]
+    GLib.set_prgname(app_id)
+    Gdk.set_program_class(app_id)
 
     window = Gtk.Window(title=title)
     window.set_default_size(1000, 700)
