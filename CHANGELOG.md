@@ -23,6 +23,9 @@ before 0.15.0, so older entries use that name.
   the next dictation tried to open the download window from the wrong place
   and could crash the dictation service. It now uses another downloaded
   model, or says the model is missing.
+- On X11 desktops (Linux Mint Cinnamon and other X11 sessions), dropdowns
+  open as a list under the button again. Since 0.14.3 a wrong check gave X11
+  the workaround meant for Wayland.
 - The "Parakeet got more accurate" offer pops up by itself, so Enter there
   now means Not Now. An Enter meant for another window no longer starts the
   670 MB download.

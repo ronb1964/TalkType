@@ -51,42 +51,41 @@ def gtk():
 
 
 class _FakeDisplay:
-    """Stands in for a GdkDisplay; only the class name matters."""
+    """Stands in for a GdkDisplay; only its GType matters."""
 
 
-def _display_named(name):
-    return type(name, (_FakeDisplay,), {})()
+def _display_of(gtype):
+    """A stand-in display of the given GType, under the Python class name
+    PyGObject really gives an X11 display (checked under Xvfb, 2026-10-20)."""
+    return type("X11Display", (_FakeDisplay,), {"__gtype__": gtype})()
 
 
-@pytest.mark.parametrize(
-    "class_name, expected",
-    [
-        ("GdkX11Display", True),
-        # Issue #9: on Wayland, GTK3's list-mode popup positions itself with
-        # window-relative coordinates clamped against the monitor's GLOBAL work
-        # area (gtkcombobox.c gtk_combo_box_list_position). On a monitor that
-        # does not start at 0,0 that shoves the popup off screen, so the value
-        # can't be changed. Menu mode uses xdg_popup positioning and works.
-        ("GdkWaylandDisplay", False),
-        ("SomethingElse", False),
-    ],
-)
-def test_list_mode_only_on_x11(class_name, expected):
-    from tuxtalk.ui_style import _wants_list_mode
+def test_list_mode_only_on_x11():
+    """Issue #9: on Wayland, GTK3's list-mode popup positions itself with
+    window-relative coordinates clamped against the monitor's GLOBAL work area
+    (gtkcombobox.c gtk_combo_box_list_position). On a monitor that does not
+    start at 0,0 that shoves the popup off screen, so the value can't be
+    changed. Menu mode uses xdg_popup positioning and works."""
+    import gi
+    gi.require_version("Gdk", "3.0")
+    gi.require_version("GdkX11", "3.0")
+    from gi.repository import Gdk, GdkX11
+    from tuxtalk.ui_style import is_x11
 
-    assert _wants_list_mode(_display_named(class_name)) is expected
+    assert is_x11(_display_of(GdkX11.X11Display.__gtype__)) is True
+    assert is_x11(_display_of(Gdk.Display.__gtype__)) is False
 
 
 def test_list_mode_never_raises_on_odd_input():
-    from tuxtalk.ui_style import _wants_list_mode
+    from tuxtalk.ui_style import is_x11
 
-    assert _wants_list_mode(None) is False
+    assert is_x11(None) is False
 
 
 def test_helper_sets_the_right_mode_for_this_display(gtk):
     """A real ComboBox must end up in list mode on X11 and menu mode elsewhere."""
     from gi.repository import Gdk
-    from tuxtalk.ui_style import apply_dropdown_list_style, _wants_list_mode
+    from tuxtalk.ui_style import apply_dropdown_list_style, is_x11
 
     combo = gtk.ComboBoxText()
     combo.append_text("CPU")
@@ -106,7 +105,7 @@ def test_helper_sets_the_right_mode_for_this_display(gtk):
     while gtk.events_pending():
         gtk.main_iteration()
 
-    expected = _wants_list_mode(Gdk.Display.get_default())
+    expected = is_x11(Gdk.Display.get_default())
     assert combo.style_get_property("appears-as-list") is expected, (
         "appears-as-list did not match the display backend. On X11 GTK may have "
         "finally dropped this deprecated property (cosmetic only); on Wayland it "
@@ -174,7 +173,7 @@ def test_long_lists_open_as_a_grid(gtk, items, columns):
 def test_helper_gives_combos_the_right_popup_for_this_display(gtk):
     """Combos realised after the helper runs: wrap path on Wayland only."""
     from gi.repository import Gdk
-    from tuxtalk.ui_style import apply_dropdown_list_style, _wants_list_mode
+    from tuxtalk.ui_style import apply_dropdown_list_style, is_x11
 
     apply_dropdown_list_style()
     combo = gtk.ComboBoxText()
@@ -184,7 +183,7 @@ def test_helper_gives_combos_the_right_popup_for_this_display(gtk):
     win.show_all()
     _pump(gtk)
 
-    expected = 0 if _wants_list_mode(Gdk.Display.get_default()) else 1
+    expected = 0 if is_x11(Gdk.Display.get_default()) else 1
     assert combo.get_wrap_width() == expected
     win.destroy()
 

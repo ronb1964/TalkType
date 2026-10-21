@@ -59,10 +59,13 @@ colorswatch.dark overlay {
 _installed = False
 
 
-def _wants_list_mode(display):
-    """True only on X11, the one backend where GTK3 places list popups right.
-    By class name, so it needs no GdkX11 typelib."""
-    return type(display).__name__.startswith("GdkX11")
+def is_x11(display):
+    """Whether the Gdk *display* is X11 (XWayland included). By its GType
+    name, so it needs no GdkX11 typelib: PyGObject calls the Python class
+    X11Display, and checking that name for "GdkX11" kept list-style
+    dropdowns off on X11 from 0.14.3 to 0.17."""
+    gtype = getattr(type(display), "__gtype__", None)
+    return gtype is not None and gtype.name == "GdkX11Display"
 
 
 def _match_menu_width(combo, allocation):
@@ -134,7 +137,8 @@ def apply_dropdown_list_style():
 
     try:
         provider = Gtk.CssProvider()
-        list_mode = _wants_list_mode(screen.get_display())
+        # X11 is the one backend where GTK3 places list popups right.
+        list_mode = is_x11(screen.get_display())
         css = _DROPDOWN_CSS + _SWATCH_CSS if list_mode else _SWATCH_CSS
         provider.load_from_data(css)
         Gtk.StyleContext.add_provider_for_screen(
