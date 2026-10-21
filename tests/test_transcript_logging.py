@@ -207,20 +207,20 @@ def test_unchecking_needs_no_dialog_and_disables(monkeypatch):
 
 # --- clearing the log ------------------------------------------------------
 
-def test_log_file_path_follows_dev_mode(monkeypatch):
+def test_the_log_folder_follows_dev_mode(monkeypatch):
     # The suite redirects logs via TUXTALK_LOG_DIR (tests/conftest.py); this
     # checks the normal rule, so switch that off. Only paths are computed.
     monkeypatch.delenv("TUXTALK_LOG_DIR", raising=False)
     monkeypatch.setenv("DEV_MODE", "1")
-    assert tlog.log_file_path().parent.name == "tuxtalk-dev"
+    assert tlog._log_dir().name == "tuxtalk-dev"
     monkeypatch.delenv("DEV_MODE", raising=False)
-    assert tlog.log_file_path().parent.name == "tuxtalk"
+    assert tlog._log_dir().name == "tuxtalk"
 
 
-def test_log_dir_override_sets_the_location_the_location(monkeypatch, tmp_path):
+def test_log_dir_override_sets_the_location(monkeypatch, tmp_path):
     monkeypatch.setenv("DEV_MODE", "1")
     monkeypatch.setenv("TUXTALK_LOG_DIR", str(tmp_path))
-    assert tlog.log_file_path() == tmp_path / "tuxtalk.log"
+    assert tlog._log_dir() == tmp_path
 
 
 def test_clear_log_empties_main_and_removes_backup(tmp_path):

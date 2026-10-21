@@ -275,11 +275,6 @@ def is_older(running):
     return running is not None and _version(running) < _version(VERSION)
 
 
-def needs_update():
-    """Installed, but older than the helper this TuxTalk brings."""
-    return is_installed() and is_older(running_version())
-
-
 def _run_as_root(script, what):
     """(ok, message) after running *script* through pkexec. (Tests replace
     this, so a test can never open a password prompt; _pkexec is the work.)"""

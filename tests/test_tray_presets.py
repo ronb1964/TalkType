@@ -155,7 +155,6 @@ def test_dbus_exposes_presets_and_the_active_one():
         is_recording=False, service_running=True)
     svc.IsRecording = lambda: False
     svc.IsServiceRunning = lambda: True
-    svc.GetInjectionMode = lambda: "auto"
     assert list(svc.GetPresets()) == [("recommended", "Recommended for this computer", "x")]
     assert svc.GetStatus()["preset"] == "recommended"
 

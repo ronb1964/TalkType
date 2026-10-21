@@ -178,12 +178,10 @@ def _typing_prefs(monkeypatch, *, running, installed=True, in_group=False):
     return P, prefs
 
 
-def test_only_an_older_helper_needs_an_update(monkeypatch):
-    monkeypatch.setattr(si, "is_installed", lambda: True)
+def test_only_an_older_helper_needs_an_update():
     for running, wanted in (("1.0", True), ("1.3", True), ("garbled", True),
                             (hotkey_helper.VERSION, False), ("1.10", False), ("9.0", False)):
-        monkeypatch.setattr(si, "running_version", lambda: running)
-        assert si.needs_update() is wanted, running
+        assert si.is_older(running) is wanted, running
 
 
 def test_a_newer_helper_than_this_tuxtalk_is_left_alone(monkeypatch):

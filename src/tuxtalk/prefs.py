@@ -1718,7 +1718,7 @@ class PreferencesWindow:
         sound_label.set_tooltip_text(
             "Pause: YouTube, Spotify and other players pause while you talk, so the\n"
             "microphone hears only you. Only what TuxTalk paused starts again.\n\n"
-            "Turn down: every other app's sound goes way down while you talk (to 25% on\n"
+            "Turn down: every other app's sound goes down while you talk (to half on\n"
             "its volume slider) and comes back after: Discord calls, games and anything\n"
             "pausing can't reach. A call still hears your microphone, so mute yourself there.\n"
             "A volume you change yourself in the meantime is left as you set it.")

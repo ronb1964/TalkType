@@ -12,7 +12,8 @@ from tuxtalk import logger as talktype_logger
 
 def test_log_file_is_not_in_the_users_config():
     real_config = Path.home() / ".config"
-    assert real_config not in talktype_logger.log_file_path().parents
+    log_dir = talktype_logger._log_dir()
+    assert log_dir != real_config and real_config not in log_dir.parents
 
 
 def test_handlers_created_on_import_point_at_the_test_log_dir():

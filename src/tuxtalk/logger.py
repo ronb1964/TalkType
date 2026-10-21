@@ -45,11 +45,6 @@ def _log_dir() -> Path:
     return base / config_dir
 
 
-def log_file_path() -> Path:
-    """Absolute path of the active log file."""
-    return _log_dir() / LOG_FILE_NAME
-
-
 def clear_log(log_dir: Path = None) -> None:
     """Empty the log: truncate the log to zero and remove its .old backup and
     the pre-rename talktype logs.
