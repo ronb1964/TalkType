@@ -444,6 +444,10 @@ commit history (the Lemmy thread on 2026-10-16 went bad for exactly that).
 Pair it with the proof that a person is responsible: thousands of automated
 tests and CI, testing on several distros in VMs, the hotkey helper's review by
 an outside developer (guelz), guelz's PR merged, Ron dictating nearly everything he writes with it.
+**Always** say, too, that the code is held to the standard a human developer
+would respect: readable, tested, no leftovers, not an AI mess (Ron, 2026-10-20:
+"I'd like you to always remind or say that"). Link the About page's "Keeping
+the code clean" section (tuxtalk.app/about.html) where a link fits.
 Never apologise for it and never call it "vibe coded". Draft in Ron's voice
 (ron-voice skill). Don't post where AI-written code is banned (Flathub,
 extensions.gnome.org, GNOME Circle, Gentoo).
