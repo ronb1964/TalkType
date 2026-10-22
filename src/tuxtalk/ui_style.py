@@ -6,7 +6,9 @@ Kept in one place because TuxTalk draws dropdowns from two different processes
 CSS. Duplicating the rule invites fixing it in one and forgetting the other.
 """
 
+import ctypes
 import logging
+import os
 
 import gi
 
@@ -376,6 +378,32 @@ def fit_windows_to_screen():
     global _fitting_hook
     if _fitting_hook is None:
         _fitting_hook = GObject.add_emission_hook(Gtk.Widget, "realize", _on_window_realize)
+
+
+EMOJI_FONT = os.path.join(os.path.dirname(__file__), "fonts", "tuxtalk-emoji.ttf")
+
+
+def load_emoji_font():
+    """Give this process TuxTalk's own emoji (packaging/build-emoji-font.py),
+    so they show on a computer without an emoji font too: there they were
+    boxes with the character's code in them (issue #19, Mint). Only this
+    process sees the font; nothing is installed. Before the first window,
+    so GTK's font list has it."""
+    try:
+        fontconfig = ctypes.CDLL("libfontconfig.so.1")
+    except OSError as e:
+        logger.warning(f"No fontconfig to give TuxTalk's emoji font to: {e}")
+        return
+    fontconfig.FcConfigAppFontAddFile.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+    if not fontconfig.FcConfigAppFontAddFile(None, EMOJI_FONT.encode()):
+        logger.warning(f"Couldn't load TuxTalk's emoji font from {EMOJI_FONT}")
+
+
+def prepare_windows():
+    """What every TuxTalk process does before its first window: emoji that
+    show everywhere, and windows that fit the screen."""
+    load_emoji_font()
+    fit_windows_to_screen()
 
 
 # Onboarding screens that scroll. While there's more below, the bottom edge of

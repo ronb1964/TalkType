@@ -5,6 +5,10 @@ before 0.15.0, so older entries use that name.
 
 ## [Unreleased]
 
+- Emoji show on every computer. Without an emoji font installed, the hint
+  markers in Preferences, Help's tab names and the first-run screens showed
+  boxes with a code in them instead. TuxTalk now carries the 36 emoji it uses
+  in a small font of its own (51 KB). Thanks to Tony for reporting it (#19).
 - Notifications say what happened in their title, like "No sound from the
   microphone", with what to do underneath. They used to be titled "TuxTalk",
   which the desktop already shows, and the pop-up cut the message off.

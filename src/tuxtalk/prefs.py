@@ -7093,7 +7093,7 @@ class PreferencesWindow:
 def main():
     from . import desktop_identity, ui_style
     desktop_identity.apply()        # TuxTalk's icon on its windows, not KDE's generic one
-    ui_style.fit_windows_to_screen()   # buttons clear of panels and docks
+    ui_style.prepare_windows()   # emoji that show, buttons clear of panels and docks
     # Before anything opens the shared D-Bus connection, as in the tray: one
     # opened without the GLib main loop can't receive signals, and Test
     # Hotkeys (which listens for HotkeyPressed) crashed on opening in 0.15.0

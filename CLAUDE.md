@@ -273,6 +273,23 @@ never make a real one in a test, it types into Ron's focused window.
 
 ---
 
+## EMOJI — TUXTALK CARRIES ITS OWN
+
+Every emoji TuxTalk's windows show comes from its own small font,
+`src/tuxtalk/fonts/tuxtalk-emoji.ttf` (Google's Noto Color Emoji cut down to
+what TuxTalk uses), loaded in every process by `ui_style.prepare_windows()`.
+Without it, a computer with no emoji font showed boxes with the character's
+code in them (issue #19, Mint).
+
+**Adding or removing an emoji anywhere in `src/tuxtalk`: run
+`python3 packaging/build-emoji-font.py` and commit the font and its `.txt`
+list with the change.** `tests/test_emoji_font.py` fails until you do, here
+and on GitHub. A plain text symbol that every font has (like ✓ or →) goes in
+the script's `TEXT_SYMBOLS` instead. Ron asked (2026-10-22) that this never
+slip: a missing emoji is a box on someone's screen.
+
+---
+
 ## VULKAN GRAPHICS ENGINE — BUILT AND HOSTED SEPARATELY
 
 The "Vulkan (any GPU)" device (config value `vulkan`; AMD, Intel and NVIDIA)

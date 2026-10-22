@@ -11,6 +11,7 @@
 #   tuxtalk/LICENSE, tuxtalk/THIRD_PARTY_LICENSES.md  - ours, and the overview
 #   wl-clipboard/                                       - built from source here
 #   ctranslate2/, tokenizers/                           - their wheels ship no license
+#   noto-color-emoji/                                   - TuxTalk's emoji font
 #   <ubuntu package>/copyright                          - every library copied from Ubuntu
 #   tuxtalk/bundled-ubuntu-packages.txt                - those packages and exact versions
 #
@@ -30,6 +31,8 @@ cp "$PROJECT/LICENSE" "$PROJECT/THIRD_PARTY_LICENSES.md" "$LIC/tuxtalk/"
 cp "$WLCLIP_SRC/COPYING" "$LIC/wl-clipboard/COPYING"
 cp "$HERE/licenses/ctranslate2-LICENSE" "$LIC/ctranslate2/LICENSE"
 cp "$HERE/licenses/tokenizers-LICENSE" "$LIC/tokenizers/LICENSE"
+mkdir -p "$LIC/noto-color-emoji"
+cp "$PROJECT/src/tuxtalk/fonts/LICENSE" "$LIC/noto-color-emoji/LICENSE"
 
 # --- Libraries copied from Ubuntu: find each one's package --------------------
 # The system file each bundled file came from. Libraries and typelibs are

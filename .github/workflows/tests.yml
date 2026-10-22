@@ -41,7 +41,7 @@ jobs:
         run: |
           python3 -m venv --system-site-packages venv
           venv/bin/pip install -q pytest numpy sounddevice pyperclip toml \
-            huggingface_hub tqdm faster-whisper onnx-asr text2num
+            huggingface_hub tqdm faster-whisper onnx-asr text2num fonttools
 
       # A virtual screen for the GTK windows the tests build, and a private
       # D-Bus session bus so no test reaches anything real.

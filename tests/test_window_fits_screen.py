@@ -259,10 +259,11 @@ def test_popups_are_never_touched():
 
 def test_every_process_that_opens_windows_fits_them():
     """Each TuxTalk process sets its icon with desktop_identity.apply() before
-    its first window; each must install the fitting there too."""
+    its first window; each must prepare its windows there too (prepare_windows:
+    the fitting and the emoji font)."""
     missing = [path.name for path in sorted(SRC.glob("*.py"))
                if "desktop_identity.apply()" in path.read_text()
-               and "ui_style.fit_windows_to_screen()" not in path.read_text()]
+               and "ui_style.prepare_windows()" not in path.read_text()]
     assert missing == []
 
 

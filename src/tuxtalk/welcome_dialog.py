@@ -3346,7 +3346,7 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
 if __name__ == '__main__':
     # Test the welcome dialog
     Gtk.init(None)
-    from .ui_style import fit_windows_to_screen
-    fit_windows_to_screen()
+    from .ui_style import prepare_windows
+    prepare_windows()
     result = show_welcome_dialog()
     print(f"Welcome dialog result: {result}")

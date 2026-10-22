@@ -40,6 +40,15 @@ I'll provide a copy on request until three years after 0.17.0.
   `usr/share/licenses/`.
 - **PyGObject, pycairo and dbus-python**, from Ubuntu 22.04.
 
+## Fonts
+
+- **Noto Color Emoji** (SIL Open Font License 1.1), from
+  https://github.com/googlefonts/noto-emoji at commit
+  `1ffdd21391dd1f25c081fa93a9dea0c7c029442b`. TuxTalk carries only the emoji
+  its own windows show, cut out of it unchanged otherwise
+  (`packaging/build-emoji-font.py`), so they show on computers without an
+  emoji font. The license is next to it, `tuxtalk/fonts/LICENSE`.
+
 ## Libraries from Ubuntu 22.04
 
 These are copied unmodified from Ubuntu 22.04: the tray icon libraries
