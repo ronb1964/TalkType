@@ -253,20 +253,22 @@ def fit_window_to_screen(window):
         drawn_by_gtk = window.get_style_context().has_class("csd")
         cap = avail if drawn_by_gtk else avail - _TITLE_BAR
         _shrink_scrollers(window, cap)
-        scrolled = _scroll_body(window) if window.get_preferred_height()[0] > cap else None
+        # Measured before the content goes in a scrolling area, which asks for
+        # a wrapping label's height as if it were one line.
+        natural = window.get_preferred_height_for_width(window.get_size()[0])[1]
+        scrolled = _scroll_body(window) if _min_height(window) > cap else None
+        width, height = window.get_size()
         if scrolled is not None and desktop_detect.get_desktop_environment() == "cosmic":
             # COSMIC opens a window at a height of its own choosing (about
             # 420 px at 1280x800) unless its minimum asks for more, so there
             # the scrolling part asks for what fills the cap, not a sliver.
             # Elsewhere the opening size is honoured, and a smaller minimum
             # lets the window be made shorter afterwards.
-            rest = window.get_preferred_height()[0] - scrolled.get_preferred_height()[0]
-            content = scrolled.get_child().get_preferred_height()[1]
+            rest = _min_height(window) - _min_height(scrolled)
+            content = scrolled.get_child().get_preferred_height_for_width(width)[1]
             scrolled.set_min_content_height(max(0, min(content, cap - rest)))
-        width, height = window.get_size()
         # A window that now scrolls opens as tall as its content, up to the cap.
-        wanted = max(height, window.get_allocated_height(),
-                     window.get_preferred_height()[1] if scrolled else 0)
+        wanted = max(height, window.get_allocated_height(), natural if scrolled else 0)
         if wanted > cap or scrolled:
             height = min(wanted, cap)
             # Wayland goes by the default size when the window first shows,
@@ -275,6 +277,14 @@ def fit_window_to_screen(window):
             window.resize(width, height)
     except Exception as e:
         logger.warning(f"Could not fit {window.get_title()!r} to the screen: {e}")
+
+
+def _min_height(widget):
+    """The height GTK won't let *widget* go below: its minimum at its
+    minimum width. Asked without a width, a wrapping label counts as one
+    line, so a dialog with a long message looked as if it fitted and opened
+    3837 px tall on a 1280x800 screen."""
+    return widget.get_preferred_size()[0].height
 
 
 def _shrink_scrollers(window, cap):
@@ -296,7 +306,7 @@ def _shrink_scrollers(window, cap):
     window.foreach(collect)
     for scroller in sorted(scrollers, key=Gtk.ScrolledWindow.get_min_content_height,
                            reverse=True):
-        too_tall = window.get_preferred_height()[0] - cap
+        too_tall = _min_height(window) - cap
         asked = scroller.get_min_content_height()
         if too_tall <= 0 or asked <= 0:
             return

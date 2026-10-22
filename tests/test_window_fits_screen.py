@@ -34,7 +34,8 @@ def _tall_label():
 
 
 def _min_height(window):
-    return window.get_preferred_height()[0]
+    """The height GTK holds the window to: its minimum at its minimum width."""
+    return window.get_preferred_size()[0].height
 
 
 def _ancestors(widget):
@@ -124,6 +125,27 @@ def test_a_message_with_a_lot_of_text_fits_too():
         ui_style.fit_window_to_screen(dialog)
         assert _min_height(dialog) <= CAP
         ok = dialog.get_widget_for_response(Gtk.ResponseType.OK)
+        assert not any(isinstance(w, Gtk.ScrolledWindow) for w in _ancestors(ok))
+    finally:
+        dialog.destroy()
+
+
+def test_a_long_wrapping_message_fits_too():
+    """A wrapping label measured without a width counts as one line; at its
+    narrowest it is thousands of pixels tall, and GTK held the window to
+    that (3837 px on a 1280x800 screen)."""
+    dialog = Gtk.Dialog(title="TuxTalk")
+    ui_style.fit_dialog_to_screen(dialog, 480, -1)
+    label = Gtk.Label(label="A long sentence that wraps over several lines. " * 60)
+    label.set_line_wrap(True)
+    dialog.get_content_area().pack_start(label, True, True, 0)
+    ok = dialog.add_button("OK", Gtk.ResponseType.OK)
+    dialog.get_content_area().show_all()
+    try:
+        assert _min_height(dialog) > CAP
+        ui_style.fit_window_to_screen(dialog)
+        assert _min_height(dialog) <= CAP
+        assert dialog.get_size() == (480, CAP)
         assert not any(isinstance(w, Gtk.ScrolledWindow) for w in _ancestors(ok))
     finally:
         dialog.destroy()
