@@ -322,7 +322,8 @@ class RecordingState:
     # to be a dictation says "Not sent" rather than "Cancelled".
     held_send: bool = False
     # The hold key was already up again when this recording had finished
-    # starting: a tap, however slowly the start went (see the hold key).
+    # starting, and that took under 2 * MIN_HOLD_MS: a tap, though the
+    # start made it read as a longer hold (see the hold key).
     released_while_starting: bool = False
     # The space a held send left off, waiting for the hotkey that held it to
     # come up (_type_owed_space), or None. Typed while the key is down, GNOME

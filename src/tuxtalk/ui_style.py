@@ -14,6 +14,8 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gtk, Gdk, GObject
 
+from . import desktop_detect
+
 logger = logging.getLogger(__name__)
 
 # GTK3 defaults ComboBox popups to "menu mode", which positions the list so the
@@ -252,10 +254,12 @@ def fit_window_to_screen(window):
         cap = avail if drawn_by_gtk else avail - _TITLE_BAR
         _shrink_scrollers(window, cap)
         scrolled = _scroll_body(window) if window.get_preferred_height()[0] > cap else None
-        if scrolled is not None:
+        if scrolled is not None and desktop_detect.get_desktop_environment() == "cosmic":
             # COSMIC opens a window at a height of its own choosing (about
-            # 420 px at 1280x800) unless its minimum asks for more, so the
-            # scrolling part asks for what fills the cap, not just a sliver.
+            # 420 px at 1280x800) unless its minimum asks for more, so there
+            # the scrolling part asks for what fills the cap, not a sliver.
+            # Elsewhere the opening size is honoured, and a smaller minimum
+            # lets the window be made shorter afterwards.
             rest = window.get_preferred_height()[0] - scrolled.get_preferred_height()[0]
             content = scrolled.get_child().get_preferred_height()[1]
             scrolled.set_min_content_height(max(0, min(content, cap - rest)))

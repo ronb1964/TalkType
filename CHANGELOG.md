@@ -37,7 +37,7 @@ before 0.15.0, so older entries use that name.
 - COSMIC (Pop!_OS 24.04 and later) works as the other desktops do. TuxTalk
   now knows which window you're in, so a terminal gets plain text and the
   paste shortcut that works there, and "Send each dictation automatically"
-  sends nothing if you switch windows during the wait. F8 and F9 no longer
+  sends nothing if you switch to another app during the wait. F8 and F9 no longer
   reach the app as well ("^[[19~" in a terminal): while dictation is on they
   are COSMIC shortcuts, listed as TuxTalk's in Settings → Keyboard → Custom
   shortcuts, and they go again when dictation stops. A key COSMIC or you

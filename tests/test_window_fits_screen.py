@@ -43,8 +43,11 @@ def _ancestors(widget):
         widget = widget.get_parent()
 
 
-def test_a_tall_dialog_scrolls_and_keeps_its_buttons_in_view():
+@pytest.mark.parametrize("desktop", ["COSMIC", "KDE"])
+def test_a_tall_dialog_scrolls_and_keeps_its_buttons_in_view(monkeypatch, desktop):
     """About: a long What's New and a Close button."""
+    monkeypatch.setenv("XDG_CURRENT_DESKTOP", desktop)
+    monkeypatch.delenv("DESKTOP_SESSION", raising=False)
     dialog = Gtk.Dialog(title="About TuxTalk")
     label = _tall_label()
     dialog.get_content_area().pack_start(label, True, True, 0)
@@ -53,10 +56,14 @@ def test_a_tall_dialog_scrolls_and_keeps_its_buttons_in_view():
     try:
         assert _min_height(dialog) > CAP
         ui_style.fit_window_to_screen(dialog)
-        # As tall as it may be: COSMIC opens a window short unless its
-        # minimum asks for more.
-        assert CAP - 10 <= _min_height(dialog) <= CAP
-        assert dialog.get_size()[1] <= CAP
+        if desktop == "COSMIC":
+            # As tall as it may be: COSMIC opens a window short unless its
+            # minimum asks for more.
+            assert CAP - 10 <= _min_height(dialog) <= CAP
+        else:
+            # It opens at the cap and can still be made shorter.
+            assert _min_height(dialog) < CAP / 2
+            assert dialog.get_size()[1] == CAP
         assert any(isinstance(w, Gtk.ScrolledWindow) for w in _ancestors(label))
         assert not any(isinstance(w, Gtk.ScrolledWindow) for w in _ancestors(close))
     finally:
