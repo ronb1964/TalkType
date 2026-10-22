@@ -405,9 +405,10 @@ class WelcomeDialog:
     def _build_dialog(self):
         """Build the GTK dialog with appropriate content."""
         self.dialog = Gtk.Dialog(title="Welcome to TuxTalk!")
-        # Cap height to the screen and allow resizing so the footer (Set it up
-        # button) is always reachable. The content below is in a ScrolledWindow, so
-        # overflow scrolls instead of being cut off. See fit_dialog_to_screen.
+        # Resizable, and capped to the screen when it's created (the realize
+        # hook's ui_style.fit_window_to_screen), so the footer (Set it up
+        # button) is always reachable. The content below is in a
+        # ScrolledWindow, so overflow scrolls instead of being cut off.
         from .ui_style import fit_dialog_to_screen
         fit_dialog_to_screen(self.dialog, 580, self.height)
         self.dialog.set_modal(True)
@@ -3028,7 +3029,7 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
     dialog.set_border_width(0)
     from .ui_style import fit_dialog_to_screen
     from .ui_style import workarea_height
-    fit_dialog_to_screen(dialog, 480, -1)  # auto-height, resizable, screen-capped
+    fit_dialog_to_screen(dialog, 480, -1)  # auto-height, resizable; capped when realized
     dialog.set_position(Gtk.WindowPosition.CENTER)
     dialog.set_keep_above(True)
 
