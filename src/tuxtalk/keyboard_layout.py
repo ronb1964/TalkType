@@ -19,6 +19,8 @@ layout), the caller pastes that dictation instead, which works on any layout.
 Finding the active layout depends on the desktop:
   KDE        org.kde.keyboard over D-Bus (the active one of the configured list)
   GNOME      gsettings org.gnome.desktop.input-sources (mru-sources first)
+  COSMIC     the layout COSMIC Settings saves for cosmic-comp (the first of
+             the list: which one is on isn't published)
   Hyprland   `j/devices` on its socket (the main keyboard)
   Sway       GET_INPUTS on its socket; names are descriptions, mapped to codes
              with libxkbregistry
@@ -242,6 +244,20 @@ def _gnome_layout():
     return None
 
 
+def _cosmic_xkb_config():
+    config = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+    with open(os.path.join(config, "cosmic", "com.system76.CosmicComp", "v1", "xkb_config"),
+              encoding="utf-8") as f:
+        return f.read()
+
+
+def _cosmic_layout():
+    """COSMIC's (layout, variant), from its RON config:
+    (rules: "", model: "pc105", layout: "de,us", variant: ",", ...)."""
+    fields = dict(re.findall(r'\b(layout|variant):\s*"([^"]*)"', _cosmic_xkb_config()))
+    return _first(fields.get("layout")), _first(fields.get("variant"))
+
+
 def _hyprland_devices():
     from .compositor_focus import _exchange, _recv_until_closed
     runtime = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
@@ -413,6 +429,8 @@ def active_layout():
                 found = layouts[index] if 0 <= index < len(layouts) else None
             elif desktop == "gnome":
                 found = _gnome_layout()
+            elif desktop == "cosmic":
+                found = _cosmic_layout()
             elif (os.environ.get("XDG_SESSION_TYPE") or "").lower() == "x11":
                 found = _x11_layout()
         if found and found[0]:

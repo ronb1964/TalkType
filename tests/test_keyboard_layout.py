@@ -172,6 +172,33 @@ def test_gnome_reports_the_active_layout(monkeypatch, mru, sources, expected):
     assert kl.active_layout() == expected
 
 
+def _cosmic(monkeypatch, tmp_path, xkb_config=None):
+    """A COSMIC session; *xkb_config* is what COSMIC Settings saved, if anything."""
+    monkeypatch.setattr(kl, "_desktop", lambda: "cosmic")
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setattr(kl, "_system_layout", lambda: ("us", ""))
+    if xkb_config is not None:
+        folder = tmp_path / "cosmic" / "com.system76.CosmicComp" / "v1"
+        folder.mkdir(parents=True)
+        (folder / "xkb_config").write_text(xkb_config)
+
+
+def test_cosmic_reports_the_layout_set_in_cosmic_settings(monkeypatch, tmp_path):
+    """Not the one picked at install time: on a German keyboard that typed
+    Y for Z."""
+    _cosmic(monkeypatch, tmp_path, '(\n    rules: "",\n    model: "pc105",\n'
+            '    layout: "ch,us",\n    variant: "fr,",\n    options: Some(""),\n'
+            '    repeat_delay: 600,\n    repeat_rate: 25,\n)')
+    assert kl.active_layout() == ("ch", "fr")
+
+
+def test_cosmic_without_a_layout_of_its_own_uses_the_systems(monkeypatch, tmp_path):
+    _cosmic(monkeypatch, tmp_path)
+    assert kl.active_layout() == ("us", "")
+    _cosmic(monkeypatch, tmp_path, '(rules: "", model: "", layout: "", variant: "", options: None)')
+    assert kl.active_layout() == ("us", "")
+
+
 def test_hyprland_reports_the_active_layout(monkeypatch):
     devices = {"keyboards": [
         {"name": "virtual-keyboard", "main": False, "layout": "us", "variant": ""},

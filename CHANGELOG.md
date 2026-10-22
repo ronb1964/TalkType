@@ -45,6 +45,9 @@ before 0.15.0, so older entries use that name.
   are COSMIC shortcuts, listed as TuxTalk's in Settings → Keyboard → Custom
   shortcuts, and they go again when dictation stops. A key COSMIC or you
   already use for something else is left alone, and the log says so.
+  Typing follows the keyboard layout set in COSMIC Settings rather than the
+  one picked when the system was installed, which on a German keyboard
+  swapped Y and Z.
 - Every TuxTalk window leaves room for panels and docks. Wayland doesn't
   tell apps where those are, so on a 1280x800 screen Setup Complete and
   About were as tall as the screen and their buttons sat behind Pop!_OS's
