@@ -1984,8 +1984,7 @@ def _send_when_due(pending: dict) -> None:
     # Tabbing from a username into the password box during the wait must
     # not submit the form: "press enter" said on its own is the only Enter a
     # password field gets.
-    from .atspi_helper import focused_is_password
-    if focused_is_password():
+    if _focused_is_password():
         logger.info("Not sent: a password field has the focus now")
         from . import screen_message
         screen_message.show_over_active_window(PASSWORD_FIELD_NOT_SENT, warning=False,
@@ -2089,10 +2088,9 @@ def _type_text(text: str) -> bool:
     would leave the later lines run into the earlier ones. Before each
     further line the focus is asked again, as the paste does, and a password
     field there raises PasswordFieldNow."""
-    from .atspi_helper import focused_is_password
     parts = text.split("\xa7SHIFT_ENTER\xa7")
     for i, part in enumerate(parts):
-        if i and focused_is_password():
+        if i and _focused_is_password():
             raise PasswordFieldNow()
         if part and not _type_text_raw(part):
             return False
@@ -2271,6 +2269,42 @@ _ELECTRON_PASTE_BROKEN_CLASSES = frozenset({
     # silently does nothing.
     "com.anthropic.Claude",
 })
+
+
+def _focused_is_password() -> bool:
+    """Whether the cursor is in a password field: one the accessibility bus
+    knows (atspi_helper), or the desktop's own password prompt."""
+    from . import atspi_helper
+    return atspi_helper.focused_is_password() or _password_prompt_has_focus()
+
+
+def _password_prompt_has_focus() -> bool:
+    """The desktop's own password prompt has the focus. KDE's and LXQt's are
+    polkit apps of their own, which only tell the accessibility bus with
+    accessibility switched on; their window says what they are. Cinnamon
+    and COSMIC draw theirs in the shell, over the app, which still counts as
+    focused while the prompt takes every key: there a waiting prompt is
+    enough (VMs, 2026-10-22)."""
+    focused = _query_focused_window_class()
+    if focused is not None and any(word in focused.lower() for word in ("polkit", "policykit")):
+        return True
+    from .desktop_detect import get_desktop_environment
+    return get_desktop_environment() in ("cinnamon", "cosmic") and _polkit_prompt_waiting()
+
+
+def _polkit_prompt_waiting() -> bool:
+    """Whether polkit-agent-helper-1 runs: it does, on every desktop, for as
+    long as a polkit prompt waits for a password."""
+    for entry in os.scandir("/proc"):
+        if not entry.name.isdigit():
+            continue
+        try:
+            with open(f"/proc/{entry.name}/comm") as f:
+                if f.read().strip() == "polkit-agent-he":   # comm keeps 15 characters
+                    return True
+        except OSError:
+            continue    # a process that ended meanwhile
+    return False
 
 
 def _query_focused_window_class() -> str | None:
@@ -3016,8 +3050,7 @@ def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = F
     as Shift+Enter, since a plain Enter would send a chat message; that holds
     for every typed line break, not only voice editing's.
     """
-    from .atspi_helper import focused_is_password
-    if focused_is_password():
+    if _focused_is_password():
         return "password_field"
     # Which window this text goes into, so select and move by voice only
     # trusts "what I just said" in that same window.
@@ -3063,7 +3096,7 @@ def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = F
             if marker in unified:
                 parts = unified.split(marker)
                 for i, part in enumerate(parts):
-                    if i and focused_is_password():
+                    if i and _focused_is_password():
                         success, password_field = False, True
                         break
                     if part and not _type_text_raw(part):
@@ -3138,7 +3171,7 @@ def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = F
         resume_at = None
         needs_break = password_field = False
         for i, part in enumerate(parts):
-            if i and focused_is_password():
+            if i and _focused_is_password():
                 resume_at, password_field = i, True
                 break
             if part:
@@ -3449,10 +3482,9 @@ def _report_undelivered(outcome: str, beeps_on: bool):
 
 
 def _refuse_password_field(beeps_on: bool) -> bool:
-    """True when the cursor is in a password field (atspi_helper.py), after
+    """True when the cursor is in a password field (_focused_is_password), after
     saying so (_password_field_refused)."""
-    from . import atspi_helper
-    if not atspi_helper.focused_is_password():
+    if not _focused_is_password():
         return False
     _password_field_refused(beeps_on)
     return True
@@ -3567,8 +3599,7 @@ def _erase_typed(text: str) -> bool:
         return False
     # The AI that found the correction can take seconds, time enough to
     # click into a password field of the same window.
-    from .atspi_helper import focused_is_password
-    if focused_is_password():
+    if _focused_is_password():
         logger.info("Correction across a pause skipped: a password field has the focus")
         return False
     try:
@@ -3863,8 +3894,7 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         # held "No wait.", backspaces for a correction), and the local AI
         # never sees them. Only "press enter" on its own still presses
         # Enter: people type the password by hand, then say it to log in.
-        from . import atspi_helper
-        if atspi_helper.focused_is_password():
+        if _focused_is_password():
             state.pending_boundary, state.held_cue = None, ""
             if not enter_only:
                 _password_field_refused(beeps_on)

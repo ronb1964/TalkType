@@ -612,8 +612,8 @@ Saying only <b>press enter</b> there still presses Enter, to log in after you ty
   • In KDE apps and Firefox only while accessibility is on (a screen reader turns it on).
   • In Chrome, Brave and apps built on them (Discord, Slack, VS Code) only if
     accessibility was already on when they started.
-  • GNOME's own password prompt counts too. Other desktops' prompts and a terminal
-    asking for one (sudo) don't tell it: there, don't dictate into the password box.
+  • The desktop's own prompt, when an app asks for your admin password, counts too.
+    A terminal asking for one (sudo) doesn't tell it: there, don't dictate.
 
 <b>Bug reports and feedback</b>
   • <b>Report bugs:</b> <a href="{ISSUES_URL}">TuxTalk issues on GitHub</a>

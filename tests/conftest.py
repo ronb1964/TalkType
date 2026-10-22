@@ -91,11 +91,15 @@ def _no_real_send_countdown(monkeypatch, request):
 @pytest.fixture(autouse=True)
 def _no_real_password_check(monkeypatch, request):
     """Typing first asks the accessibility bus whether the cursor is in a
-    password field. On the user's desktop the answer depends on the window
-    they have open; test_password_fields fakes the bus itself."""
-    from tuxtalk import atspi_helper
+    password field, and whether a polkit password prompt is waiting. On the
+    user's desktop the answers depend on what they have open;
+    test_password_fields fakes them itself."""
+    from tuxtalk import app, atspi_helper
+    monkeypatch.setattr(app, "_polkit_prompt_waiting", lambda: False)
     if request.module.__name__.rpartition(".")[2] != "test_password_fields":
         monkeypatch.setattr(atspi_helper, "focused_is_password", lambda: False)
+        # It asks which window has the focus, which tests script answer by answer.
+        monkeypatch.setattr(app, "_password_prompt_has_focus", lambda: False)
 
 
 @pytest.fixture(autouse=True)

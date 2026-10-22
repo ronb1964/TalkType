@@ -21,6 +21,8 @@ FOCUSED = 1 << atspi_helper._STATE_FOCUSED
 SHOWING = 1 << atspi_helper._STATE_SHOWING
 PASSWORD = atspi_helper._ROLE_PASSWORD_TEXT
 TEXT = 61      # ATSPI_ROLE_TEXT
+# Taken before conftest swaps in a stand-in, which every test gets.
+REAL_PROMPT_WAITING = app._polkit_prompt_waiting
 
 
 # --- the app: nothing typed, nothing kept ------------------------------------------
@@ -223,6 +225,43 @@ def test_fix_a_word_doesnt_touch_a_password_field(desktop, monkeypatch):
     desktop["password"] = True
     assert fix_word_dialog.fix_in_text("I use tax talk ", (6, 14, "TuxTalk"), "kwrite") is False
     assert keys == []
+
+
+# --- the desktop's own password prompt ----------------------------------------------
+
+@pytest.mark.parametrize("desktop_name, focused, waiting, refused", [
+    ("cinnamon", "tt-sink", True, True),      # drawn by the shell, over the app,
+    ("cosmic", "tt-sink", True, True),        # and it takes every key
+    ("cinnamon", "tt-sink", False, False),    # nothing waits
+    ("kde", None, True, False),               # unknown focus isn't a prompt
+    ("kde", "org.kde.polkit-kde-authentication-agent-1", False, True),  # helper hidden
+    ("lxqt", "lxqt-policykit-agent", True, True),
+    ("kde", "org.kde.kwrite", True, False),   # the prompt waits behind KWrite
+])
+def test_the_desktops_own_password_prompt_gets_nothing(desktop, monkeypatch, desktop_name,
+                                                       focused, waiting, refused):
+    from tuxtalk import desktop_detect
+    monkeypatch.setattr(desktop_detect, "get_desktop_environment", lambda: desktop_name)
+    monkeypatch.setattr(app, "_polkit_prompt_waiting", lambda: waiting)
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: focused)
+    dictate(monkeypatch)
+    assert (desktop["typed"] == []) is refused
+
+
+def test_a_waiting_prompt_is_seen_by_its_helper_process(tmp_path):
+    """polkit-agent-helper-1 runs while a prompt waits; the kernel keeps the
+    first 15 characters of its name."""
+    import shutil
+    import subprocess
+    helper = tmp_path / "polkit-agent-helper-1"
+    shutil.copy("/bin/sleep", helper)
+    proc = subprocess.Popen([str(helper), "30"])
+    try:
+        time.sleep(0.2)
+        assert REAL_PROMPT_WAITING() is True
+    finally:
+        proc.kill()
+        proc.wait()
 
 
 # --- the question: which widget has the focus, and is it a password field ----------

@@ -369,8 +369,7 @@ def fix_in_text(typed, fix, window):
         app._notify("Your text wasn't changed",
                     "The fix is saved, but another window had the focus.")
         return False
-    from .atspi_helper import focused_is_password
-    if focused_is_password():
+    if app._focused_is_password():
         logger.info("Fix a Word: a password field has the focus; text left as it was")
         app._notify("Your text wasn't changed",
                     "The fix is saved, but the cursor is in a password field.")

@@ -84,8 +84,9 @@ before 0.15.0, so older entries use that name.
   GTK apps (most GNOME, Cinnamon and Xfce apps), and in KDE apps and Firefox
   only while accessibility is on.
   Chrome, Brave and Electron apps (Discord, VS Code) only say so if
-  accessibility was already on when they started. GNOME's own password
-  prompts, for pkexec, the keyring or Wi-Fi, count too.
+  accessibility was already on when they started. The desktop's own
+  prompt for your admin password counts too, on GNOME, KDE, Cinnamon,
+  COSMIC and Xfce, and on GNOME its keyring and Wi-Fi prompts as well.
 - Typing is about six times faster. TuxTalk now types with its own virtual
   keyboard instead of ydotool: a 25-letter sentence that took 0.6 seconds to
   appear now takes about 0.1. Undo and select by voice are as quick. Paste
