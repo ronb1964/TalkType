@@ -239,6 +239,7 @@ class _CosmicWindows(threading.Thread):
         self.windows = {}           # cosmic handle -> ext handle
         self.active = None          # the activated window's ext handle
         self.ready = threading.Event()  # the first states are in
+        self.not_offered = False    # this cosmic-comp has no window list to follow
 
     def focused(self):
         return self.app_ids.get(self.active)
@@ -267,6 +268,7 @@ class _CosmicWindows(threading.Thread):
                                       struct.unpack_from("<I", body, end)[0])
         wl.roundtrip(on_global)
         if _EXT_LIST not in offered or offered.get(_COSMIC_INFO, (0, 0))[1] < 2:
+            self.not_offered = True
             raise ConnectionError("cosmic-comp doesn't offer its window list")
 
         def bind(interface, version):
@@ -316,10 +318,11 @@ _cosmic_lock = threading.Lock()
 
 def _from_cosmic(path):
     """The activated window's app_id, from the connection that follows them,
-    made the first time (and again if cosmic-comp went away)."""
+    made the first time (and again if cosmic-comp went away). A cosmic-comp
+    without the window list is asked once, not again at every paste."""
     global _cosmic
     with _cosmic_lock:
-        if _cosmic is None or not _cosmic.is_alive():
+        if _cosmic is None or not (_cosmic.is_alive() or _cosmic.not_offered):
             _cosmic = _CosmicWindows(path)
             _cosmic.start()
         windows = _cosmic

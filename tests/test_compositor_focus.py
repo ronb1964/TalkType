@@ -474,6 +474,17 @@ def test_a_cosmic_without_window_states_is_unknown(cosmic):
     assert time.monotonic() - started < 0.5
 
 
+def test_a_cosmic_without_window_states_is_asked_only_once(cosmic):
+    """Every paste asks which window has focus; a cosmic-comp that can't say
+    isn't connected to again each time."""
+    cosmic("org.gnome.TextEditor", active="org.gnome.TextEditor", info_version=1)
+    assert cf.focused_class() is None
+    asked = cf._cosmic
+    asked.join(1)
+    assert cf.focused_class() is None
+    assert cf._cosmic is asked
+
+
 def test_a_cosmic_that_never_sends_the_states_costs_one_wait_only(cosmic, monkeypatch):
     import time
     monkeypatch.setattr(cf, "COSMIC_FIRST_ANSWER", 0.2)
