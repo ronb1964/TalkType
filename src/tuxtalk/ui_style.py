@@ -197,19 +197,25 @@ def forward_combo_scroll(combo):
 USABLE_SHARE = 0.75
 
 
+def _monitor_showing(near):
+    """The monitor showing window *near* (it has to be on screen), else the
+    primary monitor, else the first; None when there's none."""
+    display = Gdk.Display.get_default()
+    if display is None:
+        return None
+    shown = near.get_window() if near is not None else None
+    monitor = (display.get_monitor_at_window(shown) if shown is not None
+               else display.get_primary_monitor())
+    if monitor is None and display.get_n_monitors() > 0:
+        monitor = display.get_monitor(0)
+    return monitor
+
+
 def workarea_height(near=None):
     """A cautious usable height, in logical pixels, of the monitor showing
-    window *near* (a dialog's parent; it has to be on screen), else of the
-    primary monitor; None when unknown."""
+    window *near* (_monitor_showing); None when unknown."""
     try:
-        display = Gdk.Display.get_default()
-        if display is None:
-            return None
-        shown = near.get_window() if near is not None else None
-        monitor = (display.get_monitor_at_window(shown) if shown is not None
-                   else display.get_primary_monitor())
-        if monitor is None and display.get_n_monitors() > 0:
-            monitor = display.get_monitor(0)
+        monitor = _monitor_showing(near)
         if monitor is None:
             return None
         return min(monitor.get_workarea().height,
@@ -234,7 +240,7 @@ def fit_dialog_to_screen(dialog, width, desired_height):
 _TITLE_BAR = 40
 
 
-def fit_window_to_screen(window):
+def fit_window_to_screen(window, near=None):
     """Keep *window* no taller than workarea_height() less its title bar, so
     its buttons stay clear of the screen's edge and of docks Wayland doesn't
     report (About and Setup Complete sat behind COSMIC's dock at 1280x800).
@@ -243,11 +249,12 @@ def fit_window_to_screen(window):
     scrolling areas it has (_shrink_scrollers), and if that isn't enough
     its content goes in one (_scroll_body); a dialog's own button row stays
     below it, always in view. Called for every window by
-    fit_windows_to_screen(). Never raises: a window that doesn't fit beats
-    one that doesn't open."""
+    fit_windows_to_screen(). Measured on the monitor showing *near*, by
+    default the window's parent: a window isn't on a monitor before it's
+    shown. Never raises: a window that doesn't fit beats one that doesn't
+    open."""
     try:
-        # A window isn't on a monitor before it's shown; its parent is.
-        avail = workarea_height(window.get_transient_for())
+        avail = workarea_height(near or window.get_transient_for())
         if not avail or window.is_maximized():
             return
         drawn_by_gtk = window.get_style_context().has_class("csd")
@@ -352,7 +359,26 @@ def _on_window_realize(widget, *_args):
     fitted then, sized but not yet on screen. True keeps the hook installed."""
     if isinstance(widget, Gtk.Window) and widget.get_window_type() == Gtk.WindowType.TOPLEVEL:
         fit_window_to_screen(widget)
+        if widget.get_transient_for() is None:
+            # Fitted to the primary monitor, with no parent to go by; the
+            # desktop may show it on a shorter one, or the user move it there.
+            # On Wayland GDK learns the monitor only once the window is on
+            # it, which can come after its first configure, so its focus
+            # changing asks again.
+            fitted_to = [_monitor_showing(None)]
+            for signal in ("configure-event", "window-state-event"):
+                widget.connect(signal, _refit_on_another_monitor, fitted_to)
     return True
+
+
+def _refit_on_another_monitor(window, _event, fitted_to):
+    """Fit *window* again if it's now on another monitor than it was fitted
+    to (a list, so the handler can update it). False lets GTK go on."""
+    monitor = _monitor_showing(window)
+    if monitor is not None and monitor != fitted_to[0]:
+        fitted_to[0] = monitor
+        fit_window_to_screen(window, window)
+    return False
 
 
 # The hook's id once installed (for tests to take it out again).

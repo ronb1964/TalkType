@@ -6,18 +6,20 @@ ui_style fits every window as it's created, so none has to remember to.
 These build real windows without showing them.
 """
 import pathlib
+from types import SimpleNamespace
 
 import pytest
 
 gi = pytest.importorskip("gi")
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk  # noqa: E402
+from gi.repository import GObject, Gtk  # noqa: E402
 
 from tuxtalk import ui_style  # noqa: E402
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tuxtalk"
 USABLE = 600                   # three quarters of an 800 px screen
 CAP = USABLE - ui_style._TITLE_BAR
+MEASURE_THE_MONITOR = ui_style.workarea_height    # short_screen stands in for it
 
 
 @pytest.fixture(autouse=True)
@@ -199,7 +201,6 @@ def test_a_window_asking_for_more_than_the_screen_opens_shorter():
 def test_every_window_is_fitted_as_it_is_created(monkeypatch):
     """Through the hook, as the app does it: created (not shown), the tall
     dialog already fits, its Close button outside the scrolling part."""
-    from gi.repository import GObject
     monkeypatch.setattr(ui_style, "_fitting_hook", None)
     ui_style.fit_windows_to_screen()
     dialog = Gtk.Dialog(title="About TuxTalk")
@@ -214,6 +215,40 @@ def test_every_window_is_fitted_as_it_is_created(monkeypatch):
         assert not any(isinstance(w, Gtk.ScrolledWindow) for w in _ancestors(close))
     finally:
         dialog.destroy()
+        GObject.signal_remove_emission_hook(GObject.signal_lookup("realize", Gtk.Widget),
+                                            ui_style._fitting_hook)
+
+
+def _monitor(height):
+    geometry = SimpleNamespace(height=height, width=1280)
+    return SimpleNamespace(get_workarea=lambda: geometry, get_geometry=lambda: geometry)
+
+
+def test_a_window_without_a_parent_fits_the_monitor_it_opens_on(monkeypatch):
+    """Created, it can only go by the primary monitor; shown on a second,
+    shorter one, it's fitted again to that, or its buttons ran off it."""
+    tall, short = _monitor(1600), _monitor(800)
+    on = {"monitor": tall}
+    display = SimpleNamespace(get_primary_monitor=lambda: tall, get_n_monitors=lambda: 2,
+                              get_monitor=lambda i: (tall, short)[i],
+                              get_monitor_at_window=lambda shown: on["monitor"])
+    monkeypatch.setattr(ui_style, "workarea_height", MEASURE_THE_MONITOR)
+    monkeypatch.setattr(ui_style.Gdk.Display, "get_default", lambda: display)
+    monkeypatch.setattr(ui_style, "_fitting_hook", None)
+    ui_style.fit_windows_to_screen()
+    window = Gtk.Window(title="Voice Commands")
+    scrolled = Gtk.ScrolledWindow()
+    scrolled.add(_tall_label())
+    window.add(scrolled)
+    window.set_default_size(500, 1100)
+    try:
+        window.realize()
+        assert window.get_size()[1] == 1100            # fits on the tall one
+        on["monitor"] = short
+        window.emit("configure-event", ui_style.Gdk.Event.new(ui_style.Gdk.EventType.CONFIGURE))
+        assert window.get_size()[1] == CAP
+    finally:
+        window.destroy()
         GObject.signal_remove_emission_hook(GObject.signal_lookup("realize", Gtk.Widget),
                                             ui_style._fitting_hook)
 
