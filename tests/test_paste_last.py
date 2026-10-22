@@ -257,7 +257,8 @@ def test_a_hold_started_while_the_combo_is_pending_still_stops(keys, monkeypatch
     monkeypatch.setattr(Cfg, "auto_period", True, raising=False)
     held = set()
     press_combo(held)
-    send(P, 0, held)                 # Ctrl and Alt still down: paste pending
+    send(CTRL, 0, held)
+    send(ALT, 0, held)               # P still down: paste pending
     send(ecodes.KEY_F8, 1, held)
     send(ecodes.KEY_F8, 0, held)
     assert stopped, "the hold key's release was swallowed"

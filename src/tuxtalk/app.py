@@ -4636,6 +4636,15 @@ def _held_shift(held_modifiers) -> set:
     return set(held_modifiers) & _SHIFT_CODES
 
 
+def _someone_elses_shortcut(held_modifiers) -> bool:
+    """A dictation key pressed with modifiers the desktop doesn't hold back
+    for us (kwin_hotkeys.wanted_shortcuts: the plain key, and Shift with it
+    when voice editing is on). Such a press reaches the app (Alt+F8 resizes
+    the window on KDE and GNOME), so it mustn't start a dictation as well."""
+    allowed = _SHIFT_CODES if _voice_editing else frozenset()
+    return bool(set(held_modifiers) - allowed)
+
+
 def _paste_last_dictation(cfg) -> None:
     """Type the newest Recent Dictations entry again, the way a dictation is
     typed (line breaks, injection mode, the trailing space)."""
@@ -4722,7 +4731,8 @@ def _handle_key_event(event, mode, hold_key, toggle_key,
 
     # --- Hold-to-talk: hold key down to record, release to stop ---
     if event.code == hold_key:
-        if event.value == 1 and not state.is_recording:
+        if (event.value == 1 and not state.is_recording
+                and not _someone_elses_shortcut(held_modifiers)):
             # Grab the keyboards so the hotkey doesn't reach the focused app,
             # without leaving the desktop thinking the key is still held (see
             # _grab_keyboards_hiding). start_recording releases the grabs itself
@@ -4754,7 +4764,8 @@ def _handle_key_event(event, mode, hold_key, toggle_key,
             and state.owed_space is not None and not state.is_recording):
         _type_owed_space()   # the tap that held the send is over
 
-    if toggle_key and event.code == toggle_key and event.value == 1:
+    if (toggle_key and event.code == toggle_key and event.value == 1
+            and not _someone_elses_shortcut(held_modifiers)):
         shift = _held_shift(held_modifiers) if _voice_editing else set()
         if not state.is_recording and not shift and _hold_pending_send(announce=True):
             return   # the tap only held the send: no recording
@@ -5152,6 +5163,10 @@ def _loop_evdev(cfg: Settings, input_device_idx, keyboards=None):
                 # a microphone error into an unexplained keyboard lockup.
                 logger.error(f"Error handling input event: {e}", exc_info=True)
 
+        if dead_devices:
+            # Their modifiers' key-ups can't come now, and a Ctrl left held
+            # here would stop F8 dictating (_someone_elses_shortcut).
+            held_modifiers.clear()
         _drop_dead_devices(dead_devices, devices, cfg)
 
         # Pick up keyboards that have (re)appeared. Only while idle: rescanning

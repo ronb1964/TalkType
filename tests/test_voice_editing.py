@@ -288,10 +288,35 @@ def test_plain_f8_still_dictates(keyloop):
     assert keyloop["starts"][0]["edit_mode"] is False
 
 
-def test_with_voice_editing_off_shift_f8_just_dictates(keyloop, monkeypatch):
+def test_with_voice_editing_off_shift_f8_is_left_to_the_app(keyloop, monkeypatch):
+    """The desktop doesn't hold Shift+F8 back then, so the app gets it: a
+    dictation as well would answer one key twice."""
     monkeypatch.setattr(app, "_voice_editing", False)
     key(F8, 1, {SHIFT})
-    assert keyloop["starts"][0]["edit_mode"] is False
+    key(F9, 1, {SHIFT})
+    assert keyloop["starts"] == []
+
+
+@pytest.mark.parametrize("voice_editing", [False, True])
+@pytest.mark.parametrize("mods", [(), ("Shift",), ("Alt",), ("Ctrl",), ("Ctrl", "Shift"), ("Meta",)])
+def test_a_dictation_key_starts_only_as_the_desktop_holds_it(keyloop, monkeypatch,
+                                                              voice_editing, mods):
+    """What KDE, GNOME, COSMIC and the X server keep from the app
+    (kwin_hotkeys.wanted_shortcuts) is exactly what starts a dictation.
+    Alt+F8, which resizes the window on KDE and GNOME, did both."""
+    import types
+    from tuxtalk import kwin_hotkeys
+    codes = {"Shift": SHIFT, "Alt": ecodes.KEY_LEFTALT, "Ctrl": ecodes.KEY_LEFTCTRL,
+             "Meta": ecodes.KEY_LEFTMETA}
+    monkeypatch.setattr(app, "_voice_editing", voice_editing)
+    cfg = types.SimpleNamespace(hotkey="F8", toggle_hotkey="F9", voice_commands_hotkey="",
+                                paste_last_hotkey="", voice_editing=voice_editing)
+    held = {qt for _name, _text, qt in kwin_hotkeys.wanted_shortcuts(cfg)}
+    for code, name in ((F8, "F8"), (F9, "F9")):
+        keyloop["starts"].clear()
+        app.state.is_recording = False
+        key(code, 1, {codes[m] for m in mods})
+        assert bool(keyloop["starts"]) == ("+".join(mods + (name,)) in held), name
 
 
 def test_shift_f9_edits_without_arming_hands_free(keyloop):

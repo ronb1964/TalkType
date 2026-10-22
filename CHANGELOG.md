@@ -53,6 +53,9 @@ before 0.15.0, so older entries use that name.
   key with that letter on it. TuxTalk used to listen to the key in the US
   position while the desktop held back the one with the letter, so the
   labelled key did nothing and the other one also reached the app.
+- F8 or F9 pressed with Ctrl, Alt or Super held (Alt+F8 resizes a window
+  on KDE and GNOME), or with Shift while voice editing is off, is left to
+  the desktop and the app. It used to do that and start a dictation too.
 - Every TuxTalk window leaves room for panels and docks. Wayland doesn't
   tell apps where those are, so on a 1280x800 screen Setup Complete and
   About were as tall as the screen and their buttons sat behind Pop!_OS's
