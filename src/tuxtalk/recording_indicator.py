@@ -19,7 +19,7 @@ import math
 import os
 import time
 
-from . import indicator_styles
+from . import desktop_detect, indicator_styles
 from .indicator_styles import RadialGain
 from .logger import setup_logger
 
@@ -135,13 +135,28 @@ def _monitor_rect_at(x, y):
     return Rect(g.x, g.y, g.width, g.height)
 
 
+def window_type():
+    """A popup on COSMIC, an ordinary window elsewhere.
+
+    COSMIC's X11 window manager focuses the indicator when it appears, even
+    though it asks for no focus below (Pop!_OS VM, 2026-10-21): the app
+    being dictated into lost the keyboard for the whole recording, and a
+    space typed during it went nowhere. A popup (override-redirect) is never
+    managed, so never focused, as the floating labels in screen_message are.
+    The ordinary window stays where it was proven, on GNOME, KDE and X11.
+    """
+    if desktop_detect.get_desktop_environment() == "cosmic":
+        return Gtk.WindowType.POPUP
+    return Gtk.WindowType.TOPLEVEL
+
+
 class RecordingIndicator(Gtk.Window):
     """Floating recording indicator window with configurable position"""
 
     def __init__(self, position="center", offset_x=0, offset_y=0, size="medium",
                  style="orb", color_mode="custom", custom_color="#4db3ff",
                  sensitivity=1.0, follow_window=False):
-        super().__init__(title="TuxTalk Recording")
+        super().__init__(title="TuxTalk Recording", type=window_type())
         # TuxTalk Labs: show near the bottom of the window being dictated
         # into, instead of the fixed position (_follow_target).
         self.follow_window = follow_window

@@ -423,6 +423,97 @@ def test_typing_the_space_doesnt_turn_a_tap_into_a_dictation(countdown, monkeypa
     assert TYPED == [" "] and reasons == [app.HELD_SEND_NOTICE]
 
 
+class _Keyboard:
+    """A keyboard for _handle_key_event that says which keys are down."""
+    name, path = "Keyboard", "/dev/input/event3"
+
+    def __init__(self, down):
+        self.down = down
+
+    def capabilities(self, absinfo=True):
+        from evdev import ecodes
+        return {ecodes.EV_KEY: [ecodes.KEY_A, ecodes.KEY_M, ecodes.KEY_Z]}
+
+    def active_keys(self):
+        return list(self.down)
+
+    def write(self, *event):
+        pass
+
+    def grab(self):
+        pass
+
+    def ungrab(self):
+        pass
+
+
+class _Clock:
+    """app's time module, with a clock that only moves when told to."""
+
+    def __init__(self):
+        import time
+        self._time, self.now = time, 1000.0
+
+    def time(self):
+        return self.now
+
+    def monotonic(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.now += seconds
+
+    def __getattr__(self, name):
+        return getattr(self._time, name)
+
+
+@pytest.mark.parametrize("start_s, still_down, outcome", [
+    (0.25, False, "held"),          # the Pop VM: a quick tap, a slow start
+    (0.45, False, "dictated"),      # too slow to tell: the hold time decides
+    (0.25, True, "dictated"),       # still down: dictating more onto it
+])
+def test_a_quick_tap_holds_the_send_even_when_recording_starts_slowly(
+        countdown, monkeypatch, start_s, still_down, outcome):
+    """Pop!_OS VM, 2026-10-21: starting the recording took about 0.2 s, so a
+    0.08 s tap of F8 was read as a 0.2 s hold and recorded instead of holding
+    the send. A key already up after a start that quick was a tap; after a
+    slower start, or still down, it's a dictation added to the message."""
+    from types import SimpleNamespace
+    from evdev import ecodes
+    F8, F9 = ecodes.KEY_F8, ecodes.KEY_F9
+    clock = _Clock()
+    monkeypatch.setattr(app, "time", clock)
+    reasons, dictated = [], []
+    monkeypatch.setattr(app, "cancel_recording",
+                        lambda beeps, notify, reason="": reasons.append(reason))
+    monkeypatch.setattr(app, "_transcribe_and_inject", lambda *a, **k: dictated.append(1))
+    monkeypatch.setattr(app, "_open_input_stream", lambda idx: clock.sleep(start_s))
+    for name in ("_beep", "_notify", "_notify_tray_recording_state", "_arm_chunker",
+                 "_pause_media_players", "_resume_media_players", "_stop_stream_safely"):
+        monkeypatch.setattr(app, name, lambda *a, **k: None)
+    monkeypatch.setattr(app, "recording_indicator", None)
+    monkeypatch.setattr(app.state, "owed_space", None)
+    monkeypatch.setattr(app.state, "silence", None)
+    monkeypatch.setattr(app.state, "chunks_submitted", 0)
+    monkeypatch.setattr(app.state, "frames", [])
+    cfg = SimpleNamespace(beeps=False, notify=False, smart_quotes=False, language=None,
+                          auto_space=True, auto_period=True, injection_mode="type")
+    keyboard = _Keyboard([F8] if still_down else [])
+    app._send_automatically("test", " ", "type")
+    try:
+        for value in (1, 0):        # the release was waiting while recording started
+            app._handle_key_event(SimpleNamespace(type=ecodes.EV_KEY, code=F8, value=value),
+                                  "hold", F8, F9, None, set(), [keyboard], cfg, 0)
+    finally:
+        app._release_all_grabs()
+        app.state.is_recording = False
+        app.state.stream = None
+    if outcome == "held":
+        assert reasons == [app.HELD_SEND_NOTICE] and dictated == []
+    else:
+        assert reasons == [] and dictated == [1]
+
+
 def test_a_sent_message_never_gets_the_space(countdown):
     pressed, _ = countdown
     app._send_automatically("test", " ", "type")

@@ -125,3 +125,24 @@ def test_the_window_is_resized_on_the_gtk_thread_only(indicator, monkeypatch):
     while Gtk.events_pending():
         Gtk.main_iteration()
     assert calls == [(int(200 * 1.4), int(180 * 1.4))]
+
+
+@pytest.mark.parametrize("desktop, popup", [("COSMIC", True), ("KDE", False), ("GNOME", False)])
+def test_the_indicator_never_takes_the_focus_on_cosmic(monkeypatch, desktop, popup):
+    """COSMIC focused the ordinary indicator window, and the dictation's
+    target lost the keyboard while it showed (Pop!_OS VM, 2026-10-21)."""
+    gi = pytest.importorskip("gi")
+    gi.require_version("Gtk", "3.0")
+    from gi.repository import Gtk
+
+    if not Gtk.init_check(None)[0]:
+        pytest.skip("no display available")
+    from tuxtalk.recording_indicator import RecordingIndicator
+
+    monkeypatch.setenv("XDG_CURRENT_DESKTOP", desktop)
+    monkeypatch.delenv("DESKTOP_SESSION", raising=False)
+    ind = RecordingIndicator(position="center", size="medium")
+    try:
+        assert (ind.get_property("type") == Gtk.WindowType.POPUP) is popup
+    finally:
+        ind.destroy()

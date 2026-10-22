@@ -37,6 +37,19 @@ before 0.15.0, so older entries use that name.
   While dictation is on, the X server now keeps the keys for TuxTalk, as KDE
   and GNOME already did; if another program already uses one of them, the
   log says so.
+- COSMIC (Pop!_OS 24.04 and later) works as the other desktops do. TuxTalk
+  now knows which window you're in, so a terminal gets plain text and the
+  paste shortcut that works there, and "Send each dictation automatically"
+  sends nothing if you switch to another app during the wait. F8 and F9 no longer
+  reach the app as well ("^[[19~" in a terminal): while dictation is on they
+  are COSMIC shortcuts, listed as TuxTalk's in Settings → Keyboard → Custom
+  shortcuts, and they go again when dictation stops. A key COSMIC or you
+  already use for something else is left alone, and the log says so.
+- Every TuxTalk window leaves room for panels and docks. Wayland doesn't
+  tell apps where those are, so on a 1280x800 screen Setup Complete and
+  About were as tall as the screen and their buttons sat behind Pop!_OS's
+  dock. Windows now open at most three quarters of the screen tall, and
+  one whose content needs more scrolls it, with its buttons kept in view.
 - On X11 desktops (Linux Mint Cinnamon and other X11 sessions), dropdowns
   open as a list under the button again. Since 0.14.3 a wrong check gave X11
   the workaround meant for Wayland.

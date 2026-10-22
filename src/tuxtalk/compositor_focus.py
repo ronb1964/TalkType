@@ -1,4 +1,5 @@
-"""Ask the compositor which window has focus: Sway, i3, Hyprland, niri and X11.
+"""Ask the compositor which window has focus: Sway, i3, Hyprland, niri, COSMIC
+and X11.
 
 Paste sends Ctrl+Shift+V to terminals (plain Ctrl+V is readline's
 quoted-insert there and shows nothing), and some Electron apps get typed
@@ -17,6 +18,8 @@ _query_focused_window_class).
               while a connection stays open, so every request here is one
               short connection with a short timeout.
   niri        $NIRI_SOCKET, one line of JSON each way: "FocusedWindow".
+  COSMIC      the Wayland socket itself: the window list and which window is
+              "activated" (below).
   X11         XFCE, MATE, Cinnamon, LXQt, Openbox and the rest: the window
               manager names the focused window in the root window's
               _NET_ACTIVE_WINDOW (EWMH), and WM_CLASS gives its class. Only in
@@ -37,7 +40,9 @@ import json
 import os
 import socket
 import struct
+import threading
 
+from . import desktop_detect
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -127,6 +132,206 @@ def _from_niri(path):
     reply = json.loads(_exchange(path, b'"FocusedWindow"\n', _recv_line))
     window = (reply.get("Ok") or {}).get("FocusedWindow") or {}
     return window.get("app_id")
+
+
+# --- COSMIC --------------------------------------------------------------------------
+# No IPC socket and no command to ask, but cosmic-comp offers every client the
+# window list over Wayland itself: ext_foreign_toplevel_list_v1 names each
+# window's app_id, and zcosmic_toplevel_info_v1 (version 2 and up) adds its
+# state, "activated" for the focused one. That's what COSMIC's own dock uses.
+# The wire format is simple enough to speak directly on the socket, as the other
+# compositors' are above, so no Wayland binding is needed. Opcodes are each
+# message's position among its interface's requests or events in the protocol
+# XML (cosmic-protocols, wayland-protocols).
+#
+# Unlike the others, this isn't asked afresh each time: cosmic-comp sends the
+# states on a later pass, about 0.3 s after they're asked for (cosmic-comp
+# 2026-10, Pop!_OS 24.04), which every paste would wait for. One connection
+# stays open instead and follows focus as it changes.
+
+_WL_DISPLAY = 1
+_WL_DISPLAY_SYNC, _WL_DISPLAY_GET_REGISTRY = 0, 1           # requests
+_WL_DISPLAY_ERROR = 0                                       # event
+_WL_REGISTRY_BIND = 0                                       # request
+_WL_REGISTRY_GLOBAL = 0                                     # event
+_WL_CALLBACK_DONE = 0                                       # event
+_EXT_LIST_TOPLEVEL = 0                                      # event
+_EXT_HANDLE_DESTROY = 0                                     # request
+_EXT_HANDLE_CLOSED, _EXT_HANDLE_APP_ID = 0, 3               # events
+_COSMIC_INFO_GET_COSMIC_TOPLEVEL = 1                        # request, since 2
+_COSMIC_INFO_DONE = 2                                       # event, since 2
+_COSMIC_HANDLE_DESTROY = 0                                  # request
+_COSMIC_HANDLE_STATE = 8                                    # event
+_COSMIC_STATE_ACTIVATED = 2
+_EXT_LIST = "ext_foreign_toplevel_list_v1"
+_COSMIC_INFO = "zcosmic_toplevel_info_v1"
+
+# How long the first question waits for the window states to arrive.
+COSMIC_FIRST_ANSWER = 1.0
+
+
+def _wl_string(text):
+    raw = text.encode() + b"\0"
+    return struct.pack("<I", len(raw)) + raw + b"\0" * (-len(raw) % 4)
+
+
+def _wl_read_string(body, offset=0):
+    """(the string at *offset*, the offset after it)."""
+    length = struct.unpack_from("<I", body, offset)[0]
+    text = body[offset + 4:offset + 4 + length - 1].decode("utf-8", "replace")
+    return text, offset + 4 + length + (-length % 4)
+
+
+class _Wayland:
+    """A Wayland connection at the wire level: requests out, events in."""
+
+    def __init__(self, sock):
+        self.sock = sock
+        self.next_id = 2            # 1 is wl_display
+        self.unread = b""
+
+    def new_id(self):
+        self.next_id += 1
+        return self.next_id - 1
+
+    def request(self, obj, opcode, payload=b""):
+        self.sock.sendall(struct.pack("<IHH", obj, opcode, 8 + len(payload)) + payload)
+
+    def roundtrip(self, on_event):
+        """Call on_event(object, opcode, body) for every event until the
+        compositor has answered everything sent so far."""
+        callback = self.new_id()
+        self.request(_WL_DISPLAY, _WL_DISPLAY_SYNC, struct.pack("<I", callback))
+        self.read_until(callback, _WL_CALLBACK_DONE, on_event)
+
+    def read_until(self, obj, opcode, on_event):
+        """Call on_event(object, opcode, body) for every event until *obj*
+        sends event *opcode* (never, for obj None: until the connection ends)."""
+        while True:
+            while len(self.unread) < 8 or len(self.unread) < self._size():
+                chunk = self.sock.recv(65536)
+                if not chunk:
+                    raise ConnectionError("the compositor hung up")
+                self.unread += chunk
+            size = self._size()
+            if size < 8:
+                raise ConnectionError(f"a message of {size} bytes")   # would never end
+            sender, event = struct.unpack_from("<IH", self.unread)
+            body, self.unread = self.unread[8:size], self.unread[size:]
+            if (sender, event) == (obj, opcode):
+                return
+            if sender == _WL_DISPLAY and event == _WL_DISPLAY_ERROR:
+                raise ConnectionError(f"protocol error: {_wl_read_string(body, 8)[0]}")
+            on_event(sender, event, body)
+
+    def _size(self):
+        return struct.unpack_from("<H", self.unread, 6)[0]
+
+
+class _CosmicWindows(threading.Thread):
+    """Follows COSMIC's windows on its own connection: their app_ids, and
+    which one is activated."""
+
+    def __init__(self, path):
+        super().__init__(daemon=True, name="tt-cosmic-focus")
+        self.path = path
+        self.app_ids = {}           # each window's ext handle -> its app_id
+        self.windows = {}           # cosmic handle -> ext handle
+        self.active = None          # the activated window's ext handle
+        self.ready = threading.Event()  # the first states are in
+
+    def focused(self):
+        return self.app_ids.get(self.active)
+
+    def run(self):
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+                sock.settimeout(TIMEOUT)
+                sock.connect(self.path)
+                self._follow(_Wayland(sock))
+        except Exception as e:
+            logger.debug(f"Stopped following COSMIC's windows: {e}")
+        finally:
+            self.active = None
+            self.ready.set()        # nobody waits for an answer that won't come
+
+    def _follow(self, wl):
+        registry = wl.new_id()
+        wl.request(_WL_DISPLAY, _WL_DISPLAY_GET_REGISTRY, struct.pack("<I", registry))
+        offered = {}                # interface -> (global name, version)
+
+        def on_global(obj, opcode, body):
+            if obj == registry and opcode == _WL_REGISTRY_GLOBAL:
+                interface, end = _wl_read_string(body, 4)
+                offered[interface] = (struct.unpack_from("<I", body)[0],
+                                      struct.unpack_from("<I", body, end)[0])
+        wl.roundtrip(on_global)
+        if _EXT_LIST not in offered or offered.get(_COSMIC_INFO, (0, 0))[1] < 2:
+            raise ConnectionError("cosmic-comp doesn't offer its window list")
+
+        def bind(interface, version):
+            new = wl.new_id()
+            wl.request(registry, _WL_REGISTRY_BIND, struct.pack("<I", offered[interface][0])
+                       + _wl_string(interface) + struct.pack("<II", version, new))
+            return new
+        self.toplevel_list, self.info = bind(_EXT_LIST, 1), bind(_COSMIC_INFO, 2)
+        self.wl = wl
+        wl.roundtrip(self._on_event)
+        if not self.app_ids:
+            self.ready.set()        # no windows, so no states will come
+        wl.sock.settimeout(None)    # from here on it waits for changes
+        wl.read_until(None, None, self._on_event)
+
+    def _on_event(self, obj, opcode, body):
+        if obj == self.toplevel_list and opcode == _EXT_LIST_TOPLEVEL:
+            handle = struct.unpack_from("<I", body)[0]
+            self.app_ids[handle] = None
+            window = self.wl.new_id()
+            self.windows[window] = handle
+            self.wl.request(self.info, _COSMIC_INFO_GET_COSMIC_TOPLEVEL,
+                            struct.pack("<II", window, handle))
+        elif obj in self.app_ids and opcode == _EXT_HANDLE_APP_ID:
+            self.app_ids[obj] = _wl_read_string(body)[0]
+        elif obj in self.app_ids and opcode == _EXT_HANDLE_CLOSED:
+            window = next(w for w, h in self.windows.items() if h == obj)
+            self.wl.request(window, _COSMIC_HANDLE_DESTROY)
+            self.wl.request(obj, _EXT_HANDLE_DESTROY)
+            del self.windows[window], self.app_ids[obj]
+            if self.active == obj:
+                self.active = None
+        elif obj in self.windows and opcode == _COSMIC_HANDLE_STATE:
+            length = struct.unpack_from("<I", body)[0]
+            states = struct.unpack_from(f"={length // 4}I", body, 4)   # native byte order
+            if _COSMIC_STATE_ACTIVATED in states:
+                self.active = self.windows[obj]
+            elif self.active == self.windows[obj]:
+                self.active = None
+        elif obj == self.info and opcode == _COSMIC_INFO_DONE:
+            self.ready.set()
+
+
+_cosmic = None
+_cosmic_lock = threading.Lock()
+
+
+def _from_cosmic(path):
+    """The activated window's app_id, from the connection that follows them,
+    made the first time (and again if cosmic-comp went away)."""
+    global _cosmic
+    with _cosmic_lock:
+        if _cosmic is None or not _cosmic.is_alive():
+            _cosmic = _CosmicWindows(path)
+            _cosmic.start()
+        windows = _cosmic
+    if not windows.ready.wait(COSMIC_FIRST_ANSWER):
+        windows.ready.set()         # waited once; later questions take what's known
+    return windows.focused()
+
+
+def _wayland_socket(env):
+    name = env.get("WAYLAND_DISPLAY") or "wayland-0"
+    runtime = env.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
+    return os.path.join(runtime, name)
 
 
 # --- X11 ----------------------------------------------------------------------------
@@ -295,6 +500,8 @@ def focused_class():
         path = env.get("SWAYSOCK") or env.get("I3SOCK")
         if path:
             return _from_i3(path) or None
+        if desktop_detect.get_desktop_environment() == "cosmic":
+            return _from_cosmic(_wayland_socket(env)) or None
         if is_x11_session(env):
             return _from_x11() or None
     except Exception as e:

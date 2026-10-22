@@ -1,0 +1,231 @@
+"""Every TuxTalk window fits the screen with its buttons showing.
+
+On Pop!_OS at 1280x800 About and Setup Complete were as tall as the screen
+and their buttons sat behind COSMIC's dock (VM, 2026-10-21). One rule in
+ui_style fits every window as it's created, so none has to remember to.
+These build real windows without showing them.
+"""
+import pathlib
+
+import pytest
+
+gi = pytest.importorskip("gi")
+gi.require_version("Gtk", "3.0")
+from gi.repository import Gtk  # noqa: E402
+
+from tuxtalk import ui_style  # noqa: E402
+
+SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tuxtalk"
+USABLE = 600                   # three quarters of an 800 px screen
+CAP = USABLE - ui_style._TITLE_BAR
+
+
+@pytest.fixture(autouse=True)
+def short_screen(monkeypatch):
+    if not Gtk.init_check()[0]:
+        pytest.skip("no display")
+    monkeypatch.setattr(ui_style, "workarea_height", lambda near=None: USABLE)
+
+
+def _tall_label():
+    label = Gtk.Label(label="What's new")
+    label.set_size_request(400, 1200)
+    return label
+
+
+def _min_height(window):
+    return window.get_preferred_height()[0]
+
+
+def _ancestors(widget):
+    while widget is not None:
+        yield widget
+        widget = widget.get_parent()
+
+
+@pytest.mark.parametrize("desktop", ["COSMIC", "KDE"])
+def test_a_tall_dialog_scrolls_and_keeps_its_buttons_in_view(monkeypatch, desktop):
+    """About: a long What's New and a Close button."""
+    monkeypatch.setenv("XDG_CURRENT_DESKTOP", desktop)
+    monkeypatch.delenv("DESKTOP_SESSION", raising=False)
+    dialog = Gtk.Dialog(title="About TuxTalk")
+    label = _tall_label()
+    dialog.get_content_area().pack_start(label, True, True, 0)
+    close = dialog.add_button("Close", Gtk.ResponseType.CLOSE)
+    dialog.get_content_area().show_all()
+    try:
+        assert _min_height(dialog) > CAP
+        ui_style.fit_window_to_screen(dialog)
+        if desktop == "COSMIC":
+            # As tall as it may be: COSMIC opens a window short unless its
+            # minimum asks for more.
+            assert CAP - 10 <= _min_height(dialog) <= CAP
+        else:
+            # It opens at the cap and can still be made shorter.
+            assert _min_height(dialog) < CAP / 2
+            assert dialog.get_size()[1] == CAP
+        assert any(isinstance(w, Gtk.ScrolledWindow) for w in _ancestors(label))
+        assert not any(isinstance(w, Gtk.ScrolledWindow) for w in _ancestors(close))
+    finally:
+        dialog.destroy()
+
+
+def test_a_window_with_its_own_scrolling_text_shrinks_that_and_keeps_its_buttons():
+    """Setup Complete: scrolling text with Open Preferences and Start Using
+    TuxTalk under it, inside its content rather than the dialog's own button
+    row. Scrolling the whole window pushed them out of view (Pop!_OS VM,
+    2026-10-21); the text gives up the height instead."""
+    dialog = Gtk.Dialog(title="TuxTalk - Ready!")
+    text = Gtk.ScrolledWindow()
+    text.set_min_content_height(700)
+    text.add(_tall_label())
+    start = Gtk.Button(label="Start Using TuxTalk!")
+    dialog.get_content_area().pack_start(text, True, True, 0)
+    dialog.get_content_area().pack_start(start, False, False, 0)
+    dialog.get_content_area().show_all()
+    try:
+        ui_style.fit_window_to_screen(dialog)
+        assert _min_height(dialog) <= CAP
+        assert text.get_min_content_height() > 400      # as much text as fits
+        assert start.get_parent() is dialog.get_content_area()
+    finally:
+        dialog.destroy()
+
+
+def test_scrolling_areas_side_by_side_both_give_up_height():
+    """Shrinking one of two equally tall areas changes nothing by itself;
+    the window is measured again and the other gives way too, rather than
+    the whole window being wrapped."""
+    dialog = Gtk.Dialog(title="Two columns")
+    row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+    for _ in range(2):
+        column = Gtk.ScrolledWindow()
+        column.set_min_content_height(800)
+        column.add(_tall_label())
+        row.pack_start(column, True, True, 0)
+    start = Gtk.Button(label="OK")
+    dialog.get_content_area().pack_start(row, True, True, 0)
+    dialog.get_content_area().pack_start(start, False, False, 0)
+    dialog.get_content_area().show_all()
+    try:
+        ui_style.fit_window_to_screen(dialog)
+        assert _min_height(dialog) <= CAP
+        assert start.get_parent() is dialog.get_content_area()
+    finally:
+        dialog.destroy()
+
+
+def test_a_message_with_a_lot_of_text_fits_too():
+    dialog = ui_style.message_dialog(message_type=Gtk.MessageType.INFO,
+                                     buttons=Gtk.ButtonsType.OK, text="Uninstall TuxTalk?")
+    dialog.format_secondary_text("A line that goes on.\n" * 80)
+    dialog.get_content_area().show_all()
+    try:
+        ui_style.fit_window_to_screen(dialog)
+        assert _min_height(dialog) <= CAP
+        ok = dialog.get_widget_for_response(Gtk.ResponseType.OK)
+        assert not any(isinstance(w, Gtk.ScrolledWindow) for w in _ancestors(ok))
+    finally:
+        dialog.destroy()
+
+
+def test_a_tall_plain_window_scrolls_as_a_whole():
+    window = Gtk.Window(title="Voice Commands")
+    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+    box.pack_start(_tall_label(), True, True, 0)
+    box.pack_start(Gtk.Button(label="Close"), False, False, 0)
+    window.add(box)
+    box.show_all()
+    try:
+        ui_style.fit_window_to_screen(window)
+        assert _min_height(window) <= CAP
+        assert isinstance(window.get_child(), Gtk.ScrolledWindow)
+    finally:
+        window.destroy()
+
+
+def test_a_window_that_already_fits_is_left_as_it_is():
+    dialog = Gtk.Dialog(title="TuxTalk")
+    label = Gtk.Label(label="Settings applied")
+    dialog.get_content_area().pack_start(label, False, False, 0)
+    dialog.add_button("OK", Gtk.ResponseType.OK)
+    dialog.set_default_size(400, 200)
+    dialog.get_content_area().show_all()
+    try:
+        ui_style.fit_window_to_screen(dialog)
+        assert label.get_parent() is dialog.get_content_area()
+        assert dialog.get_size() == (400, 200)
+    finally:
+        dialog.destroy()
+
+
+def test_a_window_asking_for_more_than_the_screen_opens_shorter():
+    """Preferences-style: content that scrolls by itself, a tall default size."""
+    window = Gtk.Window(title="TuxTalk Preferences")
+    scrolled = Gtk.ScrolledWindow()
+    scrolled.add(_tall_label())
+    window.add(scrolled)
+    window.set_default_size(500, 900)
+    try:
+        ui_style.fit_window_to_screen(window)
+        assert window.get_size()[1] == CAP
+        assert window.get_child() is scrolled
+    finally:
+        window.destroy()
+
+
+def test_every_window_is_fitted_as_it_is_created(monkeypatch):
+    """Through the hook, as the app does it: created (not shown), the tall
+    dialog already fits, its Close button outside the scrolling part."""
+    from gi.repository import GObject
+    monkeypatch.setattr(ui_style, "_fitting_hook", None)
+    ui_style.fit_windows_to_screen()
+    dialog = Gtk.Dialog(title="About TuxTalk")
+    try:
+        label = _tall_label()
+        dialog.get_content_area().pack_start(label, True, True, 0)
+        close = dialog.add_button("Close", Gtk.ResponseType.CLOSE)
+        dialog.get_content_area().show_all()
+        dialog.realize()
+        assert _min_height(dialog) <= CAP
+        assert any(isinstance(w, Gtk.ScrolledWindow) for w in _ancestors(label))
+        assert not any(isinstance(w, Gtk.ScrolledWindow) for w in _ancestors(close))
+    finally:
+        dialog.destroy()
+        GObject.signal_remove_emission_hook(GObject.signal_lookup("realize", Gtk.Widget),
+                                            ui_style._fitting_hook)
+
+
+def test_popups_are_never_touched():
+    """Floating labels and the recording indicator are popups, sized to fit
+    what they show."""
+    popup = Gtk.Window(type=Gtk.WindowType.POPUP)
+    popup.add(_tall_label())
+    try:
+        ui_style._on_window_realize(popup)
+        assert isinstance(popup.get_child(), Gtk.Label)
+    finally:
+        popup.destroy()
+
+
+def test_every_process_that_opens_windows_fits_them():
+    """Each TuxTalk process sets its icon with desktop_identity.apply() before
+    its first window; each must install the fitting there too."""
+    missing = [path.name for path in sorted(SRC.glob("*.py"))
+               if "desktop_identity.apply()" in path.read_text()
+               and "ui_style.fit_windows_to_screen()" not in path.read_text()]
+    assert missing == []
+
+
+def test_a_title_bar_gtk_draws_is_counted_once(monkeypatch):
+    """On COSMIC and GNOME GTK draws the title bar inside the window's own
+    size; taking the desktop's off as well left About needlessly short."""
+    window = Gtk.Window(title="About TuxTalk")
+    window.get_style_context().add_class("csd")
+    window.add(Gtk.ScrolledWindow())
+    window.set_default_size(500, 900)
+    try:
+        ui_style.fit_window_to_screen(window)
+        assert window.get_size()[1] == USABLE
+    finally:
+        window.destroy()

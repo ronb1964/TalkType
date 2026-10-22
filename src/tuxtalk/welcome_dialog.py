@@ -3297,6 +3297,7 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
         restart_button.get_style_context().add_class("suggested-action")
         restart_button.connect("clicked", on_restart_now)
         button_box.pack_start(restart_button, False, False, 0)
+        main_button = restart_button
     else:
         # Two ways out: start dictating, or adjust settings. Setup is finished
         # here, so it is safe to send the user to Preferences.
@@ -3319,6 +3320,7 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
         start_button.get_style_context().add_class("suggested-action")
         start_button.connect("clicked", lambda w: dialog.response(Gtk.ResponseType.OK))
         button_box.pack_start(start_button, False, False, 0)
+        main_button = start_button
 
     # GTK sizes the scroller at its narrowest width, where the wrapped lines
     # are taller, and comes up short: ask for their height at the window's
@@ -3330,6 +3332,10 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
     button_box.set_margin_bottom(16)
     content.pack_start(more_below_bar(scrolled), False, False, 0)
     content.pack_start(button_box, False, False, 0)
+    # Left to GTK, the focus went to the Discussions link in the scrolling
+    # part, and on a short screen the window opened scrolled down to it with
+    # "Setup Complete!" cut off (Pop!_OS VM, 2026-10-21), as Welcome did.
+    dialog.set_focus(main_button)
 
     dialog.show_all()
     dialog.run()
@@ -3339,5 +3345,7 @@ def show_setup_complete_dialog(appimage_installed=False, launcher_created=False,
 if __name__ == '__main__':
     # Test the welcome dialog
     Gtk.init(None)
+    from .ui_style import fit_windows_to_screen
+    fit_windows_to_screen()
     result = show_welcome_dialog()
     print(f"Welcome dialog result: {result}")

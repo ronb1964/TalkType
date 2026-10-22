@@ -13,7 +13,7 @@ def get_desktop_environment() -> str:
     Detect the current desktop environment
 
     Returns:
-        str: 'gnome', 'kde', 'xfce', 'cinnamon', 'mate' or 'unknown'
+        str: 'gnome', 'kde', 'xfce', 'cinnamon', 'mate', 'cosmic' or 'unknown'
     """
     # Check environment variables
     desktop = os.environ.get('XDG_CURRENT_DESKTOP', '').lower()
@@ -38,6 +38,10 @@ def get_desktop_environment() -> str:
     # MATE
     if 'mate' in desktop or 'mate' in session:
         return 'mate'
+
+    # COSMIC (System76; Pop!_OS since 24.04)
+    if 'cosmic' in desktop:
+        return 'cosmic'
 
     return 'unknown'
 

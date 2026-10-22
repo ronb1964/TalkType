@@ -321,6 +321,10 @@ class RecordingState:
     # This recording's press held a pending send, so a tap that's too short
     # to be a dictation says "Not sent" rather than "Cancelled".
     held_send: bool = False
+    # The hold key was already up again when this recording had finished
+    # starting, and that took under 2 * MIN_HOLD_MS: a tap, though the
+    # start made it read as a longer hold (see the hold key).
+    released_while_starting: bool = False
     # The space a held send left off, waiting for the hotkey that held it to
     # come up (_type_owed_space), or None. Typed while the key is down, GNOME
     # without the extension sees the key too and the space is lost.
@@ -502,13 +506,15 @@ def _claim_desktop_hotkeys(cfg):
 
     We read them below the desktop, so without this F8 also reaches the app
     ("~" in a terminal). On KDE a KWin script holds them (kwin_hotkeys); on
-    GNOME the extension does, from the list sent to the tray here; on other
-    X11 desktops the X server does (x11_hotkeys). Called at startup and after
-    every live settings change. None of it can fail dictation: the claims
-    never raise, and the tray call is fire-and-forget.
+    GNOME the extension does, from the list sent to the tray here; on COSMIC
+    shortcuts of its own (cosmic_hotkeys); on other X11 desktops the X server
+    (x11_hotkeys). Called at startup and after every live settings change.
+    None of it can fail dictation: the claims never raise, and the tray call
+    is fire-and-forget.
     """
-    from . import gnome_hotkeys, kwin_hotkeys, x11_hotkeys
+    from . import cosmic_hotkeys, gnome_hotkeys, kwin_hotkeys, x11_hotkeys
     kwin_hotkeys.claim(cfg)
+    cosmic_hotkeys.claim(cfg)
     x11_hotkeys.claim(cfg)
     try:
         import dbus
@@ -1687,6 +1693,7 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
     state.silence = None
     state.chunker = None
     state.press_t0 = time.time()
+    state.released_while_starting = False
     state.toggle_started_at = state.press_t0 if from_toggle else None
     state.edit_mode = edit_mode
     # Set before the stream starts — _sd_callback drops frames unless it's set.
@@ -3309,7 +3316,7 @@ def _finish_capture(beeps_on: bool, notify_on: bool):
         # The hotkey that held the send is up now; a tap leaves the text as
         # it is, a dictation goes after this space.
         _type_owed_space()
-    if held_ms < MIN_HOLD_MS:
+    if held_ms < MIN_HOLD_MS or (state.held_send and state.released_while_starting):
         if state.held_send:
             cancel_recording(beeps_on, notify_on, HELD_SEND_NOTICE)
             from . import screen_message
@@ -4723,7 +4730,17 @@ def _handle_key_event(event, mode, hold_key, toggle_key,
             # as Ctrl+Shift+C.
             shift = _held_shift(held_modifiers) if _voice_editing else set()
             _grab_keyboards_hiding(devices, {hold_key, *shift})
-            start_recording(cfg.beeps, cfg.notify, input_device_idx, edit_mode=bool(shift))
+            if (start_recording(cfg.beeps, cfg.notify, input_device_idx, edit_mode=bool(shift))
+                    and state.held_send):
+                # The hold time counts from the press to when its release is
+                # read, which waits for the start: 0.15 to 0.2 s in the test
+                # VMs, so a quick tap to hold the send came to over
+                # MIN_HOLD_MS on Pop!_OS and recorded instead. A key already
+                # up after a start that quick was a tap; after a slower one
+                # it could have been a short word, so the hold time decides.
+                state.released_while_starting = (
+                    time.time() - state.press_t0 < 2 * MIN_HOLD_MS / 1000
+                    and _wait_for_keys_up(devices, {hold_key}, 0))
         elif event.value == 0 and state.is_recording:
             # Let go of the keyboards before typing, so the user's own keys
             # reach the app again
@@ -5057,15 +5074,16 @@ def _loop_evdev(cfg: Settings, input_device_idx, keyboards=None):
     _helper_watch(devices, hold_key, toggle_key, voice_cmds_combo, paste_last_combo)
 
     # Have the desktop hold the hotkeys back from the focused app (see
-    # _claim_desktop_hotkeys). On KDE they are released by
-    # stop_dictation_service, the tray, or this exit hook; registered even if
-    # the claim failed, since a later hotkey change can still succeed, and
-    # release() is a no-op off KDE. GNOME's extension lets go by itself when
-    # the tray reports the service stopped, and the X server when this
-    # process's connection closes.
-    from . import kwin_hotkeys
+    # _claim_desktop_hotkeys). On KDE and COSMIC they are released by
+    # stop_dictation_service, the tray, or these exit hooks; registered even
+    # if the claim failed, since a later hotkey change can still succeed, and
+    # each release() is a no-op on other desktops. GNOME's extension lets go
+    # by itself when the tray reports the service stopped, and the X server
+    # when this process's connection closes.
+    from . import cosmic_hotkeys, kwin_hotkeys
     _claim_desktop_hotkeys(cfg)
     atexit.register(kwin_hotkeys.release)
+    atexit.register(cosmic_hotkeys.release)
 
     # Track which modifier keys are currently held (for combo detection)
     held_modifiers: set[int] = set()
@@ -5537,8 +5555,9 @@ def parse_args():
     return ap.parse_args()
 
 def main():
-    from . import desktop_identity
+    from . import desktop_identity, ui_style
     desktop_identity.apply()        # TuxTalk's icon on its windows, not KDE's generic one
+    ui_style.fit_windows_to_screen()   # buttons clear of panels and docks
     # The loaded speech model. Usually built after the GTK loop starts; built
     # earlier when it must first be downloaded (see the GTK section below).
     global model, _gtk_loop_running

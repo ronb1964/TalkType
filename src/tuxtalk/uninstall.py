@@ -38,9 +38,9 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
-from . import (ai_cleanup, config, custom_words, desktop_detect,  # noqa: E402
-               extension_helper, file_transcribe, gnome_keybindings, kwin_hotkeys,
-               model_helper, parakeet_engine, rename_migration, secure_input,
+from . import (ai_cleanup, config, cosmic_hotkeys, custom_words,  # noqa: E402
+               desktop_detect, extension_helper, file_transcribe, gnome_keybindings,
+               kwin_hotkeys, model_helper, parakeet_engine, rename_migration, secure_input,
                service_launcher, settings_backup, uinput_helper, update_checker,
                whisper_vulkan)
 from .logger import LOG_FILE_NAME, setup_logger, stop_file_logging  # noqa: E402
@@ -464,9 +464,9 @@ def stop_tuxtalk(plan, stop_tray_parts=None):
 
 def undo_desktop_changes(plan):
     """Put the desktop back as it was: Alt+F7/Alt+F8 on GNOME if the hotkey
-    test was cut short, the GNOME extension, KDE's shortcut entries. Runs
-    after stop_tuxtalk() and before the files go (the keybindings' backup
-    is one of them). Returns what's still there, in words."""
+    test was cut short, the GNOME extension, KDE's and COSMIC's shortcut
+    entries. Runs after stop_tuxtalk() and before the files go (the
+    keybindings' backup is one of them). Returns what's still there, in words."""
     left = []
     if not gnome_keybindings.restore_left_over():
         # Its backup stays (remove_files leaves plan.kept), so a reinstall
@@ -483,6 +483,8 @@ def undo_desktop_changes(plan):
             left.append(f"the GNOME extension ({_shown(folder, plan.home)})")
     if not kwin_hotkeys.forget_our_components():
         left.append("TuxTalk's entries in KDE's Shortcuts settings")
+    if not cosmic_hotkeys.release():
+        left.append("TuxTalk's entries in COSMIC's custom shortcuts")
     return left
 
 
