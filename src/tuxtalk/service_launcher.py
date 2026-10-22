@@ -251,8 +251,16 @@ def stop_dictation_service(force: bool = False) -> None:
         except OSError:
             pass  # exited between the scan and the kill
     # SIGTERM/SIGKILL skip the service's exit hooks, so hand its hotkeys back
-    # to the desktop from here. Otherwise KWin or COSMIC would keep swallowing
-    # F8 with dictation off.
+    # to the desktop from here.
+    release_desktop_hotkeys()
+
+
+def release_desktop_hotkeys() -> None:
+    """Hand back the hotkeys app._claim_desktop_hotkeys had the desktop hold,
+    or KWin or COSMIC would keep swallowing F8 with dictation off. The X
+    server lets go by itself when the service's connection closes, and
+    GNOME's extension when the tray reports the service stopped. Never
+    raises: quit path."""
     try:
         from . import cosmic_hotkeys, kwin_hotkeys
         kwin_hotkeys.release()

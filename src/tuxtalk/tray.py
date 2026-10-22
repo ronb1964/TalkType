@@ -1059,12 +1059,8 @@ class DictationTray:
         """
         if self.is_service_running():
             return
-        try:
-            from . import cosmic_hotkeys, kwin_hotkeys
-            kwin_hotkeys.release()
-            cosmic_hotkeys.release()
-        except Exception as e:
-            logger.debug(f"Could not release the desktop's hotkeys: {e}")
+        from .service_launcher import release_desktop_hotkeys
+        release_desktop_hotkeys()
 
     def toggle_service(self, widget):
         """Toggle dictation service on/off."""

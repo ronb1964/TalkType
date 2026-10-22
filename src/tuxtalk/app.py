@@ -5074,16 +5074,12 @@ def _loop_evdev(cfg: Settings, input_device_idx, keyboards=None):
     _helper_watch(devices, hold_key, toggle_key, voice_cmds_combo, paste_last_combo)
 
     # Have the desktop hold the hotkeys back from the focused app (see
-    # _claim_desktop_hotkeys). On KDE and COSMIC they are released by
-    # stop_dictation_service, the tray, or these exit hooks; registered even
-    # if the claim failed, since a later hotkey change can still succeed, and
-    # each release() is a no-op on other desktops. GNOME's extension lets go
-    # by itself when the tray reports the service stopped, and the X server
-    # when this process's connection closes.
-    from . import cosmic_hotkeys, kwin_hotkeys
+    # _claim_desktop_hotkeys). They are released by stop_dictation_service,
+    # the tray, or this exit hook; registered even if the claim failed, since
+    # a later hotkey change can still succeed.
+    from .service_launcher import release_desktop_hotkeys
     _claim_desktop_hotkeys(cfg)
-    atexit.register(kwin_hotkeys.release)
-    atexit.register(cosmic_hotkeys.release)
+    atexit.register(release_desktop_hotkeys)
 
     # Track which modifier keys are currently held (for combo detection)
     held_modifiers: set[int] = set()

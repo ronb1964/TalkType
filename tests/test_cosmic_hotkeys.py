@@ -248,3 +248,16 @@ def test_stopping_the_service_gives_the_keys_back_on_cosmic(cosmic, monkeypatch)
     monkeypatch.setattr(service_launcher, "find_service_pids", lambda: [])
     service_launcher.stop_dictation_service()
     assert _custom() == USERS_OWN
+
+
+def test_every_path_that_gives_the_keys_back_releases_cosmic_too():
+    """The launcher, the tray (after a crash) and the service's exit hook all
+    go through service_launcher.release_desktop_hotkeys, so none of them can
+    miss a desktop. Uninstalling checks each desktop's result itself."""
+    import pathlib
+    import re
+    src = pathlib.Path(ch.__file__).parent
+    direct = [path.name for path in sorted(src.glob("*.py"))
+              if path.name not in ("service_launcher.py", "uninstall.py")
+              and re.search(r"\b(kwin|cosmic)_hotkeys\.release\b", path.read_text())]
+    assert direct == []
