@@ -40,8 +40,10 @@ _STATE_FOCUSED = 12
 _STATE_SHOWING = 25
 _ROLE_PASSWORD_TEXT = 40
 
-# The shell's own "window" is always active; the focus is in an app's.
-_SKIPPED_APPS = {"gnome-shell"}
+# GNOME Shell's own "window" is always active, so it's no sign of a second
+# app with the focus. It's asked all the same: the shell's password prompts
+# (polkit, keyring, Wi-Fi) are in it, a password field in gnome-shell.
+_SHELLS = {"gnome-shell"}
 
 # Replies from an app without the Collection interface (Qt 5, some others).
 _NO_COLLECTION = {
@@ -171,8 +173,6 @@ def _active_windows(bus, deadline):
         try:
             name = _call(bus, app, "org.freedesktop.DBus.Properties", "Get",
                          GLib.Variant("(ss)", (_ACCESSIBLE, "Name")), deadline)[0]
-            if name in _SKIPPED_APPS:
-                continue
             windows = _children(bus, app, deadline)
         except GLib.Error:
             continue    # an app that quit or hangs; the next one may be it
@@ -188,7 +188,7 @@ def _log_several_active(windows):
     """Say so when more than one app calls a window active, once per change:
     then the focus may be in either, and both are asked."""
     global _last_active
-    names = tuple(sorted(name for name, _window in windows))
+    names = tuple(sorted(name for name, _window in windows if name not in _SHELLS))
     if len(names) > 1 and names != _last_active:
         logger.info(f"Password field check: several apps say a window is active: {names}")
     _last_active = names

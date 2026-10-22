@@ -231,6 +231,36 @@ def password_field(run):
     return Outcome("fail" if problems else "pass", detail, typed=in_box, screenshot=shot)
 
 
+
+@check("Dictation", "shell_password_prompt", "Nothing is typed into GNOME's own password prompt",
+       desktops=("gnome",))
+def shell_password_prompt(run):
+    """The prompt GNOME shows for pkexec (and the keyring and Wi-Fi) is part
+    of gnome-shell, not an app. /usr/bin/pkexec, not the harness's stand-in,
+    and from a shell that stays: pkexec won't run once its parent is gone."""
+    run.vm.session_background("pk", "bash", "-c", "/usr/bin/pkexec /bin/true; sleep 1")
+    try:
+        deadline = time.monotonic() + 20
+        while run.vm.ssh("pgrep -c -f '[p]olkit-agent-helper-1'",
+                         check=False).stdout.strip() in ("", "0"):
+            if time.monotonic() > deadline:
+                return Outcome("error", "GNOME's password prompt didn't open")
+            time.sleep(0.5)
+        time.sleep(1.5)
+        _typed, _heard, mark = run.say("cat_couch", wait=False)
+        refused = run.wait_log(mark, "in a password field", *FINISHED, timeout=25)
+        shot = run.shot("shell-password-prompt")
+    finally:
+        # A prompt left open would take the keyboard from every later check.
+        run.vm.tap("esc")
+        time.sleep(2)
+        run.vm.ssh("sudo -n pkill -x pkexec", check=False)
+    if refused and "Not typed: the cursor is in a password field" in refused:
+        return Outcome("pass", "Log: “Not typed: the cursor is in a password field”",
+                       screenshot=shot)
+    return Outcome("fail", "TuxTalk typed into the prompt (no “Not typed: the cursor is in a "
+                   "password field” in the log)", screenshot=shot)
+
 @check("Dictation", "password_field_others", "Other text boxes still get the dictation")
 def password_field_others(run):
     run.sink_ready()

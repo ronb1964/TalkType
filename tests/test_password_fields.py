@@ -366,6 +366,23 @@ def test_every_active_window_is_asked(bus, caplog):
     assert "several apps" in caplog.text
 
 
+def test_gnome_shells_own_password_prompt_counts(bus):
+    """The password prompt GNOME shows for pkexec, the keyring or Wi-Fi is
+    part of gnome-shell, and TuxTalk typed into it (Ubuntu VM, 2026-10-22)."""
+    bus.app("gedit", TEXT)
+    bus.app("gnome-shell", PASSWORD)
+    assert atspi_helper.focused_is_password() is True
+
+
+def test_gnome_shell_beside_an_app_is_not_several_apps(bus, caplog):
+    """Its stage always says it's active, which says nothing about the focus."""
+    bus.app("gnome-shell", TEXT)
+    bus.app("gedit", TEXT)
+    with caplog.at_level(logging.INFO, logger="tuxtalk.atspi_helper"):
+        assert atspi_helper.focused_is_password() is False
+    assert "several apps" not in caplog.text
+
+
 @pytest.fixture
 def no_connection_yet(monkeypatch):
     monkeypatch.setattr(atspi_helper, "_bus", None)
