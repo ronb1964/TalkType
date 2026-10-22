@@ -25,6 +25,7 @@ from pathlib import Path
 import checks_dictation  # noqa: F401  (each module registers its checks in import order)
 import checks_extension  # noqa: F401
 import checks_firstrun  # noqa: F401
+import checks_hotkeys  # noqa: F401
 import checks_prefs  # noqa: F401
 import checks_send  # noqa: F401
 import checks_uninstall  # noqa: F401
@@ -38,7 +39,7 @@ RUNS = TOOLS / "runs"
 # before dictation, which changes settings. Uninstall takes it all away: last.
 SECTION_ORDER = ["First run", "Preferences", "Dictation", "Words and numbers",
                  "Send automatically", "Sound and other windows", "With the GNOME extension",
-                 "Parakeet update", "Uninstall"]
+                 "Hotkeys and keyboard layouts", "Parakeet update", "Uninstall"]
 LOG_LINES = 25
 
 
