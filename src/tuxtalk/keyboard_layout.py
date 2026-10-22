@@ -465,11 +465,15 @@ def layout_key_events(text):
 
 
 # Where the letters sit on a US keyboard (evdev key codes).
-_US_LETTER_KEYS = {"b": 48, "c": 46, "i": 23, "u": 22, "v": 47}
+_US_LETTER_KEYS = dict(zip("abcdefghijklmnopqrstuvwxyz",
+                           (30, 48, 46, 32, 18, 33, 34, 35, 23, 36, 37, 38, 50,
+                            49, 24, 25, 16, 19, 31, 20, 22, 47, 17, 45, 21, 44)))
 
 
 def shortcut_keycode(letter):
-    """The key that is *letter* on the active layout, for a Ctrl shortcut.
+    """The key that is *letter* on the active layout, for a shortcut: one
+    TuxTalk presses, or a hotkey letter it listens for, since the desktops
+    match their own shortcuts by letter too.
 
     On Dvorak the US B key types X, so Ctrl+B sent there would cut the
     selection. A layout without Latin letters (Russian) gets the US key, which

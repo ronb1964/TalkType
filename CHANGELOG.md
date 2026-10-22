@@ -48,6 +48,11 @@ before 0.15.0, so older entries use that name.
   Typing follows the keyboard layout set in COSMIC Settings rather than the
   one picked when the system was installed, which on a German keyboard
   swapped Y and Z.
+- On a keyboard that isn't US QWERTY (German, French, Dvorak), a shortcut
+  with a letter in it, like Ctrl+Alt+P for Paste Last Dictation, is now the
+  key with that letter on it. TuxTalk used to listen to the key in the US
+  position while the desktop held back the one with the letter, so the
+  labelled key did nothing and the other one also reached the app.
 - Every TuxTalk window leaves room for panels and docks. Wayland doesn't
   tell apps where those are, so on a 1280x800 screen Setup Complete and
   About were as tall as the screen and their buttons sat behind Pop!_OS's

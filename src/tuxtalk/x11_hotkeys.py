@@ -23,8 +23,8 @@ connection ends that at once, as kglobalaccel does on KDE's X11 session; the
 key's release then reaches the app, which ignores it.
 
 The X server's keycodes are evdev's plus 8 (both the evdev and libinput
-drivers), so the grab is on the physical key the service listens to, whatever
-the layout. Which keys are held is decided in kwin_hotkeys.wanted_shortcuts,
+drivers), so the grab is on the physical key the service listens to: an
+F-key, or for a letter the key that types it on the active layout. Which keys are held is decided in kwin_hotkeys.wanted_shortcuts,
 as for KDE and GNOME: F-keys and modifier combos, never a bare letter.
 
 Nothing here may be fatal: failing to hold a key costs the stray characters,
@@ -70,11 +70,15 @@ def x_grab(qt_sequence):
     """(X keycode, modifier mask) for a key from wanted_shortcuts ("Shift+F8")."""
     from evdev import ecodes
 
+    from .keyboard_layout import shortcut_keycode
+
     *mods, key = qt_sequence.split("+")
     mask = 0
     for mod in mods:
         mask |= _MODIFIER_MASKS[mod]
-    return ecodes.ecodes[f"KEY_{key}"] + _EVDEV_TO_X_KEYCODE, mask
+    # A letter is the key that types it, as app._keycode_from_name listens for.
+    code = shortcut_keycode(key.lower()) if len(key) == 1 else ecodes.ecodes[f"KEY_{key}"]
+    return code + _EVDEV_TO_X_KEYCODE, mask
 
 
 def _connection():

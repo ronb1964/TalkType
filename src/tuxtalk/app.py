@@ -1041,7 +1041,11 @@ def _keycode_from_name(name: str) -> int | None:
     fkeys = {f"F{i}": getattr(ecodes, f"KEY_F{i}") for i in range(1,13)}
     if n in fkeys: return fkeys[n]
     if len(n) == 1 and "A" <= n <= "Z":
-        return getattr(ecodes, f"KEY_{n}")
+        # The key that types the letter, which is the one KDE, GNOME and COSMIC
+        # hold back for us (they match shortcuts by letter): on a German
+        # keyboard Ctrl+Alt+Y is the key US keyboards have Z on.
+        from .keyboard_layout import shortcut_keycode
+        return shortcut_keycode(n.lower())
     return None  # Unknown key name - don't activate
 
 
@@ -2554,10 +2558,7 @@ def _nav_keycode(name: str) -> int:
     if name in _NAV_KEYCODES:
         return _NAV_KEYCODES[name]
     from .keyboard_layout import shortcut_keycode
-    try:
-        return shortcut_keycode(name.lower()) or 30
-    except Exception:
-        return 30    # KEY_A on a US layout
+    return shortcut_keycode(name.lower())
 
 
 def _send_chords(chords) -> bool:

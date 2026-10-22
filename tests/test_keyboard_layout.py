@@ -385,3 +385,21 @@ def test_the_registry_is_parsed_once_and_freed(monkeypatch):
     assert kl._layout_from_description("English (US)") == ("us", "")   # first match wins
     assert kl._layout_from_description("Klingon") is None
     assert (fake.parsed, fake.freed) == (1, 1)
+
+
+# --- hotkey letters ----------------------------------------------------------------
+
+_KEY_Y, _KEY_Z = 21, 44                 # evdev: where US keyboards have Y and Z
+
+
+@pytest.mark.parametrize("layout, key", [(("us", ""), _KEY_Y), (("de", ""), _KEY_Z), (None, _KEY_Y)])
+def test_a_hotkey_letter_is_the_key_that_types_it(monkeypatch, layout, key):
+    """KDE, GNOME and COSMIC hold Ctrl+Alt+Y back by the letter, so on a
+    German keyboard the service must listen to that key too, not to the one
+    US keyboards have Y on: that typed a "z" into the app instead."""
+    from tuxtalk import app
+    from tuxtalk import x11_hotkeys
+    monkeypatch.setattr(kl, "active_layout", lambda: layout)
+    assert app._parse_hotkey_combo("Ctrl+Alt+Y") == ({"CTRL", "ALT"}, key)
+    # And the X server holds the same key on other X11 desktops.
+    assert x11_hotkeys.x_grab("Ctrl+Alt+Y") == (key + 8, 4 | 8)
