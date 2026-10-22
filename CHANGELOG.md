@@ -95,6 +95,11 @@ before 0.15.0, so older entries use that name.
   first-run setup no longer asks to install ydotool. The ydotoold an older
   version started, and the service file it set up, are removed when this
   version starts.
+- Typing works right after first-run setup on computers that hadn't
+  loaded the kernel's uinput module yet. There setup's typing permission
+  only took effect after a restart, and every dictation said TuxTalk had
+  no permission to type until then. Thanks to sparcher on the Fedora forum
+  for the log that showed it.
 - If a slow computer drops letters, `key_delay` in config.toml slows the
   keyboard down again (6 or 12 are safe values; 2 is the new default).
 - A dictation pasted into a terminal could come out as a lone ^V. The

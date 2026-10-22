@@ -18,6 +18,28 @@ def test_the_install_script_is_valid_bash_and_installs_root_owned():
     assert si.helper_source() in script
 
 
+def test_setup_loads_uinput_before_giving_it_to_the_user(tmp_path):
+    """Without the module, /dev/uinput is a bare static node the udev
+    trigger can't reach: no access for the user until a reboot (Fedora
+    LXQt, 2026-10-22). Run with stand-ins: a modprobe that fails mustn't
+    stop the rest of the setup under set -e."""
+    script = si.install_script()
+    part = script[script.index("modprobe uinput"):script.index("for i in $(seq 50)")]
+    calls = tmp_path / "calls"
+    for name, status in (("modprobe", 1), ("udevadm", 0)):
+        stub = tmp_path / name
+        stub.write_text(f'#!/bin/sh\necho "{name} $*" >> {calls}\nexit {status}\n')
+        stub.chmod(0o755)
+    run = subprocess.run(["/bin/bash", "-c", "set -euo pipefail\n" + part],
+                         env={"PATH": str(tmp_path)}, capture_output=True, text=True)
+    assert run.returncode == 0, run.stderr
+    assert calls.read_text().splitlines() == [
+        "modprobe uinput",
+        "udevadm control --reload-rules",
+        "udevadm trigger --action=change --sysname-match=uinput",
+    ]
+
+
 def test_the_uninstall_lines_are_valid_bash_and_take_everything_away():
     from tuxtalk.uinput_helper import UDEV_RULE_PATH
     script = si.uninstall_lines()

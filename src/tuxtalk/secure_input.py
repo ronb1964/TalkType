@@ -149,6 +149,10 @@ install -d -m 0755 -o root -g root {HELPER_DIR}
 systemctl enable {SERVICE}
 # restart, not start: a TuxTalk update brings a new helper with it
 systemctl restart {SERVICE}
+# Until uinput is loaded /dev/uinput is a bare static node the trigger can't
+# reach, and typing waited for a reboot (Fedora, 2026-10-22). The test VMs
+# didn't show it: their SPICE agent loads uinput at boot.
+modprobe uinput 2>/dev/null || true
 udevadm control --reload-rules
 udevadm trigger --action=change --sysname-match=uinput
 for i in $(seq 50); do
