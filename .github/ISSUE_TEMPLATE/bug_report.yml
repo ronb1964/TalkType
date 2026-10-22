@@ -25,6 +25,7 @@ body:
       options:
         - GNOME
         - KDE Plasma
+        - COSMIC
         - XFCE
         - Cinnamon
         - MATE
