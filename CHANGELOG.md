@@ -61,6 +61,8 @@ before 0.15.0, so older entries use that name.
   About were as tall as the screen and their buttons sat behind Pop!_OS's
   dock. Windows now open at most three quarters of the screen tall, and
   one whose content needs more scrolls it, with its buttons kept in view.
+  With two monitors of different heights, a window opened from the tray
+  fits the shorter one, so it fits whichever it opens on.
 - On X11 desktops (Linux Mint Cinnamon and other X11 sessions), dropdowns
   open as a list under the button again. Since 0.14.3 a wrong check gave X11
   the workaround meant for Wayland.

@@ -197,29 +197,33 @@ def forward_combo_scroll(combo):
 USABLE_SHARE = 0.75
 
 
-def _monitor_showing(near):
-    """The monitor showing window *near* (it has to be on screen), else the
-    primary monitor, else the first; None when there's none."""
+def _usable_height(monitor):
+    return min(monitor.get_workarea().height, int(monitor.get_geometry().height * USABLE_SHARE))
+
+
+def _monitor_for(near):
+    """The monitor showing window *near* (it has to be on screen). Without
+    one, the shortest monitor: a window with no parent may open on any of
+    them, and Wayland says which only once it's shown, after it's sized
+    (Sway with two monitors, 2026-10-22: Setup Complete opened sized for the
+    taller one, its buttons below the shorter one's edge). None when there's
+    no monitor."""
     display = Gdk.Display.get_default()
     if display is None:
         return None
     shown = near.get_window() if near is not None else None
-    monitor = (display.get_monitor_at_window(shown) if shown is not None
-               else display.get_primary_monitor())
-    if monitor is None and display.get_n_monitors() > 0:
-        monitor = display.get_monitor(0)
-    return monitor
+    if shown is not None:
+        return display.get_monitor_at_window(shown)
+    monitors = [display.get_monitor(i) for i in range(display.get_n_monitors())]
+    return min(monitors, key=_usable_height, default=None)
 
 
 def workarea_height(near=None):
-    """A cautious usable height, in logical pixels, of the monitor showing
-    window *near* (_monitor_showing); None when unknown."""
+    """A cautious usable height, in logical pixels, of the monitor for window
+    *near* (_monitor_for); None when unknown."""
     try:
-        monitor = _monitor_showing(near)
-        if monitor is None:
-            return None
-        return min(monitor.get_workarea().height,
-                   int(monitor.get_geometry().height * USABLE_SHARE))
+        monitor = _monitor_for(near)
+        return _usable_height(monitor) if monitor is not None else None
     except Exception:
         return None
 
@@ -240,7 +244,7 @@ def fit_dialog_to_screen(dialog, width, desired_height):
 _TITLE_BAR = 40
 
 
-def fit_window_to_screen(window, near=None):
+def fit_window_to_screen(window):
     """Keep *window* no taller than workarea_height() less its title bar, so
     its buttons stay clear of the screen's edge and of docks Wayland doesn't
     report (About and Setup Complete sat behind COSMIC's dock at 1280x800).
@@ -249,12 +253,11 @@ def fit_window_to_screen(window, near=None):
     scrolling areas it has (_shrink_scrollers), and if that isn't enough
     its content goes in one (_scroll_body); a dialog's own button row stays
     below it, always in view. Called for every window by
-    fit_windows_to_screen(). Measured on the monitor showing *near*, by
-    default the window's parent: a window isn't on a monitor before it's
-    shown. Never raises: a window that doesn't fit beats one that doesn't
-    open."""
+    fit_windows_to_screen(). Measured on the monitor of the window's parent,
+    or for a window without one the shortest (_monitor_for). Never raises: a
+    window that doesn't fit beats one that doesn't open."""
     try:
-        avail = workarea_height(near or window.get_transient_for())
+        avail = workarea_height(window.get_transient_for())
         if not avail or window.is_maximized():
             return
         drawn_by_gtk = window.get_style_context().has_class("csd")
@@ -359,26 +362,7 @@ def _on_window_realize(widget, *_args):
     fitted then, sized but not yet on screen. True keeps the hook installed."""
     if isinstance(widget, Gtk.Window) and widget.get_window_type() == Gtk.WindowType.TOPLEVEL:
         fit_window_to_screen(widget)
-        if widget.get_transient_for() is None:
-            # Fitted to the primary monitor, with no parent to go by; the
-            # desktop may show it on a shorter one, or the user move it there.
-            # On Wayland GDK learns the monitor only once the window is on
-            # it, which can come after its first configure, so its focus
-            # changing asks again.
-            fitted_to = [_monitor_showing(None)]
-            for signal in ("configure-event", "window-state-event"):
-                widget.connect(signal, _refit_on_another_monitor, fitted_to)
     return True
-
-
-def _refit_on_another_monitor(window, _event, fitted_to):
-    """Fit *window* again if it's now on another monitor than it was fitted
-    to (a list, so the handler can update it). False lets GTK go on."""
-    monitor = _monitor_showing(window)
-    if monitor is not None and monitor != fitted_to[0]:
-        fitted_to[0] = monitor
-        fit_window_to_screen(window, window)
-    return False
 
 
 # The hook's id once installed (for tests to take it out again).

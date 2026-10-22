@@ -224,33 +224,25 @@ def _monitor(height):
     return SimpleNamespace(get_workarea=lambda: geometry, get_geometry=lambda: geometry)
 
 
-def test_a_window_without_a_parent_fits_the_monitor_it_opens_on(monkeypatch):
-    """Created, it can only go by the primary monitor; shown on a second,
-    shorter one, it's fitted again to that, or its buttons ran off it."""
+def test_a_window_without_a_parent_fits_the_shortest_monitor(monkeypatch):
+    """It may open on either monitor, and Wayland says which only after it's
+    sized: fitted to the taller one, Setup Complete ran its buttons off the
+    shorter one (Sway with two monitors, VM, 2026-10-22)."""
     tall, short = _monitor(1600), _monitor(800)
-    on = {"monitor": tall}
     display = SimpleNamespace(get_primary_monitor=lambda: tall, get_n_monitors=lambda: 2,
-                              get_monitor=lambda i: (tall, short)[i],
-                              get_monitor_at_window=lambda shown: on["monitor"])
+                              get_monitor=lambda i: (tall, short)[i])
     monkeypatch.setattr(ui_style, "workarea_height", MEASURE_THE_MONITOR)
     monkeypatch.setattr(ui_style.Gdk.Display, "get_default", lambda: display)
-    monkeypatch.setattr(ui_style, "_fitting_hook", None)
-    ui_style.fit_windows_to_screen()
     window = Gtk.Window(title="Voice Commands")
     scrolled = Gtk.ScrolledWindow()
     scrolled.add(_tall_label())
     window.add(scrolled)
     window.set_default_size(500, 1100)
     try:
-        window.realize()
-        assert window.get_size()[1] == 1100            # fits on the tall one
-        on["monitor"] = short
-        window.emit("configure-event", ui_style.Gdk.Event.new(ui_style.Gdk.EventType.CONFIGURE))
+        ui_style.fit_window_to_screen(window)
         assert window.get_size()[1] == CAP
     finally:
         window.destroy()
-        GObject.signal_remove_emission_hook(GObject.signal_lookup("realize", Gtk.Widget),
-                                            ui_style._fitting_hook)
 
 
 def test_popups_are_never_touched():
