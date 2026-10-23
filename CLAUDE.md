@@ -35,8 +35,11 @@ Old folders, launchers and KDE shortcuts are moved or cleaned on start by
 - Verify each finding yourself, fix what's real (with a test where it's
   behaviour), and tell Ron in plain words what was found and fixed.
 - The same two reviews run on any feature branch before it is merged into main.
-- Once a month, a full sweep of the whole codebase for leftovers, duplicates
-  and clutter. Raise it yourself when the last one (see memory) is 30 days old.
+- Once a month, a full sweep of the whole codebase for leftovers, duplicates,
+  clutter and oversized files and functions ("Small files and functions"
+  below). Raise it yourself when the last one (see memory) is 30 days old.
+  Anything the sweep finds becomes a task Ron hears about, never only a
+  line in a report.
 - Ron, 2026-10-20: "I'm relying on you to ensure that it remains that way ...
   periodic code reviews and include Codex in there to catch anything that you
   may miss."
@@ -439,6 +442,14 @@ check the change against this list:
   out "just in case"; git keeps history.
 - **No duplicates.** Search for an existing helper before writing one. Two
   functions doing the same job is the clearest sign nobody read the codebase.
+- **Small files and functions.** A module does one job. Past about 1,500
+  lines a file is due to be split, and past about 100 lines a function is.
+  A file over 2,500 lines or a function over 200 is split before it grows
+  further (a fix that can't wait is the exception, said to Ron). A diff
+  review can't see this, since it only shows the lines added, so every
+  review also reports the largest files and functions the change touched.
+  The 2026-10-12 audit noted three huge files and nothing was done; by
+  0.18 app.py had grown to 5,900 lines and prefs.py to 7,100.
 - **Comments say why, not what.** No comment that restates the next line. Do
   explain the non-obvious: the desktop quirk, the bug it prevents, the issue
   number. Keep comments true when the code changes.
