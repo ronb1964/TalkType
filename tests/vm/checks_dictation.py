@@ -307,6 +307,38 @@ def money(run):
         run.set_config(injection_mode="auto")
 
 
+@check("Words and numbers", "kwrite_new_line", "“New line” in KWrite copies nothing from the line above")
+def kwrite_new_line(run):
+    """KWrite takes Shift+Enter as Insert Smart Newline: after "$45.", "new
+    line, $25" came out as "$$25." (0.18 release testing)."""
+    if "kde" not in run.vm.spec.tags:
+        return Outcome("skip", "Only KDE has KWrite")
+    if run.vm.ssh("command -v kwrite", check=False).returncode:
+        return Outcome("skip", "KWrite isn't installed")
+    path = f"{run.vm.home}/{REMOTE}/kwrite.txt"
+    run.vm.ssh(f"printf '%s' '$45.' > {path}")
+    run.vm.session_background("kwrite", "kwrite", path)
+    time.sleep(6)       # Qt apps aren't in the accessibility tree to wait on
+    if run.vm.ssh("pgrep -x kwrite", check=False).returncode:
+        return Outcome("fail", "KWrite didn't start")
+    run.vm.click_centre()
+    run.vm.tap("ctrl", "end")
+    time.sleep(0.5)
+    _typed, _heard, mark = run.say("money_new_line", wait=False)
+    log = run.wait_log(mark, "Smart hybrid paste completed", *FINISHED)
+    time.sleep(1)
+    run.vm.tap("ctrl", "s")
+    time.sleep(1.5)
+    shot = run.shot("kwrite-new-line")
+    run.vm.ssh("pkill -x kwrite", check=False)
+    typed = run.vm.read(path)
+    heard = heard_in(log or "")
+    if typed.startswith("$45.\n$25.") and "$$" not in typed:
+        return Outcome("pass", expected="$45.\n$25.", typed=typed, heard=heard, screenshot=shot)
+    status = "misheard" if heard and "$25" not in heard else "fail"
+    return Outcome(status, expected="$45.\n$25.", typed=typed, heard=heard, screenshot=shot)
+
+
 @check("Words and numbers", "qmark_words", "Talking about a question mark keeps the words")
 def qmark_words(run):
     run.sink_ready()

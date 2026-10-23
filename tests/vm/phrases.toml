@@ -43,6 +43,9 @@ say = "Take vitamin B twelve and sit in row E nine."
 [money]
 say = "That will cost twenty seven dollars and fifty cents."
 
+[money_new_line]
+say = "New line, twenty five dollars."
+
 [qmark_words]
 say = "That sentence should end with a question mark."
 
