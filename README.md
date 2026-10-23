@@ -46,13 +46,13 @@ Claude, Anthropic's AI, writes the code. I test it and use it every day, and I h
 
 ## New in 0.18
 
-**It won't type into password boxes.** If your cursor is in a password field when you let go of F8, nothing gets typed, and a note over the window says why. Those words stay out of Recent Dictations too. Saying just "press enter" still works there, so you can log in after typing the password yourself. TuxTalk can only tell when the app says it's a password box: GTK apps do, so most of GNOME, Cinnamon and Xfce. KDE apps and Firefox do with accessibility switched on, and Chrome-based apps like Discord mostly don't.
+**It won't type into password boxes.** If your cursor is in a password field when you let go of F8, nothing gets typed, and a note over the window says why. Those words stay out of Recent Dictations too. Saying just "press enter" still works there, so you can log in after typing the password yourself. TuxTalk can only tell when the app says it's a password box: GTK apps do, so most of GNOME, Cinnamon and Xfce. KDE apps and Firefox do with accessibility switched on, and Chrome-based apps like Discord mostly don't. The desktop's own box asking for your admin password counts too, on GNOME, KDE, Cinnamon, COSMIC and Xfce.
 
 **Typing is about six times faster, and ydotool is gone.** TuxTalk types with its own virtual keyboard now, so there's no background program to keep running. A 25 letter sentence shows up in about a tenth of a second instead of six tenths. You'll notice it most on X11, like Mint, where TuxTalk types everything.
 
 **COSMIC works now.** On Pop!_OS 24.04 TuxTalk knows which window you're in, so a terminal gets plain text, F8 doesn't leave ^[[19~ in the terminal, and typing follows the keyboard layout set in COSMIC Settings. The same terminal fix reaches Mint, Xfce and MATE.
 
-**Fixes worth knowing about.** On a keyboard that isn't US, a shortcut like Ctrl+Alt+P is the key with that letter printed on it. Alt+F8 resizes a window without starting a dictation too. And every window fits a small laptop screen with its buttons in view, dock or no dock, and on two monitors of different sizes. The [changelog](CHANGELOG.md) has the rest.
+**Fixes worth knowing about.** On a keyboard that isn't US, a shortcut like Ctrl+Alt+P is the key with that letter printed on it. Alt+F8 resizes a window without starting a dictation too. And every window fits a small laptop screen with its buttons in view, dock or no dock, and on two monitors of different sizes. Emoji show up even on a computer with no emoji font, where they used to be little boxes. The [changelog](CHANGELOG.md) has the rest.
 
 ---
 
