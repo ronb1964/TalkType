@@ -81,3 +81,9 @@ def test_the_deb_brings_pactl_for_turning_other_sounds_down():
     """Zorin OS has no pactl, so "turn other sounds down" did nothing there
     (VM test, 2026-10-20)."""
     assert '--depends "pulseaudio-utils"' in _read("build-deb.sh")
+
+
+def test_the_rpm_brings_pactl_too():
+    """By path, which Fedora (pulseaudio-utils) and openSUSE resolve to
+    their own package: the .rpm had no pactl dependency at all."""
+    assert '--depends "/usr/bin/pactl"' in _read("build-rpm.sh")

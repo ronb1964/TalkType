@@ -17,7 +17,8 @@
 #   /usr/share/pixmaps/       <- PNG icon fallback
 #
 # System deps are DECLARED (the bundle relies on the host's GTK stack). Fedora names:
-#   gtk3, libayatana-appindicator-gtk3 (tray), portaudio (mic).
+#   gtk3, libayatana-appindicator-gtk3 (tray), portaudio (mic), and /usr/bin/pactl
+#   by path (for turning other sounds down; Fedora's pulseaudio-utils has it).
 #   wl-clipboard IS bundled inside /opt/talktype, so it is not declared.
 #
 # Requires: fpm (gem install --user-install fpm) and rpmbuild (rpm-build package).
@@ -127,6 +128,7 @@ offline, on the processor or an NVIDIA, AMD or Intel graphics card." \
     --depends "gtk3" \
     --depends "libayatana-appindicator-gtk3" \
     --depends "portaudio" \
+    --depends "/usr/bin/pactl" \
     --after-install "$POSTINST" \
     --before-remove "$PROJECT_DIR/packaging/before-remove.sh" \
     --replaces "talktype < 0.15.0" \
