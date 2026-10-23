@@ -21,6 +21,18 @@ def test_keys_the_service_cannot_use_are_refused(key):
     assert wd._captured_key_problem(key, "F9")
 
 
+@pytest.mark.parametrize("key", ["a", "Z", "space", "BackSpace", "1", "Return"])
+def test_ordinary_keys_pressed_during_the_test_stay_out_of_the_log(key):
+    """Without the hotkey helper the test reads every keyboard: a password
+    typed in another window while it's open must not end up in the log."""
+    assert wd._loggable_key(key) == "another key"
+
+
+@pytest.mark.parametrize("key", ["F8", "F12", "Escape", "Pause", "Scroll_Lock"])
+def test_the_keys_the_test_is_about_are_still_logged(key):
+    assert wd._loggable_key(key) == key
+
+
 def test_function_keys_are_accepted():
     assert wd._captured_key_problem("F10", "F9") is None
 
