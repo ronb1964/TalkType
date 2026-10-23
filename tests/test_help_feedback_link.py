@@ -81,3 +81,27 @@ def test_help_lists_every_tray_preset(dialog):
     text = "\n".join(l.get_text() for l in _help_labels(dialog))
     for preset in recommend.presets("en", recommend.Hardware(None)):
         assert f"{preset.label}:" in text, f"Help doesn't mention the {preset.label} preset"
+
+
+@pytest.mark.parametrize("screen, arrows", [(4000, False), (300, True)])
+def test_every_tab_shows_without_scroll_arrows_when_the_screen_allows(monkeypatch, screen,
+                                                                     arrows):
+    """On Mint's wider font the eight tabs needed more than 760 px and GTK
+    hid some behind scroll arrows (VM, 2026-10-22). Help is as wide as its
+    tabs need; only a screen too narrow for that keeps the arrows."""
+    if not Gtk.init_check()[0]:
+        pytest.skip("no display")
+    from tuxtalk import ui_style
+    monkeypatch.setattr(ui_style, "workarea_width", lambda near=None: screen)
+    shown = []
+    monkeypatch.setattr(Gtk.Dialog, "show_all", lambda self: shown.append(self))
+    monkeypatch.setattr(Gtk.Dialog, "present", lambda self: None)
+    help_dialog.show_help_dialog()
+    dialog = shown[0]
+    try:
+        notebook = next(w for w in _widgets(dialog) if isinstance(w, Gtk.Notebook))
+        assert notebook.get_scrollable() is arrows
+        if not arrows:
+            assert dialog.get_default_size()[0] >= dialog.get_preferred_width()[0]
+    finally:
+        dialog.destroy()

@@ -19,6 +19,8 @@ import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import GLib, Gtk
 
+from . import ui_style
+
 # Where the Help window's feedback link goes; the Setup Complete screen
 # points to the same page.
 FEEDBACK_URL = "https://github.com/ronb1964/TuxTalk/discussions"
@@ -164,7 +166,6 @@ def show_help_dialog(tab=None):
     # Create notebook (tabbed interface)
     notebook = Gtk.Notebook()
     notebook.set_tab_pos(Gtk.PositionType.TOP)
-    notebook.set_scrollable(True)
     content.pack_start(notebook, True, True, 0)
 
     # Helper function to create a tab with scrolled content
@@ -728,6 +729,18 @@ Second sentence!
 
     # Connect response to destroy (for non-blocking operation)
     dialog.connect("response", lambda d, r: d.destroy())
+
+    # Every tab in view, without GTK's scroll arrows: Mint's wider font needed
+    # more than 760 px for the tab row (VM, 2026-10-22). As wide as the tabs
+    # need, unless the screen is narrower, where the arrows are the lesser evil.
+    notebook.set_scrollable(False)
+    content.show_all()      # a hidden widget asks for no width
+    needed = dialog.get_preferred_width()[0]
+    screen = ui_style.workarea_width()
+    if screen and needed > screen:
+        notebook.set_scrollable(True)
+    else:
+        dialog.set_default_size(max(760, needed), 600)
 
     dialog.show_all()
     if tab:
