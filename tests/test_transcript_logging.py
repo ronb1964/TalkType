@@ -93,13 +93,12 @@ def test_enabling_logging_is_gated_by_a_warning_dialog():
     assert "_on_log_transcripts_toggled" in text
 
 
-def test_injection_tooltip_no_longer_claims_password_field_handling():
-    """The Auto-mode tooltip must not claim it types into password fields or
-    uses AT-SPI — both false (AT-SPI is unreachable; nothing detects password
-    fields)."""
+def test_injection_tooltip_tells_the_truth_about_password_fields():
+    """0.18 recognises password fields; the tooltip had kept saying nothing
+    can detect them."""
     text = PREFS.read_text()
-    assert "Typing for password fields" not in text
-    assert "AT-SPI when available" not in text
+    assert "it cannot detect password fields" not in text
+    assert "doesn't type into password fields" in text
 
 
 # --- the enable gate is enforced (drives the real handler) -----------------
@@ -234,6 +233,21 @@ def test_clear_log_empties_main_and_removes_backup(tmp_path):
     # Truncated (not deleted) so a service holding it open keeps appending.
     assert main.exists() and main.read_text() == ""
     assert not old.exists()
+
+
+def test_clear_log_says_when_it_could_not_erase(tmp_path):
+    """Preferences said "Log cleared." even when the log stayed on disk."""
+    (tmp_path / "tuxtalk.log").mkdir()          # can't be truncated
+    assert tlog.clear_log(tmp_path) is False
+
+
+def test_a_quoted_false_turns_a_setting_off_not_on():
+    """bool("false") is True: a hand-edited log_transcripts = "false" wrote
+    every dictation to the log."""
+    s = config.Settings()
+    assert config._apply_toml(s, {"log_transcripts": "false", "beeps": "TRUE"}) == []
+    assert s.log_transcripts is False and s.beeps is True
+    assert config._apply_toml(s, {"beeps": "loud"}) == ["beeps"]
 
 
 def test_prefs_has_clear_log_button():

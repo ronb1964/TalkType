@@ -350,7 +350,18 @@ def _repair_invalid_fields(s: Settings, error: ConfigError) -> Settings:
 
 # Type casters for dataclass fields — maps annotation strings to builtins.
 # Needed because `from __future__ import annotations` stores types as strings.
-_TYPE_CASTERS = {"str": str, "bool": bool, "int": int, "float": float}
+def _to_bool(value):
+    """A TOML boolean, or the words true/false a hand edit may have quoted.
+    bool("false") is True: a quoted log_transcripts = "false" switched
+    transcript logging on."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str) and value.strip().lower() in ("true", "false"):
+        return value.strip().lower() == "true"
+    raise ValueError("not true or false")
+
+
+_TYPE_CASTERS = {"str": str, "bool": _to_bool, "int": int, "float": float}
 
 
 def _apply_toml(s: Settings, data: dict) -> list[str]:

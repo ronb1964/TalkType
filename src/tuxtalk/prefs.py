@@ -2302,7 +2302,7 @@ class PreferencesWindow:
 
         # Injection mode
         inject_label = Gtk.Label(label="Text Injection 💡:", xalign=0)
-        inject_label.set_tooltip_text("How to insert transcribed text:\n• Auto (Smart Detection): chooses paste or typing based on the focused app\n• Keystroke Typing: simulates typing character-by-character (most reliable)\n• Clipboard Paste: uses clipboard + Ctrl+V / Shift+Ctrl+V (much faster for long text)\n\nAuto mode uses paste for terminals and normal text fields, and falls back to\ntyping where paste is unreliable.\n\nNote: TuxTalk types wherever your cursor is — it cannot detect password fields\n(no Linux app reliably can on Wayland), so avoid dictating into them.\n\nClipboard Paste works in most applications:\n✓ Text editors, word processors, terminals\n✓ Web browsers, email clients\n✓ Most standard text input fields\n\nUse Keystroke Typing if paste doesn't work in specialized applications.")
+        inject_label.set_tooltip_text("How to insert transcribed text:\n• Auto (Smart Detection): chooses paste or typing based on the focused app\n• Keystroke Typing: simulates typing character-by-character (most reliable)\n• Clipboard Paste: uses clipboard + Ctrl+V / Shift+Ctrl+V (much faster for long text)\n\nAuto mode uses paste for terminals and normal text fields, and falls back to\ntyping where paste is unreliable.\n\nTuxTalk doesn't type into password fields it can recognise: most GTK apps,\nKDE apps and Firefox with accessibility on, and the desktop's own password prompt.\n\nClipboard Paste works in most applications:\n✓ Text editors, word processors, terminals\n✓ Web browsers, email clients\n✓ Most standard text input fields\n\nUse Keystroke Typing if paste doesn't work in specialized applications.")
         inject_combo = Gtk.ComboBoxText()
         inject_combo.set_can_focus(True)
         inject_combo.connect("button-press-event", self._on_combo_button_press)
@@ -5416,14 +5416,16 @@ class PreferencesWindow:
 
         if response == Gtk.ResponseType.OK:
             from .logger import clear_log
-            clear_log()
+            cleared = clear_log()
             done = message_dialog(
                 transient_for=self.window,
                 modal=True,
-                message_type=Gtk.MessageType.INFO,
+                message_type=Gtk.MessageType.INFO if cleared else Gtk.MessageType.ERROR,
                 buttons=Gtk.ButtonsType.OK,
-                text="Log cleared.",
+                text="Log cleared." if cleared else "The log couldn't be cleared completely.",
             )
+            if not cleared:
+                done.format_secondary_text("Some of it may still be on disk.")
             done.run()
             done.destroy()
 

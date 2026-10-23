@@ -22,6 +22,15 @@ before 0.15.0, so older entries use that name.
   quits most apps, because TuxTalk pressed Ctrl+A by key position. Paste,
   copy and select all now use the key that has that letter on your layout,
   so pasting works on Dvorak too.
+- Privacy: when the keyboard layout had no key for a character (an emoji, say),
+  the log named that character even with transcript logging off.
+- A setting hand-edited in config.toml as "false" in quotes was read as on;
+  for log_transcripts that meant every dictation was written to the log. The
+  words true and false now count either way, and anything else is ignored.
+- Preferences → Advanced → Clear log now said "Log cleared." even when the
+  log couldn't be erased. It says so now when it couldn't.
+- The Text Injection tooltip said TuxTalk can't detect password fields. It
+  can, since this release.
 - Saying "new line" in KWrite, Kate or KDevelop no longer copies the start
   of the line above. TuxTalk pressed Shift+Enter between the lines, which
   those editors take as Insert Smart Newline: after a line starting with

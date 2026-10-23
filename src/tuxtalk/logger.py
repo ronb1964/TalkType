@@ -45,9 +45,9 @@ def _log_dir() -> Path:
     return base / config_dir
 
 
-def clear_log(log_dir: Path = None) -> None:
+def clear_log(log_dir: Path = None) -> bool:
     """Empty the log: truncate the log to zero and remove its .old backup and
-    the pre-rename talktype logs.
+    the pre-rename talktype logs. False if any of it couldn't be erased.
 
     Truncation rather than deletion is deliberate — the dictation service holds
     the file open in append mode, and on Linux O_APPEND writes always land at the
@@ -55,18 +55,22 @@ def clear_log(log_dir: Path = None) -> None:
     at offset 0 instead of leaving a sparse, null-padded file behind.
     """
     d = log_dir or _log_dir()
+    cleared = True
     try:
         main = d / LOG_FILE_NAME
         if main.exists():
             open(main, "w").close()  # truncate in place
-    except OSError:
-        pass
+    except OSError as e:
+        logging.getLogger(__name__).warning(f"Couldn't clear the log: {e}")
+        cleared = False
     # Nothing holds these open, so they can simply be removed.
     for name in (LOG_FILE_NAME + ".old",) + _LEGACY_LOG_NAMES:
         try:
             (d / name).unlink(missing_ok=True)
-        except OSError:
-            pass
+        except OSError as e:
+            logging.getLogger(__name__).warning(f"Couldn't remove {name}: {e}")
+            cleared = False
+    return cleared
 
 
 def redact_text(text, reveal: bool = False) -> str:
