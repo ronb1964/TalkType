@@ -6,12 +6,12 @@ NVIDIA graphics, through CUDA. This runs whisper.cpp built with its Vulkan
 backend instead, which works on AMD, Intel and NVIDIA alike. For AMD and
 Intel it's the only way to use the graphics chip. For NVIDIA it's the light
 option: measured on an RTX 4070 Super it matched CUDA's speed (large-v3,
-0.51 s vs 0.53 s for 11 s of speech) for a 24 MB download instead of 1.4 GB. whisper.cpp
+0.51 s vs 0.53 s for 11 s of speech) for a 22 MB download instead of 1.4 GB. whisper.cpp
 publishes no Linux Vulkan build, so TuxTalk builds one (build-vulkan-engine.sh)
 and hosts it as a GitHub pre-release.
 
 Nothing here is downloaded unless the user picks "Vulkan (any GPU)" as the
-device: the engine (~24 MB) and the model in whisper.cpp's own format, which
+device: the engine (~22 MB) and the model in whisper.cpp's own format, which
 is a separate file from the faster-whisper one.
 
 whisper.cpp 1.9.4 also runs Parakeet (libparakeet), so the same engine runs

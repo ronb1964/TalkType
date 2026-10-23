@@ -13,6 +13,7 @@ import os
 from dataclasses import dataclass
 
 from .parakeet_engine import PARAKEET_LANGUAGES, effective_device, is_parakeet
+from .whisper_vulkan import ENGINE_SIZE_TEXT
 
 PARAKEET = "parakeet-v3"
 
@@ -371,7 +372,7 @@ COMPATIBILITY = (
 COMPATIBILITY_NOTES = (
     "Languages: Parakeet knows English and 24 European languages. "
     "Whisper models know about 99.",
-    "Vulkan is a 24 MB engine, and each model needs its own copy for it the "
+    f"Vulkan is a {ENGINE_SIZE_TEXT} engine, and each model needs its own copy for it the "
     "first time. CUDA is a one-time 1.4 GB download.",
 )
 

@@ -31,6 +31,10 @@ before 0.15.0, so older entries use that name.
   log couldn't be erased. It says so now when it couldn't.
 - The Text Injection tooltip said TuxTalk can't detect password fields. It
   can, since this release.
+- The .rpm now brings pactl (pulseaudio-utils on Fedora), which turning other
+  sounds down needs; the .deb already did.
+- Help and Preferences said the Vulkan graphics engine is a 24 MB download;
+  it's 22 MB, and they now take the size from the engine itself.
 - Saying "new line" in KWrite, Kate or KDevelop no longer copies the start
   of the line above. TuxTalk pressed Shift+Enter between the lines, which
   those editors take as Insert Smart Newline: after a line starting with

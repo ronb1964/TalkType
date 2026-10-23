@@ -64,6 +64,8 @@ def show_help_dialog(tab=None):
     TuxTalk Labs section). Returns the dialog."""
     from gi.repository import Gdk
 
+    from .whisper_vulkan import ENGINE_SIZE_TEXT
+
     f = _install_facts()
     is_flatpak = f["is_flatpak"]
     hold, toggle, paste_key = (GLib.markup_escape_text(k) for k in _keys(is_flatpak))
@@ -549,7 +551,7 @@ Microphone</b> and the test beside it.
 <b>Too slow</b>
   • Use your graphics card: TuxTalk menu → Performance → Recommended for this
     computer, or Use Recommended in Preferences → General.
-  • <b>Vulkan (any GPU)</b>: AMD, Intel or NVIDIA, a 24 MB download. It's the only way to
+  • <b>Vulkan (any GPU)</b>: AMD, Intel or NVIDIA, a {ENGINE_SIZE_TEXT} download. It's the only way to
     run Parakeet on the graphics card. TuxTalk checks your graphics card is really
     faster than your processor before it switches.
   • <b>CUDA (NVIDIA)</b>: NVIDIA only, for the Whisper models, a ~1.4 GB download.

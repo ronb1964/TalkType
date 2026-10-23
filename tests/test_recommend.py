@@ -172,3 +172,9 @@ def test_explanation_never_repeats_itself(hw):
     for model in (None, "parakeet-v3", "small", "large-v3"):
         s = r.recommend("ja", hw, model=model)
         assert s.explanation.count("99 languages") <= 1, s.explanation
+
+
+def test_the_help_notes_give_the_real_graphics_engine_size():
+    """Help, Preferences and these notes said 24 MB for a 22 MB engine."""
+    from tuxtalk import recommend, whisper_vulkan
+    assert any(whisper_vulkan.ENGINE_SIZE_TEXT in n for n in recommend.COMPATIBILITY_NOTES)

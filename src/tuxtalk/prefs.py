@@ -4,6 +4,7 @@ gi.require_version("Gdk", "3.0")
 gi.require_version("Pango", "1.0")
 from gi.repository import Gtk, Gdk, GLib, Pango
 from .ui_style import Fold, message_dialog
+from .whisper_vulkan import ENGINE_SIZE_TEXT
 import datetime
 import os
 import subprocess
@@ -771,7 +772,8 @@ class PreferencesWindow:
             if whisper_vulkan.is_offered() or self.config["device"] == "vulkan":
                 self.device_combo.append("vulkan", whisper_vulkan.DEVICE_LABEL)
                 tooltip_text += ("\n• Vulkan (any GPU): AMD, Intel or NVIDIA. On NVIDIA about as "
-                                 "fast as CUDA for a 24 MB download (one-time, with a speed check). "
+                                 f"fast as CUDA for a {ENGINE_SIZE_TEXT} download "
+                                 "(one-time, with a speed check). "
                                  "Also runs Parakeet on the graphics chip")
         except Exception as e:
             print(f"Could not check for Vulkan graphics: {e}")
@@ -2407,7 +2409,8 @@ class PreferencesWindow:
             vulkan_hint.set_margin_top(4)
             vulkan_hint.set_text(
                 "Lighter option: choose Vulkan (any GPU) as the Device in General → Change model, device or language. "
-                "It's a 24 MB download instead of 1.4 GB, works on AMD, Intel and NVIDIA, "
+                f"It's a {ENGINE_SIZE_TEXT} download instead of 1.4 GB, "
+                "works on AMD, Intel and NVIDIA, "
                 "and was about as fast as CUDA in our tests.")
             vulkan_hint.get_style_context().add_class("dim-label")
             check.attach(vulkan_hint, 0, crow, 2, 1)
@@ -4523,7 +4526,8 @@ class PreferencesWindow:
                     if self._message(
                             Gtk.MessageType.QUESTION, "Large-v3 needs your graphics card",
                             "Large-v3 can run on your AMD or Intel graphics through Vulkan. "
-                            "That's a one-time download of a 24 MB graphics engine and Large-v3 in "
+                            "That's a one-time download of a "
+                            f"{ENGINE_SIZE_TEXT} graphics engine and Large-v3 in "
                             "its format (1 GB), then a quick check that your graphics chip is "
                             "really faster than your processor.",
                             buttons=Gtk.ButtonsType.OK_CANCEL) == Gtk.ResponseType.OK:
