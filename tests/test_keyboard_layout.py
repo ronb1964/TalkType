@@ -77,13 +77,24 @@ def test_swiss_german_letters_and_symbols():
 
 
 def test_swiss_german_euro_sign():
-    """AltGr+E. Ubuntu 22.04's keyboard data (xkb-data 2.33, which the CI
-    runs) has no € on the Swiss layout; newer data does. Without it the text
-    is untypable on keys and TuxTalk types it another way (UntypableText)."""
     planner = kl.KeyPlanner("ch", "")
-    if planner.plan("€") is None:
-        pytest.skip("this system's keyboard data has no € on the Swiss layout")
     assert replay(planner, planner.plan("Preis: 5 €")) == "Preis: 5 €"
+
+
+def test_a_character_with_two_keysyms_is_still_found(monkeypatch):
+    """€ is keysym 0x20ac and 0x13a4. The keymap has 0x20ac, but Ubuntu
+    22.04's libxkbcommon (1.4) names € 0x13a4, so the € on AltGr+E went
+    unfound and the dictation was pasted instead."""
+    planner = kl.KeyPlanner("de", "")
+    real = planner._keysym
+    monkeypatch.setattr(planner, "_keysym", lambda c: 0x13A4 if c == "€" else real(c))
+    assert planner.plan("€") == [(100, 1), (18, 1), (18, 0), (100, 0)]
+
+
+def test_a_german_ellipsis_is_typed_not_pasted():
+    """… is on AltGr+. there, under a keysym no character lookup names."""
+    planner = kl.KeyPlanner("de", "")
+    assert replay(planner, planner.plan("Na ja…")) == "Na ja…"
 
 
 def test_y_and_z_use_the_keys_where_they_really_are():

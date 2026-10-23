@@ -69,6 +69,8 @@ def _lib():
         x.xkb_keymap_mod_get_index.restype = U32
         x.xkb_utf32_to_keysym.argtypes = [U32]
         x.xkb_utf32_to_keysym.restype = U32
+        x.xkb_keysym_to_utf32.argtypes = [U32]
+        x.xkb_keysym_to_utf32.restype = U32
         _xkb = x
     return _xkb
 
@@ -80,6 +82,7 @@ _KEY_102ND = 86                 # evdev; the <> key of ISO keyboards
 _KEY_F12 = 88                   # evdev; past it: the keypad's and extra keys
 _X11_MAX_KEYCODE = 255          # xkb; X11 and XWayland carry no key past it
 _ISO_LEVEL3_SHIFT = 0xfe03      # keysym AltGr produces
+_KEYPAD_KEYSYMS = range(0xff80, 0xffbe)     # KP_Space .. KP_Equal
 _INVALID_MOD = 0xffffffff
 
 # Combining marks (what NFD splits an accented letter into) and the dead key
@@ -131,6 +134,7 @@ class KeyPlanner:
         if not self.keymap:
             raise ValueError(f"unknown keyboard layout {layout}({variant})")
         self._keys = {}         # keysym -> (evdev keycode, shift, altgr)
+        self._by_char = {}      # character -> the same, for _keysym misses
         self._altgr = None
         self._index()
 
@@ -162,6 +166,16 @@ class KeyPlanner:
                     entry = (kc - _EVDEV_OFFSET, bool(mask & shift_bit), bool(mask & altgr_bit))
                     if sym not in self._keys or _cost(entry) < _cost(self._keys[sym]):
                         self._keys[sym] = entry
+        # A character can have two keysyms (€ is 0x20ac and 0x13a4): Ubuntu
+        # 22.04's libxkbcommon names € 0x13a4 while the keymap has 0x20ac, and
+        # the German layout's … is a keysym no character lookup names. What a
+        # key types finds them. Not the keypad's: a terminal in keypad mode
+        # sends escape codes for those.
+        for sym, entry in self._keys.items():
+            char = x.xkb_keysym_to_utf32(sym)
+            if (char and sym not in _KEYPAD_KEYSYMS
+                    and (char not in self._by_char or _cost(entry) < _cost(self._by_char[char]))):
+                self._by_char[char] = entry
         # Right Alt if it is AltGr, as it is on real keyboards; layouts also map a
         # virtual key to it, which works in the keymap but not on every compositor.
         if altgr_keys:
@@ -190,7 +204,7 @@ class KeyPlanner:
         """(tokens, None), or (None, the first character that can't be typed)."""
         tokens = []
         for char in text:
-            entry = self._keys.get(self._keysym(char))
+            entry = self._keys.get(self._keysym(char)) or self._by_char.get(ord(char))
             if entry and self._press(entry, tokens):
                 continue
             # Not on a key of its own: an accented letter as dead key + letter.
