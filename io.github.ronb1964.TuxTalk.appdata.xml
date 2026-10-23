@@ -95,6 +95,20 @@
   </screenshots>
 
   <releases>
+    <release version="0.18.0" date="2026-10-23">
+      <description>
+        <p>No typing into password boxes, faster typing, and COSMIC</p>
+        <ul>
+          <li>Nothing is typed into a password field or the desktop's own password prompt</li>
+          <li>Typing is about six times faster with TuxTalk's own virtual keyboard; ydotool is gone</li>
+          <li>COSMIC on Pop!_OS works like the other desktops</li>
+          <li>No stray ^[[19~ in terminals on Mint, Xfce and MATE</li>
+          <li>Shortcuts use the letter printed on the key on any keyboard layout</li>
+          <li>Windows fit small screens with their buttons in view</li>
+          <li>Emoji show even without an emoji font installed</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.17.0" date="2026-10-20">
       <description>
         <p>A more accurate Parakeet, and an uninstall that takes everything with it</p>

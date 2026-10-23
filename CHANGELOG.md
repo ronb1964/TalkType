@@ -3,8 +3,48 @@
 All notable changes to TuxTalk are documented here. It was called TalkType
 before 0.15.0, so older entries use that name.
 
-## [Unreleased]
+## [0.18.0] - 2026-10-23
 
+- TuxTalk no longer types into password fields. Dictate with the cursor in
+  a password box and nothing is typed: you hear the low beep and "TuxTalk
+  doesn't type into password fields" shows over the window. The words aren't
+  kept in Recent Dictations either, since they may be the password. The same
+  goes for Paste Last Dictation and voice editing. Saying only "press enter"
+  there still presses Enter, so you can log in after typing the password.
+  TuxTalk asks the desktop's accessibility service, so it usually works in
+  GTK apps (most GNOME, Cinnamon and Xfce apps), and in KDE apps and Firefox
+  only while accessibility is on.
+  Chrome, Brave and Electron apps (Discord, VS Code) only say so if
+  accessibility was already on when they started. The desktop's own
+  prompt for your admin password counts too, on GNOME, KDE, Cinnamon,
+  COSMIC and Xfce, and on GNOME its keyring and Wi-Fi prompts as well.
+- Typing is about six times faster. TuxTalk now types with its own virtual
+  keyboard instead of ydotool: a 25-letter sentence that took 0.6 seconds to
+  appear now takes about 0.1. Undo and select by voice are as quick. Paste
+  stays the way most dictations arrive on Wayland.
+- No more "TuxTalk's typing helper had stopped". The ydotool program and its
+  ydotoold daemon are gone, so there's nothing to start or keep running, and
+  first-run setup no longer asks to install ydotool. The ydotoold an older
+  version started, and the service file it set up, are removed when this
+  version starts.
+- Typing works right after first-run setup on computers that hadn't
+  loaded the kernel's uinput module yet. There setup's typing permission
+  only took effect after a restart, and every dictation said TuxTalk had
+  no permission to type until then. Thanks to sparcher on the Fedora forum
+  for the log that showed it.
+- If a slow computer drops letters, `key_delay` in config.toml slows the
+  keyboard down again (6 or 12 are safe values; 2 is the new default).
+- COSMIC (Pop!_OS 24.04 and later) works as the other desktops do. TuxTalk
+  now knows which window you're in, so a terminal gets plain text and the
+  paste shortcut that works there, and "Send each dictation automatically"
+  sends nothing if you switch to another app during the wait. F8 and F9 no longer
+  reach the app as well ("^[[19~" in a terminal): while dictation is on they
+  are COSMIC shortcuts, listed as TuxTalk's in Settings → Keyboard → Custom
+  shortcuts, and they go again when dictation stops. A key COSMIC or you
+  already use for something else is left alone, and the log says so.
+  Typing follows the keyboard layout set in COSMIC Settings rather than the
+  one picked when the system was installed, which on a German keyboard
+  swapped Y and Z.
 - Emoji show on every computer. Without an emoji font installed, the hint
   markers in Preferences, Help's tab names and the first-run screens showed
   boxes with a code in them instead. TuxTalk now carries the 36 emoji it uses
@@ -41,17 +81,6 @@ before 0.15.0, so older entries use that name.
   While dictation is on, the X server now keeps the keys for TuxTalk, as KDE
   and GNOME already did; if another program already uses one of them, the
   log says so.
-- COSMIC (Pop!_OS 24.04 and later) works as the other desktops do. TuxTalk
-  now knows which window you're in, so a terminal gets plain text and the
-  paste shortcut that works there, and "Send each dictation automatically"
-  sends nothing if you switch to another app during the wait. F8 and F9 no longer
-  reach the app as well ("^[[19~" in a terminal): while dictation is on they
-  are COSMIC shortcuts, listed as TuxTalk's in Settings → Keyboard → Custom
-  shortcuts, and they go again when dictation stops. A key COSMIC or you
-  already use for something else is left alone, and the log says so.
-  Typing follows the keyboard layout set in COSMIC Settings rather than the
-  one picked when the system was installed, which on a German keyboard
-  swapped Y and Z.
 - On a keyboard that isn't US QWERTY (German, French, Dvorak), a shortcut
   with a letter in it, like Ctrl+Alt+P for Paste Last Dictation, is now the
   key with that letter on it. TuxTalk used to listen to the key in the US
@@ -78,35 +107,6 @@ before 0.15.0, so older entries use that name.
 - The waveform, bars and radial indicators all draw the standard soft
   backing again. A backing picked before 0.16 (Off, Soft or Strong) had no
   control left to change it; that setting is gone.
-- TuxTalk no longer types into password fields. Dictate with the cursor in
-  a password box and nothing is typed: you hear the low beep and "TuxTalk
-  doesn't type into password fields" shows over the window. The words aren't
-  kept in Recent Dictations either, since they may be the password. The same
-  goes for Paste Last Dictation and voice editing. Saying only "press enter"
-  there still presses Enter, so you can log in after typing the password.
-  TuxTalk asks the desktop's accessibility service, so it usually works in
-  GTK apps (most GNOME, Cinnamon and Xfce apps), and in KDE apps and Firefox
-  only while accessibility is on.
-  Chrome, Brave and Electron apps (Discord, VS Code) only say so if
-  accessibility was already on when they started. The desktop's own
-  prompt for your admin password counts too, on GNOME, KDE, Cinnamon,
-  COSMIC and Xfce, and on GNOME its keyring and Wi-Fi prompts as well.
-- Typing is about six times faster. TuxTalk now types with its own virtual
-  keyboard instead of ydotool: a 25-letter sentence that took 0.6 seconds to
-  appear now takes about 0.1. Undo and select by voice are as quick. Paste
-  stays the way most dictations arrive on Wayland.
-- No more "TuxTalk's typing helper had stopped". The ydotool program and its
-  ydotoold daemon are gone, so there's nothing to start or keep running, and
-  first-run setup no longer asks to install ydotool. The ydotoold an older
-  version started, and the service file it set up, are removed when this
-  version starts.
-- Typing works right after first-run setup on computers that hadn't
-  loaded the kernel's uinput module yet. There setup's typing permission
-  only took effect after a restart, and every dictation said TuxTalk had
-  no permission to type until then. Thanks to sparcher on the Fedora forum
-  for the log that showed it.
-- If a slow computer drops letters, `key_delay` in config.toml slows the
-  keyboard down again (6 or 12 are safe values; 2 is the new default).
 - A dictation pasted into a terminal could come out as a lone ^V. The
   clipboard tool TuxTalk pastes with can open a tiny window of its own for a
   moment, and TuxTalk sometimes took it for the window you were in, so the
