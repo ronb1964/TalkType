@@ -37,6 +37,10 @@ before 0.15.0, so older entries use that name.
   it's 22 MB, and they now take the size from the engine itself.
 - Transcribe a File: Save as Subtitles failed on a long sentence with only one
   space in it, as in Chinese or Japanese with an English word.
+- Hands-free: when the microphone started with a moment of digital silence,
+  as many do, TuxTalk took the room to be perfectly quiet for the rest of the
+  recording. A fan or air conditioner then counted as speech, and the
+  recording never stopped by itself.
 - Saying "new line" in KWrite, Kate or KDevelop no longer copies the start
   of the line above. TuxTalk pressed Shift+Enter between the lines, which
   those editors take as Insert Smart Newline: after a line starting with

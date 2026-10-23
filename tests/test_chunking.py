@@ -1283,3 +1283,13 @@ def test_a_carried_question_skips_a_phrase_with_two_sentences(pipeline):
     call(frames_of(speech(1.0)), "middle")
     call(frames_of(speech(1.0)), "last", auto_period=True)
     assert typed[-1].rstrip() == "go now. I do."
+
+
+def test_a_recording_that_opens_with_digital_silence_still_learns_the_room():
+    """A first block of zeros held the noise floor at 0 for good: steady fan
+    noise then counted as speech and hands-free auto-stop never fired."""
+    from tuxtalk.silence import NoiseFloor
+    floor = NoiseFloor()
+    floor.update(0.0, 0.03)
+    heard = [floor.update(400.0, 0.03) for _ in range(100)]
+    assert not heard[-1], "steady room noise still counts as speech"

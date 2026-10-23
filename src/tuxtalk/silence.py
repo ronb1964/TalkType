@@ -62,6 +62,12 @@ class NoiseFloor:
         the room is heard, so even when someone starts talking the instant
         recording begins, the floor settles on the room within a word or two.
         """
+        if rms < 1.0:
+            # Digital silence (many streams open with a block of zeros) says
+            # nothing about the room. Learned, it held the floor at 0, which
+            # can never rise, so steady room noise counted as speech and
+            # hands-free never stopped by itself.
+            return False
         if self.level is None:
             # The first block may already be speech (talking the instant the
             # key goes down), so the first guess is capped at a quiet level;
