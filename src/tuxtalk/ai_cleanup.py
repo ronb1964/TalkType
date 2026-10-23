@@ -33,6 +33,7 @@ import tarfile
 import threading
 import time
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 
 from . import engine_process
 from .logger import setup_logger
@@ -489,6 +490,12 @@ class CorrectionEngine:
         self._key = None
         self._ready = threading.Event()
         self._lock = threading.Lock()
+        # The server dies with the thread that started it (PR_SET_PDEATHSIG
+        # is per thread), and a restart after a crash happens on the
+        # dictation's own short-lived thread: the new server was killed as
+        # soon as that dictation ended. Every start goes through this thread,
+        # which lives as long as the engine, as in whisper_vulkan.
+        self._launcher = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ai-engine")
 
     def start(self, _replacing=None):
         """Start the server in the background. Returns immediately.
@@ -510,7 +517,8 @@ class CorrectionEngine:
             # A random key so other programs on the machine cannot use it.
             self._key = secrets.token_hex(16)
             binary = _server_binary()
-            self._proc = subprocess.Popen(
+            self._proc = self._launcher.submit(
+                subprocess.Popen,
                 # 4096 tokens: room for a voice edit (MAX_EDIT_CHARS of text and
                 # the rewrite); one slot, so it is all one request's.
                 [binary, "-m", _model_path(), "--host", "127.0.0.1", "--port", str(self._port),
@@ -519,7 +527,7 @@ class CorrectionEngine:
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                 env={**os.environ, "LD_LIBRARY_PATH": os.path.dirname(binary)},
                 preexec_fn=_set_parent_death_signal,
-            )
+            ).result()
             logger.info(f"AI cleanup engine starting (pid {self._proc.pid})")
         threading.Thread(target=self._wait_until_ready, daemon=True).start()
 

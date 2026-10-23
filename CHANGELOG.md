@@ -48,6 +48,10 @@ before 0.15.0, so older entries use that name.
   stop at login if a device such as a wireless receiver disappeared while it
   was starting. Startup now opens keyboards the way a rescan does, skipping
   one that's gone, and no longer watches mice and power buttons.
+- AI self-corrections and voice editing: if the AI engine ever crashed,
+  TuxTalk started it again but the new one was stopped as soon as that
+  dictation finished, so the AI stayed off until TuxTalk was restarted. It now
+  comes back for good.
 - Saying "new line" in KWrite, Kate or KDevelop no longer copies the start
   of the line above. TuxTalk pressed Shift+Enter between the lines, which
   those editors take as Insert Smart Newline: after a line starting with

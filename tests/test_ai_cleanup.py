@@ -369,6 +369,21 @@ def test_a_server_that_died_is_started_again(dead_engine):
     assert dead_engine.is_ready() is False and len(dead_engine.started) == 1   # starting
 
 
+def test_a_restart_from_a_dictation_thread_outlives_that_thread(dead_engine, monkeypatch):
+    """The server dies with the thread that started it. Restarted on the
+    dictation's own thread, it was killed as soon as that dictation ended,
+    and AI corrections stayed off for the rest of the session."""
+    import threading
+    starters = []
+    monkeypatch.setattr(ai.subprocess, "Popen", lambda *a, **k: starters.append(
+        threading.current_thread().name) or _Proc())
+    dictation = threading.Thread(target=dead_engine.correct, args=("one, no wait, two",),
+                                 name="tt-inject")
+    dictation.start()
+    dictation.join()
+    assert len(starters) == 1 and starters[0].startswith("ai-engine")
+
+
 def test_a_stopped_engine_is_not_started_again(dead_engine):
     dead = dead_engine._proc
     dead_engine.stop()
