@@ -20,7 +20,7 @@ next is due 2026-11-22.
 | Quoted "false" in config.toml; Clear log says when it couldn't | 206934e |
 | License notices for PyAV's 39 libraries and libgomp | c0f10aa and after |
 | Subtitles crash, auto-stop after digital silence, stuck update window, startup device blip, AI engine restart | 9f3d813 to 670aeac |
-| Tests stay off the user's desktop, Recent Dictations, stats and live TuxTalk | (conftest guards) |
+| Tests stay off the user's desktop, Recent Dictations, stats and live TuxTalk | 2f39472 |
 | The code-health check and the whole-file review procedure | 84778a2 |
 
 ## 0.19, the code-health release
