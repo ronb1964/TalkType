@@ -450,3 +450,19 @@ def test_a_hotkey_letter_is_the_key_that_types_it(monkeypatch, layout, key):
     assert app._parse_hotkey_combo("Ctrl+Alt+Y") == ({"CTRL", "ALT"}, key)
     # And the X server holds the same key on other X11 desktops.
     assert x11_hotkeys.x_grab("Ctrl+Alt+Y") == (key + 8, 4 | 8)
+
+
+@pytest.mark.parametrize("layout, letter, key", [
+    (("fr", ""), "a", 16),          # AZERTY: A sits where US has Q
+    (("us", "dvorak"), "v", 52),    # Dvorak: V sits where US has the period
+    (("us", ""), "c", 46),
+])
+def test_the_shortcuts_tuxtalk_presses_use_the_letter_on_the_users_keyboard(
+        monkeypatch, layout, letter, key):
+    """Ctrl+A sent by position was Ctrl+Q on AZERTY: "clear the whole box"
+    quit the app. Dvorak got Ctrl+K for paste."""
+    from tuxtalk import app
+    monkeypatch.setattr(kl, "active_layout", lambda: layout)
+    assert app._ctrl_keys(letter) == [(29, 1), (key, 1), (key, 0), (29, 0)]
+    assert app._ctrl_keys(letter, shift=True) == [(42, 1), (29, 1), (key, 1), (key, 0),
+                                                  (29, 0), (42, 0)]

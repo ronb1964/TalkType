@@ -2049,6 +2049,17 @@ def _send_shift_enter():
     return _send_keys([(42, 1), (28, 1), (28, 0), (42, 0)], what="shift+enter",
                       raise_if_partial=True)
 
+def _ctrl_keys(letter: str, shift: bool = False) -> list:
+    """Ctrl+*letter* (Ctrl+Shift with *shift*), on the key that is that letter
+    on the user's keyboard layout. On AZERTY the US A key is Q, so Ctrl+A
+    sent by position quit the app; on Dvorak the US V key is K."""
+    from .keyboard_layout import shortcut_keycode
+    key = shortcut_keycode(letter)
+    held = [42, 29] if shift else [29]          # KEY_LEFTSHIFT, KEY_LEFTCTRL
+    return ([(k, 1) for k in held] + [(key, 1), (key, 0)]
+            + [(k, 0) for k in reversed(held)])
+
+
 def _send_select_all_delete():
     """Send Ctrl+A then Backspace to clear the entire input field.
 
@@ -2056,11 +2067,10 @@ def _send_select_all_delete():
     regardless of whether the contents came from TuxTalk, manual typing, or
     pasting from elsewhere.
     """
-    # KEY_LEFTCTRL (29) + KEY_A (30), then KEY_BACKSPACE (14)
-    if not _send_keys([(29, 1), (30, 1), (30, 0), (29, 0)], what="select-all"):
+    if not _send_keys(_ctrl_keys("a"), what="select-all"):
         return False
     time.sleep(0.05)
-    return _send_keys([(14, 1), (14, 0)], what="delete")
+    return _send_keys([(14, 1), (14, 0)], what="delete")    # KEY_BACKSPACE
 
 _OUTPUT_BACKEND = None
 
@@ -2377,15 +2387,14 @@ def _send_paste_keystroke(focused_class: str | None, primary_holds_text: bool = 
     paste the clipboard on Shift+Insert and terminals paste the primary
     selection, so it lands either way. Without that, Ctrl+V, which suits most
     apps."""
-    # KEY_LEFTSHIFT=42, KEY_LEFTCTRL=29, KEY_V=47, KEY_INSERT=110
     if is_terminal_class(focused_class):
-        keys = [(42, 1), (29, 1), (47, 1), (47, 0), (29, 0), (42, 0)]  # Ctrl+Shift+V
+        keys = _ctrl_keys("v", shift=True)
         logger.info(f"Paste: Ctrl+Shift+V (terminal class={focused_class!r})")
     elif focused_class is None and primary_holds_text:
-        keys = [(42, 1), (110, 1), (110, 0), (42, 0)]  # Shift+Insert
+        keys = [(42, 1), (110, 1), (110, 0), (42, 0)]  # Shift+Insert (KEY_INSERT=110)
         logger.info("Paste: Shift+Insert (window unknown; clipboard and primary selection set)")
     else:
-        keys = [(29, 1), (47, 1), (47, 0), (29, 0)]  # Ctrl+V
+        keys = _ctrl_keys("v")
         logger.info(f"Paste: Ctrl+V (class={focused_class!r})")
     if not _send_keys(keys, what="paste", raise_if_partial=True):
         # The keystroke never reached the desktop: the text is sitting on the
@@ -4251,8 +4260,7 @@ def _edit_problem(kind: str, beeps_on: bool) -> None:
 def _send_copy_keystroke() -> bool:
     """Ctrl+C. Terminals never get here (_transcribe_and_edit turns them away:
     Ctrl+C would stop the running program). True if it was sent."""
-    # KEY_LEFTCTRL=29, KEY_C=46
-    return _send_keys([(29, 1), (46, 1), (46, 0), (29, 0)], what="copy")
+    return _send_keys(_ctrl_keys("c"), what="copy")
 
 
 _FORMAT_LETTERS = {"bold": "b", "italic": "i", "underline": "u"}
@@ -4261,10 +4269,7 @@ _FORMAT_LETTERS = {"bold": "b", "italic": "i", "underline": "u"}
 def _send_format_shortcut(kind: str) -> bool:
     """Ctrl+B, Ctrl+I or Ctrl+U, on the key that is that letter on the user's
     keyboard layout. Sent only to word processors (voice_edit_rules)."""
-    from .keyboard_layout import shortcut_keycode
-    key = shortcut_keycode(_FORMAT_LETTERS[kind])
-    # KEY_LEFTCTRL=29
-    return _send_keys([(29, 1), (key, 1), (key, 0), (29, 0)], what=kind)
+    return _send_keys(_ctrl_keys(_FORMAT_LETTERS[kind]), what=kind)
 
 
 def _focus_moved(focused_class) -> bool:

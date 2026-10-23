@@ -5,6 +5,23 @@ before 0.15.0, so older entries use that name.
 
 ## [0.18.0] - 2026-10-23
 
+- Security: on systems where the hotkey helper can't run (no systemd), Fix
+  Typing wrote its setup script to a temporary file and then ran that file as
+  root once the password was typed. Another program running as you could
+  have swapped the file while the password box was open. The script now goes
+  straight to root's shell without touching the disk, as the hotkey helper's
+  setup already did.
+- Privacy: the first-run hotkey test, on systems without the hotkey helper,
+  wrote every key pressed anywhere to the log while it was open, letters
+  included. It now logs only the keys it tests (F1 to F24, Esc, Pause,
+  Scroll Lock).
+- Privacy: with Your Words steering Parakeet on the processor, the log named
+  the word Parakeet wrote even with transcript logging off. It now only says
+  that one of your words was used.
+- On a French (AZERTY) keyboard, "clear the whole box" pressed Ctrl+Q, which
+  quits most apps, because TuxTalk pressed Ctrl+A by key position. Paste,
+  copy and select all now use the key that has that letter on your layout,
+  so pasting works on Dvorak too.
 - Saying "new line" in KWrite, Kate or KDevelop no longer copies the start
   of the line above. TuxTalk pressed Shift+Enter between the lines, which
   those editors take as Insert Smart Newline: after a line starting with
