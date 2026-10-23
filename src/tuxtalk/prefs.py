@@ -2928,7 +2928,7 @@ class PreferencesWindow:
             desc.set_line_wrap(True)
             vbox.pack_start(desc, False, False, 0)
 
-        def table(store, titles, min_height, max_height):
+        def table(store, min_height, max_height):
             tree = Gtk.TreeView(model=store)
             scrolled = Gtk.ScrolledWindow()
             scrolled.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
@@ -2957,7 +2957,7 @@ class PreferencesWindow:
         # Fixed heights: a tree view measures its rows only once the window is
         # on screen, too late for the opening height (_fit_to_screen), so a
         # list sized by its rows opened squeezed. About six words; then it scrolls.
-        self.words_tree = table(self.words_store, None, 190, 190)
+        self.words_tree = table(self.words_store, 190, 190)
         for i, (title, expand) in enumerate((("Spelled", False),
                                              ("Also fixes when it hears", True))):
             column = Gtk.TreeViewColumn(title, Gtk.CellRendererText(), text=i)
@@ -2981,7 +2981,7 @@ class PreferencesWindow:
                 'Say a short phrase and TuxTalk types the full text. For example, '
                 'say "my email" and it types user@example.com.')
         self.commands_store = Gtk.ListStore(str, str)   # phrase, replacement
-        self.commands_tree = table(self.commands_store, None, 140, 140)   # about four snippets
+        self.commands_tree = table(self.commands_store, 140, 140)   # about four snippets
 
         # Phrase column (editable)
         phrase_renderer = Gtk.CellRendererText()

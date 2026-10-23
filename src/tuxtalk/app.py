@@ -5701,207 +5701,200 @@ def main():
     global dbus_service, recording_indicator
     dbus_service = None
     recording_indicator = None
-    gtk_needed = False
+    gtk_ok = False
+    try:
+        # Import GTK in the main thread
+        import gi
+        gi.require_version('Gtk', '3.0')
+        from gi.repository import Gtk
 
-    # Check if we need GTK at all
-    if cfg.recording_indicator or True:  # Always try D-Bus for GNOME extension
-        gtk_needed = True
-
-    if gtk_needed:
-        gtk_ok = False
+        # Initialize D-Bus service for GNOME extension integration
         try:
-            # Import GTK in the main thread
-            import gi
-            gi.require_version('Gtk', '3.0')
-            from gi.repository import Gtk
+            from .dbus_service import TuxTalkDBusService
 
-            # Initialize D-Bus service for GNOME extension integration
-            try:
-                from .dbus_service import TuxTalkDBusService
+            # Create a simple app instance with necessary attributes for D-Bus
+            class AppInstance:
+                def __init__(self, cfg):
+                    self.config = cfg
+                    self.service_running = True
+                    self.dbus_service = None
 
-                # Create a simple app instance with necessary attributes for D-Bus
-                class AppInstance:
-                    def __init__(self, cfg):
-                        self.config = cfg
-                        self.service_running = True
-                        self.dbus_service = None
+                @property
+                def is_recording(self):
+                    """Live recording state from the dictation engine."""
+                    return state.is_recording
 
-                    @property
-                    def is_recording(self):
-                        """Live recording state from the dictation engine."""
-                        return state.is_recording
+                def show_preferences(self):
+                    """Open preferences window"""
+                    import subprocess
+                    subprocess.Popen([sys.executable, "-m", "tuxtalk.prefs"])
 
-                    def show_preferences(self):
-                        """Open preferences window"""
-                        import subprocess
-                        subprocess.Popen([sys.executable, "-m", "tuxtalk.prefs"])
+                def start_recording(self):
+                    """Signal the evdev loop to start recording (thread-safe)."""
+                    if not state.is_recording:
+                        _cmd_start_recording.set()
 
-                    def start_recording(self):
-                        """Signal the evdev loop to start recording (thread-safe)."""
-                        if not state.is_recording:
-                            _cmd_start_recording.set()
+                def stop_recording(self):
+                    """Signal the evdev loop to stop recording (thread-safe)."""
+                    if state.is_recording:
+                        _cmd_stop_recording.set()
 
-                    def stop_recording(self):
-                        """Signal the evdev loop to stop recording (thread-safe)."""
-                        if state.is_recording:
-                            _cmd_stop_recording.set()
+                def toggle_recording(self):
+                    """Toggle recording state (thread-safe)."""
+                    if state.is_recording:
+                        _cmd_stop_recording.set()
+                    else:
+                        _cmd_start_recording.set()
 
-                    def toggle_recording(self):
-                        """Toggle recording state (thread-safe)."""
-                        if state.is_recording:
-                            _cmd_stop_recording.set()
+                def control(self, action):
+                    """tuxtalk --toggle/--start/--stop with no tray running."""
+                    return _control_in_service(action)
+
+                def start_service(self):
+                    """Start the dictation service"""
+                    import subprocess
+                    try:
+                        # Find the dictate script
+                        src_dir = os.path.dirname(__file__)  # usr/src/tuxtalk
+                        usr_dir = os.path.dirname(os.path.dirname(src_dir))  # usr
+                        dictate_script = os.path.join(usr_dir, "bin", "dictate")
+
+                        if os.path.exists(dictate_script):
+                            subprocess.Popen([dictate_script], env=os.environ.copy())
+                            logger.info(f"Started dictation service via {dictate_script}")
                         else:
-                            _cmd_start_recording.set()
+                            subprocess.Popen([sys.executable, "-m", "tuxtalk.app"],
+                                           env=os.environ.copy())
+                            logger.info("Started dictation service via Python module")
 
-                    def control(self, action):
-                        """tuxtalk --toggle/--start/--stop with no tray running."""
-                        return _control_in_service(action)
+                        self.service_running = True
+                        if self.dbus_service:
+                            self.dbus_service.emit_service_state(True)
+                    except Exception as e:
+                        logger.error(f"Failed to start service: {e}", exc_info=True)
 
-                    def start_service(self):
-                        """Start the dictation service"""
-                        import subprocess
-                        try:
-                            # Find the dictate script
-                            src_dir = os.path.dirname(__file__)  # usr/src/tuxtalk
-                            usr_dir = os.path.dirname(os.path.dirname(src_dir))  # usr
-                            dictate_script = os.path.join(usr_dir, "bin", "dictate")
+                def stop_service(self):
+                    """Stop the dictation service"""
+                    from .service_launcher import stop_dictation_service
+                    try:
+                        stop_dictation_service()
+                        logger.info("Stopped dictation service")
+                        self.service_running = False
+                        if self.dbus_service:
+                            self.dbus_service.emit_service_state(False)
+                    except Exception as e:
+                        logger.error(f"Failed to stop service: {e}", exc_info=True)
 
-                            if os.path.exists(dictate_script):
-                                subprocess.Popen([dictate_script], env=os.environ.copy())
-                                logger.info(f"Started dictation service via {dictate_script}")
-                            else:
-                                subprocess.Popen([sys.executable, "-m", "tuxtalk.app"],
-                                               env=os.environ.copy())
-                                logger.info("Started dictation service via Python module")
+                def set_model(self, model_name: str):
+                    """Change the Whisper model (requires service restart).
 
-                            self.service_running = True
-                            if self.dbus_service:
-                                self.dbus_service.emit_service_state(True)
-                        except Exception as e:
-                            logger.error(f"Failed to start service: {e}", exc_info=True)
+                    Writes through config.save_config, the same path every
+                    other writer uses.
+                    """
+                    try:
+                        from .config import VALID_MODELS, load_config, save_config
 
-                    def stop_service(self):
-                        """Stop the dictation service"""
-                        from .service_launcher import stop_dictation_service
-                        try:
-                            stop_dictation_service()
-                            logger.info("Stopped dictation service")
-                            self.service_running = False
-                            if self.dbus_service:
-                                self.dbus_service.emit_service_state(False)
-                        except Exception as e:
-                            logger.error(f"Failed to stop service: {e}", exc_info=True)
+                        if model_name not in VALID_MODELS:
+                            logger.error(
+                                f"SetModel: refusing unknown model {model_name!r}"
+                            )
+                            return
 
-                    def set_model(self, model_name: str):
-                        """Change the Whisper model (requires service restart).
+                        cfg = load_config()
+                        cfg.model = model_name
+                        save_config(cfg)
+                        self.config.model = model_name
 
-                        Writes through config.save_config, the same path every
-                        other writer uses.
-                        """
-                        try:
-                            from .config import VALID_MODELS, load_config, save_config
+                        logger.info(f"Model changed to {model_name} (restart required)")
 
-                            if model_name not in VALID_MODELS:
-                                logger.error(
-                                    f"SetModel: refusing unknown model {model_name!r}"
-                                )
-                                return
+                        # Emit signal so extension updates
+                        if self.dbus_service:
+                            self.dbus_service.emit_model_changed(model_name)
+                    except Exception as e:
+                        logger.error(f"Failed to set model: {e}", exc_info=True)
 
-                            cfg = load_config()
-                            cfg.model = model_name
-                            save_config(cfg)
-                            self.config.model = model_name
+                def quit(self):
+                    """Quit the application"""
+                    # stop_dictation_service stops only the service; a
+                    # pkill by name would also match the tray and Preferences.
+                    from .service_launcher import stop_dictation_service
+                    try:
+                        stop_dictation_service()
+                    except Exception:
+                        pass
+                    sys.exit(0)
 
-                            logger.info(f"Model changed to {model_name} (restart required)")
+            app_instance = AppInstance(cfg)
+            # A stand-in only: the tray owns the bus name (see
+            # TuxTalkDBusService). This succeeds only with no tray running.
+            dbus_service = TuxTalkDBusService(app_instance, primary=False)
+            app_instance.dbus_service = dbus_service
 
-                            # Emit signal so extension updates
-                            if self.dbus_service:
-                                self.dbus_service.emit_model_changed(model_name)
-                        except Exception as e:
-                            logger.error(f"Failed to set model: {e}", exc_info=True)
+            # Emit initial state so extension syncs properly
+            dbus_service.emit_service_state(True)
+            dbus_service.emit_model_changed(cfg.model)
 
-                    def quit(self):
-                        """Quit the application"""
-                        # stop_dictation_service stops only the service; a
-                        # pkill by name would also match the tray and Preferences.
-                        from .service_launcher import stop_dictation_service
-                        try:
-                            stop_dictation_service()
-                        except Exception:
-                            pass
-                        sys.exit(0)
-
-                app_instance = AppInstance(cfg)
-                # A stand-in only: the tray owns the bus name (see
-                # TuxTalkDBusService). This succeeds only with no tray running.
-                dbus_service = TuxTalkDBusService(app_instance, primary=False)
-                app_instance.dbus_service = dbus_service
-
-                # Emit initial state so extension syncs properly
-                dbus_service.emit_service_state(True)
-                dbus_service.emit_model_changed(cfg.model)
-
-                print("D-Bus service initialized for GNOME extension")
-                logger.info("D-Bus service started successfully (no tray running)")
-            except Exception as e:
-                dbus_service = None
-                if type(e).__name__ == "NameExistsException":
-                    # The normal case: the tray already owns the name.
-                    logger.info("The tray owns the D-Bus name; the service doesn't register its own")
-                else:
-                    print(f"Failed to initialize D-Bus service: {e}")
-                    logger.error(f"D-Bus service initialization failed: {e}", exc_info=True)
-
-            # Initialize recording indicator if enabled
-            if cfg.recording_indicator:
-                try:
-                    recording_indicator = RecordingIndicator(
-                        position=cfg.indicator_position,
-                        offset_x=cfg.indicator_offset_x,
-                        offset_y=cfg.indicator_offset_y,
-                        size=cfg.indicator_size,
-                        style=cfg.indicator_style,
-                        color_mode=cfg.indicator_color_mode,
-                        custom_color=cfg.indicator_color,
-                        sensitivity=cfg.indicator_sensitivity,
-                        follow_window=getattr(cfg, "indicator_follow_window", False),
-                    )
-                    # Spectrum processor for the bars style; _feed_indicator uses it.
-                    global _spectrum_processor
-                    from .indicator_dsp import SpectrumProcessor
-                    _spectrum_processor = SpectrumProcessor(bins=20)
-                    print(f"Recording indicator initialized (position: {cfg.indicator_position}, size: {cfg.indicator_size})")
-                    logger.info(f"Recording indicator initialized at position: {cfg.indicator_position}, size: {cfg.indicator_size}")
-                except Exception as e:
-                    print(f"Failed to initialize recording indicator: {e}")
-                    logger.error(f"Recording indicator initialization failed: {e}", exc_info=True)
-            gtk_ok = True
+            print("D-Bus service initialized for GNOME extension")
+            logger.info("D-Bus service started successfully (no tray running)")
         except Exception as e:
-            print(f"Failed to initialize GTK components: {e}")
-            logger.error(f"GTK initialization failed: {e}", exc_info=True)
+            dbus_service = None
+            if type(e).__name__ == "NameExistsException":
+                # The normal case: the tray already owns the name.
+                logger.info("The tray owns the D-Bus name; the service doesn't register its own")
+            else:
+                print(f"Failed to initialize D-Bus service: {e}")
+                logger.error(f"D-Bus service initialization failed: {e}", exc_info=True)
 
-        # Outside the try above: a model that fails to load is not a GTK
-        # failure, and must not be loaded a second time below.
-        if gtk_ok:
-            # If the model still has to be downloaded, do it NOW, before the GTK
-            # loop thread starts. The download shows GTK dialogs and runs them on
-            # this thread; with Gtk.main() already running on the thread below,
-            # two threads would drive GTK at once and crash the service. An
-            # already-downloaded model (the normal case) loads later, after the
-            # loop is up.
-            from .model_helper import is_model_cached_fast
-            if not is_model_cached_fast(cfg.model):
-                model = _build_model_or_exit(cfg)
+        # Initialize recording indicator if enabled
+        if cfg.recording_indicator:
+            try:
+                recording_indicator = RecordingIndicator(
+                    position=cfg.indicator_position,
+                    offset_x=cfg.indicator_offset_x,
+                    offset_y=cfg.indicator_offset_y,
+                    size=cfg.indicator_size,
+                    style=cfg.indicator_style,
+                    color_mode=cfg.indicator_color_mode,
+                    custom_color=cfg.indicator_color,
+                    sensitivity=cfg.indicator_sensitivity,
+                    follow_window=getattr(cfg, "indicator_follow_window", False),
+                )
+                # Spectrum processor for the bars style; _feed_indicator uses it.
+                global _spectrum_processor
+                from .indicator_dsp import SpectrumProcessor
+                _spectrum_processor = SpectrumProcessor(bins=20)
+                print(f"Recording indicator initialized (position: {cfg.indicator_position}, size: {cfg.indicator_size})")
+                logger.info(f"Recording indicator initialized at position: {cfg.indicator_position}, size: {cfg.indicator_size}")
+            except Exception as e:
+                print(f"Failed to initialize recording indicator: {e}")
+                logger.error(f"Recording indicator initialization failed: {e}", exc_info=True)
+        gtk_ok = True
+    except Exception as e:
+        print(f"Failed to initialize GTK components: {e}")
+        logger.error(f"GTK initialization failed: {e}", exc_info=True)
 
-            # Start single GTK main loop in a background thread for both D-Bus and recording indicator
-            def run_gtk_loop():
-                print("Starting GTK main loop...")
-                Gtk.main()
+    # Outside the try above: a model that fails to load is not a GTK
+    # failure, and must not be loaded a second time below.
+    if gtk_ok:
+        # If the model still has to be downloaded, do it NOW, before the GTK
+        # loop thread starts. The download shows GTK dialogs and runs them on
+        # this thread; with Gtk.main() already running on the thread below,
+        # two threads would drive GTK at once and crash the service. An
+        # already-downloaded model (the normal case) loads later, after the
+        # loop is up.
+        from .model_helper import is_model_cached_fast
+        if not is_model_cached_fast(cfg.model):
+            model = _build_model_or_exit(cfg)
 
-            gtk_thread = threading.Thread(target=run_gtk_loop, daemon=True)
-            gtk_thread.start()
-            _gtk_loop_running = True
-            print("GTK main loop started in background thread")
+        # Start single GTK main loop in a background thread for both D-Bus and recording indicator
+        def run_gtk_loop():
+            print("Starting GTK main loop...")
+            Gtk.main()
+
+        gtk_thread = threading.Thread(target=run_gtk_loop, daemon=True)
+        gtk_thread.start()
+        _gtk_loop_running = True
+        print("GTK main loop started in background thread")
 
     if model is None:
         model = _build_model_or_exit(cfg)
