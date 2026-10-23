@@ -2128,8 +2128,8 @@ def _type_text_raw(text: str) -> bool:
         events = keyboard_layout.layout_key_events(text)
     except keyboard_layout.UntypableText as e:
         layout, blocker = e.args
-        logger.info(f"The {layout} keyboard layout can't type {blocker!r} "
-                    f"(U+{ord(blocker):04X}); pasting instead")
+        logger.info(f"The {layout} keyboard layout can't type {_loggable(blocker)}; "
+                    "pasting instead")
         if _is_wayland_session():
             return _paste_text(text)
         return _paste_text_x11(text)

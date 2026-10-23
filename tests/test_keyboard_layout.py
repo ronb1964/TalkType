@@ -357,12 +357,14 @@ def test_type_mode_on_a_us_keyboard_types_us_keys(typing, keyboard, monkeypatch)
     assert not calls
 
 
-def test_untypable_text_is_pasted_instead(typing, keyboard, monkeypatch):
+def test_untypable_text_is_pasted_instead(typing, keyboard, monkeypatch, caplog):
     app, calls = typing
     monkeypatch.setattr(kl, "active_layout", lambda: ("de", ""))
+    monkeypatch.setattr(app, "_log_transcripts", False)
     assert app._type_text_raw("nice 👍") is True
     assert calls == [("paste", "nice 👍")]
     assert not keyboard.events, "typed part of a dictation that was then pasted whole"
+    assert "👍" not in caplog.text, "a character of the dictation was logged"
 
 
 def test_untypable_text_on_x11_uses_the_x11_clipboard(typing, monkeypatch):
