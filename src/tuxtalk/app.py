@@ -2561,7 +2561,15 @@ def _determine_injection_method(injection_mode: str) -> tuple[str, str]:
         return ("type", "Auto: not a Wayland session, typing")
     return ("paste", "Auto: paste")
 
-def plan_line_breaks(text: str, is_terminal: bool) -> list[str]:
+# KDE's text editor component takes Shift+Enter as Insert Smart Newline,
+# which starts the new line with the symbols the line above starts with: "$45",
+# new line, "$25" came out as "$$25", and one more "$" each line after.
+_SMART_NEWLINE_CLASSES_LOWER = frozenset({
+    "org.kde.kwrite", "kwrite", "org.kde.kate", "kate", "org.kde.kdevelop",
+})
+
+
+def plan_line_breaks(text: str, one_paste: bool) -> list[str]:
     """How to deliver *text*'s line breaks: the chunks to paste, in order.
 
     One chunk means one paste with real newlines in it. More than one means
@@ -2571,14 +2579,17 @@ def plan_line_breaks(text: str, is_terminal: bool) -> list[str]:
     keystroke is simply ignored there and everything lands on one line. What a
     terminal does accept is a newline inside pasted text: bracketed paste (on by
     default in modern bash and zsh) inserts it literally instead of executing at
-    it. So a terminal gets one paste carrying real newlines.
+    it. So a terminal gets one paste carrying real newlines, and so do KDE's
+    editors (_SMART_NEWLINE_CLASSES_LOWER), where a pasted newline copies
+    nothing from the line above (in a code mode Kate still indents it, as
+    any paste). Not a plain Enter there: Kate's terminal panel would run it.
 
     Everywhere else keeps the keystroke, because in a chat input like Claude
     Desktop a literal newline SUBMITS the message instead of breaking the line.
     """
     marker = "\xa7SHIFT_ENTER\xa7"
     normalised = text.replace("\n", marker)
-    if is_terminal:
+    if one_paste:
         return [normalised.replace(marker, "\n")]
     return normalised.split(marker)
 
@@ -3176,8 +3187,10 @@ def _deliver_text(text: str, injection_mode: str, t0: float, one_block: bool = F
         marker = "\xa7SHIFT_ENTER\xa7"
         # A terminal honours a newline inside a paste, but treats Shift+Enter
         # like Enter, so it gets one chunk carrying real newlines and no
-        # keystrokes at all.
-        parts = plan_line_breaks(text, is_terminal_class(_query_focused_window_class()))
+        # keystrokes at all; so do KDE's editors (plan_line_breaks).
+        focused = _query_focused_window_class()
+        parts = plan_line_breaks(text, is_terminal_class(focused)
+                                 or (focused or "").lower() in _SMART_NEWLINE_CLASSES_LOWER)
         logger.info(f"Smart hybrid mode: {len(parts)} part(s)")
 
         # Track where delivery stopped, so the fallback types only the rest:

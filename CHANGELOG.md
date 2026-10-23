@@ -5,6 +5,12 @@ before 0.15.0, so older entries use that name.
 
 ## [0.18.0] - 2026-10-23
 
+- Saying "new line" in KWrite, Kate or KDevelop no longer copies the start
+  of the line above. TuxTalk pressed Shift+Enter between the lines, which
+  those editors take as Insert Smart Newline: after a line starting with
+  "$45", "new line, $25" came out as "$$25", and the same with "- ", "#" or
+  "//". The line breaks now go in with the pasted text, as in a terminal.
+
 - TuxTalk no longer types into password fields. Dictate with the cursor in
   a password box and nothing is typed: you hear the low beep and "TuxTalk
   doesn't type into password fields" shows over the window. The words aren't

@@ -705,6 +705,8 @@ def test_one_block_is_pasted_once_with_its_line_breaks(injection, monkeypatch):
 
 
 def test_dictation_still_pastes_line_by_line(injection, monkeypatch):
+    """In a chat app; KDE's editors get one paste (test_terminal_line_breaks)."""
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: "discord")
     monkeypatch.setattr(app, "_determine_injection_method", lambda mode: ("paste", "test"))
     app._inject_text("one§SHIFT_ENTER§two", "auto", 0)
     assert injection["pasted"] == ["one", "two"] and injection["shift_enter"] == 1
