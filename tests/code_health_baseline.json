@@ -1,0 +1,772 @@
+{
+ "files": {
+  "app.py": 5932,
+  "prefs.py": 7138,
+  "tray.py": 2548,
+  "welcome_dialog.py": 3350
+ },
+ "findings": {
+  "ai_cleanup.py::<module>::long_line": 4,
+  "ai_cleanup.py::CorrectionEngine._edit_once::undocumented": 1,
+  "ai_cleanup.py::CorrectionEngine._wait_until_ready::swallowed_error": 1,
+  "ai_cleanup.py::_model_path::swallowed_error": 1,
+  "ai_cleanup.py::fix_self_corrections::long_line": 1,
+  "ai_cleanup.py::make_engine_download_func.download::undocumented": 1,
+  "app.py::<module>::dated_comment": 2,
+  "app.py::<module>::long_line": 2,
+  "app.py::<module>::undocumented": 1,
+  "app.py::_apply_cleanup_settings::long_line": 2,
+  "app.py::_beep::swallowed_error": 1,
+  "app.py::_build_model_or_exit::swallowed_error": 1,
+  "app.py::_build_parakeet_gpu_model::swallowed_error": 1,
+  "app.py::_build_vulkan_model::long_line": 1,
+  "app.py::_build_vulkan_model::swallowed_error": 1,
+  "app.py::_claim_desktop_hotkeys::swallowed_error": 1,
+  "app.py::_deliver_text::long_line": 2,
+  "app.py::_deliver_text::swallowed_error": 1,
+  "app.py::_device_name::swallowed_error": 1,
+  "app.py::_edit_problem::swallowed_error": 1,
+  "app.py::_edit_selection::long_line": 1,
+  "app.py::_find_output_device::swallowed_error": 1,
+  "app.py::_finish_capture::long_line": 1,
+  "app.py::_frames_are_dead_mic::swallowed_error": 1,
+  "app.py::_get_device_samplerate::swallowed_error": 1,
+  "app.py::_grab_keyboards_hiding::swallowed_error": 1,
+  "app.py::_guard_large_v3_without_cuda::swallowed_error": 1,
+  "app.py::_handle_spoken_edit::dated_comment": 1,
+  "app.py::_handle_undo::long_line": 2,
+  "app.py::_inject_key::long_line": 1,
+  "app.py::_inject_text::swallowed_error": 1,
+  "app.py::_input_access_diagnosis::swallowed_error": 1,
+  "app.py::_loop_evdev::swallowed_error": 1,
+  "app.py::_mark_service_ready::swallowed_error": 1,
+  "app.py::_notify_tray_hotkey_pressed::swallowed_error": 1,
+  "app.py::_notify_tray_recording_state::swallowed_error": 1,
+  "app.py::_notify_tray_running_engine::swallowed_error": 1,
+  "app.py::_paste_text::long_line": 1,
+  "app.py::_paste_text::swallowed_error": 1,
+  "app.py::_prepare_text::dated_comment": 1,
+  "app.py::_query_reported_window_class::swallowed_error": 1,
+  "app.py::_rediscover_devices::swallowed_error": 1,
+  "app.py::_report_undelivered::swallowed_error": 1,
+  "app.py::_resample_audio::long_line": 1,
+  "app.py::_resolve_boundary::dated_comment": 1,
+  "app.py::_show_voice_commands_via_dbus::swallowed_error": 1,
+  "app.py::_strip_hallucinations::long_line": 1,
+  "app.py::_transcribe_and_inject::dated_comment": 1,
+  "app.py::_transcribe_and_inject::long_line": 1,
+  "app.py::_transcribe_audio::long_line": 5,
+  "app.py::_type_text_raw::swallowed_error": 1,
+  "app.py::_wait_for_keys_up::swallowed_error": 1,
+  "app.py::build_model::long_line": 3,
+  "app.py::main.AppInstance.quit::swallowed_error": 1,
+  "app.py::main.AppInstance::undocumented": 1,
+  "app.py::main::long_line": 4,
+  "app.py::main::swallowed_error": 1,
+  "app.py::main::undocumented": 1,
+  "app.py::parse_args::long_line": 3,
+  "app.py::stop_recording::long_line": 1,
+  "audio_duck.py::<module>::dated_comment": 1,
+  "audio_duck.py::AudioDucker._duck_now::undocumented": 1,
+  "audio_duck.py::AudioDucker._restore_now::dated_comment": 1,
+  "audio_duck.py::AudioDucker._restore_now::undocumented": 1,
+  "audio_duck.py::AudioDucker._run_jobs::swallowed_error": 1,
+  "audio_duck.py::AudioDucker._settle_owed::long_line": 1,
+  "audio_duck.py::_set_volume::long_line": 1,
+  "audio_duck.py::reset_remembered::long_line": 1,
+  "chunking.py::PauseDetector.__init__::undocumented": 1,
+  "chunking.py::PauseDetector._window::undocumented": 1,
+  "cleanup.py::<module>::long_line": 1,
+  "cleanup.py::_remove_fillers.repl::undocumented": 1,
+  "clipboard.py::ClipboardKeeper._restore::swallowed_error": 1,
+  "clipboard.py::ClipboardKeeper._restore::undocumented": 1,
+  "clipboard.py::_read_primary::swallowed_error": 1,
+  "clipboard.py::_read_text::swallowed_error": 1,
+  "clipboard.py::_sensitive_supported::swallowed_error": 1,
+  "clipboard.py::_wl_paste::long_line": 1,
+  "clipboard.py::copy_selection.put_back::swallowed_error": 1,
+  "compositor_focus.py::_CosmicWindows._follow::undocumented": 1,
+  "compositor_focus.py::_CosmicWindows._on_event::undocumented": 1,
+  "compositor_focus.py::_CosmicWindows.run::swallowed_error": 1,
+  "compositor_focus.py::focused_class::swallowed_error": 1,
+  "compositor_focus.py::focused_rect::swallowed_error": 1,
+  "config.py::<module>::long_line": 1,
+  "config.py::<module>::undocumented": 1,
+  "config.py::Settings::long_line": 30,
+  "config.py::Settings::undocumented": 1,
+  "config.py::_validation_problems::long_line": 14,
+  "config.py::default_source_name::swallowed_error": 1,
+  "config.py::find_input_device::long_line": 1,
+  "config.py::find_input_device::swallowed_error": 2,
+  "config.py::load_config::long_line": 1,
+  "config.py::load_config::swallowed_error": 1,
+  "config.py::load_custom_commands::swallowed_error": 1,
+  "config.py::write_text_atomic::long_line": 1,
+  "control.py::_parse::undocumented": 1,
+  "cosmic_hotkeys.py::claim.change::undocumented": 1,
+  "cuda_helper.py::download_cuda_libraries::long_line": 3,
+  "cuda_helper.py::has_cuda_libraries::long_line": 1,
+  "cuda_helper.py::has_cuda_libraries::swallowed_error": 1,
+  "cuda_helper.py::show_cuda_download_dialog::long_line": 3,
+  "custom_words.py::_joinable::long_line": 1,
+  "custom_words.py::fix_spelling::long_line": 1,
+  "dbus_service.py::<module>::long_line": 1,
+  "dbus_service.py::TuxTalkDBusService.CheckForUpdates.do_check::undocumented": 1,
+  "dbus_service.py::TuxTalkDBusService.owns_name::swallowed_error": 1,
+  "desktop_detect.py::_is_extension_enabled_via_dbus::swallowed_error": 1,
+  "desktop_detect.py::tray_host_available::swallowed_error": 1,
+  "desktop_identity.py::apply::swallowed_error": 1,
+  "download_progress_dialog.py::UnifiedDownloadDialog._check_all_complete::long_line": 1,
+  "download_progress_dialog.py::UnifiedDownloadDialog._mark_task_complete.update_ui::long_line": 1,
+  "download_progress_dialog.py::UnifiedDownloadDialog._mark_task_complete.update_ui::undocumented": 1,
+  "download_progress_dialog.py::show_unified_download_dialog::long_line": 3,
+  "download_utils.py::free_space_bytes::swallowed_error": 1,
+  "engine_process.py::set_parent_death_signal::swallowed_error": 1,
+  "explain.py::main::undocumented": 1,
+  "explain.py::place_over_active_window::swallowed_error": 1,
+  "explain.py::start_helper_window::swallowed_error": 1,
+  "extension_helper.py::<module>::long_line": 2,
+  "extension_helper.py::download_and_install_extension.download_progress_hook::long_line": 1,
+  "extension_helper.py::download_and_install_extension::long_line": 1,
+  "extension_helper.py::download_and_install_extension::swallowed_error": 1,
+  "extension_helper.py::install_extension::long_line": 1,
+  "extension_helper.py::install_extension_from_local::swallowed_error": 1,
+  "extension_helper.py::uninstall_extension::swallowed_error": 2,
+  "file_transcribe.py::<module>::long_line": 1,
+  "file_transcribe.py::FileEngine.close::swallowed_error": 1,
+  "file_transcribe.py::FileEngine.reload_words::swallowed_error": 1,
+  "file_transcribe.py::FileEngine.text::undocumented": 1,
+  "file_transcribe.py::load_engine::long_line": 3,
+  "file_transcribe.py::load_engine::swallowed_error": 1,
+  "fix_word_dialog.py::_FixWordDialog.__init__::dated_comment": 1,
+  "fix_word_dialog.py::_FixWordDialog.__init__::undocumented": 1,
+  "fix_word_dialog.py::_FixWordDialog._on_save::undocumented": 1,
+  "fix_word_dialog.py::_FixWordDialog._update::swallowed_error": 1,
+  "fix_word_dialog.py::_FixWordDialog::undocumented": 1,
+  "gnome_keybindings.py::_set::swallowed_error": 1,
+  "gnome_keybindings.py::disable_for_hotkey_test::swallowed_error": 1,
+  "gnome_keybindings.py::restore::swallowed_error": 1,
+  "help_dialog.py::show_help_dialog.create_tab::undocumented": 1,
+  "help_dialog.py::show_help_dialog::dated_comment": 1,
+  "help_dialog.py::show_help_dialog::long_line": 10,
+  "hotkey_helper.py::Helper.__init__::long_line": 1,
+  "hotkey_helper.py::Helper.__init__::undocumented": 1,
+  "hotkey_helper.py::Helper.admit::undocumented": 1,
+  "hotkey_helper.py::Helper.deliver_down::undocumented": 1,
+  "hotkey_helper.py::Helper.handle::undocumented": 1,
+  "hotkey_helper.py::Helper.on_client_data::undocumented": 1,
+  "hotkey_helper.py::Helper.on_key::undocumented": 1,
+  "hotkey_helper.py::Helper.run_once::undocumented": 1,
+  "hotkey_helper.py::Helper.start_hide::undocumented": 1,
+  "hotkey_helper.py::Helper::undocumented": 1,
+  "hotkey_helper.py::main::undocumented": 1,
+  "hotkey_helper_client.py::HelperKeyboard._handle::long_line": 1,
+  "hotkey_helper_client.py::HelperKeyboard._handle::undocumented": 1,
+  "input_backends.py::PortalInputBackend._on_activated::undocumented": 1,
+  "input_backends.py::PortalInputBackend._shortcut_id::swallowed_error": 1,
+  "input_backends.py::PortalInputBackend.start.bind::undocumented": 1,
+  "input_backends.py::PortalInputBackend.start::undocumented": 1,
+  "keyboard_layout.py::KeyPlanner._index::long_line": 2,
+  "keyboard_layout.py::_lib::long_line": 1,
+  "keyboard_layout.py::_x11_layout::swallowed_error": 1,
+  "keyboard_layout.py::_x11_layout::undocumented": 1,
+  "keyboard_layout.py::active_layout::swallowed_error": 2,
+  "keyboard_layout.py::shortcut_keycode::swallowed_error": 1,
+  "kwin_focus.py::build_script::long_line": 2,
+  "kwin_focus.py::start::swallowed_error": 1,
+  "kwin_focus.py::stop::swallowed_error": 1,
+  "kwin_hotkeys.py::_app_shortcut_clashes::swallowed_error": 3,
+  "kwin_hotkeys.py::_log_refused::swallowed_error": 1,
+  "kwin_hotkeys.py::_unregister_ours::swallowed_error": 2,
+  "kwin_hotkeys.py::claim::swallowed_error": 1,
+  "kwin_hotkeys.py::release::swallowed_error": 2,
+  "kwin_hotkeys.py::session_bus._Bus.call::undocumented": 1,
+  "kwin_hotkeys.py::session_bus._Bus::undocumented": 1,
+  "libei_ctypes.py::LibeiSession.__init__::undocumented": 1,
+  "libei_ctypes.py::LibeiSession.press_chords.emit::undocumented": 1,
+  "media_pause.py::MediaPauser._pause_now::swallowed_error": 1,
+  "media_pause.py::MediaPauser._resume_now::swallowed_error": 1,
+  "media_pause.py::MediaPauser._run::swallowed_error": 1,
+  "media_pause.py::MediaPauser._status::swallowed_error": 1,
+  "menu_window.py::MenuWindow.__init__::undocumented": 1,
+  "menu_window.py::MenuWindow._button::dated_comment": 1,
+  "menu_window.py::MenuWindow._popup_performance::undocumented": 1,
+  "menu_window.py::MenuWindow.refresh::swallowed_error": 1,
+  "model_helper.py::_loads_on_cpu::swallowed_error": 1,
+  "model_helper.py::download_model_with_progress.do_download.GtkProgressTqdm.update::long_line": 1,
+  "model_helper.py::download_model_with_progress.do_download::long_line": 2,
+  "model_helper.py::download_model_with_progress::long_line": 3,
+  "model_helper.py::download_parakeet_update::long_line": 1,
+  "model_helper.py::is_model_cached_fast::swallowed_error": 1,
+  "normalize.py::<module>::dated_comment": 3,
+  "normalize.py::<module>::long_line": 3,
+  "notification_help.py::_install_css_once::swallowed_error": 1,
+  "notification_help.py::show_notification_help_window::swallowed_error": 1,
+  "notify.py::notify::swallowed_error": 1,
+  "output_backends.py::LibeiOutputBackend._close_session::swallowed_error": 1,
+  "parakeet_bias.py::WordBooster.__init__::undocumented": 1,
+  "parakeet_bias.py::boosted_tdt_decoding._decoding::undocumented": 1,
+  "parakeet_engine.py::ParakeetModel.set_words::long_line": 2,
+  "parakeet_engine.py::cached_model_dir::swallowed_error": 1,
+  "parakeet_gpu.py::<module>::long_line": 1,
+  "parakeet_gpu.py::ParakeetGpuModel.__init__::undocumented": 1,
+  "parakeet_gpu.py::ParakeetGpuModel._engine_messages::swallowed_error": 1,
+  "parakeet_gpu.py::ParakeetGpuModel._start::undocumented": 1,
+  "parakeet_gpu_worker.py::load_engine.set_words::undocumented": 1,
+  "parakeet_gpu_worker.py::main::swallowed_error": 2,
+  "parakeet_ultra.py::make_download_func.download::undocumented": 1,
+  "prefs.py::<module>::undocumented": 1,
+  "prefs.py::PreferencesWindow.__init__::undocumented": 1,
+  "prefs.py::PreferencesWindow._add_backup_section::dated_comment": 1,
+  "prefs.py::PreferencesWindow._check_cuda_availability::swallowed_error": 1,
+  "prefs.py::PreferencesWindow._check_gpu_status::long_line": 4,
+  "prefs.py::PreferencesWindow._check_gpu_status::swallowed_error": 1,
+  "prefs.py::PreferencesWindow._desktop_accent_rgba::swallowed_error": 1,
+  "prefs.py::PreferencesWindow._download_selected_model::long_line": 1,
+  "prefs.py::PreferencesWindow._edit_word_dialog::swallowed_error": 1,
+  "prefs.py::PreferencesWindow._find_playback_device::swallowed_error": 2,
+  "prefs.py::PreferencesWindow._fit_to_screen::swallowed_error": 1,
+  "prefs.py::PreferencesWindow._get_device_samplerate::swallowed_error": 1,
+  "prefs.py::PreferencesWindow._handle_update_result::long_line": 2,
+  "prefs.py::PreferencesWindow._has_unapplied_changes::swallowed_error": 1,
+  "prefs.py::PreferencesWindow._install_capture_scroll::swallowed_error": 1,
+  "prefs.py::PreferencesWindow._kde_refused::swallowed_error": 1,
+  "prefs.py::PreferencesWindow._load_css::swallowed_error": 1,
+  "prefs.py::PreferencesWindow._numbers_option::long_line": 5,
+  "prefs.py::PreferencesWindow._nvidia_gpu::swallowed_error": 1,
+  "prefs.py::PreferencesWindow._on_cell_editing_started.on_key_press::undocumented": 1,
+  "prefs.py::PreferencesWindow._on_download_update_clicked.do_download_and_install::undocumented": 1,
+  "prefs.py::PreferencesWindow._on_download_update_clicked.download_failed::long_line": 1,
+  "prefs.py::PreferencesWindow._on_download_update_clicked.download_failed::undocumented": 1,
+  "prefs.py::PreferencesWindow._on_fix_typing_clicked.work::long_line": 1,
+  "prefs.py::PreferencesWindow._on_fix_typing_clicked.work::swallowed_error": 1,
+  "prefs.py::PreferencesWindow._on_fix_typing_clicked::swallowed_error": 1,
+  "prefs.py::PreferencesWindow._on_install_extension_clicked.install_thread.finish_install::undocumented": 1,
+  "prefs.py::PreferencesWindow._on_load_backup_clicked::long_line": 1,
+  "prefs.py::PreferencesWindow._on_load_backup_clicked::undocumented": 1,
+  "prefs.py::PreferencesWindow._on_model_changed::long_line": 2,
+  "prefs.py::PreferencesWindow._on_model_changed::swallowed_error": 1,
+  "prefs.py::PreferencesWindow._on_remove_word::swallowed_error": 1,
+  "prefs.py::PreferencesWindow._on_remove_word::undocumented": 1,
+  "prefs.py::PreferencesWindow._on_reset_stats::undocumented": 1,
+  "prefs.py::PreferencesWindow._on_restore_earlier_clicked::undocumented": 1,
+  "prefs.py::PreferencesWindow._on_save_backup_clicked::undocumented": 1,
+  "prefs.py::PreferencesWindow._on_test_hotkeys._on_hotkey_signal::long_line": 2,
+  "prefs.py::PreferencesWindow._on_test_hotkeys::long_line": 4,
+  "prefs.py::PreferencesWindow._on_test_hotkeys::swallowed_error": 1,
+  "prefs.py::PreferencesWindow._on_uninstall_clicked::swallowed_error": 1,
+  "prefs.py::PreferencesWindow._pick_several_languages::long_line": 1,
+  "prefs.py::PreferencesWindow._refresh_device_options::long_line": 2,
+  "prefs.py::PreferencesWindow._refresh_device_options::swallowed_error": 1,
+  "prefs.py::PreferencesWindow._release_pidfile::swallowed_error": 1,
+  "prefs.py::PreferencesWindow._scroll_into_view.scroll::undocumented": 1,
+  "prefs.py::PreferencesWindow._send_automatically_option::long_line": 1,
+  "prefs.py::PreferencesWindow._show_extension_status::long_line": 4,
+  "prefs.py::PreferencesWindow._show_extension_status::swallowed_error": 1,
+  "prefs.py::PreferencesWindow._show_last_backup::long_line": 1,
+  "prefs.py::PreferencesWindow._show_typing_status::long_line": 1,
+  "prefs.py::PreferencesWindow._show_typing_status::swallowed_error": 1,
+  "prefs.py::PreferencesWindow._start_pause_test::swallowed_error": 2,
+  "prefs.py::PreferencesWindow._stop_mic_test::swallowed_error": 1,
+  "prefs.py::PreferencesWindow._stop_pause_test::swallowed_error": 1,
+  "prefs.py::PreferencesWindow._swiss_spelling_check::long_line": 2,
+  "prefs.py::PreferencesWindow._tap_reconfigure::long_line": 1,
+  "prefs.py::PreferencesWindow._update_model_combo_hint::dated_comment": 1,
+  "prefs.py::PreferencesWindow._update_recommended_row::swallowed_error": 1,
+  "prefs.py::PreferencesWindow._vulkan_offered::swallowed_error": 1,
+  "prefs.py::PreferencesWindow._watch_custom_commands_file::swallowed_error": 1,
+  "prefs.py::PreferencesWindow.check_and_download_model.download_model::swallowed_error": 1,
+  "prefs.py::PreferencesWindow.check_and_download_model::long_line": 1,
+  "prefs.py::PreferencesWindow.create_advanced_tab::long_line": 23,
+  "prefs.py::PreferencesWindow.create_advanced_tab::undocumented": 1,
+  "prefs.py::PreferencesWindow.create_audio_tab._offset_row::undocumented": 1,
+  "prefs.py::PreferencesWindow.create_audio_tab::long_line": 13,
+  "prefs.py::PreferencesWindow.create_audio_tab::swallowed_error": 1,
+  "prefs.py::PreferencesWindow.create_audio_tab::undocumented": 1,
+  "prefs.py::PreferencesWindow.create_commands_tab::swallowed_error": 1,
+  "prefs.py::PreferencesWindow.create_general_tab::long_line": 12,
+  "prefs.py::PreferencesWindow.create_general_tab::swallowed_error": 2,
+  "prefs.py::PreferencesWindow.create_general_tab::undocumented": 1,
+  "prefs.py::PreferencesWindow.create_ui::long_line": 1,
+  "prefs.py::PreferencesWindow.create_ui::undocumented": 1,
+  "prefs.py::PreferencesWindow.create_updates_tab::dated_comment": 1,
+  "prefs.py::PreferencesWindow.create_updates_tab::long_line": 3,
+  "prefs.py::PreferencesWindow.get_system_mic_volume::swallowed_error": 2,
+  "prefs.py::PreferencesWindow.load_config::swallowed_error": 1,
+  "prefs.py::PreferencesWindow.on_replay_recording::swallowed_error": 1,
+  "prefs.py::PreferencesWindow.on_start_recording::swallowed_error": 1,
+  "prefs.py::PreferencesWindow.on_stop_recording::swallowed_error": 1,
+  "prefs.py::PreferencesWindow.on_tab_switched::swallowed_error": 1,
+  "prefs.py::PreferencesWindow.restart_service::swallowed_error": 1,
+  "prefs.py::PreferencesWindow.save_config::swallowed_error": 3,
+  "prefs.py::PreferencesWindow.set_system_mic_volume::swallowed_error": 2,
+  "prefs.py::PreferencesWindow::undocumented": 1,
+  "prefs.py::SegmentedVUMeter.__init__::undocumented": 1,
+  "prefs.py::_acquire_prefs_singleton._cleanup::swallowed_error": 1,
+  "prefs.py::_acquire_prefs_singleton::swallowed_error": 2,
+  "prefs.py::_acquire_prefs_singleton::undocumented": 1,
+  "prefs.py::_coerce_config_types::swallowed_error": 1,
+  "prefs.py::_list_pulse_sources::swallowed_error": 1,
+  "prefs.py::_on_gnome::swallowed_error": 1,
+  "prefs.py::_pulse_source_for_mic::long_line": 1,
+  "prefs.py::main::long_line": 1,
+  "prefs.py::main::undocumented": 1,
+  "prefs.py::several_languages_label::long_line": 1,
+  "recommend.py::_nvidia_name::swallowed_error": 1,
+  "recommend.py::detect_hardware::swallowed_error": 1,
+  "recording_indicator.py::RecordingIndicator.__init__::undocumented": 1,
+  "recording_indicator.py::RecordingIndicator._accent_rgb::swallowed_error": 1,
+  "recording_indicator.py::RecordingIndicator.draw_orb::long_line": 1,
+  "recording_indicator.py::RecordingIndicator.draw_particles::long_line": 2,
+  "recording_indicator.py::RecordingIndicator.draw_pill_background::long_line": 7,
+  "recording_indicator.py::RecordingIndicator.hide_indicator._do_hide::undocumented": 1,
+  "recording_indicator.py::RecordingIndicator.show_at_position._do_show::undocumented": 1,
+  "rename_migration.py::_default_gnome_favorites::swallowed_error": 1,
+  "rename_migration.py::_install_tuxtalk_icon::swallowed_error": 1,
+  "rename_migration.py::_plasma_script::long_line": 1,
+  "rename_migration.py::adopt_old_install::long_line": 1,
+  "rename_migration.py::repin_launchers::swallowed_error": 2,
+  "rename_migration.py::run_at_startup::swallowed_error": 1,
+  "screen_message.py::_show_now.draw::undocumented": 1,
+  "screen_message.py::_show_now.set_text::long_line": 1,
+  "screen_message.py::_show_now::dated_comment": 1,
+  "screen_message.py::_show_over_window_now::swallowed_error": 1,
+  "screen_message.py::hide::swallowed_error": 1,
+  "screen_message.py::relabel::swallowed_error": 1,
+  "screen_message.py::show::swallowed_error": 1,
+  "screen_message.py::show_over_active_window::swallowed_error": 1,
+  "secure_input.py::_heredoc::long_line": 1,
+  "secure_input.py::install_script::long_line": 1,
+  "service_launcher.py::release_desktop_hotkeys::swallowed_error": 1,
+  "silence.py::<module>::long_line": 1,
+  "spoken_numbers.py::_small_digits_as_words.word::undocumented": 1,
+  "torch_init.py::<module>::swallowed_error": 1,
+  "torch_init.py::init_cuda_for_pytorch::swallowed_error": 2,
+  "transcribe_window.py::TranscribeWindow.__init__::long_line": 1,
+  "transcribe_window.py::TranscribeWindow.__init__::undocumented": 1,
+  "transcribe_window.py::TranscribeWindow._may_discard::dated_comment": 1,
+  "transcribe_window.py::TranscribeWindow._on_choose::undocumented": 1,
+  "transcribe_window.py::TranscribeWindow._on_done::undocumented": 1,
+  "transcribe_window.py::TranscribeWindow._on_progress::long_line": 1,
+  "transcribe_window.py::TranscribeWindow._save::long_line": 1,
+  "transcribe_window.py::TranscribeWindow._save::undocumented": 1,
+  "transcribe_window.py::TranscribeWindow._show_text::long_line": 1,
+  "transcribe_window.py::TranscribeWindow._work::long_line": 1,
+  "transcribe_window.py::TranscribeWindow._work::undocumented": 1,
+  "transcribe_window.py::TranscribeWindow.show_kept::long_line": 1,
+  "transcribe_window.py::TranscribeWindow::undocumented": 1,
+  "tray.py::<module>::undocumented": 1,
+  "tray.py::DictationTray.__init__::swallowed_error": 1,
+  "tray.py::DictationTray.__init__::undocumented": 1,
+  "tray.py::DictationTray._auto_start_service::long_line": 1,
+  "tray.py::DictationTray._build_performance_submenu::long_line": 2,
+  "tray.py::DictationTray._check_tray_visibility::swallowed_error": 1,
+  "tray.py::DictationTray._download_update.download_complete::long_line": 1,
+  "tray.py::DictationTray._get_current_preset::swallowed_error": 1,
+  "tray.py::DictationTray._init_dbus_service.TrayAppInstance.config::swallowed_error": 1,
+  "tray.py::DictationTray._shut_down::swallowed_error": 1,
+  "tray.py::DictationTray._stop_kwin_focus_provider::swallowed_error": 1,
+  "tray.py::DictationTray.is_service_running::swallowed_error": 1,
+  "tray.py::DictationTray.restart_service._do_restart::undocumented": 1,
+  "tray.py::DictationTray.set_performance_preset::long_line": 2,
+  "tray.py::DictationTray.set_performance_preset::swallowed_error": 1,
+  "tray.py::DictationTray.show_about_dialog::long_line": 1,
+  "tray.py::DictationTray.show_about_dialog::swallowed_error": 1,
+  "tray.py::DictationTray.show_menu_window_if_no_tray::swallowed_error": 1,
+  "tray.py::DictationTray::undocumented": 1,
+  "tray.py::_acquire_tray_singleton::swallowed_error": 1,
+  "tray.py::_open_from_command_line::swallowed_error": 1,
+  "tray.py::_refresh_kde_menu_cache::swallowed_error": 1,
+  "tray.py::_run_command_line::swallowed_error": 1,
+  "tray.py::_show_already_running::swallowed_error": 1,
+  "tray.py::main.check_and_show_update_notification::swallowed_error": 1,
+  "tray.py::main.check_and_show_update_notification::undocumented": 1,
+  "tray.py::main.show_first_run_setup::long_line": 1,
+  "tray.py::main.show_first_run_setup::undocumented": 1,
+  "tray.py::main::swallowed_error": 2,
+  "tray.py::main::undocumented": 1,
+  "tray.py::maybe_show_recommend_notice::swallowed_error": 1,
+  "ui_style.py::<module>::dated_comment": 1,
+  "ui_style.py::<module>::long_line": 1,
+  "ui_style.py::Fold.__init__::undocumented": 1,
+  "ui_style.py::forward_combo_scroll._on_scroll::swallowed_error": 1,
+  "ui_style.py::forward_combo_scroll._on_scroll::undocumented": 1,
+  "uinput_helper.py::<module>::swallowed_error": 1,
+  "uinput_helper.py::_readable_input_devices::swallowed_error": 1,
+  "uinput_helper.py::_readable_keyboards::swallowed_error": 3,
+  "uinput_helper.py::_username::swallowed_error": 1,
+  "uinput_helper.py::check_input_read_permission::swallowed_error": 1,
+  "uinput_helper.py::get_fix_script_content::swallowed_error": 1,
+  "uinput_helper.py::is_keyboard_device::swallowed_error": 1,
+  "uninstall.py::_package_lines::long_line": 1,
+  "uninstall.py::_wait_for.run::swallowed_error": 1,
+  "uninstall.py::find::long_line": 2,
+  "update_checker.py::_detect_system_package_manager::swallowed_error": 3,
+  "update_checker.py::_fetch_failure_message::long_line": 1,
+  "update_checker.py::_install_app_icon::long_line": 1,
+  "update_checker.py::_install_app_icon::swallowed_error": 2,
+  "update_checker.py::_refresh_desktop_menu_cache::swallowed_error": 3,
+  "update_checker.py::check_just_updated::swallowed_error": 2,
+  "update_checker.py::compare_versions::swallowed_error": 1,
+  "update_checker.py::fetch_extension_version_from_release::swallowed_error": 1,
+  "update_checker.py::fetch_release_by_tag::swallowed_error": 1,
+  "update_checker.py::get_extension_version::long_line": 1,
+  "update_checker.py::install_appimage_update::swallowed_error": 1,
+  "update_checker.py::restart_via_launcher::long_line": 1,
+  "update_checker.py::restart_via_launcher::swallowed_error": 1,
+  "virtual_keyboard.py::<module>::dated_comment": 2,
+  "virtual_keyboard.py::_keyboard_class::undocumented": 1,
+  "virtual_keyboard.py::send::long_line": 1,
+  "vocabulary.py::save_fix::swallowed_error": 1,
+  "voice_commands_dialog.py::_build_markup::long_line": 6,
+  "voice_commands_dialog.py::show_voice_commands_dialog::swallowed_error": 1,
+  "voice_edit_rules.py::<module>::long_line": 7,
+  "voice_edit_rules.py::_remove_phrase.change::undocumented": 1,
+  "voice_navigation.py::<module>::long_line": 6,
+  "voice_navigation.py::chords::dated_comment": 2,
+  "voice_navigation.py::plan::long_line": 2,
+  "vulkan_setup_dialogs.py::_remember_speed_result::swallowed_error": 1,
+  "vulkan_setup_dialogs.py::run_speed_check.work::swallowed_error": 1,
+  "welcome_dialog.py::SplashScreen.__init__::long_line": 11,
+  "welcome_dialog.py::WelcomeDialog.__init__::long_line": 1,
+  "welcome_dialog.py::WelcomeDialog.__init__::swallowed_error": 1,
+  "welcome_dialog.py::WelcomeDialog._build_base_content::long_line": 1,
+  "welcome_dialog.py::WelcomeDialog._build_dialog::dated_comment": 1,
+  "welcome_dialog.py::WelcomeDialog._build_dialog::long_line": 5,
+  "welcome_dialog.py::WelcomeDialog._build_footer::long_line": 1,
+  "welcome_dialog.py::WelcomeDialog._build_gnome_extension_option::long_line": 3,
+  "welcome_dialog.py::WelcomeDialog._build_portaudio_setup_section::long_line": 1,
+  "welcome_dialog.py::WelcomeDialog._build_recommendation::long_line": 2,
+  "welcome_dialog.py::WelcomeDialog._build_typing_setup_section::long_line": 1,
+  "welcome_dialog.py::WelcomeDialog._finish_install_portaudio::long_line": 1,
+  "welcome_dialog.py::WelcomeDialog._refresh_recommendation::long_line": 1,
+  "welcome_dialog.py::WelcomeDialog._report_fix_typing::dated_comment": 1,
+  "welcome_dialog.py::WelcomeDialog._run_in_background.runner::swallowed_error": 1,
+  "welcome_dialog.py::_apply_first_run_setup::long_line": 3,
+  "welcome_dialog.py::_download_vulkan_model_first_run::long_line": 1,
+  "welcome_dialog.py::_extension_already_active::swallowed_error": 1,
+  "welcome_dialog.py::_flush_pending_events::swallowed_error": 1,
+  "welcome_dialog.py::_menu_location::swallowed_error": 1,
+  "welcome_dialog.py::_open_key_devices::swallowed_error": 2,
+  "welcome_dialog.py::_saved_hold_key::swallowed_error": 1,
+  "welcome_dialog.py::show_hotkey_test_dialog.evdev_key_reader::swallowed_error": 3,
+  "welcome_dialog.py::show_hotkey_test_dialog.on_key_press::undocumented": 1,
+  "welcome_dialog.py::show_hotkey_test_dialog::long_line": 1,
+  "welcome_dialog.py::show_hotkey_test_dialog::swallowed_error": 1,
+  "welcome_dialog.py::show_setup_complete_dialog.on_restart_now::undocumented": 1,
+  "welcome_dialog.py::show_setup_complete_dialog::dated_comment": 1,
+  "welcome_dialog.py::show_setup_complete_dialog::long_line": 1,
+  "welcome_dialog.py::show_welcome_and_install._bg_install::swallowed_error": 1,
+  "welcome_dialog.py::show_welcome_dialog.show_dialog_after_splash::swallowed_error": 1,
+  "whisper_vulkan.py::VulkanWhisperModel.__init__::undocumented": 1,
+  "whisper_vulkan.py::VulkanWhisperModel._start::swallowed_error": 1,
+  "whisper_vulkan.py::VulkanWhisperModel._start::undocumented": 1,
+  "whisper_vulkan.py::VulkanWhisperModel.transcribe::long_line": 1,
+  "whisper_vulkan.py::make_engine_download_func.download::undocumented": 1,
+  "whisper_vulkan.py::model_path::swallowed_error": 1,
+  "window_geometry.py::_reported::swallowed_error": 1,
+  "window_geometry.py::_x11_active_rect::swallowed_error": 1,
+  "window_geometry.py::screen_monitors::swallowed_error": 1,
+  "x11_hotkeys.py::<module>::long_line": 1
+ },
+ "functions": {
+  "ai_cleanup.py::_deletion_allowed": {
+   "decisions": 17
+  },
+  "ai_cleanup.py::_is_restated_correction": {
+   "decisions": 18
+  },
+  "ai_cleanup.py::fix_self_corrections": {
+   "decisions": 24
+  },
+  "app.py::_deliver_text": {
+   "decisions": 49,
+   "lines": 245
+  },
+  "app.py::_edit_selection": {
+   "decisions": 48,
+   "lines": 157
+  },
+  "app.py::_finish_capture": {
+   "decisions": 18
+  },
+  "app.py::_handle_key_event": {
+   "decisions": 58,
+   "lines": 140
+  },
+  "app.py::_handle_spoken_edit": {
+   "decisions": 16
+  },
+  "app.py::_handle_undo": {
+   "decisions": 22,
+   "lines": 109
+  },
+  "app.py::_loop_evdev": {
+   "decisions": 32,
+   "lines": 170
+  },
+  "app.py::_paste_text": {
+   "decisions": 18
+  },
+  "app.py::_prepare_text": {
+   "decisions": 19
+  },
+  "app.py::_resolve_boundary": {
+   "decisions": 20
+  },
+  "app.py::_service_tick": {
+   "decisions": 20
+  },
+  "app.py::_transcribe_and_inject": {
+   "decisions": 73,
+   "lines": 271
+  },
+  "app.py::_transcribe_audio": {
+   "decisions": 25,
+   "lines": 120
+  },
+  "app.py::build_model": {
+   "decisions": 20,
+   "lines": 109
+  },
+  "app.py::main": {
+   "decisions": 25,
+   "lines": 289
+  },
+  "audio_duck.py::AudioDucker._restore_now": {
+   "decisions": 16
+  },
+  "autostart.py::get_launch_command": {
+   "decisions": 22
+  },
+  "autostart.py::repair_stale_appimage_autostart": {
+   "decisions": 17
+  },
+  "compositor_focus.py::_CosmicWindows._on_event": {
+   "decisions": 16
+  },
+  "config.py::_validation_problems": {
+   "decisions": 16
+  },
+  "config.py::find_input_device": {
+   "decisions": 32,
+   "lines": 101
+  },
+  "cuda_helper.py::download_cuda_libraries": {
+   "decisions": 49,
+   "lines": 207
+  },
+  "cuda_helper.py::show_cuda_download_dialog": {
+   "lines": 135
+  },
+  "custom_words.py::fix_spelling": {
+   "decisions": 28
+  },
+  "extension_helper.py::download_and_install_extension": {
+   "decisions": 17,
+   "lines": 101
+  },
+  "file_transcribe.py::load_engine": {
+   "decisions": 20
+  },
+  "fix_word_dialog.py::_FixWordDialog.__init__": {
+   "lines": 115
+  },
+  "help_dialog.py::show_help_dialog": {
+   "decisions": 16,
+   "lines": 692
+  },
+  "hotkey_helper.py::Helper.deliver_down": {
+   "decisions": 23
+  },
+  "hotkey_helper.py::Helper.handle": {
+   "decisions": 18
+  },
+  "hotkey_helper.py::Helper.run_once": {
+   "decisions": 19
+  },
+  "hotkey_helper.py::Helper.scan": {
+   "decisions": 16
+  },
+  "hotkey_helper.py::Helper.start_hide": {
+   "decisions": 33
+  },
+  "keyboard_layout.py::KeyPlanner._index": {
+   "decisions": 19
+  },
+  "kwin_hotkeys.py::_app_shortcut_clashes": {
+   "decisions": 19
+  },
+  "model_helper.py::download_model_with_progress": {
+   "decisions": 18,
+   "lines": 333
+  },
+  "model_helper.py::download_model_with_progress.do_download": {
+   "decisions": 22,
+   "lines": 135
+  },
+  "model_helper.py::make_model_download_func": {
+   "lines": 163
+  },
+  "model_helper.py::make_model_download_func.download_func": {
+   "decisions": 26,
+   "lines": 141
+  },
+  "normalize.py::_space_after_ender_repl": {
+   "decisions": 18
+  },
+  "normalize.py::normalize_text": {
+   "decisions": 18,
+   "lines": 175
+  },
+  "output_backends.py::LibeiOutputBackend._run_handshake": {
+   "lines": 106
+  },
+  "prefs.py::PreferencesWindow._build_type_at_pause": {
+   "lines": 111
+  },
+  "prefs.py::PreferencesWindow._on_download_update_clicked": {
+   "lines": 145
+  },
+  "prefs.py::PreferencesWindow._on_install_extension_clicked": {
+   "lines": 120
+  },
+  "prefs.py::PreferencesWindow._on_model_changed": {
+   "decisions": 26,
+   "lines": 146
+  },
+  "prefs.py::PreferencesWindow._on_test_hotkeys": {
+   "lines": 147
+  },
+  "prefs.py::PreferencesWindow._show_typing_status": {
+   "decisions": 17,
+   "lines": 108
+  },
+  "prefs.py::PreferencesWindow.check_and_download_model": {
+   "lines": 115
+  },
+  "prefs.py::PreferencesWindow.create_advanced_tab": {
+   "lines": 484
+  },
+  "prefs.py::PreferencesWindow.create_audio_tab": {
+   "decisions": 16,
+   "lines": 464
+  },
+  "prefs.py::PreferencesWindow.create_commands_tab": {
+   "lines": 129
+  },
+  "prefs.py::PreferencesWindow.create_general_tab": {
+   "decisions": 22,
+   "lines": 511
+  },
+  "prefs.py::PreferencesWindow.create_stats_tab": {
+   "lines": 107
+  },
+  "prefs.py::PreferencesWindow.create_ui": {
+   "lines": 104
+  },
+  "prefs.py::PreferencesWindow.create_updates_tab": {
+   "lines": 138
+  },
+  "prefs.py::PreferencesWindow.get_system_mic_volume": {
+   "decisions": 19
+  },
+  "prefs.py::hotkey_change_message": {
+   "decisions": 19
+  },
+  "rename_migration.py::adopt_old_install": {
+   "decisions": 17
+  },
+  "rename_migration.py::migrate": {
+   "decisions": 23
+  },
+  "rename_migration.py::repin_launchers": {
+   "decisions": 20
+  },
+  "secure_input.py::_pkexec": {
+   "decisions": 16
+  },
+  "settings_backup.py::read_backup": {
+   "decisions": 18
+  },
+  "transcribe_window.py::TranscribeWindow.__init__": {
+   "lines": 126
+  },
+  "tray.py::DictationTray._download_update": {
+   "lines": 128
+  },
+  "tray.py::DictationTray._init_dbus_service": {
+   "lines": 151
+  },
+  "tray.py::DictationTray._show_update_result_dialog": {
+   "lines": 142
+  },
+  "tray.py::DictationTray.set_performance_preset": {
+   "decisions": 23
+  },
+  "tray.py::DictationTray.show_about_dialog": {
+   "lines": 134
+  },
+  "tray.py::main": {
+   "decisions": 18,
+   "lines": 205
+  },
+  "uninstall.py::_empty": {
+   "decisions": 20
+  },
+  "uninstall.py::done_text": {
+   "decisions": 16
+  },
+  "uninstall.py::find": {
+   "decisions": 23
+  },
+  "update_checker.py::_install_app_icon": {
+   "lines": 104
+  },
+  "update_checker.py::get_install_type": {
+   "decisions": 16
+  },
+  "vocabulary.py::save_word": {
+   "decisions": 21
+  },
+  "voice_edit_rules.py::formatting": {
+   "decisions": 21
+  },
+  "voice_edit_rules.py::mechanical_edit": {
+   "decisions": 18
+  },
+  "welcome_dialog.py::SplashScreen.__init__": {
+   "lines": 128
+  },
+  "welcome_dialog.py::WelcomeDialog._build_dialog": {
+   "lines": 151
+  },
+  "welcome_dialog.py::WelcomeDialog._build_shortcut_setup_section": {
+   "lines": 168
+  },
+  "welcome_dialog.py::WelcomeDialog._build_typing_setup_section": {
+   "lines": 127
+  },
+  "welcome_dialog.py::_apply_first_run_setup": {
+   "decisions": 30,
+   "lines": 191
+  },
+  "welcome_dialog.py::show_hotkey_test_dialog": {
+   "lines": 468
+  },
+  "welcome_dialog.py::show_hotkey_test_dialog.evdev_key_reader": {
+   "decisions": 16
+  },
+  "welcome_dialog.py::show_setup_complete_dialog": {
+   "decisions": 19,
+   "lines": 331
+  },
+  "welcome_dialog.py::show_welcome_and_install": {
+   "decisions": 20,
+   "lines": 165
+  },
+  "x11_hotkeys.py::claim": {
+   "decisions": 16
+  }
+ }
+}

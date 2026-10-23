@@ -69,7 +69,7 @@ jobs:
         run: lint-venv/bin/poetry check --lock
 
       - name: Python (pyflakes rules)
-        run: lint-venv/bin/ruff check --select F src/tuxtalk
+        run: lint-venv/bin/ruff check src/tuxtalk
 
       # Only tracked scripts, so DEV_SETUP.md's copy of this command gives the
       # same answer in a working folder that holds untracked scripts too.

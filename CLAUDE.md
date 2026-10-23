@@ -27,22 +27,55 @@ Old folders, launchers and KDE shortcuts are moved or cleaned on start by
 - Make and test code changes in `/home/ron/Projects/TalkType/src/`
 - NEVER edit files in `.claude/worktrees/` — Ron's dev version runs from the main project
 
-### Step 1b: Two Code Reviews, Then Fix
-- Everything changed since the last release tag (`git diff vX.Y.Z -- src/
-  gnome-extension/ packaging/`) gets two independent read-only reviews: one by
-  Claude and one by Codex (the codex-direct agent), each for bugs and against
-  "CODE A HUMAN REVIEWER WOULD RESPECT" below.
-- Verify each finding yourself, fix what's real (with a test where it's
-  behaviour), and tell Ron in plain words what was found and fixed.
-- The same two reviews run on any feature branch before it is merged into main.
-- Once a month, a full sweep of the whole codebase for leftovers, duplicates,
-  clutter and oversized files and functions ("Small files and functions"
-  below). Raise it yourself when the last one (see memory) is 30 days old.
-  Anything the sweep finds becomes a task Ron hears about, never only a
-  line in a report.
-- Ron, 2026-10-20: "I'm relying on you to ensure that it remains that way ...
-  periodic code reviews and include Codex in there to catch anything that you
-  may miss."
+### Step 1b: The Code Health Gate, Two Reviews, Then Fix
+Ron, 2026-10-23: "When I asked that our app be something a human coder would
+be proud of, I meant it." What went wrong before: reviews read only the diff,
+so nobody saw app.py reach 5,900 lines; the checklist had no size rule; and an
+audit's findings ("three huge files", "restructure after 0.15.0") stayed lines
+in a report while three releases went out. This procedure closes each gap.
+
+1. **The machine gate** (`tests/test_code_health.py`, part of the test suite
+   here and in CI, so it can't be skipped). It measures all of src/tuxtalk,
+   subfolders included: file length, each function's length and decision
+   points, broad excepts that neither log (at info or above) nor raise,
+   modules without a docstring and functions or classes of 15+ lines
+   without one, comments with names or dates, lines over 100. New code meets
+   the limits. What was over them is listed finding by finding in
+   `tests/code_health_baseline.json` and may only go down (a ratchet); code
+   moved to another file keeps its entry. After an improvement, lower the
+   baseline with the command in the test file's docstring; the suite fails
+   until that's done. Raising a number, or loosening a limit or a check,
+   needs Ron's OK first ("Exceptions" below).
+2. **Two reviews of every file the change touches, read in full.** Claude and
+   Codex (the codex-direct agent), each independently and read-only: before a
+   release, everything since the last release tag; before a merge, the whole
+   branch. Start from the complete list of changed files, tests, scripts, CI
+   and docs included, and untracked ones too:
+   `git diff --name-only vX.Y.Z; git status --short`. Each reviewer gets the
+   prompt under "THE REVIEW PROMPT" word for word.
+3. **Verify, fix, verify the fix.** Check each finding yourself before
+   acting on it. Fix what's real in the same round, with a test that fails
+   without the fix where it's behaviour. Run the gate and the suite again,
+   and have the reviewer who found a high or medium finding check its fix.
+4. **What can't be fixed now goes in `CODE_HEALTH.md`** (the open list in the
+   repository: finding, severity, the release it lands in, status, and the
+   commit that closed it), and Ron hears about it. Never only a line in a
+   report, and never only in memory.
+5. **Every release pays some down:** it closes at least one `CODE_HEALTH.md`
+   task or takes at least one file or function off the baseline. Raise it
+   yourself if a release is about to go out without that; skipping needs
+   Ron's OK.
+6. **Once a month, a full sweep** of the whole codebase, not a diff: the
+   gate's numbers, `ruff check --select B,SIM,C90,ERA src/tuxtalk`, vulture
+   (dead code), pylint's duplicate-code check, and both reviewers on the
+   largest and the worst-graded files. Raise it yourself when the date in
+   `CODE_HEALTH.md` is 30 days old. Its findings go into `CODE_HEALTH.md`
+   ranked, and Ron gets them in plain words.
+7. Tell Ron in plain words what was found and fixed, each round.
+
+Ron, 2026-10-20: "I'm relying on you to ensure that it remains that way ...
+periodic code reviews and include Codex in there to catch anything that you
+may miss."
 
 ### Step 2: Ask Before Building
 - **NEVER run `./build-release.sh` without asking Ron first**
@@ -442,17 +475,19 @@ check the change against this list:
   out "just in case"; git keeps history.
 - **No duplicates.** Search for an existing helper before writing one. Two
   functions doing the same job is the clearest sign nobody read the codebase.
-- **Small files and functions.** A module does one job. Past about 1,500
-  lines a file is due to be split, and past about 100 lines a function is.
-  A file over 2,500 lines or a function over 200 is split before it grows
-  further (a fix that can't wait is the exception, said to Ron). A diff
-  review can't see this, since it only shows the lines added, so every
-  review also reports the largest files and functions the change touched.
-  The 2026-10-12 audit noted three huge files and nothing was done; by
-  0.18 app.py had grown to 5,900 lines and prefs.py to 7,100.
+- **Small files and functions.** A module does one job, and a function one
+  thing. New code stays within 1,500 lines a file, 100 lines and 15
+  decision points a function; old code over that only shrinks (the gate in
+  Step 1b measures it). A diff can't show this, since it shows the lines
+  added and never how long the file has grown: the 2026-10-12 audit noted
+  three huge files, and by 0.18 app.py was 5,900 lines and prefs.py 7,100.
 - **Comments say why, not what.** No comment that restates the next line. Do
   explain the non-obvious: the desktop quirk, the bug it prevents, the issue
-  number. Keep comments true when the code changes.
+  number. Keep comments true when the code changes. Every module, and every
+  function or class of 15 lines or more, has a docstring saying what it's
+  for (more than its name says: never filler). A
+  comment gives the reason, not the story: no names or dates in code ("Ron,
+  2026-10-18: …"); who asked and when go in the commit message.
 - **No speculative structure.** No classes, options, layers or parameters for
   a future that isn't here. The simplest code that handles the real cases.
 - **Fit the file.** Match the surrounding names, style and idioms. A change
@@ -469,8 +504,40 @@ check the change against this list:
 - **Small, focused commits** with a message that says what changed for the
   user and why.
 
-If a change can't meet this (a rushed hotfix, say), say so to Ron and fix it in
-the next commit.
+**Exceptions.** If a change can't meet this (a rushed hotfix, say), it needs
+Ron's OK first, the shortfall goes in `CODE_HEALTH.md` with the release that
+fixes it, and the commit message says so. The same goes for raising a number
+in the gate's baseline or loosening a limit.
+
+## THE REVIEW PROMPT
+
+Both reviewers get this, word for word, plus what to review and the files:
+
+> You are reviewing TuxTalk as a senior Python developer deciding whether this
+> code is something its authors could be proud of. Read every file the change
+> touches in full, not only the changed lines. Read CLAUDE.md's "CODE A HUMAN
+> REVIEWER WOULD RESPECT" first and hold the code to it. Report, each with
+> file:line, a concrete failing scenario or the exact problem, and the
+> smallest fix: (1) bugs and regressions, including desktop- and
+> distro-specific ones; (2) design: a module doing more than one job, a
+> function doing more than one thing, logic in the wrong layer, state shared
+> where it needn't be; (3) duplicates, here or anywhere else in src/; (4)
+> dead code, unused parameters, speculative options; (5) error handling: an
+> error caught where it can't happen, or swallowed without a log; (6)
+> comments: missing where the code isn't obvious, restating the code, out of
+> date, telling history instead of the reason; (7) names that mislead; (8)
+> tests that can't fail or don't pin what a user would notice; (9) security
+> and privacy, wherever the code runs as root (the hotkey helper), runs a
+> program, downloads or unpacks a file, checks an update, listens on D-Bus or
+> a socket, writes a file other users could read, or could log dictated text
+> or audio; (10) threads: GTK touched only from its main thread, shared state
+> guarded; (11) in windows, keyboard-only use, focus order and labels a
+> screen reader can read. For each
+> touched file give its length and its three longest functions. Verify each
+> claim before reporting it (grep before calling something unused). Rank by
+> harm to users first (lost text, a crash, a security or privacy hole), then
+> by what an experienced developer opening the file would notice. Say
+> plainly when a category is clean. Read-only: no edits.
 
 ## KEEP IT SIMPLE — EVERY NEW FEATURE
 

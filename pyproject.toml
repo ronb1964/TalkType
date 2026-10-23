@@ -51,8 +51,10 @@ line-length = 100
 [tool.ruff]
 line-length = 100
 
+# What CI enforces. Length, line length, error handling and docstrings are
+# measured by tests/test_code_health.py, which lets old code only improve.
 [tool.ruff.lint]
-select = ["E","F","I"]
+select = ["F"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

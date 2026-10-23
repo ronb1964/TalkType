@@ -64,7 +64,7 @@ Plain `.venv/bin/pytest` won't work, for the same PyGObject reason. On Debian an
 CI also runs two linters, and they should pass before you push. These are the same versions CI uses, and the shell check covers only the scripts git tracks, so a private script of your own in the folder doesn't trip it:
 
 ```bash
-uvx ruff@0.17.0 check --select F src/tuxtalk
+uvx ruff@0.17.0 check src/tuxtalk
 git ls-files -z '*.sh' | xargs -0 uvx --from shellcheck-py==0.11.0.1 shellcheck -S warning
 ```
 
