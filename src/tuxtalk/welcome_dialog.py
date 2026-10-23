@@ -12,7 +12,6 @@ stop screen instead.
 
 import math
 import os
-import re
 import select
 import threading
 import time
@@ -1859,7 +1858,6 @@ def show_welcome_dialog(parent=None):
                 except Exception:
                     pass
             Gtk.main_quit()
-        return False
 
     # Show splash screen first
     splash = SplashScreen()
@@ -1877,14 +1875,12 @@ def show_welcome_dialog(parent=None):
 HOTKEY_CHOICES = tuple(f"F{i}" for i in range(1, 13))
 
 
-_TEST_KEYS = re.compile(r"F\d{1,2}|Escape|Pause|Scroll_Lock")
+_TEST_KEYS = {f"F{n}" for n in range(1, 25)} | {"Escape", "Pause", "Scroll_Lock"}
 
 
 def _loggable_key(keyname):
-    """*keyname* for the log only if it's a key the hotkey test is about.
-    Without the hotkey helper the test reads every keyboard, so letters
-    typed in another window while it's open would otherwise be logged."""
-    return keyname if keyname and _TEST_KEYS.fullmatch(keyname) else "another key"
+    """Only test keys: without the helper the test hears letters typed in any window."""
+    return keyname if keyname in _TEST_KEYS else "another key"
 
 
 def _captured_key_problem(keyname, other_key):
@@ -2337,7 +2333,6 @@ def show_hotkey_test_dialog():
         _held_keycodes.add(event.hardware_keycode)
 
         keyname = Gtk.accelerator_name(event.keyval, 0)
-        logger.info(f"GTK key press: {_loggable_key(keyname)}")
 
         is_capture = capturing_key[0] is not None
         update_ui_for_key(keyname, is_capture, action="press")
@@ -2402,13 +2397,8 @@ def show_hotkey_test_dialog():
     # Continue button
     continue_button = Gtk.Button(label="Continue")
 
-    def on_continue(button):
-        # The keys are saved after run() returns, however the dialog closes.
-        dialog.response(Gtk.ResponseType.OK)
-
-    continue_button.connect("clicked", on_continue)
     continue_button.get_style_context().add_class("suggested-action")
-    dialog.add_action_widget(continue_button, Gtk.ResponseType.OK)
+    dialog.add_action_widget(continue_button, Gtk.ResponseType.OK)  # keys saved after run()
 
     # Clear GNOME's Alt+F8/Alt+F7 bindings before show_all(): GNOME may send a
     # synthetic F8 to whichever window has focus while it applies the change,
@@ -2896,8 +2886,7 @@ def show_welcome_and_install():
     # device permissions during setup (uinput_fixed), typing/hotkeys won't work
     # until a reboot, so the final screen offers "Restart computer now" instead of an
     # interrupting popup earlier in the flow.
-    needs_restart = (bool(result.get('needs_restart', result.get('uinput_fixed')))
-                     if isinstance(result, dict) else False)
+    needs_restart = bool(result.get('needs_restart', result.get('uinput_fixed')))
 
     # Turn on launch-at-login by default for new users. A dictation tool is only
     # useful when it's already running, and a fresh install almost always reboots

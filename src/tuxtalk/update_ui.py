@@ -78,6 +78,7 @@ def run_package_update(release, install_type, restart_callback=None):
             _error(message)
 
     def worker():
+        """Download, then install with pkexec; always ends in finish()."""
         try:
             path = update_checker.download_update(
                 url, filename, progress_cb,

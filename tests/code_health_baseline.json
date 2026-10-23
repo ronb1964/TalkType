@@ -1,7 +1,7 @@
 {
  "files": {
-  "app.py": 5932,
-  "prefs.py": 7138,
+  "app.py": 5908,
+  "prefs.py": 7137,
   "tray.py": 2548,
   "welcome_dialog.py": 3350
  },
@@ -64,7 +64,6 @@
   "app.py::main::long_line": 4,
   "app.py::main::swallowed_error": 1,
   "app.py::main::undocumented": 1,
-  "app.py::parse_args::long_line": 3,
   "app.py::stop_recording::long_line": 1,
   "audio_duck.py::<module>::dated_comment": 1,
   "audio_duck.py::AudioDucker._duck_now::undocumented": 1,
@@ -256,7 +255,7 @@
   "prefs.py::PreferencesWindow._on_test_hotkeys::swallowed_error": 1,
   "prefs.py::PreferencesWindow._on_uninstall_clicked::swallowed_error": 1,
   "prefs.py::PreferencesWindow._pick_several_languages::long_line": 1,
-  "prefs.py::PreferencesWindow._refresh_device_options::long_line": 2,
+  "prefs.py::PreferencesWindow._refresh_device_options::long_line": 1,
   "prefs.py::PreferencesWindow._refresh_device_options::swallowed_error": 1,
   "prefs.py::PreferencesWindow._release_pidfile::swallowed_error": 1,
   "prefs.py::PreferencesWindow._scroll_into_view.scroll::undocumented": 1,
@@ -277,7 +276,7 @@
   "prefs.py::PreferencesWindow._watch_custom_commands_file::swallowed_error": 1,
   "prefs.py::PreferencesWindow.check_and_download_model.download_model::swallowed_error": 1,
   "prefs.py::PreferencesWindow.check_and_download_model::long_line": 1,
-  "prefs.py::PreferencesWindow.create_advanced_tab::long_line": 23,
+  "prefs.py::PreferencesWindow.create_advanced_tab::long_line": 22,
   "prefs.py::PreferencesWindow.create_advanced_tab::undocumented": 1,
   "prefs.py::PreferencesWindow.create_audio_tab._offset_row::undocumented": 1,
   "prefs.py::PreferencesWindow.create_audio_tab::long_line": 13,
@@ -502,8 +501,8 @@
    "lines": 109
   },
   "app.py::_loop_evdev": {
-   "decisions": 32,
-   "lines": 170
+   "decisions": 30,
+   "lines": 169
   },
   "app.py::_paste_text": {
    "decisions": 18
@@ -530,8 +529,7 @@
    "lines": 109
   },
   "app.py::main": {
-   "decisions": 25,
-   "lines": 289
+   "lines": 276
   },
   "audio_duck.py::AudioDucker._restore_now": {
    "decisions": 16
@@ -626,7 +624,7 @@
    "lines": 111
   },
   "prefs.py::PreferencesWindow._on_download_update_clicked": {
-   "lines": 145
+   "lines": 143
   },
   "prefs.py::PreferencesWindow._on_install_extension_clicked": {
    "lines": 120
@@ -752,7 +750,7 @@
    "lines": 191
   },
   "welcome_dialog.py::show_hotkey_test_dialog": {
-   "lines": 468
+   "lines": 462
   },
   "welcome_dialog.py::show_hotkey_test_dialog.evdev_key_reader": {
    "decisions": 16
@@ -762,8 +760,8 @@
    "lines": 331
   },
   "welcome_dialog.py::show_welcome_and_install": {
-   "decisions": 20,
-   "lines": 165
+   "decisions": 19,
+   "lines": 164
   },
   "x11_hotkeys.py::claim": {
    "decisions": 16

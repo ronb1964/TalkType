@@ -13,7 +13,6 @@ import re
 import shutil
 import subprocess
 import atexit
-import argparse
 import fcntl
 import select
 import signal
@@ -5083,28 +5082,22 @@ def _loop_evdev(cfg: Settings, input_device_idx, keyboards=None):
     *keyboards* is the hotkey helper (hotkey_helper_client.HelperKeyboard) when
     it is installed: then no keyboard is opened here at all."""
     session = os.environ.get("XDG_SESSION_TYPE", "").lower()
-    print(f"Session: {session} | Wayland={session=='wayland'}")
     logger.info(f"Session type: {session}, Wayland: {session=='wayland'}")
     mode = cfg.mode.lower().strip()
     # Both hotkeys work whatever the mode setting says.
-    print(f"Hold key: {cfg.hotkey} | Toggle key: {cfg.toggle_hotkey or 'none'}")
     logger.info(f"Hold key: {cfg.hotkey}, Toggle key: {cfg.toggle_hotkey or 'none'}")
 
     # Auto-timeout setup
     svc = _ServiceState(cfg, input_device_idx)
-    print(f"Auto-timeout: {svc.timeout_enabled} | Timeout: {svc.timeout_minutes} minutes")
     logger.info(f"Auto-timeout: enabled={svc.timeout_enabled}, minutes={svc.timeout_minutes}")
 
     # evdev opens these non-blocking, which the read loop below relies on.
     use_helper = keyboards is not None
     devices = list(keyboards) if use_helper else []
-    if not use_helper:
-        # Opened like a rescan: keyboards only, and a node that vanishes
-        # between listing and opening (a device blip at login) is skipped
-        # instead of ending the service.
-        _rediscover_devices(devices)
     if use_helper:
         logger.info("Hotkeys come from the TuxTalk hotkey helper; no keyboard is opened here")
+    else:       # keyboards only; one that vanishes meanwhile is skipped
+        _rediscover_devices(devices)
     last_device_scan = time.time()
     # Establish both files' current mtimes so the first poll does not report a
     # spurious change and re-apply what the service just started with.
@@ -5620,20 +5613,6 @@ def build_model(settings: Settings):
             logger.error(f"Model loading failed: {e}")
             raise
 
-def parse_args():
-    ap = argparse.ArgumentParser(prog="dictate", description="Press-and-hold / toggle dictation for Wayland")
-    ap.add_argument("--model", help="Whisper model (tiny/base/small/medium/large-v3)", default=None)
-    ap.add_argument("--device", help="Device (cpu/cuda)", default=None)
-    ap.add_argument("--hotkey", help="Hold-to-talk hotkey (F1..F12 or a-z)", default=None)
-    ap.add_argument("--mode", choices=["hold","toggle"], help="Activation mode", default=None)
-    ap.add_argument("--toggle-hotkey", help="Toggle key (F1..F12 or a-z) when mode=toggle", default=None)
-    ap.add_argument("--mic", help="Substring of input device name to use", default=None)
-    ap.add_argument("--beeps", choices=["on","off"], help="Enable beeps", default=None)
-    ap.add_argument("--smart-quotes", choices=["on","off"], help="Use “smart quotes”", default=None)
-    ap.add_argument("--notify", choices=["on","off"], help="Desktop notifications", default=None)
-    ap.add_argument("--language", help="Force language code (e.g., en). Empty = auto-detect", default=None)
-    return ap.parse_args()
-
 def main():
     from . import desktop_identity, ui_style
     desktop_identity.apply()        # TuxTalk's icon on its windows, not KDE's generic one
@@ -5645,19 +5624,6 @@ def main():
     _install_signal_handlers()
 
     cfg = load_config()
-    args = parse_args()
-
-    if args.model: cfg.model = args.model
-    if args.device: cfg.device = args.device
-    if args.hotkey: cfg.hotkey = args.hotkey
-    if args.mode: cfg.mode = args.mode
-    if args.toggle_hotkey: cfg.toggle_hotkey = args.toggle_hotkey
-    if args.mic is not None: cfg.mic = args.mic
-    if args.beeps: cfg.beeps = (args.beeps == "on")
-    if args.smart_quotes: cfg.smart_quotes = (args.smart_quotes == "on")
-    if args.notify: cfg.notify = (args.notify == "on")
-    if args.language is not None: cfg.language = args.language
-
     _guard_large_v3_without_cuda(cfg)
 
     global _key_delay_ms

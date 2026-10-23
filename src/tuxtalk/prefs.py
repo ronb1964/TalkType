@@ -771,10 +771,9 @@ class PreferencesWindow:
             from . import whisper_vulkan
             if whisper_vulkan.is_offered() or self.config["device"] == "vulkan":
                 self.device_combo.append("vulkan", whisper_vulkan.DEVICE_LABEL)
-                tooltip_text += ("\n• Vulkan (any GPU): AMD, Intel or NVIDIA. On NVIDIA about as "
-                                 f"fast as CUDA for a {ENGINE_SIZE_TEXT} download "
-                                 "(one-time, with a speed check). "
-                                 "Also runs Parakeet on the graphics chip")
+                tooltip_text += ("\n• Vulkan (any GPU): AMD, Intel or NVIDIA. On NVIDIA about "
+                                 f"as fast as CUDA for a {ENGINE_SIZE_TEXT} download (one-time, "
+                                 "with a speed check). Also runs Parakeet on the graphics chip")
         except Exception as e:
             print(f"Could not check for Vulkan graphics: {e}")
         
@@ -2408,10 +2407,9 @@ class PreferencesWindow:
             vulkan_hint.set_margin_start(10)
             vulkan_hint.set_margin_top(4)
             vulkan_hint.set_text(
-                "Lighter option: choose Vulkan (any GPU) as the Device in General → Change model, device or language. "
-                f"It's a {ENGINE_SIZE_TEXT} download instead of 1.4 GB, "
-                "works on AMD, Intel and NVIDIA, "
-                "and was about as fast as CUDA in our tests.")
+                "Lighter option: choose Vulkan (any GPU) as the Device in General → Change model, "
+                f"device or language. It's a {ENGINE_SIZE_TEXT} download instead of 1.4 GB, works "
+                "on AMD, Intel and NVIDIA, and was about as fast as CUDA in our tests.")
             vulkan_hint.get_style_context().add_class("dim-label")
             check.attach(vulkan_hint, 0, crow, 2, 1)
             crow += 1
@@ -3614,7 +3612,7 @@ class PreferencesWindow:
 
         progress_dialog.show_all()
 
-        result_holder = {"download_path": None, "error": None}
+        result_holder = {"error": None}
 
         def progress_callback(message, percent):
             GLib.idle_add(lambda: status_label.set_text(message))
@@ -3632,8 +3630,6 @@ class PreferencesWindow:
                 result_holder["error"] = "Download failed"
                 GLib.idle_add(download_failed)
                 return
-
-            result_holder["download_path"] = downloaded_path
 
             # Step 2: Install. The tray does the restart (see restart_via_tray).
             GLib.idle_add(lambda: status_label.set_text("Installing update..."))
@@ -4007,7 +4003,7 @@ class PreferencesWindow:
         (_save_custom_commands), so nothing on disk is lost either way.
         """
         on_disk = load_custom_commands()
-        rows, snippets = self._split_commands(on_disk)
+        rows, _snippets = self._split_commands(on_disk)
         if self._commands_from_store() == self._commands_loaded:
             self._fill_commands_store(on_disk)
         else:
@@ -4526,10 +4522,9 @@ class PreferencesWindow:
                     if self._message(
                             Gtk.MessageType.QUESTION, "Large-v3 needs your graphics card",
                             "Large-v3 can run on your AMD or Intel graphics through Vulkan. "
-                            "That's a one-time download of a "
-                            f"{ENGINE_SIZE_TEXT} graphics engine and Large-v3 in "
-                            "its format (1 GB), then a quick check that your graphics chip is "
-                            "really faster than your processor.",
+                            f"That's a one-time download of a {ENGINE_SIZE_TEXT} graphics "
+                            "engine and Large-v3 in its format (1 GB), then a quick check that "
+                            "your graphics chip is really faster than your processor.",
                             buttons=Gtk.ButtonsType.OK_CANCEL) == Gtk.ResponseType.OK:
                         self._switch_to_vulkan_for_model(combo, "large-v3", confirm=False)
                     return
@@ -5426,10 +5421,8 @@ class PreferencesWindow:
                 modal=True,
                 message_type=Gtk.MessageType.INFO if cleared else Gtk.MessageType.ERROR,
                 buttons=Gtk.ButtonsType.OK,
-                text="Log cleared." if cleared else "The log couldn't be cleared completely.",
+                text="Log cleared." if cleared else "Some of the log couldn't be erased.",
             )
-            if not cleared:
-                done.format_secondary_text("Some of it may still be on disk.")
             done.run()
             done.destroy()
 
