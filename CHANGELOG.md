@@ -35,6 +35,8 @@ before 0.15.0, so older entries use that name.
   sounds down needs; the .deb already did.
 - Help and Preferences said the Vulkan graphics engine is a 24 MB download;
   it's 22 MB, and they now take the size from the engine itself.
+- Transcribe a File: Save as Subtitles failed on a long sentence with only one
+  space in it, as in Chinese or Japanese with an English word.
 - Saying "new line" in KWrite, Kate or KDevelop no longer copies the start
   of the line above. TuxTalk pressed Shift+Enter between the lines, which
   those editors take as Insert Smart Newline: after a line starting with

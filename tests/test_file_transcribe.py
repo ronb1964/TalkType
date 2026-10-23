@@ -276,3 +276,13 @@ def test_a_piece_starting_a_sentence_keeps_its_capital():
     from tuxtalk.file_transcribe import Piece, cleaned
     out = cleaned([Piece(0, 30, "That's the pin."), Piece(30, 50, "Uh, the blade moves.")])
     assert out[1].text.startswith("The blade")
+
+
+@pytest.mark.parametrize("text", ["a " + "b" * 260, "我们用 TuxTalk" + "很好用" * 70],
+                         ids=["latin", "chinese"])
+def test_subtitles_cut_a_run_on_sentence_with_one_space_instead_of_crashing(text):
+    """Save as Subtitles failed with "min() iterable argument is empty" once
+    a long sentence's only space was used up."""
+    parts = ft._cue_texts(text)
+    assert "".join(parts).replace(" ", "") == text.replace(" ", "")
+    assert len(parts) > 1

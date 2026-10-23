@@ -481,10 +481,10 @@ def _cue_texts(text):
         count = -(-len(sentence) // limit)
         while count > 1:
             target = len(sentence) // count
-            if spaced:
-                places = [i for i, ch in enumerate(sentence) if ch == " "]
-            else:
-                places = list(range(1, len(sentence)))
+            # Once the last space is used up (an English word in Chinese
+            # text), the rest is cut like unspaced text.
+            places = [i for i, ch in enumerate(sentence) if ch == " "] if spaced else []
+            places = places or list(range(1, len(sentence)))
             # A comma close to the share is the better place to cut.
             cut = min(places, key=lambda i: abs(i - target)
                       - (8 if sentence[i - 1] in ",;、，；" else 0))
