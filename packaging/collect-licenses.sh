@@ -96,9 +96,13 @@ done
 # SOURCES.md naming each library, its version, its license and its source. A
 # library not named there (a newer PyAV) stops the build until it's added.
 cp -r "$HERE/licenses/pyav" "$LIC/pyav"
+# Matched by name and version ("libavcodec .so.62.11.100" for
+# libavcodec-49be5967.so.62.11.100), so a newer FFmpeg is caught too.
 for f in "$APPDIR"/usr/lib/python3*/site-packages/av.libs/*.so*; do
     name=$(basename "$f")
-    grep -q "${name%%-*}" "$HERE/licenses/pyav/SOURCES.md" || {
+    stem=${name%-*}
+    rest=${name#"$stem"-}
+    grep -qF "$stem .${rest#*.}" "$HERE/licenses/pyav/SOURCES.md" || {
         echo "❌ $name in av.libs isn't in packaging/licenses/pyav/SOURCES.md: its license would be missing"
         exit 1
     }

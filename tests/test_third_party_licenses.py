@@ -78,3 +78,6 @@ def test_pyav_and_ffmpegs_libraries_ship_their_licenses():
     assert 'cp -r "$HERE/licenses/pyav" "$LIC/pyav"' in COLLECT
     assert "av.libs" in COLLECT, "the build no longer checks av.libs against SOURCES.md"
     assert "usr/share/licenses/pyav/" in NOTICE
+    # FFmpeg's libjpeg-derived files require this credit in the documentation.
+    assert "based in part on\nthe work of the Independent JPEG Group" in NOTICE
+    assert (pyav / "ffmpeg-libjpeg-NOTICES").is_file()

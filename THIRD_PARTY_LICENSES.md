@@ -38,6 +38,7 @@ I'll provide a copy on request until three years after 0.17.0.
   `usr/lib/python3.10/site-packages/`. CTranslate2 (MIT) and tokenizers
   (Apache-2.0) don't include theirs, so they're added under
   `usr/share/licenses/`.
+- **PyGObject, pycairo and dbus-python**, from Ubuntu 22.04.
 
 ## FFmpeg and the libraries PyAV brings
 
@@ -51,13 +52,16 @@ FFmpeg is built under the LGPL-3.0-or-later, and with x264 and x265
 are under the LGPL, BSD, MIT and Apache licenses. CTranslate2 also brings
 GCC's libgomp (GPL-3.0-or-later with the GCC Runtime Library Exception).
 
+FFmpeg includes three files from libjpeg, which FFmpeg has changed; their
+notices are in `ffmpeg-libjpeg-NOTICES`. This software is based in part on
+the work of the Independent JPEG Group.
+
 Every one of their license files is installed under `usr/share/licenses/pyav/`,
 and `SOURCES.md` there names each library's exact version and where its
 complete source is. If a source ever goes missing from those addresses, open
 an issue at https://github.com/ronb1964/TuxTalk/issues and I'll provide a
 copy, for at least three years after the last TuxTalk release that includes
 it.
-- **PyGObject, pycairo and dbus-python**, from Ubuntu 22.04.
 
 ## Fonts
 
