@@ -5097,7 +5097,12 @@ def _loop_evdev(cfg: Settings, input_device_idx, keyboards=None):
 
     # evdev opens these non-blocking, which the read loop below relies on.
     use_helper = keyboards is not None
-    devices = list(keyboards) if use_helper else [InputDevice(p) for p in list_devices()]
+    devices = list(keyboards) if use_helper else []
+    if not use_helper:
+        # Opened like a rescan: keyboards only, and a node that vanishes
+        # between listing and opening (a device blip at login) is skipped
+        # instead of ending the service.
+        _rediscover_devices(devices)
     if use_helper:
         logger.info("Hotkeys come from the TuxTalk hotkey helper; no keyboard is opened here")
     last_device_scan = time.time()

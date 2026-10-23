@@ -44,6 +44,10 @@ before 0.15.0, so older entries use that name.
 - Updating the .deb or .rpm from inside TuxTalk: an unexpected error while
   installing left the "Updating TuxTalk" window on screen, and it couldn't be
   closed. It now closes and says what went wrong.
+- Without the hotkey helper (the input group), the dictation service could
+  stop at login if a device such as a wireless receiver disappeared while it
+  was starting. Startup now opens keyboards the way a rescan does, skipping
+  one that's gone, and no longer watches mice and power buttons.
 - Saying "new line" in KWrite, Kate or KDevelop no longer copies the start
   of the line above. TuxTalk pressed Shift+Enter between the lines, which
   those editors take as Insert Smart Newline: after a line starting with
