@@ -234,7 +234,8 @@ def test_fix_a_word_doesnt_touch_a_password_field(desktop, monkeypatch):
     ("cosmic", "tt-sink", True, True),        # and it takes every key
     ("cinnamon", "tt-sink", False, False),    # nothing waits
     ("kde", None, True, False),               # unknown focus isn't a prompt
-    ("kde", "org.kde.polkit-kde-authentication-agent-1", False, True),  # helper hidden
+    ("kde", "org.kde.polkit-kde-authentication-agent-1", True, True),
+    ("kde", "org.kde.polkit-kde-authentication-agent-1", None, True),  # /proc hidden
     ("lxqt", "lxqt-policykit-agent", True, True),
     ("kde", "org.kde.kwrite", True, False),   # the prompt waits behind KWrite
 ])
@@ -246,6 +247,16 @@ def test_the_desktops_own_password_prompt_gets_nothing(desktop, monkeypatch, des
     monkeypatch.setattr(app, "_query_focused_window_class", lambda: focused)
     dictate(monkeypatch)
     assert (desktop["typed"] == []) is refused
+
+
+def test_with_no_prompt_waiting_the_focused_window_isnt_asked(desktop, monkeypatch):
+    """The check runs before every typed line; asking the tray which window
+    has the focus each time would slow typing down for nothing."""
+    asked = []
+    monkeypatch.setattr(app, "_polkit_prompt_waiting", lambda: False)
+    monkeypatch.setattr(app, "_query_focused_window_class", lambda: asked.append(1))
+    assert app._password_prompt_has_focus() is False
+    assert asked == []
 
 
 def test_a_waiting_prompt_is_seen_by_its_helper_process(tmp_path):
@@ -262,6 +273,7 @@ def test_a_waiting_prompt_is_seen_by_its_helper_process(tmp_path):
     finally:
         proc.kill()
         proc.wait()
+    assert REAL_PROMPT_WAITING() is False      # unless a real prompt is open right now
 
 
 # --- the question: which widget has the focus, and is it a password field ----------

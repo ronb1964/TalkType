@@ -2284,26 +2284,41 @@ def _password_prompt_has_focus() -> bool:
     accessibility switched on; their window says what they are. Cinnamon
     and COSMIC draw theirs in the shell, over the app, which still counts as
     focused while the prompt takes every key: there a waiting prompt is
-    enough (VMs, 2026-10-22)."""
-    focused = _query_focused_window_class()
-    if focused is not None and any(word in focused.lower() for word in ("polkit", "policykit")):
-        return True
+    enough (VMs, 2026-10-22). With no prompt waiting nothing is asked: this
+    runs before every typed line."""
+    waiting = _polkit_prompt_waiting()
+    if waiting is False:
+        return False
     from .desktop_detect import get_desktop_environment
-    return get_desktop_environment() in ("cinnamon", "cosmic") and _polkit_prompt_waiting()
+    if waiting and get_desktop_environment() in ("cinnamon", "cosmic"):
+        return True
+    focused = _query_focused_window_class()
+    return focused is not None and any(word in focused.lower() for word in ("polkit", "policykit"))
 
 
-def _polkit_prompt_waiting() -> bool:
-    """Whether polkit-agent-helper-1 runs: it does, on every desktop, for as
-    long as a polkit prompt waits for a password."""
-    for entry in os.scandir("/proc"):
-        if not entry.name.isdigit():
-            continue
-        try:
-            with open(f"/proc/{entry.name}/comm") as f:
-                if f.read().strip() == "polkit-agent-he":   # comm keeps 15 characters
-                    return True
-        except OSError:
-            continue    # a process that ended meanwhile
+def _polkit_prompt_waiting() -> bool | None:
+    """Whether a polkit prompt waits for this user's password: while one
+    does, polkit-agent-helper-1 runs, on every desktop. Another user's,
+    logged in at the same time, doesn't count. None when /proc hides other
+    users' processes (hidepid), so it can't be told."""
+    if not os.path.exists("/proc/1"):
+        return None
+    with os.scandir("/proc") as entries:
+        for entry in entries:
+            if not entry.name.isdigit():
+                continue
+            try:
+                with open(f"/proc/{entry.name}/comm") as f:
+                    if f.read().strip() != "polkit-agent-he":   # comm keeps 15 characters
+                        continue
+                with open(f"/proc/{entry.name}/status") as f:
+                    uid = next(int(line.split()[1]) for line in f if line.startswith("Uid:"))
+            except (OSError, StopIteration, ValueError):
+                continue    # a process that ended meanwhile
+            # Set-user-ID root, so the real user is whoever it asks for; a
+            # socket-activated one (polkit 124 and later) runs as root itself.
+            if uid in (os.getuid(), 0):
+                return True
     return False
 
 

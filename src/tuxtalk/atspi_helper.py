@@ -74,7 +74,8 @@ def focused_is_password() -> bool:
             return False
         # Every active window is asked, not the first: a desktop shell other
         # than GNOME's may call its own window active too.
-        windows = list(_active_windows(bus, deadline))
+        # The shell's tree is the biggest: its turn comes after the apps'.
+        windows = sorted(_active_windows(bus, deadline), key=lambda found: found[0] in _SHELLS)
         _log_several_active(windows)
         for _app, window in windows:
             try:
