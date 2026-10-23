@@ -295,6 +295,18 @@ def vitamin(run):
     return pieces_outcome(run, "vitamin", ["B12", "E9"])
 
 
+@check("Words and numbers", "money", "A dollar sign, typed key by key")
+def money(run):
+    """The keymaps also put $ on KEY_DOLLAR, which X11 can't carry: "$27.50"
+    arrived as "27.50" (0.18 release testing)."""
+    run.set_config(injection_mode="type")
+    try:
+        run.sink_ready()
+        return pieces_outcome(run, "money", ["$27.50"])
+    finally:
+        run.set_config(injection_mode="auto")
+
+
 @check("Words and numbers", "qmark_words", "Talking about a question mark keeps the words")
 def qmark_words(run):
     run.sink_ready()

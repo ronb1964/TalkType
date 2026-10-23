@@ -40,6 +40,9 @@ tts = "Let go of F. eight, then go to B. five. A. seven, a five minute walk."
 [vitamin]
 say = "Take vitamin B twelve and sit in row E nine."
 
+[money]
+say = "That will cost twenty seven dollars and fifty cents."
+
 [qmark_words]
 say = "That sentence should end with a question mark."
 
