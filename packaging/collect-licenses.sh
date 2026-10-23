@@ -12,6 +12,9 @@
 #   wl-clipboard/                                       - built from source here
 #   ctranslate2/, tokenizers/                           - their wheels ship no license
 #   noto-color-emoji/                                   - TuxTalk's emoji font
+#   pyav/                                               - FFmpeg, x264, x265 and the other
+#                                                         libraries in PyAV's av.libs, and
+#                                                         CTranslate2's libgomp
 #   <ubuntu package>/copyright                          - every library copied from Ubuntu
 #   tuxtalk/bundled-ubuntu-packages.txt                - those packages and exact versions
 #
@@ -88,5 +91,18 @@ for pkg in $(printf '%s\n' "${!PACKAGES[@]}" | sort); do
     dpkg-query -W -f='${Package} ${Version} (source: ${source:Package})\n' "$pkg" >> "$LIST"
 done
 
+# --- The libraries PyAV's wheel bundles --------------------------------------
+# The av wheel carries none of their licenses. Ours are in licenses/pyav, with
+# SOURCES.md naming each library, its version, its license and its source. A
+# library not named there (a newer PyAV) stops the build until it's added.
+cp -r "$HERE/licenses/pyav" "$LIC/pyav"
+for f in "$APPDIR"/usr/lib/python3*/site-packages/av.libs/*.so*; do
+    name=$(basename "$f")
+    grep -q "${name%%-*}" "$HERE/licenses/pyav/SOURCES.md" || {
+        echo "❌ $name in av.libs isn't in packaging/licenses/pyav/SOURCES.md: its license would be missing"
+        exit 1
+    }
+done
+
 chmod -R a+rX "$LIC"
-echo "   ✅ Licenses: TuxTalk, wl-clipboard, ctranslate2, tokenizers + ${#PACKAGES[@]} Ubuntu packages"
+echo "   ✅ Licenses: TuxTalk, wl-clipboard, ctranslate2, tokenizers, PyAV's libraries + ${#PACKAGES[@]} Ubuntu packages"

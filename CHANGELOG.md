@@ -55,6 +55,11 @@ before 0.15.0, so older entries use that name.
 - AI self-corrections are stricter about what they let through: an answer
   that changes a number's punctuation ("2.5" to "2,5") or drops a "like" or
   "hmm" is now refused, and the dictation is typed as you said it.
+- Licenses: Transcribe a File's audio library (PyAV) brings FFmpeg, x264,
+  x265 and 36 other libraries, and TuxTalk shipped them without their license
+  notices. Every one of their license files is now included, with each
+  library's exact version and where its source is
+  (usr/share/licenses/pyav/), and THIRD_PARTY_LICENSES.md describes them.
 - Saying "new line" in KWrite, Kate or KDevelop no longer copies the start
   of the line above. TuxTalk pressed Shift+Enter between the lines, which
   those editors take as Insert Smart Newline: after a line starting with

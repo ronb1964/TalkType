@@ -33,11 +33,30 @@ I'll provide a copy on request until three years after 0.17.0.
 
 - **Python 3.10** (PSF License), from Ubuntu 22.04.
 - **Python packages** (faster-whisper, CTranslate2, onnxruntime, onnx-asr,
-  text2num, NumPy, sounddevice, Hugging Face Hub, tokenizers, PyAV and the
-  libraries they use): each package's license is in its own `*.dist-info` folder under
+  text2num, NumPy, sounddevice, Hugging Face Hub, tokenizers, PyAV): each
+  package's own license is in its `*.dist-info` folder under
   `usr/lib/python3.10/site-packages/`. CTranslate2 (MIT) and tokenizers
   (Apache-2.0) don't include theirs, so they're added under
   `usr/share/licenses/`.
+
+## FFmpeg and the libraries PyAV brings
+
+Transcribe a File reads audio and video with PyAV 16.0.1, whose package
+includes 39 libraries of its own: FFmpeg 8.0, x264 and x265, the AV1, VP8/9,
+WebP, Opus, Vorbis, Speex, LAME, TwoLAME, AMR and H.264 codecs, GnuTLS,
+Nettle, GMP, libunistring, alsa-lib, libdrm, libxcb, libXau and glibc's
+libmvec. They come unmodified from PyAV's own build (pyav-ffmpeg release 8.0-2).
+FFmpeg is built under the LGPL-3.0-or-later, and with x264 and x265
+(GPL-2.0-or-later) the combination is under the GPL-3.0-or-later; the others
+are under the LGPL, BSD, MIT and Apache licenses. CTranslate2 also brings
+GCC's libgomp (GPL-3.0-or-later with the GCC Runtime Library Exception).
+
+Every one of their license files is installed under `usr/share/licenses/pyav/`,
+and `SOURCES.md` there names each library's exact version and where its
+complete source is. If a source ever goes missing from those addresses, open
+an issue at https://github.com/ronb1964/TuxTalk/issues and I'll provide a
+copy, for at least three years after the last TuxTalk release that includes
+it.
 - **PyGObject, pycairo and dbus-python**, from Ubuntu 22.04.
 
 ## Fonts

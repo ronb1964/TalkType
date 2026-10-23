@@ -66,3 +66,15 @@ def test_deb_and_rpm_refuse_an_appimage_without_licenses():
         assert "THIRD_PARTY_LICENSES.md wl-clipboard/COPYING" in text, script
         assert "rebuild it with ./build-release.sh" in text, script
         assert place in text, script
+
+
+def test_pyav_and_ffmpegs_libraries_ship_their_licenses():
+    """PyAV's wheel bundles FFmpeg, x264, x265 and 36 more libraries with
+    none of their licenses: 0.15 to 0.18 shipped them without notices."""
+    pyav = ROOT / "packaging/licenses/pyav"
+    for name in ("ffmpeg-COPYING.LGPLv3", "x264-COPYING", "x265-COPYING", "SOURCES.md",
+                 "libdrm-NOTICES", "libgomp-COPYING.RUNTIME"):
+        assert (pyav / name).is_file(), name
+    assert 'cp -r "$HERE/licenses/pyav" "$LIC/pyav"' in COLLECT
+    assert "av.libs" in COLLECT, "the build no longer checks av.libs against SOURCES.md"
+    assert "usr/share/licenses/pyav/" in NOTICE
