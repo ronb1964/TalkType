@@ -18,8 +18,14 @@ from tuxtalk import history
 ROOT = Path(__file__).resolve().parent.parent
 
 
+# Saved before conftest points every test at a throwaway file: these tests
+# check where the real one goes.
+_REAL_HISTORY_PATH = history._history_path
+
+
 @pytest.fixture(autouse=True)
 def runtime_dir(tmp_path, monkeypatch):
+    monkeypatch.setattr(history, "_history_path", _REAL_HISTORY_PATH)
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
     monkeypatch.delenv("FLATPAK_ID", raising=False)
     return tmp_path

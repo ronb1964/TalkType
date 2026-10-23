@@ -228,16 +228,77 @@ def _no_real_hotkey_helper_or_pkexec(monkeypatch, tmp_path):
         pytest.fail("a test tried to run something as root through pkexec")
     monkeypatch.setattr(secure_input, "_run_as_root", refuse)
 
-    # And pkexec itself, however it's reached. A test that mocks
-    # subprocess.run on purpose replaces this guard with its own mock.
+    # And pkexec itself, however it's reached: subprocess.run, or Popen as
+    # the package updater uses. A test that mocks either on purpose replaces
+    # this guard with its own mock.
     import subprocess
     real_run = subprocess.run
 
+    def refuse_pkexec(cmd):
+        first = cmd[0] if isinstance(cmd, (list, tuple)) and cmd else str(cmd).split(" ")[0]
+        if os.path.basename(str(first)) == "pkexec":
+            pytest.fail(f"a test tried to run pkexec: {str(cmd)[:60]}")
+
     def guarded_run(cmd, *args, **kwargs):
-        if isinstance(cmd, (list, tuple)) and cmd and os.path.basename(str(cmd[0])) == "pkexec":
-            pytest.fail(f"a test tried to run pkexec: {cmd[:3]}")
+        refuse_pkexec(cmd)
         return real_run(cmd, *args, **kwargs)
+
+    class GuardedPopen(subprocess.Popen):
+        def __init__(self, cmd, *args, **kwargs):
+            refuse_pkexec(cmd)
+            super().__init__(cmd, *args, **kwargs)
     monkeypatch.setattr(subprocess, "run", guarded_run)
+    monkeypatch.setattr(subprocess, "Popen", GuardedPopen)
+
+
+# What a running TuxTalk's processes have in their command line.
+_TUXTALK_PROCESSES = (b"tuxtalk.app", b"tuxtalk.tray", b"tuxtalk.prefs", b"TuxTalk",
+                      b"tuxtalk-hotkeys", b"whisper-server", b"llama-server",
+                      b"parakeet_gpu_worker")
+
+
+def _started_by_this_test_run(pid):
+    """Whether *pid* descends from this pytest process."""
+    while pid > 1:
+        if pid == os.getpid():
+            return True
+        try:
+            with open(f"/proc/{pid}/stat") as f:
+                pid = int(f.read().rsplit(")", 1)[1].split()[1])
+        except (OSError, ValueError, IndexError):
+            return False
+    return False
+
+
+@pytest.fixture(autouse=True)
+def _no_signals_to_a_real_tuxtalk(monkeypatch):
+    """No test may stop or kill a TuxTalk that is really running: a test that
+    reached stop_dictation_service once killed Ron's dev service mid-dictation.
+    Processes the tests started themselves can still be signalled."""
+    real_kill = os.kill
+
+    def guarded_kill(pid, sig):
+        try:
+            with open(f"/proc/{pid}/cmdline", "rb") as f:
+                cmdline = f.read()
+        except OSError:
+            return real_kill(pid, sig)
+        if (pid != os.getpid() and not _started_by_this_test_run(pid)
+                and any(name in cmdline for name in _TUXTALK_PROCESSES)):
+            pytest.fail(f"a test tried to signal a real TuxTalk process: {cmdline[:80]!r}")
+        return real_kill(pid, sig)
+    monkeypatch.setattr(os, "kill", guarded_kill)
+
+
+@pytest.fixture(autouse=True)
+def _no_real_history_or_stats(monkeypatch, tmp_path_factory):
+    """Recent Dictations and the usage stats live in a throwaway folder: every
+    full run used to put seven test sentences into the user's Recent
+    Dictations (it keeps 20) and add to their word count."""
+    from tuxtalk import history, stats
+    folder = tmp_path_factory.mktemp("history")
+    monkeypatch.setattr(history, "_history_path", lambda: str(folder / "history.json"))
+    monkeypatch.setattr(stats, "stats_path", lambda: str(folder / "stats.json"))
 
 
 @pytest.fixture(autouse=True)
