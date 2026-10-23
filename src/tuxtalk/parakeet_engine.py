@@ -157,9 +157,12 @@ class ParakeetModel:
 
 
 def _log_word(word, cost, kept):
-    """Log the words parakeet_bias wrote (not every try: there are many)."""
+    """Log that parakeet_bias wrote one of Your Words (not every try: there
+    are many). Not which word: that is something the user said, and the log
+    keeps none of that unless log_transcripts is on, when the transcription
+    line shows it anyway."""
     if kept:
-        logger.info(f"Your Words: Parakeet wrote {word!r} (cost {cost:.1f})")
+        logger.info(f"Your Words: Parakeet wrote one of your words (cost {cost:.1f})")
 
 
 def load_parakeet_model():

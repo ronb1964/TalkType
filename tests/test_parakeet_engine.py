@@ -164,3 +164,15 @@ def test_nothing_recognized_plays_the_cancel_beep(monkeypatch):
     monkeypatch.setattr(app, "_transcribe_audio", lambda *a: None)
     app._transcribe_and_inject([np.ones(16000, dtype=np.int16).tobytes()], 16000, True, False, False)
     assert beeps == [app.CANCEL_BEEP]
+
+
+def test_the_log_says_your_words_steered_parakeet_but_not_which_word(caplog):
+    """Which word Parakeet wrote is something the user said: the log keeps
+    none of that unless log_transcripts is on."""
+    import logging
+    from tuxtalk import parakeet_engine
+    caplog.set_level(logging.INFO, logger=parakeet_engine.logger.name)
+    parakeet_engine._log_word("ClaudeClaw", 2.5, kept=True)
+    logged = " ".join(r.message for r in caplog.records)
+    assert "one of your words" in logged
+    assert "ClaudeClaw" not in logged
