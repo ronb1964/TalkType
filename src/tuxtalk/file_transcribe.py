@@ -485,6 +485,8 @@ def _cue_texts(text):
             # text), the rest is cut like unspaced text.
             places = [i for i, ch in enumerate(sentence) if ch == " "] if spaced else []
             places = places or list(range(1, len(sentence)))
+            if not places:          # one character left: nothing to cut
+                break
             # A comma close to the share is the better place to cut.
             cut = min(places, key=lambda i: abs(i - target)
                       - (8 if sentence[i - 1] in ",;、，；" else 0))

@@ -278,8 +278,8 @@ def test_a_piece_starting_a_sentence_keeps_its_capital():
     assert out[1].text.startswith("The blade")
 
 
-@pytest.mark.parametrize("text", ["a " + "b" * 260, "我们用 TuxTalk" + "很好用" * 70],
-                         ids=["latin", "chinese"])
+@pytest.mark.parametrize("text", ["a " + "b" * 260, "a" * 260 + " b", "我们用 TuxTalk" + "很好用" * 70],
+                         ids=["space first", "space last", "chinese"])
 def test_subtitles_cut_a_run_on_sentence_with_one_space_instead_of_crashing(text):
     """Save as Subtitles failed with "min() iterable argument is empty" once
     a long sentence's only space was used up."""
