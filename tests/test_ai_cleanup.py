@@ -79,8 +79,7 @@ UNSAFE = [
     # a number's punctuation changed: a different value in many countries
     ("Set it to 1.5, no wait, 2.5.", "Set it to 2,5."),
     ("Order 1,000 bolts, no wait, 2,000 bolts.", "Order 2.000 bolts."),
-    # "like" and "hmm" carry meaning; dropping them isn't a filler cleanup
-    ("I would like the blue one, no wait, two of them.", "I would the blue one, two of them."),
+    # "hmm" carries meaning; the AI isn't told to drop it
     ("Hmm, that sounds about right.", "That sounds about right."),
 ]
 
@@ -429,3 +428,10 @@ def test_only_folders_other_than_the_current_version_go(tmp_path):
     engine_process.remove_other_versions(str(tmp_path), "1.9.4")
     assert sorted(p.name for p in tmp_path.iterdir()) == ["1.9.4", "notes.txt"]
     engine_process.remove_other_versions(str(tmp_path / "missing"), "1.9.4")    # never raises
+
+
+def test_a_filler_like_may_still_go_with_a_correction():
+    """The prompt tells the model to delete "like" used as filler: the safety
+    check must not then refuse the corrected sentence."""
+    assert ai.edit_is_safe("So I was, like, going to order two boxes, no wait, three boxes.",
+                           "So I was going to order three boxes.")

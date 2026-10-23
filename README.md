@@ -313,7 +313,7 @@ Want your own shortcut, or a script? Run `tuxtalk --toggle` (or `--start`, `--st
 - **Hands-free if you want it.** Double-tap F9, talk, and it stops by itself when you go quiet. A single tap still works as a plain on/off switch, so a long dictation with thinking pauses never gets cut off. Say nothing for 10 seconds and it stops without typing anything.
 - **Your choice of speech model.** NVIDIA's Parakeet is the default: fast on any processor, for English and 24 European languages. OpenAI's Whisper covers 99 languages, from Tiny up to Large-v3. Not sure which? **What works with what?** in Preferences lays it out.
 - **Only these languages.** Tick the languages you actually speak and Whisper's auto-detect sticks to those.
-- **Any graphics card.** NVIDIA, AMD or Intel through Vulkan, a 24 MB download. On NVIDIA you can use CUDA instead. TuxTalk times your graphics chip against your processor first and only uses it if it's really faster.
+- **Any graphics card.** NVIDIA, AMD or Intel through Vulkan, a 22 MB download. On NVIDIA you can use CUDA instead. TuxTalk times your graphics chip against your processor first and only uses it if it's really faster.
 - **Corrections.** Say "no wait", "scratch that", "I mean" or "actually" and the optional AI fixes it. It also drops "um", "uh" and stutters.
 - **Voice commands.** "comma", "period", "new paragraph", "undo last word", "delete last three sentences" and more. See the full list below.
 - **Email and web addresses.** "john at gmail dot com" types john@gmail.com, and "github dot com" types github.com.
@@ -459,7 +459,7 @@ A graphics card makes the Whisper models much faster, and with Vulkan it speeds 
 
 | | Works on | Download | Pick it in |
 |---|---|---|---|
-| **Vulkan (Light)** | NVIDIA, AMD and Intel | 24 MB | Preferences → General → Device → Vulkan (any GPU) |
+| **Vulkan (Light)** | NVIDIA, AMD and Intel | 22 MB | Preferences → General → Device → Vulkan (any GPU) |
 | **CUDA (Full)** | NVIDIA only | 1.4 GB | Preferences → General → Device → CUDA (NVIDIA) |
 
 On an RTX 4070 Super both were equally fast: half a second for 11 seconds of speech with the Large model. First run uses any graphics card through Vulkan. CUDA is set up from Preferences by choosing it as the Device.

@@ -178,9 +178,10 @@ def has_correction(sentence: str) -> bool:
 
 # --- The safety check --------------------------------------------------------
 
-# Not "like" or "hmm": they carry meaning too ("I would like the red one"),
-# so the AI may not drop them (cleanup.py doesn't either).
-_FILLERS = {"um", "uh", "umm", "uhm", "er", "erm"}
+# The fillers the AI is told it may delete (_SYSTEM), and no others: "hmm"
+# carries meaning ("hmm, that sounds right"). A "like" it drops isn't always a
+# filler either, but the prompt asks for it.
+_FILLERS = {"um", "uh", "umm", "uhm", "er", "erm", "like"}
 _FILLER_PHRASES = [("you", "know")]
 _CUES = [("no", "wait"), ("wait", "no"), ("wait",), ("i", "mean"), ("sorry",), ("actually",),
          ("make", "that"), ("scratch", "that"), ("or", "rather"), ("rather",), ("no",)]

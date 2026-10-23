@@ -53,8 +53,8 @@ before 0.15.0, so older entries use that name.
   dictation finished, so the AI stayed off until TuxTalk was restarted. It now
   comes back for good.
 - AI self-corrections are stricter about what they let through: an answer
-  that changes a number's punctuation ("2.5" to "2,5") or drops a "like" or
-  "hmm" is now refused, and the dictation is typed as you said it.
+  that changes a number's punctuation ("2.5" to "2,5") or drops a "hmm" is
+  now refused, and the dictation is typed as you said it.
 - Licenses: Transcribe a File's audio library (PyAV) brings FFmpeg, x264,
   x265 and 36 other libraries, and TuxTalk shipped them without their license
   notices. Every one of their license files is now included, with each
