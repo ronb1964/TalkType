@@ -76,6 +76,12 @@ UNSAFE = [
     # restated clause: a value nobody said, or a detail of the first one lost
     ("Send the report to Bob, scratch that, send it to Jim.", "Send the report to Jimmy."),
     ("Send the report to Bob, scratch that, send it to Jim.", "Send report to Jim."),
+    # a number's punctuation changed: a different value in many countries
+    ("Set it to 1.5, no wait, 2.5.", "Set it to 2,5."),
+    ("Order 1,000 bolts, no wait, 2,000 bolts.", "Order 2.000 bolts."),
+    # "like" and "hmm" carry meaning; dropping them isn't a filler cleanup
+    ("I would like the blue one, no wait, two of them.", "I would the blue one, two of them."),
+    ("Hmm, that sounds about right.", "That sounds about right."),
 ]
 
 

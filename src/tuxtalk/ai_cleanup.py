@@ -178,7 +178,9 @@ def has_correction(sentence: str) -> bool:
 
 # --- The safety check --------------------------------------------------------
 
-_FILLERS = {"um", "uh", "umm", "uhm", "er", "erm", "hmm", "like"}
+# Not "like" or "hmm": they carry meaning too ("I would like the red one"),
+# so the AI may not drop them (cleanup.py doesn't either).
+_FILLERS = {"um", "uh", "umm", "uhm", "er", "erm"}
 _FILLER_PHRASES = [("you", "know")]
 _CUES = [("no", "wait"), ("wait", "no"), ("wait",), ("i", "mean"), ("sorry",), ("actually",),
          ("make", "that"), ("scratch", "that"), ("or", "rather"), ("rather",), ("no",)]
@@ -193,10 +195,11 @@ _LINKING_WORDS = {"the", "a", "an", "of", "for", "to", "in", "on", "at", "and", 
 _LEGIT_DOUBLES = {"that", "had", "is", "do", "very", "so", "bye", "no", "yeah", "ha", "really"}
 
 
-# Words in any script ("café", "Müller", "東京"), and the signs that carry a
-# value as words of their own: a currency, a percent, and a minus or plus
-# before a number (not a hyphen inside "well-known" or a range "5-6").
-_TOKEN = re.compile(r"[\w']+|[€$£¥%]|(?<!\w)[-−+](?=\d)")
+# Numbers whole with their separators, so "2.5" changed to "2,5" is a
+# changed value; words in any script ("café", "Müller", "東京"); and the signs
+# that carry a value as words of their own: a currency, a percent, and a
+# minus or plus before a number (not a hyphen in "well-known" or "5-6").
+_TOKEN = re.compile(r"\d+(?:[.,]\d+)*|[\w']+|[€$£¥%]|(?<!\w)[-−+](?=\d)")
 
 
 def _words(text):

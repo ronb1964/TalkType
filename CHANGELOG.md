@@ -52,6 +52,9 @@ before 0.15.0, so older entries use that name.
   TuxTalk started it again but the new one was stopped as soon as that
   dictation finished, so the AI stayed off until TuxTalk was restarted. It now
   comes back for good.
+- AI self-corrections are stricter about what they let through: an answer
+  that changes a number's punctuation ("2.5" to "2,5") or drops a "like" or
+  "hmm" is now refused, and the dictation is typed as you said it.
 - Saying "new line" in KWrite, Kate or KDevelop no longer copies the start
   of the line above. TuxTalk pressed Shift+Enter between the lines, which
   those editors take as Insert Smart Newline: after a line starting with
