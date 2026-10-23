@@ -137,6 +137,42 @@ def test_a_us_less_than_sign_uses_shift_and_comma():
     assert kl.KeyPlanner("de", "").plan("<") == [(86, 1), (86, 0)]     # its only key there
 
 
+def test_a_dollar_sign_and_brackets_use_the_keys_every_keyboard_has():
+    """The keymaps also put $ ( ) on rare extra keys (KEY_DOLLAR, the keypad's
+    brackets) that need no Shift. "$27.34" came out as "27.34" in Claude
+    Desktop: X11 can't carry KEY_DOLLAR at all."""
+    planner = kl.planner_for(kl.US)
+    assert planner.plan("$") == [(42, 1), (5, 1), (5, 0), (42, 0)]      # Shift+4
+    assert planner.plan("()") == [(42, 1), (10, 1), (10, 0), (42, 0),   # Shift+9, Shift+0
+                                  (42, 1), (11, 1), (11, 0), (42, 0)]
+
+
+@pytest.mark.parametrize("layout", ["us", "de", "ch", "fr", "gb", "es", "it"])
+def test_no_key_is_one_x11_cant_carry(layout):
+    """X11 key codes stop at 255 (evdev code + 8), XWayland's too. A key past
+    that never reaches an X11 app, and its character silently goes missing."""
+    planner = kl.KeyPlanner(layout, "")
+    tokens = planner.plan("$27.34 (5)")
+    assert replay(planner, tokens) == "$27.34 (5)"
+    tokens += planner.plan("€") or []     # US has no € key: pasted instead
+    assert all(code + 8 <= 255 for code, _ in tokens)
+
+
+def test_a_japanese_bar_is_shift_and_yen():
+    """Not AltGr on the <> key, which Japanese keyboards don't have."""
+    assert kl.KeyPlanner("jp", "").plan("|") == [(42, 1), (124, 1), (124, 0), (42, 0)]
+
+
+def test_a_euro_sign_on_a_german_keyboard_is_altgr_e():
+    planner = kl.KeyPlanner("de", "")
+    assert planner.plan("€") == [(100, 1), (18, 1), (18, 0), (100, 0)]
+
+
+def test_a_euro_sign_on_a_us_keyboard_is_pasted_not_lost():
+    """US has no € key of its own, only the KEY_EURO extra key X11 can't carry."""
+    assert kl.planner_for(kl.US).plan("5 €") is None
+
+
 def test_the_blocking_character_is_named():
     """Naming it saves matching timestamps to find which dictation fell back."""
     assert kl.KeyPlanner("ua", "").plan_or_blocker("Це Windows 10") == (None, "W")

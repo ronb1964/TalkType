@@ -77,6 +77,8 @@ _EVDEV_OFFSET = 8               # xkb keycode = evdev keycode + 8
 _KEY_LEFTSHIFT = 42             # evdev
 _KEY_RIGHTALT = 100             # evdev; AltGr on almost every layout
 _KEY_102ND = 86                 # evdev; the <> key of ISO keyboards
+_KEY_F12 = 88                   # evdev; past it: the keypad's and extra keys
+_X11_MAX_KEYCODE = 255          # xkb; X11 and XWayland carry no key past it
 _ISO_LEVEL3_SHIFT = 0xfe03      # keysym AltGr produces
 _INVALID_MOD = 0xffffffff
 
@@ -100,12 +102,21 @@ _DEAD_KEYS = {
 
 
 def _cost(entry):
-    """How much a key is avoided: one for Shift, one for AltGr, three for the
-    extra key beside the left Shift (ISO keyboards' <>). US keyboards don't
-    have that key; a desktop set to a US model may map nothing to it, and
-    "<" would go missing where Shift+comma works."""
+    """How much a key is avoided: one for Shift, one for AltGr, and more for
+    a key not every keyboard has. Three for the extra key beside the left
+    Shift (ISO keyboards' <>): a desktop set to a US model may map nothing to
+    it, and "<" would go missing where Shift+comma works. Two for the keypad's
+    and extra keys past F12, which keymaps give $ ( ) on with no Shift; less
+    than <>, so a Japanese | stays Shift+Yen, not AltGr on a <> key Japanese
+    keyboards don't have."""
     keycode, shift, altgr = entry
-    return shift + altgr + (3 if keycode == _KEY_102ND else 0)
+    if keycode == _KEY_102ND:
+        rare = 3
+    elif keycode > _KEY_F12:
+        rare = 2
+    else:
+        rare = 0
+    return shift + altgr + rare
 
 
 class KeyPlanner:
@@ -132,7 +143,10 @@ class KeyPlanner:
         altgr_bit = 1 << altgr if altgr != _INVALID_MOD else 0
         allowed = shift_bit | altgr_bit
         altgr_keys = []
-        for kc in range(x.xkb_keymap_min_keycode(self.keymap), x.xkb_keymap_max_keycode(self.keymap) + 1):
+        # Keys past X11's last code (KEY_DOLLAR, KEY_EURO) never reach an X11
+        # app: "$27.34" was typed as "27.34" in Claude Desktop.
+        last = min(x.xkb_keymap_max_keycode(self.keymap), _X11_MAX_KEYCODE)
+        for kc in range(x.xkb_keymap_min_keycode(self.keymap), last + 1):
             for level in range(x.xkb_keymap_num_levels_for_key(self.keymap, kc, 0)):
                 syms = C.POINTER(C.c_uint32)()
                 if x.xkb_keymap_key_get_syms_by_level(self.keymap, kc, 0, level, C.byref(syms)) != 1:
