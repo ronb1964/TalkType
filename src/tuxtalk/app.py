@@ -2094,13 +2094,13 @@ def _type_text(text: str) -> bool:
             raise PasswordFieldNow()
         if part and not _type_text_raw(part):
             return False
-        if i < len(parts) - 1:  # Not the last part, send Shift+Enter
-            time.sleep(0.05)  # Small delay between text and key
+        if i < len(parts) - 1:
+            time.sleep(0.05)
             # The line break is part of the text: a failed one is a
             # partial injection, and the undo buffer must not count it.
             if not _send_shift_enter():
                 return False
-            time.sleep(0.05)  # Small delay after key
+            time.sleep(0.05)
     return True
 
 def _type_text_raw(text: str) -> bool:

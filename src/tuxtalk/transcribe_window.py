@@ -522,8 +522,8 @@ def main(argv=None):
         from . import desktop_identity, ui_style
         desktop_identity.apply()        # TuxTalk's icon on the window
         ui_style.prepare_windows()   # emoji that show, buttons clear of panels and docks
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"Couldn't set up the window's icon, emoji or size: {e}")
     window = TranscribeWindow()
     GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, FRONT, window.present)
     try:

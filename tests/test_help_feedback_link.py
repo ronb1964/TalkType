@@ -92,7 +92,7 @@ def test_every_tab_shows_without_scroll_arrows_when_the_screen_allows(monkeypatc
     if not Gtk.init_check()[0]:
         pytest.skip("no display")
     from tuxtalk import ui_style
-    monkeypatch.setattr(ui_style, "workarea_width", lambda near=None: screen)
+    monkeypatch.setattr(ui_style, "workarea_width", lambda: screen)
     shown = []
     monkeypatch.setattr(Gtk.Dialog, "show_all", lambda self: shown.append(self))
     monkeypatch.setattr(Gtk.Dialog, "present", lambda self: None)

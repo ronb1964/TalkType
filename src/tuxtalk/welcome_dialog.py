@@ -1248,11 +1248,9 @@ class WelcomeDialog:
         status_box.set_margin_start(15)
         status_box.set_margin_top(8)
 
-        # uinput permission status
-        uinput_icon = "✅" if not self.needs_uinput_fix else "❌"
-        uinput_text = "Input device permissions OK" if not self.needs_uinput_fix else "Input device permissions needed"
+        # Only built while typing needs fixing; Fix Typing updates it.
         uinput_label = Gtk.Label()
-        uinput_label.set_markup(f'{uinput_icon} {uinput_text}')
+        uinput_label.set_markup("❌ Input device permissions needed")
         uinput_label.set_halign(Gtk.Align.START)
         status_box.pack_start(uinput_label, False, False, 0)
         self._uinput_status_label = uinput_label
@@ -1410,7 +1408,7 @@ class WelcomeDialog:
         if self.uinput_fixed:
             button.set_label("✅ Fixed!")
             button.set_sensitive(False)  # Disable - no more action needed
-            # The ❌ line above the button still said "needed" after the fix
+            # The status line above the button still said "needed" after the fix
             # worked (Silverblue VM, 2026-10-16).
             label = getattr(self, "_uinput_status_label", None)
             if label is not None:

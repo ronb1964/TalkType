@@ -43,11 +43,11 @@ TEXT_SYMBOLS = frozenset("–—‘’“”•…€←→−⊘▁■▸▼●
 _JOINERS = "‍️"
 
 
-def symbols_in_source(src=SRC):
+def symbols_in_source():
     """Every symbol (not a letter, mark or space) in the string literals of
     TuxTalk's code: what its windows can show. Docstrings don't count."""
     found = set()
-    for path in sorted(src.glob("*.py")):
+    for path in sorted(SRC.glob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"))
         docstrings = {id(node.body[0].value) for node in ast.walk(tree)
                       if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef,
@@ -62,9 +62,9 @@ def symbols_in_source(src=SRC):
     return found
 
 
-def emoji_needed(src=SRC):
+def emoji_needed():
     """The symbols the emoji font has to carry."""
-    return symbols_in_source(src) - TEXT_SYMBOLS
+    return symbols_in_source() - TEXT_SYMBOLS
 
 
 def main():

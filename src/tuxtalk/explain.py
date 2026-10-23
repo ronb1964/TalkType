@@ -216,8 +216,8 @@ def main(argv=None):
         from . import desktop_identity, ui_style
         desktop_identity.apply()        # TuxTalk's icon on the window, not a generic one
         ui_style.prepare_windows()   # emoji that show, buttons clear of panels and docks
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"Couldn't set up the window's icon, emoji or size: {e}")
     dialog, check = build_dialog(kind)
     # Asked before the window shows, while the app still has the focus.
     place_over_active_window(dialog)
