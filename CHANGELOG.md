@@ -41,6 +41,9 @@ before 0.15.0, so older entries use that name.
   as many do, TuxTalk took the room to be perfectly quiet for the rest of the
   recording. A fan or air conditioner then counted as speech, and the
   recording never stopped by itself.
+- Updating the .deb or .rpm from inside TuxTalk: an unexpected error while
+  installing left the "Updating TuxTalk" window on screen, and it couldn't be
+  closed. It now closes and says what went wrong.
 - Saying "new line" in KWrite, Kate or KDevelop no longer copies the start
   of the line above. TuxTalk pressed Shift+Enter between the lines, which
   those editors take as Insert Smart Newline: after a line starting with

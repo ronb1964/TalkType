@@ -78,17 +78,23 @@ def run_package_update(release, install_type, restart_callback=None):
             _error(message)
 
     def worker():
-        path = update_checker.download_update(
-            url, filename, progress_cb,
-            checksums_url=release.get("checksums_url"))
-        if not path:
-            reason = last_message[0].rstrip(".!") or "The download could not be completed"
-            GLib.idle_add(lambda: finish(
-                False, f"{reason}.\n\nPlease try again or update from GitHub."))
-            return
-        GLib.idle_add(lambda: status.set_text(
-            "Waiting for your password to install…"))
-        ok, msg = update_checker.install_package_update(path, install_type)
+        try:
+            path = update_checker.download_update(
+                url, filename, progress_cb,
+                checksums_url=release.get("checksums_url"))
+            if not path:
+                reason = last_message[0].rstrip(".!") or "The download could not be completed"
+                GLib.idle_add(lambda: finish(
+                    False, f"{reason}.\n\nPlease try again or update from GitHub."))
+                return
+            GLib.idle_add(lambda: status.set_text(
+                "Waiting for your password to install…"))
+            ok, msg = update_checker.install_package_update(path, install_type)
+        except Exception as e:
+            # The window refuses to close while this runs: without an
+            # answer it would stay on screen until TuxTalk quit.
+            logger.exception("Package update failed")
+            ok, msg = False, f"The update failed: {e}\n\nPlease try again or update from GitHub."
         GLib.idle_add(lambda: finish(ok, msg))
 
     threading.Thread(target=worker, daemon=True).start()

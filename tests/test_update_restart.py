@@ -483,3 +483,27 @@ def test_a_cancelled_password_prompt_says_cancelled(tmp_path, monkeypatch, retur
     ok, message = uc.install_package_update(str(package), "deb")
     assert not ok
     assert expected in message
+
+
+def test_an_unexpected_install_error_closes_the_update_window_and_says_why(monkeypatch):
+    """The "Updating TuxTalk" window refuses to close while it works; an
+    exception in the install left it on screen until TuxTalk quit."""
+    pytest.importorskip("gi")
+    from tuxtalk import update_ui
+
+    monkeypatch.setattr(update_ui.update_checker, "get_package_asset",
+                        lambda release, kind: ("https://example.invalid/t.deb", "t.deb"))
+    monkeypatch.setattr(update_ui.update_checker, "download_update",
+                        lambda *a, **k: "/tmp/t.deb")
+
+    def broken_install(path, kind):
+        raise OSError("no space left")
+    monkeypatch.setattr(update_ui.update_checker, "install_package_update", broken_install)
+    monkeypatch.setattr(update_ui.GLib, "idle_add", lambda fn, *a: fn(*a))
+    monkeypatch.setattr(update_ui.threading, "Thread",
+                        lambda target, daemon: type("T", (), {"start": lambda self: target()})())
+    errors = []
+    monkeypatch.setattr(update_ui, "_error", errors.append)
+
+    update_ui.run_package_update({}, "deb")
+    assert errors and "no space left" in errors[0]
