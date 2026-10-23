@@ -670,55 +670,29 @@ PKEXEC_INSTALL_TIMEOUT = 900
 
 
 def install_udev_rule_with_pkexec():
-    """
-    Install the udev rule using pkexec for privilege escalation.
+    """Set up the "input" group and its udev rule through pkexec, for
+    systems where the hotkey helper can't run. Returns (success, message).
 
-    Returns:
-        tuple: (success: bool, message: str)
-    """
-    import tempfile
-
-    # Create temporary script
-    script_content = get_fix_script_content()
-    script_path = None
-
+    The script goes to root's bash on stdin, as secure_input does. Written to
+    a file first, any program running as this user could have rewritten it
+    while the password prompt was open, and it would then have run as root."""
+    logger.info("Running the input group setup with pkexec")
     try:
-        # The script runs as root through `bash script_path`, so it needs no
-        # execute bit and stays readable by this user only (mkstemp's 0600).
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.sh', delete=False) as f:
-            f.write(script_content)
-            script_path = f.name
-
-        logger.info(f"Running udev fix script with pkexec: {script_path}")
-        result = subprocess.run(['pkexec', 'bash', script_path],
-                              capture_output=True, text=True, timeout=PKEXEC_SCRIPT_TIMEOUT)
-
-        if result.returncode == 0:
-            logger.info("Udev rule installed successfully")
-            return (True, "Permissions configured successfully!\n\n"
-                         "Restart your computer to apply (logging out is often not enough).")
-        elif pkexec_was_declined(result):
-            logger.info("User cancelled pkexec authentication")
-            return (False, "Authentication was cancelled.")
-        else:
-            error_msg = result.stderr or result.stdout or "Unknown error"
-            logger.error(f"Failed to install udev rule: {error_msg}")
-            return (False, f"Failed to configure permissions:\n{error_msg}")
-            
+        result = subprocess.run(['pkexec', '/bin/bash', '-s'], input=get_fix_script_content(),
+                                capture_output=True, text=True, timeout=PKEXEC_SCRIPT_TIMEOUT)
     except subprocess.TimeoutExpired:
         logger.error("pkexec timed out")
         return (False, "The operation timed out. Please try again.")
     except FileNotFoundError:
         logger.error("pkexec not found")
         return (False, "pkexec not found. Please install polkit to use this feature.")
-    except Exception as e:
-        logger.error(f"Error running pkexec: {e}")
-        return (False, f"Error: {e}")
-    finally:
-        # Removed on every path, a timeout included, so no root script is
-        # left behind in /tmp.
-        if script_path:
-            try:
-                os.unlink(script_path)
-            except OSError:
-                pass
+    if result.returncode == 0:
+        logger.info("Udev rule installed successfully")
+        return (True, "Permissions configured successfully!\n\n"
+                      "Restart your computer to apply (logging out is often not enough).")
+    if pkexec_was_declined(result):
+        logger.info("User cancelled pkexec authentication")
+        return (False, "Authentication was cancelled.")
+    error_msg = result.stderr or result.stdout or "Unknown error"
+    logger.error(f"Failed to install udev rule: {error_msg}")
+    return (False, f"Failed to configure permissions:\n{error_msg}")

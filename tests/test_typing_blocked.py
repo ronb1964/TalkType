@@ -119,17 +119,16 @@ def test_the_fix_script_group_check_runs_in_bash(tmp_path):
         assert (tmp_path / "ran").exists() is should_run, groups
 
 
-def test_the_root_script_is_private_and_removed_even_on_a_timeout(monkeypatch):
-    import stat
+def test_the_root_script_goes_to_pkexec_on_stdin_never_through_a_file(monkeypatch):
+    """A script file in /tmp could be rewritten by any program running as
+    this user while the password prompt is open, and then run as root."""
     seen = {}
 
-    def slow_pkexec(cmd, **k):
-        path = cmd[-1]
-        seen["path"] = path
-        seen["mode"] = stat.S_IMODE(U.os.stat(path).st_mode)
+    def pkexec(cmd, **k):
+        seen["cmd"], seen["input"] = cmd, k.get("input")
         raise U.subprocess.TimeoutExpired(cmd, k.get("timeout"))
-    monkeypatch.setattr(U.subprocess, "run", slow_pkexec)
+    monkeypatch.setattr(U.subprocess, "run", pkexec)
     ok, _message = U.install_udev_rule_with_pkexec()
     assert ok is False
-    assert seen["mode"] == 0o600
-    assert not U.os.path.exists(seen["path"])
+    assert seen["cmd"] == ["pkexec", "/bin/bash", "-s"]
+    assert seen["input"] == U.get_fix_script_content()
