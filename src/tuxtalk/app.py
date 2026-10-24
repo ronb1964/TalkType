@@ -1697,7 +1697,7 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
     state.chunker = None
     state.press_t0 = time.time()
     state.released_while_starting = False
-    state.toggle_started_at = state.press_t0 if from_toggle else None
+    state.toggle_started_at = None
     state.edit_mode = edit_mode
     # Set before the stream starts — _sd_callback drops frames unless it's set.
     state.is_recording = True
@@ -1735,8 +1735,6 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
 
     _arm_chunker(getattr(state, "recording_samplerate", SAMPLE_RATE), edit_mode)
     _pause_media_players()
-    print("Recording…")
-    logger.debug("Recording started")
     _beep(beeps_on, *START_BEEP)
     if notify_on: _notify("Recording… speak now", "")
 
@@ -1749,9 +1747,11 @@ def start_recording(beeps_on: bool, notify_on: bool, input_device_idx,
             recording_indicator.show_at_position()
             recording_indicator.start_recording()
         except Exception as e:
-            print(f"Failed to show recording indicator: {e}")
             logger.error(f"Failed to show recording indicator: {e}", exc_info=True)
 
+    # From here: keys wait on this thread, so a tap made during a slow start counts (#21).
+    state.toggle_started_at = time.time() if from_toggle else None
+    logger.info(f"Recording started in {time.time() - state.press_t0:.2f}s")
     return True
 
 # How long stopping the microphone may take before TuxTalk carries on without

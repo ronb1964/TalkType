@@ -3,6 +3,15 @@
 All notable changes to TuxTalk are documented here. It was called TalkType
 before 0.15.0, so older entries use that name.
 
+## [0.18.2] - 2026-10-23
+
+- Hands-free: on a computer where starting a recording takes a moment
+  (finding the microphone, opening it and playing the start beep), the
+  second tap of a double-tap was read only after all that, and by then it
+  counted as too late, so the recording stopped instead. The double-tap is
+  now timed from when the recording is ready. The log says how long each
+  start took. Thanks to Tony for sticking with it (#21).
+
 ## [0.18.1] - 2026-10-23
 
 - Hands-free: a double-tap of the toggle key only counted when the second

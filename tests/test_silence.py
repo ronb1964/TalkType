@@ -103,10 +103,14 @@ def test_talking_the_instant_recording_starts_still_counts_as_speech():
 
 # --- Wiring into the service -------------------------------------------------
 
-def _start(monkeypatch, from_toggle=True, seconds=1.0):
+def _start(monkeypatch, from_toggle=True, seconds=1.0, mic_delay=0.0):
     from tuxtalk import app
     monkeypatch.setattr(app, "_auto_stop_seconds", seconds)
-    monkeypatch.setattr(app, "_open_input_stream", lambda idx: setattr(app.state, "recording_samplerate", SR))
+
+    def open_microphone(idx):
+        time.sleep(mic_delay)
+        app.state.recording_samplerate = SR
+    monkeypatch.setattr(app, "_open_input_stream", open_microphone)
     monkeypatch.setattr(app, "_beep", lambda *a, **k: None)
     monkeypatch.setattr(app, "_notify_tray_recording_state", lambda *a: None)
     monkeypatch.setattr(app, "recording_indicator", None, raising=False)
@@ -182,6 +186,15 @@ def test_the_start_beep_picked_up_by_the_mic_is_not_a_word(monkeypatch):
         app._sd_callback(quiet[i:i + BLOCK].reshape(-1, 1), BLOCK, None, None)
     assert app.state.silence.nothing_said
     app._cmd_stop_recording.clear()
+    app.state.is_recording = False
+
+
+def test_a_quick_second_tap_counts_when_the_recording_was_slow_to_start(monkeypatch):
+    """Issue #21: the keys are read on the thread that starts the recording,
+    so a second tap made while the microphone and the start beep took most
+    of a second is only read afterwards. It is still a double-tap."""
+    app = _start(monkeypatch, mic_delay=0.9)
+    assert app._toggle_pressed_while_recording(beeps_on=False) is True
     app.state.is_recording = False
 
 
