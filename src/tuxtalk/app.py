@@ -3320,11 +3320,13 @@ def _toggle_pressed_while_recording(beeps_on: bool) -> bool:
     if (_auto_stop_seconds <= 0 or started is None or state.silence is not None
             or time.time() - started > DOUBLE_TAP_S):
         return False
-    from .silence import SilenceDetector
-    state.silence = SilenceDetector(
-        _auto_stop_seconds, getattr(state, "recording_samplerate", SAMPLE_RATE))
+    from .silence import SilenceDetector, has_a_word
+    rate = getattr(state, "recording_samplerate", SAMPLE_RATE)
+    detector = SilenceDetector(_auto_stop_seconds, rate)
+    if has_a_word(_frames_f32(list(state.frames)), rate):
+        detector.heard_speech()
+    state.silence = detector
     logger.info("Double-tap: this recording will stop by itself when you go quiet")
-    print("Hands-free: stops when you stop talking")
     _beep(beeps_on, *HANDS_FREE_BEEP)
     return True
 
@@ -3477,14 +3479,15 @@ def _warn_mic_switched(old_idx, new_idx):
     _notify("Recording from another microphone", notice)
 
 
+def _frames_f32(frames):
+    """Raw int16 recording frames as float samples in -1..1."""
+    return np.frombuffer(b"".join(frames), dtype=np.int16).astype(np.float32) / 32768.0
+
+
 def _frames_are_dead_mic(frames, rec_sr) -> bool:
     """silence.is_dead_mic for raw int16 recording frames."""
     from .silence import is_dead_mic
-    try:
-        pcm = np.frombuffer(b"".join(frames), dtype=np.int16)
-    except Exception:
-        return False
-    return is_dead_mic(pcm.astype(np.float32) / 32768.0, rec_sr)
+    return is_dead_mic(_frames_f32(frames), rec_sr)
 
 
 def _report_undelivered(outcome: str, beeps_on: bool):
@@ -3876,14 +3879,12 @@ def _transcribe_and_inject(frames, rec_sr, beeps_on, smart_quotes, notify_on,
         return True
 
     try:
-        # Convert captured bytes → float32 mono PCM in [-1, 1]
-        pcm_int16 = np.frombuffer(b''.join(frames), dtype=np.int16)
-        if pcm_int16.size == 0:
+        audio_f32 = _frames_f32(frames)
+        if audio_f32.size == 0:
             if _nothing_in_chunk("had no audio"):
                 return
             print("(No audio captured)")
             return
-        audio_f32 = pcm_int16.astype(np.float32) / 32768.0
         if rec_sr != SAMPLE_RATE:
             audio_f32 = _resample_audio(audio_f32, rec_sr, SAMPLE_RATE)
 
@@ -4476,10 +4477,9 @@ def _transcribe_and_edit(frames, rec_sr, beeps_on, language, injection_mode):
     rewrite replaces. Ctrl+Z in the app undoes it."""
     from .silence import is_speechless_tap
     t0 = time.time()
-    pcm_int16 = np.frombuffer(b''.join(frames), dtype=np.int16)
-    if pcm_int16.size == 0:
+    audio_f32 = _frames_f32(frames)
+    if audio_f32.size == 0:
         return
-    audio_f32 = pcm_int16.astype(np.float32) / 32768.0
     if rec_sr != SAMPLE_RATE:
         audio_f32 = _resample_audio(audio_f32, rec_sr, SAMPLE_RATE)
     if is_speechless_tap(audio_f32, SAMPLE_RATE):

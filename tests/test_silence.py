@@ -149,6 +149,24 @@ def test_a_double_tap_at_a_relaxed_pace_still_switches_to_hands_free(monkeypatch
     app.state.is_recording = False
 
 
+def test_a_word_said_before_the_second_tap_is_kept(monkeypatch):
+    """Tap, say a quick word, tap again, then nothing more: the word is
+    dictation, so going quiet stops the recording to type it, not to drop
+    it as "nothing said"."""
+    app = _start(monkeypatch)
+    word = speech(0.4)
+    for i in range(0, len(word), BLOCK):
+        app._sd_callback(word[i:i + BLOCK].reshape(-1, 1), BLOCK, None, None)
+    assert app._toggle_pressed_while_recording(beeps_on=False) is True
+    quiet = noise(12.0)
+    for i in range(0, len(quiet), BLOCK):
+        app._sd_callback(quiet[i:i + BLOCK].reshape(-1, 1), BLOCK, None, None)
+    assert app._cmd_stop_recording.is_set()
+    assert not app.state.silence.nothing_said
+    app._cmd_stop_recording.clear()
+    app.state.is_recording = False
+
+
 def test_a_slow_second_tap_is_a_normal_stop(monkeypatch):
     app = _start(monkeypatch)
     app.state.toggle_started_at -= app.DOUBLE_TAP_S + 0.1

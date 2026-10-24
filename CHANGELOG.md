@@ -9,6 +9,9 @@ before 0.15.0, so older entries use that name.
   tap came within 0.4 seconds, so at a relaxed pace the second tap stopped
   the recording instead (the light came on and went straight off). The taps
   can now be up to 0.7 seconds apart. Thanks to Tony for reporting it (#21).
+- Hands-free: a word said between the two taps of a double-tap, with nothing
+  after it, was thrown away as "nothing said" when the recording stopped
+  itself. It's typed now.
 
 ## [0.18.0] - 2026-10-23
 

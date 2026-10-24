@@ -29,7 +29,6 @@
   "app.py::_edit_selection::long_line": 1,
   "app.py::_find_output_device::swallowed_error": 1,
   "app.py::_finish_capture::long_line": 1,
-  "app.py::_frames_are_dead_mic::swallowed_error": 1,
   "app.py::_get_device_samplerate::swallowed_error": 1,
   "app.py::_grab_keyboards_hiding::swallowed_error": 1,
   "app.py::_guard_large_v3_without_cuda::swallowed_error": 1,
@@ -518,7 +517,7 @@
   },
   "app.py::_transcribe_and_inject": {
    "decisions": 73,
-   "lines": 271
+   "lines": 269
   },
   "app.py::_transcribe_audio": {
    "decisions": 25,
