@@ -139,6 +139,16 @@ def test_a_double_tap_switches_to_hands_free_and_it_stops_itself(monkeypatch):
     app.state.is_recording = False
 
 
+def test_a_double_tap_at_a_relaxed_pace_still_switches_to_hands_free(monkeypatch):
+    """Issue #21: taps about half a second apart, a normal pace for someone
+    whose hands are slow, stopped the recording instead."""
+    app = _start(monkeypatch)
+    app.state.toggle_started_at -= 0.55
+    assert app._toggle_pressed_while_recording(beeps_on=False) is True
+    assert app.state.silence is not None
+    app.state.is_recording = False
+
+
 def test_a_slow_second_tap_is_a_normal_stop(monkeypatch):
     app = _start(monkeypatch)
     app.state.toggle_started_at -= app.DOUBLE_TAP_S + 0.1

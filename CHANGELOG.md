@@ -3,6 +3,13 @@
 All notable changes to TuxTalk are documented here. It was called TalkType
 before 0.15.0, so older entries use that name.
 
+## [0.18.1] - 2026-10-23
+
+- Hands-free: a double-tap of the toggle key only counted when the second
+  tap came within 0.4 seconds, so at a relaxed pace the second tap stopped
+  the recording instead (the light came on and went straight off). The taps
+  can now be up to 0.7 seconds apart. Thanks to Tony for reporting it (#21).
+
 ## [0.18.0] - 2026-10-23
 
 - Security: on systems where the hotkey helper can't run (no systemd), Fix

@@ -125,7 +125,7 @@ def handsfree_silence(run):
     run.set_config(auto_stop_silence=True)
     run.sink_ready()
     mark = run.log_mark()
-    run.vm.tap("f9", hold=0.05)    # both taps inside the app's 0.4 s double-tap window
+    run.vm.tap("f9", hold=0.05)    # both taps inside the app's 0.7 s double-tap window
     run.vm.tap("f9", hold=0.05)
     log = run.wait_log(mark, "Auto-stop: nothing said", timeout=25)
     typed = run.sink_text()

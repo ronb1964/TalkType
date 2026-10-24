@@ -265,9 +265,9 @@ CHANNELS = 1
 MIN_HOLD_MS = 200
 START_BEEP = (1200, 0.12)
 HANDS_FREE_BEEP = (1600, 0.07)  # confirms a double-tap switched the recording to hands-free
-# Two taps of the toggle key closer together than this switch the recording
-# that the first tap started to hands-free, instead of stopping it.
-DOUBLE_TAP_S = 0.4
+# Two toggle taps closer than this make the first tap's recording hands-free.
+# Generous: 0.4 s missed slower hands (#21); a quick word still comes, at auto-stop.
+DOUBLE_TAP_S = 0.7
 CANCEL_BEEP = (500, 0.12)
 READY_BEEP  = (1000, 0.09)
 
