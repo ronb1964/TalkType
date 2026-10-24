@@ -167,6 +167,24 @@ def test_a_word_said_before_the_second_tap_is_kept(monkeypatch):
     app.state.is_recording = False
 
 
+def test_the_start_beep_picked_up_by_the_mic_is_not_a_word(monkeypatch):
+    """Speakers next to the mic: the start beep is recorded, but a double-tap
+    with nothing said after it is still nothing said."""
+    app = _start(monkeypatch)
+    t = np.arange(int(app.START_BEEP[1] * SR)) / SR
+    beep = (np.sin(2 * np.pi * app.START_BEEP[0] * t) * 8000).astype(np.int16)
+    heard = np.concatenate([noise(0.1), beep, noise(0.3)])   # it sounds a moment in
+    for i in range(0, len(heard), BLOCK):
+        app._sd_callback(heard[i:i + BLOCK].reshape(-1, 1), BLOCK, None, None)
+    assert app._toggle_pressed_while_recording(beeps_on=False) is True
+    quiet = noise(12.0)
+    for i in range(0, len(quiet), BLOCK):
+        app._sd_callback(quiet[i:i + BLOCK].reshape(-1, 1), BLOCK, None, None)
+    assert app.state.silence.nothing_said
+    app._cmd_stop_recording.clear()
+    app.state.is_recording = False
+
+
 def test_a_slow_second_tap_is_a_normal_stop(monkeypatch):
     app = _start(monkeypatch)
     app.state.toggle_started_at -= app.DOUBLE_TAP_S + 0.1

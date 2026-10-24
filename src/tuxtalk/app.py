@@ -3312,9 +3312,9 @@ def _toggle_pressed_while_recording(beeps_on: bool) -> bool:
     the second tap of a double-tap and switched the recording to hands-free
     (the caller must then NOT stop it); False means a normal stop.
 
-    A single tap keeps the toggle a plain on/off switch, however long the
-    speaker pauses. Only a double-tap, with the option on, arms auto-stop; a
-    double-tap would otherwise just start and cancel a too-short recording.
+    A single tap keeps the toggle a plain on/off switch. Only a double-tap,
+    with the option on, arms auto-stop. A word said before the second tap
+    counts as speech; the start beep the mic may pick up first does not.
     """
     started = state.toggle_started_at
     if (_auto_stop_seconds <= 0 or started is None or state.silence is not None
@@ -3323,7 +3323,7 @@ def _toggle_pressed_while_recording(beeps_on: bool) -> bool:
     from .silence import SilenceDetector, has_a_word
     rate = getattr(state, "recording_samplerate", SAMPLE_RATE)
     detector = SilenceDetector(_auto_stop_seconds, rate)
-    if has_a_word(_frames_f32(list(state.frames)), rate):
+    if has_a_word(_frames_f32(list(state.frames))[int(2 * START_BEEP[1] * rate):], rate):
         detector.heard_speech()
     state.silence = detector
     logger.info("Double-tap: this recording will stop by itself when you go quiet")
